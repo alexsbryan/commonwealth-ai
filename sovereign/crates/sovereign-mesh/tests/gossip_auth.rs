@@ -2,7 +2,7 @@
 //! Gossip auth-boundary test.
 //!
 //! `Mesh::merge_from` is the auth boundary for the `/internal/gossip`
-//! endpoint: any incoming payload whose `mesh_id` or `join_key_hash`
+//! endpoint: any incoming payload whose `mesh_id` or `invite_key_hash`
 //! doesn't match ours is rejected wholesale (`MergeReport.rejected ==
 //! true`), and the route handler at `routes_internal::gossip` turns
 //! that into a `401 Unauthorized` response with no Mesh write.
@@ -17,7 +17,7 @@
 //! test pins:
 //!
 //! 1. **Wrong `mesh_id` → 401, no mutation, no hook fire.**
-//! 2. **Wrong `join_key_hash` → 401, no mutation, no hook fire.**
+//! 2. **Wrong `invite_key_hash` → 401, no mutation, no hook fire.**
 //! 3. **Matching id + hash + a new member → 200, mutation visible,
 //!    hook fires.** (Negative control proves the test isn't just
 //!    accepting every 401.)
@@ -36,10 +36,13 @@ use commonwealth_core::mesh::{MemberRecord, Mesh};
 mod common;
 use common::{member_with_last_seen as member, spawn_router};
 
-/// Build a founder AppState pinned to (mesh_id, join_key_hash) +
+/// Build a founder AppState pinned to (mesh_id, invite_key_hash) +
 /// install a counter-incrementing mesh-mutation hook so the test
 /// can assert the hook does NOT fire on rejected payloads.
-fn build_founder(mesh_id: MeshId, join_key_hash: [u8; 32]) -> (AppState, NodeId, Arc<AtomicUsize>) {
+fn build_founder(
+    mesh_id: MeshId,
+    invite_key_hash: [u8; 32],
+) -> (AppState, NodeId, Arc<AtomicUsize>) {
     let founder_id = NodeId::from_u128(0xCAFE_BABE_CAFE_BABE);
     let mut members = HashMap::new();
     members.insert(
@@ -52,9 +55,12 @@ fn build_founder(mesh_id: MeshId, join_key_hash: [u8; 32]) -> (AppState, NodeId,
         ),
     );
     let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: mesh_id,
         name: "Auth Test".into(),
-        join_key_hash,
+        invite_key_hash,
+        invite_version: 0,
         require_encryption: false,
         members,
         peers: vec![],
@@ -80,14 +86,14 @@ async fn spawn_internal(state: AppState) -> SocketAddr {
 /// so each test can drift one field at a time.
 fn gossip_payload(
     mesh_id: MeshId,
-    join_key_hash: [u8; 32],
+    invite_key_hash: [u8; 32],
     members: Vec<MemberRecord>,
 ) -> serde_json::Value {
     json!({
         "mesh": {
             "id": mesh_id,
             "name": "any name",
-            "join_key_hash": join_key_hash.to_vec(),
+            "join_key_hash": invite_key_hash.to_vec(),
             "members": members,
             "peers": Vec::<serde_json::Value>::new(),
         }
@@ -163,9 +169,9 @@ async fn wrong_mesh_id_rejects_with_401_and_no_mutation() {
 }
 
 #[tokio::test]
-async fn wrong_join_key_hash_rejects_with_401_and_no_mutation() {
+async fn wrong_invite_key_hash_rejects_with_401_and_no_mutation() {
     // Same shape as above but mesh_id matches; the auth check
-    // catches the join_key_hash mismatch instead. Tests the
+    // catches the invite_key_hash mismatch instead. Tests the
     // second half of `Mesh::merge_from`'s OR condition — a
     // refactor that accidentally short-circuited on mesh_id alone
     // would slip past `wrong_mesh_id_rejects_*` but fail here.
@@ -206,7 +212,7 @@ async fn wrong_join_key_hash_rejects_with_401_and_no_mutation() {
     assert_eq!(
         resp.status(),
         reqwest::StatusCode::UNAUTHORIZED,
-        "wrong join_key_hash must yield 401; got {}",
+        "wrong invite_key_hash must yield 401; got {}",
         resp.status()
     );
 
@@ -220,7 +226,7 @@ async fn wrong_join_key_hash_rejects_with_401_and_no_mutation() {
 
 #[tokio::test]
 async fn matching_credentials_accept_new_member_and_fire_hook() {
-    // Negative control: with matching `mesh_id` AND `join_key_hash`,
+    // Negative control: with matching `mesh_id` AND `invite_key_hash`,
     // the gossip merge proceeds, the new member lands in the
     // founder's view, the hook fires once. Without this, the
     // rejection assertions above might be firing on something

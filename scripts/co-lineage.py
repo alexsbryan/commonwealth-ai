@@ -288,6 +288,14 @@ def _serves_tokens(serves_raw: str | None) -> list[str]:
     cleaned = serves_raw.split("#", 1)[0].strip()
     if not cleaned or cleaned.startswith("("):
         return []  # (unattributed) and friends — a legal, visible state
+    # Everything from the first "(" on is a note to the reader, never a bar id.
+    # Stripping it only when it LED the value meant `noun-convergence (instrument;
+    # mints the numbers §10 cannot stand behind)` rendered eight phantom bars the
+    # campaign never declared — "mints", "the", "numbers", "§10" ... (§18.3:
+    # absence is reported, not invented). Bar ids never contain "(".
+    cleaned = cleaned.split("(", 1)[0].strip()
+    if not cleaned:
+        return []
     return cleaned.replace(",", " ").split()
 
 
@@ -493,6 +501,13 @@ def _run_instrument(instrument: str, timeout_s: int) -> tuple[int | None, str, s
             os.killpg(proc.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
+        except PermissionError:
+            # EPERM: the group exists but is not ours to signal. Fall back to the
+            # leader; the group check below will report honestly if it survives.
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
         out, err = proc.communicate()
     dead = True
     if timed_out:
@@ -505,6 +520,14 @@ def _run_instrument(instrument: str, timeout_s: int) -> tuple[int | None, str, s
                 os.killpg(proc.pid, 0)
             except ProcessLookupError:
                 dead = True
+                break
+            except PermissionError:
+                # EPERM means the process group EXISTS and we may not signal it.
+                # That is the opposite of dead, and it must not crash the sweep:
+                # before this arm, one slow instrument aborted the whole
+                # `measure` run with a traceback instead of recording a
+                # could-not-judge row for the bar that was actually at fault.
+                dead = False
                 break
             _time.sleep(0.01)
     return proc.returncode, out or "", err or "", timed_out, dead
@@ -976,6 +999,16 @@ def self_test() -> int:  # noqa: C901 — a flat checklist reads better than a f
             f = Path(td) / "t.toml"
             f.write_text(text, encoding="utf-8")
             return load_campaign_file(f)
+
+    # serves: a parenthetical is a note to the reader, never a bar id (§18.3)
+    check("serves: bar ids parse", _serves_initiative("nc x") == "nc" and _serves_bars("nc x") == ["x"])
+    check("serves: trailing (unattributed) is not a bar",
+          _serves_bars("nc (unattributed)") == [], _serves_bars("nc (unattributed)"))
+    check("serves: multi-word parenthetical yields no phantom bars",
+          _serves_bars("nc (instrument; mints the numbers)") == [],
+          _serves_bars("nc (instrument; mints the numbers)"))
+    check("serves: leading parenthetical yields no initiative",
+          _serves_initiative("(unattributed)") is None)
 
     def expect_error(name: str, text: str, needle: str) -> None:
         try:

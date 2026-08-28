@@ -1,0 +1,46 @@
+[package]
+name = "sovereign-enrichment-catalog"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The enrichment catalog: where enrichment workspaces live on disk, what each one's config says, and which exist."
+
+# WHY THIS CRATE EXISTS (noun-convergence rung nc-16-shared-capability).
+# `config.json` under `<data-root>/enrichment/<corpus-id>/` had THREE
+# implementations, because the schema lived inside a host BINARY where nothing
+# below could reach it:
+#   1. sovereign-cli-llm  enrich_cmd::config::EnrichConfig   — reads + writes
+#   2. sovereign-tools    watched::enrich::EnrichConfigJson  — synthesized it,
+#      with a doc comment reading "Mirrors ... field-for-field. Kept separate
+#      so this crate doesn't depend on the CLI." It had already drifted: four
+#      fields short (toc_markers, phase1b_max_output_tokens, phase_overrides,
+#      ontology).
+#   3. sovereign-desktop  enrich_commands.rs                 — hand-parsed it
+#      out of a `serde_json::Value`, field name by field name.
+# One schema, one path layout, one inventory — below all three hosts.
+
+[dependencies]
+# The enrichment pipeline this config configures: `CustomAtlasSpec` (the
+# recipe-supplied ontology) and `PhaseCache` (the model-stamped phase cache
+# `EnrichConfig::phase_cache` constructs). Knowledge layer — down.
+corpus-engine = { workspace = true }
+# The path SSOT. `rebrand::data_dir()` is the ONE derivation the env registry
+# declares for the per-user data root (quality/env-flags.toml, SOVEREIGN_DATA_DIR:
+# "read sites must not re-derive the fallback chain"). Contract layer — down.
+sovereign-contracts = { workspace = true }
+# `setup_config::client_daemon_base()` resolves `[daemon] client_port` for the
+# `base_url` default, so `enrich init` pins the operator's port rather than the
+# compiled one. Runtime layer — down.
+sovereign-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+# `catalog` tests build a real enrichment store under a temp root rather than
+# mutating HOME — the path accessors resolve $HOME on every call, so a
+# HOME-mutating test is a cross-test race (see `paths` tests).
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

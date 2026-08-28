@@ -36,7 +36,7 @@ use super::ErrorBody;
 
 #[derive(Debug, Deserialize)]
 pub struct GrantRequest {
-    pub corpus_id: String,
+    pub corpus_id: kernel_types::CorpusId,
     /// Full-hex node ids of the user-selected helper peers. May be empty for
     /// a local-only self-serve run (the grant then authorizes only the
     /// coordinator).
@@ -50,7 +50,7 @@ pub struct GrantRequest {
 
 #[derive(Debug, Serialize)]
 pub struct GrantResponse {
-    pub corpus_id: String,
+    pub corpus_id: kernel_types::CorpusId,
     pub allowed_peers: Vec<String>,
     pub expires_at_ms: u64,
 }
@@ -72,14 +72,17 @@ pub async fn corpus_grant_issue(
     // Grantability is enforced here, from the recipe (the source of truth,
     // always present at registration). A non-grantable corpus — a structural
     // KnowledgeView corpus — can NEVER be lent to peers, even under a grant.
-    let recipe = engine.load_recipe(&req.corpus_id).await.map_err(|e| {
-        (
-            StatusCode::NOT_FOUND,
-            Json(ErrorBody {
-                error: format!("cannot resolve recipe for corpus '{}': {e}", req.corpus_id),
-            }),
-        )
-    })?;
+    let recipe = engine
+        .load_recipe(req.corpus_id.as_str())
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorBody {
+                    error: format!("cannot resolve recipe for corpus '{}': {e}", req.corpus_id),
+                }),
+            )
+        })?;
     if !recipe.corpus.grantable {
         return Err((
             StatusCode::FORBIDDEN,
@@ -120,7 +123,7 @@ pub async fn corpus_grant_issue(
     );
 
     Ok(Json(GrantResponse {
-        corpus_id: grant.corpus_id,
+        corpus_id: req.corpus_id,
         allowed_peers: grant.allowed_peers.iter().map(|n| n.to_hex()).collect(),
         expires_at_ms: grant.expires_at_ms,
     }))
@@ -130,12 +133,12 @@ pub async fn corpus_grant_issue(
 
 #[derive(Debug, Deserialize)]
 pub struct GrantRevokeRequest {
-    pub corpus_id: String,
+    pub corpus_id: kernel_types::CorpusId,
 }
 
 #[derive(Debug, Serialize)]
 pub struct GrantRevokeResponse {
-    pub corpus_id: String,
+    pub corpus_id: kernel_types::CorpusId,
     /// True when a live grant was found and revoked; false when there was
     /// nothing to revoke (idempotent — still 200).
     pub revoked: bool,
@@ -146,7 +149,7 @@ pub async fn corpus_grant_revoke(
     State(state): State<AppState>,
     Json(req): Json<GrantRevokeRequest>,
 ) -> Result<Json<GrantRevokeResponse>, (StatusCode, Json<ErrorBody>)> {
-    let Some(grant) = state.inner.grant_store.revoke(&req.corpus_id) else {
+    let Some(grant) = state.inner.grant_store.revoke(req.corpus_id.as_str()) else {
         return Ok(Json(GrantRevokeResponse {
             corpus_id: req.corpus_id,
             revoked: false,
@@ -176,7 +179,7 @@ pub async fn corpus_grant_revoke(
     }
 
     Ok(Json(GrantRevokeResponse {
-        corpus_id: grant.corpus_id,
+        corpus_id: req.corpus_id,
         revoked: true,
     }))
 }

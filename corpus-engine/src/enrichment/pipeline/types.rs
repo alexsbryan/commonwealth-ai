@@ -1614,8 +1614,21 @@ impl Phase6Output {
 
 // ── Phase 7: gap detection ────────────────────────────────────
 
+/// The Phase 7 gap as the MODEL wrote it: free prose, no structural anchor.
+///
+/// Renamed apart from the atlas's `Gap`
+/// (`enrichment::atlas::analysis::gaps::Gap`, nc-12-gap 2026-08-20).
+/// corpus-engine publicly re-exported two different `Gap` types and both
+/// wrote a file named `gaps.json`. They share a lifetime — one pipeline
+/// run over one corpus — but not a shape: the atlas gap anchors to atom
+/// ids under a closed `GapKind`, this one is whatever the model returned.
+/// Merging would have meant inventing a `GapKind` (an extracted gap has no
+/// structural kind) and parsing "low / medium / high" prose into `f32`, so
+/// the noun went to the atlas — the v2.1 successor format that owns it —
+/// and the extractive shape took its own name. Serde field names are
+/// unchanged, so `gaps.json` caches written before the rename still load.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Gap {
+pub struct ExtractedGap {
     pub id: String,
     pub gap_text: String,
     pub evidence: String,
@@ -1627,7 +1640,7 @@ pub struct Gap {
 pub struct Phase7Output {
     pub schema_version: u32,
     pub pipeline_id: String,
-    pub gaps: Vec<Gap>,
+    pub gaps: Vec<ExtractedGap>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub failures: Vec<PhaseFailure>,
     pub written_at: String,
@@ -1648,7 +1661,7 @@ pub struct Atlas {
     pub concerns: Vec<CanonicalConcern>,
     pub positions: Vec<Position>,
     pub tensions: Vec<Tension>,
-    pub gaps: Vec<Gap>,
+    pub gaps: Vec<ExtractedGap>,
 }
 
 impl Atlas {

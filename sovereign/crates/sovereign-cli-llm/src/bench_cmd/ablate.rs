@@ -297,7 +297,7 @@ fn summarize(reps: &[RepResult]) -> ArmSummary {
 //      so `daemon stop` alone lets launchd bring it right back.
 //      `launchctl bootout` is what actually removes it.
 //   3. The listener dies tens of seconds before the process does (an
-//      18GB model unload is not instant), and `~/.svrnmesh/daemon.lock`
+//      18GB model unload is not instant), and `<data dir>/daemon.lock`
 //      is held until the process exits. Waiting on the port therefore
 //      races: the new daemon exits 1 with "another daemon already holds
 //      the run lock". Wait on the LOCK.
@@ -313,13 +313,18 @@ impl Drop for ForegroundDaemon {
     }
 }
 
-/// Must resolve through the SSOT, not `dirs_home()`. The daemon takes this
-/// lock via `rebrand::svrnmesh_root()`, which falls back to a populated
-/// legacy `~/.sovereign`; a hand-rolled `~/.svrnmesh` would look in the
-/// wrong place on an unmigrated machine and report the lock free while the
-/// daemon holds it.
+/// Must resolve the way the DAEMON resolves it, not by hand. The lock is
+/// keyed on the daemon's data root (`RunLock`), which is `[data] dir` from
+/// the config it loads — so read the same config. Falling back to
+/// `rebrand::data_dir()` matches `SetupConfig`'s own default for that field.
+/// A hand-rolled `~/.svrnmesh/daemon.lock` would look in the wrong place on
+/// an unmigrated machine, or on any host whose config names a data dir, and
+/// report the lock free while the daemon holds it.
 fn daemon_lock_path() -> PathBuf {
-    sovereign_contracts::rebrand::svrnmesh_root().join("daemon.lock")
+    let root = sovereign_contracts::setup_config::SetupConfig::load()
+        .map(|c| c.data.dir)
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::data_dir());
+    sovereign_contracts::run_lock::RunLock::path_for(&root)
 }
 
 /// The DISPATCHER binary, which is not the one we are running.

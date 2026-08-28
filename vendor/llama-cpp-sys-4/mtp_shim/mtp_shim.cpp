@@ -185,28 +185,6 @@ extern "C" void mtp_session_free(mtp_session * s) {
     delete s;
 }
 
-extern "C" bool mtp_session_need_embd(const mtp_session * s) {
-    if (s == nullptr) {
-        return false;
-    }
-    try {
-        return common_speculative_need_embd(s->spec.get());
-    } catch (...) {
-        return false;
-    }
-}
-
-extern "C" bool mtp_session_need_embd_pre_norm(const mtp_session * s) {
-    if (s == nullptr) {
-        return false;
-    }
-    try {
-        return common_speculative_need_embd_nextn(s->spec.get());
-    } catch (...) {
-        return false;
-    }
-}
-
 extern "C" bool mtp_session_begin(
         mtp_session *       s,
         int32_t             seq_id,

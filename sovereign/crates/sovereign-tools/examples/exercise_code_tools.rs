@@ -59,7 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let graph: sovereign_tools::ScipGraphHandle = Arc::new(arc_swap::ArcSwap::from_pointee(
         corpus_engine_scip::ScipGraph::open_in_memory("example").expect("in-memory ScipGraph"),
     ));
-    let sym_tool = SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&graph));
+    let sym_tool = SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared();
     let out = sym_tool
         .execute(&serde_json::json!({ "name": "Runtime" }), &ctx)
         .await?;
@@ -91,7 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ─── code_search (FTS-only path, no inference) ─────────────
     println!("─── code_search(query = \"parse the recipe\") [FTS fallback] ───");
-    let search_tool = CodeSearchTool::new(Arc::clone(&engine));
+    let search_tool = CodeSearchTool::new(Arc::clone(&engine)).declared();
     let out = search_tool
         .execute(&serde_json::json!({ "query": "parse the recipe" }), &ctx)
         .await?;
@@ -102,7 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Use a huge window so we definitely see something from the corpus
     // we indexed today.
     println!("─── recent_changes(hours = 168) ───");
-    let recent_tool = RecentChangesTool::new(Arc::clone(&engine));
+    let recent_tool = RecentChangesTool::new(Arc::clone(&engine)).declared();
     let out = recent_tool
         .execute(&serde_json::json!({ "hours": 168_u64 }), &ctx)
         .await?;

@@ -235,7 +235,7 @@ fn main() {
         println!("using full daemon sampler chain (DRY omitted post-migration)");
         LlamaSampler::chain_simple([
             grammar_sampler,
-            LlamaSampler::penalties(128, 1.15, 0.1, 0.1),
+            LlamaSampler::penalties(&model, 128, 1.15, 0.1, 0.1),
             LlamaSampler::top_k(40),
             LlamaSampler::min_p(0.05, 1),
             LlamaSampler::temp(0.2),

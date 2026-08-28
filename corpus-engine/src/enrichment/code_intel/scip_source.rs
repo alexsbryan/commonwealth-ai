@@ -16,8 +16,9 @@ use std::path::Path;
 
 use corpus_engine_scip::{ScipGraph, SymbolRow};
 
-use super::{extract_body_from_lines, is_enrichable_kind, SymbolMeta, SymbolSource};
+use super::{extract_body_from_lines, is_enrichable_kind, PromptKind, SymbolMeta, SymbolSource};
 use crate::error::Result;
+use corpus_engine_scip::{descriptor_kind, DescriptorKind};
 
 /// Bodies shorter than this (trimmed) are skipped — one-line getters and the
 /// like don't carry enough intent to summarize usefully.
@@ -40,6 +41,33 @@ fn symbol_meta_from_row(row: &SymbolRow) -> SymbolMeta {
 /// file once (cache), skips non-functions, unreadable files, and trivially
 /// short bodies, and dedups by `(file, line, name)` (SCIP can double-list a
 /// symbol under two path prefixes). Pure + sync so it is unit-testable.
+/// Which prompt a descriptor deserves, or `None` to skip it entirely.
+///
+/// One decider, reusing `corpus_engine_scip::descriptor_kind` rather than
+/// re-deriving the SCIP grammar here (ARCH §10.6).
+pub fn prompt_kind_for(qualified_name: &str) -> Option<PromptKind> {
+    let k = descriptor_kind(qualified_name);
+    if k.is_callable() {
+        return Some(PromptKind::Callable);
+    }
+    match k {
+        DescriptorKind::Type => Some(PromptKind::Type),
+        // POSITIVE IDENTIFICATION TO DROP, fallback to keep. Only a descriptor
+        // we can positively read as non-callable is skipped; an unreadable one
+        // keeps its prior treatment.
+        //
+        // The SCIP descriptor grammar is the CROSS-LANGUAGE signal, which is
+        // why routing on it does not tie this pass to one exporter. Measured
+        // on this graph 2026-08-24: every symbol carries a descriptor (zero
+        // empty), and scip-python emits the same shapes as rust-analyzer —
+        // 14,219 callable and 3,303 type descriptors of its own. This arm is
+        // therefore not a language special-case but a refusal to drop what we
+        // could not read, for whatever exporter turns up next.
+        DescriptorKind::Unrecognized => Some(PromptKind::Callable),
+        _ => None,
+    }
+}
+
 pub fn enumerate_from_rows(
     rows: &[SymbolRow],
     source_root: &Path,
@@ -53,6 +81,7 @@ pub fn enumerate_from_rows(
     let mut seen: HashSet<(String, i32, String)> = HashSet::new();
     let mut out = Vec::new();
     let (mut enrichable, mut emitted, mut skipped_short, mut unreadable) = (0usize, 0, 0, 0);
+    let mut skipped_kind = 0usize;
 
     for row in rows {
         // Optional scope: when `file_filter` is non-empty, keep only symbols
@@ -76,6 +105,23 @@ pub fn enumerate_from_rows(
         if !is_enrichable_kind(&row.kind) {
             continue;
         }
+        // ROUTE ON THE DESCRIPTOR, which is reliable, rather than trusting the
+        // caller screen to mean "function". It does not: `#[derive(..)]`
+        // expansions emit refs whose CALLER is the type, so a struct walks
+        // straight through the screen above and is then asked a prompt that
+        // says "ONE function" six times. Measured on this graph 2026-08-24:
+        // of 61,706 symbols the old screens admitted, only 32,739 were
+        // callable — 4,945 types, 3,164 modules and 20,858 other non-callables
+        // were all being described as functions.
+        //
+        // Types are KEPT (with their own prompt): "what does this represent"
+        // is exactly the question a destination-first audit asks. Modules and
+        // the rest are DROPPED — a module's body is the whole file, which is
+        // the most expensive call in the run and the least useful answer.
+        let Some(kind) = prompt_kind_for(&row.qualified_name) else {
+            skipped_kind += 1;
+            continue;
+        };
         enrichable += 1;
         if !seen.insert((row.file_path.clone(), row.line_start, row.name.clone())) {
             continue; // duplicate symbol row
@@ -95,6 +141,7 @@ pub fn enumerate_from_rows(
             continue;
         }
         out.push(SymbolSource {
+            kind,
             meta: symbol_meta_from_row(row),
             body,
         });
@@ -158,6 +205,44 @@ mod tests {
         let d = std::env::temp_dir().join(format!("code_intel_{tag}_{}", std::process::id()));
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    /// A struct walks straight through the caller screen, because
+    /// `#[derive(..)]` expansions emit refs whose CALLER is the type. It must
+    /// be routed to the TYPE prompt, not asked "what does this function do".
+    #[test]
+    fn a_type_is_routed_to_the_type_prompt_not_the_function_one() {
+        assert_eq!(
+            prompt_kind_for("rust-analyzer cargo c 0.1.0 m/Label#"),
+            Some(PromptKind::Type)
+        );
+        assert_eq!(
+            prompt_kind_for("rust-analyzer cargo c 0.1.0 m/select_route()."),
+            Some(PromptKind::Callable)
+        );
+    }
+
+    /// A module's body is the whole file — the most expensive call in the run
+    /// and the least useful answer. Dropped, not described.
+    /// An exporter whose descriptors this grammar cannot read must KEEP its
+    /// symbols, not lose them. Every exporter on today's graph emits readable
+    /// descriptors, so this arm guards the next one rather than a current gap.
+    #[test]
+    fn an_unreadable_descriptor_keeps_the_symbol_rather_than_dropping_it() {
+        assert_eq!(prompt_kind_for("handle"), Some(PromptKind::Callable));
+        assert_eq!(prompt_kind_for(""), Some(PromptKind::Callable));
+    }
+
+    #[test]
+    fn modules_and_other_non_callables_are_skipped_entirely() {
+        for d in [
+            "rust-analyzer cargo c 0.1.0 refactor_cmd/labels/",
+            "rust-analyzer cargo c 0.1.0 m/CONST.",
+            "rust-analyzer cargo c 0.1.0 m/Type#field.",
+        ] {
+            assert_eq!(prompt_kind_for(d), None, "{d} should be skipped");
+        }
     }
 
     #[test]

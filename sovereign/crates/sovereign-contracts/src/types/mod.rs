@@ -23,40 +23,15 @@ pub type EntityInventory = std::collections::HashSet<String>;
 
 // ─── Inference Types ───────────────────────────────────────────
 
-/// The derived slot shadow of an OICP latency class (SLOT_POLICY §8).
-/// A request's true routing input is its `InferenceRequirements`
-/// envelope; `preferred_speed` is a legacy projection of that, written
-/// only by `slot_policy::latency_to_speed` (never a free-hand literal
-/// in new code).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub enum Speed {
-    /// Interactive tier: routed to the fast slot (the small, always-resident model). The serde default.
-    #[default]
-    Fast,
-    /// Retained ONLY for serde compatibility (stored `Plan`s embed the
-    /// PascalCase `"Medium"` string, and dropping the variant would
-    /// silently parse-fail them to empty) and for descriptive capability
-    /// metadata (`ProviderCapabilities::relative_speed`). It is NOT a
-    /// routing target: `latency_to_speed` never yields it, and
-    /// construction sites use `Fast` or `Slow` (SLOT_POLICY §8). At the
-    /// engine it is indistinguishable from `Slow` (both pick the primary
-    /// slot).
-    Medium,
-    /// Quality tier: routed to the primary slot; latency is secondary.
-    Slow,
-}
-
-/// Coarse reasoning-depth scale. Descriptive capability metadata
-/// (`ProviderCapabilities::relative_reasoning`), not a routing input.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Depth {
-    /// Surface-level: recall and single-hop answers.
-    Shallow,
-    /// Bounded multi-step reasoning — the tier the built-in local slots advertise.
-    Moderate,
-    /// Extended multi-hop reasoning — the strongest tier a provider can claim.
-    Deep,
-}
+// The inference call vocabulary lives in `oicp-types` (layer 0) and is
+// re-exported here at its historical path. It moved down when `oicp-client` —
+// the crate whose job is to decouple the systems — turned out to depend on
+// sovereign for the very types it puts on the wire (noun-convergence rung 2b).
+// Sovereign's SLOT_POLICY did NOT move: see `crate::slot_policy`.
+pub use crate::oicp::{
+    CompletionRequest, CompletionResponse, Depth, FinishReason, PromptShape, ProviderCapabilities,
+    SamplingMode, Speed, StreamFrame, StreamUsage, ToolSchema,
+};
 
 /// User-configurable inference parameters, sourced from `DesktopConfig`.
 /// Passed to `Runtime::new()` and used when building every `CompletionRequest`.
@@ -119,11 +94,6 @@ impl Default for InferenceConfig {
 // in a submodule joins the `types::*` surface — and therefore the
 // sovereign-contracts and sovereign-core crate roots — only by being added
 // HERE, as a reviewable diff. api-gate snapshots the resulting surface.
-mod completion;
-pub use completion::{
-    CompletionRequest, CompletionResponse, FinishReason, PromptShape, ProviderCapabilities,
-    SamplingMode, StreamFrame, StreamUsage, ToolSchema,
-};
 mod edit_slot;
 pub use edit_slot::{EditSlotInfo, FimLane, FimStyle, NextEditFormat, NextEditLane};
 // Generic local-journal machinery (file layout, rotation, caps,
@@ -150,9 +120,20 @@ pub use grounding_journal::{
 };
 mod routing;
 pub use routing::{
-    compute_trust_level, AuthorityClaim, Effect, Effort, Idempotency, Intent, Latency, Operation,
-    Permission, Scope, ToolContext, ToolDescriptor, ToolExample, TrustLevel,
+    compute_trust_level, AuthorityClaim, Effort, Intent, IntentRow, Operation, Permission,
+    ToolAccess, ToolContext, TrustLevel,
 };
+
+// ─── Tool Vocabulary ───────────────────────────────────────────
+
+// What a host publishes ABOUT a tool — the descriptor and its four behavioural
+// properties — lives in `oicp-types` (layer 0) and is re-exported here at its
+// historical path. It moved down when `commonwealth-api`'s injector middleware,
+// a layer-1 crate, turned out to be reaching UP into sovereign for the very
+// vocabulary it renders into every request (noun-convergence rung 2c, family
+// A). Sovereign's tool POLICY did NOT move: `Permission`, `AuthorityClaim` and
+// `ToolContext` are re-exported above, from `crate::types::routing`.
+pub use crate::oicp::{Effect, Idempotency, Latency, Scope, ToolDescriptor, ToolExample};
 mod conversation;
 pub use conversation::{
     Conversation, ConversationContext, ConversationTopicContext, HistoryRetrievalHit,
@@ -167,6 +148,11 @@ pub use epistemic::{
 };
 mod custody;
 pub use custody::{join_custody, ChunkCustody, Custody, CUSTODY_META_KEY};
+/// Re-exported beside [`Custody`] for the same reason: both are kernel facts a
+/// product crate reads off a chunk, and a non-core crate taking a direct
+/// `kernel-types` dep to name one field is §8.3's smell. `MeshScoredChunk`
+/// carries both.
+pub use kernel_types::Grain;
 mod search_privacy;
 pub use search_privacy::SearchPrivacy;
 mod grounding_verdict;
@@ -184,6 +170,18 @@ pub use narration::{
     NarrationEvent, NarrationPhase, NextStepOffer, OfferContext, ProposedAlternative,
     ResumeSession, RouterClassification, RoutingPolicy, RoutingTiming, TurnNarration,
 };
+// The client-facing projection of a persisted message's `metadata` blob.
+// Kept module-qualified rather than re-exported: it owns a `Provenance`
+// that is NOT `epistemic::Provenance` above, and two types of one name at
+// one path is the §10.6 smell this crate is supposed to prevent. Callers
+// write `projection::Provenance`, which says which one they mean.
+pub mod projection;
+// The turn protocol — what a client and a serving host say to each other
+// while one turn runs. Moved out of the `sovereign-server` BINARY on
+// 2026-08-25 (TOPOLOGY.md §10 phase 5b): a protocol private to a binary
+// crate is one no other process can speak.
+mod turn;
+pub use turn::{TurnFrame, TurnMode, TurnRequest};
 
 // ─── Plan Types ────────────────────────────────────────────────
 
@@ -1281,7 +1279,7 @@ pub struct RuntimeMetrics {
 mod ui;
 pub use ui::{
     ActionPreview, CoverageNote, InsightNode, InsightPosition, InsightSinkState, InsightSource,
-    PositionStyle, ResponseProvenance, SourceSummary, ThinFolder,
+    PositionStyle, ResponseProvenance, RouterStamp, SourceSummary, ThinFolder,
 };
 mod document;
 pub use document::{

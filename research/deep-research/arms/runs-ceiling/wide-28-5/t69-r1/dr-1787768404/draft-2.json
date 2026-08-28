@@ -1,0 +1,280 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787768404",
+  "charter_hash": "9a40ca214c62420d",
+  "round": 2,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Based on the evidence provided, here is a detailed explanation of the differences and connections between Google's A2A protocol and the MCP protocol, along with an elaboration on the innovative aspects and problems addressed by A2A.\n\n### **Differences and Connections: A2A vs. MCP**\n\nThe primary distinction lies in their specific function within the AI agent ecosystem: one connects agents to tools/data, while the other connects agents to each other [Source: ev-estate-1][Source: ev-40].\n\n*   **Core Purpose:**\n    *   **MCP (Model Context Protocol):** Introduced by Anthropic in late 2024, MCP focuses on connecting AI models to external tools and data sources. It solves the problem of having to build a new tool for every data problem by standardizing how agents access resources like files, databases, and APIs [Source: ev-estate-1][Source: ev-32]. Essentially, it acts as the \"model-to-world interface\" or a universal connector for context [Source: ev-42][Source: ev-47].\n    *   **A2A (Agent-to-Agent Protocol):** Launched by Google in April 2025, A2A is designed specifically to enable seamless communication between AI agents themselves. Its goal is to break down silos where agents built on different frameworks cannot coordinate with one another [Source: ev-estate-1][Source: ev-16]. It serves as an \"agent-to-agent collaboration framework,\" allowing peers from different vendors to discover and delegate tasks securely [Source: ev-34][Source: ev-48].\n\n*   **Relationship:**\n    *   The protocols are complementary rather than competing standards. Together they form a complete stack for interoperable multi-agent systems [Source: ev-estate-1]. MCP handles the vertical layer of agent-to-resource connections, while A2A handles the horizontal layer of agent-to-agent delegation across organizational boundaries [Source: ev-21].\n    *   Some frameworks integrate both natively; for example, Microsoft Agent Framework 1.0 includes native support for both MCP and A2A, whereas Google ADK 2.0 has native A2A support but also integrates with other tools via MCP concepts [Source: ev-30][Source: ev-44].\n\n### **Innovative Aspects of the A2A Protocol**\n\nThe A2A protocol introduces several architectural innovations designed to facilitate complex multi-agent ecosystems:\n\n*   **Agent Cards:** Every compliant agent publishes a JSON \"Agent Card\" at a well-known URL that describes its capabilities, supported modalities, authentication requirements, and pricing. Client agents query these cards to discover what remote agents can do before initiating tasks, enabling dynamic workflow composition without hard-coded integrations [Source: ev-estate-1][Source: ev-21].\n*   **Task Lifecycle Management:** The protocol defines a structured lifecycle for tasks (submission, execution, completion) allowing long-running operations to be managed asynchronously. It supports streaming updates via Server-Sent Events (SSE) so clients can monitor progress in real-time [Source: ev-estate-2][Source: ev-40].\n*   **Standardized Transport:** A2A utilizes standard web technologies—specifically JSON-RPC 2.0 wrapped inside HTTP POST requests—to ensure straightforward integration across different platforms using common protocols like SSE and Push Notifications [Source: ev-estate-1][Source: ev-38].\n*   **Vendor Neutrality:** By being governed by the Linux Foundation since its donation, A2A aims to prevent vendor lock-in. This governance model ensures neutral development, attracting over 50 initial partners (including Amazon, Microsoft, Salesforce) with support growing to over 150 organizations within a year [Source: ev-estate-1][Source: ev-6][Source: ev-45].\n\n### **Specific Problems Addressed by A2A**\n\nGoogle's A2A protocol was designed to solve critical fragmentation issues in enterprise AI adoption:\n\n*   **Interoperability Silos:** As organizations deploy more autonomous agents from different vendors or using different underlying technologies (e.g., LangGraph vs. CrewAI), they often end up unable to communicate or coordinate [Source: ev-estate-1]. A2A addresses this \"multi-agent integration chaos\" by providing a common language for heterogeneous agents to discover, authenticate, and collaborate seamlessly regardless of their origin [Source: ev-34][Source: ev-8].\n*   **Fragmentation and Custom Code Overhead:** Currently, integrating an agent with another system requires custom code, proprietary APIs, and weeks of engineering time because each connection is unique [Source: ev-17]. A2A standardizes these interactions, reducing the need for bespoke connectors and enabling dynamic composition of multi-agent workflows [Source: ev-estate-1].\n*   **Security Risks in Multi-Agent Environments:** Research highlights that while A2A provides a secure framework conceptually, its original specification had critical limitations regarding sensitive data. Issues included insufficient token lifetime control, lack of strong customer authentication (SCA), overbroad access scopes, and missing consent flows which increased risks like unauthorized disclosure and prompt injection attacks [Source: ev-38][Source: ev-46]. The protocol is evolving to address these through enhancements like explicit user consent orchestration (`USER_CONSENT_REQUIRED`) and direct data flow controllers [Source: ev-estate-2].\n\nIn summary, while MCP standardizes the connection between an AI model and the world's tools/data, A2A standardizes the communication between those models when they act as autonomous agents collaborating with one another across different systems.",
+  "citations": [
+    {
+      "evidence_id": "estate-1",
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://agentstoday.substack.com/p/agents-today-15-ai-agent-interoperability",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://medium.com/@sandibesen/an-unbiased-comparison-of-mcp-acp-and-a2a-protocols-0b45923a20f3",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://ikala.ai/blog/ai-trends/an-in-depth-analysis-of-googles-a2a-protocol-and-its-relationship-with-anthropics-mcp-en",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://cohorte.co/blog/googles-agent2agent-a2a-protocol-a-new-era-of-ai-agent-interoperability",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://www.linuxfoundation.org/press/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://github.com/a2aproject/A2A",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://news.ycombinator.com/item?id=48582679",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://codilime.com/blog/a2a-protocol-explained",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://arxiv.org/html/2505.12490v3",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://www.koyeb.com/blog/a2a-and-mcp-start-of-the-ai-agent-protocol-wars",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://a2aprotocol.ai/blog/impact-analysis-google-donating-a2a-protocol-linux-foundation",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://www.helpnetsecurity.com/2025/06/24/the-linux-foundation-agent2agent",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://arxiv.org/html/2505.02279v1",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-2",
+      "url": "https://nevermined.ai/blog/model-context-protocol-adoption-statistics",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-4",
+      "url": "https://cloudsecurityalliance.org/blog/2025/04/30/threat-modeling-google-s-a2a-protocol-with-the-maestro-framework",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-6",
+      "url": "https://stellagent.ai/insights/a2a-protocol-google-agent-to-agent",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-7",
+      "url": "https://tfir.io/ciscos-agntcy-takes-on-ai-agent-fragmentation-under-linux-foundation-umbrella",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-8",
+      "url": "https://mastra.ai/blog/what-is-agent-to-agent-protocol",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-10",
+      "url": "https://tyk.io/learning-center/a2a-protocol-architecture-and-technical-specification",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-11",
+      "url": "https://www.prnewswire.com/news-releases/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year-302737641.html",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-13",
+      "url": "https://akka.io/blog/mcp-a2a-acp-what-does-it-all-mean",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-15",
+      "url": "https://atlan.com/know/google-a2a-protocol",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-16",
+      "url": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-17",
+      "url": "https://galileo.ai/blog/google-agent2agent-a2a-protocol-guide",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-18",
+      "url": "https://tyk.io/learning-center/agent-protocols-a-complete-guide-to-mcp-a2a-and-acp",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-19",
+      "url": "https://bytebridge.medium.com/from-rest-to-mcp-why-developers-should-embrace-the-model-context-protocol-003e3806874a",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-21",
+      "url": "https://www.digitalapplied.com/blog/google-a2a-protocol-agent-to-agent-communication-guide",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-22",
+      "url": "https://www.thefastmode.com/technology-solutions/48034-linux-foundation-s-a2a-protocol-gains-rapid-enterprise-adoption-across-cloud-giants",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-23",
+      "url": "https://www.anthropic.com/news/model-context-protocol",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-24",
+      "url": "https://medium.com/@plawanrath/case-study-building-a-multi-agent-research-assistant-with-a2a-protocol-0df1d6eb71c3",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-25",
+      "url": "https://medium.com/@astropomeai/a-comprehensive-overview-of-the-model-context-protocol-mcp-f65150da0aa0",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-27",
+      "url": "https://zbrain.ai/understanding-the-a2a-protocol",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-29",
+      "url": "https://www.infoq.com/articles/ai-agent-transport-layer",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-30",
+      "url": "https://alicelabs.ai/en/insights/best-ai-agent-frameworks-2026",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-31",
+      "url": "https://arxiv.org/html/2602.14878v1",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-32",
+      "url": "https://huggingface.co/blog/1bo/a2a-protocol-explained",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-34",
+      "url": "https://www.deep-kondah.com/dissecting-the-a2a-protocol-foundations-for-interoperable-multi-agent-systems-mas",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-35",
+      "url": "https://uvik.net/blog/agentic-ai-frameworks",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-36",
+      "url": "https://www.linuxfoundation.org/press/linux-foundation-launches-the-agent2agent-protocol-project-to-enable-secure-intelligent-communication-between-ai-agents",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-37",
+      "url": "https://onereach.ai/blog/guide-choosing-mcp-vs-a2a-protocols",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-38",
+      "url": "https://github.com/a2aproject/a2a",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-39",
+      "url": "https://www.cybage.com/blog/mastering-google-s-a2a-protocol-the-complete-guide-to-agent-to-agent-communication",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-40",
+      "url": "https://medium.com/@saeedhajebi/a2a-protocol-an-in-depth-guide-78387f992f59",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-41",
+      "url": "https://github.com/a2aproject/A2A/commit/fde2bd8da8dcd4c6c5373de20f6e4e5b878d82f9",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-42",
+      "url": "https://www.backslash.security/blog/what-is-mcp-model-context-protocol",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-43",
+      "url": "https://arxiv.org/html/2505.02279v2",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-44",
+      "url": "https://agent2agent.info/docs/topics/key-concepts",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-45",
+      "url": "https://www.langchain.com/resources/ai-agent-frameworks",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-46",
+      "url": "https://en.wikipedia.org/wiki/Model_Context_Protocol",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-47",
+      "url": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-48",
+      "url": "https://medium.com/@armankamran/the-future-of-autonomous-conversations-googles-a2a-protocol-mcp-and-the-rise-of-ai-to-ai-8c98ba06d37a",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "ev-49",
+      "url": "https://blog.dreamfactory.com/stateful-vs-stateless-web-app-design",
+      "custody": "personal"
+    }
+  ]
+}

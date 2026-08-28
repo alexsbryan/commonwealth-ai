@@ -437,18 +437,6 @@ mod tests {
         (notes, features, project, dir, guard)
     }
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: ConversationId::new(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     #[tokio::test]
     async fn rejects_without_partner_confirmation() {
         let (notes, features, project, _dir, _home_lock) = fresh().await;
@@ -463,7 +451,7 @@ mod tests {
                     "analysis": "needs new extractor",
                     "partner_confirmed": false
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap_err();
@@ -483,7 +471,7 @@ mod tests {
                     "format_or_source": "PACER XML",
                     "analysis": "needs new extractor"
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap_err();
@@ -507,7 +495,7 @@ mod tests {
                     "blocked_recipe_parts": ["extract"],
                     "partner_confirmed": true
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();

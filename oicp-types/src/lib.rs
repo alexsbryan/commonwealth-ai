@@ -25,14 +25,28 @@
 //! to a v0.3 manifest.
 
 pub mod capability;
+pub mod completion;
+pub mod error;
 pub mod ingest;
+pub mod jsonrpc;
 pub mod knowledge;
 pub mod manifest;
 pub mod registry;
 pub mod requirements;
 pub mod response;
 pub mod scoring;
+pub mod slot;
+pub mod tool;
 pub mod version;
+
+pub use completion::{
+    latency_to_speed, speed_to_latency, CompletionRequest, CompletionResponse, Depth, FinishReason,
+    PromptShape, ProviderCapabilities, SamplingMode, Speed, StreamFrame, StreamUsage, ToolSchema,
+};
+pub use error::{InferenceError, InferenceResult};
+pub use jsonrpc::{JsonRpcError, JsonRpcRequest, JsonRpcResponse, JSONRPC_VERSION};
+pub use slot::{ComputeChildStatus, ResidentSlot, SlotPlacement, WorkerPlacement};
+pub use tool::{Effect, Idempotency, Latency, Scope, ToolDescriptor, ToolExample};
 
 pub use capability::{
     infer_hint_from_profile, proficiency, Capability, CapabilityClaim, CapabilityHint,

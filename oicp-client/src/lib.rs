@@ -43,6 +43,52 @@ use sovereign_contracts::types::*;
 /// 500th byte lands mid-UTF-8 — a remote error message with an em dash
 /// in the wrong place would have turned a peer's 503 into a local panic.
 /// One implementation, three call sites (§10.6).
+/// Attempts for a QUEUE SHED specifically — the initial call plus two.
+///
+/// Not a general retry, and the distinction is the whole point: a shed is
+/// BACKPRESSURE with a stated delay, and the only honest response to
+/// "busy, come back in 32s" is to come back. A 500, a 404, a malformed body
+/// are FAILURES, and retrying those masks them.
+const SHED_MAX_ATTEMPTS: u32 = 3;
+
+/// Total time this client will spend WAITING on sheds for one logical call.
+///
+/// A cap rather than an unbounded honour of the hint: a host predicting a
+/// two-minute wait should hand control back to the caller, which can decide
+/// to route elsewhere, rather than have its client block silently.
+const SHED_TOTAL_WAIT_CAP: std::time::Duration = std::time::Duration::from_secs(90);
+
+/// The delay a 503 ASKED FOR, when the 503 is a shed.
+///
+/// `None` for every other refusal. The discriminator is the presence of
+/// `retry_after_secs` in the body, NOT the 503 status: the admission layer is
+/// the only thing that puts that field on the wire
+/// (`commonwealth-api::admission::AdmissionRejection`), and a genuine
+/// `backend_error` carries no such field. Keying on the status alone would
+/// retry real failures into silence.
+///
+/// Minted 2026-08-26. The daemon computed this hint, set the `Retry-After`
+/// header, and structured the body — and no client in the workspace had a
+/// retry loop at all, so every caller threw it away and reported backpressure
+/// as a hard error. Measured: three sub-requests of ONE turn refused inside
+/// 17 ms against a hint that said 32 seconds (note `bf432b4d`).
+fn shed_retry_after(status: reqwest::StatusCode, body: &str) -> Option<std::time::Duration> {
+    if status != reqwest::StatusCode::SERVICE_UNAVAILABLE {
+        return None;
+    }
+    let parsed: serde_json::Value = serde_json::from_str(body).ok()?;
+    let secs = parsed.get("retry_after_secs")?.as_u64()?;
+    // Clamp: a hint of 0 would spin, and one of an hour would hang the caller
+    // that [`SHED_TOTAL_WAIT_CAP`] exists to protect. The ceiling is DERIVED
+    // from that cap rather than written twice — a per-hint ceiling above the
+    // total budget is dead range, since such a hint could never be honoured
+    // (ARCH §10.6, and this exact drift was caught by
+    // `the_retry_hint_is_clamped_at_both_ends`).
+    Some(std::time::Duration::from_secs(
+        secs.clamp(1, SHED_TOTAL_WAIT_CAP.as_secs()),
+    ))
+}
+
 fn error_excerpt(body: &str) -> &str {
     const MAX: usize = 500;
     if body.len() <= MAX {
@@ -60,6 +106,24 @@ fn error_excerpt(body: &str) -> &str {
 /// Works with any endpoint implementing the OpenAI chat/completions API:
 /// vLLM, Ollama, llama.cpp server, text-generation-inference, etc.
 pub struct RemoteApiProvider {
+    /// May this provider WAIT OUT a shed, or must it report it and let the
+    /// caller route elsewhere?
+    ///
+    /// **Off by default, and that default is the invariant.** Waiting is only
+    /// correct where there is no alternative holder. A PEER that sheds is
+    /// giving a ROUTING signal — try local, try another peer — and re-dialling
+    /// it inside its own retry window is the failed-hop tax
+    /// `MESH_SCALE…§9.1.1` measures; `chat_completion_e2e`'s
+    /// `a_yielding_peer_is_asked_once_not_once_per_turn` and
+    /// `repeated_sheds_never_quarantine_a_healthy_peer` both pin it, and both
+    /// caught this being on by default on 2026-08-26.
+    ///
+    /// Turn it on with [`Self::waiting_out_sheds`] only where this endpoint is
+    /// the LAST RESORT — the local slot after peer selection has already been
+    /// exhausted. There, "busy, come back in 32s" is the whole answer, and
+    /// dropping it is what made three sub-requests of one turn fail inside
+    /// 17ms against a 32-second hint (note `bf432b4d`).
+    wait_out_sheds: bool,
     client: reqwest::Client,
     endpoint: String,
     api_key: Option<String>,
@@ -163,6 +227,11 @@ impl RemoteApiProvider {
             "input": texts,
         });
 
+        // Deliberately NOT routed through `send_honouring_shed`: this site's
+        // refusal is a CAPABILITY verdict, not backpressure, and it returns
+        // `NotImplemented` so a caller can fall back to per-item embedding.
+        // Flattening that into `Inference` would be the same collapse this
+        // client already refuses to make on a 503 body (§18.3).
         let req = self.stamped(self.client.post(&url).json(&body));
 
         let response = req
@@ -221,6 +290,8 @@ impl RemoteApiProvider {
             .unwrap_or_default();
 
         Self {
+            // Off: see the field docs — a peer shed is a routing signal, not a wait.
+            wait_out_sheds: false,
             client,
             endpoint: endpoint.trim_end_matches('/').to_string(),
             api_key,
@@ -254,6 +325,8 @@ impl RemoteApiProvider {
         context_size: u32,
     ) -> Self {
         Self {
+            // Off: see the field docs — a peer shed is a routing signal, not a wait.
+            wait_out_sheds: false,
             client,
             endpoint: endpoint.trim_end_matches('/').to_string(),
             api_key: Some(bearer),
@@ -285,6 +358,13 @@ impl RemoteApiProvider {
     /// The hex encoding is what `commonwealth-api`'s
     /// `parse_x_node_id` expects; an unparseable value is not
     /// ignored, it buckets under the zero node and is still gated.
+    /// Declare this endpoint the LAST RESORT, so a shed is waited out rather
+    /// than reported. See [`Self::wait_out_sheds`] — do not set this on a peer.
+    pub fn waiting_out_sheds(mut self) -> Self {
+        self.wait_out_sheds = true;
+        self
+    }
+
     pub fn with_node_id(mut self, node_id_hex: impl Into<String>) -> Self {
         self.node_id = Some(node_id_hex.into());
         self
@@ -302,6 +382,74 @@ impl RemoteApiProvider {
     /// distinguish that from correct behaviour, so the invariant is
     /// made structural rather than remembered (ARCH §7). Seven call
     /// sites hand-maintained the auth half before this existed.
+    /// Send, and come back when the host asks us to.
+    ///
+    /// THE ONE place this client waits out backpressure (ARCH §10.6). `build`
+    /// re-creates the request per attempt rather than cloning, so a body
+    /// stream cannot be consumed by a failed try.
+    ///
+    /// Returns the FIRST success, or the last refusal. A refusal that is not a
+    /// shed returns immediately and untouched — see [`shed_retry_after`].
+    async fn send_honouring_shed<F>(
+        &self,
+        build: F,
+        what: &'static str,
+    ) -> Result<reqwest::Response>
+    where
+        F: Fn() -> reqwest::RequestBuilder,
+    {
+        let mut waited = std::time::Duration::ZERO;
+        let mut attempt = 0u32;
+        loop {
+            let response = build()
+                .send()
+                .await
+                .map_err(|e| Error::Inference(format!("{what} failed: {e}")))?;
+            if response.status().is_success() {
+                return Ok(response);
+            }
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            attempt += 1;
+
+            let shed = if self.wait_out_sheds {
+                shed_retry_after(status, &body)
+            } else {
+                // Not our shed to wait out: report it so the caller can route
+                // elsewhere. Peers depend on this — see `wait_out_sheds`.
+                None
+            };
+            let Some(delay) = shed else {
+                // Not backpressure — a real failure. Surface it as it arrived.
+                return Err(Error::Inference(format!(
+                    "{what} returned {status}: {}",
+                    error_excerpt(&body)
+                )));
+            };
+            if attempt >= SHED_MAX_ATTEMPTS || waited + delay > SHED_TOTAL_WAIT_CAP {
+                // Out of budget. Report the shed AS a shed — the caller needs
+                // to know this was "busy", not "broken", to decide whether to
+                // route elsewhere (§18.3).
+                return Err(Error::Inference(format!(
+                    "{what} shed by the host after {attempt} attempt(s), \
+                     {}s waited: {}",
+                    waited.as_secs(),
+                    error_excerpt(&body)
+                )));
+            }
+            tracing::info!(
+                target: "oicp_client",
+                what,
+                attempt,
+                delay_ms = delay.as_millis() as u64,
+                waited_ms = waited.as_millis() as u64,
+                "shed — honouring the host's Retry-After and coming back"
+            );
+            tokio::time::sleep(delay).await;
+            waited += delay;
+        }
+    }
+
     fn stamped(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
         let mut req = req;
         if let Some(ref auth) = self.auth_header() {
@@ -724,21 +872,12 @@ impl InferenceProvider for RemoteApiProvider {
         let url = format!("{}/chat/completions", self.endpoint);
         let body = self.build_request(request);
 
-        let req = self.stamped(self.client.post(&url).json(&body));
-
-        let response = req
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("Remote API request failed: {e}")))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(Error::Inference(format!(
-                "Remote API returned {status}: {}",
-                error_excerpt(&body)
-            )));
-        }
+        let response = self
+            .send_honouring_shed(
+                || self.stamped(self.client.post(&url).json(&body)),
+                "Remote API request",
+            )
+            .await?;
 
         let chat_response: ChatCompletionResponse = response
             .json()
@@ -805,21 +944,12 @@ impl InferenceProvider for RemoteApiProvider {
         let mut body = self.build_request(request);
         body["stream"] = serde_json::json!(true);
 
-        let req = self.stamped(self.client.post(&url).json(&body));
-
-        let response = req
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("Remote typed stream request failed: {e}")))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(Error::Inference(format!(
-                "Remote typed stream API returned {status}: {}",
-                error_excerpt(&body)
-            )));
-        }
+        let response = self
+            .send_honouring_shed(
+                || self.stamped(self.client.post(&url).json(&body)),
+                "Remote typed stream request",
+            )
+            .await?;
 
         let byte_stream = response.bytes_stream();
         // Carry parser state across the byte-stream's filter_map by
@@ -895,21 +1025,12 @@ impl InferenceProvider for RemoteApiProvider {
         let mut body = self.build_request(request);
         body["stream"] = serde_json::json!(true);
 
-        let req = self.stamped(self.client.post(&url).json(&body));
-
-        let response = req
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("Remote stream request failed: {e}")))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(Error::Inference(format!(
-                "Remote stream API returned {status}: {}",
-                error_excerpt(&body)
-            )));
-        }
+        let response = self
+            .send_honouring_shed(
+                || self.stamped(self.client.post(&url).json(&body)),
+                "Remote stream request",
+            )
+            .await?;
 
         let byte_stream = response.bytes_stream();
 
@@ -964,18 +1085,12 @@ impl InferenceProvider for RemoteApiProvider {
             "input": text,
         });
 
-        let req = self.stamped(self.client.post(&url).json(&body));
-
-        let response = req
-            .send()
-            .await
-            .map_err(|e| Error::Inference(format!("Embedding request failed: {e}")))?;
-
-        if !response.status().is_success() {
-            return Err(Error::NotImplemented(
-                "Embedding not supported by this endpoint".to_string(),
-            ));
-        }
+        let response = self
+            .send_honouring_shed(
+                || self.stamped(self.client.post(&url).json(&body)),
+                "Embedding request",
+            )
+            .await?;
 
         #[derive(Deserialize)]
         struct EmbedResponse {
@@ -1161,6 +1276,12 @@ pub struct SplitInferenceProvider {
 }
 
 impl SplitInferenceProvider {
+    /// Build the daemon-backed pair from an explicit context window and embed
+    /// query-instruction prefix.
+    ///
+    /// Both slots are declared LAST RESORT — this provider owns no weights, so
+    /// the daemon on the far end is the only holder and a shed is waited out
+    /// rather than reported. See [`RemoteApiProvider::waiting_out_sheds`].
     pub fn new(
         endpoint_v1: &str,
         chat_model_id: String,
@@ -1168,18 +1289,64 @@ impl SplitInferenceProvider {
         context_size: u32,
         embed_query_instruction: String,
     ) -> Self {
-        let chat = std::sync::Arc::new(RemoteApiProvider::new(
+        Self::new_with_bearer(
             endpoint_v1,
             None,
-            &chat_model_id,
+            chat_model_id,
+            embed_model_id,
             context_size,
-        ));
+            embed_query_instruction,
+        )
+    }
+
+    /// Same, carrying an `Authorization: Bearer` on every outbound call.
+    ///
+    /// The bearer exists for the case where the daemon on the far end is
+    /// **not this operator's** — a node that lent named models to a guest for
+    /// a bounded window (`svrn mesh grant`). A local daemon needs none: a
+    /// loopback caller is admitted before any bearer is read.
+    ///
+    /// Deliberately a second constructor rather than a `with_bearer(self)`
+    /// builder: the key lives inside the two `RemoteApiProvider`s, so a
+    /// post-hoc setter would have to rebuild both — and would then be a second
+    /// site deciding shed-waiting and the query-instruction prefix. One body
+    /// builds the pair; `new` is the no-bearer call of it.
+    pub fn new_with_bearer(
+        endpoint_v1: &str,
+        bearer: Option<String>,
+        chat_model_id: String,
+        embed_model_id: String,
+        context_size: u32,
+        embed_query_instruction: String,
+    ) -> Self {
+        // BOTH slots wait out a shed, and this is the ONE site that opts in
+        // (ARCH §7 — structural, not remembered). This provider owns no
+        // weights: the daemon on the other end of `endpoint_v1` is the only
+        // holder there is, so "busy, come back in 32s" is the whole answer and
+        // there is nowhere else to route. A peer provider is the opposite case
+        // and stays OFF by default — see [`RemoteApiProvider::wait_out_sheds`].
+        //
+        // Putting it here rather than at the six call sites is what makes it
+        // unforgettable: a new daemon-backed client gets the behaviour by
+        // construction, and `provider_for_peer` cannot acquire it by accident
+        // because it builds a bare `RemoteApiProvider`, never this.
+        //
+        // The failure it closes was measured: three sub-requests of ONE turn's
+        // own fan-out, refused by their own host inside 17 ms against a
+        // 32-second hint, with no other client on the machine (note
+        // `bf432b4d`). The hint was computed, serialised, transported — and
+        // dropped.
+        let chat = std::sync::Arc::new(
+            RemoteApiProvider::new(endpoint_v1, bearer.clone(), &chat_model_id, context_size)
+                .waiting_out_sheds(),
+        );
         // The embed slot carries the query-instruction prefix so
         // `embed_query` stays bit-identical to the embedded engine. The chat
         // slot never embeds, so it leaves the prefix empty.
         let embed = std::sync::Arc::new(
-            RemoteApiProvider::new(endpoint_v1, None, &embed_model_id, context_size)
-                .with_query_instruction(embed_query_instruction),
+            RemoteApiProvider::new(endpoint_v1, bearer, &embed_model_id, context_size)
+                .with_query_instruction(embed_query_instruction)
+                .waiting_out_sheds(),
         );
         Self {
             chat,
@@ -1215,6 +1382,18 @@ impl SplitInferenceProvider {
         chat_model_id: String,
         embed_model_id: String,
     ) -> Self {
+        Self::from_manifest_with_bearer(endpoint_v1, None, manifest, chat_model_id, embed_model_id)
+    }
+
+    /// [`Self::from_manifest`] carrying a bearer. See [`Self::new_with_bearer`]
+    /// for why the credential is a constructor argument rather than a setter.
+    pub fn from_manifest_with_bearer(
+        endpoint_v1: &str,
+        bearer: Option<String>,
+        manifest: &ProviderManifest,
+        chat_model_id: String,
+        embed_model_id: String,
+    ) -> Self {
         /// The pre-v0.4 client default, used when the host doesn't advertise a
         /// truthful `context_tokens` for the chat model.
         const V03_FALLBACK_CONTEXT: u32 = 8192;
@@ -1234,8 +1413,9 @@ impl SplitInferenceProvider {
             .and_then(|k| k.embed_model.as_ref())
             .map(|e| e.query_instruction_prefix.clone())
             .unwrap_or_default();
-        Self::new(
+        Self::new_with_bearer(
             endpoint_v1,
+            bearer,
             chat_model_id,
             embed_model_id,
             context_size,
@@ -1414,6 +1594,79 @@ impl InferenceProvider for SplitInferenceProvider {
 
 #[cfg(test)]
 mod tests {
+
+    /// A shed is retried; a FAILURE is not. This is the whole safety property
+    /// of the retry, so it is the thing pinned.
+    ///
+    /// Named failing input (ARCH §18.1): key the retry on the 503 STATUS
+    /// instead of on `retry_after_secs`, and case two starts retrying a
+    /// genuine `backend_error` — turning a broken host into a slow one and
+    /// hiding the break. That is the exact shape of the embed-slot failure
+    /// that cost this project a session on 2026-08-26 (note `f4972e1b`).
+    #[test]
+    fn only_backpressure_is_retried_never_a_failure() {
+        use reqwest::StatusCode;
+        let shed = r#"{"error":"host busy: ~121875 ms predicted wait at queue position 1","reason":"local_queue_full","retry_after_secs":32}"#;
+        assert_eq!(
+            shed_retry_after(StatusCode::SERVICE_UNAVAILABLE, shed),
+            Some(std::time::Duration::from_secs(32))
+        );
+
+        // A 503 that is NOT a shed — no `retry_after_secs`. Must not retry.
+        let broken = r#"{"error":{"message":"embedding batch failed: Decode Error -3","type":"backend_error"}}"#;
+        assert_eq!(
+            shed_retry_after(StatusCode::SERVICE_UNAVAILABLE, broken),
+            None
+        );
+
+        // The hint on a non-503 is not ours to honour.
+        assert_eq!(
+            shed_retry_after(StatusCode::INTERNAL_SERVER_ERROR, shed),
+            None
+        );
+
+        // Not JSON at all, and an empty body — both are refusals, not delays.
+        assert_eq!(
+            shed_retry_after(StatusCode::SERVICE_UNAVAILABLE, "gateway timeout"),
+            None
+        );
+        assert_eq!(shed_retry_after(StatusCode::SERVICE_UNAVAILABLE, ""), None);
+    }
+
+    /// The default is OFF, and that is the safety half.
+    ///
+    /// Named failing input (ARCH §18.1), and it is not hypothetical: shipping
+    /// this ON by default on 2026-08-26 broke
+    /// `chat_completion_e2e::a_yielding_peer_is_asked_once_not_once_per_turn`
+    /// and `repeated_sheds_never_quarantine_a_healthy_peer` — a peer that
+    /// yielded with `retry_after_secs=34` was re-dialled twice inside its own
+    /// window. A peer shed is a ROUTING signal; only a last-resort endpoint
+    /// may wait one out.
+    #[test]
+    fn a_provider_does_not_wait_out_sheds_unless_told_to() {
+        let p = RemoteApiProvider::new("http://x", None, "m", 4096);
+        assert!(
+            !p.wait_out_sheds,
+            "default must be OFF — a peer shed is a routing signal, not backpressure to sit on"
+        );
+        assert!(p.waiting_out_sheds().wait_out_sheds);
+    }
+
+    /// The hint is honoured, not obeyed. A `0` would spin; an hour would hang
+    /// the caller the total cap exists to protect.
+    #[test]
+    fn the_retry_hint_is_clamped_at_both_ends() {
+        use reqwest::StatusCode;
+        let with = |n: u64| format!(r#"{{"reason":"local_queue_full","retry_after_secs":{n}}}"#);
+        let d = |n: u64| shed_retry_after(StatusCode::SERVICE_UNAVAILABLE, &with(n)).unwrap();
+        assert_eq!(d(0), std::time::Duration::from_secs(1));
+        assert_eq!(d(32), std::time::Duration::from_secs(32));
+        // The ceiling IS the total budget — no dead range above it.
+        assert_eq!(d(9_999), SHED_TOTAL_WAIT_CAP);
+        // So no single honoured hint can ever exceed the budget it spends.
+        assert!(d(9_999) <= SHED_TOTAL_WAIT_CAP);
+        assert!(d(32) <= SHED_TOTAL_WAIT_CAP);
+    }
     use super::*;
 
     #[tokio::test]
@@ -1837,6 +2090,24 @@ mod tests {
         )
     }
 
+    /// What the daemon emits when its slot queue sheds — the shape
+    /// `commonwealth-api::admission::shed_response` renders, header and
+    /// all. `shed_retry_after` reads `retry_after_secs` out of the BODY;
+    /// the header is here because the real response carries it and a
+    /// fixture that drops it would let a body-only parser pass on a
+    /// response no daemon sends.
+    fn http_shed(retry_after_secs: u64) -> String {
+        let body = format!(
+            r#"{{"error":"host busy","reason":"local_queue_full","retry_after_secs":{retry_after_secs}}}"#
+        );
+        format!(
+            "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\n\
+             Retry-After: {retry_after_secs}\r\nContent-Length: {}\r\n\
+             Connection: close\r\n\r\n{body}",
+            body.len()
+        )
+    }
+
     /// What a real daemon emits for a TRUNCATED generation: two tokens,
     /// `finish_reason: "length"`, and a usage record. Truncation is the
     /// case that matters — a synthesised terminal frame reports it as a
@@ -2095,6 +2366,64 @@ mod tests {
         assert!(
             head.contains("x-node-id: 00c0ffee"),
             "the streaming completion must carry the node id; head was:\n{head}"
+        );
+    }
+
+    /// The two halves of the shed policy, in one test, because they are one
+    /// decision seen from two sides — and shipping the retry ON by default on
+    /// 2026-08-26 proved that half of it alone is a mesh regression.
+    ///
+    /// A WIRE assertion for the same reason the stamp tests above are: a
+    /// provider that quietly gave up and one that quietly waited both return
+    /// an `Err` to the caller. Only the socket count separates them.
+    ///
+    /// Named failing input (ARCH §18.1): drop `.waiting_out_sheds()` from
+    /// either slot in `SplitInferenceProvider::new` and half A fails with one
+    /// request line instead of two; add it to `provider_for_peer` and half B
+    /// hangs the mock's second accept, which is `chat_completion_e2e`'s
+    /// `a_yielding_peer_is_asked_once_not_once_per_turn` restated at this
+    /// layer.
+    #[tokio::test]
+    async fn the_daemon_backed_slot_waits_out_a_shed_and_a_bare_provider_reports_it() {
+        // A. The last resort. Scripted shed-then-answer: the client only ever
+        //    sees the answer if it comes back for it.
+        let daemon = MockDaemon::serving(vec![
+            http_shed(1),
+            http_ok(
+                "application/json",
+                r#"{"choices":[{"message":{"content":"hi"},"finish_reason":"stop"}]}"#,
+            ),
+        ]);
+        let served = daemon.attach_provider().complete(&a_request()).await;
+        assert!(
+            served.is_ok(),
+            "the daemon-backed slot owns no weights and has nowhere to route: a shed \
+             is a wait, not a verdict — got {served:?}"
+        );
+        assert_eq!(
+            daemon.request_lines().len(),
+            2,
+            "the wait has to reach the socket; one request line means the hint was \
+             computed, transported and dropped (note `bf432b4d`)"
+        );
+
+        // B. The control, and the invariant the default protects. ONE response
+        //    scripted, so a provider that re-dialled would block the mock's
+        //    second `accept` — the failure is a hang, which is louder than a
+        //    wrong count and is the point.
+        let peer = MockDaemon::serving(vec![http_shed(1)]);
+        let refused = peer.provider().complete(&a_request()).await;
+        let err = refused.expect_err("a bare provider must surface the shed, not absorb it");
+        assert!(
+            err.to_string().contains("503"),
+            "a peer shed is a ROUTING signal and must arrive intact so the cascade \
+             tries elsewhere — got {err}"
+        );
+        assert_eq!(
+            peer.request_lines().len(),
+            1,
+            "a peer is asked ONCE; re-dialling inside its own retry window is the \
+             failed-hop tax MESH_SCALE §9.1.1 measures"
         );
     }
 }

@@ -65,6 +65,11 @@ impl Runtime {
         // failure, one layer down).
         locator_hint: Option<MetalingualLocator>,
     ) -> Result<Response> {
+        // Resolved ONCE for the turn and passed to every stage below
+        // (daemon-convergence Phase 4a) — no stage reaches back into the
+        // Runtime for a provider.
+        let lane = self.lane();
+
         let from_router = locator_hint.is_some();
         let locator = locator_hint.unwrap_or_else(|| parse_metalingual_locator(message));
         tracing::info!(?locator, from_router, "MetalingualQuery: resolved locator");
@@ -227,6 +232,7 @@ impl Runtime {
                         .as_deref()
                         .or(context.conversation.enabled_corpora.as_deref()),
                     context.corpus_ceiling.as_deref(),
+                    &lane,
                 )
                 .await;
 
@@ -381,10 +387,10 @@ impl Runtime {
             Default::default()
         };
         let folder_meta = self.folder_metadata_snapshot().await;
-        self.rerank_conv_chunks_via_ppr(message, &mut chunks, &display_categories)
+        self.rerank_conv_chunks_via_ppr(message, &mut chunks, &display_categories, &lane)
             .await;
         let conv_briefing = self
-            .build_conv_briefing_block(&chunks, &display_categories)
+            .build_conv_briefing_block(&chunks, &display_categories, &lane)
             .await;
         let doc_context = format_scored_chunks_with_kinds(
             &chunks,
@@ -749,6 +755,8 @@ fn conv_chunk(title: String, content: String, rank: usize) -> corpus_engine::Sco
         chunk_id: None,
         source_doc_id: None,
         vector_distance: None,
+        // A rendered turn from THIS conversation, not corpus content.
+        provenance: corpus_engine::index::ChunkProvenance::manufactured("conversation_turn"),
     }
 }
 
@@ -840,7 +848,7 @@ mod tests {
         inference: Arc<RecordingInference>,
         store: Arc<sovereign_store::memory::InMemoryStateStore>,
     ) -> Runtime {
-        Runtime::new(
+        Runtime::new(crate::runtime::RuntimeParts::new(
             inference,
             Box::new(crate::stubs::PassthroughRouter),
             Box::new(crate::stubs::NoOpPlanner),
@@ -849,7 +857,10 @@ mod tests {
             Arc::new(SkillRegistry::new()),
             Arc::new(crate::executor::AutoApprovalChannel),
             crate::types::InferenceConfig::default(),
-        )
+            // Phase 4b: enrichment is a required argument, not eight
+            // forgettable builders.
+            crate::runtime::lane::LaneSources::none(),
+        ))
     }
 
     fn context_with(messages: Vec<Message>) -> ConversationContext {

@@ -79,40 +79,111 @@ const HELP: Help = Help {
     ],
 };
 
-pub async fn cmd_atlas_tensions_classify(args: &[String]) -> i32 {
-    if help::wants_help(args) {
-        help::print(&HELP);
-        return 0;
+/// What the Phase 6 classifier did — or why it did nothing.
+///
+/// FIVE different things used to return exit `0` from this command: the
+/// holistic pass, the per-pair pass, a pipeline that opts into neither,
+/// an empty candidate file, and `--dry-run`. The orchestrator saw the
+/// same `0` for all five and reported `"Tensions complete"`. Four of
+/// them classified nothing at all (ARCH §18.3: absence is reported,
+/// never defaulted).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClassifyOutcome {
+    /// The corpus-level naturalistic pass ran.
+    Holistic {
+        /// Fault-line edges written. Zero on a dry run.
+        edges: usize,
+        runs_succeeded: usize,
+        runs_attempted: usize,
+        dry_run: bool,
+    },
+    /// The per-pair classifier ran over the candidate file.
+    PerPair {
+        accepted: usize,
+        rejected: usize,
+        chat_failures: usize,
+        parse_failures: usize,
+        /// Candidates pointing at atoms missing from atoms.json.
+        stale_dropped: usize,
+    },
+    /// The pipeline opts into neither Phase 6 classifier. Nothing ran,
+    /// and that is the expected outcome for this corpus — not a failure,
+    /// and not a classification either.
+    NotOptedIn { pipeline_id: String },
+    /// `tension_candidates.json` held no candidates.
+    NoCandidates,
+    /// `--dry-run`: prompts composed and printed, model never called.
+    DryRun { candidates: usize },
+}
+
+impl ClassifyOutcome {
+    /// One line naming what happened, for the build orchestrator's
+    /// `StepDone` event.
+    pub fn summary(&self) -> String {
+        match self {
+            Self::Holistic {
+                edges,
+                runs_succeeded,
+                runs_attempted,
+                dry_run,
+            } => {
+                if *dry_run {
+                    "holistic dry run — prompt composed, model not called".to_string()
+                } else {
+                    let mut s = format!(
+                        "holistic: {edges} fault-line edge(s) from {runs_succeeded}/{runs_attempted} run(s)"
+                    );
+                    if runs_succeeded < runs_attempted {
+                        s.push_str(" (some runs failed)");
+                    }
+                    s
+                }
+            }
+            Self::PerPair {
+                accepted,
+                rejected,
+                chat_failures,
+                parse_failures,
+                stale_dropped,
+            } => {
+                let mut s = format!("{accepted} tension(s), {rejected} rejected");
+                if chat_failures + parse_failures > 0 {
+                    s.push_str(&format!(
+                        "; {chat_failures} chat + {parse_failures} parse failure(s) — recall degraded"
+                    ));
+                }
+                if *stale_dropped > 0 {
+                    s.push_str(&format!("; {stale_dropped} stale candidate(s) dropped"));
+                }
+                s
+            }
+            Self::NotOptedIn { pipeline_id } => {
+                format!(
+                    "nothing classified — pipeline `{pipeline_id}` opts into no Phase 6 classifier"
+                )
+            }
+            Self::NoCandidates => {
+                "nothing classified — tension_candidates.json held 0 candidates".to_string()
+            }
+            Self::DryRun { candidates } => {
+                format!("dry run — {candidates} prompt(s) printed, model not called")
+            }
+        }
     }
+}
 
-    let parsed = match parse_args(args) {
-        Ok(p) => p,
-        Err(msg) => {
-            eprintln!("error: {msg}");
-            eprintln!();
-            help::print(&HELP);
-            return 2;
-        }
-    };
+/// Classify tension candidates. Keeps its per-candidate progress
+/// printing: each candidate is a chat call.
+pub async fn run(parsed: &ParsedClassify) -> Result<ClassifyOutcome, String> {
+    let cfg = EnrichConfig::require(&parsed.corpus_id)
+        .map_err(|e| format!("loading enrichment config: {e}"))?;
 
-    let cfg = match EnrichConfig::require(&parsed.corpus_id) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("error: loading enrichment config: {e}");
-            return 1;
-        }
-    };
-
-    let pipeline = match super::pipeline_resolve::resolve_pipeline(&cfg) {
-        Some(p) => p,
-        None => {
-            eprintln!(
-                "error: pipeline '{}' not registered (corpus references unknown pipeline)",
-                cfg.pipeline_id
-            );
-            return 1;
-        }
-    };
+    let pipeline = super::pipeline_resolve::resolve_pipeline(&cfg).ok_or_else(|| {
+        format!(
+            "pipeline '{}' not registered (corpus references unknown pipeline)",
+            cfg.pipeline_id
+        )
+    })?;
 
     let atlas_dir = atlas_dir_for(&cfg.corpus_id);
 
@@ -133,34 +204,26 @@ pub async fn cmd_atlas_tensions_classify(args: &[String]) -> i32 {
             "  · pipeline '{}' is not opted into the Phase 6 atlas Tension classifier — skipping.",
             cfg.pipeline_id
         );
-        return 0;
+        return Ok(ClassifyOutcome::NotOptedIn {
+            pipeline_id: cfg.pipeline_id.clone(),
+        });
     }
 
-    let candidates = match read_tension_candidates(&atlas_dir) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!(
-                "error: reading {}/tension_candidates.json: {e}. Run \
-                 `svrn enrich atlas-tensions {}` first.",
-                atlas_dir.display(),
-                cfg.corpus_id
-            );
-            return 1;
-        }
-    };
+    let candidates = read_tension_candidates(&atlas_dir).map_err(|e| {
+        format!(
+            "reading {}/tension_candidates.json: {e}. Run `svrn enrich atlas-tensions {}` first.",
+            atlas_dir.display(),
+            cfg.corpus_id
+        )
+    })?;
 
     if candidates.candidates.is_empty() {
         println!("  · 0 candidates in tension_candidates.json — nothing to classify.");
-        return 0;
+        return Ok(ClassifyOutcome::NoCandidates);
     }
 
-    let atoms = match read_atlas_atoms(&atlas_dir) {
-        Ok(a) => a,
-        Err(e) => {
-            eprintln!("error: reading {}/atoms.json: {e}", atlas_dir.display());
-            return 1;
-        }
-    };
+    let atoms = read_atlas_atoms(&atlas_dir)
+        .map_err(|e| format!("reading {}/atoms.json: {e}", atlas_dir.display()))?;
 
     // Resolve every candidate up-front. Candidates that point at
     // atoms missing from atoms.json (stale candidate file) are
@@ -209,17 +272,14 @@ pub async fn cmd_atlas_tensions_classify(args: &[String]) -> i32 {
             println!("system: {} bytes", prompt.system.len());
             println!("user:\n{}", prompt.user);
         }
-        return 0;
+        return Ok(ClassifyOutcome::DryRun {
+            candidates: resolved.len(),
+        });
     }
 
     // Build the chat closure once; reuse across candidates.
-    let client = match DaemonInferenceClient::from_enrich_config(&cfg) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("error: building daemon client: {e}");
-            return 1;
-        }
-    };
+    let client = DaemonInferenceClient::from_enrich_config(&cfg)
+        .map_err(|e| format!("building daemon client: {e}"))?;
     let (_embed, chat) = client.into_closures();
 
     // Walk the existing edges file. We preserve every non-Tension
@@ -227,17 +287,13 @@ pub async fn cmd_atlas_tensions_classify(args: &[String]) -> i32 {
     // LlmPairwise (i.e., a hand-authored or future-non-LLM Tension
     // edge stays). LlmPairwise Tension edges from a prior classifier
     // run are dropped and replaced with this run's output.
-    let prior_edges = match read_atlas_edges(&atlas_dir) {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!(
-                "error: reading {}/edges.json: {e}. Run `svrn enrich atlas-resolve {} --phase all` first.",
-                atlas_dir.display(),
-                cfg.corpus_id
-            );
-            return 1;
-        }
-    };
+    let prior_edges = read_atlas_edges(&atlas_dir).map_err(|e| {
+        format!(
+            "reading {}/edges.json: {e}. Run `svrn enrich atlas-resolve {} --phase all` first.",
+            atlas_dir.display(),
+            cfg.corpus_id
+        )
+    })?;
     let mut next_edges: Vec<Edge> = prior_edges
         .edges
         .iter()
@@ -313,17 +369,43 @@ pub async fn cmd_atlas_tensions_classify(args: &[String]) -> i32 {
     );
 
     let next = corpus_engine::enrichment::atlas::edges::EdgesFile::new(next_edges);
-    match write_atlas_edges(&atlas_dir, &next) {
-        Ok(path) => {
-            println!("  ✓ wrote {}", path.display());
-            // Failures aren't a hard error — they degrade recall but
-            // the pipeline still emits the accepted edges. The
-            // top-level build will see exit 0 unless a write actually
-            // failed.
-            0
+    let path =
+        write_atlas_edges(&atlas_dir, &next).map_err(|e| format!("writing edges.json: {e}"))?;
+    println!("  ✓ wrote {}", path.display());
+
+    // Chat and parse failures are not a hard error — they degrade recall
+    // while the accepted edges still land, so this stays a success. They
+    // now RIDE ON the outcome instead of vanishing into exit 0, which is
+    // what let a half-classified run read as a clean one.
+    Ok(ClassifyOutcome::PerPair {
+        accepted,
+        rejected,
+        chat_failures,
+        parse_failures,
+        stale_dropped: stale_drops,
+    })
+}
+
+pub async fn cmd_atlas_tensions_classify(args: &[String]) -> i32 {
+    if help::wants_help(args) {
+        help::print(&HELP);
+        return 0;
+    }
+
+    let parsed = match parse_args(args) {
+        Ok(p) => p,
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            eprintln!();
+            help::print(&HELP);
+            return 2;
         }
-        Err(e) => {
-            eprintln!("error: writing edges.json: {e}");
+    };
+
+    match run(&parsed).await {
+        Ok(_) => 0,
+        Err(msg) => {
+            eprintln!("error: {msg}");
             1
         }
     }
@@ -351,25 +433,16 @@ async fn run_holistic_classifier(
     pipeline: &dyn corpus_engine::enrichment::pipeline::Pipeline,
     atlas_dir: &std::path::Path,
     dry_run: bool,
-) -> i32 {
-    let atoms = match read_atlas_atoms(atlas_dir) {
-        Ok(a) => a,
-        Err(e) => {
-            eprintln!("error: reading {}/atoms.json: {e}", atlas_dir.display());
-            return 1;
-        }
-    };
+) -> Result<ClassifyOutcome, String> {
+    let atoms = read_atlas_atoms(atlas_dir)
+        .map_err(|e| format!("reading {}/atoms.json: {e}", atlas_dir.display()))?;
 
-    let prompt = match pipeline.compose_phase6_holistic(&atoms) {
-        Some(p) => p,
-        None => {
-            eprintln!(
-                "  ⚠ pipeline '{}' opts into holistic but compose returned None",
-                cfg.pipeline_id
-            );
-            return 1;
-        }
-    };
+    let prompt = pipeline.compose_phase6_holistic(&atoms).ok_or_else(|| {
+        format!(
+            "pipeline '{}' opts into holistic but compose returned None",
+            cfg.pipeline_id
+        )
+    })?;
 
     println!(
         "  Phase 6 holistic: {} chars in (system: {} bytes, user: {} bytes)",
@@ -382,16 +455,16 @@ async fn run_holistic_classifier(
         println!("  · --dry-run: composed prompt below; not calling the model");
         println!("──── system ────\n{}", prompt.system);
         println!("──── user ────\n{}", prompt.user);
-        return 0;
+        return Ok(ClassifyOutcome::Holistic {
+            edges: 0,
+            runs_succeeded: 0,
+            runs_attempted: 0,
+            dry_run: true,
+        });
     }
 
-    let client = match DaemonInferenceClient::from_enrich_config(cfg) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("error: building daemon client: {e}");
-            return 1;
-        }
-    };
+    let client = DaemonInferenceClient::from_enrich_config(cfg)
+        .map_err(|e| format!("building daemon client: {e}"))?;
     let (_embed, chat) = client.into_closures();
 
     // Run the holistic call N times and union the results, keyed by
@@ -470,17 +543,13 @@ async fn run_holistic_classifier(
     // Read existing edges, drop prior LlmPairwise Tension edges
     // (whether from per-pair or a previous holistic run). Preserve
     // every other edge.
-    let prior_edges = match read_atlas_edges(atlas_dir) {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!(
-                "error: reading {}/edges.json: {e}. Run `svrn enrich atlas-resolve {} --phase all` first.",
-                atlas_dir.display(),
-                cfg.corpus_id
-            );
-            return 1;
-        }
-    };
+    let prior_edges = read_atlas_edges(atlas_dir).map_err(|e| {
+        format!(
+            "reading {}/edges.json: {e}. Run `svrn enrich atlas-resolve {} --phase all` first.",
+            atlas_dir.display(),
+            cfg.corpus_id
+        )
+    })?;
     let mut next_edges: Vec<Edge> = prior_edges
         .edges
         .iter()
@@ -519,16 +588,16 @@ async fn run_holistic_classifier(
     println!("  Phase 6 holistic summary: {materialized} edge(s) written");
 
     let next = corpus_engine::enrichment::atlas::edges::EdgesFile::new(next_edges);
-    match write_atlas_edges(atlas_dir, &next) {
-        Ok(path) => {
-            println!("  ✓ wrote {}", path.display());
-            0
-        }
-        Err(e) => {
-            eprintln!("error: writing edges.json: {e}");
-            1
-        }
-    }
+    let path =
+        write_atlas_edges(atlas_dir, &next).map_err(|e| format!("writing edges.json: {e}"))?;
+    println!("  ✓ wrote {}", path.display());
+
+    Ok(ClassifyOutcome::Holistic {
+        edges: materialized,
+        runs_succeeded: HOLISTIC_RUNS - chat_failures - parse_failures,
+        runs_attempted: HOLISTIC_RUNS,
+        dry_run: false,
+    })
 }
 
 /// Resolve a position name (the surface form the model emitted) to
@@ -666,11 +735,14 @@ fn next_edge_ordinal(edges: &[Edge]) -> usize {
         .unwrap_or(0)
 }
 
-#[derive(Debug)]
-struct ParsedClassify {
-    corpus_id: String,
-    max_candidates: Option<usize>,
-    dry_run: bool,
+/// A parsed `atlas-tensions-classify` invocation. Public so the `enrich
+/// build` orchestrator constructs one directly instead of round-tripping
+/// through argv.
+#[derive(Debug, Clone)]
+pub struct ParsedClassify {
+    pub corpus_id: String,
+    pub max_candidates: Option<usize>,
+    pub dry_run: bool,
 }
 
 fn parse_args(args: &[String]) -> Result<ParsedClassify, String> {

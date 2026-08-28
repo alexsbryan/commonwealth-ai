@@ -411,6 +411,25 @@ pub fn range_lines(range: &[i32]) -> Option<(i32, i32)> {
     }
 }
 
+/// Full occurrence span: `(start_line, start_col, end_line, end_col)`.
+///
+/// SCIP encodes a range as `[startLine, startChar, endLine, endChar]`, or the
+/// 3-element short form `[startLine, startChar, endChar]` when the range does
+/// not cross a line boundary.
+///
+/// [`range_lines`] keeps only the two line numbers, which is all the CALL GRAPH
+/// ever needed. A REWRITER needs the columns too: to replace a reference it must
+/// know which characters on the line are the identifier, so it can swap exactly
+/// that token and leave the rest of the expression alone. rust-analyzer already
+/// emits the columns; until now they were decoded and dropped on the floor.
+pub fn range_span(range: &[i32]) -> Option<(i32, i32, i32, i32)> {
+    match range.len() {
+        0..=2 => None,
+        3 => Some((range[0], range[1], range[0], range[2])),
+        _ => Some((range[0], range[1], range[2], range[3])),
+    }
+}
+
 pub fn kind_to_str(kind: i32) -> &'static str {
     use symbol_information::Kind;
     match Kind::try_from(kind) {

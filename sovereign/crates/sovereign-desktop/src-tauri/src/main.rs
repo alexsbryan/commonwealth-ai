@@ -19,6 +19,7 @@ mod health;
 mod import_commands;
 mod insight_commands;
 mod invoke_coverage;
+mod launch_mode;
 mod local_corpus_commands;
 mod mesh_commands;
 mod meshapp;
@@ -55,6 +56,7 @@ pub(crate) mod test_support {
 use std::process::ExitCode;
 use std::sync::Arc;
 
+use sovereign_contracts::launch::Launch;
 use tauri::{Emitter, Manager};
 
 use crate::approval::TauriApprovalChannel;
@@ -88,33 +90,71 @@ fn main() -> ExitCode {
     // process spawns this mode in a subprocess to detect ggml
     // backend crashes (e.g., the Gemma 4 Metal SIGSEGV) before
     // loading models in the user-facing slot. See `smoketest.rs`.
+    // ONE decision about what this process becomes (ARCH §2.1, §10.6).
+    //
+    // This used to be three independent argv scans in this function, and
+    // `sovereign-cli-daemon` kept a fourth list that DISAGREED with it: this
+    // binary found `--compute-child` at any position, that one only at
+    // `args[0]`. `Launch::parse` is now the single decider for both, so they
+    // cannot drift apart again. `quality/TOPOLOGY.md §1` records what that
+    // divergence cost — a reader concluding the desktop was a separate
+    // runtime, when `--daemon-child` IS `daemon run`.
+    //
+    // ORDERING NOTE: the old code tested smoketest -> daemon-child ->
+    // compute-child. `Launch::parse` tests the child re-execs first and
+    // smoketest last, deliberately (a child re-exec must never be mistaken for
+    // a CLI invocation). The flags do not co-occur in any spawn site, so this
+    // is a theoretical reordering — but it is now ONE documented order rather
+    // than two accidental ones.
     let argv: Vec<String> = std::env::args().collect();
-    if let Some(code) = smoketest::detect_and_run(&argv) {
-        return code;
-    }
+    let args: Vec<String> = argv.iter().skip(1).cloned().collect();
+    let launch = Launch::parse(&args, Launch::Desktop);
+    // Publish it before dispatching: `state::bootstrap` commissions the
+    // in-process daemon through `sovereign_mesh::assemble` and must name the
+    // SAME launch this match saw, not re-derive one.
+    launch_mode::publish(launch.clone());
+    match launch {
+        // Skip Tauri entirely: load one model, decode one token, exit. The
+        // parent spawns this to detect ggml backend crashes (e.g. the Gemma 4
+        // Metal SIGSEGV) before loading into the user-facing slot.
+        // `detect_and_run` re-reads the FULL argv for `--model` / `--gpu-layers`
+        // / `--ctx`; `None` means it declined, and falling through to the GUI
+        // is what this path did before.
+        Launch::Smoketest { .. } => {
+            if let Some(code) = smoketest::detect_and_run(&argv) {
+                return code;
+            }
+        }
 
-    // Supervised child-daemon mode (DAEMON_RESILIENCE.md P0.1): when
-    // relaunched as `--daemon-child`, this process IS the daemon — the
-    // identical entry `sovereign-cli-daemon daemon run` uses (panic
-    // hook, run lock, RAM-derived OOM limits, listener watchdog and
-    // all) — and never initializes Tauri. The parent desktop spawns +
-    // supervises it (see `supervisor_setup.rs`); a ggml SEGV kills only
-    // this child, and the supervisor restarts it behind the reconnect
-    // surface instead of the whole window dying.
-    if argv.iter().any(|a| a == "--daemon-child") {
-        std::process::exit(sovereign_cli_daemon::daemon_child_main());
-    }
+        // Supervised child-daemon mode (DAEMON_RESILIENCE.md P0.1): this
+        // process IS the daemon — the identical entry `sovereign-cli-daemon
+        // daemon run` uses (panic hook, run lock, RAM-derived OOM limits,
+        // listener watchdog and all) — and never initializes Tauri. The parent
+        // spawns + supervises it (`supervisor_setup.rs`); a ggml SEGV kills
+        // only this child, and the supervisor restarts it behind the reconnect
+        // surface instead of the whole window dying.
+        Launch::Daemon { .. } => {
+            std::process::exit(sovereign_cli_daemon::daemon_child_main());
+        }
 
-    // Compute-child re-exec (DISTRIBUTED_PILOT_READINESS.md P1): when the
-    // in-process daemon's ComputeChildManager spawns `current_exe()
-    // --compute-child …` and `current_exe` is THIS desktop binary, route
-    // straight to the daemon lib's arg dispatcher (which detects the flag and
-    // runs the inference child) and never initialize Tauri — a ggml SEGV
-    // then kills only this child, not the window.
-    if argv.iter().any(|a| a == "--compute-child") {
-        std::process::exit(sovereign_cli_daemon::run_with_args(
-            argv.iter().skip(1).cloned().collect(),
-        ));
+        // Compute-child re-exec (DISTRIBUTED_PILOT_READINESS.md P1): the
+        // in-process daemon's ComputeChildManager spawns `current_exe()
+        // --compute-child …`, and `current_exe` is THIS binary. Route to the
+        // daemon lib's dispatcher and never initialize Tauri, so a ggml SEGV
+        // kills only this child and not the window. `Worker` cannot be reached
+        // through this binary today (it needs the `daemon` verb) but routes
+        // with it rather than silently opening a window.
+        Launch::ComputeChild { .. } | Launch::Worker { .. } => {
+            std::process::exit(sovereign_cli_daemon::run_with_args(args));
+        }
+
+        // Fall through to Tauri. `Verb` and `Bare` land here because that is
+        // what this binary did before — a one-shot verb handed to the desktop
+        // opens the GUI. Preserved, not endorsed (§10.1): making the desktop
+        // refuse a verb is a behaviour change and belongs in its own commit.
+        // `Server` is unreachable here; named so a new variant cannot land in
+        // a wildcard without someone deciding what it means.
+        Launch::Desktop | Launch::Server | Launch::Verb { .. } | Launch::Bare => {}
     }
 
     // The grounding gate's verification note (the failed-claim caveat) rides
@@ -291,10 +331,13 @@ fn main() -> ExitCode {
             let bootstrap_mode = tauri::async_runtime::block_on(bootstrap::detect());
             tracing::info!(?bootstrap_mode, "bootstrap mode resolved");
 
-            // When supervised mode is opted into (`SOVEREIGN_USE_SUPERVISOR=1`),
-            // bring the daemon up as a supervised child and switch to Attach
-            // against it. Returns the original mode + None when not supervised
-            // or startup fails (→ in-process fall-back). See supervisor_setup.rs.
+            // Supervised-child mode is the DEFAULT (the W1 flip): bring the
+            // daemon up as a child and switch to Attach against it. Returns
+            // the original mode + None when the kill-switch is set
+            // (`SOVEREIGN_USE_SUPERVISOR=0`, `SOVEREIGN_FORCE_LOCAL=1`) or
+            // startup fails — the in-process EmbeddedDaemon fall-back, which
+            // is the one path where THIS process claims the data root's run
+            // lock. See supervisor_setup.rs.
             let (bootstrap_mode, supervisor) = tauri::async_runtime::block_on(
                 supervisor_setup::maybe_start(bootstrap_mode, handle.clone()),
             );
@@ -705,6 +748,9 @@ fn main() -> ExitCode {
                 mesh_commands::mesh_is_running,
                 mesh_commands::mesh_leave,
                 mesh_commands::mesh_rotate_invite,
+                mesh_commands::mesh_list,
+                mesh_commands::mesh_switch,
+                mesh_commands::mesh_forget,
                 mesh_commands::mesh_relay_candidates,
                 mesh_commands::suggest_node_name,
                 mesh_commands::mesh_diagnostics,

@@ -7,18 +7,14 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::{json, Value};
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::{
-    Effect, Idempotency, Latency, Permission, Scope, StepOutput, ToolContext, ToolDescriptor,
-    ToolExample,
-};
+use sovereign_core::types::{StepOutput, ToolContext};
 
 use crate::confidence::{observation_grade, ConfidenceGrade};
 use crate::store::{ScopeMatch, WorkAtlasStore};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 #[derive(Debug)]
 pub struct WorkInFlightTool {
@@ -171,92 +167,80 @@ pub fn collect_in_flight(
     })
 }
 
-#[async_trait]
-impl Tool for WorkInFlightTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "work_in_flight".to_string(),
-            name: "Work In Flight".to_string(),
-            description: "List live work signals overlapping a scope. Use BEFORE \
-                          starting non-trivial work on a function or file to see \
-                          whether another agent on the mesh is touching it. \
-                          Returns both explicit Claims (Declared grade) and \
-                          passive Observations from CodeWatcher edits \
-                          (Active ≤5min, Recent ≤30min). Phase 2: Observations \
-                          are file-level — `match_mode=file` matches them; \
-                          symbol-graph distance arrives in Phase 2b. \
-                          Excludes the caller's own session. \
-                          READ `node_is_self` BEFORE ACTING: it is true only \
-                          when the record is on YOUR machine. Host-local scope \
-                          names collide across the mesh — every node's daemon \
-                          listens on :9741, so a scope like \
-                          `daemon-runtime:9741-primary-slot` matches every \
-                          node's daemon and a peer's claim looks exactly like a \
-                          lock on your own box. `node_id` alone cannot tell \
-                          them apart; `node_is_self` can. \
-                          File paths are stored REPO-RELATIVE (canonical since \
-                          2026-07-23) — query with repo-relative paths. An \
-                          empty scope with match_mode=file matches EVERYTHING: \
-                          the supported way to fetch all live signals at once."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "scope": {
-                        "type": "string",
-                        "description": "A SCIP symbol id, file path, or path prefix."
-                    },
-                    "match_mode": {
-                        "type": "string",
-                        "enum": ["symbol", "file"],
-                        "default": "symbol",
-                        "description": "How to match `scope` against claims. `symbol` = exact symbol id; `file` = path equality or prefix."
-                    },
-                    "include_self": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Also return the caller's own sessions' records. Default false (coordination view: peers only). Set true to audit ALL live signals, e.g. listing your own claims."
-                    }
-                },
-                "required": ["scope"]
-            }),
-            examples: vec![ToolExample {
-                situation:
-                    "About to refactor a function — check whether anyone else has claimed it."
-                        .into(),
-                call: json!({ "scope": "CorpusEngine::ingest" }),
-            }],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "scope":        { "type": "string" },
-                    "match_mode":   { "type": "string" },
-                    "claims":       { "type": "array", "items": { "type": "object" } },
-                    "observations": { "type": "array", "items": { "type": "object" } }
-                }
-            })),
-        }
-    }
-
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    /// Surface peer activity into the agent's per-turn preamble so a
-    /// Claude session "knows" what's happening on the mesh without
-    /// having to remember to query. Called by the context assembler
-    /// every turn; must be fast (local SQLite scan only) and must not
-    /// mutate state.
+impl WorkInFlightTool {
+    /// Bind this tool's state to its `work_in_flight` manifest row.
     ///
-    /// Output is intentionally short — one line, no per-record detail
-    /// — and only surfaces *peer* activity (records this node didn't
-    /// originate). When nothing salient is happening, returns `None`
-    /// so the preamble stays quiet.
-    async fn signal(&self) -> Option<String> {
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("work_in_flight", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_signal({
+            let state = Arc::clone(&state);
+            Arc::new(move || {
+                let state = Arc::clone(&state);
+                Box::pin(async move { state.signal_now().await })
+                    as std::pin::Pin<Box<dyn std::future::Future<Output = Option<String>> + Send>>
+            })
+        })
+    }
+
+    /// The executable half of `work_in_flight`.
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
+        let scope = params
+            .get("scope")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::InvalidInput("work_in_flight requires 'scope'".into()))?;
+        let match_mode_str = params
+            .get("match_mode")
+            .and_then(|v| v.as_str())
+            .unwrap_or("symbol");
+        let match_mode = match match_mode_str {
+            "symbol" => ScopeMatch::Symbol,
+            "file" => ScopeMatch::File,
+            other => {
+                return Err(Error::InvalidInput(format!(
+                    "invalid match_mode '{other}' — use 'symbol' or 'file'"
+                )))
+            }
+        };
+
+        let include_self = params
+            .get("include_self")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let in_flight = collect_in_flight(
+            &self.store,
+            scope,
+            match_mode,
+            ctx.agent_session_token.as_deref(),
+            include_self,
+        )
+        .map_err(|message| Error::Tool {
+            tool_id: "work_in_flight".into(),
+            message,
+        })?;
+
+        tracing::debug!(
+            scope,
+            match_mode = match_mode_str,
+            claim_hits = in_flight.claims.len(),
+            observation_hits = in_flight.observations.len(),
+            "work_atlas:query"
+        );
+        Ok(StepOutput::Json(json!({
+            "scope": scope,
+            "match_mode": match_mode_str,
+            "claims": in_flight.claims,
+            "observations": in_flight.observations,
+        })))
+    }
+
+    async fn signal_now(&self) -> Option<String> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
@@ -328,56 +312,6 @@ impl Tool for WorkInFlightTool {
             "work atlas: {} — query `work_in_flight(scope, match_mode)` before non-trivial edits in this area.",
             parts.join(", ")
         ))
-    }
-
-    async fn execute(&self, params: &Value, ctx: &ToolContext) -> Result<StepOutput> {
-        let scope = params
-            .get("scope")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::InvalidInput("work_in_flight requires 'scope'".into()))?;
-        let match_mode_str = params
-            .get("match_mode")
-            .and_then(|v| v.as_str())
-            .unwrap_or("symbol");
-        let match_mode = match match_mode_str {
-            "symbol" => ScopeMatch::Symbol,
-            "file" => ScopeMatch::File,
-            other => {
-                return Err(Error::InvalidInput(format!(
-                    "invalid match_mode '{other}' — use 'symbol' or 'file'"
-                )))
-            }
-        };
-
-        let include_self = params
-            .get("include_self")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-        let in_flight = collect_in_flight(
-            &self.store,
-            scope,
-            match_mode,
-            ctx.agent_session_token.as_deref(),
-            include_self,
-        )
-        .map_err(|message| Error::Tool {
-            tool_id: "work_in_flight".into(),
-            message,
-        })?;
-
-        tracing::debug!(
-            scope,
-            match_mode = match_mode_str,
-            claim_hits = in_flight.claims.len(),
-            observation_hits = in_flight.observations.len(),
-            "work_atlas:query"
-        );
-        Ok(StepOutput::Json(json!({
-            "scope": scope,
-            "match_mode": match_mode_str,
-            "claims": in_flight.claims,
-            "observations": in_flight.observations,
-        })))
     }
 }
 

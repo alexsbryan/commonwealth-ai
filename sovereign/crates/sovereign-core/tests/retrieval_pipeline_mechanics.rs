@@ -58,6 +58,8 @@ fn marker_chunk(title: &str) -> corpus_engine::ScoredChunk {
         chunk_id: None,
         source_doc_id: None,
         vector_distance: None,
+        // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
+        provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
     }
 }
 
@@ -107,6 +109,9 @@ async fn runner_executes_steps_in_order_threading_state() {
         Vec::new(),
         "KnowledgeQuery",
         "KnowledgeQuery".to_string(),
+        // A stage under test needs no providers — which is the point of
+        // Phase 4a: a turn is drivable without wiring an enrichment stack.
+        sovereign_core::runtime::Lane::none(),
     );
     let pipeline = RetrievalPipeline {
         name: "test",
@@ -140,6 +145,9 @@ async fn runner_survives_steps_that_shrink_the_pool() {
         Vec::new(),
         "DeepQuery",
         "DeepQuery".to_string(),
+        // A stage under test needs no providers — which is the point of
+        // Phase 4a: a turn is drivable without wiring an enrichment stack.
+        sovereign_core::runtime::Lane::none(),
     );
     let pipeline = RetrievalPipeline {
         name: "test",

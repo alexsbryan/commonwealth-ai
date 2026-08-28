@@ -605,6 +605,15 @@ mod tests {
     /// The whole point of this module: every name here must be servable with
     /// no sibling binary present. If someone adds a subcommand that needs the
     /// workbench, this list is where the mistake becomes visible.
+    ///
+    /// The stakes rose on 2026-08-21. Until then `sovereign-cli-dev` carried
+    /// its own `register` / `unregister` / `list` / `watch` in
+    /// `project_cmd/registry_watch.rs`, so a verb dropped from `IN_PROCESS`
+    /// fell through to the sibling and still ran — the duplication was
+    /// quietly acting as a safety net. That fork was unreachable dead code
+    /// (nc-27) and was deleted. Nothing catches a dropped verb now except
+    /// this test: removing a name here no longer degrades the command, it
+    /// removes it.
     #[test]
     fn in_process_set_is_exactly_what_this_build_can_serve() {
         let daemon_facing = ["register", "unregister", "list", "watch"];

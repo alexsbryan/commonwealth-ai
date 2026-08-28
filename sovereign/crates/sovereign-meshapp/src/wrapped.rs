@@ -32,7 +32,7 @@ use std::path::Path;
 use chrono::{Datelike, NaiveDateTime, Timelike};
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::chunkers::threaded_turns::{parse_turns, Attribution, ParsedTurn};
+use corpus_engine::chunkers::threaded_turns::{parse_turns, ParsedTurn, TurnAuthor};
 use corpus_engine::index::CorpusIndex;
 
 pub mod semantic;
@@ -179,8 +179,28 @@ pub struct Excerpt {
 /// A cited verbatim span. `char_start`/`char_end` come from the GLiNER
 /// row and are best-effort (highlighting); the audited invariant is
 /// that `text` appears verbatim in chunk `chunk_id`.
+///
+/// RENAMED APART from `Citation` on 2026-08-21 (rung `nc-20-turn-adoption`).
+/// This IS the same concept as `kernel_types::Citation` — a verbatim passage
+/// bound to where it came from — and it still cannot BE one, for three
+/// reasons measured rather than assumed:
+///
+/// 1. The artifact is PERSISTED and read back (`wrapped/all-time.json`,
+///    [`WRAPPED_SCHEMA_VERSION`]), so the type must be `Deserialize`.
+///    `kernel_types::Citation` deliberately has none — deserialization is a
+///    constructor, and it would be a door around the seal.
+/// 2. It carries `char_start`/`char_end` for highlighting. The kernel type's
+///    fields are private and its one door takes only a quote and a seal.
+/// 3. There is no seal here to point into. These spans are folded out of the
+///    GLiNER `chunk_entities` table at card-build time, and the verbatim
+///    invariant is checked AFTER the fact by [`verify_wrapped_artifact`] —
+///    which is the honest difference between the two types, not a defect this
+///    rung can remove by renaming.
+///
+/// The artifact JSON is UNCHANGED: field names carry the wire, never the Rust
+/// type name.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Citation {
+pub struct CitedSpan {
     pub chunk_id: u64,
     pub char_start: usize,
     pub char_end: usize,
@@ -213,7 +233,7 @@ pub struct TopicStat {
     /// this group over-indexes on the theme. This is the RANK key; the
     /// count is context, not the ordering. See [`semantic::log_odds`].
     pub distinctiveness: f64,
-    pub sample: Citation,
+    pub sample: CitedSpan,
 }
 
 /// Shaped so the SDK `forceGraph` view renders nodes/edges directly.
@@ -241,7 +261,7 @@ pub struct CastNode {
     /// `YYYY-MM-DD` of the first and last conversation it appears in.
     pub first_date: String,
     pub last_date: String,
-    pub sample: Citation,
+    pub sample: CitedSpan,
 }
 
 /// An edge that had to earn its place. v2 linked any pair sharing two
@@ -300,7 +320,7 @@ pub struct Turn {
     /// text saw 19.9% of `conversations-anthropic` and reported the
     /// user:assistant ratio as 2.7x when it is 14.9x (measured
     /// 2026-07-26 over 16,404 chunks). [`build_conv_docs`] owns the
-    /// attribution walk that closes that gap.
+    /// author walk that closes that gap.
     pub words: u64,
     pub chunk_id: u64,
     /// First non-empty body line — the only quotable span a turn offers.
@@ -784,7 +804,7 @@ pub fn build_conv_docs(rows: &[corpus_engine::index::EnrichmentChunkRow]) -> Vec
             let body = turn_body(&t.block);
             doc.turns.push(Turn {
                 ts: t.timestamp.as_deref().and_then(parse_turn_ts),
-                is_user: t.attribution == Attribution::User,
+                is_user: t.author == TurnAuthor::User,
                 words: body.split_whitespace().count() as u64,
                 chunk_id: row.id,
                 first_line: first_nonempty_line(body),
@@ -1133,12 +1153,12 @@ pub fn collect_assistant_text(rows: &[corpus_engine::index::EnrichmentChunkRow])
             }
         }
         for t in &turns {
-            if t.attribution == Attribution::Assistant {
+            if t.author == TurnAuthor::Assistant {
                 out.push(turn_body(&t.block).to_string());
             }
         }
         if let Some(last) = turns.last() {
-            open_is_assistant = last.attribution == Attribution::Assistant;
+            open_is_assistant = last.author == TurnAuthor::Assistant;
         }
     }
     out

@@ -15,7 +15,7 @@
 
 use std::path::Path;
 
-use super::args::{get_flag, split_args};
+use super::args::parse_args;
 use super::feature::derive_node_id_from_git;
 use super::stores::open_note_store;
 
@@ -36,7 +36,14 @@ pub(crate) async fn cmd_spec(args: &[String]) -> i32 {
 }
 
 pub(crate) async fn cmd_spec_diff(args: &[String]) -> i32 {
-    let (positional, _flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("atos: {e}");
+            return 2;
+        }
+    };
+    let positional = flags.positionals();
     let Some(feature_id) = positional.first().cloned() else {
         eprintln!("spec diff: missing <feature-id>");
         return 2;
@@ -139,12 +146,22 @@ pub(crate) async fn cmd_spec_diff(args: &[String]) -> i32 {
 }
 
 pub(crate) async fn cmd_spec_accept(args: &[String]) -> i32 {
-    let (positional, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("atos: {e}");
+            return 2;
+        }
+    };
+    let positional = flags.positionals();
     let Some(feature_id) = positional.first().cloned() else {
         eprintln!("spec accept: missing <feature-id>");
         return 2;
     };
-    let reason = get_flag(&flags, "reason").unwrap_or_default();
+    let reason = flags
+        .value("reason")
+        .map(|s| s.to_string())
+        .unwrap_or_default();
     let repo_root = match std::env::current_dir() {
         Ok(p) => p,
         Err(e) => {

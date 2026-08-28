@@ -180,9 +180,19 @@ cargo run -p xtask -- quality        # every structural gate, one summary table
 `cargo xtask quality` bundles arch-gate (file-size ratchet), docs-gate (every
 path the narrative docs cite must resolve), boundary-gate (the studio package
 stays liftable), layer-gate (dependency direction per `quality/ARCH_LAYERS.toml`
-plus god-crate fan-in caps), and lock-gate (no new duplicate crate versions).
+plus god-crate fan-in caps), lock-gate (no new duplicate crate versions),
+env-gate (every env read declared in `quality/env-flags.toml`), and concept-gate
+(one noun, one owner — no NEW name defined as a type in two crates).
 Each failure message ends with the exact command that fixes it; baselines live
 under `quality/baselines/` and may only shrink (see ARCH_PRINCIPLES §8.6).
+
+concept-gate is ADVISORY inside `cargo xtask quality` and hard on its own: it
+counts type definitions in the SCIP graph at the last indexed commit, not in the
+working tree, so a pre-push habit-run must not go red for an indexer that is
+minutes behind. CI and landing verdicts call `sovereign code converge status`
+directly and gate on its exit code. The summary carries four verdicts, not two —
+PASS / FAIL / COULD-NOT-JUDGE / NEVER-RAN — because a gate that could not reach
+its evidence did not pass.
 
 If you'd rather be sure before you push:
 

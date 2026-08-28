@@ -46,6 +46,9 @@ const PEER_ONLY: [&str; 5] = [
 /// corpus, scored as confidently as a real answer.
 fn substituted_hit(score: f32) -> KnowledgeResult {
     KnowledgeResult {
+        // A substituted hit vouches for nothing.
+        custody: None,
+        grain: None,
         content: "Parcel 3721-014 · single-family · assessed value $1,204,000".into(),
         title: Some("SF Assessor Roll 2024".into()),
         corpus_id: "sf-assessor-roll".into(),

@@ -16,7 +16,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tauri::State;
 
@@ -46,107 +45,37 @@ fn build_client() -> reqwest::Client {
         .expect("reqwest client builds")
 }
 
-// ─── Wire types — Deserialize-only mirrors of the daemon DTOs ────
+// ─── Request types ───────────────────────────────────────────────
+//
+// Imported, not re-declared — the same rule the response types below
+// already follow. This is the config the user's choices travel in, so
+// it MUST be the daemon's own type.
+//
+// Until 2026-08-21 this was a hand-copied five-field `WatchedFolderConfigWire`
+// (follow_symlinks, deletion_guard, sweep_interval_secs,
+// soft_delete_grace_secs, exclude_globs). `src/lib/types.ts` declares ten
+// fields NON-OPTIONAL and `WatchedFolderRegisterFlow.svelte` binds five of the
+// missing ones to live controls, so serde dropped them on the way through this
+// command and `RegisterRequest.config`'s per-field `#[serde(default)]` filled
+// them back in with defaults on the daemon side. The user's sensitive toggle,
+// sync-mode radio, OCR checkbox, additional-roots picker and enrichment choice
+// were all inert, silently.
+pub use sovereign_tools::local_corpus::config::{DeletionGuardConfig, WatchedFolderConfig};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WatchedFolderConfigWire {
-    #[serde(default = "default_follow_symlinks")]
-    pub follow_symlinks: bool,
-    #[serde(default)]
-    pub deletion_guard: DeletionGuardConfigWire,
-    #[serde(default = "default_sweep_interval")]
-    pub sweep_interval_secs: u64,
-    #[serde(default = "default_grace")]
-    pub soft_delete_grace_secs: u64,
-    #[serde(default)]
-    pub exclude_globs: Vec<String>,
-}
-
-impl Default for WatchedFolderConfigWire {
-    fn default() -> Self {
-        Self {
-            follow_symlinks: false,
-            deletion_guard: DeletionGuardConfigWire::default(),
-            sweep_interval_secs: 120,
-            soft_delete_grace_secs: 7 * 86_400,
-            exclude_globs: Vec::new(),
-        }
-    }
-}
-
-fn default_follow_symlinks() -> bool {
-    false
-}
-fn default_sweep_interval() -> u64 {
-    120
-}
-fn default_grace() -> u64 {
-    7 * 86_400
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeletionGuardConfigWire {
-    pub absolute_threshold: usize,
-    pub fractional_threshold: f32,
-    pub enabled: bool,
-}
-
-impl Default for DeletionGuardConfigWire {
-    fn default() -> Self {
-        Self {
-            absolute_threshold: 100,
-            fractional_threshold: 0.25,
-            enabled: true,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct RegisterResponse {
-    pub corpus_id: String,
-    pub display_name: String,
-    pub initial_sweep: serde_json::Value,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ListResponse {
-    pub corpora: Vec<ListEntry>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ListEntry {
-    pub corpus_id: String,
-    pub display_name: String,
-    pub root_path: PathBuf,
-    pub status: serde_json::Value,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct StatusResponse {
-    pub corpus_id: String,
-    pub status: serde_json::Value,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct StateResponse {
-    pub corpus_id: String,
-    pub status: serde_json::Value,
-    pub skipped_by_extension: std::collections::HashMap<String, usize>,
-    pub failed_files: Vec<serde_json::Value>,
-    pub tombstones: usize,
-    pub live_entries: usize,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct AckResponse {
-    pub corpus_id: String,
-    pub ok: bool,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct IncompleteJobsResponse {
-    pub jobs: Vec<serde_json::Value>,
-}
+// ─── Wire types ──────────────────────────────────────────────────
+//
+// Imported, not re-declared: these ARE the daemon's response types from
+// `/internal/corpus/watch/*`, so a field rename on the server side is now a
+// compile error here instead of a runtime deserialization failure. Until
+// 2026-08-21 (nc-21) this file carried seven hand-copied mirrors that had
+// already drifted — `ListEntry` was missing `sync_mode`, `sensitive` and
+// `additional_roots_count`, and typed the nested payloads as
+// `serde_json::Value`. The commands below only pass these through to the
+// frontend; nothing here reads a field.
+pub use sovereign_mesh::corpus_watch_http::{
+    AckResponse, IncompleteJobsResponse, ListEntry, ListResponse, RegisterResponse, StateResponse,
+    StatusResponse,
+};
 
 // ─── Commands ────────────────────────────────────────────────────
 
@@ -155,7 +84,7 @@ pub async fn lc_watch_register(
     state: State<'_, Arc<AppState>>,
     path: PathBuf,
     display_name: Option<String>,
-    config: Option<WatchedFolderConfigWire>,
+    config: Option<WatchedFolderConfig>,
     sync_initial: Option<bool>,
 ) -> Result<RegisterResponse, String> {
     let body = json!({
@@ -454,4 +383,86 @@ async fn delete_json<T: serde::de::DeserializeOwned>(url: &str) -> Result<T, Str
     }
     serde_json::from_slice(&bytes)
         .map_err(|e| format!("daemon returned an unparseable response from {url}: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The exact payload `WatchedFolderRegisterFlow.svelte` builds, with
+    /// every control moved OFF its default so a dropped field is visible
+    /// as a wrong value rather than a coincidental match.
+    fn register_flow_payload() -> serde_json::Value {
+        json!({
+            "follow_symlinks": true,
+            "deletion_guard": {
+                "absolute_threshold": 7,
+                "fractional_threshold": 0.5,
+                "enabled": false
+            },
+            "sweep_interval_secs": 900,
+            "soft_delete_grace_secs": 172_800,
+            "exclude_globs": ["*.tmp"],
+            "with_ocr": true,
+            "sync_mode": "manual",
+            "sensitive": true,
+            "additional_roots": [{ "path": "/tmp/extra", "added_at_unix": 1_787_000_000 }],
+            "enrichment": { "kind": "off" }
+        })
+    }
+
+    /// Every field the register flow sets must survive the Tauri command
+    /// boundary — deserialize into the config type, then re-serialize into
+    /// the HTTP body exactly as `lc_watch_register` does.
+    ///
+    /// This is the guard for the 2026-08-21 defect: the command took a
+    /// hand-copied five-field mirror, so `with_ocr`, `sync_mode`,
+    /// `sensitive`, `additional_roots` and `enrichment` were silently
+    /// dropped here and then re-defaulted by `RegisterRequest`'s per-field
+    /// `#[serde(default)]` on the daemon side. Against that mirror this
+    /// test fails on all five; it cannot be satisfied by anything short of
+    /// carrying the daemon's own type.
+    #[test]
+    fn register_config_survives_the_command_boundary() {
+        let cfg: WatchedFolderConfig = serde_json::from_value(register_flow_payload())
+            .expect("the register flow's payload deserializes into the daemon's config type");
+
+        // What `lc_watch_register` actually puts on the wire.
+        let body = json!({ "config": cfg });
+        let sent = &body["config"];
+
+        // The five fields the fork dropped.
+        assert_eq!(sent["with_ocr"], serde_json::json!(true));
+        assert_eq!(sent["sync_mode"], serde_json::json!("manual"));
+        assert_eq!(sent["sensitive"], serde_json::json!(true));
+        assert_eq!(
+            sent["additional_roots"][0]["path"],
+            serde_json::json!("/tmp/extra")
+        );
+        assert_eq!(sent["enrichment"]["kind"], serde_json::json!("off"));
+
+        // The five it carried, so this test also pins the fork's own surface.
+        assert_eq!(sent["follow_symlinks"], serde_json::json!(true));
+        assert_eq!(sent["sweep_interval_secs"], serde_json::json!(900));
+        assert_eq!(sent["soft_delete_grace_secs"], serde_json::json!(172_800));
+        assert_eq!(sent["exclude_globs"][0], serde_json::json!("*.tmp"));
+        assert_eq!(
+            sent["deletion_guard"]["absolute_threshold"],
+            serde_json::json!(7)
+        );
+    }
+
+    /// `config: None` must still be the daemon's defaults, not a local
+    /// re-statement of them. The fork carried its own `Default` impl with
+    /// hand-copied constants (120s / 7d / absolute 100 / fractional 0.25);
+    /// those now come from one place.
+    #[test]
+    fn absent_config_defaults_to_the_daemon_type() {
+        let cfg = Option::<WatchedFolderConfig>::None.unwrap_or_default();
+        let sent = json!(cfg);
+        assert_eq!(sent["sync_mode"], serde_json::json!("continuous"));
+        assert_eq!(sent["sensitive"], serde_json::json!(false));
+        assert_eq!(sent["with_ocr"], serde_json::json!(false));
+        assert_eq!(sent["enrichment"]["kind"], serde_json::json!("off"));
+    }
 }

@@ -52,6 +52,13 @@ use crate::error::{Error, Result};
 /// — caller (Reindexer) triggers a full re-export.
 pub const SCHEMA_VERSION: u32 = 3;
 
+/// The one `INSERT INTO refs` in this module. Four copies of this statement
+/// drifted apart the moment the span columns were added — the column list is a
+/// single decider and lives here (§10.6).
+const REFS_INSERT_SQL: &str = "INSERT INTO refs (corpus_id, caller_symbol, callee_symbol, \
+     caller_qualified, callee_qualified, file_path, line, start_col, end_line, end_col, ref_kind) \
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
 // ─── Types ───────────────────────────────────────────────────
 
 /// How a call was resolved by the SCIP exporter.
@@ -299,8 +306,26 @@ pub struct ScipRefRecord {
     /// Full SCIP descriptor for the callee.
     pub callee_qualified: String,
     pub file_path: String,
+    /// Start line of the reference occurrence, 0-based.
     pub line: i32,
+    /// Start column of the identifier token, 0-based. `-1` means the row
+    /// predates span recording — see [`ScipRefRecord::has_span`].
+    pub start_col: i32,
+    /// End line of the occurrence, 0-based. `-1` when unrecorded.
+    pub end_line: i32,
+    /// End column (exclusive) of the identifier token. `-1` when unrecorded.
+    pub end_col: i32,
     pub ref_kind: String,
+}
+
+impl ScipRefRecord {
+    /// True when this row carries a precise character span, i.e. it is safe to
+    /// drive a source rewrite from. Rows written before the span columns
+    /// existed report `false` rather than a plausible-looking `0` — a rewriter
+    /// that trusted a defaulted zero would corrupt the head of every line.
+    pub fn has_span(&self) -> bool {
+        self.start_col >= 0 && self.end_col >= self.start_col && self.end_line >= self.line
+    }
 }
 
 // ─── ScipGraph ───────────────────────────────────────────────
@@ -623,11 +648,22 @@ impl ScipGraph {
                 callee_qualified TEXT NOT NULL DEFAULT '',
                 file_path TEXT NOT NULL,
                 line INTEGER NOT NULL,
+                start_col INTEGER NOT NULL DEFAULT -1,
+                end_line INTEGER NOT NULL DEFAULT -1,
+                end_col INTEGER NOT NULL DEFAULT -1,
                 ref_kind TEXT NOT NULL DEFAULT 'direct'
             );
             CREATE INDEX IF NOT EXISTS idx_refs_caller ON refs(caller_symbol);
             CREATE INDEX IF NOT EXISTS idx_refs_callee ON refs(callee_symbol);
             CREATE INDEX IF NOT EXISTS idx_refs_corpus ON refs(corpus_id);
+            -- `symbols` has had a file_path index since v1; `refs` did not, so
+            -- every by-file question was a full scan of the ref table (measured
+            -- 2026-08-23 on a 1,646,038-row graph: 3.4s warm / 8.0s cold, versus
+            -- 0.004s with this index, 0.97s to build). No SCHEMA_VERSION bump —
+            -- `CREATE INDEX IF NOT EXISTS` is idempotent and applies to existing
+            -- dbs on the next open, the same additive reasoning as the span
+            -- columns below.
+            CREATE INDEX IF NOT EXISTS idx_refs_file ON refs(file_path);
 
             CREATE TABLE IF NOT EXISTS scip_meta (
                 key TEXT PRIMARY KEY,
@@ -636,6 +672,27 @@ impl ScipGraph {
             ",
         )
         .map_err(|e| Error::Database(format!("SCIP graph schema: {e}")))?;
+
+        // ── Span columns: additive migration, not a version bump ────────────
+        // `CREATE TABLE IF NOT EXISTS` above only shapes a FRESH db, so an
+        // existing graph would never gain these columns. Bumping
+        // `SCHEMA_VERSION` would force every peer into a full re-export of a
+        // ~776MB graph mid-campaign; an `ALTER TABLE ... DEFAULT -1` is
+        // metadata-only in SQLite and costs nothing. Pre-existing rows keep
+        // `-1` — honestly "no span recorded" rather than a plausible `0` — and
+        // the next export fills them in. See `ScipRefRecord::has_span`.
+        for col in ["start_col", "end_line", "end_col"] {
+            let sql = format!("ALTER TABLE refs ADD COLUMN {col} INTEGER NOT NULL DEFAULT -1");
+            match conn.execute(&sql, []) {
+                Ok(_) => {}
+                // "duplicate column name" = already migrated. Any other error
+                // is real and must not be swallowed (§18.3).
+                Err(e) if e.to_string().contains("duplicate column name") => {}
+                Err(e) => {
+                    return Err(Error::Database(format!("refs span migration ({col}): {e}")));
+                }
+            }
+        }
         Ok(())
     }
 
@@ -1125,7 +1182,7 @@ impl ScipGraph {
         let mut stmt = conn
             .prepare(
                 "SELECT caller_symbol, callee_symbol, caller_qualified, callee_qualified,
-                        file_path, line, ref_kind
+                        file_path, line, ref_kind, start_col, end_line, end_col
                  FROM refs WHERE corpus_id = ?",
             )
             .map_err(|e| Error::Database(format!("iter_all_refs prepare: {e}")))?;
@@ -1139,6 +1196,10 @@ impl ScipGraph {
                     file_path: row.get(4)?,
                     line: row.get(5)?,
                     ref_kind: row.get(6)?,
+                    // Rows written before the span migration read -1.
+                    start_col: row.get(7).unwrap_or(-1),
+                    end_line: row.get(8).unwrap_or(-1),
+                    end_col: row.get(9).unwrap_or(-1),
                 })
             })
             .map_err(|e| Error::Database(format!("iter_all_refs query: {e}")))?;
@@ -1311,8 +1372,7 @@ impl ScipGraph {
 
         for r in &refs {
             conn.execute(
-                "INSERT INTO refs (corpus_id, caller_symbol, callee_symbol, caller_qualified, callee_qualified, file_path, line, ref_kind)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                REFS_INSERT_SQL,
                 params![
                     corpus,
                     r.caller_symbol,
@@ -1321,6 +1381,9 @@ impl ScipGraph {
                     r.callee_qualified,
                     r.file_path,
                     r.line,
+                    r.start_col,
+                    r.end_line,
+                    r.end_col,
                     r.ref_kind,
                 ],
             )
@@ -1373,9 +1436,20 @@ impl ScipGraph {
             }
             for r in &refs {
                 conn.execute(
-                    "INSERT INTO refs (corpus_id, caller_symbol, callee_symbol, caller_qualified, callee_qualified, file_path, line, ref_kind)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    params![corpus, r.caller_symbol, r.callee_symbol, r.caller_qualified, r.callee_qualified, r.file_path, r.line, r.ref_kind],
+                    REFS_INSERT_SQL,
+                    params![
+                        corpus,
+                        r.caller_symbol,
+                        r.callee_symbol,
+                        r.caller_qualified,
+                        r.callee_qualified,
+                        r.file_path,
+                        r.line,
+                        r.start_col,
+                        r.end_line,
+                        r.end_col,
+                        r.ref_kind
+                    ],
                 )?;
             }
             Ok(())
@@ -1445,9 +1519,20 @@ impl ScipGraph {
                 }
                 for r in &refs {
                     conn.execute(
-                        "INSERT INTO refs (corpus_id, caller_symbol, callee_symbol, caller_qualified, callee_qualified, file_path, line, ref_kind)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                        params![corpus, r.caller_symbol, r.callee_symbol, r.caller_qualified, r.callee_qualified, r.file_path, r.line, r.ref_kind],
+                        REFS_INSERT_SQL,
+                        params![
+                            corpus,
+                            r.caller_symbol,
+                            r.callee_symbol,
+                            r.caller_qualified,
+                            r.callee_qualified,
+                            r.file_path,
+                            r.line,
+                            r.start_col,
+                            r.end_line,
+                            r.end_col,
+                            r.ref_kind
+                        ],
                     )?;
                 }
                 Ok(())
@@ -1719,11 +1804,25 @@ impl ScipGraph {
 
         let mut refs = Vec::new();
         {
-            let mut stmt = other_conn
-                .prepare(
-                    "SELECT caller_symbol, callee_symbol, caller_qualified, callee_qualified, file_path, line, ref_kind FROM refs",
-                )
-                .map_err(|e| Error::Database(format!("import read refs: {e}")))?;
+            // The SOURCE graph may predate the span migration (a peer's older
+            // export, or a file copied off another host), so try the span-aware
+            // read and fall back rather than failing the whole import. Spans
+            // that aren't there arrive as -1 and the next local export fills
+            // them — never as 0, which a rewriter would read as column zero.
+            const WITH_SPANS: &str = "SELECT caller_symbol, callee_symbol, caller_qualified, \
+                 callee_qualified, file_path, line, ref_kind, start_col, end_line, end_col \
+                 FROM refs";
+            const LEGACY: &str = "SELECT caller_symbol, callee_symbol, caller_qualified, \
+                 callee_qualified, file_path, line, ref_kind FROM refs";
+            let (mut stmt, has_spans) = match other_conn.prepare(WITH_SPANS) {
+                Ok(st) => (st, true),
+                Err(_) => (
+                    other_conn
+                        .prepare(LEGACY)
+                        .map_err(|e| Error::Database(format!("import read refs: {e}")))?,
+                    false,
+                ),
+            };
             let rows = stmt
                 .query_map([], |row| {
                     Ok(ScipRefRecord {
@@ -1734,6 +1833,21 @@ impl ScipGraph {
                         file_path: row.get(4)?,
                         line: row.get(5)?,
                         ref_kind: row.get(6)?,
+                        start_col: if has_spans {
+                            row.get(7).unwrap_or(-1)
+                        } else {
+                            -1
+                        },
+                        end_line: if has_spans {
+                            row.get(8).unwrap_or(-1)
+                        } else {
+                            -1
+                        },
+                        end_col: if has_spans {
+                            row.get(9).unwrap_or(-1)
+                        } else {
+                            -1
+                        },
                     })
                 })
                 .map_err(|e| Error::Database(format!("import query refs: {e}")))?;
@@ -1849,8 +1963,7 @@ impl ScipGraph {
 
         for r in &refs {
             conn.execute(
-                "INSERT INTO refs (corpus_id, caller_symbol, callee_symbol, caller_qualified, callee_qualified, file_path, line, ref_kind)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                REFS_INSERT_SQL,
                 params![
                     source_corpus_id,
                     r.caller_symbol,
@@ -1859,6 +1972,9 @@ impl ScipGraph {
                     r.callee_qualified,
                     r.file_path,
                     r.line,
+                    r.start_col,
+                    r.end_line,
+                    r.end_col,
                     r.ref_kind,
                 ],
             )
@@ -2585,6 +2701,70 @@ mod integrity_tests {
         );
     }
 
+    /// The span columns must survive insert -> read. Without this the whole
+    /// rewriter chain rests on an untested round-trip: `scip_export` would
+    /// decode `occ.range` correctly, the writer would drop it, and
+    /// `code redirect` would report "no span recorded" on a freshly indexed
+    /// graph with no way to tell that apart from a pre-migration row.
+    #[tokio::test]
+    async fn ref_spans_survive_the_round_trip() {
+        let g = ScipGraph::open_in_memory("spans").unwrap();
+        g.ingest_symbols_and_refs(
+            vec![sym("caller", "a.rs")],
+            vec![ScipRefRecord {
+                caller_symbol: "caller".into(),
+                callee_symbol: "strip_html".into(),
+                caller_qualified: String::new(),
+                callee_qualified: String::new(),
+                file_path: "a.rs".into(),
+                line: 12,
+                start_col: 8,
+                end_line: 12,
+                end_col: 18,
+                ref_kind: "direct".into(),
+            }],
+        )
+        .await
+        .unwrap();
+
+        let refs = g.iter_all_refs().await.unwrap();
+        assert_eq!(refs.len(), 1);
+        let r = &refs[0];
+        assert_eq!(
+            (r.line, r.start_col, r.end_line, r.end_col),
+            (12, 8, 12, 18)
+        );
+        assert!(r.has_span(), "a full span must report has_span()");
+    }
+
+    /// A row written before the migration reads -1 and reports NO span. It must
+    /// never present as column 0 — a rewriter would splice into the head of the
+    /// line and corrupt the file.
+    #[tokio::test]
+    async fn pre_migration_rows_report_no_span_not_column_zero() {
+        let g = ScipGraph::open_in_memory("legacy").unwrap();
+        g.ingest_symbols_and_refs(
+            vec![sym("caller", "a.rs")],
+            vec![ScipRefRecord {
+                caller_symbol: "caller".into(),
+                callee_symbol: "strip_html".into(),
+                caller_qualified: String::new(),
+                callee_qualified: String::new(),
+                file_path: "a.rs".into(),
+                line: 3,
+                start_col: -1,
+                end_line: -1,
+                end_col: -1,
+                ref_kind: "direct".into(),
+            }],
+        )
+        .await
+        .unwrap();
+        let refs = g.iter_all_refs().await.unwrap();
+        assert!(!refs[0].has_span());
+        assert_ne!(refs[0].start_col, 0, "absence must not read as column 0");
+    }
+
     #[tokio::test]
     async fn replace_file_symbols_updates_defs_but_preserves_refs() {
         let g = ScipGraph::open_in_memory("alpha").unwrap();
@@ -2598,6 +2778,9 @@ mod integrity_tests {
                 callee_qualified: String::new(),
                 file_path: "a.rs".into(),
                 line: 5,
+                start_col: -1,
+                end_line: -1,
+                end_col: -1,
                 ref_kind: "call".into(),
             }],
         )
@@ -2883,6 +3066,9 @@ mod tests {
                 callee_qualified: String::new(),
                 file_path: "src/middleware/auth.rs".into(),
                 line: 5,
+                start_col: -1,
+                end_line: -1,
+                end_col: -1,
                 ref_kind: "direct".into(),
             },
             ScipRefRecord {
@@ -2892,6 +3078,9 @@ mod tests {
                 callee_qualified: String::new(),
                 file_path: "src/middleware/auth.rs".into(),
                 line: 6,
+                start_col: -1,
+                end_line: -1,
+                end_col: -1,
                 ref_kind: "direct".into(),
             },
             // login_handler and refresh_handler call issue_token_pair
@@ -2902,6 +3091,9 @@ mod tests {
                 callee_qualified: String::new(),
                 file_path: "src/routes/auth.rs".into(),
                 line: 5,
+                start_col: -1,
+                end_line: -1,
+                end_col: -1,
                 ref_kind: "direct".into(),
             },
             ScipRefRecord {
@@ -2911,6 +3103,9 @@ mod tests {
                 callee_qualified: String::new(),
                 file_path: "src/routes/auth.rs".into(),
                 line: 15,
+                start_col: -1,
+                end_line: -1,
+                end_col: -1,
                 ref_kind: "direct".into(),
             },
         ]
@@ -3057,6 +3252,9 @@ mod tests {
                 callee_qualified: String::new(),
                 file_path: "a.rs".into(),
                 line: 3,
+                start_col: -1,
+                end_line: -1,
+                end_col: -1,
                 ref_kind: "direct".into(),
             },
             ScipRefRecord {
@@ -3066,6 +3264,9 @@ mod tests {
                 callee_qualified: String::new(),
                 file_path: "b.rs".into(),
                 line: 3,
+                start_col: -1,
+                end_line: -1,
+                end_col: -1,
                 ref_kind: "direct".into(),
             },
         ];
@@ -3259,6 +3460,9 @@ mod tests {
                 callee_qualified: String::new(),
                 file_path: "a.rs".into(),
                 line: 3,
+                start_col: -1,
+                end_line: -1,
+                end_col: -1,
                 ref_kind: "direct".into(),
             },
             ScipRefRecord {
@@ -3268,6 +3472,9 @@ mod tests {
                 callee_qualified: String::new(),
                 file_path: "b.rs".into(),
                 line: 3,
+                start_col: -1,
+                end_line: -1,
+                end_col: -1,
                 ref_kind: "direct".into(),
             },
         ];
@@ -3315,6 +3522,9 @@ mod tests {
                 callee_qualified: String::new(),
                 file_path: format!("caller{i}.rs"),
                 line: 3,
+                start_col: -1,
+                end_line: -1,
+                end_col: -1,
                 ref_kind: "direct".into(),
             });
         }

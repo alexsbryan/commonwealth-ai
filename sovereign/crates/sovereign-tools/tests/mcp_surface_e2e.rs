@@ -58,24 +58,27 @@ fn renamed_tool_descriptor_ids_are_canonical() {
     let engine = empty_engine();
     let graph = empty_graph();
 
-    let symbols = sovereign_tools::SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&graph));
+    let symbols =
+        sovereign_tools::SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared();
     assert_eq!(symbols.descriptor().id, "symbols");
 
-    let callers = sovereign_tools::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&graph));
+    let callers =
+        sovereign_tools::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared();
     assert_eq!(callers.descriptor().id, "callers");
 
-    let callees = sovereign_tools::FindCalleesTool::new(Arc::clone(&engine), Arc::clone(&graph));
+    let callees =
+        sovereign_tools::FindCalleesTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared();
     assert_eq!(callees.descriptor().id, "callees");
 
-    let blast = sovereign_tools::BlastRadiusTool::new(Arc::clone(&graph));
+    let blast = sovereign_tools::BlastRadiusTool::new(Arc::clone(&graph)).declared();
     assert_eq!(blast.descriptor().id, "blast");
 
     // Notes: no DB needed for descriptor introspection.
     let dir = tempfile::tempdir().unwrap();
     let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
-    let write = sovereign_tools::WriteNoteTool::new(Arc::clone(&notes));
+    let write = sovereign_tools::WriteNoteTool::new(Arc::clone(&notes)).declared();
     assert_eq!(write.descriptor().id, "note");
-    let read = sovereign_tools::ReadNotesTool::new(Arc::clone(&notes));
+    let read = sovereign_tools::ReadNotesTool::new(Arc::clone(&notes)).declared();
     assert_eq!(read.descriptor().id, "notes");
 }
 
@@ -90,27 +93,24 @@ fn render_tools_list_emits_canonical_only() {
     let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
 
     let mut registry = ToolRegistry::new();
-    registry.register(Box::new(sovereign_tools::SymbolLookupTool::new(
-        Arc::clone(&engine),
-        Arc::clone(&graph),
-    )));
-    registry.register(Box::new(sovereign_tools::FindCallersTool::new(
-        Arc::clone(&engine),
-        Arc::clone(&graph),
-    )));
-    registry.register(Box::new(sovereign_tools::FindCalleesTool::new(
-        Arc::clone(&engine),
-        Arc::clone(&graph),
-    )));
-    registry.register(Box::new(sovereign_tools::BlastRadiusTool::new(Arc::clone(
-        &graph,
-    ))));
-    registry.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(
-        &notes,
-    ))));
-    registry.register(Box::new(sovereign_tools::ReadNotesTool::new(Arc::clone(
-        &notes,
-    ))));
+    registry.register(Box::new(
+        sovereign_tools::SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared(),
+    ));
+    registry.register(Box::new(
+        sovereign_tools::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared(),
+    ));
+    registry.register(Box::new(
+        sovereign_tools::FindCalleesTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared(),
+    ));
+    registry.register(Box::new(
+        sovereign_tools::BlastRadiusTool::new(Arc::clone(&graph)).declared(),
+    ));
+    registry.register(Box::new(
+        sovereign_tools::WriteNoteTool::new(Arc::clone(&notes)).declared(),
+    ));
+    registry.register(Box::new(
+        sovereign_tools::ReadNotesTool::new(Arc::clone(&notes)).declared(),
+    ));
 
     let listed = render_tools_list(&registry.descriptors());
     let names: Vec<&str> = listed.iter().filter_map(|t| t["name"].as_str()).collect();
@@ -183,19 +183,19 @@ fn new_tools_advertise_canonical_ids() {
     let lint = Arc::new(
         corpus_engine_watchers::LintResultStore::open(&dir.path().join("lint.db")).unwrap(),
     );
-    let build = sovereign_tools::BuildTool::new(Arc::clone(&lint));
+    let build = sovereign_tools::BuildTool::new(Arc::clone(&lint)).declared();
     assert_eq!(build.descriptor().id, "build");
     assert!(MCP_TOOLS_ALWAYS.contains(&"build"));
 
     // spec → SPEC_GATED tier.
-    let spec = sovereign_tools::SpecTool::new();
+    let spec = sovereign_tools::SpecTool::new().declared();
     assert_eq!(spec.descriptor().id, "spec");
     assert!(MCP_TOOLS_SPEC_GATED.contains(&"spec"));
 
     // drift → SPEC_GATED tier (atos-gated tool).
     #[cfg(feature = "atos")]
     {
-        let drift = sovereign_tools::DriftTool::new();
+        let drift = sovereign_tools::DriftTool::new().declared();
         assert_eq!(drift.descriptor().id, "drift");
         assert!(MCP_TOOLS_SPEC_GATED.contains(&"drift"));
     }
@@ -230,20 +230,18 @@ fn plan_schema_builds_over_real_tool_descriptors() {
     let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
 
     let mut registry = ToolRegistry::new();
-    registry.register(Box::new(sovereign_tools::SymbolLookupTool::new(
-        Arc::clone(&engine),
-        Arc::clone(&graph),
-    )));
-    registry.register(Box::new(sovereign_tools::FindCallersTool::new(
-        Arc::clone(&engine),
-        Arc::clone(&graph),
-    )));
-    registry.register(Box::new(sovereign_tools::BlastRadiusTool::new(Arc::clone(
-        &graph,
-    ))));
-    registry.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(
-        &notes,
-    ))));
+    registry.register(Box::new(
+        sovereign_tools::SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared(),
+    ));
+    registry.register(Box::new(
+        sovereign_tools::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared(),
+    ));
+    registry.register(Box::new(
+        sovereign_tools::BlastRadiusTool::new(Arc::clone(&graph)).declared(),
+    ));
+    registry.register(Box::new(
+        sovereign_tools::WriteNoteTool::new(Arc::clone(&notes)).declared(),
+    ));
 
     let descriptors = registry.descriptors();
     let schema = sovereign_core::planner::plan_schema(&descriptors)

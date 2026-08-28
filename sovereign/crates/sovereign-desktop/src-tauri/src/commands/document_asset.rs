@@ -320,6 +320,9 @@ pub async fn ask_document(
         .collect();
 
     let provenance = sovereign_core::types::ResponseProvenance {
+        // A document-asset op is not a routed turn — no router decided it, and
+        // `None` says exactly that rather than claiming a degraded one.
+        router: None,
         intent: format!("DocumentAsk:{}", operation.label()),
         search_method: Some("document".to_string()),
         sources: vec![sovereign_core::types::SourceSummary {
@@ -531,23 +534,47 @@ async fn run_turn_via_runtime(
 
     state.approval.set_task_id(conversation_id).await;
 
-    let response = runtime
-        .handle_turn(question, conversation_id)
-        .await
-        .map_err(|e| format!("Runtime turn failed: {e}"))?;
+    // The same driver the chat commands use (TOPOLOGY §10 phase 6). A
+    // document question is a turn; it was calling `handle_turn` directly and
+    // therefore skipping the raw-model check, the document-path decision and
+    // the graceful guards that `serve_turn` applies once for everyone.
+    let store = {
+        let guard = state.store.read().await;
+        guard.as_ref().map(Arc::clone)
+    }
+    .ok_or("Store not ready")?;
+
+    let turn = sovereign_core::runtime::collect_turn(
+        &runtime,
+        store.as_ref(),
+        conversation_id,
+        question,
+        sovereign_contracts::types::TurnMode::Grounded,
+        None,
+    )
+    .await
+    .map_err(|e| format!("Runtime turn failed: {e}"))?;
 
     // Runtime saved the assistant message itself and spawned auto-title.
     // Emit the list-refresh event the normal send_message command emits.
     let _ = app_handle.emit("conversations:changed", ());
 
     Ok(DocumentAskResponse {
-        response: response.message.content,
+        response: turn.text,
         operation: None,
         sources: Vec::new(),
         // Carries the runtime's full message metadata — provenance,
         // retrieved_chunks, and `grounding_gate` (the verification
-        // receipt) — to the live bubble.
-        metadata: response.message.metadata,
+        // receipt) — to the live bubble. Read from the persisted row
+        // in-process, the same way the chat commands do it: `collect_turn`
+        // hands back the typed projection for callers across a socket, and
+        // this one owns the store.
+        metadata: sovereign_core::runtime::message_metadata(
+            store.as_ref(),
+            conversation_id,
+            &turn.message_id,
+        )
+        .await,
     })
 }
 

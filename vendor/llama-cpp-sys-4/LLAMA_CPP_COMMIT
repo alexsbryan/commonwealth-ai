@@ -1,56 +1,117 @@
-1464c62d88f699ec9700c8010bbfdbc603a9efd6
+035e22731a7fd70b9854b3a2d64ec68e9b1a45d3
 
-# What this file is
+# !!! LINE 1 IS A PULL-REQUEST HEAD, NOT AN UPSTREAM COMMIT !!!
 #
-# `llama.cpp/` in this directory is a plain vendored copy with NO sovereign
-# divergence. This file names the upstream commit it equals, because the
-# bundled tree carries no marker of its own: llama.cpp fills BUILD_COMMIT at
-# build time from a `.git` that does not exist here, so without this file the
-# only way to identify the revision is to diff whole trees.
+# This is the head of ggml-org/llama.cpp PR #27742 (Qwen3.8-Flash-Next,
+# LLM_ARCH_QWEN4EXP / model_type qwen4_exp), vendored 2026-08-26 so this
+# workspace can run that model before the PR lands.
 #
-# The claim is checkable, not asserted:
+# VERIFICATION STATUS: PASSING BOTH DIRECTIONS (corrected again 2026-08-28)
 #
-#     ./scripts/verify-vendored-llama-cpp.sh
+# THE 2026-08-26 "1764 files: 1764 identical, 0 differing" BELOW WAS TRUE AND
+# MEANT LESS THAN IT READ. The script only walked the vendored tree, so it
+# could see an EDIT and never an OMISSION -- its own comment said "a file
+# present upstream but not here is expected and is not reported".
 #
-# It fetches the upstream tarball at the SHA on line 1 and compares every
-# vendored file byte-for-byte. Verified 2026-08-03: 1552/1552 identical,
-# 0 differing, 0 files absent upstream.
+# This fast-forward moved the Metal shaders to a per-kernel layout
+# (ggml/src/ggml-metal/kernels/*.metal). The vendoring step refreshes files
+# that already exist, so all 20 NEW upstream files were never taken -- and the
+# old single-file ggml-metal.metal was deleted as "stale and inert" on the
+# strength of a grep for .cpp references, which cannot see a CMakeLists that
+# reads kernels/${kind}.metal. Net effect: macOS could not CONFIGURE llama.cpp
+# at all ("file STRINGS file .../kernels/fa.metal cannot be read"), while the
+# verifier reported a clean tree and exit 0. Linux builds GGML_METAL=OFF, so
+# #52 landed green from the Fedora host and broke every Mac in the fleet.
 #
-# Why this commit and not the one the crate ships
+# Repaired 2026-08-28: the 20 kernels are vendored (tree is now 1784 files,
+# byte-identical to upstream), the verifier gained a REVERSE pass, and the
+# intentional omissions are declared in VENDOR_EXCLUDE beside this file. The
+# reverse pass was watched failing -- remove one kernel and it exits 1.
 #
-# llama-cpp-sys-4 0.5.1 bundles llama.cpp 221f0f6356efe2260023208365705ec5d5a7c8f5.
-# 1464c62d88 is its DIRECT CHILD — exactly one commit ahead:
+#     1784 files: 1784 identical, 0 differing, 0 not in upstream,
+#                 0 missing locally                                  (exit 0)
 #
-#     1464c62d88  metal: implement DSv4 Lightning Indexer (#25893)  2026-08-03
+# The 2026-08-26 note follows, unedited, for the record.
 #
-# That commit is load-bearing for distributed DeepSeek-V4. deepseek4.cpp:671
-# calls ggml_lightning_indexer unconditionally on the DSv4 path, and at
-# 221f0f63 GGML_OP_LIGHTNING_INDEXER is absent from Metal's supports_op. The
-# RPC backend's supports_op is an unconditional `return true` (ggml-rpc.cpp,
-# still a //TODO upstream), so the scheduler hands the Metal worker an op it
-# cannot run and the worker aborts mid-graph. Shipping 221f0f63 would trade
-# yesterday's csa_top_k_mask abort for a lightning-indexer abort.
+# An earlier revision of this note claimed the verify script CANNOT check a PR
+# head, "because a PR head is not reachable from master". That was asserted and
+# never tested, and it is FALSE. GitHub keeps PR heads in the base repo under
+# refs/pull/N/head, and codeload serves archives by SHA regardless of master
+# reachability:
 #
-# The commit touches 8 files; 7 are under ggml/src/ggml-metal/ and are shipped
-# by the crate, the 8th is tests/test-backend-ops.cpp which the published crate
-# strips. None overlap the three patches build.rs requires (0003/0004/0005 touch
-# common/speculative.*, include/llama.h, src/llama-context.cpp,
-# src/llama-cparams.h), so patch application is unaffected.
+#     codeload.github.com/ggml-org/llama.cpp/tar.gz/035e2273...  ->  HTTP 200, 37 MB
 #
-# How to move this pin
+# `./scripts/verify-vendored-llama-cpp.sh` runs against this pin and PASSES:
+#
+#     1764 files: 1764 identical, 0 differing, 0 not in upstream    (exit 0)
+#
+# It first failed on 8 stale files carried over from the previous pin that
+# upstream no longer ships. Every one was inert -- tools/parser is absent from
+# tools/CMakeLists.txt's add_subdirectory list so its CMakeLists is never
+# processed; ggml-metal.metal's only mention is a COMMENT at
+# ggml-metal-ops.cpp:2230; the cuda/webgpu/tts leftovers had no references at
+# all. They were deleted, which moves this tree TOWARD upstream, not away from
+# it. "The vendored tree equals a known upstream revision" is a CHECKED claim
+# on this pin, not a pending one.
+#
+# WHY THE FAST-FORWARD IS SAFE
+#
+# The PR branches from our previous pin exactly. GitHub's
+# compare/1464c62d88...refs/pull/27742/head reports:
+#
+#     merge_base = 1464c62d88f6   ahead_by = 420   behind_by = 0
+#
+# A clean descendant with no divergence — this was a fast-forward, not a
+# rebase across conflicting history.
+#
+# WHAT ACTUALLY MOVED
+#
+# Of the 1552 tracked vendored files: 1257 were already byte-identical, 287
+# were refreshed from the PR head, and 8 no longer exist upstream. Those 8 were
+# initially left in place as dead weight (ggml-cuda/mmq-config-pascal.cuh,
+# ggml-metal/ggml-metal.metal, a WebGPU shader template, tools/parser/*,
+# tools/tts/*); they have since been DELETED so the tree matches upstream
+# exactly -- see VERIFICATION STATUS above. 185 files new to the tree were
+# added, of which the ones that
+# matter are src/models/qwen4exp.cpp, src/llama-memory-hybrid-idx.{h,cpp},
+# src/llama-kv-cache-msa.{h,cpp}, src/llama-kv-cache-dsa-iswa.{h,cpp},
+# common/json.{h,cpp}, ggml/src/ggml-feats.h, and five new Vulkan shaders.
+# The rest are backends this workspace does not build (openvino, sycl,
+# ggml-et, cuda, metal) and are inert.
+#
+# PATCH 0003 WAS REBASED IN THE SAME MOVE
+#
+# 0004 and 0005 applied clean across the 420 commits. 0003
+# (exact-speculative-state) did not: common/speculative.cpp moved under it.
+# It was re-cut against the new tree — same six hunks, same semantics
+# (set_state void -> bool, fail-closed returns, bounds checks before stash
+# checks). Two hunks were originally landed with GNU patch fuzz 3, so the
+# rebased patch deserves a human read before it is trusted for MTP
+# correctness. Original preserved at /tmp/0003.orig.bak for this session.
+#
+# RESTORE POINT
+#
+#   1464c62d88f699ec9700c8010bbfdbc603a9efd6
+#   "metal: implement DSv4 Lightning Indexer (#25893)", 2026-08-03
+#
+# The vendored tree is git-tracked (1552 files), so
+# `git checkout -- vendor/llama-cpp-sys-4/` restores both the tree and the
+# original patch set wholesale. Nothing here is one-way.
+#
+# HOW TO MOVE THIS PIN (unchanged from the original note)
 #
 # Do NOT hand-edit files under llama.cpp/. Two reasons. First, build.rs's
 # `llama_src_version` keys its re-copy cache on CMakeLists.txt's MTIME for a
-# non-git tree, so an in-place edit elsewhere may not trigger a rebuild. Second,
-# an edited tree matches no upstream commit and the verify script can no longer
-# tell you what you are building.
+# non-git tree, so an in-place edit elsewhere may not trigger a rebuild.
+# Second, an edited tree matches no upstream commit and the verify script can
+# no longer tell you what you are building.
 #
 # Instead: re-extract the whole tree at the new SHA, update line 1, and re-run
-# the verify script. Adding a `patches/NNNN-*.patch` file is NOT a route either
-# — build.rs:stage_active_patches copies only a HARDCODED allowlist
+# the verify script. Adding a `patches/NNNN-*.patch` file is NOT a route
+# either — build.rs:stage_active_patches copies only a HARDCODED allowlist
 # (0003/0004/0005, plus 0001 under the `q1` feature) into the staged dir, and
 # only staged patches are applied. A new patch file is silently ignored.
 #
-# When a llama-cpp-rs release ships a submodule at or past this SHA, this whole
-# fast-forward becomes redundant: re-vendor the stock crate and set line 1 to
-# whatever that release bundles.
+# When a llama-cpp-rs release ships a submodule at or past the merged SHA,
+# this whole detour becomes redundant: re-vendor the stock crate and set line
+# 1 to whatever that release bundles.

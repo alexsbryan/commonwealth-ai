@@ -38,14 +38,13 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_notes::ProjectDocsStore;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Hard cap on the bytes returned for any one document. The spec
 /// is normally a few KB at most; ARCHITECTURE.md is the long
@@ -79,69 +78,21 @@ impl Default for SpecTool {
     }
 }
 
-#[async_trait]
-impl Tool for SpecTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "spec".to_string(),
-            name: "Spec".to_string(),
-            description: "Return the active feature's spec.md, ARCHITECTURE.md, and \
-                          CHARTER.md in a single response so the agent can read the \
-                          contract it's working under without three separate file \
-                          reads. Pass `feature_id` to target a specific feature; \
-                          omit it when there's exactly one `.sovereign/features/*/` \
-                          directory and the spec is the obvious target. Each \
-                          document is markdown, truncated to 32 KB with a \
-                          `*_truncated` flag when larger. Use `spec()` BEFORE \
-                          modifying code in a feature directory, BEFORE deciding \
-                          whether your change matches the documented invariants, \
-                          and AFTER spec drift is reported by the daemon."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "feature_id": {
-                        "type": "string",
-                        "description": "Feature id to read. Omit to auto-resolve when there's exactly one feature directory."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You're about to modify code under a single-feature workspace and want to read the spec, architecture doc, and charter in one call.".into(),
-                    call: serde_json::json!({}),
-                },
-                ToolExample {
-                    situation: "Multiple features are active; pick the one you're working on.".into(),
-                    call: serde_json::json!({ "feature_id": "p0-payments" }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "feature_id":            { "type": ["string", "null"] },
-                    "repo_root":             { "type": "string" },
-                    "spec":                  { "type": ["string", "null"] },
-                    "spec_truncated":        { "type": "boolean" },
-                    "architecture":          { "type": ["string", "null"] },
-                    "architecture_truncated":{ "type": "boolean" },
-                    "charter":               { "type": ["string", "null"] },
-                    "charter_truncated":     { "type": "boolean" }
-                }
-            })),
-        }
+impl SpecTool {
+    /// Bind this tool's state to its `spec` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("spec", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![Permission::FileRead]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `spec`.
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let cwd = ctx
             .working_directory
             .as_deref()

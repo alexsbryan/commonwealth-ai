@@ -68,7 +68,7 @@ async fn notes_handle(state: &Arc<AppState>) -> Result<Arc<NoteStore>, String> {
 
 use sovereign_core::time::unix_now;
 
-fn row_from_note(row: corpus_engine_notes::NoteRow) -> Option<LessonRow> {
+fn row_from_note(row: corpus_engine_notes::Note) -> Option<LessonRow> {
     let raw = row.payload_json.as_deref()?;
     let payload: LessonPayload = match serde_json::from_str(raw) {
         Ok(p) => p,

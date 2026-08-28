@@ -10,8 +10,11 @@
 //! 2. Build an `EmbeddedLlamaCpp` inference provider from the three
 //!    GGUF slots (primary / fast / embed).
 //! 3. Build a `ToolRegistry` + `NoteStore` so `/mcp/*` has tools.
-//! 4. Build `EmbeddedDaemon` with `.set_inference_provider()` and
-//!    `.set_mcp()` so `:9741` serves both `/v1/*` and `/mcp/*`.
+//! 4. Build every service the daemon needs — engine, mesh-routed provider,
+//!    tool mount, project / knowledge-view / solve routers, shared stores —
+//!    then commission `EmbeddedDaemon` with all of them in ONE
+//!    `DaemonServices::Headless` value, so `:9741` serves `/v1/*`, `/mcp/*`
+//!    and the rest with no post-construction wiring step to forget.
 //! 5. `try_resume()` the persisted mesh; on first run where no
 //!    `mesh.json` exists, create a silent "solo" mesh so the listener
 //!    comes up. `svrn mesh rotate` (future) can later print a
@@ -25,6 +28,7 @@ use std::sync::Arc;
 use corpus_engine::CorpusEngine;
 use corpus_engine_notes::NoteStore;
 use corpus_engine_watchers::{LintResultStore, TestResultStore};
+use sovereign_contracts::launch::Launch;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
@@ -79,13 +83,13 @@ use workspace::resolve_workspace_dir;
 ///                                    the explicit `run` token.
 /// - `svrn daemon <known>`     → start/stop/restart/reload/status as
 ///                                    before.
-pub async fn run(args: &[String]) -> i32 {
+pub async fn run(launch: &Launch, args: &[String]) -> i32 {
     if sovereign_cli_shared::help::wants_help(args) {
         sovereign_cli_shared::help::print(&HELP);
         return 0;
     }
     match args.first().map(String::as_str) {
-        Some("run") => run_daemon(&args[1..]).await,
+        Some("run") => run_daemon(launch, &args[1..]).await,
         Some("start") => start_daemon(&args[1..]).await,
         Some("stop") => stop_daemon().await,
         Some("restart") => restart_daemon(&args[1..]).await,
@@ -95,7 +99,7 @@ pub async fn run(args: &[String]) -> i32 {
             // Bare flags like `svrn daemon --setup-only` route
             // straight to run_daemon — the user means "start the
             // daemon (or its first-boot wizard) with these flags."
-            run_daemon(args).await
+            run_daemon(launch, args).await
         }
         Some(other) => {
             eprintln!("error: unknown daemon subcommand '{other}'");
@@ -108,7 +112,7 @@ pub async fn run(args: &[String]) -> i32 {
             // without hunting for the magic `run` keyword. launchd
             // and systemd unit files keep using `daemon run`
             // explicitly; both paths land in the same place.
-            run_daemon(&[]).await
+            run_daemon(launch, &[]).await
         }
     }
 }
@@ -150,7 +154,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
     ],
 };
 
-async fn run_daemon(args: &[String]) -> i32 {
+async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // ── Worker-mode branch (ephemeral pod) ────────────────────────
     //
     // `svrn daemon run --worker-mode` runs an ephemeral worker
@@ -166,7 +170,19 @@ async fn run_daemon(args: &[String]) -> i32 {
     // /v1/chat/completions exposure. The binary is the same, but the
     // wiring branches here and stays in worker_daemon.rs from this
     // point forward.
-    if args.iter().any(|a| a == "--worker-mode") {
+    //
+    // THE LAUNCH ANSWERS THIS, not a second argv scan. Until 2026-08-25 this
+    // line read `args.iter().any(|a| a == "--worker-mode")` — the last
+    // surviving launch-mode READER outside `Launch::parse`, and a §10.6
+    // duplicate created by the refactor that introduced `Launch`: `dispatch`
+    // collapsed `Daemon` and `Worker` into one `daemon_cmd::run` call, so
+    // `Launch` answered and this function asked again. Threading the `Launch`
+    // itself (rather than re-deriving from `args`) is what makes the two
+    // agree by construction — and it sidesteps the arg-shape mismatch that
+    // deferred this fix, since `Launch::Worker` carries argv INCLUDING the
+    // `run` subcommand while `run_worker_daemon` wants it stripped.
+    // Falsifier 1, readers: 1 -> 0.
+    if matches!(launch, Launch::Worker { .. }) {
         return run_worker_daemon(args).await;
     }
 
@@ -250,18 +266,6 @@ async fn run_daemon(args: &[String]) -> i32 {
         return 0;
     }
 
-    // ── Single-instance guard (DAEMON_RESILIENCE.md P0.5) ─────────
-    // Taken before anything heavy: a refused second instance must not
-    // have already loaded models. Held for the process lifetime; the
-    // kernel releases it on any exit, including SIGKILL.
-    let _run_lock = match lifecycle::acquire_run_lock() {
-        Ok(lock) => lock,
-        Err(msg) => {
-            eprintln!("error: {msg}");
-            return 1;
-        }
-    };
-
     // ── Log rotation ──────────────────────────────────────────────
     //
     // launchd holds the FDs on `daemon.log` / `daemon.err` (set via
@@ -332,6 +336,56 @@ async fn run_daemon(args: &[String]) -> i32 {
                 return 1;
             }
         },
+    };
+
+    // ── Is our data root the one that holds this machine's data? ──
+    //
+    // Four directories have been a data root across releases, and
+    // `data_dir()` always returns a plausible one — which is what made a
+    // wrong answer invisible (note `b2aa9fb8`). Classify before claiming:
+    // starting fresh on top of live data somewhere else is a silent
+    // substitution, and the daemon is the surface where it is worst (a
+    // service that boots into an empty universe and reports healthy).
+    match sovereign_contracts::data_roots::classify(&config.data.dir) {
+        v if v.is_refusal() => {
+            eprintln!("error: data root {}: {v}", config.data.dir.display());
+            return 1;
+        }
+        sovereign_contracts::data_roots::RootConflict::Clear => {}
+        v => tracing::warn!(
+            target: "daemon",
+            root = %config.data.dir.display(),
+            "data roots: {v}"
+        ),
+    }
+
+    // ── Single-instance guard (DAEMON_RESILIENCE.md P0.5) ─────────
+    //
+    // Taken as early as the thing it protects is KNOWN — which is here,
+    // right after the config parse, not before it. The lock is keyed on the
+    // DATA ROOT (`RunLock`), and until 2026-08-24 it was keyed on `$HOME`
+    // and therefore had to be taken before the config was read; that key
+    // refused three soak nodes with three data dirs under one HOME and
+    // admitted two processes onto one data dir from two HOMEs. A TOML parse
+    // is the only thing that now happens first, and nothing heavy — no
+    // model, no listener, no store — has been touched.
+    //
+    // Held for the process lifetime: the kernel releases it on any exit,
+    // including SIGKILL, so there is no stale-lock cleanup path.
+    let _run_lock = match sovereign_contracts::run_lock::RunLock::acquire(&config.data.dir) {
+        Ok(lock) => {
+            tracing::debug!(
+                target: "daemon",
+                lock = %lock.path().display(),
+                enforced = lock.is_enforced(),
+                "run lock: claimed the data root"
+            );
+            lock
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
     };
 
     // Shared-model cluster role → RPC env contract. The desktop fleet
@@ -420,6 +474,43 @@ async fn run_daemon(args: &[String]) -> i32 {
         eprintln!("error: cannot create data dir {}: {e}", data_dir.display());
         return 1;
     }
+    // ── The state store — `sovereign.db` (daemon-convergence Phase 3) ────
+    //
+    // Until now `sovereign daemon run` opened this file NOWHERE, while still
+    // mounting `reading_http`: every `conversation-history` chunk it served
+    // came back with `title: null`, because the handler resolved the title
+    // through a `state_store()` that answered `None` on this variant. That was
+    // the single crossing in an otherwise nesting variant lattice — Desktop
+    // carried a store, Headless did not, and neither was a superset of the
+    // other (`quality/TOPOLOGY.md` §3.5, class D).
+    //
+    // It is opened HERE, beside `notes.db`, and a failure is fatal rather than
+    // degraded: the store is `ServingCore` now, and CORE means the process
+    // cannot serve at all without it. Falling back to `InMemoryStateStore`
+    // would reproduce exactly the defect being closed — a daemon that answers
+    // every conversation lookup with a well-formed nothing (ARCH §18.3).
+    //
+    // Safe to open unconditionally because of Phase 1: `RunLock` above is
+    // keyed on THIS data root, so at most one process is writing this file.
+    let state_db_path = data_dir.join("sovereign.db");
+    // The CONCRETE handle is kept as well as the trait object: the same
+    // `SqliteStateStore` is also the `ConvTieredReader` the turn's enrichment
+    // lane reads briefings through (spec CONV_TIERED_PORT.md), and that view
+    // is not reachable from `dyn StateStore`. One open, two views — never two
+    // opens (TOPOLOGY phase 1: one writer per data root).
+    let state_store_concrete = match sovereign_store::sqlite::SqliteStateStore::open(&state_db_path)
+    {
+        Ok(s) => Arc::new(s),
+        Err(e) => {
+            eprintln!(
+                "error: cannot open state db {}: {e}",
+                state_db_path.display()
+            );
+            return 1;
+        }
+    };
+    let state_store: Arc<dyn sovereign_core::traits::StateStore> = state_store_concrete.clone();
+
     let notes_path = data_dir.join("notes.db");
     let notes_store = match NoteStore::open(&notes_path) {
         Ok(s) => Arc::new(s),
@@ -630,7 +721,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     // it as a `GlinerFn` adapter without re-loading the model.
     let (gliner_raw, chunk_entity_extractor) = bootstrap::load_gliner_extractor(&data_dir);
 
-    let engine: Arc<CorpusEngine> = bootstrap::build_corpus_engine(
+    let (engine, embed_model_id): (Arc<CorpusEngine>, String) = bootstrap::build_corpus_engine(
         &data_dir,
         Arc::clone(&provider),
         Arc::clone(&notes_store),
@@ -713,12 +804,241 @@ async fn run_daemon(args: &[String]) -> i32 {
     )
     .await;
 
-    let (daemon, mesh_provider) =
-        bootstrap::build_mesh_providers(&data_dir, Arc::clone(&provider)).await;
+    // ── Assemble the daemon's services, THEN commission the daemon ────
+    //
+    // Order is load-bearing and is the point of daemon-convergence Phase 2:
+    // every dependency is built first and handed over in one total value, so
+    // there is no window in which a request can reach a half-wired daemon and
+    // no slot this bootstrap can forget. `DeferredDaemon` breaks the one
+    // genuine cycle — the daemon serves peers through a provider that routes
+    // to peers — and carries no capability of its own.
+    let (deferred_daemon, mesh_provider) =
+        bootstrap::build_mesh_provider(Arc::clone(&provider)).await;
     let routed_provider: Arc<dyn InferenceProvider> = mesh_provider.clone();
-    daemon
-        .set_inference_provider(Arc::clone(&routed_provider))
+
+    // Notes-rail convergence recorder (order commons-fluency fix 9):
+    // ONE shared instance — named on the daemon's `HeadlessRails` so `/status`
+    // reads it, and handed to BOTH the outbound publish sink and the inbound
+    // ingest poller so the writers' stamps are what `/status` reports. A second
+    // copy would let the status section disagree with the sink — never.
+    let convergence_recorder = Arc::new(commonwealth_api::state::ConvergenceRecord::new());
+
+    bootstrap::wire_note_propagation_sink(
+        Arc::clone(&notes_store),
+        Arc::clone(&work_atlas_mesh_store),
+        self_node_id,
+        Arc::clone(&convergence_recorder),
+    );
+
+    bootstrap::spawn_notes_tier_backfill(Arc::clone(&notes_store));
+
+    bootstrap::spawn_notes_ingest_poller(
+        Arc::clone(&work_atlas_mesh_store),
+        Arc::clone(&notes_store),
+        self_node_id,
+        Arc::clone(&convergence_recorder),
+    );
+
+    bootstrap::spawn_lazy_stamp_fingerprints(Arc::clone(&engine));
+
+    bootstrap::spawn_tier2_enrichment_resume(&data_dir);
+
+    let advertise_embed =
+        bootstrap::advertise_embed_model(Arc::clone(&provider), &config, resolved_embed_family)
+            .await;
+
+    // Keep the reindexer alive for the lifetime of the daemon.
+    // The variable binding is load-bearing — dropping the Arc
+    // stops every supervised watcher.
+    let (_reindexer_handle, project_http, knowledge_view_http) =
+        bootstrap::start_freshness_pipeline(
+            &data_dir,
+            Arc::clone(&notes_store),
+            Arc::clone(&engine),
+            Arc::clone(&provider),
+            Arc::clone(&merged_scip_handle),
+        )
         .await;
+
+    // The watched-folder singleton must be installed before the daemon starts
+    // serving, but the ROUTE is now part of the daemon's declared capability
+    // rather than something this call installs — so a failed subsystem yields
+    // handlers that answer 503 with a named reason, not routes that 404.
+    let _watched_subsystem = bootstrap::setup_watched_folders(
+        Arc::clone(&engine),
+        Arc::clone(&state_store),
+        &data_dir,
+        &config,
+        folder_tiered_deps,
+    )
+    .await;
+
+    // ── The daemon commissions the ONE Runtime ────────────────────────────
+    //
+    // `quality/TOPOLOGY.md` §3.5: "DAEMON — the only process that assembles a
+    // Runtime". Until now `sovereign daemon run` held every ingredient — the
+    // corpus engine, the state store, the routed inference provider — and no
+    // thing that ANSWERS, so a turn could only be served by a host that had
+    // built its own `Runtime` around its own copy of the recipe. That is what
+    // made "the daemon serves the turn" impossible to state in the type.
+    //
+    // The recipe is `sovereign-runtime-recipe`, the same one `svrn chat` uses,
+    // so the daemon cannot acquire a private dialect of the retrieval stack.
+    // Two host inputs differ from the CLI's and both are decisions, not
+    // defaults:
+    //
+    //   * shell WITHHELD — §10 "Decisions taken" 1. Shell execution does not
+    //     move into a long-lived daemon running as a different user with a
+    //     different cwd. Named in `tool_bundles` as a `Withheld` family, so it
+    //     reads as a decision rather than an omission.
+    //   * `mesh_knowledge` left at the recipe's `None`. §3.5 lists it among
+    //     the five capabilities that leave the Runtime entirely: the client
+    //     posts to `127.0.0.1:9741/v1/knowledge/search`, which INSIDE this
+    //     process is a loopback call to itself.
+    let common = sovereign_runtime_recipe::common_parts(
+        sovereign_runtime_recipe::RecipeInputs {
+            inference: Arc::clone(&routed_provider),
+            store: Arc::clone(&state_store),
+            conv_tiered: Some(Arc::clone(&state_store_concrete)
+                as Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>),
+            corpus_engine: Arc::clone(&engine),
+            note_store: Some(Arc::clone(&notes_store)),
+            // No workspace skills on the daemon: skill activation is a surface
+            // concern (a conversation is tagged by the surface that created
+            // it) and the daemon serves every surface. Empty is the same
+            // registry `svrn chat` passes.
+            skills: Arc::new(sovereign_core::SkillRegistry::new()),
+            // Approvals are out of scope for v1 of the turn protocol — the
+            // same posture `sovereign-server` ships. `TurnRequest::Approve`
+            // exists on the wire; routing it to a daemon-side session owner is
+            // Phase 5's remaining work (hazard 12).
+            approval: Arc::new(sovereign_core::executor::AutoApprovalChannel),
+            inference_config: sovereign_core::types::InferenceConfig::default(),
+            indexes_dir: data_dir.join("indexes"),
+            // Derived ONCE, by the corpus-engine builder, and handed here —
+            // see `build_corpus_engine`. The atlas embedding cache keys on it.
+            embed_model: embed_model_id.clone(),
+            // The families this daemon's turn registry carries. Shell is
+            // named as WITHHELD rather than simply absent, so the decision is
+            // a value a reader finds here (TOPOLOGY §10 "Decisions taken" 1;
+            // ARCH §18.3).
+            tool_bundles: {
+                let mut b = sovereign_runtime_recipe::baseline_bundles(
+                    sovereign_runtime_recipe::BaselineDeps {
+                        store: &state_store,
+                        inference: &routed_provider,
+                        corpus_engine: &engine,
+                        // The daemon opened this above; wiring it here is what
+                        // gives `knowledge_lookup` its notes channel. It ran
+                        // with that channel dark until 2026-08-26 while the
+                        // desktop, which wired it by hand, did not.
+                        note_store: Some(&notes_store),
+                        web: sovereign_tools::bundles::WebReach::Granted(
+                            sovereign_core::egress::search_client()
+                                .expect("egress boundary search client build"),
+                        ),
+                        // No operator switch on a daemon, and escalating to the
+                        // open web without one is a decision nobody made.
+                        escalation: sovereign_tools::bundles::WebEscalation::Disabled,
+                    },
+                );
+                b.push(Box::new(sovereign_tools::bundles::WikipediaTools::new(
+                    Arc::clone(&engine),
+                )));
+                b.push(Box::new(sovereign_contracts::tool_bundle::Withheld::new(
+                    "shell",
+                    "no shell in a long-lived daemon running as a different user \
+                     with a different cwd (TOPOLOGY §10 decision 1)",
+                )));
+                b
+            },
+            // No settings panel on this host, so nothing to consult: every
+            // family composed above registers.
+            switches: sovereign_runtime_recipe::ToolSwitches::Ungoverned,
+            // No config file of its own: the canonical `[[mcp_servers]]` array
+            // is the whole declaration on this host.
+            mcp_extra: Vec::new(),
+            // A service must reach `listening` promptly. The meta-atlas is a
+            // ~1 GB JSON parse (981 MB on the authoring host) and blocking
+            // boot on it is a daemon that looks hung to `svrn daemon start`;
+            // the desktop reached the same conclusion in 2026-06 and has
+            // warmed it in the background ever since.
+            warmth: sovereign_runtime_recipe::LaneWarmth::Deferred,
+            // `build::inference::load_provider` above already installed a
+            // rerank slot INSIDE the embedded engine from the same
+            // `SOVEREIGN_RERANK_MODEL_PATH`. A standalone one here would put
+            // the same GGUF in this process twice, and the VRAM pre-flight
+            // would not catch it — it plans one rerank slot.
+            rerank: sovereign_runtime_recipe::RerankWiring::AlreadyInProvider,
+        },
+        &sovereign_runtime_recipe::TracingProgress,
+    )
+    .await;
+    let runtime = sovereign_runtime_recipe::commission(common.parts);
+    tracing::info!(
+        tools = runtime.tools.count(),
+        "daemon: Runtime commissioned — this process can serve a turn"
+    );
+
+    // ── Commission, through THE assembler ─────────────────────────────
+    //
+    // This bootstrap no longer names its own variant. It hands its parts to
+    // `sovereign_mesh::assemble`, the one exhaustive match over `Launch` that
+    // constructs anything (`quality/TOPOLOGY.md` §10, Falsifier 3), and that
+    // match decides what `sovereign daemon run` composes into. A refusal is
+    // fatal and names both sides — a daemon that came up as the wrong shape is
+    // the hazard, so there is nothing to degrade to (§18.3).
+    let services = match sovereign_mesh::assemble(
+        launch,
+        sovereign_mesh::LaunchParts::Serving {
+            serving: sovereign_mesh::ServingProfile {
+                core: sovereign_mesh::ServingCore {
+                    // The engine the auto_ingest loop and the
+                    // /internal/corpus/* surface both read.
+                    corpus_engine: Arc::clone(&engine),
+                    inference_provider: Arc::clone(&routed_provider),
+                    // Phase 3: the headless daemon's own `sovereign.db`,
+                    // opened at the top of this function. `reading_http` now
+                    // resolves conversation titles on this variant too.
+                    state_store: Arc::clone(&state_store),
+                    // Phase 5c: the thing that answers. Commissioned just
+                    // above, from the one shared recipe.
+                    runtime: Arc::clone(&runtime),
+                },
+                capability: sovereign_mesh::ServingCapability {
+                    mcp: bootstrap::build_mcp_surface(tools, Arc::clone(&notes_store)),
+                    project_http,
+                    corpus_watch_http: sovereign_mesh::corpus_watch_http::corpus_watch_router(),
+                },
+                advertise_embed,
+            },
+            headless: Some(sovereign_mesh::HeadlessExtras {
+                rails: sovereign_mesh::HeadlessRails {
+                    // Rebuilds the provider when `models.*` changes on disk. Holds
+                    // the same deferred handle, bound below.
+                    provider_factory: Arc::new(provider::LlamaCppFactory {
+                        daemon: Arc::clone(&deferred_daemon),
+                    }),
+                    // The work atlas writes into THIS store, so its entries reach
+                    // gossip's `all_entries_for_gossip` enumeration. Without it the
+                    // daemon builds a private in-memory store and atlas data is
+                    // invisible across the mesh.
+                    mesh_store: Arc::clone(&work_atlas_mesh_store),
+                    convergence_recorder: Arc::clone(&convergence_recorder),
+                },
+                knowledge_view_http,
+                solve_http: solve_http::solve_router(Arc::clone(&solve_jobs)),
+            }),
+        },
+    ) {
+        Ok(s) => s,
+        Err(refusal) => {
+            eprintln!("error: {refusal}");
+            return 1;
+        }
+    };
+    let daemon = sovereign_mesh::EmbeddedDaemon::new(data_dir.clone(), config.clone(), services);
+    deferred_daemon.bind(Arc::clone(&daemon));
 
     // Host side of distributed-inference auto-warm. When this node distributes a
     // large primary across mesh workers, the embedded engine calls this seam to
@@ -745,97 +1065,6 @@ async fn run_daemon(args: &[String]) -> i32 {
     );
 
     bootstrap::spawn_slot_alias_push(Arc::clone(&daemon), mesh_provider);
-
-    // Hand the engine to the mesh daemon so the auto_ingest loop and
-    // /internal/corpus/* HTTP surface can both see in-progress
-    // wikipedia/etc. ingests. See engine block above for the
-    // diagnostic story.
-    daemon.set_corpus_engine(Arc::clone(&engine)).await;
-
-    // Wire the work-atlas's shared `MeshStore` into the daemon BEFORE
-    // `try_resume`. Once the daemon transitions to Running its
-    // `AppState.mesh_store` is this exact `Arc<MeshStore>`, so:
-    //   - the work-atlas tools (`declare_scope`, etc.) write into
-    //     the store gossip's `all_entries_for_gossip` enumerates;
-    //   - peer broadcasts arriving at `/internal/app/state` merge
-    //     into the same instance the atlas reads from.
-    // Without this, the daemon would have constructed its own
-    // independent in-memory store and atlas data would be invisible
-    // across the mesh.
-    daemon
-        .set_mesh_store(Arc::clone(&work_atlas_mesh_store))
-        .await;
-
-    // Notes-rail convergence recorder (order commons-fluency fix 9):
-    // ONE shared instance — installed into AppState (via the daemon's
-    // set_convergence_recorder, picked up at AppState construction in
-    // start_daemon) so `/status` reads it, and handed to BOTH the
-    // outbound publish sink and the inbound ingest poller so the
-    // writers' stamps are what `/status` reports. A second copy would
-    // let the status section disagree with the sink — never.
-    let convergence_recorder = Arc::new(commonwealth_api::state::ConvergenceRecord::new());
-    daemon
-        .set_convergence_recorder(Arc::clone(&convergence_recorder))
-        .await;
-
-    bootstrap::wire_note_propagation_sink(
-        Arc::clone(&notes_store),
-        Arc::clone(&work_atlas_mesh_store),
-        self_node_id,
-        Arc::clone(&convergence_recorder),
-    );
-
-    bootstrap::spawn_notes_tier_backfill(Arc::clone(&notes_store));
-
-    bootstrap::spawn_notes_ingest_poller(
-        Arc::clone(&work_atlas_mesh_store),
-        Arc::clone(&notes_store),
-        self_node_id,
-        Arc::clone(&convergence_recorder),
-    );
-
-    bootstrap::spawn_lazy_stamp_fingerprints(Arc::clone(&engine));
-
-    bootstrap::spawn_tier2_enrichment_resume(&data_dir);
-
-    bootstrap::advertise_embed_model(
-        Arc::clone(&provider),
-        &config,
-        resolved_embed_family,
-        Arc::clone(&daemon),
-    )
-    .await;
-
-    bootstrap::install_http_and_mcp(
-        Arc::clone(&daemon),
-        tools,
-        Arc::clone(&notes_store),
-        &config,
-        Arc::clone(&solve_jobs),
-    )
-    .await;
-
-    // Keep the reindexer alive for the lifetime of the daemon.
-    // The variable binding is load-bearing — dropping the Arc
-    // stops every supervised watcher.
-    let _reindexer_handle = bootstrap::start_freshness_pipeline(
-        &data_dir,
-        Arc::clone(&notes_store),
-        Arc::clone(&daemon),
-        Arc::clone(&engine),
-        Arc::clone(&provider),
-        Arc::clone(&merged_scip_handle),
-    )
-    .await;
-
-    let _watched_subsystem = bootstrap::setup_watched_folders(
-        Arc::clone(&engine),
-        &data_dir,
-        &config,
-        folder_tiered_deps,
-        Arc::clone(&daemon),
-    )
-    .await;
 
     // ── Resume or bootstrap a solo mesh ───────────────────────────
     match daemon.try_resume().await {

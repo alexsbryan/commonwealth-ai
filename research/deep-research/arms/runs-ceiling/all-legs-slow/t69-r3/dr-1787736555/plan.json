@@ -1,0 +1,37 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787736555",
+  "charter_hash": "3fb8f8015b957249",
+  "rounds_planned": 2,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of core architectural components defined in the Agent2Agent (A2A) protocol specification",
+      "Count of primary interaction patterns supported by Model Context Protocol (MCP) vs. A2A",
+      "Percentage increase in agent interoperability standards adopted since 2024 involving Google and Anthropic",
+      "Median latency overhead introduced by MCP tool-calling layer compared to direct API calls",
+      "Share of enterprise AI agents currently using proprietary internal protocols versus open standards like A2A or MCP",
+      "Number of distinct message types specified in the A2A JSON-RPC schema version 1.0",
+      "Ratio of read-only operations to write-enabled operations allowed under default MCP server permissions",
+      "Index measuring semantic similarity between A2A Agent Card fields and OpenAPI specification elements",
+      "Count of major tech companies endorsing the Linux Foundation's donation of the A2A protocol as of late 2025",
+      "Percentage change in developer adoption rates for MCP servers on GitHub from Q3 2024 to Q3 2025",
+      "Median number of tool definitions required per agent task when using MCP versus native function calling",
+      "Share of cross-vendor AI agent communication failures attributed to lack of standardized discovery mechanisms before A2A release",
+      "Number of security vulnerability classes identified in early MCP implementations regarding prompt injection via tools",
+      "Ratio of synchronous request-response interactions to asynchronous event-driven workflows supported by A2A",
+      "Index evaluating the complexity gap between LLM-native reasoning and structured data exchange in both protocols",
+      "Count of distinct authentication methods specified in A2A specification compared to OAuth flows in MCP",
+      "Percentage share of cloud service providers offering managed hosting for MCP servers as of October 2025",
+      "Median token consumption difference when an agent uses A2A delegation versus direct tool execution via MCP",
+      "Number of open-source libraries implementing A2A client capabilities across Python, Java, and Go ecosystems",
+      "Share of AI developers reporting that protocol fragmentation is a top three barrier to multi-agent system deployment"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2"
+    ]
+  }
+}

@@ -39,27 +39,120 @@ use super::icd::{FetchList, FormedQuery, Gap, SearchHit, SkipEntry, SkipLedger, 
 /// caller decides which rounds carry the frontier (the loop: round 1
 /// only — the initial acquisition; rounds 2+ are gap-targeted
 /// follow-ups).
+/// The ONE query-validity decider (acquisition tune, 2026-08-24):
+/// `None` when the text is dispatchable, `Some(reason)` when it is not.
+///
+/// WHY IT EXISTS. `actionable_query` is a string template over a claim
+/// sentence (audit.rs `query_for` → mod.rs `template_query`), and nothing
+/// between the claim and the search backend asked whether the result was
+/// a query. The logged t7a flight dispatched `###` three times and the
+/// empty string three times on task 90 round 2 alone — 21% of that task's
+/// search allowance spent on markdown the draft happened to contain.
+///
+/// WHAT IT DOES NOT DO. It does not judge query QUALITY. The same flight
+/// formed gap queries that are mangled draft prose ("They equipped
+/// internal clocks allow them interpret changing patterns throughou") —
+/// those clear this bar and should, because separating a clumsy query
+/// from a good one is judgment, and a deterministic three-word count that
+/// pretended to have it would be the worse failure (§7.6). This gate
+/// answers exactly one question: is there a query here at all?
+pub fn query_refusal(text: &str) -> Option<&'static str> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Some("empty");
+    }
+    if content_word_count(trimmed) < MIN_QUERY_CONTENT_WORDS {
+        return Some("fewer-than-3-content-words");
+    }
+    None
+}
+
+/// A query needs this many content words to be worth a search call.
+/// Three is the floor at which a web query names a subject and something
+/// about it; below that the flight's own record is markdown scaffolding
+/// and bare fragments.
+pub const MIN_QUERY_CONTENT_WORDS: usize = 3;
+
+/// A content word: at least two characters and at least one alphanumeric
+/// once markup and punctuation are trimmed. `###`, `**`, `(3)` and `—`
+/// are not content words; `MCP`, `1873` and `A2A` are.
+fn content_word_count(text: &str) -> usize {
+    text.split_whitespace()
+        .filter(|w| {
+            let core = w.trim_matches(|c: char| !c.is_alphanumeric());
+            core.chars().count() >= 2 && core.chars().any(|c| c.is_alphanumeric())
+        })
+        .count()
+}
+
+/// Mint the round's queries.
+///
+/// `gap_queries` is the port's model-formed reformulation of the gaps
+/// (AIQ planner rule 3 — see `ResearchPort::gap_queries`), positionally
+/// matched to `gaps`. `None` means the port had no such surface or
+/// refused, and the deterministic `actionable_query` template is used
+/// instead — which is RECORDED on the query's `formed_by`, so the
+/// artifact always says which shape produced it and a silent revert to
+/// the template is impossible (§18.3).
 pub fn form_queries(
     run_id: &str,
     charter_hash: &str,
     round: u32,
     gaps: &[Gap],
     preplanned: &[String],
+    gap_queries: Option<&[String]>,
 ) -> FetchList {
+    // The refusal ledger: a formed query the gate declined. Recorded in
+    // formation order so the artifact reads as "what the round tried".
+    let mut refused_queries: Vec<super::icd::RefusedQuery> = Vec::new();
+    // Positional: the port's contract is one line per gap, in order, and
+    // it refuses rather than return a different count.
+    let model_formed = gap_queries.filter(|q| q.len() == gaps.len());
+    let gap_source = if model_formed.is_some() {
+        "gap-model"
+    } else {
+        "gap-template"
+    };
+    let text_for = |i: usize, g: &Gap| -> String {
+        model_formed
+            .and_then(|q| q.get(i).cloned())
+            .unwrap_or_else(|| g.actionable_query.clone())
+    };
     let mut queries: Vec<FormedQuery> = gaps
         .iter()
         .enumerate()
-        .map(|(i, g)| FormedQuery {
-            id: format!("q{}", i + 1),
-            // t6f rung 2: gap-derived acquisition — use actionable_query which
-            // is the search-shaped form of the gap. MICRO-PROBE VALIDATED:
-            // gap.text sentence form ("Meridian Bridge completed") doesn't
-            // match keyword tokens like "completion"; actionable_query keyword
-            // form ("Meridian Bridge completion date 1873") does match.
-            text: g.actionable_query.clone(),
+        .filter(|(i, g)| {
+            let text = text_for(*i, g);
+            if let Some(reason) = query_refusal(&text) {
+                refused_queries.push(super::icd::RefusedQuery {
+                    text,
+                    reason: reason.to_string(),
+                    from_gap_id: Some(g.id.clone()),
+                    formed_by: gap_source.to_string(),
+                });
+                return false;
+            }
+            true
+        })
+        .map(|(i, g)| (i, g))
+        .enumerate()
+        .map(|(n, (i, g))| FormedQuery {
+            id: format!("q{}", n + 1),
+            // The port's model-formed query when there is one, else the
+            // t6f rung 2 template (actionable_query — the search-shaped
+            // form of the gap; MICRO-PROBE VALIDATED: gap.text sentence
+            // form "Meridian Bridge completed" doesn't match keyword
+            // tokens like "completion", the actionable form does).
+            // `formed_by` records which, so the fetch list always names
+            // the shape that produced it.
+            text: text_for(i, g),
             from_gap_id: Some(g.id.clone()),
-            formed_by: "gap-template".to_string(),
-            provider: "deterministic".to_string(),
+            formed_by: gap_source.to_string(),
+            provider: if model_formed.is_some() {
+                "port".to_string()
+            } else {
+                "deterministic".to_string()
+            },
             // t1d fix 3: the floor's record rides the query into the
             // fetch list — the artifact is self-describing.
             corroboration: g.corroboration.clone(),
@@ -67,6 +160,15 @@ pub fn form_queries(
         .collect();
     let mut next = queries.len() + 1;
     for q in preplanned {
+        if let Some(reason) = query_refusal(q) {
+            refused_queries.push(super::icd::RefusedQuery {
+                text: q.clone(),
+                reason: reason.to_string(),
+                from_gap_id: None,
+                formed_by: "plan-subquestion".to_string(),
+            });
+            continue;
+        }
         queries.push(FormedQuery {
             id: format!("q{next}"),
             text: q.clone(),
@@ -77,6 +179,18 @@ pub fn form_queries(
         });
         next += 1;
     }
+    if !refused_queries.is_empty() {
+        tracing::warn!(
+            target: "deep_research",
+            run_id,
+            round,
+            formed = queries.len() + refused_queries.len(),
+            dispatched = queries.len(),
+            refused = refused_queries.len(),
+            reasons = ?refused_queries.iter().map(|r| r.reason.as_str()).collect::<Vec<_>>(),
+            "acquisition: formed queries refused before dispatch (not a query)"
+        );
+    }
     FetchList {
         icd: "fetch_list".to_string(),
         version: super::icd::ICD_VERSION,
@@ -84,6 +198,7 @@ pub fn form_queries(
         charter_hash: charter_hash.to_string(),
         round,
         queries,
+        refused_queries,
         search_hits: Vec::new(),
         triage: TriageOutcome {
             code_set_k: Vec::new(),
@@ -913,6 +1028,173 @@ mod tests {
         assert!(r.skip_ledger.entries.is_empty());
     }
 
+    /// RED-first (acquisition tune, 2026-08-24): a formed query that is
+    /// not a query is never dispatched, and its refusal is RECORDED.
+    ///
+    /// THE MEASURED SHAPE. `actionable_query` is a string TEMPLATE over a
+    /// claim sentence (audit.rs `query_for` → mod.rs `template_query`:
+    /// strip citation spans, strip disallowed figures, take 140 chars).
+    /// Nothing between the claim and the search backend asks whether the
+    /// result is a query at all. On the logged t7a flight, task 90 round
+    /// 2 dispatched `###` three times and the EMPTY STRING three times —
+    /// six of that task's 28 queries (21% of its search allowance) spent
+    /// on markdown scaffolding the draft happened to contain. Six of the
+    /// flight's 132 queries overall.
+    ///
+    /// THE BAR IS DELIBERATELY LOW. Three content words. This gate
+    /// refuses things that are not queries; it does NOT judge whether a
+    /// query is a GOOD one — 49% of the flight's rounds-2+ gap queries
+    /// are mangled draft prose that clears three words easily ("They
+    /// equipped internal clocks allow them interpret changing patterns
+    /// throughou"), and separating those from real queries needs
+    /// judgment this function does not have and must not pretend to.
+    /// Fixing that is a different change (a planner, not a template).
+    ///
+    /// REFUSED, NOT DROPPED (§18.3): the refusal rides the fetch list, so
+    /// a query the loop declined to spend on is visible in the artifact
+    /// rather than silently absent.
+    /// The AIQ rule-3 port (acquisition tune, 2026-08-24): when the port
+    /// reformulates the gaps, the round asks the MODEL-FORMED query and
+    /// the artifact says so; when it does not, the round falls back to
+    /// the deterministic template and the artifact says THAT.
+    ///
+    /// The recorded shape this replaces: `actionable_query` is a template
+    /// over a claim sentence, so the gap rounds fired draft prose at a
+    /// search engine ("They equipped internal clocks allow them interpret
+    /// changing patterns throughou"). Round 1's queries were already
+    /// model-formed via `plan_subquestions` and are the ones that
+    /// retrieve well — this gives the gap rounds the same surface.
+    ///
+    /// A fallback is never silent (§18.3): `formed_by` and `provider`
+    /// both carry which shape produced the query, so a run that quietly
+    /// reverted to the template is visible in the fetch list.
+    #[test]
+    fn model_formed_gap_queries_are_used_and_the_fallback_is_recorded() {
+        let gaps = vec![
+            Gap {
+                id: "g1".to_string(),
+                text: "It was completed several years after the survey.".to_string(),
+                actionable_query: "It was completed several years after the survey".to_string(),
+                from_claim_id: None,
+                corroboration: None,
+            },
+            Gap {
+                id: "g2".to_string(),
+                text: "The protocol handles capability discovery.".to_string(),
+                actionable_query: "The protocol handles capability discovery".to_string(),
+                from_claim_id: None,
+                corroboration: None,
+            },
+        ];
+        let reformed = vec![
+            "Meridian Bridge completion date".to_string(),
+            "Agent2Agent A2A protocol capability discovery mechanism".to_string(),
+        ];
+
+        let modelled = form_queries("run", "hash", 2, &gaps, &[], Some(&reformed));
+        assert_eq!(
+            modelled
+                .queries
+                .iter()
+                .map(|q| q.text.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "Meridian Bridge completion date",
+                "Agent2Agent A2A protocol capability discovery mechanism"
+            ],
+            "the round asks the reformulated query, not the template"
+        );
+        assert!(
+            modelled
+                .queries
+                .iter()
+                .all(|q| q.formed_by == "gap-model" && q.provider == "port"),
+            "a model-formed query names its shape and its provider"
+        );
+
+        let templated = form_queries("run", "hash", 2, &gaps, &[], None);
+        assert!(
+            templated
+                .queries
+                .iter()
+                .all(|q| q.formed_by == "gap-template" && q.provider == "deterministic"),
+            "the fallback names ITSELF — a silent revert to the template \
+             is what the record exists to prevent"
+        );
+        assert_eq!(
+            templated.queries[0].text,
+            "It was completed several years after the survey"
+        );
+
+        // A count mismatch is refused, not matched positionally: a query
+        // aligned to the wrong gap is worse than the template.
+        let short = vec!["only one line".to_string()];
+        let mismatched = form_queries("run", "hash", 2, &gaps, &[], Some(&short));
+        assert!(
+            mismatched
+                .queries
+                .iter()
+                .all(|q| q.formed_by == "gap-template"),
+            "a short reformulation falls back rather than misaligning"
+        );
+    }
+
+    #[test]
+    fn a_query_that_is_not_a_query_is_refused_and_recorded() {
+        let gaps = vec![
+            Gap {
+                id: "g1".to_string(),
+                text: "heading".to_string(),
+                actionable_query: "###".to_string(),
+                from_claim_id: None,
+                corroboration: None,
+            },
+            Gap {
+                id: "g2".to_string(),
+                text: "empty".to_string(),
+                actionable_query: String::new(),
+                from_claim_id: None,
+                corroboration: None,
+            },
+            Gap {
+                id: "g3".to_string(),
+                text: "two words only".to_string(),
+                actionable_query: "Meridian Bridge".to_string(),
+                from_claim_id: None,
+                corroboration: None,
+            },
+            Gap {
+                id: "g4".to_string(),
+                text: "a real one".to_string(),
+                actionable_query: "Meridian Bridge completion date 1873".to_string(),
+                from_claim_id: None,
+                corroboration: None,
+            },
+        ];
+        let fl = form_queries("run", "hash", 2, &gaps, &["**".to_string()], None);
+        assert_eq!(
+            fl.queries.len(),
+            1,
+            "only the real query is dispatchable, got {:?}",
+            fl.queries.iter().map(|q| &q.text).collect::<Vec<_>>()
+        );
+        assert_eq!(fl.queries[0].text, "Meridian Bridge completion date 1873");
+        let refused: Vec<&str> = fl.refused_queries.iter().map(|r| r.text.as_str()).collect();
+        assert_eq!(
+            refused,
+            vec!["###", "", "Meridian Bridge", "**"],
+            "every refusal is recorded in the order it was formed"
+        );
+        assert!(
+            fl.refused_queries.iter().all(|r| !r.reason.is_empty()),
+            "a refusal names its reason"
+        );
+        // The surviving query keeps its identity: ids are assigned to
+        // what is DISPATCHED, so the fetch list's query ids stay dense
+        // and `SearchHit::query_id` still resolves.
+        assert_eq!(fl.queries[0].id, "q1");
+    }
+
     #[test]
     fn queries_come_from_gaps_deterministically() {
         let gaps = vec![Gap {
@@ -922,7 +1204,7 @@ mod tests {
             from_claim_id: Some("c2".to_string()),
             corroboration: None,
         }];
-        let fl = form_queries("run", "hash", 2, &gaps, &[]);
+        let fl = form_queries("run", "hash", 2, &gaps, &[], None);
         assert_eq!(fl.queries.len(), 1);
         // drb1-r2c: re-pinned to the committed form_queries (t6f rung 2)
         // — the query is the gap's actionable_query, the search-shaped
@@ -946,7 +1228,7 @@ mod tests {
             from_claim_id: Some("c2".to_string()),
             corroboration: None,
         }];
-        let fl = form_queries("run", "hash", 2, &gaps, &[]);
+        let fl = form_queries("run", "hash", 2, &gaps, &[], None);
         assert_eq!(fl.queries.len(), 1);
         // Query uses actionable_query (search-shaped), not text (declarative)
         assert_eq!(fl.queries[0].text, "Meridian Bridge completion year");
@@ -973,8 +1255,26 @@ mod tests {
             from_claim_id: Some("c1".to_string()),
             corroboration: Some(record.clone()),
         }];
-        let fl = form_queries("run", "hash", 2, &gaps, &["preplanned query".to_string()]);
+        // Three content words minimum (`query_refusal`): the old fixture
+        // here was the two-word "preplanned query", which the 2026-08-24
+        // validity gate refuses. Widened, not weakened — what this test
+        // pins is that the FLOOR RECORD rides the formed query, and a
+        // realistic preplanned query pins it just as well. On the logged
+        // t7a flight the bar refused nothing beyond the `###`/empty six,
+        // so it costs no real query.
+        let fl = form_queries(
+            "run",
+            "hash",
+            2,
+            &gaps,
+            &["preplanned query about the index".to_string()],
+            None,
+        );
         assert_eq!(fl.queries.len(), 2);
+        assert!(
+            fl.refused_queries.is_empty(),
+            "both fixtures clear the validity gate"
+        );
         assert_eq!(fl.queries[0].corroboration, Some(record));
         assert_eq!(
             fl.queries[1].corroboration, None,

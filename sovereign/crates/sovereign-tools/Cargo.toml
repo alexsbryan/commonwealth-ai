@@ -6,6 +6,10 @@ license.workspace = true
 
 [dependencies]
 sovereign-core = { workspace = true }
+# The enrichment store's `config.json` schema + path layout. This crate's
+# watched-folder driver WRITES that file and the CLI subprocess it spawns reads
+# it; both used to carry their own copy (rung nc-16-shared-capability).
+sovereign-enrichment-catalog = { workspace = true }
 # Recipe-author reads the recipe schema descriptor + (B:P4) url_template /
 # registry consts from the contract crate directly, so it needs no corpus-engine
 # dependency — the seam that lets the authoring stack extract (B:P6).

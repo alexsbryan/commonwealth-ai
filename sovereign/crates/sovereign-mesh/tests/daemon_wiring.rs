@@ -55,9 +55,12 @@ fn build_wired_app_state() -> (AppState, Arc<AtomicUsize>) {
         member_with_last_seen(self_id, "self", 100, "127.0.0.1:9742".parse().unwrap()),
     );
     let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(42),
         name: "wiring-test".into(),
-        join_key_hash: [7u8; 32],
+        invite_key_hash: [7u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members,
         peers: vec![],
@@ -167,12 +170,12 @@ async fn with_mesh_mutation_hook_fires_on_gossip_delta() {
     let other_id = NodeId::from_u128(0x2222_2222_2222_2222);
     let other_addr: SocketAddr = "127.0.0.1:9999".parse().unwrap();
 
-    let join_key_hash: [u8; 32] = [7u8; 32];
+    let invite_key_hash: [u8; 32] = [7u8; 32];
     let payload = json!({
         "mesh": {
             "id": MeshId::from_u128(42),
             "name": "wiring-test",
-            "join_key_hash": join_key_hash.to_vec(),
+            "join_key_hash": invite_key_hash.to_vec(),
             "members": [
                 member_with_last_seen(self_id, "self", 200, "127.0.0.1:9742".parse().unwrap()),
                 member_with_last_seen(other_id, "peer", 200, other_addr),

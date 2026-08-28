@@ -1,0 +1,10 @@
+[
+  "MCP Protocol Architecture — This section establishes that MCP is an open standard introduced by Anthropic in late 2024 designed to connect LLMs with external tools and data sources via a standardized two-way interface.",
+  "A2A Protocol Core Concepts — This section defines the A2A protocol as Google’s April 2025 initiative for enabling seamless communication and collaboration between AI agents, detailing its core components like AgentCard, Task, Artifact, Message, and Part.",
+  "A2A Governance and Industry Adoption — This section explains how Google donated A2A to the Linux Foundation in June 2025 to ensure neutral governance, supported by over 100 technology companies including Amazon, Cisco, Microsoft, and Salesforce.",
+  "MCP vs. A2A Functional Distinction — This section contrasts the protocols by establishing that MCP focuses on connecting models to external tools and data (vertical integration), while A2A enables direct agent-to-agent interaction (horizontal interoperability).",
+  "Complementary Ecosystem Roles — This section elaborates on how MCP and A2A work together within a broader AI ecosystem, where agents use MCP for tool access and A2A for peer collaboration, creating an interoperable landscape.",
+  "A2A Security Vulnerabilities — This section identifies specific security gaps in the current A2A implementation, such as the absence of token lifetime limitations, lack of strong customer authentication, insufficiently granular scopes, and risks of excessive data exposure.",
+  "Innovative Aspects of A2A Design — This section highlights the innovative features of A2A, including its streaming model using Server-Sent Events (SSE), push notifications for disconnected scenarios, and enterprise-ready extensions that distinguish it from earlier agent communication attempts.",
+  "Problems Addressed by A2A — This section details the specific interoperability issues in multi-agent systems that A2A is designed to solve, addressing the challenge of agents effectively working with other autonomous entities at scale without custom integrations."
+]

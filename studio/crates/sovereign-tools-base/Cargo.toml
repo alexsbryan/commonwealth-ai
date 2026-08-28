@@ -6,13 +6,27 @@ edition = "2021"
 license.workspace = true
 
 # The dependency budget IS the point of this crate: the contract vocabulary
-# (Tool, ToolRegistry, StepOutput, Error/Result, SetupConfig, McpServerConfig,
-# recipe::sections) plus ordinary async/HTTP/serde leaves — no corpus-engine,
-# no llama.cpp, no mesh. Tools that need those (extract, corpus_store/search,
-# atlas_*) stay in `sovereign-tools` and are injected via `extra_tools`.
+# (Tool, ToolRegistry, StepOutput, Error/Result, SetupConfig, McpServerConfig)
+# plus ordinary async/HTTP/serde leaves — no llama.cpp, no mesh. Tools that need
+# those (extract, corpus_store/search, atlas_*) stay in `sovereign-tools` and
+# are injected via `extra_tools`.
+#
+# BUDGET AMENDED 2026-08-20 (noun-convergence rung 2). It used to read "no
+# corpus-engine", and it still forbids what that was written against: the
+# `corpus-engine` crate itself, whose closure drags LanceDB, Tantivy, rusqlite
+# and mmap. What it now permits is `corpus-engine-sections` — a leaf whose
+# entire dependency budget is `regex` + `tracing`. `tool:section` was always
+# calling corpus-engine's own `ChapterRegexDetector`; it reached it through
+# `sovereign_contracts::recipe::sections`, which is where the detectors were
+# parked so both callers could share one implementation. Parking them there
+# made the knowledge layer depend on the layer above it. They now live at the
+# bottom and both callers reach DOWN. Same one implementation, same weight —
+# what changed is the direction, not the budget's intent.
 
 [dependencies]
 sovereign-contracts = { workspace = true }
+# The section detectors — `regex`-only leaf, see the budget note above.
+corpus-engine-sections = { workspace = true }
 
 async-trait = { workspace = true }
 # `McpError` (mcp/transport.rs) derives thiserror::Error.

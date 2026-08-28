@@ -28,15 +28,15 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::slot_policy::Workload;
-use sovereign_core::traits::{InferenceProvider, Tool};
+use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::*;
 
-use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
+use corpus_engine_notes::{Note, NoteScope, NoteStore, ScopeFilter};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct ReadNoteDigestTool {
     notes: Arc<NoteStore>,
@@ -57,76 +57,21 @@ impl ReadNoteDigestTool {
     }
 }
 
-#[async_trait]
-impl Tool for ReadNoteDigestTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "read_note_digest".to_string(),
-            name: "Read Note Digest".to_string(),
-            description: "Return a markdown digest (≤2k tokens) summarizing notes that match the \
-                 scope/feature/kinds filter. Cached per notes_version — a fresh call right after \
-                 a write_note will regenerate. Use at session start or after a compaction event \
-                 to rebuild working context without rehydrating every raw note. Reference notes \
-                 by id via read_note_by_id when you need the full content."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "scope": {
-                        "type": "array",
-                        "items": {"type": "string", "enum": ["global", "feature", "session"]},
-                        "description": "Scope filter. Defaults to ['global','feature'] when \
-                                        feature_id is set, ['global'] otherwise."
-                    },
-                    "feature_id": {
-                        "type": "string",
-                        "description": "Pairs with scope=['feature']. Narrows to one feature."
-                    },
-                    "kinds": {
-                        "type": "array",
-                        "items": {"type": "string",
-                                   "enum": ["decision","attempt","invariant","todo","reflection"]},
-                        "description": "Kind filter. Defaults to [decision,invariant,attempt]."
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "default": 100,
-                        "description": "Max notes to consider (capped at 100)."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![ToolExample {
-                situation: "You just came back from a compaction event and need to rebuild \
-                            context for the active feature without fetching every raw note. \
-                            Call this first, then expand any [note:...] reference you need."
-                    .into(),
-                call: serde_json::json!({
-                    "scope": ["global", "feature"],
-                    "feature_id": "atos-version-flag"
-                }),
-            }],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Slow,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "markdown": { "type": "string" },
-                    "stale":    { "type": "boolean" },
-                    "hit":      { "type": "boolean",
-                                  "description": "True when the digest was served from cache" }
-                }
-            })),
-        }
+impl ReadNoteDigestTool {
+    /// Bind this tool's state to its `read_note_digest` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("read_note_digest", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `read_note_digest`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let feature_id = params
             .get("feature_id")
             .and_then(|v| v.as_str())
@@ -280,7 +225,7 @@ fn compute_scope_hash(
     format!("{:016x}", hasher.finish())
 }
 
-fn format_notes_for_prompt(notes: &[NoteRow]) -> String {
+fn format_notes_for_prompt(notes: &[Note]) -> String {
     let mut out = String::with_capacity(notes.len() * 160);
     for n in notes {
         let scope_tag = if n.scope == "global" {
@@ -299,7 +244,7 @@ fn format_notes_for_prompt(notes: &[NoteRow]) -> String {
     out
 }
 
-fn fallback_header_digest(notes: &[NoteRow]) -> String {
+fn fallback_header_digest(notes: &[Note]) -> String {
     let mut out = String::from(
         "> **Digest fallback.** The Fast inference slot is not available — \
          returning note headers without summarization. The operator should \
@@ -330,7 +275,8 @@ async fn summarize_via_fast_slot(provider: &dyn InferenceProvider, raw: &str) ->
     // turn-loop context (a compact digest the agent expands on demand),
     // not durable truth. Housekeep's Some(0) think budget matches this
     // site verbatim.
-    let mut request = CompletionRequest::for_workload(Workload::Housekeep, raw.to_string())
+    let mut request = Workload::Housekeep
+        .request(raw.to_string())
         .with_system(system)
         // POLICY-DEBT(SLOT_POLICY §4.5 Housekeep): 800 > 512 forfeits the
         // batched FastShort claim; the 300–600-word digest target needs it.
@@ -374,7 +320,7 @@ mod tests {
 
     #[test]
     fn fallback_header_digest_references_notes_by_id() {
-        let rows = vec![NoteRow {
+        let rows = vec![Note {
             id: "abc-1".into(),
             kind: "decision".into(),
             content: "use FTS5".into(),

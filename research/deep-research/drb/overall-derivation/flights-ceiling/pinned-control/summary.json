@@ -1,0 +1,20 @@
+{
+  "arm": "pinned-control",
+  "task": 69,
+  "values": [
+    47.23174468343295
+  ],
+  "n": 1,
+  "mean": 47.23174468343295,
+  "sd": NaN,
+  "se": NaN,
+  "missing": [],
+  "control_mean": 45.63,
+  "control_sd": 2.97,
+  "control_n": 2,
+  "delta": 1.6017446834329476,
+  "pooled_2se": 7.2749845360660395,
+  "aiq_t69_our_ruler": 53.8638,
+  "control_name": "control-4b + the bounded-audit cell",
+  "routing_witnessed": "yes"
+}

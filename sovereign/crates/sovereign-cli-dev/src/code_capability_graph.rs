@@ -27,6 +27,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use sovereign_cli_shared::dirs::sovereign_root;
 
 // ─── on-disk shapes (subset; serde ignores the fields we don't name) ───────
 
@@ -64,6 +65,10 @@ struct FindingsFile {
 /// One code-vs-docs verdict. Joined to a capability on the composite key
 /// `(label, n_entries, n_core)` — see [`finding_key`] — because `label` alone
 /// collides across distinct clusters.
+///
+/// NOT `sovereign_mesh::source_content_validator::Finding` (a tool-output
+/// validation finding); this is a Deserialize-only row of the
+/// capability-graph report file.
 #[derive(Deserialize)]
 struct Finding {
     /// "corroborated" | "undocumented" | "drifted".
@@ -79,6 +84,9 @@ struct Finding {
 
 // ─── output shapes (inlined into the HTML as JSON) ─────────────────────────
 
+/// NOT `sovereign_tools::code::suggest_seams::Member`, which carries SCIP
+/// spans for a seam proposal; this is the render shape inlined into the
+/// HTML as JSON.
 #[derive(Serialize)]
 struct Member {
     name: String,
@@ -763,13 +771,6 @@ pub async fn cmd_capability_graph(args: &[String]) -> i32 {
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────
-
-/// Branded per-user data root (rebrand-aware path SSOT — prefers a
-/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
-/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
-fn sovereign_root() -> PathBuf {
-    sovereign_cli_shared::dirs::sovereign_root()
-}
 
 /// Open an emitted artifact in the OS default application (the browser), so a CLI
 /// user lands on the rendered graph without copy-pasting the path. Best-effort:

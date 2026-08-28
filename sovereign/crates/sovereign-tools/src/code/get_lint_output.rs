@@ -6,14 +6,13 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_watchers::LintResultStore;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct GetLintOutputTool {
     store: Arc<LintResultStore>,
@@ -25,62 +24,26 @@ impl GetLintOutputTool {
     }
 }
 
-#[async_trait]
-impl Tool for GetLintOutputTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "get_lint_output".to_string(),
-            name: "Get Lint Output".to_string(),
-            description: "Retrieve the full raw output of a lint run by run_id. \
-                          Call when lint_status shows output_truncated: true on an error. \
-                          The run_id is in the lint_status summary."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "run_id": {
-                        "type": "integer",
-                        "description": "The run ID from lint_status summary."
-                    }
-                },
-                "required": ["run_id"]
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "lint_status returned errors but the message was cut off with output_truncated: true. Call this with the run_id from that response to get the full compiler output — file paths, line numbers, and the complete error text.".into(),
-                    call: serde_json::json!({ "run_id": 42 }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "run_id":           { "type": "integer" },
-                    "output":           { "type": "string" },
-                    "output_truncated": { "type": "boolean" }
-                }
-            })),
-        }
+impl GetLintOutputTool {
+    /// Bind this tool's state to its `get_lint_output` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("get_lint_output", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        params
-            .get("run_id")
-            .and_then(|v| v.as_i64())
-            .ok_or_else(|| {
-                Error::InvalidInput("get_lint_output requires 'run_id' (integer)".to_string())
-            })?;
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `get_lint_output`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let run_id = params
             .get("run_id")
             .and_then(|v| v.as_i64())
@@ -101,5 +64,15 @@ impl Tool for GetLintOutputTool {
                 message: e.to_string(),
             }),
         }
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+        params
+            .get("run_id")
+            .and_then(|v| v.as_i64())
+            .ok_or_else(|| {
+                Error::InvalidInput("get_lint_output requires 'run_id' (integer)".to_string())
+            })?;
+        Ok(())
     }
 }

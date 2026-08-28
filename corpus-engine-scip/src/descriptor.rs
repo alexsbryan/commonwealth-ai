@@ -217,6 +217,29 @@ pub fn descriptor_kind(qualified_name: &str) -> DescriptorKind {
     DescriptorKind::Unrecognized
 }
 
+/// Split a field symbol into its owning type and the field's name.
+///
+/// `…deep_research/icd/ClaimCitation#url.` → (`…deep_research/icd/ClaimCitation#`,
+/// `url`). The owner slice keeps the package prefix, so it is the owning
+/// type's own qualified name and can be looked up directly.
+///
+/// Returns `None` for anything that is not a [`DescriptorKind::Field`], which
+/// is the reason this lives here rather than in either caller: two modules
+/// need the split (`roles::type_fields` counts field NAMES,
+/// `shape::field_signatures` needs name AND type) and one of them writing its
+/// own `rfind('#')` would be a second decider for the same parse (§10.6).
+pub fn field_owner_and_name(qualified_name: &str) -> Option<(&str, &str)> {
+    if descriptor_kind(qualified_name) != DescriptorKind::Field {
+        return None;
+    }
+    let hash = qualified_name.rfind('#')?;
+    let name = qualified_name[hash + 1..].trim_end_matches('.');
+    if name.is_empty() {
+        return None;
+    }
+    Some((&qualified_name[..=hash], name))
+}
+
 /// How a reference to this callee was dispatched. See [`DispatchHint`].
 pub fn dispatch_hint(callee_qualified: &str) -> DispatchHint {
     match descriptor_kind(callee_qualified) {
@@ -320,6 +343,43 @@ mod tests {
         assert_eq!(leaf_name(&format!("{PFX}Verdict#")), "Verdict");
         assert_eq!(leaf_name(&format!("{PFX}m/run().")), "run()");
         assert_eq!(leaf_name(&format!("{PFX}ids/define_id!")), "define_id");
+    }
+
+    #[test]
+    fn a_field_splits_into_its_owner_and_its_name() {
+        let url = format!("{PFX}deep_research/icd/ClaimCitation#url.");
+        assert_eq!(
+            field_owner_and_name(&url),
+            Some((
+                format!("{PFX}deep_research/icd/ClaimCitation#").as_str(),
+                "url"
+            ))
+        );
+        // The owner slice IS the type's own qualified name, so it looks up.
+        let (owner, _) = field_owner_and_name(&url).unwrap();
+        assert_eq!(descriptor_kind(owner), DescriptorKind::Type);
+    }
+
+    /// Everything that is not a field must decline rather than return a guess
+    /// — a `path/CONST.` and a `Type#method().` both end in `.` and both have
+    /// a `#` somewhere nearby (§18.3).
+    #[test]
+    fn nothing_but_a_field_splits() {
+        for not_a_field in [
+            "workflow_cmd/HELP.",
+            "types/ScoredChunk#",
+            "StartupOutcome#Failed#",
+            "traits/InferenceProvider#complete().",
+            "impl#[Runtime]handle_message().",
+            "crate/",
+        ] {
+            let q = format!("{PFX}{not_a_field}");
+            assert_eq!(
+                field_owner_and_name(&q),
+                None,
+                "must decline: {not_a_field}"
+            );
+        }
     }
 
     #[test]

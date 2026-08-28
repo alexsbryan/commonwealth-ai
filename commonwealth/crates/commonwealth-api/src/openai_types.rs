@@ -578,6 +578,38 @@ pub struct ModelObject {
     /// Commonwealth extension: performance estimates.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub performance: Option<ModelPerformance>,
+    /// Commonwealth extension: whether a holder has these weights in
+    /// memory right now. See [`Residency`] — the distinction it draws is
+    /// the one `performance.loaded` could not, because that flag answers
+    /// only for the daemon being asked and is absent entirely when no
+    /// shard plan exists (which was 4 of 6 real entries on a live mesh).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub residency: Option<Residency>,
+    /// Commonwealth extension: display names of the nodes advertising this
+    /// id, `"local"` for this one. Empty only on the orchestrator path,
+    /// which tracks models without attributing them to a node.
+    ///
+    /// `owned_by` cannot carry this: it is a single string, it is part of
+    /// the OpenAI baseline shape, and it read `"mesh"` for every real
+    /// entry — so a client could see that a model existed somewhere and
+    /// never which somewhere.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub advertised_by: Vec<String>,
+}
+
+/// Whether a listed model's weights are in memory, on a node that holds
+/// them. Every id `/v1/models` returns is dispatchable by name — that is
+/// the list's contract — so the open question is only what the first
+/// request pays.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Residency {
+    /// A holder reports the weights resident. First token is a decode away.
+    Resident,
+    /// A holder has the weights and loads them on demand. The first request
+    /// pays a cold load — tens of seconds for a large primary, which is
+    /// normal operation and not an availability fault.
+    Cold,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -842,10 +874,28 @@ mod tests {
                     estimated_ttft_ms: 1100,
                     loaded: true,
                 }),
+                residency: Some(Residency::Resident),
+                advertised_by: vec!["local".into(), "RuggedFox".into()],
             }],
         };
         let json = serde_json::to_string(&resp).unwrap();
         assert!(json.contains("qwen3-coder-30b"));
+        assert!(json.contains(r#""residency":"resident""#));
+        assert!(json.contains("RuggedFox"));
+    }
+
+    /// The two availability fields are `skip_serializing_if`-absent, so an
+    /// old client parsing a new payload and a new client parsing an old one
+    /// must both work. The second direction is the one that bites: the
+    /// orchestrator path emits no `advertised_by`, and a `Vec` field without
+    /// `#[serde(default)]` would make that a hard parse failure in the
+    /// Ollama `/api/tags` shim, which round-trips this type.
+    #[test]
+    fn model_object_parses_without_the_availability_fields() {
+        let json = r#"{"id":"m","object":"model","created":0,"owned_by":"mesh"}"#;
+        let m: ModelObject = serde_json::from_str(json).unwrap();
+        assert_eq!(m.residency, None);
+        assert!(m.advertised_by.is_empty());
     }
 
     #[test]

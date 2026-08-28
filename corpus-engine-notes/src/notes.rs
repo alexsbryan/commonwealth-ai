@@ -40,6 +40,12 @@ use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 
 use crate::error::{Error, Result};
+// The published vocabulary lives in `crate::note` (rung 7). Re-exported here
+// so `corpus_engine_notes::notes::NoteScope` and friends keep resolving —
+// every consumer's `use` line is untouched by the split.
+pub use crate::note::{
+    is_ephemeral_kind, Note, NoteScope, NoteSource, ScopeFilter, EPHEMERAL_KINDS,
+};
 use crate::notes_schema::{
     MIGRATION_V1, MIGRATION_V10, MIGRATION_V11, MIGRATION_V12, MIGRATION_V2, MIGRATION_V3,
     MIGRATION_V4, MIGRATION_V5, MIGRATION_V6, MIGRATION_V7, MIGRATION_V8, MIGRATION_V9, SCHEMA_NEW,
@@ -125,7 +131,7 @@ pub struct NotePropagationEvent {
 }
 
 /// Note row carried on the propagation wire. Mirrors the
-/// `NoteRow` shape (minus rowid + retirement metadata, which is
+/// `Note` shape (minus rowid + retirement metadata, which is
 /// node-local lifecycle state) plus the v9 propagation fields.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ExportedNoteRow {
@@ -458,7 +464,7 @@ pub(crate) fn fts5_user_query(query: &str) -> String {
 }
 
 /// FTS5 candidate pool: top-`pool_size` notes ranked by BM25.
-/// Returns `(NoteRow, bm25_rank)` — bm25 returns "lower is
+/// Returns `(Note, bm25_rank)` — bm25 returns "lower is
 /// better"; the caller flips the sign before min-max
 /// normalisation.
 fn fetch_bm25_pool(
@@ -469,7 +475,7 @@ fn fetch_bm25_pool(
     kinds: &[String],
     pool_size: usize,
     include_retired: bool,
-) -> Result<Vec<(NoteRow, f64)>> {
+) -> Result<Vec<(Note, f64)>> {
     let match_expr = fts5_user_query(query);
     if match_expr.is_empty() {
         return Ok(Vec::new());
@@ -548,7 +554,7 @@ fn fetch_cosine_pool(
     include_retired: bool,
     query_vec: &[f32],
     local_model_id: &str,
-) -> Result<Vec<(NoteRow, f64)>> {
+) -> Result<Vec<(Note, f64)>> {
     let (where_extra, bound) = build_filter_clause(symbols, files, kinds);
     let retired_clause = if include_retired {
         ""
@@ -577,7 +583,7 @@ fn fetch_cosine_pool(
             Ok((note, bytes, model_id))
         })
         .map_err(sqlite_err)?;
-    let mut scored: Vec<(NoteRow, f64)> = Vec::new();
+    let mut scored: Vec<(Note, f64)> = Vec::new();
     let mut foreign_space_excluded = 0usize;
     for r in mapped {
         let (note, bytes, model_id) = r.map_err(sqlite_err)?;
@@ -799,208 +805,6 @@ fn backfill_content_hashes(conn: &Connection) -> Result<()> {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-/// Scope dimension for ATOS notes.
-///
-/// - `Global`: architectural invariants that outlive any one feature.
-/// - `Feature`: decisions/attempts/invariants tied to a single feature id.
-/// - `Session`: ephemeral scratch within one agent session.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NoteScope {
-    Global,
-    Feature,
-    Session,
-}
-
-impl NoteScope {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Global => "global",
-            Self::Feature => "feature",
-            Self::Session => "session",
-        }
-    }
-
-    pub fn parse(s: &str) -> Option<Self> {
-        match s {
-            "global" => Some(Self::Global),
-            "feature" => Some(Self::Feature),
-            "session" => Some(Self::Session),
-            _ => None,
-        }
-    }
-}
-
-/// Note kinds that are OPERATIONAL EXHAUST, not durable knowledge: high-volume,
-/// machine-emitted, read back only within a conversation (never a cross-session
-/// or cross-node reference). They are the lifecycle opposite of durable kinds
-/// (decision / invariant / attempt / reflection / …).
-///
-/// This is the single source of truth for "is this note ephemeral?", consulted
-/// by both the write path ([`NoteStore::write_note_full_v9`] auto-scopes these
-/// to Session so they never gossip) and the TTL sweep
-/// ([`NoteStore::purge_expired_ephemeral`]). The CLI `notes rationalize` imports
-/// it too, so there is exactly ONE list to keep current.
-pub const EPHEMERAL_KINDS: &[&str] = &["tool_decision", "checkpoint", "checkpoint_restored"];
-
-/// True when `kind` is operational exhaust (see [`EPHEMERAL_KINDS`]).
-pub fn is_ephemeral_kind(kind: &str) -> bool {
-    EPHEMERAL_KINDS.contains(&kind)
-}
-
-/// Provenance dimension for notes (audit-hardening v6 schema).
-///
-/// `Agent` is the highest-confidence source — the agent explicitly
-/// called the `note` tool. The other four record automated sources
-/// the audit assembly ranks lower:
-///
-/// - `Committed` — harvested from a git commit message by the daemon
-///   reindexer's git HEAD poll.
-/// - `Extracted` — produced by an LLM pass over the session diff at
-///   audit-assembly time.
-/// - `Inferred` — regex-mined from agent response text in the
-///   conversation transcript.
-/// - `Observed` — derived from a tool-call pattern match (e.g.
-///   `blast` → file write counts as "investigated impact before
-///   modifying").
-///
-/// The audit floor is non-empty when at least one of these fires,
-/// even if the agent never wrote an explicit note.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NoteSource {
-    Agent,
-    Committed,
-    Extracted,
-    Inferred,
-    Observed,
-}
-
-impl NoteSource {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Agent => "agent",
-            Self::Committed => "committed",
-            Self::Extracted => "extracted",
-            Self::Inferred => "inferred",
-            Self::Observed => "observed",
-        }
-    }
-
-    pub fn parse(s: &str) -> Option<Self> {
-        match s {
-            "agent" => Some(Self::Agent),
-            "committed" => Some(Self::Committed),
-            "extracted" => Some(Self::Extracted),
-            "inferred" => Some(Self::Inferred),
-            "observed" => Some(Self::Observed),
-            _ => None,
-        }
-    }
-
-    /// Audit-display priority. Higher number = higher priority.
-    /// Used to sort decisions so agent-written notes appear above
-    /// extracted/inferred/observed ones at the same date.
-    pub fn priority(self) -> u8 {
-        match self {
-            Self::Agent => 4,
-            Self::Committed => 3,
-            Self::Extracted => 2,
-            Self::Inferred => 1,
-            Self::Observed => 0,
-        }
-    }
-}
-
-/// A single note row returned from [`NoteStore::read_notes`].
-#[derive(Debug, Clone)]
-pub struct NoteRow {
-    pub id: String,
-    pub kind: String,
-    pub content: String,
-    pub symbols: Vec<String>,
-    pub files: Vec<String>,
-    pub session_id: String,
-    /// RFC 3339 timestamp string.
-    pub created_at: String,
-    /// Primary tool this note concerns (reflections only; `None` for other kinds).
-    pub tool_name: Option<String>,
-    /// Unix timestamp when this note was retired; `None` means active.
-    pub retired_at: Option<i64>,
-    /// Human-readable reason for retirement (e.g. "fixed in PR #88").
-    pub retired_by: Option<String>,
-    /// Scope dimension: `"global"` | `"feature"` | `"session"`.
-    pub scope: String,
-    /// ATOS feature id when `scope == "feature"`. `None` otherwise.
-    pub feature_id: Option<String>,
-    /// Origin note id when this row was created by `promote_note`. `None` for
-    /// native writes.
-    pub promoted_from: Option<String>,
-    /// Free-text entity name this note relates to — typically a
-    /// `Person` / `Organization` name for `commitment` and
-    /// `follow_up` kinds, an `Initiative` name for `goal` kind. Not
-    /// a foreign key into the entity graph (the graph is rebuilt
-    /// each enrichment cycle); the digest matches at query time.
-    /// `None` when the note has no relational anchor (e.g. classic
-    /// `decision` / `invariant` kinds).
-    pub related_entity: Option<String>,
-    /// Provenance of the note. One of:
-    /// - `"agent"`     — explicit `note` tool call by an agent (highest signal).
-    /// - `"committed"` — harvested from a git commit message.
-    /// - `"extracted"` — extracted by an LLM pass over the session diff.
-    /// - `"inferred"`  — regex-mined from agent response text.
-    /// - `"observed"`  — derived from a tool-call pattern match.
-    ///
-    /// Pre-v6 rows default to `"agent"`. CHECK enforcement is at the
-    /// application layer (in [`NoteStore::write_note_with_source`])
-    /// rather than via a SQL constraint, so adding a new source is a
-    /// one-line code change rather than a schema migration.
-    pub source: String,
-    /// Note id this note reverses. `None` for first-time decisions.
-    /// Audit assembly uses this to render `↳ REVERSED` lines under the
-    /// original decision. The referenced row is left intact — only the
-    /// audit display treats this as a reversal.
-    pub supersedes: Option<String>,
-    /// Structured per-kind payload (v7+). Used by the recipe-author
-    /// kinds (`decision` with a `decision_kind`, `research_finding`
-    /// with `authority`, `recipe_issue` with category/count, etc.) so
-    /// the dashboard / CLI can read fields without reparsing
-    /// `content`. NULL for pre-v7 rows and for kinds that don't carry
-    /// structured data.
-    pub payload_json: Option<String>,
-    /// Node that authored this note, in [`NodeId`]'s lossy `Display`
-    /// form (`node-` + first 8 bytes hex). `None` for rows written
-    /// before the column existed, and for stores opened without a mesh
-    /// identity (a bare CLI `NoteStore::open` never calls
-    /// [`NoteStore::set_origin_node_id`]).
-    ///
-    /// Kept as the raw string rather than a parsed id because the
-    /// `Display` form is truncated and cannot round-trip — resolution
-    /// to a human name is prefix-matching against the roster, which is
-    /// [`NoteStore::attribution`]'s job. Readers that want a label MUST
-    /// go through that method rather than matching on this field, so
-    /// there is one decider for "whose note is this?".
-    ///
-    /// `None` here is reported as [`NodeAttribution::Unattributed`],
-    /// never silently rendered as the local node (ARCH_PRINCIPLES §18.3).
-    pub origin_node_id: Option<String>,
-    /// Receipt stamp, origin side (order `commons-fluency` fix 3):
-    /// unix seconds when THIS node's daemon last successfully
-    /// published the note through the mesh sink. `None` = never
-    /// published — the write stayed node-local (or the row predates
-    /// the v12 columns). The same value is carried on the wire
-    /// inside [`NotePropagationEvent::sent_at`].
-    pub sent_at: Option<i64>,
-    /// Receipt stamp, receiver side: unix seconds when THIS node's
-    /// daemon first applied the note from the wire
-    /// ([`NoteStore::ingest_remote_notes`]). `None` = authored
-    /// locally, never received. Together with `sent_at` this forms
-    /// the two-sided receipt: on a peer's row `sent_at` is the
-    /// ORIGIN's publish clock, `received_at` is the receiver's own
-    /// apply clock, and a drill can bracket `sent_at <= received_at
-    /// <= now` without trusting either machine's clock for both
-    /// ends.
-    pub received_at: Option<i64>,
-}
-
 /// One member of the mesh, as far as note attribution is concerned.
 #[derive(Debug, Clone)]
 pub struct RosterEntry {
@@ -1219,19 +1023,6 @@ impl NodeAttribution {
             Self::Ambiguous { .. } => "ambiguous",
         }
     }
-}
-
-/// Retrieval filter for scope/feature combinations.
-///
-/// Use `ScopeFilter::default()` to preserve the legacy behavior of reading
-/// all notes regardless of scope.
-#[derive(Debug, Clone, Default)]
-pub struct ScopeFilter {
-    /// When non-empty, results are restricted to rows with `scope` in this list.
-    pub scopes: Vec<NoteScope>,
-    /// When `Some`, applies `feature_id = ?` as an additional predicate. Only
-    /// meaningful when `scopes` includes `NoteScope::Feature`.
-    pub feature_id: Option<String>,
 }
 
 /// A single row from the tool call ring buffer.
@@ -1603,7 +1394,7 @@ impl NoteStore {
             .map_err(|_| "node_roster already set")
     }
 
-    /// Resolve a row's [`NoteRow::origin_node_id`] to an attribution.
+    /// Resolve a row's [`Note::origin_node_id`] to an attribution.
     ///
     /// THE single decider for "whose note is this?" — every surface that
     /// shows an author goes through here, so the self/peer judgement
@@ -3069,7 +2860,7 @@ impl NoteStore {
     /// is a v2 optimisation that swaps the overlap-count score
     /// for a diffusion score over the bipartite entity↔note
     /// graph. Same input + output shape, deeper signal.
-    pub async fn read_notes_related(&self, seed: &str, k: usize) -> Result<Vec<NoteRow>> {
+    pub async fn read_notes_related(&self, seed: &str, k: usize) -> Result<Vec<Note>> {
         let cap = k.min(100);
         let conn = self.conn.lock().await;
 
@@ -3111,7 +2902,7 @@ impl NoteStore {
         // Anchor rows are exact matches — they head the result set.
         // Column order must match `map_note_row` exactly (no overlap
         // column; that is the scored tier's extra).
-        let mut out: Vec<NoteRow> = {
+        let mut out: Vec<Note> = {
             if anchor_ids.is_empty() {
                 Vec::new()
             } else {
@@ -3376,7 +3167,7 @@ impl NoteStore {
     /// Used by compaction-recovery paths: a digest references notes by id
     /// (`[note:abc-123]`), and the agent calls this to fetch the full row
     /// only for those it needs.
-    pub async fn read_note_by_id(&self, id: &str) -> Result<Option<NoteRow>> {
+    pub async fn read_note_by_id(&self, id: &str) -> Result<Option<Note>> {
         let conn = self.conn.lock().await;
         let row = conn
             .query_row(
@@ -3478,7 +3269,7 @@ impl NoteStore {
         kinds: &[String],
         limit: usize,
         include_retired: bool,
-    ) -> Result<Vec<NoteRow>> {
+    ) -> Result<Vec<Note>> {
         self.read_notes_scoped(
             query,
             symbols,
@@ -3514,7 +3305,7 @@ impl NoteStore {
         limit: usize,
         include_retired: bool,
         scope_filter: &ScopeFilter,
-    ) -> Result<Vec<NoteRow>> {
+    ) -> Result<Vec<Note>> {
         Ok(self
             .read_notes_scoped_outcome(
                 query,
@@ -3604,7 +3395,7 @@ impl NoteStore {
             where_extra.push_str("))");
         }
 
-        let rows: Vec<NoteRow> = {
+        let rows: Vec<Note> = {
             let conn = self.conn.lock().await;
             // Sanitize free text before it reaches MATCH — raw prose with
             // parens/quotes is invalid FTS5 syntax (see `fts5_user_query`).
@@ -3663,7 +3454,7 @@ impl NoteStore {
             }
         };
 
-        let filtered: Vec<NoteRow> = rows
+        let filtered: Vec<Note> = rows
             .into_iter()
             .filter(|n| scope_matches(n, scope_filter))
             .collect();
@@ -3699,7 +3490,7 @@ impl NoteStore {
     /// for `notes rationalize` and audits, NOT hot paths. On a store dominated
     /// by high-volume telemetry kinds this can be thousands of rows; that is
     /// the point (that volume is exactly what rationalization exists to see).
-    pub async fn scan_all(&self, include_retired: bool) -> Result<Vec<NoteRow>> {
+    pub async fn scan_all(&self, include_retired: bool) -> Result<Vec<Note>> {
         let retired_clause = if include_retired {
             ""
         } else {
@@ -3810,7 +3601,7 @@ impl NoteStore {
 
     /// Semantic-blend variant of [`read_notes_scoped`].
     ///
-    /// Returns the same NoteRow shape but ranks the candidate pool
+    /// Returns the same Note shape but ranks the candidate pool
     /// using a min-max normalised blend of:
     /// - BM25 rank (from FTS5, when `query` is set), and
     /// - cosine similarity between the query embedding and each
@@ -3846,7 +3637,7 @@ impl NoteStore {
         include_retired: bool,
         scope_filter: &ScopeFilter,
         semantic_query: Option<&str>,
-    ) -> Result<Vec<NoteRow>> {
+    ) -> Result<Vec<Note>> {
         Ok(self
             .read_notes_scoped_semantic_outcome(
                 query,
@@ -3963,7 +3754,7 @@ impl NoteStore {
         // each pool. Missing-in-pool → score stays None and that
         // dimension contributes 0 to the blend after normalisation.
         use std::collections::HashMap;
-        let mut blended: HashMap<String, (NoteRow, Option<f64>, Option<f64>)> = HashMap::new();
+        let mut blended: HashMap<String, (Note, Option<f64>, Option<f64>)> = HashMap::new();
         for (row, rank) in bm25_pool {
             blended
                 .entry(row.id.clone())
@@ -3989,7 +3780,7 @@ impl NoteStore {
         let bm25_minmax = MinMax::from_slice(&bm25_vals);
         let cosine_minmax = MinMax::from_slice(&cosine_vals);
 
-        let mut scored: Vec<(NoteRow, f64)> = blended
+        let mut scored: Vec<(Note, f64)> = blended
             .into_iter()
             .map(|(_, (row, bm, cos))| {
                 let bm_norm = bm.map(|x| bm25_minmax.normalise(-x)).unwrap_or(0.0);
@@ -4000,7 +3791,7 @@ impl NoteStore {
             .collect();
         scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        let filtered: Vec<NoteRow> = scored
+        let filtered: Vec<Note> = scored
             .into_iter()
             .map(|(row, _)| row)
             .filter(|n| scope_matches(n, scope_filter))
@@ -4039,7 +3830,7 @@ impl NoteStore {
         since: i64,
         tool_filter: Option<&str>,
         include_retired: bool,
-    ) -> Result<Vec<NoteRow>> {
+    ) -> Result<Vec<Note>> {
         let retired_clause = if include_retired {
             ""
         } else {
@@ -4096,7 +3887,7 @@ impl NoteStore {
         &self,
         related_entity: &str,
         kinds: &[&str],
-    ) -> Result<Vec<NoteRow>> {
+    ) -> Result<Vec<Note>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn
             .prepare(
@@ -4222,7 +4013,7 @@ impl NoteStore {
     // ── Todo summary ───────────────────────────────────────────────────────
 
     /// Return the most recent open `todo` notes (for the startup summary).
-    pub async fn open_todos(&self, limit: usize) -> Result<Vec<NoteRow>> {
+    pub async fn open_todos(&self, limit: usize) -> Result<Vec<Note>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn
             .prepare(
@@ -4339,7 +4130,7 @@ fn sqlite_err(e: rusqlite::Error) -> Error {
 pub struct NoteReadOutcome {
     /// Candidate pool with identical-content duplicates collapsed to
     /// one representative row each, truncated to the caller's limit.
-    pub rows: Vec<NoteRow>,
+    pub rows: Vec<Note>,
     /// How many duplicate rows were collapsed (0 when none existed).
     pub collapsed: usize,
 }
@@ -4369,7 +4160,7 @@ fn notes_read_pool_size(limit: usize) -> usize {
 ///
 /// Returns (kept rows, collapsed count). The count is reported, never
 /// silent (§18.3) — callers name it in the response / tracing.
-fn collapse_content_duplicates(rows: Vec<NoteRow>) -> (Vec<NoteRow>, usize) {
+fn collapse_content_duplicates(rows: Vec<Note>) -> (Vec<Note>, usize) {
     let mut seen: std::collections::HashSet<(String, String, Option<String>)> =
         std::collections::HashSet::with_capacity(rows.len());
     let mut collapsed = 0usize;
@@ -4390,7 +4181,7 @@ fn collapse_content_duplicates(rows: Vec<NoteRow>) -> (Vec<NoteRow>, usize) {
 }
 
 /// legacy [`NoteStore::read_notes`] wrapper uses this to preserve behavior.
-fn scope_matches(note: &NoteRow, filter: &ScopeFilter) -> bool {
+fn scope_matches(note: &Note, filter: &ScopeFilter) -> bool {
     if filter.scopes.is_empty() && filter.feature_id.is_none() {
         return true;
     }
@@ -4425,7 +4216,7 @@ fn bump_notes_version(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-fn map_note_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteRow> {
+fn map_note_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Note> {
     let symbols_json: String = row.get(3)?;
     let files_json: String = row.get(4)?;
     let created_at_secs: i64 = row.get(6)?;
@@ -4438,7 +4229,7 @@ fn map_note_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteRow> {
         .map(|dt| dt.to_rfc3339())
         .unwrap_or_else(|| created_at_secs.to_string());
 
-    Ok(NoteRow {
+    Ok(Note {
         id: row.get(0)?,
         kind: row.get(1)?,
         content: row.get(2)?,

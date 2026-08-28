@@ -47,7 +47,7 @@ use tokio::sync::mpsc;
 use crate::error::Result;
 use crate::slot_policy::Workload;
 use crate::traits::{InferenceProvider, MemoryStore};
-use crate::types::{CompletionRequest, Memory, MemoryKind};
+use crate::types::{Memory, MemoryKind};
 
 // The operator-facing config knobs (`CompactionConfig`, `CompactionMode`,
 // `DEFAULT_SYNTHESIS_PROMPT`) were relocated to `sovereign-contracts` so
@@ -235,7 +235,8 @@ async fn run_pass(
     let prompt = config.synthesis_prompt.replace("{entries}", &entries);
 
     // SLOT_POLICY §3 Housekeep: memory-fold synthesis (advisory).
-    let mut request = CompletionRequest::for_workload(Workload::Housekeep, prompt)
+    let mut request = Workload::Housekeep
+        .request(prompt)
         .with_output_budget(config.max_summary_chars.div_ceil(2) as u32);
     request.temperature = Some(0.3);
     // Distilled Fast model narrates its plan without this; hard-off the

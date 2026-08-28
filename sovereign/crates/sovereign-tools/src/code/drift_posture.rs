@@ -32,14 +32,14 @@
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use sovereign_core::error::Result;
-use sovereign_core::traits::Tool;
+use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::*;
+use std::sync::Arc;
 
 /// Default narrative docs the architectural drift detector tracks.
 /// Resolved relative to the workspace root.
@@ -339,80 +339,30 @@ impl Default for DriftPostureTool {
     }
 }
 
-#[async_trait]
-impl Tool for DriftPostureTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "drift_posture".to_string(),
-            name: "Drift Posture".to_string(),
-            description:
-                "Return the freshness state of the architectural-drift report \
-                 (`sovereign drift detect` output) without re-running the LLM \
-                 pipeline. Sibling to `lint_status`: cheap, idempotent, no \
-                 cargo lock contention. Use to decide whether the drift digest \
-                 you're about to cite is current against the narrative docs \
-                 (SYSTEM_OVERVIEW.md + ARCH_PRINCIPLES.md by default). \
-                 Status: `fresh` (every narrative hash matches the recorded \
-                 fingerprint), `stale` (one or more narratives edited since \
-                 last run — re-run `sovereign drift detect`), `partial` \
-                 (fingerprint missing a requested narrative — new doc added \
-                 since last run), `never_run` (no fingerprint or report \
-                 exists yet). When fresh, the response carries the Act-on \
-                 count and top-3 critical findings extracted from the report's \
-                 JSON sidecar."
-                    .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "narrative": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Override the narrative-doc set. Defaults to sovereign/SYSTEM_OVERVIEW.md + sovereign/ARCH_PRINCIPLES.md resolved relative to the workspace root."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "Decide whether to cite the drift report in the session-start brief, or warn that it's stale.".into(),
-                    call: serde_json::json!({}),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "status": { "type": "string", "enum": ["fresh","stale","partial","never_run"] },
-                    "last_run_at_unix": { "type": ["integer","null"] },
-                    "age_seconds": { "type": ["integer","null"] },
-                    "act_on_count": { "type": ["integer","null"] },
-                    "top_critical": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "doc": { "type": "string" },
-                                "section": { "type": ["string","null"] },
-                                "claim": { "type": "string" }
-                            }
-                        }
-                    },
-                    "narrative_paths": { "type": "array", "items": { "type": "string" } },
-                    "stale_paths": { "type": "array", "items": { "type": "string" } },
-                    "output_path": { "type": ["string","null"] }
-                }
-            })),
-        }
+impl DriftPostureTool {
+    /// Bind this tool's state to its `drift_posture` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("drift_posture", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_signal({
+            let state = Arc::clone(&state);
+            Arc::new(move || {
+                let state = Arc::clone(&state);
+                Box::pin(async move { state.signal_now().await })
+                    as std::pin::Pin<Box<dyn std::future::Future<Output = Option<String>> + Send>>
+            })
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `drift_posture`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let narrative_paths = resolve_narratives(params, self.workspace_root.as_deref());
         let posture = compute_posture(&self.drift_dir, &narrative_paths);
         Ok(StepOutput::Json(
@@ -420,7 +370,7 @@ impl Tool for DriftPostureTool {
         ))
     }
 
-    async fn signal(&self) -> Option<String> {
+    async fn signal_now(&self) -> Option<String> {
         let narrative_paths = resolve_narratives(&json!({}), self.workspace_root.as_deref());
         let posture = compute_posture(&self.drift_dir, &narrative_paths);
         match posture.status {

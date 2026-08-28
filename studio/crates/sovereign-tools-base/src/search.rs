@@ -109,6 +109,11 @@ pub const SEARCH_SYSTEM_PROMPT: &str = include_str!("../assets/search_system_pro
 
 #[async_trait]
 impl Tool for SearchTool {
+    /// Governed by the `search` switch — direct queries leave the machine, so this is a switch a user is entitled to hold.
+    fn family(&self) -> Option<sovereign_contracts::tool_bundle::ToolFamily> {
+        Some(sovereign_contracts::tool_bundle::ToolFamily::Search)
+    }
+
     fn descriptor(&self) -> ToolDescriptor {
         ToolDescriptor {
             id: "search".to_string(),

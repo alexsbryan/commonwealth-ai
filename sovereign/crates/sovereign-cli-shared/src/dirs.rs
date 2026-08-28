@@ -46,15 +46,6 @@ pub fn sovereign_meshapps() -> PathBuf {
     sovereign_root().join("meshapps")
 }
 
-/// Where the embedded Commonwealth mesh persists its `mesh.json` —
-/// shared with `sovereign-desktop` so a mesh created from either
-/// surface is picked up by the other. Intentionally uses the
-/// platform-native data dir rather than `sovereign_root()` so it
-/// matches the desktop app's storage. Delegates to the SSOT.
-pub fn mesh_data_dir() -> PathBuf {
-    sovereign_contracts::rebrand::mesh_data_dir()
-}
-
 /// Same shape as `project_cmd::default_data_dir` before the split:
 /// returns `None` when home-dir resolution fails, so existing
 /// `.or_else(default_data_dir)` callers don't need to change.
@@ -92,11 +83,5 @@ mod tests {
             root.display()
         );
         assert!(idx.ends_with("indexes"));
-    }
-
-    #[test]
-    fn mesh_data_dir_uses_brand_dir() {
-        let p = mesh_data_dir();
-        assert!(p.ends_with("svrnmesh") || p.ends_with("sovereign"));
     }
 }

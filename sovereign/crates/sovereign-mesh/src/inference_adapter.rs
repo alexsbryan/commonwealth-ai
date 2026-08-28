@@ -1362,6 +1362,15 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         ))
     }
 
+    /// Straight delegation. The provider installed here is the
+    /// `MeshInferenceProvider`, which is the only thing on this node that
+    /// knows which peers a named request can reach; every other provider
+    /// inherits the empty default and `/v1/models` correctly lists local
+    /// slots only.
+    async fn peer_manifests(&self) -> Vec<(String, ProviderManifest)> {
+        self.provider.peer_manifests().await
+    }
+
     async fn embed(&self, input: &str) -> Result<Vec<f32>, String> {
         // Delegate to the underlying provider's EmbedSlot. The
         // commonwealth-api handler wraps the returned vector in an

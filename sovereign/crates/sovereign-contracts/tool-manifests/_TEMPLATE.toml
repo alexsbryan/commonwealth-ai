@@ -1,0 +1,114 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# NOT LOADED. This file is not listed in `tool_manifest::FAMILIES`, so nothing
+# parses it — it is here to be COPIED FROM, the same way
+# `sovereign-recipes/_templates/` works for corpora.
+#
+# Why a template rather than a doc paragraph: minting a bespoke struct costs
+# seconds, and reaching for a shared surface costs discovery + reading + judging
+# fit (NOUN_CONVERGENCE §10.4). A paragraph does not change that arithmetic; a
+# block you paste already wired to the shared surface does. That is why recipe
+# authoring works and why the corpus axis of `nc-extends` is the one scoring
+# DATA.
+#
+# ─── Adding a tool ────────────────────────────────────────────────────────
+#
+# 1. Copy ONE of the two blocks below into `code.toml` (tools under
+#    `sovereign-tools/src/code/`) or `knowledge.toml` (everything else).
+# 2. Fill it in. `id` must be unique across every family — the catalog panics
+#    on a duplicate rather than letting the second silently win.
+# 3. If your tool has NEW behaviour, write the executable half and have its
+#    `descriptor()` read `tool_manifest::require("<id>").to_descriptor()` and
+#    its `required_permissions()` read `.permissions.clone()`. Do not restate
+#    either in Rust — one decider, one name (ARCH §10.6).
+# 4. If your tool IS an existing tool under a narrower declaration, use the
+#    SECOND block. There is no step 3: `ToolRegistry::install_declared` binds it.
+#
+# Field reference: `sovereign-contracts/src/tool_manifest/mod.rs`.
+# Enum spellings are the serde forms, all lowercase:
+#   effect      = read | write | readwrite
+#   idempotency = idempotent | nonidempotent
+#   latency     = instant | fast | slow | streaming
+#   scope       = session | persistent | external
+#   permissions = Network | FileRead | FileWrite | Shell | EmailRead |
+#                 EmailWrite | CalendarRead | CalendarWrite | RecipeAuthoring |
+#                 WorkflowAuthoring | CorpusIngest   (PascalCase — these are
+#                 policy, not protocol, and keep their historical wire form)
+#
+# There is deliberately NO default for `effect` / `idempotency` / `latency` /
+# `scope`. A tool that will not classify itself is a tool the approval gate and
+# the retry gate cannot reason about (ARCH §7).
+
+
+# ─── 1. A tool with new behaviour: manifest here, handler in Rust ─────────
+[[tool]]
+id = "your_tool_id"
+name = "Human Readable Name"
+# Phrased for the MODEL choosing among tools, not for a changelog. Say what it
+# answers and when to reach for it over the neighbouring tool.
+description = "What this tool does and when to use it instead of the obvious alternative."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+# Optional. Omit entirely for "do not retry" — the trait default, and the right
+# answer for anything non-idempotent.
+# retry = { max_retries = 2, backoff_ms = [1000, 3000] }
+
+[tool.parameters]
+type = "object"
+required = ["subject"]
+
+[tool.parameters.properties.subject]
+type = "string"
+description = "What the caller is asking about."
+
+[tool.parameters.properties.limit]
+type = "integer"
+description = "How many results. Default 10."
+default = 10
+
+# Optional but high-value: small models copy examples more reliably than they
+# follow descriptions. Two or three that show DIFFERENT shapes beat one.
+[[tool.examples]]
+situation = "The concrete moment an agent should reach for this — not a restatement of the description."
+call = { subject = "retry policy", limit = 5 }
+
+# Optional. What a downstream plan step can reference via `{N.key}` templates.
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties.matches]
+type = "array"
+description = "One entry per hit."
+
+
+# ─── 2. A tool that is PURE DATA: no Rust at all ──────────────────────────
+#
+# `delegate` names an already-registered tool that does the work; `defaults` are
+# merged UNDER the caller's parameters, so a caller key always wins. Use this
+# when an existing capability is right but its default is wrong for a common
+# case, or when a narrower schema plus better examples is the whole improvement.
+#
+# `install_declared` skips this (with a warn naming the id) on a host where the
+# delegate target is not registered — hosts legitimately carry different subsets.
+#
+# [[tool]]
+# id = "narrower_view"
+# name = "Narrower View"
+# description = "`existing_tool`, pinned to the mode that answers the question people actually ask."
+# effect = "read"
+# idempotency = "idempotent"
+# latency = "fast"
+# scope = "persistent"
+# delegate = "existing_tool"
+# defaults = { mode = "the-one-that-is-usually-right" }
+#
+# [tool.parameters]
+# type = "object"
+# required = ["subject"]
+#
+# [tool.parameters.properties.subject]
+# type = "string"
+# description = "What the caller is asking about."

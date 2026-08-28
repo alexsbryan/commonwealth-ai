@@ -385,7 +385,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/sec-filings-company/recipe.toml"
 sha256 = ""
-catalog_status = "featured"
+catalog_status = "preview"
 
 [[recipes]]
 id = "uap-blue-book"

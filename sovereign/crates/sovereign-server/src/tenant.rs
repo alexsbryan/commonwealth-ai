@@ -3,19 +3,32 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use sovereign_core::error::Result;
-use sovereign_core::runtime::{Runtime, StreamHandle};
+use sovereign_core::runtime::Runtime;
+use sovereign_core::traits::StateStore;
 use sovereign_core::types::{CorpusVisibility, Response};
 
 /// Wraps a Runtime with tenant-scoped conversation IDs.
 /// Each tenant's conversations are prefixed to prevent cross-tenant access.
 pub struct TenantRuntime {
     pub runtime: Arc<Runtime>,
+    /// The server's own state-store handle — the same `Arc` `main.rs`
+    /// hands to `Runtime::new`, layered as its own Extension.
+    /// `forbidden_corpora` reads it directly instead of `runtime.store`,
+    /// and `ws.rs` hands it to `serve_turn` so the turn service can read
+    /// back what the turn concluded. The Runtime is named here only for
+    /// the three methods that answer a turn. Daemon-convergence Phase 0;
+    /// the streaming pair left in phase 5c.
+    pub store: Arc<dyn StateStore>,
     pub tenant_id: String,
 }
 
 impl TenantRuntime {
-    pub fn new(runtime: Arc<Runtime>, tenant_id: String) -> Self {
-        Self { runtime, tenant_id }
+    pub fn new(runtime: Arc<Runtime>, store: Arc<dyn StateStore>, tenant_id: String) -> Self {
+        Self {
+            runtime,
+            store,
+            tenant_id,
+        }
     }
 
     /// Scope a conversation ID to this tenant. Public so streaming
@@ -36,7 +49,7 @@ impl TenantRuntime {
     /// proceeding with an empty deny-set — a transient store error would
     /// otherwise open the gate.
     pub async fn forbidden_corpora(&self) -> Result<HashSet<String>> {
-        let states = self.runtime.store.list_corpus_states().await?;
+        let states = self.store.list_corpus_states().await?;
         Ok(states
             .into_iter()
             .filter(|s| s.deleted_at.is_none())
@@ -47,58 +60,21 @@ impl TenantRuntime {
             .collect())
     }
 
-    pub async fn handle_message(&self, message: &str, conversation_id: &str) -> Result<Response> {
-        let scoped = self.scoped_id(conversation_id);
-        self.runtime.handle_message(message, &scoped).await
-    }
-
-    /// Streaming variant — yields a [`StreamHandle`] whose `stream`
-    /// produces token deltas and whose `message_id` identifies the
-    /// assistant message the runtime persists once the stream is
-    /// exhausted. Scoping mirrors [`Self::handle_message`].
-    pub async fn handle_message_stream(
-        &self,
-        message: &str,
-        conversation_id: &str,
-    ) -> Result<StreamHandle> {
-        let scoped = self.scoped_id(conversation_id);
-        self.runtime.handle_message_stream(message, &scoped).await
-    }
-
-    /// Fetch the persisted `metadata` blob for a message in this
-    /// tenant's conversation. Used after a stream completes to project
-    /// provenance + citations for the terminal frame. Returns `None`
-    /// when the conversation/message isn't found or carries no metadata
-    /// (the projection layer treats all of these identically).
-    pub async fn message_metadata(
-        &self,
-        conversation_id: &str,
-        message_id: &str,
-    ) -> Option<serde_json::Value> {
-        let scoped = self.scoped_id(conversation_id);
-        let convo = self.runtime.store.get_conversation(&scoped).await.ok()?;
-        convo
-            .messages
-            .into_iter()
-            .find(|m| m.id == message_id)
-            .and_then(|m| m.metadata)
-    }
-
-    /// Non-streaming entry that routes workspace-tagged conversations
-    /// (recipe-author) into the agent loop; generic ones behave like
-    /// [`Self::handle_message`]. The conversation API uses this.
-    pub async fn handle_message_any(
-        &self,
-        message: &str,
-        conversation_id: &str,
-    ) -> Result<Response> {
-        let scoped = self.scoped_id(conversation_id);
-        self.runtime.handle_message_any(message, &scoped).await
-    }
+    // `handle_message` and `handle_message_any` used to live here: two
+    // thin wrappers that scoped an id and then ran a turn. Both are gone
+    // (TOPOLOGY §10 phase 6). Their only caller, the REST message route,
+    // now scopes the id itself — once, visibly, exactly as `ws.rs` does —
+    // and hands it to `sovereign_core::runtime::collect_turn`, the same
+    // driver the WebSocket route uses.
+    //
+    // What this host actually owns is TENANCY, and that is what is left
+    // here: `scoped_id`, the corpus visibility filter, and seeding. Running
+    // a turn was never this type's job; it only looked like it because
+    // there was nowhere else to put the call.
 
     /// Seed an empty conversation row + optional skill tag before the
     /// first message (scoped to this tenant). `skill_id =
-    /// "recipe-author"` makes [`Self::handle_message_any`] drive the
+    /// "recipe-author"` makes the turn driver dispatch into the
     /// agent loop.
     pub async fn seed_conversation(
         &self,

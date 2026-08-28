@@ -1,0 +1,36 @@
+error: cannot construct `corpus_engine::Evidence` with struct literal syntax due to private fields
+  --> tests/ui/evidence_without_a_custody.rs:5:13
+   |
+ 5 |       let _ = Evidence {
+   |               ^^^^^^^^
+ 6 |           content: "the text".to_string(),
+   |           ------------------------------- private field
+ 7 | /         origin: Origin {
+ 8 | |             source: Source::Corpus {
+ 9 | |                 corpus: CorpusId::new("wikipedia").unwrap(),
+10 | |                 document: ContentHash::of_str("doc"),
+...  |
+14 | |             grain: Grain::Leaf,
+15 | |         },
+   | |_________- private field
+16 |           score: 0.9,
+   |           ---------- private field
+   |
+   = note: ...and other private field `custody` that was not provided
+help: you might have meant to use the `acquired` associated function
+   |
+ 5 -     let _ = Evidence {
+ 6 -         content: "the text".to_string(),
+ 7 -         origin: Origin {
+ 8 -             source: Source::Corpus {
+ 9 -                 corpus: CorpusId::new("wikipedia").unwrap(),
+10 -                 document: ContentHash::of_str("doc"),
+11 -                 locator: Locator::new("chunk:1").unwrap(),
+12 -             },
+13 -             served_by: Server::Local,
+14 -             grain: Grain::Leaf,
+15 -         },
+16 -         score: 0.9,
+17 -     };
+ 5 +     let _ = Evidence::acquired(_, _, _, _);
+   |

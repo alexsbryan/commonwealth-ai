@@ -438,6 +438,7 @@ impl Runtime {
         // non-streaming and test callers. Gates the narration chip
         // only — retrieval itself runs either way.
         session_id: Option<&str>,
+        lane: &crate::runtime::Lane,
     ) {
         // Default-on as of 2026-05-26 marathon_graceful spike outcome.
         // `SOVEREIGN_HISTORY_RETRIEVAL=0` disables for A/B compares.
@@ -538,10 +539,10 @@ impl Runtime {
             }
             for (&slot, emb) in missing.iter().zip(embeds) {
                 // Entities are extracted here rather than per-turn for
-                // the same reason as the embedding — `self.gliner` is
+                // the same reason as the embedding — the lane's extractor is
                 // fixed for the Runtime's lifetime, so an entry
                 // written under one extractor state stays valid.
-                let entities: std::collections::HashSet<String> = self
+                let entities: std::collections::HashSet<String> = lane
                     .gliner
                     .as_ref()
                     .map(|g| g.extract_entities(&unit_texts[slot]).into_iter().collect())
@@ -602,7 +603,7 @@ impl Runtime {
         const HYBRID_COSINE_WEIGHT: f32 = 0.6;
         const HYBRID_JACCARD_WEIGHT: f32 = 0.4;
         let query_entities: std::collections::HashSet<String> =
-            if let Some(g) = self.gliner.as_ref() {
+            if let Some(g) = lane.gliner.as_ref() {
                 g.extract_entities(&query_text).into_iter().collect()
             } else {
                 std::collections::HashSet::new()
@@ -646,7 +647,7 @@ impl Runtime {
                 .zip(q_norm.iter())
                 .map(|(a, b)| a * b)
                 .sum();
-            let sim = if self.gliner.is_some() {
+            let sim = if lane.gliner.is_some() {
                 let j = jaccard(&query_entities, &vectors.entities);
                 HYBRID_COSINE_WEIGHT * cos + HYBRID_JACCARD_WEIGHT * j
             } else {
@@ -892,11 +893,34 @@ mod tests {
         )
     }
 
+    /// Same rig, with a routing-event sink installed. Since Phase 5 collapsed
+    /// the builder surface a sink is a FIELD, so it is chosen here rather than
+    /// chained on afterwards.
+    fn runtime_with_events(
+        inference: Arc<CountingEmbed>,
+        events: Arc<dyn crate::traits::RoutingEventSink>,
+    ) -> Runtime {
+        Runtime::new(crate::runtime::RuntimeParts {
+            routing_events: events,
+            ..parts_for(
+                inference,
+                Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+            )
+        })
+    }
+
     fn runtime_with_store(
         inference: Arc<CountingEmbed>,
         store: Arc<sovereign_store::memory::InMemoryStateStore>,
     ) -> Runtime {
-        Runtime::new(
+        Runtime::new(parts_for(inference, store))
+    }
+
+    fn parts_for(
+        inference: Arc<CountingEmbed>,
+        store: Arc<sovereign_store::memory::InMemoryStateStore>,
+    ) -> crate::runtime::RuntimeParts {
+        crate::runtime::RuntimeParts::new(
             inference,
             Box::new(crate::stubs::PassthroughRouter),
             Box::new(crate::stubs::NoOpPlanner),
@@ -905,6 +929,9 @@ mod tests {
             Arc::new(SkillRegistry::new()),
             Arc::new(crate::executor::AutoApprovalChannel),
             crate::types::InferenceConfig::default(),
+            // Phase 4b: enrichment is a required argument, not eight
+            // forgettable builders.
+            crate::runtime::lane::LaneSources::none(),
         )
     }
 
@@ -998,8 +1025,10 @@ mod tests {
     async fn recall_emits_a_narration_chip_naming_the_turns() {
         let inference = Arc::new(CountingEmbed::new());
         let events = Arc::new(RecordingEvents::default());
-        let runtime = runtime_with(Arc::clone(&inference))
-            .with_routing_events(Arc::clone(&events) as Arc<dyn crate::traits::RoutingEventSink>);
+        let runtime = runtime_with_events(
+            Arc::clone(&inference),
+            Arc::clone(&events) as Arc<dyn crate::traits::RoutingEventSink>,
+        );
 
         let mut ctx = context_with_turns(12);
         runtime
@@ -1008,6 +1037,7 @@ mod tests {
                 "tell me about topic 0",
                 "conv-memo",
                 Some("session-1"),
+                &crate::runtime::Lane::none(),
             )
             .await;
 
@@ -1046,12 +1076,20 @@ mod tests {
     async fn recall_without_a_session_still_retrieves_but_stays_silent() {
         let inference = Arc::new(CountingEmbed::new());
         let events = Arc::new(RecordingEvents::default());
-        let runtime = runtime_with(Arc::clone(&inference))
-            .with_routing_events(Arc::clone(&events) as Arc<dyn crate::traits::RoutingEventSink>);
+        let runtime = runtime_with_events(
+            Arc::clone(&inference),
+            Arc::clone(&events) as Arc<dyn crate::traits::RoutingEventSink>,
+        );
 
         let mut ctx = context_with_turns(12);
         runtime
-            .maybe_retrieve_relevant_history(&mut ctx, "tell me about topic 0", "conv-memo", None)
+            .maybe_retrieve_relevant_history(
+                &mut ctx,
+                "tell me about topic 0",
+                "conv-memo",
+                None,
+                &crate::runtime::Lane::none(),
+            )
             .await;
 
         assert!(
@@ -1073,7 +1111,13 @@ mod tests {
         // so the dropped region is messages[..15] → 8 pair-units.
         let mut ctx = context_with_turns(12);
         runtime
-            .maybe_retrieve_relevant_history(&mut ctx, "tell me about topic 0", "conv-memo", None)
+            .maybe_retrieve_relevant_history(
+                &mut ctx,
+                "tell me about topic 0",
+                "conv-memo",
+                None,
+                &crate::runtime::Lane::none(),
+            )
             .await;
         let first = inference.calls();
         assert_eq!(first.len(), 1, "one embed_batch on the cold turn");
@@ -1088,7 +1132,13 @@ mod tests {
         // hit, so embed_batch must not be called at all.
         let mut ctx2 = context_with_turns(12);
         runtime
-            .maybe_retrieve_relevant_history(&mut ctx2, "and topic 3?", "conv-memo", None)
+            .maybe_retrieve_relevant_history(
+                &mut ctx2,
+                "and topic 3?",
+                "conv-memo",
+                None,
+                &crate::runtime::Lane::none(),
+            )
             .await;
         assert_eq!(
             inference.calls().len(),
@@ -1112,7 +1162,13 @@ mod tests {
             let before = inference.calls().len();
             let mut ctx_n = context_with_turns(pairs);
             runtime
-                .maybe_retrieve_relevant_history(&mut ctx_n, "topic 5 again", "conv-memo", None)
+                .maybe_retrieve_relevant_history(
+                    &mut ctx_n,
+                    "topic 5 again",
+                    "conv-memo",
+                    None,
+                    &crate::runtime::Lane::none(),
+                )
                 .await;
             let calls = inference.calls();
             let units_this_turn = ctx_n

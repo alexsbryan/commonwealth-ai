@@ -30,8 +30,7 @@ pub const SECTION_CACHE_DIR: &str = "section_cache";
 /// model_id) triple. 16-hex-char prefix of blake3.
 pub fn cache_key(text: &str, prompt_version: &str, model_id: &str) -> String {
     let input = format!("section|{text}|{prompt_version}|{model_id}");
-    let full = blake3::hash(input.as_bytes()).to_hex().to_string();
-    full[..16].to_string()
+    kernel_types::ContentHash::of_str(&input).short()
 }
 
 fn cache_path(atlas_dir: &Path, key: &str) -> PathBuf {

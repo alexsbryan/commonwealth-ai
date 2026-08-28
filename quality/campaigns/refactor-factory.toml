@@ -1,0 +1,260 @@
+# Flight rules — read raw. Verdicts come from measurement rows, never prose here.
+id        = "refactor-factory"
+objective = "An agent nobody instructed reaches for what already exists instead of writing a new one"
+spec      = "quality/REFACTOR_FACTORY.md"
+declared  = "2026-08-23"
+status    = "active"
+
+# ════════════════════════════════════════════════════════════════════════════
+#  THE DIRECTION — operator, 2026-08-23, verbatim and total
+# ════════════════════════════════════════════════════════════════════════════
+#
+#   "An agent writes new code because new is local, certain, and needs no
+#    discovery; reuse needs knowing something exists and trusting it fits."
+#
+# That is a COST MODEL, not a complaint, and the objective is to invert the
+# costs. Five terms: new is LOCAL (no navigation), CERTAIN (it will work), NO
+# DISCOVERY (no search). Reuse costs KNOWING (discovery) and TRUSTING
+# (verification). Given those costs the agent is picking correctly.
+#
+# THE FACTORY CONVERGES THE STOCK; THE BAR MEASURES THE FLOW. Conflating them
+# is how noun-convergence spent nine waves on a number blind to its own work.
+# A converged backlog with an unchanged miss rate is a treadmill.
+#
+# WHEN DIRECTION AND A BAR DISAGREE, DIRECTION WINS AND THE BAR IS WRONG.
+
+[[bar]]
+id           = "miss-rate"
+one_line     = "CLAIM: of the new symbols agents create, fewer duplicate something that already existed"
+derives_from = "operator's cost model 2026-08-23; baselined over the whole of repository history BEFORE any intervention landed"
+status       = "open"
+# THE SENTENCE ITS SUBJECT SAYS WHEN IT MOVES: "there was already one of these
+# and it fit, so I used it" — said by an agent nobody instructed.
+#
+# WHAT IT MEASURES: misses / new-symbols. A MISS is one later-born member of a
+# duplicate-shape group: at the moment it was written, a type of that shape
+# already existed in another crate. Commits belonging to this initiative are
+# excluded from the NUMERATOR AND THE DENOMINATOR, so the campaign cannot
+# manufacture its own result.
+#
+# THE WINDOW IS FIVE MONTHS, NOT THE SIX THE SPEC ASKED FOR. The repository's
+# first commit is 2026-03-31. The instrument reports its own span rather than
+# honouring a requested one (ARCH §18.3).
+#
+# THE DETECTOR IS FROZEN AND THAT IS THE ONLY REAL GUARD. Loosening what counts
+# as "duplicates something existing" moves this bar without anything improving
+# — it is the one attack of the five that works. Settings recorded in every
+# run's output: converge shape, threshold 0.50, min_shared 3, rare_df 20,
+# min_fields 2, names_only false. CHANGING ANY OF THEM RESTARTS THE SERIES.
+#
+# THE FLOOR IS A FLOOR, AND THE BOUND IS STATED. The detector runs on the
+# CURRENT graph, so a duplicate born and killed inside the window is invisible
+# to it. 182 in-window births (3.3%) are gone at HEAD and cannot be adjudicated,
+# so the true rate lies in [1.48%, 4.78%]. Reported as an interval, never as
+# the point estimate alone.
+#
+# GATE ZERO, AND WHAT IT CAUGHT ON ITS FIRST RUN. `miss-rate.py --gate-zero`
+# re-derives the monthly new-type counts recorded in REFACTOR_FACTORY.md before
+# this instrument existed — a number measured independently of it — and asserts
+# three internal invariants. It FAILED first time: filtered births drifted from
+# the anchor by up to 26.4%. The birth mechanism was fine; the anchor counts
+# tests, benches and examples and the bar must not, because the DETECTOR excludes
+# them and a numerator and denominator drawn from different populations is
+# meaningless. Both counts are now computed — unfiltered for the control (within
+# 2.6% every month), filtered for the bar. One of the invariants
+# ("a birth cannot vanish without a death") reproduces, mechanically, a bug that
+# had already been caught by hand: a survival check keyed on (name, path) counted
+# every RELOCATED type as dead and reported 1,625 vanished against 822 deaths.
+#
+# THE TARGET OF 0.0074 IS HALF THE FLOOR AND IT IS A STATED GUESS, SO IT CAN BE
+# WRONG. Nothing derives it. The spec's own success condition is behavioural —
+# "the miss rate falls and holds for a quarter with nobody steering it" — and no
+# evidence yet says what level is achievable. Treat it as a placeholder that the
+# first real intervention should replace with a derived number.
+#
+# THE BASELINE TREND IS ADVERSE AND IS RECORDED AS SUCH: 1.26 / 1.27 / 1.66 /
+# 1.55 / 2.54 percent, April to August. Absolute misses FELL (25 -> 12) while
+# the rate ROSE, because births fell faster (1984 -> 473). That is the
+# compounding the spec predicts: the more that exists, the likelier any new
+# symbol duplicates it. Arresting the rise is the first milestone, not the
+# target.
+floor        = 0.0148
+floor_basis  = "measured 2026-08-23 by scripts/miss-rate.py at HEAD 63c72af8 over 2026-04..2026-08: 82 misses / 5527 new symbols, 112 shape groups adjudicated, 136 initiative commits excluded from both sides. Interval [0.0148, 0.0478]. Gate zero passes 8/8, positive control within 2.6% of the independently-recorded anchor in all five months."
+target       = 0.0074
+direction    = "lower_is_better"
+timeout_s    = 120
+instrument   = "scripts/miss-rate.py --json"
+kill         = "If the bar stays flat AND the cost-model diagnostic shows agents saw the existing thing, trusted it, found it cheaper, and still wrote new, then the model of WHY agents duplicate is wrong and we do not know why. Naming which clause failed — discovery / trust / cost — is mandatory; 'did not move' alone is not a result."
+
+[[bar]]
+id           = "negative-flow"
+one_line     = "MIRROR: does this codebase subtract at all, or only add more slowly?"
+derives_from = "operator 2026-08-23: 'stock and flow is great -- but I think we need some representation of negative flow too'"
+status       = "open"
+# DELIBERATELY A MIRROR, NOT A RATCHET, AND THE REASON IS THE POINT.
+# A death-rate target is gameable by the cheapest possible move: delete working
+# code. Every other bar here is hard to game and this one would be trivial, so
+# it carries NO target and nothing is ever steered by it. It exists to stop a
+# specific misreading of `miss-rate` — a falling miss rate means agents write
+# fewer duplicates, and says NOTHING about whether what already accumulated
+# ever leaves.
+#
+# WHAT IT MEASURES: organic deaths per birth. Deaths inside initiative commits
+# are counted SEPARATELY and excluded — those are our convergence work, not the
+# codebase's own habit, and folding them in would let the campaign take credit
+# for a closure loop it did not create.
+#
+# THE BASELINE: 737 organic deaths against 5527 births over five months, plus
+# 85 more inside initiative commits. Net flow +4790. The codebase adds roughly
+# 7.5x faster than it subtracts, and no month is net-negative. That is the
+# quantified form of "agents add cheaply and never subtract".
+floor        = 0.133
+floor_basis  = "measured 2026-08-23 by scripts/miss-rate.py at HEAD 63c72af8: 737 organic deaths / 5527 births over 2026-04..2026-08, rename-suppressed via -M -C so a relocation is neither a birth nor a death."
+target       = 0.133
+direction    = "higher_is_better"
+timeout_s    = 120
+instrument   = "scripts/miss-rate.py --json --emit negative-flow"
+kill         = "If this is ever cited as a reason to delete something, it has failed and should be removed. It is context for miss-rate, never an objective."
+
+[[bar]]
+id           = "factory-scale"
+one_line     = "CLAIM: the factory brings a whole atom under type control in one session, not a toy slice"
+derives_from = "operator standard 2026-08-23: 'if we're not actually able to scale the refactor factory to churn 10k+ lines of code in one session safely I'll question how much we've actually built an effective factory'"
+status       = "open"
+# WHY THIS IS NOT A LINES-CHURNED BAR, and the operator's standard is still met.
+# The factory's economics are that a ~50-line `prepare` edit makes thousands of
+# call-site edits UNNECESSARY: once CorpusId carries AsRef<str>/Borrow<str>/
+# PartialEq<str>, most of corpus_id's 6,682 in-scope mentions keep compiling
+# untouched. On the newtype kind H3 SUCCEEDING MEANS FEWER LINES CHANGE, so a
+# lines-churned bar is maximised by SKIPPING prepare and hand-editing every call
+# site. The metric would select for the worse machine. This bar counts what came
+# under type control instead of what was typed over. The 10k line standard is
+# kept, and kept where it is honest — see `factory-deletion`.
+#
+# PRORATED, NOT ALL-OR-NOTHING: a half-migrated atom has genuinely brought half
+# its surface under the compiler, and rounding that to zero would make the bar
+# jump discontinuously at the last call site.
+#
+# TARGET IS 6682, NOT 6935: the instrument measures IN-SCOPE mentions, matching
+# the detector's population. Claiming the larger number would be reporting a
+# figure the instrument cannot reach.
+floor        = 0.0
+floor_basis  = "measured 2026-08-23 by scripts/factory-scale.py at HEAD 63c72af8: corpus_id has 0 typed declarations against 369 on String, 6682 in-scope mentions, 0 under type control. `svrn code refactor` returns 'Unknown code subcommand: refactor' — the factory does not exist."
+target       = 6682.0
+direction    = "higher_is_better"
+timeout_s    = 180
+instrument   = "scripts/factory-scale.py --json --emit scale"
+kill         = "If reaching this requires hand-editing call sites rather than shaping the target type, the factory is hand-editing with extra steps and H1 has failed. Stop and say so."
+
+[[bar]]
+id           = "factory-deletion"
+one_line     = "CLAIM: one rung removes 10k+ net lines, safely"
+derives_from = "the operator's 10k standard, placed on the kind where deletion is the actual work"
+status       = "open"
+# THE OPERATOR'S NUMBER, ON THE RUNG WHERE IT IS HONEST. merge-shape and
+# delete-loser converge by DELETING a duplicate type, its impls and its
+# conversions — not by editing one field. 282 duplicate types across 112 groups
+# at even ~40 lines each is the 10k session. Deletion is also ungameable by
+# verbosity: you cannot pad a negative.
+#
+# MAX OVER RUNGS, NOT SUM, because the standard is about SINGLE-SESSION
+# capability. A rung is a session; rungs are grouped by the `rf-N` token already
+# present in commit subjects. The total is reported and is never the headline.
+#
+# "SAFELY" IS NOT MEASURED HERE AND IS NOT ASSUMED: it is carried by the wire
+# differ (rf-2) plus both gates. A rung that hits 10000 with a wire escape has
+# failed, and `factory-deletion` alone cannot see that.
+floor        = 0.0
+floor_basis  = "measured 2026-08-23 by scripts/factory-scale.py at HEAD 63c72af8: no `rf-` rung commit exists, so max-over-rungs is 0."
+target       = 10000.0
+direction    = "higher_is_better"
+timeout_s    = 180
+instrument   = "scripts/factory-scale.py --json --emit deletion"
+kill         = "If a rung reaches 10000 net lines removed but the wire differ was skipped, bypassed, or had no failing case, the number is void — deletion without the encoding gate is exactly the node_id near-miss at scale."
+
+# ════════════════════════════════════════════════════════════════════════════
+#  THE LEDGER'S OWN BARS — quality/REFACTOR_LEDGER.md
+# ════════════════════════════════════════════════════════════════════════════
+#
+# The factory converges the stock and `miss-rate` measures the flow. These four
+# measure whether the DISPATCH mechanism works — whether a series of agents can
+# actually pull record after record until the work is gone.
+
+[[bar]]
+id           = "ledger-closure-exact"
+one_line     = "CLAIM: a close reports exactly what the detector can no longer see, and costs less than a coffee"
+derives_from = "REFACTOR_LEDGER.md L1', restated 2026-08-24 after L1 as written was falsified during the build"
+status       = "open"
+# L1 SAID "every detector can be re-run against a named file set". FALSE, and
+# the reason matters more than the verdict: `converge::census` computes
+# "defined in more than one crate" and `shape_census` weights by IDF over the
+# population with an absolute rare_df gate. Narrowing their INPUT to six files
+# does not make them cheaper, it makes them WRONG — six files in one crate
+# yield zero cross-crate collisions and zero cross-crate shape pairs, so the
+# detector stops firing for the wrong reason. That is fake closure through the
+# front door.
+#
+# SO SCOPING IS A POST-FILTER, NEVER A NARROWED INPUT. Each detector computes
+# its whole population; the file set filters the RESULT. Exact, because
+# TypeDef.file and ShapeSide.file both carry the file.
+#
+# WHAT IT MEASURES: two clauses, both required. EXACTNESS — sites reported for
+# a file set equal the whole run filtered to that set. AFFORDABILITY — one
+# close under 30s.
+floor        = 0.0
+floor_basis  = "measured 2026-08-24 on this host, first live close of rf-field-atom-kernel-types-corpusid: converting 4 of 6 declarations closed exactly 4, the 2 in the untouched file stayed open, control fired. Affordability: the four cheap detectors run in 52s including a ~10s graph load; the behaviour detector's near tier is O(n^2) over 24,823 reps and measured 156s on 12 threads, so it is opt-in behind --all and renders as SKIPPED, never omitted."
+target       = 1.0
+
+[[bar]]
+id           = "ledger-order-sufficient"
+one_line     = "CLAIM: an agent burning a record reads nothing outside the order's file set"
+derives_from = "REFACTOR_LEDGER.md L2 — the operator's cost model, inverted and measured"
+status       = "open"
+# THE SENTENCE ITS SUBJECT SAYS WHEN IT MOVES: nothing. The agent just does the
+# work, because knowing and trusting were both paid for before it started.
+#
+# THIS IS THE THESIS. The order kills DISCOVERY by carrying the sites with
+# their current text; it kills TRUST by carrying three diffs where the same
+# edit already landed and passed. If this bar does not move, the order is not
+# carrying enough and no amount of ledger tidiness will fix it.
+#
+# WHAT IT MEASURES: median exploratory tool calls per order, outside the file
+# set. Target 0.
+#
+# THE GUARD: no order may cite a document. Pinned by
+# `the_order_never_tells_the_worker_to_go_read_a_document`.
+floor        = -1.0
+floor_basis  = "not yet measured — no worker session has burned an order. The first one sets the floor; -1 is the absent marker, never a zero that could read as a pass."
+target       = 0.0
+
+[[bar]]
+id           = "ledger-control-catches"
+one_line     = "MIRROR: does a detector that went quiet get caught, or does it report a clean sweep?"
+derives_from = "ARCH §18.1 — a check with no failing input you can name is not a check"
+status       = "open"
+# ALREADY EARNED ITS KEEP, ON THE FIRST LIVE RUN. The shape detector's control
+# was `Verdict` — ten definitions workspace-wide, an obvious choice. But
+# `Verdict` is a FIELDLESS ENUM and `shape_census` matches field signatures
+# with min_fields=2, so it can never appear in that detector's population. The
+# run came back COULD-NOT-JUDGE and closed nothing instead of reporting 286
+# sites the author would have believed.
+#
+# WHAT IT MEASURES: of detector runs whose control went silent, the fraction
+# that closed zero holdings. Anything below 1.0 means fake closure shipped.
+floor        = 1.0
+floor_basis  = "measured 2026-08-24: three unit tests pin the direction (silent control with sites present, empty sweep, detector-failed-to-run) and one live run caught a real mis-specified control before it produced a number."
+target       = 1.0
+
+[[bar]]
+id           = "ledger-cache-earns-keep"
+one_line     = "CLAIM: status is cheap enough to run every time anyone wonders"
+derives_from = "REFACTOR_LEDGER.md L4"
+status       = "open"
+# A 15s status gets run once a day; a 0.2s status gets run every time someone
+# wonders. That difference is the whole reason the cache exists.
+#
+# NOT YET BUILT. The single-pass fix to the field-atom detector landed first
+# and was worth more: it had been re-walking all ~1,900 files once per atom.
+floor        = 52.0
+floor_basis  = "measured 2026-08-24 on this host: full `status` over the four cheap detectors, 52s wall, of which ~10s is the graph load (320,619 symbols + 1,646,038 refs). No cache exists yet."
+target       = 5.0

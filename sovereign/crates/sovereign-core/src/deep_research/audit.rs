@@ -34,8 +34,11 @@ use super::icd::{
     Gap, GapList, GateAction, Verdict, WitnessRecord,
 };
 use crate::oicp::ShardingPrivacy;
-use crate::runtime::grounding::{claim_violation_joint, grounding_gate_threshold};
+use crate::runtime::grounding::{
+    claim_violation_joint, grounding_gate_threshold, spans_supporting_claim_batched,
+};
 use crate::traits::InferenceProvider;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// One window chunk as the audit sees it (content + custody).
@@ -46,6 +49,76 @@ pub struct AuditChunk {
     /// `None` = unknown provenance (refuses).
     pub custody_known: bool,
     pub source_url: String,
+}
+
+/// Character budget for the audit's shared evidence window.
+///
+/// Deliberately the SAME token budget as [`super::synthesize::ROUND_EVIDENCE_TOKENS`]:
+/// both bound a window handed to a 65,536-token slot, and two different answers
+/// to "how much evidence fits" is the §10.6 smell that lets one drift.
+///
+/// # Why this exists (regression found 2026-08-25)
+///
+/// This site built `texts` from EVERY window chunk at full length. On small
+/// estates it fit and nobody noticed. On the task-69 web estate (98 sources,
+/// 2.18M chars) it rendered **259,250 tokens against a 65,536 slot** and the
+/// gate call 503'd — roughly 350 times per flight, in every flight of
+/// 2026-08-24 and 2026-08-25. `forced_choice_ab` returns `None` on error and
+/// the caller FAILS OPEN by design, so the grounding gate silently did not run
+/// on any large-estate deliverable while the pipeline read it as passed.
+///
+/// The 1,500-char cap that used to live inside `EvidenceFamily` was removed
+/// deliberately (the bench critic has no counterpart, and the calibrated
+/// threshold only transfers if both render byte-identically). So the bound
+/// belongs HERE, at the caller, exactly where note 6dc35087 puts it: the
+/// renderer keeps its parity contract and simply gets handed less.
+pub(crate) const AUDIT_EVIDENCE_TOKENS: usize = 24_000;
+
+/// Per-chunk floor. Below this a chunk cannot carry a supporting sentence with
+/// enough context to judge it, so once the fair share would fall under this we
+/// seat fewer chunks and COUNT the rest rather than shredding all of them.
+const AUDIT_MIN_CHUNK_CHARS: usize = 600;
+
+/// Seat every chunk in the window on a fair share of the budget, truncating
+/// long ones — rather than admitting whole chunks until the budget runs out.
+///
+/// Returns `(texts, dropped, truncated)`.
+///
+/// # Why fair-share and not fill-until-full
+///
+/// The first cut of this bound (2026-08-25) filled best-first with whole
+/// chunks and MEASURED `window_chunks=52 chunks_used=5 chunks_dropped=47` on
+/// the task-69 estate: web chunks average ~19k chars, so five of them spent
+/// the entire budget and the gate judged every claim against a tenth of the
+/// evidence. A claim genuinely supported by chunk 30 would be recorded
+/// unsupported — a WRONG verdict, which is worse than the could-not-judge it
+/// replaced. Seating all 52 at ~1,846 chars each keeps every source
+/// represented, and lands close to the 1,500-char per-chunk cap this gate
+/// used before land B removed it for bench-critic render parity.
+///
+/// Truncation is not free either: a supporting sentence past the cut is
+/// invisible. That is why `truncated` is returned and traced — the next
+/// reader must be able to see that a verdict was reached on trimmed evidence.
+fn bounded_audit_texts(chunks: &[AuditChunk]) -> (Vec<String>, usize, usize) {
+    if chunks.is_empty() {
+        return (Vec::new(), 0, 0);
+    }
+    let budget = AUDIT_EVIDENCE_TOKENS * super::synthesize::CHARS_PER_TOKEN;
+    let per_chunk = (budget / chunks.len()).max(AUDIT_MIN_CHUNK_CHARS);
+    let seats = (budget / per_chunk).max(1).min(chunks.len());
+    let mut truncated = 0usize;
+    let texts: Vec<String> = chunks[..seats]
+        .iter()
+        .map(|c| {
+            if c.content.chars().count() > per_chunk {
+                truncated += 1;
+                c.content.chars().take(per_chunk).collect()
+            } else {
+                c.content.clone()
+            }
+        })
+        .collect();
+    (texts, chunks.len() - seats, truncated)
 }
 
 /// The audit result for one claim.
@@ -332,6 +405,37 @@ const MIN_LOCATE_SIM: f32 = 0.35;
 /// not a measurement).
 const SUPPORT_FLOOR: f64 = 0.65;
 
+/// Span embeddings for one audit pass, memoized by chunk id.
+///
+/// `locate_spans` and its `embed_batch` are pure functions of the CHUNK —
+/// nothing about them depends on the claim being judged. They were being
+/// recomputed for every (claim, chunk) pair. `claim_figures_present` passes
+/// vacuously for a figureless claim, and on the measured task-69 flight 133
+/// of 139 claims (96%) were figureless, so nearly every claim visited every
+/// chunk: ~4,655 pairs re-splitting and re-embedding 35 chunks whose spans
+/// never changed.
+///
+/// ONLY SUCCESSES ARE CACHED. An `embed_batch` failure is left uncached so
+/// the next claim retries it exactly as it did before — a sticky failure
+/// would turn a transient outage into a run-long degrade, which is a
+/// behaviour change and not the one being made here. Successes are
+/// deterministic, so reusing them is byte-identical.
+#[derive(Default)]
+pub struct SpanCache {
+    by_chunk: std::sync::Mutex<HashMap<String, Arc<(Vec<String>, Vec<Vec<f32>>)>>>,
+}
+
+impl SpanCache {
+    fn get(&self, chunk_id: &str) -> Option<Arc<(Vec<String>, Vec<Vec<f32>>)>> {
+        self.by_chunk.lock().ok()?.get(chunk_id).cloned()
+    }
+    fn put(&self, chunk_id: &str, v: Arc<(Vec<String>, Vec<Vec<f32>>)>) {
+        if let Ok(mut m) = self.by_chunk.lock() {
+            m.insert(chunk_id.to_string(), v);
+        }
+    }
+}
+
 /// Split a chunk into overlapping spans for stage 2.
 fn locate_spans(content: &str) -> Vec<String> {
     let t: String = super::scrub_control(content)
@@ -380,28 +484,148 @@ pub enum LocatedBy {
     VerbatimFallback,
 }
 
-/// Stages 2+3 for one chunk. `Ok(None)` = located but unsupported;
-/// `Err` = the embedding surface is unavailable (the caller degrades and
-/// names it).
-async fn chunk_supports(
+/// Minimum candidate spans before the batched triage is worth its own
+/// prefill. Below this the per-span calibrated calls are already cheap
+/// (they are ~900 chars each) and one extra generation would be net cost —
+/// the same amortisation gate `gate_batch_min_claims` applies to the
+/// sibling register.
+const AUDIT_LOCATE_BATCH_MIN: usize = 6;
+
+/// drb1: batch the audit's location loop (`SOVEREIGN_DR_AUDIT_BATCH_LOCATE`,
+/// **default OFF**). One triage generation over the pinned evidence window
+/// shortlists which chunks are worth a calibrated call; the calibrated call
+/// still decides every chunk the triage admits.
+///
+/// IT SHIPPED DEFAULT-ON AND WAS TURNED OFF BY ITS OWN FLIP CONDITION
+/// (2026-08-26). The argument for on was sound in shape — the triage can only
+/// cost support, never manufacture it — but the ledger row asked for a
+/// measured `shadow_lost` of zero and the binder bed returned the opposite on
+/// the first claim that had support to lose: 49 of 52 candidates rejected,
+/// including both chunks the calibrated register bound, converting a `Passed`
+/// claim with two origins into a corroboration-floor `CouldNotJudge`. The
+/// prompt and the window have both been rebuilt since (recall-first wording, a
+/// prefix that is actually pinned); default stays OFF until a bed run shows
+/// the bound sets agree. An argument about direction is not a measurement.
+fn batch_locate_enabled() -> bool {
+    std::env::var("SOVEREIGN_DR_AUDIT_BATCH_LOCATE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// drb1: judge the located spans in DESCENDING COSINE ORDER and stop once the
+/// claim has reached `CORROBORATION_FLOOR` distinct origins
+/// (`SOVEREIGN_DR_AUDIT_LOCATE_EARLY_EXIT`, default off).
+///
+/// VERDICT-IDENTICAL BY CONSTRUCTION, and that is the point: the loop stops
+/// only at the moment the claim has ALREADY cleared the floor, which is
+/// exactly the condition under which it passes. Nothing found later could
+/// change `Passed` into anything else. A claim that never reaches the floor
+/// exits the loop having visited every candidate, precisely as before.
+///
+/// WHAT IT DOES CHANGE, named rather than buried: `supporting_chunk_ids` and
+/// `corroboration.support_chunks` get SMALLER — the record carries the origins
+/// that settled the claim, not every chunk that would have bound. That is a
+/// real change to what the deliverable can cite per claim, which is why it is
+/// its own flag and its own measurement rather than a free rider on the batch.
+fn locate_early_exit_enabled() -> bool {
+    std::env::var("SOVEREIGN_DR_AUDIT_LOCATE_EARLY_EXIT")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// How many calibrated per-span calls ONE claim may spend locating its
+/// origins (`SOVEREIGN_DR_AUDIT_LOCATE_BUDGET`, 0 = unbounded, the
+/// pre-2026-08-26 behaviour).
+///
+/// # This is the lever, and it is a DECLARED bound
+///
+/// Measured on the binder bed 2026-08-26: a calibrated span call costs ~2.4s
+/// and that cost is a ~360-token prefill which cannot be shared — the register
+/// judges ONE passage in isolation, which is the entire point of it, so there
+/// is no family to put it in. The only way to spend less is to make fewer
+/// calls. Claims 2 and 3 of the bed spent 50 and 14 calls to reach
+/// could-not-judge; on the source flight only 1 of 6 loop-reaching claims
+/// passed, so most of that spend buys an abstention.
+///
+/// Best-first ordering (see `locate_early_exit_enabled`) is what makes a bound
+/// defensible: the candidates most likely to bind are judged first, so a claim
+/// whose origins exist is expected to find them inside the budget.
+///
+/// **It is NOT silent.** A claim that exhausts its budget without reaching the
+/// corroboration floor says so in its own `reason` — the record distinguishes
+/// "we looked everywhere and found one origin" from "we stopped looking after
+/// N" (§18.3). Absence is reported, never defaulted.
+fn locate_call_budget() -> usize {
+    std::env::var("SOVEREIGN_DR_AUDIT_LOCATE_BUDGET")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(0)
+}
+
+/// Whether ONE claim's candidate set earns the batched triage.
+///
+/// Pure, and the only place the two conditions meet, so the amortisation gate
+/// is pinned by `cargo test` without a model and without mutating a
+/// process-global env var mid-suite (ARCH §10.6, §7).
+fn triage_worth_it(enabled: bool, candidates: usize) -> bool {
+    enabled && candidates >= AUDIT_LOCATE_BATCH_MIN
+}
+
+/// Judge the spans the triage REJECTED as well, and count how many the
+/// calibrated register would have bound (`SOVEREIGN_DR_AUDIT_LOCATE_SHADOW`,
+/// default off). This is the only configuration in which the triage's cost is
+/// observable: with it off a rejected span is never judged and its lost
+/// support is unobservable by construction. Costs the full pre-batch call
+/// count — a measurement mode, never a product one.
+fn locate_shadow_enabled() -> bool {
+    std::env::var("SOVEREIGN_DR_AUDIT_LOCATE_SHADOW")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// Stage 2 for one chunk: the span most ABOUT this claim, or `Ok(None)` when
+/// nothing in the chunk clears `MIN_LOCATE_SIM` (stage 3 is then never asked).
+/// `Err` = the embedding surface is unavailable and the caller degrades and
+/// names it.
+///
+/// Split out of the former `chunk_supports` (2026-08-26) so that the
+/// MODEL-FREE stages run for every candidate chunk BEFORE any model call is
+/// issued. That ordering is what lets one triage generation cover all the
+/// candidates at once; nothing about which span is picked, or about the
+/// `MIN_LOCATE_SIM` floor, changed in the move.
+async fn locate_best_span(
     provider: &Arc<dyn InferenceProvider>,
-    claim: &str,
     claim_vec: &[f32],
+    chunk_id: &str,
     content: &str,
-    posture: ShardingPrivacy,
-) -> Result<bool, String> {
-    let spans = locate_spans(content);
+    cache: &SpanCache,
+) -> Result<Option<(f32, String)>, String> {
+    // The spans and their embeddings belong to the CHUNK, not the claim —
+    // compute them once per pass (see `SpanCache`).
+    let entry = match cache.get(chunk_id) {
+        Some(hit) => hit,
+        None => {
+            let spans = locate_spans(content);
+            if spans.is_empty() {
+                return Ok(None);
+            }
+            let vecs = provider
+                .embed_batch(&spans)
+                .await
+                .map_err(|e| format!("span embed: {e}"))?;
+            if vecs.iter().any(|v| v.is_empty()) {
+                // Same rule as the claim vector: absence is reported, never
+                // scored as a miss.
+                return Err("zero-dimension span embedding".to_string());
+            }
+            let entry = Arc::new((spans, vecs));
+            cache.put(chunk_id, Arc::clone(&entry));
+            entry
+        }
+    };
+    let (spans, vecs) = (&entry.0, &entry.1);
     if spans.is_empty() {
-        return Ok(false);
-    }
-    let vecs = provider
-        .embed_batch(&spans)
-        .await
-        .map_err(|e| format!("span embed: {e}"))?;
-    if vecs.iter().any(|v| v.is_empty()) {
-        // Same rule as the claim vector: absence is reported, never
-        // scored as a miss.
-        return Err("zero-dimension span embedding".to_string());
+        return Ok(None);
     }
     let mut best: Option<(f32, usize)> = None;
     for (i, v) in vecs.iter().enumerate() {
@@ -412,30 +636,60 @@ async fn chunk_supports(
         }
     }
     let Some((sim, idx)) = best else {
-        return Ok(false);
+        return Ok(None);
     };
-    let span = &spans[idx];
     if sim < MIN_LOCATE_SIM {
         tracing::debug!(
             target: "deep_research",
             sim, floor = MIN_LOCATE_SIM,
             "t5 binder: no span is about this claim — stage 3 not asked"
         );
-        return Ok(false);
+        return Ok(None);
     }
-    let violation =
-        claim_violation_joint(provider, claim, std::slice::from_ref(span), 1, 0, posture).await;
+    Ok(Some((sim, spans[idx].clone())))
+}
+
+/// Stage 3 for one located span: the CALIBRATED forced-choice judge against
+/// `SUPPORT_FLOOR`.
+///
+/// **This is the released instrument and the batched triage never replaces
+/// it.** A span the triage admits still has to clear this call to bind as an
+/// origin, so no chunk can become a claim's citation on the strength of the
+/// text A/B alone (ARCH §18.3).
+/// `None` = the judge could not be reached (the daemon shed the call, the
+/// provider errored). The caller COUNTS that separately from "judged and not
+/// supported" — they are the same value to the binder, which binds neither,
+/// but they are not the same fact, and a run degraded by an unavailable judge
+/// otherwise reads as a claim with no support (§18.3: absence is reported,
+/// never defaulted). Measured 2026-08-26: a replay contending with an
+/// unrelated daemon tenant had every judge call shed with a 503
+/// `local_queue_full` and reported `bound=[]` with no other signal.
+async fn judge_span_support(
+    provider: &Arc<dyn InferenceProvider>,
+    claim: &str,
+    span: &str,
+    posture: ShardingPrivacy,
+) -> Option<bool> {
+    let violation = claim_violation_joint(
+        provider,
+        claim,
+        std::slice::from_ref(&span.to_string()),
+        1,
+        0,
+        posture,
+    )
+    .await;
     let Some(violation) = violation else {
-        return Ok(false);
+        return None;
     };
     let support = 1.0 - violation;
     tracing::debug!(
         target: "deep_research",
-        sim, support, floor = SUPPORT_FLOOR,
+        support, floor = SUPPORT_FLOOR,
         supported = support >= SUPPORT_FLOOR,
         "t5 binder: located span judged"
     );
-    Ok(support >= SUPPORT_FLOOR)
+    Some(support >= SUPPORT_FLOOR)
 }
 
 pub async fn assess_claim(
@@ -445,6 +699,7 @@ pub async fn assess_claim(
     containment: &ContainmentConfig,
     posture: ShardingPrivacy,
     tau: f64,
+    spans: &SpanCache,
 ) -> ClaimAudit {
     // 1. Empty window → never-ran (never a pass).
     if chunks.is_empty() {
@@ -460,36 +715,24 @@ pub async fn assess_claim(
         };
     }
 
-    // 2. Judge.
-    let texts: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
-    let prob = claim_violation_joint(provider, claim, &texts, texts.len(), 0, posture).await;
-    let Some(prob) = prob else {
-        return ClaimAudit {
-            claim: claim.to_string(),
-            verdict: Verdict::CouldNotJudge,
-            action: GateAction::AbstainedDecline,
-            witness: WitnessRecord::default(),
-            supporting_chunk_ids: Vec::new(),
-            empty_evidence_window: false,
-            reason: Some("judge failed to run (claim_violation_joint returned None)".to_string()),
-            corroboration: None,
-        };
-    };
-
-    // 3. Failed (violation).
-    if prob >= tau {
-        return ClaimAudit {
-            claim: claim.to_string(),
-            verdict: Verdict::Failed,
-            action: GateAction::AbstainedDecline,
-            witness: WitnessRecord::default(),
-            supporting_chunk_ids: Vec::new(),
-            empty_evidence_window: false,
-            reason: Some(format!("judge violation_prob {prob:.3} >= tau {tau}")),
-            corroboration: None,
-        };
-    }
-
+    // ORDER (2026-08-24, the "trim the fat" pass): the ref-required
+    // handle checks run BEFORE the judge. They are a pure string scan
+    // (`citation_handles` looks for "[Source: ...]") plus a lookup, and
+    // they were sitting behind the single most expensive call shape in
+    // the system — the full-window-prefill claim judge. Measured on the
+    // task-69 flight: 18 of 139 claims (13%) paid that judge and were
+    // then refused here by strings.
+    //
+    // THIS CHANGES A PRECEDENCE, and the change is named rather than
+    // buried (§18.3). Before, a handleless claim the judge REFUTED came
+    // back `Failed`; now it comes back `CouldNotJudge` with the
+    // ref-required reason, because the judge no longer runs for it. Both
+    // are non-passing and the ref-required refusal is the more
+    // actionable record ("cite the chunk you are asserting against"),
+    // but it IS a verdict conversion where the prior comment claimed
+    // refusals only. Zero of the 139 claims on the measured flight are
+    // affected: all 11 `Failed` claims carry resolvable handles.
+    // Pinned by `ref_required_precedes_the_judge`.
     // 4. Ref-required (order deep-research-t4a, pre-registered): the
     // draft must cite the chunks it asserts against — the model's
     // honesty discretion goes to zero (it selects which chunks to
@@ -538,12 +781,160 @@ pub async fn assess_claim(
             corroboration: None,
         };
     }
+
+    // 2. Judge.
+    //
+    // The WHOLE window is the stable prefix (2026-08-24). Every sibling
+    // claim in an audit pass is judged against the same `chunks` — the
+    // pass builds them once (`Self::audit_chunks`) and hands the same
+    // slice to each call — which is exactly `EvidenceFamily`'s contract:
+    // "the evidence every sibling call in the pass sees". Declaring it
+    // lets `SOVEREIGN_PREFIX_STATE` (default-on; the grounding gate is
+    // its only consumer) pin the evidence prefill ONCE for the pass
+    // instead of re-prefilling the entire window per claim.
+    //
+    // This is a pure LATENCY change: the split moves the declared cache
+    // boundary and NEVER the prompt text — `EvidenceFamily::new(w)` then
+    // `claim_prompt(rest)` renders the same bytes for every split of the
+    // same window, pinned by `the_family_split_moves_the_boundary_not_the_prompt`.
+    // Same bytes to the judge means the same verdict; only the prefill
+    // is spared.
+    //
+    // Measured cost of passing 0 here: on task 69 the round-2 audit ran
+    // 46s against a 2-chunk window (baseline dr-1787551476) and >33min
+    // against a 33-chunk one once greedy acquisition landed — the audit
+    // had become the run's dominant wall-clock term.
+    let (texts, dropped, truncated) = bounded_audit_texts(chunks);
+    if dropped > 0 || truncated > 0 {
+        tracing::info!(
+            target: "deep_research",
+            window_chunks = chunks.len(),
+            chunks_seated = texts.len(),
+            chunks_dropped = dropped,
+            chunks_truncated = truncated,
+            budget_tokens = AUDIT_EVIDENCE_TOKENS,
+            "audit: evidence window bounded — every seated chunk is represented, \
+             and what was trimmed or dropped is counted, never silently absent"
+        );
+    }
+    if texts.is_empty() {
+        // Every chunk individually exceeded the budget. Rare, but it must be a
+        // NAMED could-not-judge rather than a gate that quietly judged nothing.
+        return ClaimAudit {
+            claim: claim.to_string(),
+            verdict: Verdict::CouldNotJudge,
+            action: GateAction::AbstainedDecline,
+            witness: WitnessRecord::default(),
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: Some(format!(
+                "audit window unbounded-able: {} chunk(s) each exceed the {}-token budget",
+                chunks.len(),
+                AUDIT_EVIDENCE_TOKENS
+            )),
+            corroboration: None,
+        };
+    }
+    let n_shared = texts.len();
+    let t_window = std::time::Instant::now();
+    let prob = claim_violation_joint(provider, claim, &texts, texts.len(), n_shared, posture).await;
+    tracing::info!(
+        target: "deep_research",
+        window_judge_ms = t_window.elapsed().as_millis(),
+        chunks = texts.len(),
+        "audit: whole-window judge"
+    );
+    let Some(prob) = prob else {
+        return ClaimAudit {
+            claim: claim.to_string(),
+            verdict: Verdict::CouldNotJudge,
+            action: GateAction::AbstainedDecline,
+            witness: WitnessRecord::default(),
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: Some("judge failed to run (claim_violation_joint returned None)".to_string()),
+            corroboration: None,
+        };
+    };
+
+    // 3. Failed (violation).
+    if prob >= tau {
+        return ClaimAudit {
+            claim: claim.to_string(),
+            verdict: Verdict::Failed,
+            action: GateAction::AbstainedDecline,
+            witness: WitnessRecord::default(),
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: Some(format!("judge violation_prob {prob:.3} >= tau {tau}")),
+            corroboration: None,
+        };
+    }
+
     let ref_texts: Vec<String> = chunks
         .iter()
         .filter(|c| referenced_ids.contains(&c.id))
         .map(|c| c.content.clone())
         .collect();
+    let t_witness = std::time::Instant::now();
     let witness = containment_witness(provider, claim, &ref_texts, containment, posture).await;
+    tracing::info!(
+        target: "deep_research",
+        witness_ms = t_witness.elapsed().as_millis(),
+        ref_chunks = ref_texts.len(),
+        specifics = witness.specifics.len(),
+        "audit: containment witness"
+    );
+
+    // HOISTED above the location loop (2026-08-24, the "trim the fat"
+    // pass). This check reads only `witness`, decided on the line above —
+    // yet it used to sit AFTER the per-chunk location loop, and its
+    // return discards what that loop produced (`supporting_chunk_ids:
+    // Vec::new()`). So the loop ran, in full, for every claim whose
+    // specifics the witness had already found absent, and the result was
+    // thrown away. Measured on the task-69 flight: 51 of 139 claims
+    // (37%), about 1,785 (claim, chunk) pairs computed for nothing.
+    //
+    // The VERDICT is identical in every case, by inspection: the only
+    // return this now preempts is the R-3 unknown-provenance refusal
+    // below, and that returns `CouldNotJudge` too. What differs, and only
+    // when BOTH would have fired, is the recorded action/reason —
+    // `AbstainedDecline` with the witness reason instead of
+    // `RefusedUnknownProvenance`. That is the better record anyway: R-3
+    // exists to stop a claim PASSING on unknown provenance, and a claim
+    // whose asserted specifics are absent from its own cited evidence was
+    // never going to pass. Zero claims on the measured flight took the
+    // R-3 path at all. Pinned by
+    // `witness_downgrade_precedes_the_location_loop`.
+    // Witness downgrade: all witnessable specifics absent (or the
+    // negative-claim rule's contradicted negation).
+    if witness.ran && witness.all_absent {
+        return ClaimAudit {
+            claim: claim.to_string(),
+            verdict: Verdict::CouldNotJudge,
+            action: GateAction::AbstainedDecline,
+            witness: WitnessRecord {
+                ran: true,
+                specifics: witness.specifics,
+                all_absent: true,
+                // The witness's own reason when it named one (the
+                // negative-claim rule: "contradicted" vs "holds" — the
+                // generic all-absent string would be a false record for
+                // a contradicted negation, whose specifics ARE present);
+                // the generic shape otherwise.
+                reason: witness.reason.or_else(|| {
+                    Some(
+                        "all extracted specifics absent from the evidence (containment witness)"
+                            .to_string(),
+                    )
+                }),
+            },
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: None,
+            corroboration: None,
+        };
+    }
 
     // 6. Custody veto (R-3): the claim's supporting chunks must not rest
     // on unknown provenance. Locate supporting chunks by specific
@@ -587,40 +978,251 @@ pub async fn assess_claim(
         LocatedBy::VerbatimFallback
     };
 
-    for chunk in chunks {
-        // Stage 1 runs in BOTH modes and is honesty-critical: every
-        // figure the claim asserts must be verbatim in this chunk. A
-        // figureless claim passes this stage vacuously.
+    // THE LOCATION LOOP, BATCHED (2026-08-26). Measured on the pin-validate
+    // flight (`runs-pin-validate/pinned-1.log`): 328 claim audits took 102.5
+    // minutes, and 35 of them — the 11% that reached THIS loop — consumed 90.6
+    // of those minutes, 88% of the audit, at ~130s each. The other 285
+    // short-circuited above and averaged 1.85s. 130s is one model call per
+    // chunk against a 57-chunk window, and the loop bound 0-2 chunks out of 57.
+    //
+    // The shape is a three-step ladder, and the ORDER is the whole point:
+    //   1. the model-free stages (verbatim figures, then the cosine locate)
+    //      run for EVERY chunk first, so the candidate set is known before any
+    //      model call is issued;
+    //   2. ONE triage generation scores every candidate span at once;
+    //   3. the CALIBRATED per-span judge runs only for the spans the triage
+    //      admitted, or could not settle.
+    //
+    // Step 3 is why this is not a judge substitution: every chunk that binds
+    // has cleared `SUPPORT_FLOOR` on the same calibrated register it cleared
+    // before, so nothing can become a citation on the triage's word. The one
+    // verdict the triage can change is a REJECTION, and its consequence is a
+    // claim losing support it might have had — could-not-judge instead of
+    // passed. That is the abstention direction, which is the honesty floor's
+    // (ARCH §18.3). `SOVEREIGN_DR_AUDIT_LOCATE_SHADOW` is how that cost is
+    // measured rather than assumed: it judges the rejected spans too and
+    // counts what was lost.
+    //
+    // Stage 1 runs in BOTH modes and is honesty-critical: every figure the
+    // claim asserts must be verbatim in the chunk. A figureless claim passes
+    // it vacuously.
+    let mut candidates: Vec<(usize, f32, String)> = Vec::new();
+    let mut verbatim_only: Vec<usize> = Vec::new();
+    let t_locate = std::time::Instant::now();
+    for (i, chunk) in chunks.iter().enumerate() {
         if !claim_figures_present(claim, &chunk.content) {
             continue;
         }
-        let carries = match claim_vec.as_deref() {
-            Some(cv) => match chunk_supports(provider, claim, cv, &chunk.content, posture).await {
-                Ok(v) => v,
-                Err(e) => {
-                    tracing::warn!(
-                        target: "deep_research",
-                        error = %e,
-                        chunk = %chunk.id,
-                        "t5 binder: stage 2/3 unavailable for this chunk — verbatim fallback, named"
-                    );
-                    witnessable_specifics
-                        .iter()
-                        .any(|s| chunk.content.contains(s))
+        match claim_vec.as_deref() {
+            Some(cv) => {
+                match locate_best_span(provider, cv, &chunk.id, &chunk.content, spans).await {
+                    Ok(Some((sim, span))) => candidates.push((i, sim, span)),
+                    // Located nothing about the claim — stage 3 was never
+                    // asked before this change either.
+                    Ok(None) => {}
+                    Err(e) => {
+                        tracing::warn!(
+                            target: "deep_research",
+                            error = %e,
+                            chunk = %chunk.id,
+                            "t5 binder: stage 2/3 unavailable for this chunk — verbatim fallback, named"
+                        );
+                        verbatim_only.push(i);
+                    }
                 }
-            },
-            None => witnessable_specifics
-                .iter()
-                .any(|s| chunk.content.contains(s)),
-        };
-        if carries {
-            if chunk.custody_known {
-                supporting.push(chunk.id.clone());
-                supporting_urls.push(chunk.source_url.clone());
-            } else {
-                unknown_supporting.push(chunk.id.clone());
+            }
+            None => verbatim_only.push(i),
+        }
+    }
+
+    // One generation over every candidate span. Empty when the flag is off or
+    // the candidate set is too small to amortise the prefill — and an empty
+    // triage means every candidate falls through to the calibrated call, which
+    // is exactly the pre-2026-08-26 behaviour.
+    // BEST-FIRST: the claim's OWN CITATIONS, then cosine.
+    //
+    // Cosine alone is a weak prior and the bed says so: with candidates in
+    // pure cosine order, a budget of 8 found only ONE of claim 1's two binding
+    // origins and cost it a `Passed` verdict (2026-08-26). The stronger signal
+    // was already in hand and unused (§19) — `referenced_ids` is the WRITER'S
+    // declaration of which chunks it drew this claim from, computed just above
+    // for the ref-required check. On that same claim one of the two binding
+    // chunks (`ev-25`) is cited by the claim itself.
+    //
+    // A citation is a prior, never a verdict: cited chunks are judged FIRST,
+    // by the same calibrated register, and a cited chunk that does not support
+    // the claim still fails. This only changes what order we ask in, which is
+    // exactly what makes an early exit or a call budget land on real origins
+    // instead of on whatever sorted highest.
+    //
+    // Chunk order is restored for the RECORD by the binding pass below, which
+    // walks `chunks`, so this reorders only the sequence of calls.
+    candidates.sort_by(|a, b| {
+        let cited = |idx: usize| referenced_ids.iter().any(|r| *r == chunks[idx].id);
+        cited(b.0)
+            .cmp(&cited(a.0))
+            .then_with(|| b.1.total_cmp(&a.1))
+    });
+    let early_exit = locate_early_exit_enabled();
+    let locate_ms = t_locate.elapsed().as_millis();
+    let batched = triage_worth_it(batch_locate_enabled(), candidates.len());
+    let t_triage = std::time::Instant::now();
+    // THE PINNED WINDOW, not the candidate spans. `texts` is the exact slice
+    // the whole-window judge above was handed, so `EvidenceFamily::new`
+    // renders the same prefix bytes and the daemon RESTORES it rather than
+    // prefilling 12k tokens again (measured: 71,947ms of prefill on a
+    // claim-conditioned window vs 1,613ms on this one). The verdict vector is
+    // therefore indexed by CHUNK, and a candidate past `texts.len()` — a chunk
+    // the budget could not seat — simply has no triage row and falls through
+    // to the calibrated call.
+    let triage: Vec<Option<bool>> = if batched {
+        spans_supporting_claim_batched(provider, claim, &texts, posture).await
+    } else {
+        Vec::new()
+    };
+
+    // Stage 3, for the admitted and the unsettled. `carries` is indexed by
+    // CHUNK so the binding pass below stays in chunk order — the order
+    // `supporting_chunk_ids` has always been recorded in.
+    let triage_ms = t_triage.elapsed().as_millis();
+    let t_calibrated = std::time::Instant::now();
+    let mut carries: HashMap<usize, bool> = HashMap::new();
+    let mut triage_skipped = 0usize;
+    let mut shadow_lost = 0usize;
+    let mut calibrated_calls = 0usize;
+    let mut judge_unavailable = 0usize;
+    let mut origins_so_far: Vec<String> = Vec::new();
+    let mut early_exited = false;
+    let budget = locate_call_budget();
+    let mut budget_exhausted = false;
+    let mut bound_ranks: Vec<usize> = Vec::new();
+    for (rank, (i, _sim, span)) in candidates.iter().enumerate() {
+        if early_exit && origins_so_far.len() >= CORROBORATION_FLOOR {
+            early_exited = true;
+            break;
+        }
+        if budget > 0 && calibrated_calls >= budget {
+            // Not "nothing more supports this claim" — "we stopped asking".
+            // The two are different facts and the record keeps them apart.
+            budget_exhausted = true;
+            break;
+        }
+        match triage.get(*i).copied().flatten() {
+            // The triage settled it as unsupported: the calibrated call is
+            // skipped. Under SHADOW it is issued anyway and any disagreement
+            // is COUNTED — the promotion evidence, not an assumption.
+            Some(false) => {
+                triage_skipped += 1;
+                if locate_shadow_enabled() {
+                    calibrated_calls += 1;
+                    match judge_span_support(provider, claim, span, posture).await {
+                        Some(true) => {
+                            shadow_lost += 1;
+                            carries.insert(*i, true);
+                        }
+                        Some(false) => {}
+                        None => judge_unavailable += 1,
+                    }
+                }
+            }
+            // Admitted, or the triage produced no clean aligned row for it.
+            // Either way the calibrated register decides.
+            _ => {
+                calibrated_calls += 1;
+                match judge_span_support(provider, claim, span, posture).await {
+                    Some(v) => {
+                        carries.insert(*i, v);
+                        if v {
+                            // WHERE in the best-first order this binding was
+                            // found. This is the number that sets any call
+                            // budget: a bound whose K is guessed rather than
+                            // read off this distribution is a coin-flip
+                            // dressed as a policy (measured 2026-08-26: K=8
+                            // cost a Passed claim its second origin).
+                            bound_ranks.push(rank);
+                        }
+                        // Origins, not chunks — five copies of one page is one
+                        // origin, the same rule the floor itself applies.
+                        if v && chunks[*i].custody_known {
+                            let u = &chunks[*i].source_url;
+                            if !origins_so_far.iter().any(|o| o == u) {
+                                origins_so_far.push(u.clone());
+                            }
+                        }
+                    }
+                    None => judge_unavailable += 1,
+                }
             }
         }
+    }
+
+    let calibrated_ms = t_calibrated.elapsed().as_millis();
+    // The verbatim fallback, for chunks whose embedding path was unavailable.
+    for i in &verbatim_only {
+        let hit = witnessable_specifics
+            .iter()
+            .any(|sp| chunks[*i].content.contains(sp));
+        carries.insert(*i, hit);
+    }
+
+    for (i, chunk) in chunks.iter().enumerate() {
+        if !carries.get(&i).copied().unwrap_or(false) {
+            continue;
+        }
+        if chunk.custody_known {
+            supporting.push(chunk.id.clone());
+            supporting_urls.push(chunk.source_url.clone());
+        } else {
+            unknown_supporting.push(chunk.id.clone());
+        }
+    }
+    // The three stages are timed SEPARATELY because the first attempt to price
+    // this loop guessed at the split and guessed wrong: the batched arm was
+    // predicted at ~25s and measured 310s on one claim, and a single total
+    // cannot say whether that is the embedding sweep, the triage prefill or
+    // the confirmations. A stage with no timer is a stage you tune blind.
+    tracing::info!(
+        target: "deep_research",
+        candidates = candidates.len(),
+        chunks = chunks.len(),
+        batched,
+        locate_ms,
+        triage_ms,
+        calibrated_ms,
+        triage_skipped,
+        calibrated_calls,
+        judge_unavailable,
+        early_exit,
+        early_exited,
+        budget,
+        budget_exhausted,
+        bound_ranks = ?bound_ranks,
+        shadow = locate_shadow_enabled(),
+        shadow_lost,
+        supporting = supporting.len(),
+        origins = supporting_urls.len(),
+        "t5 binder: support located — the calls this claim actually paid for"
+    );
+    // A binder that could not reach its judge did not decide this claim's
+    // support; it ran out of instrument. Loud, because the alternative is a
+    // contended run that reports `bound=[]` and reads exactly like a claim
+    // nothing supports (§18.1 — could-not-judge is not a verdict of "no").
+    if judge_unavailable > 0 {
+        tracing::warn!(
+            target: "deep_research",
+            judge_unavailable,
+            calibrated_calls,
+            "t5 binder: the judge was UNAVAILABLE for span(s) — this claim's support set is \
+             degraded, not measured"
+        );
+    }
+    if locate_shadow_enabled() && shadow_lost > 0 {
+        tracing::warn!(
+            target: "deep_research",
+            shadow_lost,
+            triage_skipped,
+            "t5 binder SHADOW: the triage rejected span(s) the calibrated judge would have bound"
+        );
     }
     tracing::debug!(
         target: "deep_research",
@@ -646,36 +1248,6 @@ pub async fn assess_claim(
             supporting_chunk_ids: Vec::new(),
             empty_evidence_window: false,
             reason: Some("refused: claim rests on unknown-provenance evidence (R-3)".to_string()),
-            corroboration: None,
-        };
-    }
-
-    // Witness downgrade: all witnessable specifics absent (or the
-    // negative-claim rule's contradicted negation).
-    if witness.ran && witness.all_absent {
-        return ClaimAudit {
-            claim: claim.to_string(),
-            verdict: Verdict::CouldNotJudge,
-            action: GateAction::AbstainedDecline,
-            witness: WitnessRecord {
-                ran: true,
-                specifics: witness.specifics,
-                all_absent: true,
-                // The witness's own reason when it named one (the
-                // negative-claim rule: "contradicted" vs "holds" — the
-                // generic all-absent string would be a false record for
-                // a contradicted negation, whose specifics ARE present);
-                // the generic shape otherwise.
-                reason: witness.reason.or_else(|| {
-                    Some(
-                        "all extracted specifics absent from the evidence (containment witness)"
-                            .to_string(),
-                    )
-                }),
-            },
-            supporting_chunk_ids: Vec::new(),
-            empty_evidence_window: false,
-            reason: None,
             corroboration: None,
         };
     }
@@ -716,9 +1288,25 @@ pub async fn assess_claim(
             empty_evidence_window: false,
             reason: Some(format!(
                 "corroboration floor: {} supporting chunk(s) from {} distinct origin(s); \
-                 floor is {CORROBORATION_FLOOR}",
+                 floor is {CORROBORATION_FLOOR}{}",
                 supporting.len(),
-                origins.len()
+                origins.len(),
+                // The difference between "we looked at everything this claim
+                // could rest on" and "we stopped after N" is the difference
+                // between a finding and a budget, and the record must not
+                // blur them (§18.3). Only ever appended when the loop
+                // actually stopped short.
+                if budget_exhausted {
+                    format!(
+                        " — SEARCH BOUNDED: stopped after {} calibrated call(s) of {} \
+                         candidate(s) (SOVEREIGN_DR_AUDIT_LOCATE_BUDGET); this is a \
+                         bounded search, not an exhausted one",
+                        calibrated_calls,
+                        candidates.len()
+                    )
+                } else {
+                    String::new()
+                }
             )),
             corroboration: Some(corroboration),
         };
@@ -952,12 +1540,65 @@ mod tests {
     use futures::Stream;
     use std::pin::Pin;
 
+    fn chunk(id: &str, chars: usize) -> AuditChunk {
+        AuditChunk {
+            id: id.to_string(),
+            content: "x".repeat(chars),
+            custody_known: true,
+            source_url: "https://example.test/a".to_string(),
+        }
+    }
+
+    #[test]
+    fn the_audit_window_seats_every_chunk_rather_than_dropping_most_of_them() {
+        let budget = AUDIT_EVIDENCE_TOKENS * crate::deep_research::synthesize::CHARS_PER_TOKEN;
+
+        // Under budget: nothing trimmed, nothing dropped.
+        let small = vec![chunk("a", 1_000), chunk("b", 1_000)];
+        let (texts, dropped, truncated) = bounded_audit_texts(&small);
+        assert_eq!((texts.len(), dropped, truncated), (2, 0, 0));
+
+        // THE REGRESSION THIS REPLACES, measured on task 69: 52 web chunks
+        // averaging ~19k chars. Fill-until-full seated 5 and dropped 47, so
+        // the gate judged every claim against a tenth of the evidence and a
+        // claim supported by chunk 30 came back unsupported — a WRONG verdict,
+        // worse than the could-not-judge it replaced.
+        let web: Vec<AuditChunk> = (0..52).map(|i| chunk(&format!("c{i}"), 19_000)).collect();
+        let (texts, dropped, truncated) = bounded_audit_texts(&web);
+        assert_eq!(texts.len(), 52, "every source must stay represented");
+        assert_eq!(dropped, 0);
+        assert_eq!(truncated, 52, "and the trimming must be counted");
+        let total: usize = texts.iter().map(|t| t.chars().count()).sum();
+        assert!(total <= budget, "window {total} chars must fit {budget}");
+
+        // Pathological width: the fair share would fall under the floor, so we
+        // seat fewer at a legible size and COUNT the rest instead of shredding
+        // every chunk into unjudgeable fragments.
+        let many: Vec<AuditChunk> = (0..400).map(|i| chunk(&format!("d{i}"), 5_000)).collect();
+        let (texts, dropped, _) = bounded_audit_texts(&many);
+        let total: usize = texts.iter().map(|t| t.chars().count()).sum();
+        assert!(total <= budget, "window {total} chars must fit {budget}");
+        assert!(dropped > 0, "an unseatable tail must be reported");
+        assert_eq!(
+            texts.len() + dropped,
+            many.len(),
+            "every chunk is seated or counted"
+        );
+        assert!(
+            texts
+                .iter()
+                .all(|t| t.chars().count() >= AUDIT_MIN_CHUNK_CHARS),
+            "a seated chunk is never trimmed below the legibility floor"
+        );
+    }
+
     #[test]
     /// RED before `blank_out_heading_lines`. The deliverable's H1 is
     /// `# {question}`; a question ends in `?`, so the splitter emitted the
     /// user's own question as a claim and `render.rs` stamped a verdict on
     /// it. First live composed flight shipped a report titled
     /// `# Is there a general method ...? **[refuted by the evidence]**`.
+
     #[test]
     fn the_report_title_is_never_extracted_as_a_claim() {
         let draft = "# Is there a general method for solving asymmetric auctions?\n\n\
@@ -1456,6 +2097,86 @@ mod tests {
     /// witness's extraction) answers the scripted text. The joint judge
     /// makes exactly one provider call, so the audit path is fully
     /// deterministic.
+    /// A provider that COUNTS what the audit actually asked it to do.
+    /// `embed_batch` is the location loop's per-chunk stage-2 call, so its
+    /// count is how many (claim, chunk) pairs the loop really visited.
+    #[derive(Default)]
+    struct CountingProvider {
+        completes: std::sync::atomic::AtomicUsize,
+        embeds: std::sync::atomic::AtomicUsize,
+        embed_batches: std::sync::atomic::AtomicUsize,
+        /// Chunk texts handed to embed_batch, so a test can see whether the
+        /// SAME chunk was embedded more than once in a pass.
+        batched: std::sync::Mutex<Vec<String>>,
+        /// Specifics the extractor returns; "NONE" makes the witness
+        /// all-absent.
+        extract: &'static str,
+    }
+
+    impl CountingProvider {
+        fn n_complete(&self) -> usize {
+            self.completes.load(std::sync::atomic::Ordering::Relaxed)
+        }
+        fn n_embed_batch(&self) -> usize {
+            self.embed_batches
+                .load(std::sync::atomic::Ordering::Relaxed)
+        }
+    }
+
+    #[async_trait]
+    impl InferenceProvider for CountingProvider {
+        async fn complete(
+            &self,
+            r: &crate::types::CompletionRequest,
+        ) -> crate::error::Result<crate::types::CompletionResponse> {
+            self.completes
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let text = if r.structured_output.is_some() {
+                r#"{"A": 1.0, "B": 0.0}"#.to_string()
+            } else {
+                self.extract.to_string()
+            };
+            Ok(crate::types::CompletionResponse {
+                text,
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "test".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+        async fn complete_stream(
+            &self,
+            _r: &crate::types::CompletionRequest,
+        ) -> crate::error::Result<Pin<Box<dyn Stream<Item = crate::error::Result<String>> + Send>>>
+        {
+            unimplemented!()
+        }
+        async fn embed(&self, _t: &str) -> crate::error::Result<Vec<f32>> {
+            self.embeds
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            Ok(vec![1.0, 0.0, 0.0])
+        }
+        async fn embed_batch(&self, texts: &[String]) -> crate::error::Result<Vec<Vec<f32>>> {
+            self.embed_batches
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if let Ok(mut b) = self.batched.lock() {
+                b.push(texts.join("|"));
+            }
+            Ok(texts.iter().map(|_| vec![1.0, 0.0, 0.0]).collect())
+        }
+        fn capabilities(&self) -> crate::types::ProviderCapabilities {
+            crate::types::ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: false,
+                relative_speed: crate::types::Speed::Fast,
+                relative_reasoning: crate::types::Depth::Moderate,
+            }
+        }
+    }
+
     struct ShapeScripted {
         extract: &'static str,
     }
@@ -1515,7 +2236,126 @@ mod tests {
         }]
     }
 
+    /// **The ref-required handle check must run BEFORE the judge.**
+    ///
+    /// `citation_handles` is a pure `[Source: ...]` string scan; the judge is
+    /// the full-window-prefill call and the priciest shape in the system. A
+    /// claim with no handle can only ever be refused, so paying the judge
+    /// first is pure waste — 18 of 139 claims (13%) on the measured task-69
+    /// flight did exactly that.
+    ///
+    /// Pins the ORDER by counting: a handleless claim must reach the
+    /// provider ZERO times. Watched red against the pre-trim order, where
+    /// the same claim cost one `complete` before being refused.
     #[tokio::test]
+    async fn ref_required_precedes_the_judge() {
+        let p = Arc::new(CountingProvider {
+            extract: "Apollo 11",
+            ..Default::default()
+        });
+        let provider: Arc<dyn InferenceProvider> = p.clone();
+        let audit = assess_claim(
+            &provider,
+            "Apollo 11 landed in 1969 and nobody cited a thing.",
+            &apollo_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+            &SpanCache::default(),
+        )
+        .await;
+        assert_eq!(audit.verdict, Verdict::CouldNotJudge);
+        assert_eq!(audit.action, GateAction::RefusedNoCitationHandle);
+        assert_eq!(
+            p.n_complete(),
+            0,
+            "a handleless claim must not reach the judge — the handle check is \
+             a string scan and the judge is the most expensive call we make"
+        );
+    }
+
+    /// **The witness downgrade must run BEFORE the location loop.**
+    ///
+    /// `witness.all_absent` is decided from the referenced chunks alone, and
+    /// its return discards `supporting_chunk_ids` — so every stage-2/3 call
+    /// the loop makes for such a claim is computed and thrown away. On the
+    /// measured task-69 flight that was 51 of 139 claims, ~1,785
+    /// (claim, chunk) pairs.
+    ///
+    /// Pins it by counting `embed_batch`, which is the loop's per-chunk
+    /// stage-2 call: an all-absent claim must make ZERO of them. Watched red
+    /// against the pre-trim order, where the loop ran over the whole window
+    /// first.
+    #[tokio::test]
+    async fn witness_downgrade_precedes_the_location_loop() {
+        let p = Arc::new(CountingProvider {
+            extract: "NONE",
+            ..Default::default()
+        });
+        let provider: Arc<dyn InferenceProvider> = p.clone();
+        let audit = assess_claim(
+            &provider,
+            "None of the provided sources list the crew members of the Apollo 11 mission. [Source: c1]",
+            &apollo_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+            &SpanCache::default(),
+        )
+        .await;
+        assert_eq!(audit.verdict, Verdict::CouldNotJudge);
+        assert!(audit.witness.ran && audit.witness.all_absent);
+        assert_eq!(
+            p.n_embed_batch(),
+            0,
+            "an all-absent claim must not walk the location loop — its result \
+             is discarded by the very return this check makes"
+        );
+    }
+
+    /// **A chunk's spans are embedded once per pass, not once per claim.**
+    ///
+    /// `locate_spans` + `embed_batch` depend only on the CHUNK. 96% of the
+    /// measured flight's claims were figureless, so `claim_figures_present`
+    /// passed vacuously and nearly every claim visited every chunk —
+    /// re-splitting and re-embedding the same text ~139 times.
+    ///
+    /// Pins it by judging two different claims through ONE `SpanCache` and
+    /// asserting the second one embeds nothing new. Watched red without the
+    /// cache: the batch count doubles.
+    #[tokio::test]
+    async fn span_embeddings_are_computed_once_per_chunk_per_pass() {
+        let p = Arc::new(CountingProvider {
+            extract: "Apollo 11",
+            ..Default::default()
+        });
+        let provider: Arc<dyn InferenceProvider> = p.clone();
+        let spans = SpanCache::default();
+        let window = apollo_window();
+        for claim in [
+            "Apollo 11 landed on the Moon in 1969. [Source: c1]",
+            "The Apollo 11 mission carried a crew to the Moon. [Source: c1]",
+        ] {
+            let _ = assess_claim(
+                &provider,
+                claim,
+                &window,
+                &ContainmentConfig::default(),
+                ShardingPrivacy::LocalOnly,
+                0.9,
+                &spans,
+            )
+            .await;
+        }
+        let batches = p.n_embed_batch();
+        assert!(
+            batches <= window.len(),
+            "each chunk's spans must be embedded at most ONCE for the pass: \
+             {batches} embed_batch calls across {} chunks and 2 claims",
+            window.len()
+        );
+    }
+
     async fn contradicted_negative_records_its_reason_in_the_audit() {
         // Ref-required amendment (order deep-research-t4a,
         // pre-registered): the fixture claim gains its citation handle
@@ -1532,6 +2372,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_eq!(audit.verdict, Verdict::CouldNotJudge);
@@ -1561,6 +2402,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_eq!(audit.verdict, Verdict::CouldNotJudge);
@@ -1637,6 +2479,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_eq!(
@@ -1682,6 +2525,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_eq!(
@@ -1711,6 +2555,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_eq!(
@@ -1778,6 +2623,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_eq!(
@@ -1826,6 +2672,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_eq!(audit.verdict, Verdict::Passed, "two distinct origins pass");
@@ -1883,6 +2730,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_eq!(
@@ -1920,6 +2768,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_eq!(
@@ -1957,6 +2806,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_eq!(
@@ -2176,6 +3026,373 @@ mod tests {
         }
     }
 
+    // ---- the batched location loop (SOVEREIGN_DR_AUDIT_BATCH_LOCATE) ----
+
+    /// Scripts the TRIAGE and the CALIBRATED registers independently and
+    /// counts each, so a test can assert both what bound and what it cost.
+    ///
+    /// The two are told apart the way the wire tells them apart: the
+    /// calibrated forced choice asks for structured output, the triage is a
+    /// text completion whose prompt carries the numbering instruction. No test
+    /// here mutates a process-global env var — the amortisation gate is pinned
+    /// separately as a pure function (`triage_worth_it`).
+    struct TriageScripted {
+        extract: &'static str,
+        /// Verdict lines the triage returns, already rendered.
+        triage_reply: String,
+        /// The calibrated A/B: support = a/(a+b).
+        a: f64,
+        b: f64,
+        triage_calls: std::sync::atomic::AtomicUsize,
+        calibrated_calls: std::sync::atomic::AtomicUsize,
+    }
+
+    impl TriageScripted {
+        fn new(extract: &'static str, triage_reply: String, a: f64, b: f64) -> Arc<Self> {
+            Arc::new(Self {
+                extract,
+                triage_reply,
+                a,
+                b,
+                triage_calls: std::sync::atomic::AtomicUsize::new(0),
+                calibrated_calls: std::sync::atomic::AtomicUsize::new(0),
+            })
+        }
+        fn counts(&self) -> (usize, usize) {
+            use std::sync::atomic::Ordering::SeqCst;
+            (
+                self.triage_calls.load(SeqCst),
+                self.calibrated_calls.load(SeqCst),
+            )
+        }
+    }
+
+    #[async_trait]
+    impl InferenceProvider for TriageScripted {
+        async fn complete(
+            &self,
+            r: &crate::types::CompletionRequest,
+        ) -> crate::error::Result<crate::types::CompletionResponse> {
+            use std::sync::atomic::Ordering::SeqCst;
+            let text = if r.structured_output.is_some() {
+                // Both the WHOLE-WINDOW judge (step 3 of `assess_claim`) and
+                // the per-SPAN judge (the binder's stage 3) are this same
+                // calibrated register, so a/b alone cannot script them apart —
+                // and scripting the span verdict onto the window judge refutes
+                // the claim before the loop is ever reached. They are told
+                // apart the way the wire tells them apart: the window prompt
+                // renders many passages and therefore carries the family
+                // separator; a span prompt renders exactly one and never does.
+                //
+                // The window judge always SUPPORTS here. Its verdict is not
+                // what any of these tests is about; leaving it free would make
+                // them assert the wrong gate.
+                if r.prompt.contains("\n---\n") {
+                    r#"{"A": 0.99, "B": 0.01}"#.to_string()
+                } else {
+                    self.calibrated_calls.fetch_add(1, SeqCst);
+                    format!(r#"{{"A": {}, "B": {}}}"#, self.a, self.b)
+                }
+            } else if r.prompt.contains("numbered 1 to") {
+                self.triage_calls.fetch_add(1, SeqCst);
+                self.triage_reply.clone()
+            } else {
+                self.extract.to_string()
+            };
+            Ok(crate::types::CompletionResponse {
+                text,
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "test".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+        async fn complete_stream(
+            &self,
+            _r: &crate::types::CompletionRequest,
+        ) -> crate::error::Result<Pin<Box<dyn Stream<Item = crate::error::Result<String>> + Send>>>
+        {
+            unimplemented!()
+        }
+        async fn embed(&self, _t: &str) -> crate::error::Result<Vec<f32>> {
+            Ok(vec![1.0, 0.0, 0.0, 0.0])
+        }
+        fn capabilities(&self) -> crate::types::ProviderCapabilities {
+            crate::types::ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: false,
+                relative_speed: crate::types::Speed::Fast,
+                relative_reasoning: crate::types::Depth::Moderate,
+            }
+        }
+    }
+
+    /// Enough chunks to clear `AUDIT_LOCATE_BATCH_MIN`, all custody-known and
+    /// each its own origin, so nothing but the binder decides the outcome.
+    fn triage_chunks(n: usize) -> Vec<AuditChunk> {
+        (0..n)
+            .map(|i| AuditChunk {
+                id: format!("c{}", i + 1),
+                content: format!(
+                    "The Apollo 11 crew landed on the Moon in 1969. Passage number {i} carries \
+                     the same account at enough length to survive the locate stage and to be \
+                     split into a span the binder can judge on its own terms."
+                ),
+                custody_known: true,
+                source_url: format!("https://example.com/{i}"),
+            })
+            .collect()
+    }
+
+    const TRIAGE_CLAIM: &str = "The Apollo 11 crew landed on the Moon. [Source: c1]";
+
+    /// Force the batch on for a behaviour test.
+    ///
+    /// Safe under BOTH engines without a serialisation crate, and the reason
+    /// is worth stating rather than hoping: every test that touches this var
+    /// sets it to the SAME value, so nextest (process per test) and
+    /// `cargo test` (threads in one process) cannot disagree about it, and the
+    /// one test that reads the gate WITHOUT the env — `the_triage_gate_needs_
+    /// both_the_flag_and_the_candidates` — goes through the pure
+    /// `triage_worth_it` and never reads the environment at all.
+    fn force_batch_on() {
+        std::env::set_var("SOVEREIGN_DR_AUDIT_BATCH_LOCATE", "1");
+    }
+
+    /// Serialises every test whose behaviour depends on
+    /// `SOVEREIGN_DR_AUDIT_LOCATE_BUDGET`, and sets it for the guarded test.
+    ///
+    /// WHY THIS EXISTS, and why `force_batch_on`'s argument does NOT cover it.
+    /// That helper is safe unserialised because every test sets
+    /// `SOVEREIGN_DR_AUDIT_BATCH_LOCATE` to the SAME value ("1"), so threads
+    /// cannot disagree. The budget var is different: it is set to "4" by the
+    /// bounded test and "0" by the unbounded ones, and read by a third that
+    /// expects the default. Under `cargo test` (threads in one process) those
+    /// race, and the observed failure is a real one wearing a flake's
+    /// clothes — measured 2026-08-26: `the_call_budget_bounds_the_loop`
+    /// saw 12 calls instead of 4 and `an_unaligned_triage_falls_through`
+    /// saw 4 instead of 8, while all 40 pass with `--test-threads=1`.
+    /// Restoring the var at the end of a test cannot fix this; only holding
+    /// the lock for the test's duration can. Under nextest (process per test)
+    /// the lock is uncontended and costs nothing.
+    ///
+    /// A test that depends on this var and does NOT take the guard reopens
+    /// the race — the guard is the one decider for that dependency (§10.6).
+    fn budget_guard(value: &str) -> std::sync::MutexGuard<'static, ()> {
+        static BUDGET_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        // A panicking guarded test poisons the lock; the env state it left is
+        // overwritten on the next line anyway, so recovering is correct here
+        // and avoids one real failure cascading into unrelated ones.
+        let g = BUDGET_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        std::env::set_var("SOVEREIGN_DR_AUDIT_LOCATE_BUDGET", value);
+        g
+    }
+
+    /// **THE honesty red for the batch.** The triage admits every span, and
+    /// the calibrated judge refutes them. Nothing may bind.
+    ///
+    /// This is the property that lets the flag default ON: the text A/B can
+    /// never make a chunk into a citation, because the calibrated register
+    /// still decides every span the triage admits. If this test ever goes
+    /// green by binding, the triage has become the verdict and the flag must
+    /// go dark.
+    #[tokio::test]
+    async fn the_triage_never_binds_what_the_calibrated_judge_refuses() {
+        force_batch_on();
+        // Asserts a calibrated CALL COUNT, so it depends on the
+        // budget even though it never sets one.
+        let _budget = budget_guard("0");
+        let chunks = triage_chunks(8);
+        let reply = (1..=8).map(|i| format!("{i}: A\n")).collect::<String>();
+        // a=0.02 / b=0.98 -> support 0.02, far below SUPPORT_FLOOR.
+        let p = TriageScripted::new("Apollo 11", reply, 0.02, 0.98);
+        let provider: Arc<dyn InferenceProvider> = p.clone();
+        let audit = assess_claim(
+            &provider,
+            TRIAGE_CLAIM,
+            &chunks,
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+            &SpanCache::default(),
+        )
+        .await;
+        assert!(
+            audit.supporting_chunk_ids.is_empty(),
+            "the calibrated judge refuted every span; the triage must not bind one anyway: {:?}",
+            audit.supporting_chunk_ids
+        );
+        assert_ne!(audit.verdict, Verdict::Passed);
+        let (triage, calibrated) = p.counts();
+        assert_eq!(triage, 1, "exactly one triage generation for the claim");
+        assert_eq!(
+            calibrated, 8,
+            "every admitted span must still cost its calibrated call"
+        );
+    }
+
+    /// The saving is real: a span the triage rejects costs no calibrated call.
+    /// This is the whole 90-minutes-of-102 that the batch exists to reclaim,
+    /// so it is asserted as a COUNT rather than described in a comment.
+    #[tokio::test]
+    async fn a_triage_rejection_skips_the_calibrated_call() {
+        force_batch_on();
+        // Asserts a calibrated CALL COUNT, so it depends on the
+        // budget even though it never sets one.
+        let _budget = budget_guard("0");
+        let chunks = triage_chunks(8);
+        let reply = (1..=8).map(|i| format!("{i}: B\n")).collect::<String>();
+        let p = TriageScripted::new("Apollo 11", reply, 0.98, 0.02);
+        let provider: Arc<dyn InferenceProvider> = p.clone();
+        let audit = assess_claim(
+            &provider,
+            TRIAGE_CLAIM,
+            &chunks,
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+            &SpanCache::default(),
+        )
+        .await;
+        let (triage, calibrated) = p.counts();
+        assert_eq!(triage, 1);
+        assert_eq!(
+            calibrated, 0,
+            "eight rejected spans must cost eight fewer calibrated calls, not zero saving"
+        );
+        assert!(audit.supporting_chunk_ids.is_empty());
+    }
+
+    /// A triage that produces no aligned verdict costs TIME, never a verdict:
+    /// every unparsed row falls through to the calibrated register, which is
+    /// exactly the pre-batch behaviour. Alignment is hardened by numbering,
+    /// and a mis-count degrades to the fallback rather than shifting a row.
+    #[tokio::test]
+    async fn an_unaligned_triage_falls_through_to_the_calibrated_judge() {
+        force_batch_on();
+        // Asserts a calibrated CALL COUNT, so it depends on the
+        // budget even though it never sets one.
+        let _budget = budget_guard("0");
+        let chunks = triage_chunks(8);
+        let p = TriageScripted::new(
+            "Apollo 11",
+            "I am unable to comply with that format.".to_string(),
+            0.98,
+            0.02,
+        );
+        let provider: Arc<dyn InferenceProvider> = p.clone();
+        let audit = assess_claim(
+            &provider,
+            TRIAGE_CLAIM,
+            &chunks,
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+            &SpanCache::default(),
+        )
+        .await;
+        let (triage, calibrated) = p.counts();
+        assert_eq!(triage, 1);
+        assert_eq!(
+            calibrated, 8,
+            "an unparsed triage must judge every candidate, not silently drop them"
+        );
+        assert_eq!(
+            audit.supporting_chunk_ids.len(),
+            8,
+            "and the calibrated verdicts still bind"
+        );
+        // Chunk order is the record's order and the batch did not reshuffle it.
+        assert_eq!(audit.supporting_chunk_ids[0], "c1");
+        assert_eq!(audit.supporting_chunk_ids[7], "c8");
+    }
+
+    /// The call budget bounds the loop AND SAYS SO IN THE RECORD.
+    ///
+    /// Both halves are the test. A bound that shrinks the call count but lets
+    /// the claim report a plain corroboration-floor miss would be a silent
+    /// truncation wearing a finding's clothes — the reader could not tell
+    /// "one origin exists" from "we stopped after 4" (§18.3). The triage here
+    /// admits everything and the calibrated judge refuses everything, so the
+    /// claim can never reach the floor and the loop would otherwise run all
+    /// 12 candidates.
+    #[tokio::test]
+    async fn the_call_budget_bounds_the_loop_and_names_itself_in_the_record() {
+        force_batch_on();
+        let _budget = budget_guard("4");
+        let chunks = triage_chunks(12);
+        let reply = (1..=12).map(|i| format!("{i}: A\n")).collect::<String>();
+        let p = TriageScripted::new("Apollo 11", reply, 0.02, 0.98);
+        let provider: Arc<dyn InferenceProvider> = p.clone();
+        let audit = assess_claim(
+            &provider,
+            TRIAGE_CLAIM,
+            &chunks,
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+            &SpanCache::default(),
+        )
+        .await;
+        let (_, calibrated) = p.counts();
+        assert_eq!(calibrated, 4, "the budget must actually stop the loop");
+        let reason = audit.reason.unwrap_or_default();
+        assert!(
+            reason.contains("SEARCH BOUNDED"),
+            "a bounded search must name itself, or it is a silent truncation: {reason:?}"
+        );
+        assert!(
+            reason.contains("of 12 candidate(s)"),
+            "and it must say how much it did not look at: {reason:?}"
+        );
+    }
+
+    /// The unbounded default is the pre-2026-08-26 loop: every candidate
+    /// judged, and NO bounded-search note on a claim that genuinely ran out of
+    /// evidence rather than out of budget.
+    #[tokio::test]
+    async fn without_a_budget_the_loop_visits_every_candidate_and_says_nothing_about_bounds() {
+        force_batch_on();
+        let _budget = budget_guard("0");
+        let chunks = triage_chunks(12);
+        let reply = (1..=12).map(|i| format!("{i}: A\n")).collect::<String>();
+        let p = TriageScripted::new("Apollo 11", reply, 0.02, 0.98);
+        let provider: Arc<dyn InferenceProvider> = p.clone();
+        let audit = assess_claim(
+            &provider,
+            TRIAGE_CLAIM,
+            &chunks,
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+            &SpanCache::default(),
+        )
+        .await;
+        let (_, calibrated) = p.counts();
+        assert_eq!(calibrated, 12);
+        assert!(!audit.reason.unwrap_or_default().contains("SEARCH BOUNDED"));
+    }
+
+    /// The amortisation gate, pinned as a pure function so no test has to
+    /// mutate a process-global env var to reach it. Below the minimum the
+    /// triage's own prefill costs more than the calls it would save; with the
+    /// flag off nothing batches at any size.
+    #[test]
+    fn the_triage_gate_needs_both_the_flag_and_the_candidates() {
+        assert!(!triage_worth_it(false, 500), "flag off never batches");
+        assert!(
+            !triage_worth_it(true, AUDIT_LOCATE_BATCH_MIN - 1),
+            "below the minimum the prefill does not amortise"
+        );
+        assert!(triage_worth_it(true, AUDIT_LOCATE_BATCH_MIN));
+        assert!(triage_worth_it(true, AUDIT_LOCATE_BATCH_MIN + 1));
+    }
+
     /// THE honesty red for T5. Similarity cannot see negation: a chunk
     /// that CONTRADICTS the claim sits right next to it in embedding
     /// space, so stage 2 will happily locate a span. Stage 3 is what
@@ -2197,6 +3414,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_ne!(
@@ -2234,6 +3452,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         let origins = audit
@@ -2272,6 +3491,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_ne!(

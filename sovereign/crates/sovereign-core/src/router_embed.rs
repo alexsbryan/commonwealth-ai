@@ -771,10 +771,12 @@ fn truncate(s: &str, n: usize) -> String {
 /// The wire label for an `Intent` — the inverse of [`parse_intent`]
 /// over the labels an exemplar TOML can name.
 ///
-/// Exists so calibration banks and routing reports can name intents in
-/// the same snake_case vocabulary the exemplar TOML uses, without every
-/// caller re-deriving it from `{:?}`. `intent_label_round_trips` keeps
-/// the two in sync.
+/// The `slug` column of [`Intent::row`], and nothing else. It was a
+/// thirteen-arm `match` here until 2026-08-20, when it turned out to be one of
+/// THREE independent implementations of this one wire key — the other two in
+/// `runtime::intent_helpers::intent_hint` and `eval_cmd::runner`. One key, one
+/// decider (ARCH principle 8). `intent_label_round_trips` keeps this and
+/// `parse_intent` in sync.
 ///
 /// `SimpleAction` and `Continuation` are router-internal — they are
 /// produced downstream (a web-search action, a thread continuation)
@@ -782,21 +784,7 @@ fn truncate(s: &str, n: usize) -> String {
 /// their labels. The mapping is deliberately one-way for those two:
 /// a report still needs to name them.
 pub fn intent_label(intent: &Intent) -> &'static str {
-    match intent {
-        Intent::SimpleQuery => "simple_query",
-        Intent::KnowledgeQuery => "knowledge_query",
-        Intent::DeepQuery => "deep_query",
-        Intent::ComparisonQuery => "comparison_query",
-        Intent::CodeQuery => "code_query",
-        Intent::ComplexTask => "complex_task",
-        Intent::MetalingualQuery => "metalingual_query",
-        Intent::ConationQuery => "conation_query",
-        Intent::CommissiveQuery => "commissive_query",
-        Intent::ExpressiveQuery => "expressive_query",
-        Intent::GenerativeQuery => "generative_query",
-        Intent::SimpleAction { .. } => "simple_action",
-        Intent::Continuation { .. } => "continuation",
-    }
+    intent.row().slug
 }
 
 /// Parse the snake_case intent label in the exemplar TOML into an

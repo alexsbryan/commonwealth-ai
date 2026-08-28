@@ -269,7 +269,12 @@ impl Default for RunArgs {
             no_judge: false,
             with_atlas: None,
             atlas_top_k: 3,
-            atlas_min_description_chars: 200,
+            // Was 200 until 2026-08-21. The grounding path this harness measures
+            // uses `AtlasContextFilter::default()`, whose floor moved 200 -> 10
+            // because 200 dropped ~85% of SEP atoms. Reading the owner's default
+            // means the next move of that floor reaches the eval harness too.
+            atlas_min_description_chars: runner::AtlasContextFilter::default()
+                .min_description_chars,
             atlas_depth: Vec::new(),
             atlas_max_entries: None,
             atlas_include_kinds: Vec::new(),
@@ -724,13 +729,20 @@ async fn cmd_run(args: &[String]) -> i32 {
                     );
                 }
             }
-            let filter = runner::AtlasLoadFilter {
+            // The filter the eval harness applies is the SAME type the grounding
+            // path uses, and `atlas_min_description_chars` now defaults to that
+            // type's own floor (nc-22c found them diverged: 200 here vs 10 there,
+            // so eval measured an atom universe production had abandoned).
+            // Closed 2026-08-21 by operator decision — it moves published eval
+            // numbers, which is why it was not a drive-by (ARCH §18.6).
+            let filter = runner::AtlasContextFilter {
                 min_description_chars: a.atlas_min_description_chars,
                 depth_allowlist: a.atlas_depth.clone(),
                 max_entries: a.atlas_max_entries,
                 include_claims,
                 include_tensions,
                 include_configurations,
+                ..runner::AtlasContextFilter::default()
             };
             // `--with-atlas` accepts a comma-separated list of atlas
             // corpus ids. Each loads independently (with its own

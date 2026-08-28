@@ -11,7 +11,8 @@
 //! v1 supersedes via an *existing* rule (`--keep`); authoring a brand-new
 //! superseding rule (`--draft`) is deferred — see the `--draft` arm.
 
-use corpus_engine::enrichment::{GovernanceOp, GovernanceOpKind, GovernanceOplog};
+use corpus_engine::enrichment::GovernanceOpKind;
+use corpus_engine::oplog::{Op, Oplog};
 
 use super::{atlas_dir, load_view, now_unix};
 
@@ -138,12 +139,12 @@ pub fn cmd_resolve(args: &[String]) -> i32 {
         return 2;
     };
 
-    let oplog = GovernanceOplog::new(atlas_dir(&parsed.corpus_id));
+    let oplog = Oplog::<GovernanceOpKind>::new(atlas_dir(&parsed.corpus_id));
     let ts = now_unix();
     // The Supersede is the substance; ResolveTension records that this
     // tension was adjudicated *via* that Supersede (so a later Revert of
     // the bundle is atomic — it names both).
-    let supersede = GovernanceOp::new(
+    let supersede = Op::new(
         GovernanceOpKind::Supersede {
             new_rule: keep_id.clone(),
             old_rules: vec![old_id.clone()],
@@ -152,7 +153,7 @@ pub fn cmd_resolve(args: &[String]) -> i32 {
         ts,
         "human:cli",
     );
-    let resolve = GovernanceOp::new(
+    let resolve = Op::new(
         GovernanceOpKind::ResolveTension {
             tension: tension.id.clone(),
             via: supersede.id.clone(),

@@ -1,0 +1,22 @@
+error: cannot construct `corpus_engine::Evidence` with struct literal syntax due to private fields
+ --> tests/ui/evidence_without_an_origin.rs:5:13
+  |
+5 |     let _ = Evidence {
+  |             ^^^^^^^^
+6 |         content: "the text".to_string(),
+  |         ------------------------------- private field
+7 |         custody: Custody::Personal,
+  |         -------------------------- private field
+8 |         score: 0.9,
+  |         ---------- private field
+  |
+  = note: ...and other private field `origin` that was not provided
+help: you might have meant to use the `acquired` associated function
+  |
+5 -     let _ = Evidence {
+6 -         content: "the text".to_string(),
+7 -         custody: Custody::Personal,
+8 -         score: 0.9,
+9 -     };
+5 +     let _ = Evidence::acquired(_, _, _, _);
+  |

@@ -5,8 +5,13 @@
 # sandboxed ops channel (docs/OPS_CHANNEL.md). Run as the login user on the
 # Mac that should ACCEPT ops connections:
 #
-#   bash scripts/ops-channel-setup-macos.sh            # authorize the default svrn-ops key
-#   bash scripts/ops-channel-setup-macos.sh "ssh-ed25519 AAAA... comment"   # other client key
+#   bash scripts/ops-channel-setup-macos.sh            # keys from ~/.svrn-ops/clients
+#   bash scripts/ops-channel-setup-macos.sh "ssh-ed25519 AAAA... comment"   # + one-off
+#
+# CLIENT KEYS ARE HOST STATE, NOT SOURCE. They live in ~/.svrn-ops/clients,
+# outside the repo; the script writes a commented template there on first run
+# rather than shipping a default. A key baked into a shipped script authorizes
+# its owner on every machine that ever runs the script.
 #
 # What it does (all user-level, idempotent, reversible):
 #   - runs a PRIVATE sshd on port 2222 as this user via a LaunchAgent
@@ -25,9 +30,6 @@ set -euo pipefail
 
 [ "$(uname)" = "Darwin" ] || { echo "this script is for macOS (the server side)"; exit 1; }
 
-DEFAULT_KEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII54RkuTeAumX6oc+gFevl6opDD9vrDdzyNMmEMD/+Sz svrn-ops'
-CLIENT_KEY="${1:-$DEFAULT_KEY}"
-
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WRAPPER="$HERE/ops-channel.sh"
 [ -f "$WRAPPER" ] || { echo "missing $WRAPPER — pull the repo first"; exit 1; }
@@ -38,6 +40,49 @@ PLIST="$HOME/Library/LaunchAgents/com.svrn.ops-sshd.plist"
 LABEL="com.svrn.ops-sshd"
 
 mkdir -p "$OPS" && chmod 700 "$OPS"
+CLIENTS="$OPS/clients"
+
+# Seed from an existing authorized_keys so a working host is never locked out;
+# otherwise write the template and stop. Stopping is the point: with no default
+# client there is no accidental grant on someone else's machine.
+if [ ! -f "$CLIENTS" ]; then
+  if [ -s "$OPS/authorized_keys" ]; then
+    awk '{for(i=1;i<=NF;i++) if($i ~ /^(ssh-(rsa|dss|ed25519)|ecdsa-|sk-)/){
+           out=$i; for(j=i+1;j<=NF;j++) out=out" "$j; print out; break}}' \
+      "$OPS/authorized_keys" > "$CLIENTS"
+    echo "  migrated $(wc -l < "$CLIENTS" | tr -d ' ') key(s) from authorized_keys -> $CLIENTS"
+  else
+    cat > "$CLIENTS" <<'TEMPLATE'
+# Clients authorized for the ops channel on this host, one per line in
+# authorized_keys format (type, base64, comment). Blank lines and # are ignored.
+#
+# Do NOT add options here. The setup script adds `restrict` and the forced
+# command itself; an option written here would weaken the sandbox silently.
+#
+# This file is deliberately outside the repo. A client key committed to a
+# shipped script authorizes its owner on every machine that runs it.
+#
+#   ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... svrn-ops
+TEMPLATE
+    chmod 600 "$CLIENTS"
+    echo "no clients configured — wrote a template to $CLIENTS" >&2
+    echo "add the public key(s) allowed to use the ops channel, then re-run." >&2
+    exit 2
+  fi
+fi
+chmod 600 "$CLIENTS"
+
+KEYS=()
+while IFS= read -r line; do
+  case "$line" in ''|'#'*) continue ;; esac
+  KEYS+=("$line")
+done < "$CLIENTS"
+[ $# -gt 0 ] && KEYS+=("$@")
+if [ "${#KEYS[@]}" -eq 0 ]; then
+  echo "no clients in $CLIENTS — nothing would be authorized. Refusing." >&2
+  exit 2
+fi
+
 [ -f "$OPS/host_key" ] || ssh-keygen -q -t ed25519 -N '' -f "$OPS/host_key"
 
 # --- tailnet-only bind ---------------------------------------------------
@@ -79,7 +124,13 @@ StrictModes no
 LogLevel VERBOSE
 EOF
 
-printf 'restrict,command="%s" %s\n' "$WRAPPER" "$CLIENT_KEY" > "$OPS/authorized_keys"
+# The clients file is the source of truth, so regenerating is correct here —
+# unlike before, when `>` silently dropped keys added by hand to this file.
+: > "$OPS/authorized_keys"
+for k in "${KEYS[@]}"; do
+  printf 'restrict,command="%s" %s\n' "$WRAPPER" "$k" >> "$OPS/authorized_keys"
+  echo "  authorized (forced command): $(printf '%s' "$k" | awk '{print $3}')"
+done
 chmod 600 "$OPS/authorized_keys" "$OPS/host_key"
 
 mkdir -p "$HOME/Library/LaunchAgents"

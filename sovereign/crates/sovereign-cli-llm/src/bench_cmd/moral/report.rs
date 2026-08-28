@@ -158,9 +158,9 @@ pub fn print_text_report(run: &MoralEvalRun) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bench_cmd::rubric::judge::{CriterionVerdict, Judgement};
+    use crate::bench_cmd::rubric::judge::{Ballot, CriterionVerdict};
 
-    fn outcome(id: &str, dim: &str, weight: i32, verdict: Option<Judgement>) -> CriterionOutcome {
+    fn outcome(id: &str, dim: &str, weight: i32, verdict: Option<Ballot>) -> CriterionOutcome {
         CriterionOutcome {
             criterion_id: id.into(),
             dimension: dim.into(),
@@ -168,8 +168,8 @@ mod tests {
             verdict: CriterionVerdict {
                 verdict,
                 evidence: String::new(),
-                trials_yes: matches!(verdict, Some(Judgement::Yes)) as u32,
-                trials_no: matches!(verdict, Some(Judgement::No)) as u32,
+                trials_yes: matches!(verdict, Some(Ballot::Yes)) as u32,
+                trials_no: matches!(verdict, Some(Ballot::No)) as u32,
                 trials_failed: verdict.is_none() as u32,
             },
         }
@@ -204,7 +204,7 @@ mod tests {
             scenarios: vec![scenario_report(
                 "s1",
                 "ai_agent",
-                vec![outcome("a", "identifying", 2, Some(Judgement::Yes))],
+                vec![outcome("a", "identifying", 2, Some(Ballot::Yes))],
             )],
             aggregate: Aggregate::default(),
         };
@@ -231,12 +231,12 @@ mod tests {
             scenarios: vec![scenario_report(
                 "s1",
                 "ai_agent",
-                vec![outcome("a", "identifying", 2, Some(Judgement::Yes))],
+                vec![outcome("a", "identifying", 2, Some(Ballot::Yes))],
             )],
             aggregate: aggregate(&[scenario_report(
                 "s1",
                 "ai_agent",
-                vec![outcome("a", "identifying", 2, Some(Judgement::Yes))],
+                vec![outcome("a", "identifying", 2, Some(Ballot::Yes))],
             )]),
         };
         let v = serde_json::to_value(&run).unwrap();

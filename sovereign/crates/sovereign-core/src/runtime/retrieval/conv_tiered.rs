@@ -54,6 +54,7 @@ impl Runtime {
         query: &str,
         chunks: &mut [corpus_engine::ScoredChunk],
         display_categories: &std::collections::HashMap<String, String>,
+        lane: &crate::runtime::Lane,
     ) {
         let weight = std::env::var("SOVEREIGN_CONV_PPR_WEIGHT")
             .ok()
@@ -67,7 +68,7 @@ impl Runtime {
         if weight <= 0.0 {
             return;
         }
-        let Some(reader) = self.conv_tiered_reader.as_ref() else {
+        let Some(reader) = lane.conv_tiered.as_ref() else {
             return;
         };
 
@@ -267,8 +268,9 @@ impl Runtime {
         &self,
         chunks: &[corpus_engine::ScoredChunk],
         display_categories: &std::collections::HashMap<String, String>,
+        lane: &crate::runtime::Lane,
     ) -> String {
-        let Some(reader) = self.conv_tiered_reader.as_ref() else {
+        let Some(reader) = lane.conv_tiered.as_ref() else {
             return String::new();
         };
         let cats_opt = if display_categories.is_empty() {

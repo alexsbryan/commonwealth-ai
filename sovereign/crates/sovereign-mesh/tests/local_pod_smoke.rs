@@ -191,7 +191,7 @@ fn run_args<'a>(container_name: &'a str, host_port: u16, bootstrap_b64: &'a str)
     // entrypoint.sh).
     args.push("daemon".into());
     args.push("run".into());
-    args.push("--worker-mode".into());
+    args.push(sovereign_contracts::launch::WORKER_MODE_FLAG.into());
     args
 }
 

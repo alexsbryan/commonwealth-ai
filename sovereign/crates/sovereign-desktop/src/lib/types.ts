@@ -1055,10 +1055,25 @@ export interface MeshStatus {
    *  bare key" details so users can paste into a chat client that
    *  mangles deep-link URLs. Same caveat as join_link. */
   join_key?: string | null;
-  /** Track W: this founder's own iroh reachability (relay-home + discovery
+  /** Track W: this node's own iroh reachability (relay-home + discovery
    *  health + self-heal history). Absent when iroh isn't running. Drives the
    *  "Reachable / Reconnecting" indicator. */
-  founder_reachability?: FounderReachability | null;
+  self_reachability?: SelfReachability | null;
+  /** Every mesh this node has joined — the active one and the parked ones.
+   *  Drives the switcher in Settings › Mesh. Absent on a daemon predating
+   *  multi-mesh membership. */
+  meshes?: KnownMesh[];
+}
+
+/** One membership in the mesh switcher. A parked mesh keeps its full roster
+ *  and mesh secret on disk, which is why switching back to it is a resume
+ *  rather than a join — no invite is redeemed. */
+export interface KnownMesh {
+  mesh_id: string;
+  name: string;
+  members_total: number;
+  is_active: boolean;
+  last_seen_unix: number;
 }
 
 /** A self-heal action the reachability watchdog took. */
@@ -1068,9 +1083,9 @@ export interface RecoveryEvent {
   ok: boolean;
 }
 
-/** The founder's own iroh reachability — mirrors the Rust `FounderReachability`
+/** This node's own iroh reachability — mirrors the Rust `SelfReachability`
  *  (a `ReachabilityStatus` flattened alongside `dial` + `endpoint_id`). */
-export interface FounderReachability {
+export interface SelfReachability {
   dial?: string | null;
   endpoint_id: string;
   relay_homed: boolean;
@@ -2833,7 +2848,14 @@ export interface EvidenceExcerpt {
 export interface RelatedAtom {
   atom_id: string;
   atom_type: AtomType;
-  display_name: string;
+  /** The neighbour's canonical name. This is the wire field —
+   *  `sovereign_mesh::RelatedAtom` and the desktop's `RelatedAtomDto`
+   *  both emit `canonical_name`. It said `display_name` here until
+   *  2026-08-21, which is `AtomDetail`'s field for the FOCAL atom, not
+   *  a related one; the related-name chip rendered `undefined`. The
+   *  second declaration of this shape in
+   *  `stores/readingSession.svelte.ts` always had it right. */
+  canonical_name: string;
   edge_type: string;
   role: string;
   confidence: number;

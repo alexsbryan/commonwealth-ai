@@ -12,6 +12,9 @@
 //! `api_address()` reports the bind decision the daemon committed to;
 //! `running_client_token()` reports the installed token. Custom ports
 //! avoid colliding with a real daemon on 9741.
+mod common;
+use common::mesh_admin_services;
+
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -30,6 +33,7 @@ fn cfg_with_ports(client_port: u16, internal_port: u16) -> SetupConfig {
             embed: PathBuf::from("/models/embed.gguf"),
             code: None,
             context_size: None,
+            fast_context_size: None,
             max_extras_memory_gb: None,
             extra: BTreeMap::new(),
             primary_pool: None,
@@ -59,8 +63,11 @@ fn cfg_with_ports(client_port: u16, internal_port: u16) -> SetupConfig {
 #[tokio::test]
 async fn unexposed_solo_mesh_binds_loopback_with_no_token() {
     let dir = tempfile::tempdir().unwrap();
-    let daemon = EmbeddedDaemon::new(dir.path().to_path_buf());
-    daemon.set_setup_config(cfg_with_ports(38751, 38752)).await;
+    let daemon = EmbeddedDaemon::new(
+        dir.path().to_path_buf(),
+        cfg_with_ports(38751, 38752),
+        mesh_admin_services(),
+    );
     // NO expose_client_api() — the silent solo-mesh path.
     daemon
         .create_mesh("solo", "node")
@@ -89,8 +96,11 @@ async fn unexposed_solo_mesh_binds_loopback_with_no_token() {
 #[tokio::test]
 async fn exposed_mesh_binds_wide_with_token_and_persists_marker() {
     let dir = tempfile::tempdir().unwrap();
-    let daemon = EmbeddedDaemon::new(dir.path().to_path_buf());
-    daemon.set_setup_config(cfg_with_ports(38851, 38852)).await;
+    let daemon = EmbeddedDaemon::new(
+        dir.path().to_path_buf(),
+        cfg_with_ports(38851, 38852),
+        mesh_admin_services(),
+    );
     // Explicit share: expose BEFORE create so start_daemon binds wide
     // on first start (no restart).
     daemon.expose_client_api();

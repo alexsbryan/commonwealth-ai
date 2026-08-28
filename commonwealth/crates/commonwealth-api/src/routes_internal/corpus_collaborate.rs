@@ -71,14 +71,17 @@ pub async fn corpus_collaborate(
     // (the source of truth, present from registration) rather than the
     // stamped index — the post-create `grantable` stamp may not be written
     // yet during a fresh collaborative ingest.
-    let recipe_privacy = engine.load_recipe(&req.corpus_id).await.map_err(|e| {
-        (
-            StatusCode::NOT_FOUND,
-            Json(ErrorBody {
-                error: format!("cannot resolve recipe for corpus '{}': {e}", req.corpus_id),
-            }),
-        )
-    })?;
+    let recipe_privacy = engine
+        .load_recipe(req.corpus_id.as_str())
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorBody {
+                    error: format!("cannot resolve recipe for corpus '{}': {e}", req.corpus_id),
+                }),
+            )
+        })?;
     if !recipe_privacy.corpus.mesh_sharing {
         // Local-only corpus. Require a live grant that authorizes exactly
         // the requested peer set. `grantable = false` (structural
@@ -89,7 +92,7 @@ pub async fn corpus_collaborate(
             && state
                 .inner
                 .grant_store
-                .live(&req.corpus_id, now_ms)
+                .live(req.corpus_id.as_str(), now_ms)
                 .map(|g| g.authorizes(&requested))
                 .unwrap_or(false);
         if !authorized {
@@ -201,7 +204,7 @@ pub async fn corpus_collaborate(
         );
     }
 
-    let recipe_id = req.recipe_id.as_deref().unwrap_or(&req.corpus_id);
+    let recipe_id = req.recipe_id.as_deref().unwrap_or(req.corpus_id.as_str());
 
     // Detect whether this is a JSONL corpus (Wikipedia-style BulkDownload) or
     // an HF parquet corpus.  JSONL corpora have no source-file manifest, so we
@@ -219,12 +222,12 @@ pub async fn corpus_collaborate(
     //      the caller doesn't interpret "No source manifest" as a data-loss error
     //      or prompt the user to run `reconstruct-manifest` unnecessarily.
     let has_hf_manifest = engine
-        .source_manifest(&req.corpus_id)
+        .source_manifest(req.corpus_id.as_str())
         .ok()
         .flatten()
         .is_some();
     let jsonl_article_count = if !has_hf_manifest {
-        engine.count_jsonl_articles(&req.corpus_id).ok()
+        engine.count_jsonl_articles(req.corpus_id.as_str()).ok()
     } else {
         None
     };
@@ -255,7 +258,9 @@ pub async fn corpus_collaborate(
     // lease reaper. See `commonwealth-knowledge::work_queue`.
     if use_pull_queue() {
         let units = if is_jsonl {
-            let shard_count = engine.jsonl_source_shard_count(&req.corpus_id).unwrap_or(1);
+            let shard_count = engine
+                .jsonl_source_shard_count(req.corpus_id.as_str())
+                .unwrap_or(1);
             if shard_count > 1 {
                 // Union LOCAL processed_shards (this peer's partition
                 // dirs on disk) with PEER processed_shards (every
@@ -266,12 +271,12 @@ pub async fn corpus_collaborate(
                 // observed in the wild: 8 of 33 distinct shards
                 // processed twice on a two-peer Wikipedia ingest.
                 let mut processed: std::collections::HashSet<usize> = engine
-                    .corpus_processed_shards(&req.corpus_id)
+                    .corpus_processed_shards(req.corpus_id.as_str())
                     .into_iter()
                     .collect();
                 let peer_processed = commonwealth_state::union_processed_shards(
                     &state.inner.mesh_store,
-                    &req.corpus_id,
+                    req.corpus_id.as_str(),
                 );
                 processed.extend(peer_processed);
                 let remaining: Vec<usize> = (0..shard_count)
@@ -294,9 +299,9 @@ pub async fn corpus_collaborate(
                         }),
                     )
                 })?;
-                let committed_iter_pos = engine.corpus_committed_iter_pos(&req.corpus_id);
+                let committed_iter_pos = engine.corpus_committed_iter_pos(req.corpus_id.as_str());
                 let current_article = engine
-                    .estimate_article_pos(&req.corpus_id, committed_iter_pos, 500)
+                    .estimate_article_pos(req.corpus_id.as_str(), committed_iter_pos, 500)
                     .map_err(|e| {
                         (
                             StatusCode::INTERNAL_SERVER_ERROR,
@@ -311,21 +316,23 @@ pub async fn corpus_collaborate(
                 build_work_units_jsonl_single(current_article, total_articles, 32)
             }
         } else {
-            let remaining = engine.remaining_source_files(&req.corpus_id).map_err(|e| {
-                let status = if e.to_string().contains("No index found") {
-                    StatusCode::NOT_FOUND
-                } else if e.to_string().contains("No source manifest") {
-                    StatusCode::UNPROCESSABLE_ENTITY
-                } else {
-                    StatusCode::INTERNAL_SERVER_ERROR
-                };
-                (
-                    status,
-                    Json(ErrorBody {
-                        error: e.to_string(),
-                    }),
-                )
-            })?;
+            let remaining = engine
+                .remaining_source_files(req.corpus_id.as_str())
+                .map_err(|e| {
+                    let status = if e.to_string().contains("No index found") {
+                        StatusCode::NOT_FOUND
+                    } else if e.to_string().contains("No source manifest") {
+                        StatusCode::UNPROCESSABLE_ENTITY
+                    } else {
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    };
+                    (
+                        status,
+                        Json(ErrorBody {
+                            error: e.to_string(),
+                        }),
+                    )
+                })?;
             build_work_units_hf(&remaining)
         };
 
@@ -348,14 +355,11 @@ pub async fn corpus_collaborate(
             //       the existing handoff blob (still in `mesh_store`
             //       via gossip) and re-fire the merge so the corpus
             //       actually finishes.
-            let canonical_exists = engine
-                .canonical_path(&req.corpus_id)
-                .join("_corpus_meta.json")
-                .exists();
+            let canonical_exists = engine.corpus(req.corpus_id.as_str()).is_installed();
 
             if !canonical_exists {
                 if let Some(existing) =
-                    find_local_handoff_for_corpus(&state, &req.corpus_id, self_id)
+                    find_local_handoff_for_corpus(&state, req.corpus_id.as_str(), self_id)
                 {
                     tracing::info!(
                         corpus = %req.corpus_id,
@@ -377,7 +381,7 @@ pub async fn corpus_collaborate(
                 // (deterministic short-circuits before the cooldown).
                 let outcome = crate::auto_recover::try_recover_stranded_partitions(
                     engine.index_dir(),
-                    &req.corpus_id,
+                    req.corpus_id.as_str(),
                 )
                 .await;
                 match outcome {
@@ -456,6 +460,12 @@ pub async fn corpus_collaborate(
                             "corpus_collaborate: stranded-partition recovery skipped \
                              (incomplete local coverage); peer with full coverage \
                              will produce canonical"
+                        );
+                    }
+                    crate::auto_recover::RecoveryOutcome::InvalidCorpusId => {
+                        tracing::warn!(
+                            corpus_id = %req.corpus_id,
+                            "corpus_collaborate: empty corpus id, nothing to recover"
                         );
                     }
                     crate::auto_recover::RecoveryOutcome::CanonicalDirectoryReserved => {
@@ -550,7 +560,7 @@ pub async fn corpus_collaborate(
         // `engine.ingest(...)` task to bail at its next cancel check,
         // leaving the pull_loops as the single writer into
         // `<corpus>-partition-<node>/`. No-op when nothing is running.
-        if engine.cancel_corpus_ingest(&req.corpus_id) {
+        if engine.cancel_corpus_ingest(req.corpus_id.as_str()) {
             tracing::info!(
                 corpus = %req.corpus_id,
                 handoff = %handoff.handoff_id,
@@ -682,10 +692,12 @@ pub async fn corpus_collaborate(
         // was unsafe (silent corruption when snapshots drifted, a
         // confusing "zero chunks" error when B's extraction was
         // truncated) and is now only used for the single-shard case.
-        let shard_count = engine.jsonl_source_shard_count(&req.corpus_id).unwrap_or(1);
+        let shard_count = engine
+            .jsonl_source_shard_count(req.corpus_id.as_str())
+            .unwrap_or(1);
         if shard_count > 1 {
             let processed: std::collections::HashSet<usize> = engine
-                .corpus_processed_shards(&req.corpus_id)
+                .corpus_processed_shards(req.corpus_id.as_str())
                 .into_iter()
                 .collect();
             let remaining: Vec<usize> = (0..shard_count)
@@ -701,7 +713,7 @@ pub async fn corpus_collaborate(
             );
 
             plan_collaborative_ingestion_jsonl_sharded(
-                &req.corpus_id,
+                req.corpus_id.as_str(),
                 recipe_id,
                 remaining,
                 &local_member,
@@ -729,9 +741,9 @@ pub async fn corpus_collaborate(
             })?;
 
             // Load committed_iter_pos to estimate how far Machine A has gone.
-            let committed_iter_pos = engine.corpus_committed_iter_pos(&req.corpus_id);
+            let committed_iter_pos = engine.corpus_committed_iter_pos(req.corpus_id.as_str());
             let current_article = engine
-                .estimate_article_pos(&req.corpus_id, committed_iter_pos, 500)
+                .estimate_article_pos(req.corpus_id.as_str(), committed_iter_pos, 500)
                 .map_err(|e| {
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
@@ -751,7 +763,7 @@ pub async fn corpus_collaborate(
             );
 
             plan_collaborative_ingestion_jsonl(
-                &req.corpus_id,
+                req.corpus_id.as_str(),
                 recipe_id,
                 current_article,
                 total_articles,
@@ -771,21 +783,23 @@ pub async fn corpus_collaborate(
         }
     } else {
         // ── HF parquet path (Gutenberg, StackExchange, …) ─────────────────
-        let remaining = engine.remaining_source_files(&req.corpus_id).map_err(|e| {
-            let status = if e.to_string().contains("No index found") {
-                StatusCode::NOT_FOUND
-            } else if e.to_string().contains("No source manifest") {
-                StatusCode::UNPROCESSABLE_ENTITY
-            } else {
-                StatusCode::INTERNAL_SERVER_ERROR
-            };
-            (
-                status,
-                Json(ErrorBody {
-                    error: e.to_string(),
-                }),
-            )
-        })?;
+        let remaining = engine
+            .remaining_source_files(req.corpus_id.as_str())
+            .map_err(|e| {
+                let status = if e.to_string().contains("No index found") {
+                    StatusCode::NOT_FOUND
+                } else if e.to_string().contains("No source manifest") {
+                    StatusCode::UNPROCESSABLE_ENTITY
+                } else {
+                    StatusCode::INTERNAL_SERVER_ERROR
+                };
+                (
+                    status,
+                    Json(ErrorBody {
+                        error: e.to_string(),
+                    }),
+                )
+            })?;
 
         if remaining.is_empty() {
             return Err((
@@ -800,7 +814,7 @@ pub async fn corpus_collaborate(
         }
 
         plan_collaborative_ingestion(
-            &req.corpus_id,
+            req.corpus_id.as_str(),
             recipe_id,
             &remaining,
             &local_member,
@@ -963,7 +977,7 @@ pub async fn corpus_collaborate(
 
 #[derive(Debug, Deserialize)]
 pub struct EligiblePeersRequest {
-    pub corpus_id: String,
+    pub corpus_id: kernel_types::CorpusId,
 }
 
 #[derive(Debug, Serialize)]
@@ -1007,7 +1021,7 @@ pub async fn corpus_eligible_peers(
     })?;
 
     let grantable = engine
-        .load_recipe(&req.corpus_id)
+        .load_recipe(req.corpus_id.as_str())
         .await
         .map(|r| r.corpus.grantable)
         .unwrap_or(false);
@@ -1054,7 +1068,7 @@ pub async fn corpus_eligible_peers(
 
 #[derive(Debug, Deserialize)]
 pub struct CollaborateRequest {
-    pub corpus_id: String,
+    pub corpus_id: kernel_types::CorpusId,
     /// Recipe to use. Defaults to `corpus_id` when absent.
     pub recipe_id: Option<String>,
     /// Per-job peer allowlist for an ephemeral grant-scoped ingest.

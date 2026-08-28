@@ -720,6 +720,27 @@ impl ResearchPort for MockBackendImpl {
         }
     }
 
+    async fn gap_queries(&self, question: &str, gaps: &[String]) -> Result<Vec<String>, String> {
+        // The deck's stand-in for the live port's model rewrite: the
+        // gap's OWN TEXT is the query. Deterministic (the drills depend
+        // on it), no model, and it preserves the property under test —
+        // a self-contained query derived from the gap, rather than the
+        // deterministic template's slice of it.
+        //
+        // The P5 drill is why this exists. Its poisoned arm's gap text
+        // is "OpenAI acquired Anthropic in March 2025." — a perfectly
+        // good query — which `template_query` reduces to " (2025)". The
+        // query validity gate then refuses that, rounds 2-3 search
+        // nothing, and the drill loses its dedup coverage. The template
+        // mangling a usable claim IS the defect the gap-query
+        // reformulation exists to fix, so the mock exercises the fixed
+        // seam and the drill keeps testing what it was written to test.
+        match &self.draft_surface {
+            MockDraftSurface::Delegated(inner) => inner.gap_queries(question, gaps).await,
+            MockDraftSurface::Scripted(_) => Ok(gaps.to_vec()),
+        }
+    }
+
     async fn plan_subquestions(&self, question: &str) -> Result<Vec<String>, String> {
         // The mock follows its draft surface (one decider per surface):
         // Scripted — the scripted text's non-empty lines ARE the

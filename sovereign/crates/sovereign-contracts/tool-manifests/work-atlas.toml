@@ -1,0 +1,177 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Cross-mesh work coordination (`sovereign-work-atlas`).
+#
+# The DECLARED half of each tool. Adding a tool here plus a handler is the
+# whole change; there is no `impl Tool for` block to write.
+
+[[tool]]
+id = "declare_scope"
+name = "Declare Scope"
+description = "Claim a scope (a symbol id or file path) so other agents on the same mesh can see you're working on it. Use BEFORE non-trivial work on a function or file the rest of the team also touches; drop with `release_scope` when done. Claims expire on TTL (default 4h, configurable) and are dropped when your session ends. Empty intent is rejected \u2014 the intent is what tells colliding agents what you're trying to do."
+effect = "write"
+idempotency = "nonidempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["symbols", "intent"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.symbols]
+type = "array"
+description = "One or more SCIP symbol ids or file paths. Mixed list OK."
+
+[tool.parameters.properties.symbols.items]
+type = "string"
+
+[tool.parameters.properties.intent]
+type = "string"
+description = "What you're trying to do. Non-empty."
+
+[tool.parameters.properties.ttl_seconds]
+type = "integer"
+description = "Override the default TTL. Clamped to the configured max."
+minimum = 1
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.claim_id]
+type = "string"
+
+[tool.output_schema.properties.session_id]
+type = "string"
+
+[tool.output_schema.properties.ttl_expires_at]
+type = "integer"
+
+[tool.output_schema.properties.intent]
+type = "string"
+
+
+[[tool]]
+id = "release_scope"
+name = "Release Scope"
+description = "Drop a previously-declared claim. Idempotent \u2014 releasing an already-released or expired claim returns `released: false` without erroring. Once released, the claim is gone; spec \u00a73 forbids history."
+effect = "write"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["claim_id"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.claim_id]
+type = "string"
+description = "UUID returned by declare_scope."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.released]
+type = "boolean"
+
+
+[[tool]]
+id = "resource_may_i"
+name = "Resource May I"
+description = "One-question check before touching a SHARED resource: is it taken right now? Verdict `held` = a live claim names this scope, with node attribution, intent, and time remaining; `expired` = someone took it and never released (their work may have died mid-run) \u2014 NOT the same as free; `free` = never claimed or explicitly released (the work finished). Deliberately NOT a lock: the verdict never blocks, and a seat may always override with its reason recorded. Scope convention: node-qualified names like `daemon:<node>:<action>` \u2014 exact match, so `daemon:BeefyMac:restart` does not answer for `daemon:BeefyMac:restart-verify`. Read `node_is_self` on each claim to tell your own claim from a peer's."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["scope"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.scope]
+type = "string"
+description = "The resource scope, e.g. `daemon:<node>:restart`. Exact match."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.scope]
+type = "string"
+
+[tool.output_schema.properties.verdict]
+type = "string"
+enum = ["held", "expired", "free"]
+
+[tool.output_schema.properties.claims]
+type = "array"
+
+[tool.output_schema.properties.claims.items]
+type = "object"
+
+
+[[tool]]
+id = "work_in_flight"
+name = "Work In Flight"
+description = "List live work signals overlapping a scope. Use BEFORE starting non-trivial work on a function or file to see whether another agent on the mesh is touching it. Returns both explicit Claims (Declared grade) and passive Observations from CodeWatcher edits (Active \u22645min, Recent \u226430min). Phase 2: Observations are file-level \u2014 `match_mode=file` matches them; symbol-graph distance arrives in Phase 2b. Excludes the caller's own session. READ `node_is_self` BEFORE ACTING: it is true only when the record is on YOUR machine. Host-local scope names collide across the mesh \u2014 every node's daemon listens on :9741, so a scope like `daemon-runtime:9741-primary-slot` matches every node's daemon and a peer's claim looks exactly like a lock on your own box. `node_id` alone cannot tell them apart; `node_is_self` can. File paths are stored REPO-RELATIVE (canonical since 2026-07-23) \u2014 query with repo-relative paths. An empty scope with match_mode=file matches EVERYTHING: the supported way to fetch all live signals at once."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["scope"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.scope]
+type = "string"
+description = "A SCIP symbol id, file path, or path prefix."
+
+[tool.parameters.properties.match_mode]
+type = "string"
+enum = ["symbol", "file"]
+default = "symbol"
+description = "How to match `scope` against claims. `symbol` = exact symbol id; `file` = path equality or prefix."
+
+[tool.parameters.properties.include_self]
+type = "boolean"
+default = false
+description = "Also return the caller's own sessions' records. Default false (coordination view: peers only). Set true to audit ALL live signals, e.g. listing your own claims."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.scope]
+type = "string"
+
+[tool.output_schema.properties.match_mode]
+type = "string"
+
+[tool.output_schema.properties.claims]
+type = "array"
+
+[tool.output_schema.properties.claims.items]
+type = "object"
+
+[tool.output_schema.properties.observations]
+type = "array"
+
+[tool.output_schema.properties.observations.items]
+type = "object"

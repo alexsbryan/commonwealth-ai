@@ -91,6 +91,7 @@ impl Runtime {
         per_corpus_limits: Option<&HashMap<String, usize>>,
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
+        lane: &crate::runtime::Lane,
     ) -> Vec<corpus_engine::ScoredChunk> {
         self.search_corpus_indexes_reporting(
             embedding,
@@ -100,6 +101,7 @@ impl Runtime {
             per_corpus_limits,
             enabled_corpora,
             corpus_ceiling,
+            lane,
         )
         .await
         .chunks
@@ -123,6 +125,11 @@ impl Runtime {
         per_corpus_limits: Option<&HashMap<String, usize>>,
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
+        // The turn's enrichment providers. Carries the cross-encoder this
+        // fan-out reranks with — read from the LANE, never from `self`, so
+        // the pass a stage applies is the one its caller resolved for the
+        // turn (daemon-convergence Phase 4a).
+        lane: &crate::runtime::Lane,
     ) -> CorpusFanoutResult {
         let mut chunks = Vec::new();
         let engine = match &self.corpus_engine {
@@ -418,9 +425,12 @@ impl Runtime {
         let embedding_arc: std::sync::Arc<[f32]> = std::sync::Arc::from(embedding);
         let query_arc: std::sync::Arc<str> = std::sync::Arc::from(query_text);
         let label_arc: std::sync::Arc<str> = std::sync::Arc::from(label);
-        let rerank_fn = self.rerank_fn.clone();
-        let rerank_base = self.rerank_config.clone();
-        let rerank_enabled = self.rerank_config.enabled && self.rerank_fn.is_some();
+        let rerank_fn = lane.rerank.f.clone();
+        let rerank_base = lane.rerank.config.clone();
+        // ONE decider for "does this turn rerank" — `Rerank::active`. The
+        // conjunction used to be spelled out here AND implied at every
+        // `search_with_rerank` call site (ARCH §10.6).
+        let rerank_enabled = lane.rerank.active();
         let fanout_t0 = std::time::Instant::now();
         let mut tasks = Vec::with_capacity(eligible.len());
         for info in &eligible {
@@ -724,6 +734,7 @@ impl Runtime {
         label: &str,
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
+        lane: &crate::runtime::Lane,
     ) -> Vec<corpus_engine::ScoredChunk> {
         let mut chunks = Vec::new();
         let engine = match &self.corpus_engine {
@@ -800,13 +811,13 @@ impl Runtime {
                     continue;
                 }
             };
-            let corpus_rerank = rerank_config_for_corpus(&self.rerank_config, info);
+            let corpus_rerank = rerank_config_for_corpus(&lane.rerank.config, info);
             match idx
                 .search_with_rerank(
                     embedding,
                     query_text,
                     limit,
-                    self.rerank_fn.as_ref(),
+                    lane.rerank.f(),
                     &corpus_rerank,
                     None,
                 )

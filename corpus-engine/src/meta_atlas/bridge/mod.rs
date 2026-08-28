@@ -35,8 +35,8 @@ pub use build::{
     build_bridge, BridgeBuildConfig, BridgeBuildReport, BridgeBuildStats, DriverTopic,
 };
 pub use edges::{
-    default_bridge_edges_path, read_bridge_edges, write_bridge_edges, BridgeEdge, BridgeEdgesFile,
-    BridgeOp, BridgeOpKind, BridgeOplog, BridgeRelation, BridgeSignal, EdgeSource, TopicRef,
+    default_bridge_edges_path, read_bridge_edges, write_bridge_edges, BridgeAct, BridgeEdge,
+    BridgeEdgesFile, BridgeOpKind, BridgeRelation, BridgeSignal, EdgeSource, TopicRef, ALIGNER,
 };
 pub use lookup::BridgeIndex;
 pub use signals::{

@@ -186,25 +186,57 @@ pub struct RetrievalOutcome {
     pub baseline: Option<EvalRun>,
 }
 
-#[derive(Debug, Clone)]
+/// The flag surface, as a struct. THE FIELD LIST IS THE FLAG LIST — `clap`
+/// derives `--sample-questions` from `sample_questions`, the value coercion
+/// from the field type (`Option<PathBuf>` parses a path, `bool` is a presence
+/// flag), the defaults from `default_value*`, and the one exclusivity rule from
+/// the `conflicts_with_all` on `prod_pipeline`. Adding a flag here is adding a
+/// field: the 88-line `while i < args.len()` loop this replaced needed a match
+/// arm AND a `Default` entry AND an `i += 2` nobody could forget safely.
+///
+/// The hand-written `impl Default for Opts` is gone with it. Its only caller
+/// was the parse loop, and keeping both would leave every default declared
+/// twice — `parse_args(&[])` is now the one place a default comes from
+/// (ARCH §10.6).
+///
+/// `disable_help_flag` because `--help` is served by [`HELP`] through
+/// `sovereign_cli_shared::help::print`, which is unchanged.
+#[derive(clap::Parser, Debug, Clone)]
+#[command(
+    // The `Usage:` line inside a parse error says what the user TYPED. Taken
+    // from `HELP.command` rather than spelled again, so the two cannot drift;
+    // without it clap names the binary (`sovereign-cli-llm`), which is not a
+    // command anyone runs.
+    name = HELP.command,
+    no_binary_name = true,
+    disable_help_flag = true
+)]
 struct Opts {
+    #[arg(long, default_value = "sovereign/bench")]
     bench_root: PathBuf,
+    #[arg(long)]
     filter: Option<String>,
+    #[arg(long)]
     update_baseline: bool,
+    #[arg(long)]
     rebuild: bool,
+    #[arg(long)]
     report: Option<PathBuf>,
+    #[arg(long, default_value_t = 0.005)]
     regression_threshold: f32,
     /// Top-K cap passed to `svrn eval run --limit` on retrieval
     /// lane subprocess invocations. Default 30 to match the chunk
     /// counts the pre-monorepo baselines were captured at; CLI
     /// default (10) was producing apples-to-oranges source_recall
     /// regressions.
+    #[arg(long, default_value_t = 30)]
     retrieval_limit: usize,
     /// Lean-QA cap forwarded to `svrn eval run --sample-questions` on synth
     /// lanes: down-sample each bank to at most N questions, stratified by
     /// category. None = full bank. Only affects `--synth` runs (the slow
     /// lane); retrieval/routing keep the full set for stable HARD-gate
     /// denominators. A sampled synth run is advisory, not baseline-comparable.
+    #[arg(long)]
     sample_questions: Option<usize>,
     /// When true, retrieval-lane benches drive the FULL chat pipeline
     /// (intent classifier → router → search tools → synthesis) via
@@ -218,6 +250,7 @@ struct Opts {
     /// Baselines are stored under `<bench-id>-synth/` to keep
     /// retrieval-mode and synth-mode runs from overwriting each
     /// other.
+    #[arg(long)]
     synth: bool,
     /// When true, retrieval-lane benches drive ONLY the router
     /// classifier (no retrieval, no synthesis) via
@@ -231,38 +264,31 @@ struct Opts {
     /// flags misroutes for the operator to investigate. Baselines
     /// stored at `baselines/<bench>-routing/` to keep separate
     /// from retrieval and synth modes.
+    #[arg(long)]
     routing_only: bool,
     /// Bench-prod parity mode. Passes `--prod-pipeline` to `eval run`:
     /// each question drives the production KQ retrieval pipeline
     /// in-process (no synthesis) and the composed evidence pool is
     /// scored. Deterministic (intent pinned). Baselines stored at
     /// `baselines/<bench>-prod/` (`-prod-isolated` with --isolate).
+    // The three retrieval modes write different baseline families and drive
+    // different code paths, so --prod-pipeline refuses the other two. Declared
+    // on the flag it constrains rather than re-checked after parsing, which is
+    // what lets clap render the refusal.
+    //
+    // NOT an `ArgGroup` over all three: --synth WITH --routing-only is accepted
+    // today (routing_only wins in `baseline_bench` and `run_one`), and a group
+    // would start rejecting it. That would be a behaviour change, not a
+    // conversion.
+    #[arg(long, conflicts_with_all = ["synth", "routing_only"])]
     prod_pipeline: bool,
     /// Per-corpus isolation (synth only). Passes `--isolate` to
     /// `eval run`, scoping each bank's retrieval to its target corpus
     /// to measure that corpus's integrity in isolation rather than its
     /// performance amid cross-corpus competition. Baselines stored at
     /// `baselines/<bench>-synth-isolated/`.
+    #[arg(long)]
     isolate: bool,
-}
-
-impl Default for Opts {
-    fn default() -> Self {
-        Self {
-            bench_root: PathBuf::from("sovereign/bench"),
-            filter: None,
-            update_baseline: false,
-            rebuild: false,
-            report: None,
-            regression_threshold: 0.005, // 0.5 pt
-            retrieval_limit: 30,
-            sample_questions: None,
-            synth: false,
-            prod_pipeline: false,
-            routing_only: false,
-            isolate: false,
-        }
-    }
 }
 
 /// Tag the bench's id with the active retrieval mode (`-synth`,
@@ -1061,12 +1087,72 @@ const CORPUS_MIX_DRIFT_BAND: f32 = 0.08;
 /// chat archive, and this lane stayed green because the expected facts still
 /// arrived. A bench that gates SEP could not see a defect reproducing on SEP.
 /// The data was already in the baseline; nothing scored it.
+/// Drop the questions this run could not MEASURE, from both sides.
+///
+/// A row carrying `EvalResult::error` is a turn that failed — a 503 from a
+/// busy daemon, an embed error — and its zeroed scores are the shape of a
+/// measurement, not one. Scoring it sinks the mean and reports a regression
+/// that says nothing about the code (ARCH §18.2's four verdicts; §18.3's
+/// "an `Err` collapsed into a success-shaped value").
+///
+/// Named failing input: `synth:sep` on 2026-08-26 reported FAIL(3reg) with 9
+/// of 15 questions holding `503 host busy / local_queue_full` and NOT ONE
+/// EXECUTED QUESTION REGRESSED.
+///
+/// Both sides are filtered to the same question ids, because a 6-question
+/// mean against a 15-question mean is not a comparison either.
+fn drop_unmeasured(prev: &EvalRun, cur: &EvalRun) -> (EvalRun, EvalRun, usize) {
+    let measured: std::collections::BTreeSet<&str> = cur
+        .results
+        .iter()
+        .filter(|r| r.error.is_none())
+        .map(|r| r.question_id.as_str())
+        .collect();
+    let unmeasured = cur.results.len() - measured.len();
+    let keep = |run: &EvalRun| EvalRun {
+        results: run
+            .results
+            .iter()
+            .filter(|r| measured.contains(r.question_id.as_str()))
+            .cloned()
+            .collect(),
+        ..run.clone()
+    };
+    (keep(prev), keep(cur), unmeasured)
+}
+
 fn classify_retrieval(
     prev: &EvalRun,
     cur: &EvalRun,
     threshold: f32,
     use_answer_equiv: bool,
 ) -> BenchStatus {
+    // Unmeasured rows leave FIRST — before the mix-drift check too, because a
+    // failed turn contributes no chunks and would read as composition drift.
+    let (prev_owned, cur_owned, unmeasured) = drop_unmeasured(prev, cur);
+    let (prev, cur) = (&prev_owned, &cur_owned);
+    if unmeasured > 0 {
+        // Never silently: the count and one example reach the lane output, so
+        // "the bank shrank" cannot be mistaken for "the bank held".
+        let example = cur_owned
+            .results
+            .iter()
+            .chain(prev_owned.results.iter())
+            .find_map(|r| r.error.as_deref())
+            .unwrap_or("");
+        println!(
+            "  ⚠ {unmeasured} question(s) returned an ERROR and are EXCLUDED from \
+             this comparison, not scored 0.0{}{}",
+            if example.is_empty() { "" } else { " — e.g. " },
+            example
+        );
+    }
+    if cur.results.is_empty() {
+        // Every question errored. Nothing was verified, and "nothing verified
+        // is not a pass" (ARCH §18.1) — but it is not a regression either.
+        println!("  0 regressed (unmeasured — every question errored)");
+        return BenchStatus::Stale;
+    }
     // Composition first: a pool that changed WHAT IT IS made of is a finding
     // regardless of which way the recall means moved, and reporting it as
     // "improved" because recall ticked up is how D1 hid.
@@ -1186,91 +1272,7 @@ fn exit_code_from(outcomes: &[BenchOutcome]) -> i32 {
 }
 
 fn parse_args(args: &[String]) -> Result<Opts, String> {
-    let mut opts = Opts::default();
-    let mut i = 0;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--bench-root" => {
-                let v = args.get(i + 1).ok_or("--bench-root requires a path")?;
-                opts.bench_root = PathBuf::from(v);
-                i += 2;
-            }
-            "--filter" => {
-                let v = args.get(i + 1).ok_or("--filter requires a pattern")?;
-                opts.filter = Some(v.clone());
-                i += 2;
-            }
-            "--update-baseline" => {
-                opts.update_baseline = true;
-                i += 1;
-            }
-            "--rebuild" => {
-                opts.rebuild = true;
-                i += 1;
-            }
-            "--report" => {
-                let v = args.get(i + 1).ok_or("--report requires a path")?;
-                opts.report = Some(PathBuf::from(v));
-                i += 2;
-            }
-            "--regression-threshold" => {
-                let v = args
-                    .get(i + 1)
-                    .ok_or("--regression-threshold requires a number")?;
-                opts.regression_threshold = v
-                    .parse::<f32>()
-                    .map_err(|e| format!("--regression-threshold: {e}"))?;
-                i += 2;
-            }
-            "--retrieval-limit" => {
-                let v = args
-                    .get(i + 1)
-                    .ok_or("--retrieval-limit requires a number")?;
-                opts.retrieval_limit = v
-                    .parse::<usize>()
-                    .map_err(|e| format!("--retrieval-limit: {e}"))?;
-                i += 2;
-            }
-            "--synth" => {
-                opts.synth = true;
-                i += 1;
-            }
-            "--prod-pipeline" => {
-                opts.prod_pipeline = true;
-                i += 1;
-            }
-            "--sample-questions" => {
-                let v = args
-                    .get(i + 1)
-                    .ok_or("--sample-questions requires a number")?;
-                opts.sample_questions = Some(
-                    v.parse::<usize>()
-                        .map_err(|e| format!("--sample-questions: {e}"))?,
-                );
-                i += 2;
-            }
-            "--routing-only" => {
-                opts.routing_only = true;
-                i += 1;
-            }
-            "--isolate" => {
-                opts.isolate = true;
-                i += 1;
-            }
-            other if other.starts_with("--") => {
-                return Err(format!("unknown flag: {other}"));
-            }
-            other => {
-                return Err(format!("unexpected positional argument: {other}"));
-            }
-        }
-    }
-    // The three retrieval modes are mutually exclusive — each writes its
-    // own baseline family and drives a different code path.
-    if opts.prod_pipeline && (opts.synth || opts.routing_only) {
-        return Err("--prod-pipeline is mutually exclusive with --synth / --routing-only".into());
-    }
-    Ok(opts)
+    sovereign_cli_shared::flag_surface::parse::<Opts>(args)
 }
 
 // Silence unused-import false-positive when ATLAS_DIRNAME isn't
@@ -1310,7 +1312,58 @@ mod tests {
     #[test]
     fn parse_args_rejects_unknown_flag() {
         let err = parse_args(&["--nope".into()]).unwrap_err();
-        assert!(err.contains("unknown flag"));
+        // Asserts the RULE, not the wording. The phrasing is clap's since the
+        // flag surface became `#[derive(clap::Parser)]` — it renders
+        // "unexpected argument '--nope' found" where the hand-rolled loop said
+        // "unknown flag: --nope". A user-facing text change, declared here
+        // rather than discovered later.
+        assert!(err.contains("--nope"), "got: {err}");
+    }
+
+    #[test]
+    fn key_equals_value_is_accepted() {
+        // The form four hand-rolled CLIs silently dropped (nc-22b). clap takes
+        // it for free; the loop this replaced had to be taught it.
+        let o = parse_args(&["--filter=obsidian".into(), "--retrieval-limit=12".into()]).unwrap();
+        assert_eq!(o.filter.as_deref(), Some("obsidian"));
+        assert_eq!(o.retrieval_limit, 12);
+    }
+
+    #[test]
+    fn prod_pipeline_refuses_the_other_two_modes() {
+        // Each mode writes its own baseline family, so running two at once
+        // would score one and file it under the other's name.
+        for other in ["--synth", "--routing-only"] {
+            let err = parse_args(&["--prod-pipeline".into(), other.into()]).unwrap_err();
+            assert!(
+                err.contains("--prod-pipeline") && err.contains(other),
+                "got: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn synth_with_routing_only_is_still_accepted() {
+        // Pins what the conversion did NOT change. The hand-rolled check only
+        // ever refused --prod-pipeline; this pair parses, and `routing_only`
+        // wins downstream (`baseline_bench`, `run_one`). An `ArgGroup` over all
+        // three modes would have quietly started rejecting it.
+        let o = parse_args(&["--synth".into(), "--routing-only".into()]).unwrap();
+        assert!(o.synth && o.routing_only);
+    }
+
+    #[test]
+    fn a_parse_error_carries_one_prefix_and_names_the_typed_command() {
+        // Composed exactly as `cmd_all` composes it. `clap`'s own rendering
+        // also opens `error: `, so before `flag_surface::parse` owned the
+        // stripping this read `error: error: …`; and the `Usage:` line named
+        // `sovereign-cli-llm`, a binary no user invokes.
+        let rendered = format!("error: {}", parse_args(&["--nope".into()]).unwrap_err());
+        assert!(!rendered.starts_with("error: error:"), "got: {rendered}");
+        assert!(
+            rendered.contains("Usage: svrn bench all"),
+            "got: {rendered}"
+        );
     }
 
     fn outcome_with(status: BenchStatus) -> BenchOutcome {
@@ -1379,6 +1432,7 @@ mod tests {
             .chunks(per_q.max(1))
             .enumerate()
             .map(|(i, c)| EvalResult {
+                error: None,
                 question_id: format!("q{i}"),
                 category: "summarize".into(),
                 question: "q".into(),
@@ -1463,6 +1517,77 @@ mod tests {
         assert!(matches!(
             classify_retrieval(&a, &b, 0.02, false),
             BenchStatus::Green
+        ));
+    }
+
+    /// Build a run whose questions all scored `ratio`, with the first
+    /// `n_errored` of them marked UNMEASURED (a failed turn, zeroed scores).
+    fn run_with_errors(n: usize, ratio: f32, n_errored: usize) -> EvalRun {
+        let mut run = run_with_mix(&[("sep", n * 4)], n);
+        for (i, r) in run.results.iter_mut().enumerate() {
+            let scored = if i < n_errored { 0.0 } else { ratio };
+            r.source_score.ratio = Some(scored);
+            r.fact_score.ratio = Some(scored);
+            r.retrieved.clear();
+            if i < n_errored {
+                r.error = Some(
+                    "turn: Inference error: Remote typed stream API returned 503 \
+                     Service Unavailable: host busy"
+                        .into(),
+                );
+            }
+        }
+        run
+    }
+
+    /// A turn that ERRORED is not a turn that scored zero.
+    ///
+    /// Named failing input (ARCH §18.1): `synth:sep` on 2026-08-26 reported
+    /// FAIL(3reg) with 9 of 15 questions holding a `503 host busy` and not one
+    /// executed question regressed. Before `drop_unmeasured`, this fixture
+    /// reds; after it, the six real measurements decide the verdict.
+    #[test]
+    fn errored_questions_are_excluded_not_scored_zero() {
+        let baseline = run_with_errors(15, 1.0, 0);
+        let current = run_with_errors(15, 1.0, 9);
+        let (_, cur_kept, unmeasured) = drop_unmeasured(&baseline, &current);
+        assert_eq!(unmeasured, 9, "the errored rows must be counted");
+        assert_eq!(cur_kept.results.len(), 6, "six measurements survive");
+        assert!(
+            matches!(
+                classify_retrieval(&baseline, &current, 0.02, false),
+                BenchStatus::Green
+            ),
+            "nine 503s must not read as a quality regression"
+        );
+    }
+
+    /// …and a real drop among the questions that DID run still reds, so the
+    /// exclusion cannot be used to hide one.
+    #[test]
+    fn a_real_drop_among_measured_questions_still_reds() {
+        let baseline = run_with_errors(15, 1.0, 0);
+        let mut current = run_with_errors(15, 0.2, 9);
+        // The nine errored rows keep their zeroes; the six that ran dropped.
+        for r in current.results.iter_mut().filter(|r| r.error.is_none()) {
+            r.source_score.ratio = Some(0.2);
+            r.fact_score.ratio = Some(0.2);
+        }
+        assert!(matches!(
+            classify_retrieval(&baseline, &current, 0.02, false),
+            BenchStatus::Regressed
+        ));
+    }
+
+    /// Every question errored: nothing was verified, which is neither a pass
+    /// nor a regression (ARCH §18.1/§18.2).
+    #[test]
+    fn an_all_errored_run_is_unmeasured_not_regressed() {
+        let baseline = run_with_errors(5, 1.0, 0);
+        let current = run_with_errors(5, 1.0, 5);
+        assert!(matches!(
+            classify_retrieval(&baseline, &current, 0.02, false),
+            BenchStatus::Stale
         ));
     }
 

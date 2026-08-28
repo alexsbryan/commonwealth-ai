@@ -6,8 +6,9 @@
 //! Where `tool:chunk` splits by size (700-char passages), `tool:section` splits
 //! by *structure* — the unit the real enrichment Phase 1 runs over (a chapter),
 //! not an arbitrary 700-char window. It reuses the corpus engine's own
-//! `ChapterRegexDetector` (the exact detector the v2 pipeline feeds into phase 1),
-//! so a workflow-authored section pass matches the bespoke path.
+//! `ChapterRegexDetector` from `corpus-engine-sections` (the exact detector the
+//! v2 pipeline feeds into phase 1 — one implementation, reached downward by
+//! both callers), so a workflow-authored section pass matches the bespoke path.
 //!
 //! **Flexible by config, not by source.** The `boundary` regex is the whole knob:
 //! the default recognises `Chapter`/`Part` forms, but there is nothing
@@ -28,8 +29,8 @@
 
 use async_trait::async_trait;
 
+use corpus_engine_sections::{ChapterRegexDetector, SectionDetector};
 use sovereign_contracts::error::{Error, Result};
-use sovereign_contracts::recipe::sections::{ChapterRegexDetector, SectionDetector};
 use sovereign_contracts::traits::Tool;
 use sovereign_contracts::types::*;
 
@@ -187,18 +188,6 @@ fn emit_section(
 mod tests {
     use super::*;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     fn as_array(out: StepOutput) -> Vec<serde_json::Value> {
         match out {
             StepOutput::Json(serde_json::Value::Array(a)) => a,
@@ -216,7 +205,10 @@ mod tests {
                     Chapter 2\n\nThe Assistant Commissioner left Scotland Yard at dusk.";
         let arr = as_array(
             SectionTool
-                .execute(&serde_json::json!({ "text": book }), &ctx())
+                .execute(
+                    &serde_json::json!({ "text": book }),
+                    &ToolContext::default(),
+                )
                 .await
                 .unwrap(),
         );
@@ -237,7 +229,7 @@ mod tests {
             SectionTool
                 .execute(
                     &serde_json::json!({ "text": md, "boundary": r"(?m)^#\s+.*$" }),
-                    &ctx(),
+                    &ToolContext::default(),
                 )
                 .await
                 .unwrap(),
@@ -254,7 +246,10 @@ mod tests {
         let note = "Just a flat note with no headings at all. It has two sentences.";
         let arr = as_array(
             SectionTool
-                .execute(&serde_json::json!({ "text": note }), &ctx())
+                .execute(
+                    &serde_json::json!({ "text": note }),
+                    &ToolContext::default(),
+                )
                 .await
                 .unwrap(),
         );
@@ -273,7 +268,7 @@ mod tests {
             SectionTool
                 .execute(
                     &serde_json::json!({ "text": book, "paragraph_chunks": true }),
-                    &ctx(),
+                    &ToolContext::default(),
                 )
                 .await
                 .unwrap(),
@@ -298,12 +293,15 @@ mod tests {
     #[tokio::test]
     async fn bad_boundary_regex_is_a_loud_error() {
         assert!(SectionTool
-            .execute(&serde_json::json!({ "text": "x", "boundary": "(" }), &ctx())
+            .execute(
+                &serde_json::json!({ "text": "x", "boundary": "(" }),
+                &ToolContext::default()
+            )
             .await
             .is_err());
         // Neither `path` nor `text` is also a loud error.
         assert!(SectionTool
-            .execute(&serde_json::json!({}), &ctx())
+            .execute(&serde_json::json!({}), &ToolContext::default())
             .await
             .is_err());
     }

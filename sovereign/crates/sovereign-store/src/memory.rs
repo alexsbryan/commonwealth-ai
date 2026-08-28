@@ -89,6 +89,47 @@ impl ConversationStore for InMemoryStateStore {
         Ok(())
     }
 
+    /// INSERT-OR-IGNORE a conversation row, overridden rather than left on the
+    /// trait's `Ok(())` default.
+    ///
+    /// The default reports SUCCESS for a write it does not perform — ARCH
+    /// §18.3, an absence dressed as a result — and its doc comment says it
+    /// exists so in-memory stores keep compiling. The cost of leaving it: a
+    /// surface that seeds a conversation before the first message (the desktop
+    /// "new chat" flow, `sovereign-server`'s and the daemon's
+    /// `POST /v1/conversations`) is untestable against this store, because the
+    /// row it was told it created is not there. That is how
+    /// `sovereign-mesh/tests/turn_surface.rs` found this: it asserted the
+    /// daemon's create route seeds the row it names, and the store said yes
+    /// and meant no.
+    ///
+    /// Same reasoning as `conversation_frames` above — a double whose write is
+    /// a no-op does not exercise the path under test, it hides it.
+    async fn insert_empty_conversation(
+        &self,
+        id: &str,
+        created_at: i64,
+        surface_skill_id: Option<&str>,
+    ) -> Result<()> {
+        self.conversations
+            .write()
+            .await
+            .entry(id.to_string())
+            .or_insert_with(|| Conversation {
+                id: id.to_string(),
+                title: None,
+                messages: Vec::new(),
+                created_at,
+                updated_at: created_at,
+                version: 0,
+                deleted_at: None,
+                skill_id: surface_skill_id.map(|s| s.to_string()),
+                enabled_corpora: None,
+                searched_sources: None,
+            });
+        Ok(())
+    }
+
     async fn save_message(&self, msg: &Message) -> Result<()> {
         // Ensure conversation exists.
         let mut convos = self.conversations.write().await;

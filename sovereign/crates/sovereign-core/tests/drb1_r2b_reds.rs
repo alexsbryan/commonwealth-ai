@@ -83,9 +83,11 @@ const MAX_ROUNDS: u32 = 3;
 const ROUND_ONE_CAP: u32 = 4;
 
 /// The scripted draft: 12 unique lines → a 12-sub-question frontier
-/// (FRONTIER_MAX), so round 1 forms strictly more queries than the
-/// allowance holds (its own audit gaps + 12 frontier) — the shape that
-/// exhausts a 12-search allowance at HEAD. The audit over the empty
+/// (under FRONTIER_MAX, which is 20 since 2026-08-24 — this test needs
+/// a frontier WIDER than one round's allowance, not one at the cap), so
+/// round 1 forms strictly more queries than the allowance holds (its own
+/// audit gaps + 12 frontier) — the shape that exhausts a 12-search
+/// allowance at HEAD. The audit over the empty
 /// window leaves every claim open, so the loop keeps gap-derived
 /// queries alive in every round (the clean-deck spin).
 const DRAFT: &str = "DeepSeek released R1 in January 2025 and it repriced AI compute.\n\

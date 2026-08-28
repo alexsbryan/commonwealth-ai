@@ -16,63 +16,108 @@ description = "Local-dev workbench binary: project lifecycle + code intelligence
 #   - sovereign-cli-daemon: daemon lifecycle + setup + service install + doctor
 #   - sovereign-cli-llm: bench / chat / eval / atlas / enrich / mesh / corpus
 
+# The crate gained a `[lib]` target on 2026-08-21. It was binary-only until
+# then, which is why `nc-reach` scored it 135 types / 0% exported: nothing in
+# Rust can import a type out of a bin crate. `src/lib.rs` carries the whole
+# module tree and the crate docs explaining the split; `src/main.rs` is a shim
+# over `bin_main()`.
+[lib]
+name = "sovereign_cli_dev"
+path = "src/lib.rs"
+
 [[bin]]
 name = "sovereign-cli-dev"
 path = "src/main.rs"
+# The binary IS the workbench — it cannot be built without the modules.
+# `default = ["workbench"]` means this is satisfied by every ordinary build;
+# the guard exists so `--no-default-features` (the dispatcher's view of this
+# crate) skips the bin instead of failing to compile it.
+required-features = ["workbench"]
 
-[dependencies]
-sovereign-core = { workspace = true }
-# The pure-HTTP OICP client, in place of `sovereign-inference`. The only
-# thing this binary ever wanted from that crate was `RemoteApiProvider`
-# (one import, `code_cmd.rs`), which sovereign-inference merely re-exports
-# from here — while itself linking llama.cpp unconditionally.
+# ── Dependency shape (2026-08-21) ────────────────────────────────────────
+# Two tiers, and the line between them is load-bearing.
 #
-# This removes the DIRECT dependency only. Measured delta: 3.5 KB of a
-# 395 MB debug binary, because `sovereign-mesh` below still pulls
-# `sovereign-inference` unconditionally. Shedding llama.cpp requires
-# `sovereign-mesh` to leave this crate's default build, which in turn
-# needs `sovereign_mesh::projects` (the only thing the index path uses
-# from it) extracted to a leaf crate.
-oicp-client = { workspace = true }
-sovereign-store = { workspace = true }
+# ALWAYS-ON is what `sovereign-cli` inherits when it links this crate with
+# `default-features = false`: `corpus-engine-scip` + `sovereign-cli-shared`
+# (no features) and small third-party crates the dispatcher already carries.
+# `InProcessCodeVerb` and everything it reaches must live inside that budget.
+#
+# WORKBENCH (default) is everything else — `sovereign-mesh` drags llama.cpp,
+# `sovereign-tools` drags arrow + parquet + the enrichment catalog,
+# `corpus-engine` drags the tree-sitter grammars. Linking those into a
+# dispatcher to move a metric is the failure this split refuses.
+[dependencies]
+# ── Always-on: the thin, linkable surface ──
+# `converge_cmd`'s entire dependency surface. Read-only SQLite over the SCIP
+# graph; no grammars, no model, no daemon.
+corpus-engine-scip = { workspace = true }
+# Default features only — `dirs` and `tracing_init` are ungated. The heavy
+# features this crate needs (`scip`, `code-index`, `mcp-client`,
+# `project-model`) are requested from the `workbench` feature below so a
+# `--no-default-features` consumer does not pay for them.
+sovereign-cli-shared = { workspace = true }
+
+# ── Workbench-only workspace crates ──
+sovereign-core = { workspace = true, optional = true }
+# oicp-client is NOT a direct dependency here any more (2026-08-20). The one
+# import that wanted it — `RemoteApiProvider`, in `code_cmd.rs`'s copy of
+# `build_daemon_embed_fn` — moved with the rest of `svrn code index` into
+# `sovereign-cli-shared::code_index`, so it now arrives through the
+# `code-index` feature below.
+#
+# The measurement that put it here is still worth knowing: taking the HTTP
+# client directly rather than through `sovereign-inference` (which merely
+# re-exports it while linking llama.cpp unconditionally) saved 3.5 KB of a
+# 395 MB debug binary. llama.cpp still arrives transitively via
+# `sovereign-mesh`, which depends on `sovereign-inference` unconditionally
+# across 8 files of inference-serving guts. The workbench only sheds
+# llama.cpp when `sovereign-mesh` leaves its default build — which needs
+# `sovereign_mesh::projects` (the only thing the index path uses from it)
+# extracted to a leaf crate. Do not cite the swap as the size win.
+sovereign-store = { workspace = true, optional = true }
 # The dev workbench drives the ATOS code-intel tools (project_context,
 # provision/archive/record-atos-event, design-signals, drift), so it enables
 # the `atos` feature; product builds (daemon/desktop/server) leave it off.
-sovereign-tools = { workspace = true, features = ["treesitter", "atos", "dev-tools"] }
-sovereign-atos = { workspace = true }
-sovereign-mesh = { workspace = true, features = ["treesitter"] }
-sovereign-cli-shared = { workspace = true, features = [
-    "scip",
-    "mcp-client",
-    # `observation` + `project_toml` live here since 2026-08-07; `found`,
-    # `phase`, `audit` and `charter amend` read the model the shipped
-    # dispatcher's `project init` writes.
-    "project-model",
-] }
+sovereign-tools = { workspace = true, features = [
+    "treesitter",
+    "atos",
+    "dev-tools",
+], optional = true }
+sovereign-atos = { workspace = true, optional = true }
+sovereign-mesh = { workspace = true, features = ["treesitter"], optional = true }
 # `project_cmd::cmd_serve` registers work-atlas claim handlers when
 # the daemon comes up; pulled in directly here rather than via
 # sovereign-tools so the dep is visible in this crate's tree.
-sovereign-work-atlas = { workspace = true }
-commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
-commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
-corpus-engine = { workspace = true, features = ["treesitter"] }
-corpus-engine-notes = { workspace = true }
-corpus-engine-scip = { workspace = true }
+sovereign-work-atlas = { workspace = true, optional = true }
+commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state", optional = true }
+commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core", optional = true }
+corpus-engine = { workspace = true, features = ["treesitter"], optional = true }
+corpus-engine-notes = { workspace = true, optional = true }
 # `code_fieldglass` renders the layer-flow panel from the SAME parser/evaluator
 # the layer gate uses (one decider), and the SRP co-change communities from the
 # same git harvest the drift/arch temporal sections use.
-arch-layers = { workspace = true }
-corpus-engine-archaeology = { workspace = true }
-corpus-engine-atos = { workspace = true }
-corpus-engine-watchers = { workspace = true }
+arch-layers = { workspace = true, optional = true }
+corpus-engine-archaeology = { workspace = true, optional = true }
+corpus-engine-atos = { workspace = true, optional = true }
+corpus-engine-watchers = { workspace = true, optional = true }
+# `refactor_wire` (the factory's stage-6 encoding gate) serialises fixtures
+# of the kernel's id types through the ONE wire decider, `kernel_types::wire`
+# (§10.6). `wire-fixture` is what turns that module on outside kernel-types'
+# own tests.
+kernel-types = { workspace = true, features = ["wire-fixture"], optional = true }
+
+# ── Third-party ──
+# Everything here except axum/tower-http is already a dependency of
+# `sovereign-cli`, so an always-on entry costs the dispatcher nothing new.
+# axum + tower-http serve the workbench's MCP HTTP surface and are gated.
 async-trait = { workspace = true }
-axum = { workspace = true }
+axum = { workspace = true, optional = true }
+tower-http = { workspace = true, optional = true }
 futures = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
-tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 reqwest = { workspace = true }
@@ -93,6 +138,38 @@ rusqlite = { version = "0.35", features = ["bundled"] }
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+[features]
+# ON for every ordinary build, including the binary's own. A consumer that
+# only wants the linkable surface (`sovereign-cli`) turns it off.
+default = ["workbench"]
+workbench = [
+    "dep:sovereign-core",
+    "dep:sovereign-store",
+    "dep:sovereign-tools",
+    "dep:sovereign-atos",
+    "dep:sovereign-mesh",
+    "dep:sovereign-work-atlas",
+    "dep:commonwealth-state",
+    "dep:commonwealth-core",
+    "dep:corpus-engine",
+    "dep:corpus-engine-notes",
+    "dep:arch-layers",
+    "dep:corpus-engine-archaeology",
+    "dep:corpus-engine-atos",
+    "dep:corpus-engine-watchers",
+    "dep:kernel-types",
+    "dep:axum",
+    "dep:tower-http",
+    # `svrn code index` — the workbench's `code` router serves it, and so does
+    # the shipped dispatcher. One implementation lives there since 2026-08-20.
+    "sovereign-cli-shared/code-index",
+    "sovereign-cli-shared/scip",
+    "sovereign-cli-shared/mcp-client",
+    # `observation` + `project_toml` live here since 2026-08-07; `found`,
+    # `phase`, `audit` and `charter amend` read the model the shipped
+    # dispatcher's `project init` writes.
+    "sovereign-cli-shared/project-model",
+]
 
 [lints]
 workspace = true

@@ -37,8 +37,28 @@
 //! remote callers: the federation/health surface a peer must read
 //! *before* it could possibly hold a token. Everything that does work
 //! or returns user data is gated.
+//!
+//! ## Loopback is a property of the LISTENER, not of the layer
+//!
+//! "Admit loopback" is right for the daemon's own client listener and
+//! wrong for the one the iroh acceptor forwards GUEST traffic to: that
+//! acceptor `TcpStream::connect`s `127.0.0.1`, so every tunnelled request
+//! arrives wearing a loopback peer address it did not earn. A guest whose
+//! entire credential is a bearer would be admitted before the bearer was
+//! read.
+//!
+//! [`ClientAuthPolicy`] is therefore per-listener state, not a global. The
+//! default (`trust_loopback: true`) is the listener an operator's own tools
+//! talk to; the daemon binds the router a SECOND time with
+//! `trust_loopback: false` and routes
+//! [`commonwealth_transport::iroh::GUEST_ALPN`] there. Mesh peers keep
+//! `CLIENT_ALPN` → the trusting listener, which is what lets their federated
+//! inference (which carries no `Authorization` at all) keep working.
 
+use commonwealth_core::ct::constant_time_eq;
+use commonwealth_knowledge::GuestGrant;
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use axum::extract::{ConnectInfo, Request, State};
 use axum::http::StatusCode;
@@ -53,6 +73,53 @@ use crate::state::AppState;
 /// load/persist lives next to `node_key` in that crate.
 pub use commonwealth_transport::identity::load_or_create_client_token;
 
+/// Per-listener auth posture. See the module docs: the daemon binds the
+/// client router more than once, and the binds differ only in whether a
+/// loopback peer address is evidence of a local caller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClientAuthPolicy {
+    /// Admit a loopback peer without reading a credential.
+    ///
+    /// True for a listener a caller reaches by actually being on this
+    /// machine. FALSE for one fed by the iroh acceptor, where the loopback
+    /// address is the acceptor's own forward hop and says nothing about who
+    /// dialled.
+    pub trust_loopback: bool,
+}
+
+impl Default for ClientAuthPolicy {
+    /// The historical posture, and the right one for the daemon's own
+    /// listener: the local user, the desktop app and in-process callers
+    /// never present a token.
+    fn default() -> Self {
+        Self {
+            trust_loopback: true,
+        }
+    }
+}
+
+impl ClientAuthPolicy {
+    /// The posture for a listener whose callers all arrive through a tunnel:
+    /// nothing is local, so nothing is free.
+    pub const UNTRUSTED_LOOPBACK: Self = Self {
+        trust_loopback: false,
+    };
+}
+
+/// Middleware state for [`client_auth_layer`]: the daemon's state plus the
+/// posture of the listener this copy of the layer guards.
+#[derive(Clone)]
+pub struct ClientAuthState {
+    pub state: AppState,
+    pub policy: ClientAuthPolicy,
+}
+
+impl ClientAuthState {
+    pub fn new(state: AppState, policy: ClientAuthPolicy) -> Self {
+        Self { state, policy }
+    }
+}
+
 /// Exact request paths that remain reachable without a token, even
 /// from a non-loopback caller. Both are read-only and advertise-by-
 /// design: `/oicp/v1/capabilities` is the federation handshake a peer
@@ -60,24 +127,6 @@ pub use commonwealth_transport::identity::load_or_create_client_token;
 /// pairing surface. Matched by EXACT equality (not prefix), so no
 /// child path inherits the exemption.
 pub const AUTH_EXEMPT_PATHS: &[&str] = &["/status", "/oicp/v1/capabilities"];
-
-/// Constant-time byte comparison. Unequal lengths short-circuit
-/// (length is not the secret — the token width is fixed and public);
-/// equal lengths fold an XOR accumulator over every byte so the
-/// running time doesn't depend on the position of the first
-/// mismatch. Dependency-free; deliberately NOT `==` (which
-/// short-circuits at the first differing byte and leaks a timing
-/// oracle on the secret).
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut diff: u8 = 0;
-    for (x, y) in a.iter().zip(b.iter()) {
-        diff |= x ^ y;
-    }
-    diff == 0
-}
 
 /// Extract the bearer token from an `Authorization` header value, if
 /// present and well-formed (`Bearer <token>`, case-insensitive scheme).
@@ -110,10 +159,11 @@ fn unauthorized(reason: &'static str) -> Response {
 /// the client router so it runs before load-shedding admission and
 /// before any handler work.
 pub async fn client_auth_layer(
-    State(state): State<AppState>,
+    State(auth): State<ClientAuthState>,
     request: Request,
     next: Next,
 ) -> Response {
+    let ClientAuthState { state, policy } = auth;
     let peer = request
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
@@ -139,8 +189,10 @@ pub async fn client_auth_layer(
         }
     };
 
-    // Loopback is always local — admit without a token.
-    if peer.ip().is_loopback() {
+    // Loopback is local — admit without a token, on a listener where that
+    // inference holds. It does not hold on the guest listener: see the module
+    // docs, and `ClientAuthPolicy`.
+    if peer.ip().is_loopback() && policy.trust_loopback {
         return next.run(request).await;
     }
 
@@ -171,23 +223,79 @@ pub async fn client_auth_layer(
         Some(presented) if constant_time_eq(presented.as_bytes(), expected.as_bytes()) => {
             next.run(request).await
         }
-        Some(_) => unauthorized("bearer mismatch"),
+        // A guest grant — a bearer that is NOT membership and NOT the daemon
+        // token. Ordered strictly after the full-token arm so a guest token can
+        // never widen into full access by matching first.
+        //
+        // This arm never inspects a `Scope` variant: it asks the grant whether
+        // it permits this path and inserts the grant for the handler. That is
+        // what keeps a newly-added scope from having to touch this file at all
+        // — see `commonwealth_knowledge::guest_grant`.
+        Some(presented) => {
+            let now = commonwealth_core::clock::unix_now_millis();
+            match state.inner.guest_grants.live(presented, now) {
+                Some(grant) if grant.permits_path(request.uri().path()) => {
+                    let mut request = request;
+                    request.extensions_mut().insert(Guest(Arc::new(grant)));
+                    next.run(request).await
+                }
+                Some(grant) => {
+                    // Out of scope, not unauthenticated. Say which — a bare 403
+                    // sends the operator hunting for a credential problem that
+                    // isn't there.
+                    tracing::info!(
+                        peer = %peer,
+                        path = %request.uri().path(),
+                        scopes = %grant.summary(),
+                        "client_auth: guest grant does not cover this path"
+                    );
+                    guest_out_of_scope(&grant, request.uri().path())
+                }
+                None => unauthorized("bearer mismatch"),
+            }
+        }
         None => unauthorized("missing bearer"),
     }
+}
+
+/// The authenticated guest behind a request, attached by [`client_auth_layer`]
+/// and read by the handlers that refine a scope per-request (today:
+/// `routes_inference`). Absent on every other request — a loopback caller, a
+/// full-token caller, and an unauthenticated one all have no `Guest`.
+///
+/// `Arc` because the grant is cloned out of the store once per request and read
+/// by more than one place in a handler.
+#[derive(Clone)]
+pub struct Guest(pub Arc<GuestGrant>);
+
+/// 403 for a live grant that simply doesn't cover this route.
+///
+/// Distinct from [`unauthorized`] on purpose. That one deliberately withholds
+/// which check failed, because its audience is a prober guessing credentials.
+/// This one's audience is a guest holding a *valid* credential who asked for
+/// something outside it — nothing is leaked by naming the boundary they already
+/// hold, and refusing without saying why is how "the link is broken" tickets get
+/// filed against a link that is working exactly as issued.
+fn guest_out_of_scope(grant: &GuestGrant, path: &str) -> Response {
+    (
+        StatusCode::FORBIDDEN,
+        Json(serde_json::json!({
+            "error": {
+                "message": format!(
+                    "this guest link does not cover {path} — it grants: {}",
+                    grant.summary()
+                ),
+                "type": "guest_scope",
+                "code": "out_of_scope",
+            }
+        })),
+    )
+        .into_response()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn constant_time_eq_matches_only_identical_bytes() {
-        assert!(constant_time_eq(b"abc123", b"abc123"));
-        assert!(!constant_time_eq(b"abc123", b"abc124"));
-        assert!(!constant_time_eq(b"abc", b"abcd")); // length differs
-        assert!(!constant_time_eq(b"", b"x"));
-        assert!(constant_time_eq(b"", b""));
-    }
 
     #[test]
     fn bearer_parsing_is_scheme_insensitive_and_trims() {

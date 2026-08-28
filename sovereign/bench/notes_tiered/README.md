@@ -86,7 +86,7 @@ The existing retrieval-bench discovery
 (`sovereign-cli-llm::bench_cmd::discover`) expects a chunked
 corpus indexed at `~/.svrnmesh/indexes/<corpus_id>/`. Notes
 live at `~/.svrnmesh/notes.db` (a single SQLite file) — the
-scoring shape is `NoteRow` containment by id, not chunk-section
+scoring shape is `Note` containment by id, not chunk-section
 containment. Rather than shoehorn notes into the chunk-bench
 runner, we ship a focused example binary that owns its
 fixtures + scorer.

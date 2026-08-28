@@ -1,0 +1,346 @@
+# The runtime graph — TARGET state.
+#
+# Companion to quality/ARCH_LAYERS.toml, which declares the CRATE dependency
+# DAG. That one is healthy: zero ordering violations across 55 members. This
+# one declares the RUNTIME DAG — processes, stores, and the capabilities that
+# order writes between them — and it is where the cycles are.
+#
+# ── READ THIS BEFORE TRUSTING ANY ROW ────────────────────────────────────────
+# THIS FILE DESCRIBES THE TARGET, NOT THE SYSTEM. Every row carries `today`
+# stating what is actually true right now. Rows where `today` differs from the
+# declaration are WORK, not documentation.
+#
+# That distinction is the entire reason this file exists in a checkable format
+# rather than as prose. TARGET_ARCHITECTURE.md §5 declared five deployment
+# profiles; measured 2026-08-24, those five names occur ZERO times anywhere in
+# the tree outside the document declaring them, and nothing noticed for
+# months. A prose architecture in this repo has a measured half-life. The gate
+# that would enforce this file is deliberately NOT built yet — building it
+# before the graph is agreed would be the additive reflex this program exists
+# to treat (ARCH §19). Until it exists, `today` is the honest column and the
+# declaration is a claim.
+#
+# ── THE MODEL ────────────────────────────────────────────────────────────────
+# Four projections over the same node set. Three are already acyclic and are
+# recorded here so a change that breaks one is visible:
+#
+#   spawn   process → process   acyclic today (desktop → daemon-child → compute-child)
+#   call    process → process   acyclic today (shells → daemon → peers)
+#   read    process → store     acyclicity not meaningful; readers do not order
+#   write   process → store     NOT ACYCLIC TODAY — this is the whole problem
+#
+# A store with N concurrent writers and no ordering relation between them has
+# a cycle wherever two processes both read and write it, which is every store
+# below. corpus-engine says so itself at src/sharding.rs:29-37: "The canonical
+# directory is a shared address. […] Which of them lands before the promote is
+# a race."
+#
+# ── WHAT MAKES THE WRITE PROJECTION A DAG ────────────────────────────────────
+# A lease. It converts "N concurrent writers" into "a sequence of writers",
+# and a sequence is trivially acyclic. That is the only structural change this
+# file asks for; everything else here is recording what is already true.
+#
+# The precedent already exists in-tree and works: corpus-engine-scip takes an
+# flock on <db_dir>/.rebuild.lock before rebuilding scip_graph.db
+# (scip_graph.rs:2190-2245), writes to a staging path, and renames over. One
+# store, one lock, no races reported. Every other store below is convention.
+
+schema_version = 1
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PROCESSES
+# ═════════════════════════════════════════════════════════════════════════════
+# `resident` = binds a listener and outlives its invocation.
+# `launch` = the Launch variant that reaches it (see the entry-point design).
+# A process is NOT a binary. sovereign-desktop is one executable and four
+# processes; counting binaries is what made a prior survey conclude there were
+# "three or four runtimes" when two of them own no crates exclusively.
+
+[[process]]
+name     = "daemon"
+launch   = "Daemon"
+resident = true
+binds    = ["client-port", "peer-port"]
+binary   = "sovereign-cli-daemon"
+also     = "sovereign-desktop --daemon-child"
+# The same code, reached two ways. `--daemon-child` IS
+# sovereign_cli_daemon::daemon_child_main(), and since the 2026-07-18
+# supervisor flip it is the DEFAULT desktop topology. Anything that treats the
+# desktop's daemon as a separate implementation is wrong.
+today    = "matches"
+
+[[process]]
+name     = "worker"
+launch   = "Worker"
+resident = true
+binds    = ["peer-port-tls"]
+binary   = "sovereign-cli-daemon --worker-mode"
+# A different router on a different socket behind a seed-derived certificate;
+# the container entrypoint. Modelled as its own process rather than a flag on
+# `daemon` because it serves a disjoint surface — collapsing them would make
+# "what does this process expose" unanswerable from the graph.
+today    = "matches"
+
+[[process]]
+name     = "compute-child"
+launch   = "ComputeChild"
+resident = true
+binds    = ["loopback-ephemeral"]
+# Owns the weights for one slot. A deliberate process boundary for GPU and
+# llama.cpp crash isolation, and it is correct as it stands — a ggml SEGV kills
+# the child, not the window. Touches NO store, which is what makes it safe to
+# kill at any moment.
+today    = "matches"
+
+[[process]]
+name     = "desktop"
+launch   = "Desktop"
+resident = true
+binds    = []
+# A shell. Owns no domain state and supervises a daemon child.
+today    = '''PARTLY CONVERGED — with SOVEREIGN_USE_SUPERVISOR=0 the desktop still hosts EmbeddedDaemon IN-PROCESS rather than supervising a child, so row 6 (a shell that is conditionally a daemon) stands. The ROUTER divergence does not: it was re-measured 2026-08-24 as desktop 5 of 7 and CLI daemon 7 of 7 — a delta of two (knowledge_view_http, solve_http), not the "4 vs 6" recorded here, because both original counts missed corpus_watch_http, which each host installs indirectly via WatchedSubsystem::install. The three-setters claim (set_provider_factory / set_mesh_store / set_convergence_recorder, CLI-daemon-only) was correct. Both are now type-checked: daemon-convergence Phase 2 replaced the 17 late-bound slots with a DaemonServices sum whose Desktop and Headless variants declare exactly what each carries, and the daemon builds its own mesh/admin/reading routers from a Weak<Self> so no host can differ on them. See TOPOLOGY.md §5 rows 5 and 6.'''
+
+[[process]]
+name     = "cli"
+launch   = "Verb"
+resident = false
+binds    = []
+# One-shot verbs. Reaches the daemon over HTTP for inference and may hold a
+# store lease for its own duration — see the `cli` grants below. This is not a
+# concession: `scripts/code-intel-corpus-run.sh` is an ~11h launchd enrichment
+# pass that runs deliberately while the daemon stays up, and it is a legitimate
+# topology. The target makes its exclusion real, not forbidden.
+today    = "matches, except the lease does not exist"
+
+[[process]]
+name     = "server"
+launch   = "Verb"
+resident = true
+binds    = ["mobile-port"]
+binary   = "sovereign-server"
+# The mobile-access host. Delegates ALL inference to the daemon and loads no
+# models of its own.
+today    = '''UNRESOLVED — appears in no release script; either mobile access is dead on a shipped build or there is a packaging step nobody has found. Resolve before granting it anything.'''
+
+[[process]]
+name     = "peer"
+external = true
+# Another daemon, reached over the peer port or iroh. Modelled so cross-mesh
+# edges have a terminus; nothing here constrains it.
+today    = "matches"
+
+# ── DELETED 2026-08-24 ───────────────────────────────────────────────────────
+# EXECUTED. The crate, its three contrib packaging artifacts (systemd unit,
+# launchd plist, curl|sh installer) and its workspace membership are gone; the
+# five shipped strings that told users to run `commonwealth daemon start` for
+# something on :9741 now name `svrn daemon start`, which is what actually
+# serves that port. Kept below as the rationale of record.
+#
+# commonwealth-daemon was NOT a process in this graph. It was vestigial: a
+# current_thread runtime, NodeId::generate() on every boot, a Mesh constructed
+# empty with a comment conceding it, no mDNS and no gossip, and it ships in no
+# release lane — while binding the SAME client and peer ports as the real
+# daemon, so the two cannot coexist on one machine. It is a second
+# implementation of the system's most load-bearing process (ARCH §10.6).
+#
+# Two claims in that rationale were WRONG and are corrected here, because the
+# next reader will otherwise inherit them: (a) "ships in no release lane" —
+# it shipped a systemd unit, a launchd plist and a `curl | sh` installer that
+# fetched a release binary; nothing BUILT that binary, which is a different
+# defect. (b) commonwealth/README.md claimed it served the headless cloud-GPU
+# peer; CLOUD_PEER_DEPLOY.md never invoked it, and that case is actually
+# `sovereign-cli daemon run --worker-mode` (Launch::Worker), containerised.
+
+# ═════════════════════════════════════════════════════════════════════════════
+# STORES
+# ═════════════════════════════════════════════════════════════════════════════
+# Everything durable, under one root. `writers_today` is the measured count;
+# `capability` names the lease that must order them.
+
+[[store]]
+name          = "corpus-index"
+path          = "<root>/indexes/<corpus>/"
+holds         = "chunks.lance, atlas/, asset CAS, _corpus_meta.json, caches"
+capability    = "corpus-writer"
+writers_today = ["daemon", "desktop", "cli", "peer-ingest", "compaction"]
+today         = '''NO EXCLUSION. The only guard is SOVEREIGN_ENRICH_SKIP_INDEX, an environment variable set by hand in a shell script — and it is UNREGISTERED (quality/baselines/env_unregistered.txt:52). A correctness-critical invariant enforced by a human remembering a flag the repo's own registry does not know exists.'''
+
+[[store]]
+name          = "scip-graph"
+path          = "<root>/indexes/<corpus>/scip_graph.db"
+capability    = "scip-writer"
+writers_today = ["daemon-reindexer", "cli"]
+today         = '''MATCHES — flock on .rebuild.lock, staging write, rename over (corpus-engine-scip/src/scip_graph.rs:2190-2245). The one store that already does this, and the template for the rest.'''
+
+[[store]]
+name          = "enrichment"
+path          = "<root>/enrichment/<corpus>/"
+capability    = "enrichment-writer"
+writers_today = ["cli", "daemon", "desktop"]
+today         = '''NO EXCLUSION. sovereign-enrichment-catalog/src/lib.rs:4-6 names all three writers in its own module doc. A heartbeat exists (enrichment/state.rs:373) but detects abandonment rather than preventing concurrency — two writers both heartbeat happily.'''
+
+[[store]]
+name          = "agent-state"
+path          = "<root>/*.db"
+holds         = "notes, features, plan, lint_results, test_results, docs, sovereign"
+capability    = "agent-state-writer"
+writers_today = ["daemon", "cli", "desktop", "server"]
+today         = '''TOLERATED, not ordered. SQLite WAL plus busy_timeout(5s) makes concurrent writes safe at the row level, which is genuinely sufficient here — this store wants concurrency, not exclusion. Recorded so the distinction from corpus-index is deliberate.'''
+
+[[store]]
+name          = "config"
+path          = "<root>/{config.toml,projects.json,mesh.json,join_key.secret}"
+capability    = "config-writer"
+writers_today = ["cli-setup", "daemon"]
+today         = '''SINGLE WRITER, ENFORCED SINCE 2026-08-24. mesh.json is written by daemon.shutdown() and read by try_resume() on next boot, so a second daemon would silently fight it. The second IMPLEMENTATION is gone (commonwealth-daemon, deleted 2026-08-24) and the run lock is now keyed on the DATA ROOT rather than on sovereign_root(), so two instances under different $HOMEs pointed at one root are refused instead of colliding — flock identity is the inode, so a symlinked spelling cannot claim twice (sovereign_contracts::run_lock). Still convention rather than a lease on two counts: the lock is taken by each writer rather than handed to it, and `cli-setup` writes config.toml without taking it at all.'''
+
+# ═════════════════════════════════════════════════════════════════════════════
+# CAPABILITIES
+# ═════════════════════════════════════════════════════════════════════════════
+# A capability is a value obtained from a lease, not a boolean checked before
+# acting. Holding it IS the proof, so it cannot be forgotten the way a flag
+# can, and it travels with the writer it licenses. `exclusive = true` is what
+# makes the write projection acyclic: at most one holder at a time, so writes
+# form a sequence.
+
+[[capability]]
+name      = "corpus-writer"
+exclusive = true
+grants    = ["daemon", "cli"]
+# The desktop is deliberately NOT granted this. It already retreated from
+# writing: local_corpus_commands.rs:529 and corpus_watch_http.rs:1283 both
+# record the same defect — ingesting in one process while enriching in another
+# DEADLOCKED on the cross-process index handoff — and both were fixed by moving
+# the whole job into one process, not by locking. The target keeps that.
+
+[[capability]]
+name      = "scip-writer"
+exclusive = true
+grants    = ["daemon", "cli"]
+
+[[capability]]
+name      = "enrichment-writer"
+exclusive = true
+grants    = ["daemon", "cli", "desktop"]
+
+[[capability]]
+name      = "agent-state-writer"
+exclusive = false
+grants    = ["daemon", "cli", "desktop", "server"]
+# Deliberately non-exclusive. SQLite already orders these correctly and a lease
+# here would buy nothing while costing every CLI verb a round-trip.
+
+[[capability]]
+name      = "config-writer"
+exclusive = true
+grants    = ["cli", "daemon"]
+
+# ═════════════════════════════════════════════════════════════════════════════
+# EDGES
+# ═════════════════════════════════════════════════════════════════════════════
+
+[[edge]]
+kind = "spawn"
+from = "desktop"
+to   = "daemon"
+note = '''Supervised child. The parent retains the JoinHandle and awaits it with a bounded budget on exit — the only properly-owned task in the app.'''
+
+[[edge]]
+kind = "spawn"
+from = "daemon"
+to   = "compute-child"
+
+[[edge]]
+kind = "spawn"
+from = "desktop"
+to   = "compute-child"
+note = "current_exe() is the desktop binary, so it must handle the flag too."
+
+[[edge]]
+kind = "call"
+from = "desktop"
+to   = "daemon"
+via  = "client-port"
+
+[[edge]]
+kind = "call"
+from = "cli"
+to   = "daemon"
+via  = "client-port"
+note = '''Inference only. The CLI borrows COMPUTE over HTTP while owning STATE directly on disk — the inverse of the obvious reading, and the reason the storage axis has to exist separately from the process axis.'''
+
+[[edge]]
+kind = "call"
+from = "server"
+to   = "daemon"
+via  = "client-port"
+
+[[edge]]
+kind = "call"
+from = "daemon"
+to   = "peer"
+via  = "peer-port"
+
+[[edge]]
+kind = "call"
+from = "daemon"
+to   = "worker"
+via  = "peer-port-tls"
+
+# ═════════════════════════════════════════════════════════════════════════════
+# INVARIANTS
+# ═════════════════════════════════════════════════════════════════════════════
+# What a gate would check, stated now so the graph is falsifiable before the
+# gate exists. Each names the failing input, per ARCH §18.1.
+
+[[invariant]]
+name    = "spawn-is-acyclic"
+holds   = true
+failing = "A process that spawns an ancestor. None today."
+
+[[invariant]]
+name    = "call-is-acyclic"
+holds   = true
+failing = '''daemon calling back into a shell. None today; the mobile path goes mobile → server → daemon and stops.'''
+
+[[invariant]]
+name    = "one-implementation-per-process"
+holds   = true
+failing = '''HELD 2026-08-24 by deleting commonwealth-daemon, which bound the same client and peer ports from different code. The desktop and CLI daemons both bind :9741 but are the SAME implementation (sovereign-mesh::EmbeddedDaemon), which is what this invariant asks. Re-falsified by: any second type that binds the client or peer port, or a `Runtime`/`EmbeddedDaemon` constructed outside the one assembler.'''
+
+[[invariant]]
+name    = "every-exclusive-store-has-a-lease"
+holds   = false
+failing = "corpus-index has five writers and no lease; enrichment has three."
+
+[[invariant]]
+name    = "write-is-acyclic"
+holds   = false
+failing = '''Two processes writing chunks.lance concurrently. Reachable today by running `svrn enrich` while the daemon is up without SOVEREIGN_ENRICH_SKIP_INDEX set.'''
+
+[[invariant]]
+name    = "a-process-writes-only-what-it-is-granted"
+holds   = false
+failing = "The desktop writing corpus-index in the unsupervised topology."
+
+[[invariant]]
+name    = "cancellation-reaches-the-writer"
+holds   = false
+failing = '''A desktop cancel cannot stop a CLI ingest of the same corpus. CancellationRegistry claims to be 'the single source of truth across the daemon' and is process-local, so the claim is false across exactly the boundary that matters.'''
+
+# ── OPEN QUESTIONS, recorded rather than guessed ─────────────────────────────
+#
+# 1. Does a lease alone fix the documented deadlock? Both fixes in-tree moved
+#    the job into one process rather than locking, which suggests the failure
+#    was a cross-process index HANDOFF, not merely concurrent writes. A lease
+#    makes ownership explicit; whether it makes the handoff safe is untested.
+#
+# 2. Is LanceDB's manifest commit CAS-safe across processes? No in-tree retry
+#    path and no doc claiming one were found. Every mitigation in the repo is
+#    avoidance, which suggests it is not relied upon. Read the lancedb commit
+#    path before designing on top of it.
+#
+# 3. Can the standalone daemon and the desktop's embedded daemon run against
+#    one root simultaneously? Both construct full engines against
+#    <root>/indexes and no mutual-exclusion check was found. Likely a real
+#    hazard; needs a runtime test, not a grep.

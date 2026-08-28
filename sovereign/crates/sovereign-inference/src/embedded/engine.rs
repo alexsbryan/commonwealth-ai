@@ -30,7 +30,7 @@ use sovereign_core::model_family::{
     EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
 };
 use sovereign_core::setup_config::{fim_defaults, EditSection};
-use sovereign_core::traits::{InferenceProvider, ResidentSlot};
+use sovereign_core::traits::{frames_to_text_stream, InferenceProvider, ResidentSlot};
 use sovereign_core::types::*;
 use sovereign_core::Result;
 
@@ -177,6 +177,60 @@ impl Default for InferenceConfig {
             fast_family: ModelFamily::Unknown,
             primary_family: ModelFamily::Unknown,
             embed_family: ModelFamily::Unknown,
+        }
+    }
+}
+
+/// The window each slot is built with — one value, named per slot.
+///
+/// # Why this is a struct and not a scalar
+///
+/// It WAS a scalar. `context_size: u32` was threaded from config into every
+/// `ModelSlot::load` in this file, so the fast slot, the primary, the primary
+/// sibling pool and the fast/primary alias all got the same number. KV cache
+/// is linear in `n_ctx`, so a 4B fast model carried a 27B primary's window and
+/// paid a 27B primary's cache for it.
+///
+/// The fix is not a second scalar parameter — that reintroduces the same
+/// question one slot later ("and what about embed?"). It is a value whose
+/// fields are the slots, so adding a slot means adding a field and the
+/// compiler asks every construction site what that slot's window should be.
+/// Same move as `LaneSources` and `RuntimeParts`: totality over a surface a
+/// caller could otherwise forget half of.
+///
+/// `FastShort` is deliberately absent. It already owns `FAST_SHORT_N_CTX` next
+/// to `FAST_SHORT_N_SEQ_MAX`, because its window is not a free choice — the
+/// two divide to give the per-sequence budget `pick_slot` gates on, so they
+/// have to move together and belong in one place.
+#[derive(Debug, Clone, Copy)]
+pub struct SlotWindows {
+    /// The primary (deep-reasoning) slot, and the default for embed / code /
+    /// extras.
+    pub primary: u32,
+    /// The fast slot. Note this is the OVERFLOW path — `pick_slot` sends any
+    /// prompt too large for FastShort here — so it must cover the largest
+    /// prompt that lands on it, not the typical one.
+    pub fast: u32,
+}
+
+impl SlotWindows {
+    /// Every slot gets the same window. This is what the scalar did, kept as a
+    /// NAMED constructor so the call sites that genuinely mean it (a compute
+    /// child, where one slot is the only slot) say so, and the ones that were
+    /// merely inheriting a global stop being indistinguishable from them.
+    pub fn uniform(n_ctx: u32) -> Self {
+        Self {
+            primary: n_ctx,
+            fast: n_ctx,
+        }
+    }
+
+    /// Resolve from config: the primary's window, and the fast slot's own if
+    /// `[models].fast_context_size` is set.
+    pub fn from_models(models: &sovereign_core::setup_config::ModelsSection) -> Self {
+        Self {
+            primary: models.effective_context_size(),
+            fast: models.effective_fast_context_size(),
         }
     }
 }
@@ -939,7 +993,10 @@ impl EmbeddedLlamaCpp {
             fast_model_path,
             primary_model_path,
             None,
-            context_size,
+            // A dual load has no separate fast budget to spend: both slots are
+            // this one model. `uniform` says that, where the bare scalar used
+            // to make it indistinguishable from a slot inheriting a global.
+            SlotWindows::uniform(context_size),
             gpu_layers,
         )
     }
@@ -951,7 +1008,7 @@ impl EmbeddedLlamaCpp {
         fast_model_path: &Path,
         primary_model_path: Option<&Path>,
         embed_model_path: Option<&Path>,
-        context_size: u32,
+        windows: SlotWindows,
         gpu_layers: Option<u32>,
     ) -> Result<Self> {
         Self::load_full_with_families(
@@ -959,7 +1016,7 @@ impl EmbeddedLlamaCpp {
             primary_model_path,
             embed_model_path,
             None,
-            context_size,
+            windows,
             gpu_layers,
             ModelFamily::Unknown,
             ModelFamily::Unknown,
@@ -984,7 +1041,7 @@ impl EmbeddedLlamaCpp {
         primary_model_path: Option<&Path>,
         embed_model_path: Option<&Path>,
         code_model_path: Option<&Path>,
-        context_size: u32,
+        windows: SlotWindows,
         gpu_layers: Option<u32>,
         fast_family: ModelFamily,
         primary_family: ModelFamily,
@@ -996,7 +1053,7 @@ impl EmbeddedLlamaCpp {
             primary_model_path,
             embed_model_path,
             code_model_path,
-            context_size,
+            windows,
             gpu_layers,
             fast_family,
             primary_family,
@@ -1036,7 +1093,10 @@ impl EmbeddedLlamaCpp {
             None,
             None,
             None,
-            context_size,
+            // A compute child's one slot IS the only slot — there is no second
+            // window to size, and `uniform` is the honest name for that rather
+            // than an omission.
+            SlotWindows::uniform(context_size),
             gpu_layers,
             family,
             ModelFamily::Unknown,
@@ -1052,7 +1112,7 @@ impl EmbeddedLlamaCpp {
         primary_model_path: Option<&Path>,
         embed_model_path: Option<&Path>,
         code_model_path: Option<&Path>,
-        context_size: u32,
+        windows: SlotWindows,
         gpu_layers: Option<u32>,
         fast_family: ModelFamily,
         primary_family: ModelFamily,
@@ -1060,6 +1120,12 @@ impl EmbeddedLlamaCpp {
         code_family: ModelFamily,
         only_slot_distributable: bool,
     ) -> Result<Self> {
+        // Unpacked once, at the top, so every `ModelSlot::load` below names
+        // WHICH window it is spending rather than reading one ambient scalar.
+        let SlotWindows {
+            primary: context_size,
+            fast: fast_context_size,
+        } = windows;
         let hardware = HardwareProfile::detect();
         // GPU offload layer count. Precedence: explicit config > env override
         // > hardware default (999 when a GPU is detected, else 0).
@@ -1107,15 +1173,7 @@ impl EmbeddedLlamaCpp {
         // instrument. Honour the var so it means what upstream says it means.
         // An explicit `SOVEREIGN_LLAMA_LOGS=0` still wins: asking for silence
         // is unambiguous, and should not be overridden by a debug var.
-        let llama_logs = std::env::var("SOVEREIGN_LLAMA_LOGS").ok();
-        match llama_logs.as_deref() {
-            Some("0") => backend.void_logs(),
-            Some("1") => crate::llama::install_log_tracing(),
-            _ if std::env::var_os("GGML_RPC_DEBUG").is_some() => {
-                crate::llama::install_log_tracing();
-            }
-            _ => crate::llama::install_log_tracing_errors_only(),
-        }
+        crate::llama_logs::LlamaLogs::from_env().install(&mut backend);
         let backend = Arc::new(backend);
 
         // Distributable mesh worker: if SOVEREIGN_RPC_SERVE is set, expose this
@@ -1148,9 +1206,12 @@ impl EmbeddedLlamaCpp {
 
         tracing::info!(slot = "fast", family = ?fast_family, "loading slot");
         let fast = Arc::new(ModelSlot::load(
+            "fast",
             &backend,
             fast_model_path,
-            context_size,
+            // The fast slot's OWN window. Identical to the primary's unless
+            // `[models].fast_context_size` says otherwise — see `SlotWindows`.
+            fast_context_size,
             n_gpu_layers,
             // The fast slot stays local — never distributed across the mesh —
             // EXCEPT in a compute child loaded via `load_single_distributed`,
@@ -1255,6 +1316,7 @@ impl EmbeddedLlamaCpp {
                 );
             }
             match ModelSlot::from_existing_model(
+                "fast_short",
                 &backend,
                 Arc::clone(&fast.model),
                 fast.model_id.clone(),
@@ -1367,8 +1429,14 @@ impl EmbeddedLlamaCpp {
             // The sibling pool is a LOCAL weight-sharing optimization (one
             // resident copy, N contexts) — incoherent with distribution, which
             // splits the weights across remote workers. Keep it local.
-            let primary_0 =
-                ModelSlot::load(&backend, primary_path, context_size, n_gpu_layers, false)?;
+            let primary_0 = ModelSlot::load(
+                "primary",
+                &backend,
+                primary_path,
+                context_size,
+                n_gpu_layers,
+                false,
+            )?;
             let shared_model = Arc::clone(&primary_0.model);
             let shared_id = primary_0.model_id.clone();
             let shared_size = primary_0.size_bytes;
@@ -1376,6 +1444,7 @@ impl EmbeddedLlamaCpp {
             slots.push(Arc::new(primary_0));
             for i in 1..n {
                 let sibling = ModelSlot::from_existing_model(
+                    "primary_sibling",
                     &backend,
                     Arc::clone(&shared_model),
                     shared_id.clone(),
@@ -1433,6 +1502,7 @@ impl EmbeddedLlamaCpp {
                     "fast and primary share a GGUF; aliasing primary slot to fast's loaded weights (one VRAM copy, separate KV)"
                 );
                 match ModelSlot::from_existing_model(
+                    "primary_alias",
                     &backend,
                     Arc::clone(&fast.model),
                     fast.model_id.clone(),
@@ -1545,6 +1615,7 @@ impl EmbeddedLlamaCpp {
                 "loading extras slot"
             );
             match ModelSlot::load(
+                "primary",
                 &self.primary_backend,
                 &path,
                 context_size,
@@ -1867,6 +1938,7 @@ impl EmbeddedLlamaCpp {
         }
 
         let slot = ModelSlot::load(
+            "extra",
             &self.primary_backend,
             &path,
             context_size,
@@ -2594,7 +2666,14 @@ impl EmbeddedLlamaCpp {
             // enumeration includes the just-registered RPC worker(s).
             *primary = None;
             let started = Instant::now();
-            let s = ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers, distributable)?;
+            let s = ModelSlot::load(
+                "primary",
+                &backend,
+                &target_path,
+                ctx_size,
+                gpu_layers,
+                distributable,
+            )?;
             *primary = Some(s);
             *loaded = Some(target_path.clone());
             tracing::info!(
@@ -3091,6 +3170,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         }
                         *primary = None;
                         let s = ModelSlot::load(
+                            "primary",
                             &backend,
                             &target_path,
                             ctx_size,
@@ -3253,300 +3333,38 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         &self,
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-        // FastShort doesn't support streaming yet — the coalescer
-        // returns whole responses, not token-by-token chunks. Coerce
-        // streaming requests that would route to FastShort back onto
-        // the Fast slot. Phase 1b/3/5/6 enrichment never streams (they
-        // call `complete`), so this fallback only fires for callers
-        // misconfigured to ask for streaming with a small max_output.
-        let raw_target = self.select_slot_for_request(request);
-        let target = if matches!(raw_target, SlotTarget::FastShort) {
-            tracing::debug!(
-                "FastShort selected for streaming request; falling back to Fast \
-                 (FastShort doesn't expose a streaming API)"
-            );
-            SlotTarget::Fast
-        } else {
-            raw_target
-        };
-        let slot_name: String = match &target {
-            SlotTarget::Fast => "fast".into(),
-            SlotTarget::FastShort => "fast_short".into(),
-            SlotTarget::Primary => "primary".into(),
-            SlotTarget::Code => "code".into(),
-            SlotTarget::Extra(name) => format!("extras:{name}"),
-        };
-
+        // ONE routing dance, not two. Until noun-convergence rung nc-17 this
+        // method was a ~285-line mirror of `complete_stream_with_finish`
+        // below — same FastShort coercion, same extras/sibling-pool/lazy/fast
+        // slot selection, same hot-swap and inflight-permit sequence — and
+        // that copy's own doc comment said so. The pair had DRIFTED on the
+        // branch that matters: the typed twin grew the Raw/FIM
+        // `generate_stream_sync_fim` fork (INLINE_COMPLETION.md §4/D8) on its
+        // extras and fast branches; this copy never did, so an inline-
+        // completion request that arrived here took the templated full-clear
+        // path and re-prefilled the whole window on every keystroke instead
+        // of the typing delta. Delegating closes that by construction: there
+        // is now one body, so a fork can no longer land in half of it.
         tracing::debug!(
-            slot = %slot_name,
-            speed = ?request.preferred_speed,
-            prompt_chars = request.prompt.len(),
-            system_chars = request.system_message.as_ref().map(|s| s.len()).unwrap_or(0),
-            max_tokens = ?request.max_tokens,
-            "inference.complete_stream: call"
+            "inference.complete_stream: delegating to the typed path, adapting frames to text"
         );
-
-        let request = request.clone();
-        let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(32);
-
-        // Extras slot: eagerly loaded, mirrors the fast-slot streaming
-        // path with a different ModelSlot reference.
-        if let SlotTarget::Extra(name) = &target {
-            let Some((slot, quirks)) = self.extras_lookup(name) else {
-                return Err(Error::Inference(format!(
-                    "extras slot {name:?} was unloaded between selection \
-                     and dispatch — retry the request"
-                )));
-            };
-            let _permit = ModelSlot::acquire_inflight(&slot, "complete_stream/extras").await?;
-            let slot_label_owned = slot_name.clone();
-            tokio::task::spawn_blocking(move || {
-                // Hold the permit for the streaming task's lifetime.
-                let _permit = _permit;
-                let start = Instant::now();
-                slot.last_used
-                    .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
-                let mut ctx_lock = slot.context.blocking_lock();
-                if let Err(e) = ModelSlot::generate_stream_dispatch(
-                    &slot.model,
-                    &slot.model_id,
-                    &mut ctx_lock,
-                    &request,
-                    StreamSink::Legacy(&tx),
-                    &quirks,
-                    None,
-                ) {
-                    tracing::warn!(slot = %slot_label_owned, error = %e, "stream error");
-                    let _ = tx.blocking_send(Err(e));
-                } else {
-                    tracing::info!(
-                        slot = %slot_label_owned,
-                        latency_ms = start.elapsed().as_millis() as u64,
-                        "inference.complete_stream: done"
-                    );
-                }
-            });
-            return Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)));
-        }
-
-        // Primary sibling pool — the streaming twin of `complete()`'s
-        // pool branch (order mesh-scale-t1-streampool; red §8.3.5: the
-        // lever moved non-streaming 1.00→1.27 while streaming stayed at
-        // 1.02 because this branch did not exist). Same eligibility
-        // decider as the non-streaming path; the sibling's own context
-        // + inflight permit is what lets a second stream's first token
-        // arrive while the first stream is still decoding.
-        match pool_dispatch(self.primary_pool.is_some(), &target) {
-            PoolDispatch::NoPool => {}
-            PoolDispatch::NotPrimaryClass => {
-                tracing::debug!(
-                    target = ?target,
-                    "sibling pool present but request is not primary-class — \
-                     its own slot serves it"
-                );
-            }
-            PoolDispatch::RefuseCodeIncompatible => {
-                tracing::error!(slot = "code", pool = true, "{}", POOL_CODE_REFUSAL);
-                return Err(Error::Inference(POOL_CODE_REFUSAL.to_string()));
-            }
-            PoolDispatch::Sibling => {
-                let pool = self
-                    .primary_pool
-                    .as_ref()
-                    .expect("PoolDispatch::Sibling implies a pool");
-                let (sibling_idx, slot) = pool.pick();
-                let pool_size = pool.len();
-                tracing::debug!(
-                    slot = "primary",
-                    sibling_idx,
-                    pool_size,
-                    streaming = true,
-                    "dispatching to primary sibling"
-                );
-                let _permit =
-                    ModelSlot::acquire_inflight(&slot, "complete_stream/primary_pool").await?;
-                let quirks = self.primary_quirks.clone();
-                tokio::task::spawn_blocking(move || {
-                    // Hold the permit for the streaming task's lifetime.
-                    let _permit = _permit;
-                    let start = Instant::now();
-                    slot.last_used
-                        .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
-                    let mut ctx_lock = slot.context.blocking_lock();
-                    if let Err(e) = ModelSlot::generate_stream_dispatch(
-                        &slot.model,
-                        &slot.model_id,
-                        &mut ctx_lock,
-                        &request,
-                        StreamSink::Legacy(&tx),
-                        &quirks,
-                        None,
-                    ) {
-                        tracing::warn!(slot = "primary", sibling_idx, error = %e, "stream error");
-                        let _ = tx.blocking_send(Err(e));
-                    } else {
-                        tracing::info!(
-                            slot = "primary",
-                            sibling_idx,
-                            pool_size,
-                            latency_ms = start.elapsed().as_millis() as u64,
-                            "inference.complete_stream: done"
-                        );
-                    }
-                });
-                return Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)));
-            }
-        }
-
-        // Primary + Code share the lazy slot (hot-swap). Fast uses the
-        // always-resident slot. Resolve path + quirks + slot-label up
-        // front so the blocking task has one code path.
-        let lazy_target: Option<(PathBuf, ModelQuirks, &'static str)> = match target {
-            SlotTarget::Fast => None,
-            // FastShort is handled before this match (or coerced to
-            // Fast in the streaming path), so this arm never fires.
-            SlotTarget::FastShort => unreachable!("FastShort handled above"),
-            SlotTarget::Primary => Some((
-                self.primary_path.clone().unwrap(),
-                self.primary_quirks.clone(),
-                "primary",
-            )),
-            SlotTarget::Code => Some((
-                self.code_path.clone().unwrap(),
-                self.code_quirks.clone(),
-                "code",
-            )),
-            SlotTarget::Extra(_) => unreachable!("handled above"),
-        };
-
-        if let Some((target_path, quirks, slot_label)) = lazy_target {
-            // Distribute only when this lazy load targets the configured PRIMARY
-            // model — the shared lazy slot also hot-swaps in the code model, which
-            // must stay local (distributing a non-primary slot is the §3 crash).
-            let distributable = self.primary_path.as_deref() == Some(target_path.as_path());
-            let _permit = self.acquire_lazy("complete_stream/lazy").await?;
-            let primary_lock = Arc::clone(&self.primary);
-            let backend = Arc::clone(&self.primary_backend);
-            let ctx_size = self.primary_ctx_size;
-            let gpu_layers = self.gpu_layers;
-            let last_use = Arc::clone(&self.last_primary_use);
-            let loaded_path = Arc::clone(&self.primary_loaded_path);
-
-            tokio::task::spawn_blocking(move || {
-                // Hold the permit for the streaming task's lifetime.
-                let _permit = _permit;
-                let start = Instant::now();
-
-                // Hot-swap check: if the lazy slot is holding a different
-                // model than we need, unload + reload. For streaming we
-                // report the swap on the error channel only if the load
-                // actually fails — the swap itself is internal plumbing.
-                let mut primary = primary_lock.blocking_lock();
-                let mut loaded = loaded_path.blocking_lock();
-                let needs_swap = loaded.as_deref() != Some(target_path.as_path());
-                if needs_swap {
-                    if primary.is_some() {
-                        tracing::info!(
-                            slot = slot_label,
-                            from = ?loaded.as_ref().map(|p| p.display().to_string()),
-                            to = %target_path.display(),
-                            "hot-swapping lazy slot (streaming)"
-                        );
-                    } else {
-                        tracing::info!(
-                            slot = slot_label,
-                            path = %target_path.display(),
-                            "loading lazy slot (first use, streaming)"
-                        );
-                    }
-                    *primary = None;
-                    *loaded = None;
-                    match ModelSlot::load(
-                        &backend,
-                        &target_path,
-                        ctx_size,
-                        gpu_layers,
-                        distributable,
-                    ) {
-                        Ok(slot) => {
-                            *primary = Some(slot);
-                            *loaded = Some(target_path.clone());
-                        }
-                        Err(e) => {
-                            tracing::error!(slot = slot_label, error = %e, "slot load failed");
-                            let _ = tx.blocking_send(Err(e));
-                            return;
-                        }
-                    }
-                }
-                drop(loaded);
-
-                let slot = primary.as_ref().unwrap();
-                let mut ctx_lock = slot.context.blocking_lock();
-                *last_use.blocking_lock() = Some(Instant::now());
-                if let Err(e) = ModelSlot::generate_stream_dispatch(
-                    &slot.model,
-                    &slot.model_id,
-                    &mut ctx_lock,
-                    &request,
-                    StreamSink::Legacy(&tx),
-                    &quirks,
-                    None,
-                ) {
-                    tracing::warn!(slot = slot_label, error = %e, "stream error");
-                    let _ = tx.blocking_send(Err(e));
-                } else {
-                    tracing::info!(
-                        slot = slot_label,
-                        latency_ms = start.elapsed().as_millis() as u64,
-                        "inference.complete_stream: done"
-                    );
-                }
-            });
-        } else {
-            let slot = Arc::clone(&self.fast);
-            let _permit = ModelSlot::acquire_inflight(&slot, "complete_stream/fast").await?;
-            let quirks = self.fast_quirks.clone();
-            tokio::task::spawn_blocking(move || {
-                // Hold the permit for the streaming task's lifetime.
-                let _permit = _permit;
-                let start = Instant::now();
-                let mut ctx_lock = slot.context.blocking_lock();
-                if let Err(e) = ModelSlot::generate_stream_dispatch(
-                    &slot.model,
-                    &slot.model_id,
-                    &mut ctx_lock,
-                    &request,
-                    StreamSink::Legacy(&tx),
-                    &quirks,
-                    None,
-                ) {
-                    tracing::warn!(slot = "fast", error = %e, "stream error");
-                    let _ = tx.blocking_send(Err(e));
-                } else {
-                    tracing::info!(
-                        slot = "fast",
-                        latency_ms = start.elapsed().as_millis() as u64,
-                        "inference.complete_stream: done"
-                    );
-                }
-            });
-        }
-
-        Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)))
+        let frames = self.complete_stream_with_finish(request).await?;
+        Ok(frames_to_text_stream(frames))
     }
 
-    /// Typed-frame override: yield [`StreamFrame`] with an accurate
-    /// terminal [`FinishReason`]. Mirrors [`complete_stream`]'s
-    /// slot-routing dance so per-slot mutex / hot-swap semantics stay
-    /// identical — only the channel item type and the inner generate
-    /// helper change.
+    /// The one embedded streaming implementation: slot selection,
+    /// hot-swap, inflight permits, and typed [`StreamFrame`]s carrying an
+    /// accurate terminal [`FinishReason`].
+    ///
+    /// [`complete_stream`][Self::complete_stream] is a thin adapter over
+    /// this. It used to be a second copy of everything below; nc-17 deleted
+    /// that copy after finding the two had diverged on the Raw/FIM fork.
     async fn complete_stream_with_finish(
         &self,
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>> {
-        // FastShort doesn't support streaming — same coercion as
-        // `complete_stream` (whose routing this method mirrors).
+        // FastShort doesn't support streaming — the coalescer returns whole
+        // responses, not token-by-token chunks, so coerce back onto Fast.
         // Without it, a Fast-speed request with small max_tokens and a
         // short prompt panics on the FastShort `unreachable!` arm
         // below and the stream never terminates (caught 2026-06-09 by
@@ -3618,7 +3436,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         &slot.model_id,
                         &mut ctx_lock,
                         &request,
-                        StreamSink::Typed(&tx),
+                        &tx,
                         &quirks,
                         None,
                     )
@@ -3640,9 +3458,13 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             return Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)));
         }
 
-        // Primary sibling pool — same decider and same dispatch as
-        // `complete_stream` above (whose routing this method mirrors);
-        // only the sink type and the error frame differ.
+        // Primary sibling pool — the streaming twin of `complete()`'s pool
+        // branch (order mesh-scale-t1-streampool; red §8.3.5: the lever moved
+        // non-streaming 1.00→1.27 while streaming stayed at 1.02 because this
+        // branch did not exist). Same eligibility decider as the
+        // non-streaming path; the sibling's own context + inflight permit is
+        // what lets a second stream's first token arrive while the first
+        // stream is still decoding.
         match pool_dispatch(self.primary_pool.is_some(), &target) {
             PoolDispatch::NoPool => {}
             PoolDispatch::NotPrimaryClass => {
@@ -3690,7 +3512,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         &slot.model_id,
                         &mut ctx_lock,
                         &request,
-                        StreamSink::Typed(&tx),
+                        &tx,
                         &quirks,
                         None,
                     ) {
@@ -3759,18 +3581,19 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                             slot = slot_label,
                             from = ?loaded.as_ref().map(|p| p.display().to_string()),
                             to = %target_path.display(),
-                            "hot-swapping lazy slot (streaming, typed)"
+                            "hot-swapping lazy slot (streaming)"
                         );
                     } else {
                         tracing::info!(
                             slot = slot_label,
                             path = %target_path.display(),
-                            "loading lazy slot (first use, streaming, typed)"
+                            "loading lazy slot (first use, streaming)"
                         );
                     }
                     *primary = None;
                     *loaded = None;
                     match ModelSlot::load(
+                        "primary",
                         &backend,
                         &target_path,
                         ctx_size,
@@ -3801,7 +3624,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     &slot.model_id,
                     &mut ctx_lock,
                     &request,
-                    StreamSink::Typed(&tx),
+                    &tx,
                     &quirks,
                     None,
                 ) {
@@ -3846,7 +3669,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         &slot.model_id,
                         &mut ctx_lock,
                         &request,
-                        StreamSink::Typed(&tx),
+                        &tx,
                         &quirks,
                         None,
                     )
@@ -4204,7 +4027,14 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             // path runs on hot-swap.
             *primary = None;
             let started = Instant::now();
-            let s = ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers, distributable)?;
+            let s = ModelSlot::load(
+                "primary",
+                &backend,
+                &target_path,
+                ctx_size,
+                gpu_layers,
+                distributable,
+            )?;
             *primary = Some(s);
             *loaded = Some(target_path.clone());
             tracing::info!(

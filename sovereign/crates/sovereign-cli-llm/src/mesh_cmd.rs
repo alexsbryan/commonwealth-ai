@@ -7,9 +7,62 @@
 
 use std::path::PathBuf;
 
-use sovereign_cli_shared::dirs::mesh_data_dir;
+use sovereign_cli_shared::dirs::sovereign_root;
 use sovereign_mesh::deep_link::{build_https_join_link, parse_join_argument};
 use sovereign_mesh::EmbeddedDaemon;
+
+/// The `SetupConfig` a `svrn mesh` one-shot binds with.
+///
+/// A missing `config.toml` is the ordinary first-run state and
+/// [`SetupConfig::unconfigured`] is its honest value: default ports, loopback
+/// client bind. A config that EXISTS but will not parse is not that state, and
+/// the substitution is named on stderr rather than applied silently — before
+/// this the daemon reached the same defaults through internal `None` fallbacks
+/// and said nothing, so a typo in `[daemon] client_port` looked like the port
+/// simply not taking effect (ARCH §18.3).
+/// The `DaemonServices` a `svrn mesh create` / `svrn mesh join` one-shot
+/// assembles — obtained from THE assembler, not named here.
+///
+/// `sovereign_mesh::assemble` is the one exhaustive match over `Launch` that
+/// constructs anything (`quality/TOPOLOGY.md` §10, Falsifier 3). These two
+/// sites used to name `DaemonServices::MeshAdmin` directly, which is a fourth
+/// place answering "what does this invocation assemble". They now supply
+/// parts and let the match answer — so a mesh verb that somehow ran under a
+/// different launch mode is refused rather than quietly given a daemon.
+///
+/// `Launch::parse` is called here rather than threaded because this binary is
+/// `exec`d by the dispatcher and its argv IS the verb invocation; parse is the
+/// one sanctioned reader of that (Falsifier 1 forbids OTHER code deciding what
+/// the process is, not calling the decider).
+fn mesh_admin_services() -> sovereign_mesh::DaemonServices {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let launch = sovereign_contracts::launch::Launch::parse(
+        &args,
+        // A mesh verb reaching this code path IS a verb invocation; `Bare` is
+        // the honest default for "argv named nothing this parser knows".
+        sovereign_contracts::launch::Launch::Verb {
+            name: "mesh".to_string(),
+            args: args.clone(),
+        },
+    );
+    match sovereign_mesh::assemble(&launch, sovereign_mesh::LaunchParts::Admin) {
+        Ok(services) => services,
+        Err(refusal) => {
+            eprintln!("error: {refusal}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn one_shot_setup_config() -> sovereign_core::setup_config::SetupConfig {
+    match sovereign_core::setup_config::SetupConfig::load() {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            eprintln!("(no usable ~/.svrnmesh/config.toml: {e} — binding the default :9741/:9742)");
+            sovereign_core::setup_config::SetupConfig::unconfigured()
+        }
+    }
+}
 
 /// Run a mesh subcommand. Returns the exit code.
 pub async fn run_mesh(args: &[String]) -> i32 {
@@ -25,11 +78,16 @@ pub async fn run_mesh(args: &[String]) -> i32 {
     match args[0].as_str() {
         "create" => cmd_create(&args[1..]).await,
         "join" => cmd_join(&args[1..]).await,
+        "list" => cmd_list(&args[1..]).await,
+        "switch" => cmd_switch(&args[1..]).await,
+        "forget" => cmd_forget(&args[1..]).await,
         "rotate" => cmd_rotate(&args[1..]).await,
+        "grant" => crate::mesh_guest::cmd_grant(&args[1..]).await,
+        "use" => crate::mesh_guest::cmd_use(&args[1..]).await,
         "status" => cmd_status(&args[1..]).await,
         "transport" => cmd_transport(&args[1..]).await,
         "balance" => cmd_balance().await,
-        "leave" => cmd_leave().await,
+        "leave" => cmd_leave(&args[1..]).await,
         "logs" => cmd_logs().await,
         "fetch-model" => cmd_fetch_model(&args[1..]).await,
         "warm-cache" => cmd_warm_cache(&args[1..]).await,
@@ -88,7 +146,10 @@ async fn cmd_warm_cache(args: &[String]) -> i32 {
     let cache_dir = match cache_dir.or_else(sovereign_inference::embedded::default_cache_dir) {
         Some(d) => d,
         None => {
-            eprintln!("could not resolve a cache dir (pass --cache-dir or set HOME)");
+            eprintln!(
+                "no cache dir: SOVEREIGN_RPC_CACHE_DIR is off/0/empty (caching \
+                 disabled), or HOME is unset. Pass --cache-dir to warm one anyway."
+            );
             return 1;
         }
     };
@@ -393,6 +454,14 @@ const HELP_MESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::
                 "Generate a new shareable join key (invalidates the previous)",
             ),
             (
+                "grant --model <id>",
+                "Lend named models to a NON-member for a bounded window; prints a guest link",
+            ),
+            (
+                "use <link>",
+                "Accept a guest link — `svrn chat` then routes to the issuing node",
+            ),
+            (
                 "status",
                 "Show mesh members, hosted knowledge, loaded models",
             ),
@@ -401,6 +470,9 @@ const HELP_MESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::
                 "Show each peer's live iroh path (direct / relayed / mixed)",
             ),
             ("balance", "Show your contribution to the mesh"),
+            ("list", "Show every mesh this node has joined; the active one is marked"),
+            ("switch <mesh>", "Park the active mesh and bring another one up"),
+            ("forget <mesh>", "Drop a parked mesh from this node"),
             ("leave", "Leave the current mesh"),
             ("logs", "Show mesh daemon logs"),
             (
@@ -688,16 +760,27 @@ async fn cmd_plan(args: &[String]) -> i32 {
     // `SOVEREIGN_RPC_HEADROOM` env wins (the daemon reads it directly), else the
     // `[shared_model] headroom` config (bootstrap bridges config→env), else 1.2.
     // `--headroom` overrides this for what-if planning.
-    let mut headroom: f64 = std::env::var("SOVEREIGN_RPC_HEADROOM")
-        .ok()
-        .and_then(|v| v.trim().parse::<f64>().ok())
+    // ONE parser, ONE default (§10.6). The env read, the `>= 1.0` filter and
+    // the literal `1.2` used to exist here AND in
+    // `sovereign_inference::embedded::rpc_headroom_factor` — the function that
+    // actually gates the load. They agreed, which is the weakest way for a
+    // promise to hold: this command's whole contract is that "a previewed plan
+    // uses the headroom the load executes with", and it was kept by two copies
+    // of a number matching.
+    //
+    // The config fallback stays here, and is why the shared helper returns an
+    // `Option`: this CLI can run BEFORE bootstrap has bridged
+    // `[shared_model] headroom` into the environment, so it has a second
+    // source the daemon does not. The filter applies to that source too — a
+    // headroom below 1.0 gates on less memory than the model needs.
+    let mut headroom: f64 = sovereign_inference::embedded::rpc_headroom_from_env()
         .or_else(|| {
             sovereign_core::setup_config::SetupConfig::load()
                 .ok()
                 .and_then(|c| c.shared_model.headroom)
+                .filter(|&h| h >= 1.0)
         })
-        .filter(|&h| h >= 1.0)
-        .unwrap_or(1.2);
+        .unwrap_or(sovereign_inference::embedded::RPC_HEADROOM_DEFAULT);
     let mut headroom_from_flag = false;
     let mut json = false;
     let mut from_mesh = false;
@@ -915,7 +998,7 @@ async fn cmd_plan(args: &[String]) -> i32 {
     // weights-only fit, the same fallback the live gate takes. Measured
     // ~278 ms warm on a 155 GB set (tests/device_memory_probe.rs).
     let _backend = sovereign_inference::llama::cpp::llama_backend::LlamaBackend::init();
-    let overheads = sovereign_inference::embedded::projected_overheads(&model, n_ctx);
+    let overheads = sovereign_inference::embedded::projected_overheads(&model, n_ctx, false);
 
     // What peers have measured. A key pins the exact silicon *and* the exact
     // split, so an operator asking about a configuration they have never run will
@@ -2549,7 +2632,7 @@ async fn cmd_create(args: &[String]) -> i32 {
     // is gone — we can't re-show it. Direct the user to `mesh rotate`
     // instead of blindly attempting another create_mesh (which errors
     // with AlreadyRunning or leaves them confused).
-    if sovereign_mesh::persist::load(&mesh_data_dir())
+    if sovereign_mesh::persist::load(&sovereign_root())
         .map(|opt| opt.is_some())
         .unwrap_or(false)
     {
@@ -2567,7 +2650,11 @@ async fn cmd_create(args: &[String]) -> i32 {
     });
     let node_name = hostname().unwrap_or_else(|| "sovereign-node".to_string());
 
-    let daemon = EmbeddedDaemon::new(mesh_data_dir());
+    let daemon = EmbeddedDaemon::new(
+        sovereign_root(),
+        one_shot_setup_config(),
+        mesh_admin_services(),
+    );
     // Explicit create = serve remote peers → expose the client API
     // (bind non-loopback + require a bearer token).
     daemon.expose_client_api();
@@ -2618,7 +2705,13 @@ fn print_mesh_share(
             encrypted,
             expires_at,
         ),
-        None => build_https_join_link(join_key, None, Some(mesh_name), None, false, None),
+        // `parse_join_argument` FILTERS to `Join`, so a guest link cannot
+        // reach here — it is spelled out rather than folded into `_` so that a
+        // third `DeepLink` variant breaks this build instead of silently
+        // rendering an invite from something that is not one.
+        Some(sovereign_mesh::deep_link::DeepLink::Guest { .. }) | None => {
+            build_https_join_link(join_key, None, Some(mesh_name), None, false, None)
+        }
     };
     println!();
     println!("Mesh created.");
@@ -2675,7 +2768,7 @@ async fn cmd_join(args: &[String]) -> i32 {
     // still completes on the founder's side, but only the CLI
     // process's mesh state gets updated — never the long-running
     // daemon's. CLI exits, in-memory join state evaporates, and the
-    // daemon keeps its solo-mesh `join_key_hash`. Every subsequent
+    // daemon keeps its solo-mesh `invite_key_hash`. Every subsequent
     // gossip from peers mismatches and gets rejected.
     //
     // Routing through `POST /v1/mesh/join` makes the running daemon
@@ -2688,7 +2781,11 @@ async fn cmd_join(args: &[String]) -> i32 {
     }
 
     eprintln!("(no daemon detected on :9741 — running the join in-process)");
-    let daemon = EmbeddedDaemon::new(mesh_data_dir());
+    let daemon = EmbeddedDaemon::new(
+        sovereign_root(),
+        one_shot_setup_config(),
+        mesh_admin_services(),
+    );
     daemon.expose_client_api();
     let Some(link) = parse_join_argument(arg) else {
         // Pre-validated above, so this is unreachable. Bail
@@ -2720,7 +2817,7 @@ async fn cmd_join(args: &[String]) -> i32 {
 /// than `/` because the daemon's root route returns 405 for GET and
 /// reqwest's `.send()` succeeds against 405 just as well as 200 — the
 /// goal is "is anything listening", not "is the response 2xx".
-async fn daemon_listening_on(port: u16) -> bool {
+pub(crate) async fn daemon_listening_on(port: u16) -> bool {
     let url = format!("http://127.0.0.1:{port}/v1/models");
     let Ok(client) = reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(500))
@@ -2801,28 +2898,81 @@ async fn cmd_rotate(args: &[String]) -> i32 {
         sovereign_cli_shared::help::print(&HELP_MESH_ROTATE);
         return 0;
     }
-    match sovereign_mesh::persist::rotate_join_key(&mesh_data_dir()) {
-        Ok(Some(rotated)) => {
-            eprintln!();
-            eprintln!("Note: existing members stay connected. Only future joins need the new key.");
-            eprintln!("If the daemon is currently running, restart it to load the new key.");
-            // Rotation is an offline persist op — the API token is
-            // unchanged, so it isn't reprinted here (shown on create /
-            // `mesh status`).
-            // Offline persist op — no running daemon to read a dial
-            // string from; the daemon's status poll (`current_invite`)
-            // serves the dial-bearing link once it's back up.
-            print_mesh_share(&rotated.mesh_name, &rotated.join_key, None, None);
-            0
-        }
-        Ok(None) => {
-            eprintln!("No mesh to rotate — run `svrn setup` or `svrn mesh create` first.");
-            1
-        }
+    let force = args.iter().any(|a| a == "--force");
+
+    // Rotation MUST go through the running daemon. It used to be an offline
+    // disk write, which is why it had to tell the user to restart: the daemon
+    // held the old hash in memory and re-persisted it over the new one on its
+    // next gossip round, silently reverting the rotation. There is no correct
+    // offline rotation — the live mesh is the thing that has to change.
+    if !daemon_listening_on(daemon_client_port()).await {
+        eprintln!(
+            "No daemon detected on :{} — rotation needs one.",
+            daemon_client_port()
+        );
+        eprintln!("Start it with `svrn daemon start`, then re-run.");
+        return 1;
+    }
+    rotate_via_running_daemon(force).await
+}
+
+/// The daemon's client port from `SetupConfig`, not a hardcoded 9741 — a
+/// sandbox pointed at its own daemon must not rotate the operator's mesh.
+fn daemon_client_port() -> u16 {
+    sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.daemon.client_port)
+        .unwrap_or(9741)
+}
+
+async fn rotate_via_running_daemon(force: bool) -> i32 {
+    let port = daemon_client_port();
+    let url = format!("http://127.0.0.1:{port}/v1/mesh/rotate?force={force}");
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+    {
+        Ok(c) => c,
         Err(e) => {
-            eprintln!("Failed to rotate join key: {e}");
-            1
+            eprintln!("Failed to build HTTP client: {e}");
+            return 1;
         }
+    };
+    let resp = match client.post(&url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Failed to reach running daemon at {url}: {e}");
+            return 1;
+        }
+    };
+    let status = resp.status();
+    let payload: serde_json::Value = match resp.json().await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Daemon returned non-JSON response (status={status}): {e}");
+            return 1;
+        }
+    };
+    if status.is_success() {
+        let mesh_name = payload
+            .get("mesh_name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("(unknown)");
+        let join_key = payload
+            .get("join_key")
+            .and_then(|v| v.as_str())
+            .unwrap_or("(unknown)");
+        eprintln!();
+        eprintln!("Existing members stay connected — rotation changes only who may JOIN.");
+        print_mesh_share(mesh_name, join_key, None, None);
+        0
+    } else {
+        let err = payload
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("(no error message)");
+        eprintln!();
+        eprintln!("Failed to rotate (daemon returned {status}): {err}");
+        1
     }
 }
 
@@ -3111,9 +3261,203 @@ async fn cmd_balance() -> i32 {
     0
 }
 
-async fn cmd_leave() -> i32 {
-    println!("(mesh leave requires a running daemon)");
+/// `svrn mesh leave`
+///
+/// Was a success-shaped stub: it printed "(mesh leave requires a running
+/// daemon)" and exited **0** having done nothing, while a daemon WAS running
+/// and `POST /v1/mesh/leave` worked one hop away. That collapses ARCH §18.2's
+/// *never-ran* into *passed* — the caller's script sees success and moves on.
+/// No daemon is now a non-zero exit that says so.
+async fn cmd_leave(args: &[String]) -> i32 {
+    if sovereign_cli_shared::help::wants_help(args) {
+        eprintln!("Usage: svrn mesh leave");
+        eprintln!();
+        eprintln!("Give up membership in the active mesh and return to a solo mesh.");
+        eprintln!("Parked meshes are untouched — use `svrn mesh forget` to drop those.");
+        return 0;
+    }
+    let port = daemon_client_port();
+    if !daemon_listening_on(port).await {
+        eprintln!("No daemon detected on :{port} — nothing to leave.");
+        eprintln!("Start it with `svrn daemon start` if the mesh should be running.");
+        return 1;
+    }
+    let url = format!("http://127.0.0.1:{port}/v1/mesh/leave");
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Failed to build HTTP client: {e}");
+            return 1;
+        }
+    };
+    match client.post(&url).send().await {
+        Ok(r) if r.status().is_success() => {
+            println!();
+            println!("Left the mesh. This node is now its own solo mesh.");
+            println!("The daemon restarts to rebind; give it ~10s.");
+            0
+        }
+        Ok(r) => {
+            let status = r.status();
+            let body = r.text().await.unwrap_or_default();
+            eprintln!("Failed to leave (daemon returned {status}): {body}");
+            1
+        }
+        Err(e) => {
+            eprintln!("Failed to reach running daemon at {url}: {e}");
+            1
+        }
+    }
+}
+
+/// `svrn mesh list` — every mesh this node has joined, active one marked.
+///
+/// Reads disk directly rather than the daemon: the answer is the same either
+/// way, and an operator debugging a daemon that will not start still needs to
+/// see what it is a member of.
+async fn cmd_list(args: &[String]) -> i32 {
+    if sovereign_cli_shared::help::wants_help(args) {
+        eprintln!("Usage: svrn mesh list [--json]");
+        eprintln!();
+        eprintln!("Show every mesh this node has joined. The active one is marked '*'.");
+        return 0;
+    }
+    let root = sovereign_root();
+    let active = sovereign_mesh::persist::active_mesh_id(&root);
+    let known = sovereign_mesh::persist::list_known(&root);
+
+    if args.iter().any(|a| a == "--json") {
+        let rows: Vec<serde_json::Value> = known
+            .iter()
+            .map(|m| {
+                serde_json::json!({
+                    "mesh_id": m.mesh_id.to_hex(),
+                    "name": m.name,
+                    "members_total": m.members.len(),
+                    "is_active": active.as_ref() == Some(&m.mesh_id),
+                })
+            })
+            .collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&rows).unwrap_or_default()
+        );
+        return 0;
+    }
+
+    if known.is_empty() {
+        println!(
+            "No meshes joined yet. `svrn mesh create` or paste an invite with `svrn mesh join`."
+        );
+        return 0;
+    }
+    println!();
+    for m in &known {
+        let mark = if active.as_ref() == Some(&m.mesh_id) {
+            "*"
+        } else {
+            " "
+        };
+        let state = if active.as_ref() == Some(&m.mesh_id) {
+            "active"
+        } else {
+            "parked"
+        };
+        println!(
+            " {mark} {:<28} {:>3} member(s)  {state}",
+            m.name,
+            m.members.len()
+        );
+    }
+    println!();
     0
+}
+
+/// `svrn mesh switch <mesh>` — park the active mesh, bring another up.
+async fn cmd_switch(args: &[String]) -> i32 {
+    if sovereign_cli_shared::help::wants_help(args) || args.is_empty() {
+        eprintln!("Usage: svrn mesh switch <mesh-name-or-id>");
+        eprintln!();
+        eprintln!("Park the active mesh and bring another joined mesh up in its place.");
+        eprintln!("Peers on the parked mesh see this node go offline — NOT depart, so");
+        eprintln!("switching back later is a resume and needs no invite.");
+        eprintln!();
+        eprintln!("`svrn mesh list` shows what is joined.");
+        return if args.is_empty() { 1 } else { 0 };
+    }
+    let target = args[0].clone();
+    let port = daemon_client_port();
+    if !daemon_listening_on(port).await {
+        eprintln!("No daemon detected on :{port} — switching needs one.");
+        return 1;
+    }
+    let url = format!("http://127.0.0.1:{port}/v1/mesh/switch");
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Failed to build HTTP client: {e}");
+            return 1;
+        }
+    };
+    let resp = match client
+        .post(&url)
+        .json(&serde_json::json!({ "mesh": target }))
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Failed to reach running daemon at {url}: {e}");
+            return 1;
+        }
+    };
+    let status = resp.status();
+    let body = resp.text().await.unwrap_or_default();
+    if status.is_success() {
+        println!();
+        println!("Switching to \"{target}\" — the daemon rebinds, give it ~10s.");
+        println!("`svrn mesh status` will show the new roster.");
+        0
+    } else {
+        eprintln!("Failed to switch (daemon returned {status}): {body}");
+        1
+    }
+}
+
+/// `svrn mesh forget <mesh>` — drop a PARKED mesh from this node.
+async fn cmd_forget(args: &[String]) -> i32 {
+    if sovereign_cli_shared::help::wants_help(args) || args.is_empty() {
+        eprintln!("Usage: svrn mesh forget <mesh-name-or-id>");
+        eprintln!();
+        eprintln!("Delete a parked mesh's roster and invite key from this node.");
+        eprintln!("Refuses on the ACTIVE mesh — switch or leave first.");
+        eprintln!();
+        eprintln!("Rejoining afterwards needs a fresh invite, since the roster is gone.");
+        return if args.is_empty() { 1 } else { 0 };
+    }
+    let root = sovereign_root();
+    let known = sovereign_mesh::persist::list_known(&root);
+    let Some(found) = sovereign_mesh::persist::resolve_known(&known, &args[0]) else {
+        eprintln!("Not a member of any mesh matching '{}'.", args[0]);
+        eprintln!("`svrn mesh list` shows what is joined.");
+        return 1;
+    };
+    match sovereign_mesh::persist::forget(&root, &found.mesh_id) {
+        Ok(()) => {
+            println!("Forgot \"{}\".", found.name);
+            0
+        }
+        Err(e) => {
+            eprintln!("Failed to forget \"{}\": {e}", found.name);
+            1
+        }
+    }
 }
 
 async fn cmd_logs() -> i32 {
@@ -3324,7 +3668,7 @@ async fn cmd_fetch_model(args: &[String]) -> i32 {
 /// the gossip-port endpoints (`:9742`), which is exactly what we
 /// want — the model-files routes live on the internal port.
 async fn collect_peer_internal_urls() -> std::io::Result<Vec<String>> {
-    let mesh_path = sovereign_cli_shared::dirs::mesh_data_dir().join("mesh.json");
+    let mesh_path = sovereign_root().join("mesh.json");
     let bytes = std::fs::read(&mesh_path)?;
     // Parse loosely — we only need the addresses array of each
     // non-self member. Using serde_json::Value avoids dragging in

@@ -24,13 +24,12 @@
 //! WS upgrade) is untouched — auth stays bearer-token / loopback-guard,
 //! which are transport-independent by construction.
 
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::Path;
 
 use commonwealth_transport::iroh::{
     build_relayed_endpoint, format_dial_string, Endpoint, IrohAcceptor, IrohTransport, RelayConfig,
-    ALPN, CLIENT_ALPN, RPC_ALPN,
+    ALPN, CLIENT_ALPN, GUEST_ALPN, RPC_ALPN,
 };
 use commonwealth_transport::TrafficClass;
 
@@ -39,6 +38,29 @@ use commonwealth_transport::TrafficClass;
 /// class routes iroh-first (with automatic per-dial IP fallback via
 /// `RoutedTransport`'s empty required set), and the config is an
 /// opt-OUT — `<class> = "ip"` pins that class to the IP path. A legacy
+/// Answers "is this dialer a live member of the mesh we are serving?"
+///
+/// A closure rather than a snapshot because membership changes between dials
+/// and a cached set would admit a departed node (or refuse a fresh one) for as
+/// long as it was stale. The daemon supplies one reading `AppState`'s live
+/// `Mesh`; `MemberRecord.removed_at` tombstones are excluded, so leaving the
+/// mesh takes reachability with it.
+pub type MemberCheck = std::sync::Arc<
+    dyn Fn(
+            commonwealth_core::ids::NodePubkey,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>>
+        + Send
+        + Sync,
+>;
+
+/// A check that admits nobody. For hosts with no mesh to consult — every
+/// `CLIENT_ALPN` dial is treated as a stranger and meets the bearer gate.
+/// Fail-CLOSED by construction: forgetting to wire the real check cannot
+/// widen access, only narrow it.
+pub fn admits_no_one() -> MemberCheck {
+    std::sync::Arc::new(|_| Box::pin(std::future::ready(false)))
+}
+
 /// `"iroh"` entry is a no-op (it names the default) and is logged as
 /// such; unknown values get the default (routed) with a warning. The
 /// string→`TrafficClass` interpretation lives here (Track W3) because
@@ -148,12 +170,7 @@ async fn build_mesh_endpoint(
 /// `routes_status::rpc_worker_port`). `None` = not an RPC worker; the
 /// acceptor then neither advertises nor routes [`RPC_ALPN`].
 fn rpc_serve_port() -> Option<u16> {
-    let bind = std::env::var("SOVEREIGN_RPC_SERVE").ok()?;
-    let bind = bind.trim();
-    if bind.is_empty() {
-        return None;
-    }
-    bind.rsplit(':').next()?.parse().ok()
+    sovereign_contracts::launch::RpcServe::from_env().port()
 }
 
 /// Resolve whether this daemon's iroh endpoint turns on. Explicit
@@ -227,6 +244,99 @@ pub struct MeshIrohAccess {
     rpc_route_active: bool,
 }
 
+/// The four local listeners an accepted iroh connection can be forwarded to.
+///
+/// A value rather than four loose arguments because the decision below reads
+/// them together, and because a test wiring a real acceptor must be able to
+/// build the SAME routing the daemon does — not a second copy of it (§10.6).
+#[derive(Debug, Clone, Copy)]
+pub struct AcceptorRoutes {
+    /// The mesh-internal router (`:9742`), loopback-bound.
+    pub internal: SocketAddr,
+    /// The daemon's own client router (`:9741`), which admits loopback.
+    pub client: SocketAddr,
+    /// The second bind of the client router, which does NOT admit loopback.
+    /// `None` when it failed to bind — a stranger is then closed, not
+    /// promoted.
+    pub guest: Option<SocketAddr>,
+    /// A local ggml rpc-server, when this node serves one.
+    pub rpc: Option<SocketAddr>,
+}
+
+impl AcceptorRoutes {
+    /// Where an accepted connection is forwarded — the ONE place that turns
+    /// `(protocol, who dialed)` into a local listener.
+    ///
+    /// **Holding this node's dial string is not a credential.** It is public:
+    /// it rides in every invite's `dial=` and is gossiped as
+    /// `MemberRecord.node_pubkey`. What the QUIC handshake proves is the
+    /// dialer's key, and that is what this consults.
+    ///
+    /// - `CLIENT_ALPN` — a MEMBER reaches the daemon's own client listener,
+    ///   which admits it without a bearer. That is not a shortcut: peer
+    ///   federated inference carries no `Authorization` header at all, and
+    ///   membership-by-key is the credential it presents instead. A stranger
+    ///   is NOT refused — it is routed to the bearer-checking guest listener,
+    ///   the same posture it would get calling a LAN-bound daemon. So
+    ///   `/status` and `/oicp/v1/capabilities` stay reachable (a node must be
+    ///   able to read those before it could hold anything), and everything
+    ///   else demands a daemon token or a live guest grant. When that listener
+    ///   did not bind, a stranger gets `None` — closed, never the trusting
+    ///   listener.
+    /// - `RPC_ALPN` — MEMBERS ONLY, with no fallback. It forwards to a raw
+    ///   ggml rpc-server that speaks tensor operations and authenticates
+    ///   nothing; there is no listener to downgrade a stranger to.
+    /// - `GUEST_ALPN` — any dialer. A guest is by definition not a member, and
+    ///   the listener behind this one reads its bearer.
+    /// - `ALPN` (internal) — any dialer, DELIBERATELY. A joining node is not
+    ///   yet a member and `/internal/join` is how it becomes one, so gating
+    ///   this on membership would make the mesh unjoinable over its own
+    ///   transport. The sensitive routes behind it carry their own
+    ///   credentials (`gossip_authorized`, the join key). The rest do not, and
+    ///   that gap outlives this function: closing it needs a join-only
+    ///   listener for non-members, the same shape as the guest split above.
+    ///   Named here so it is a known open edge and not an oversight.
+    pub async fn forward_for(
+        &self,
+        alpn: &[u8],
+        dialer: commonwealth_core::ids::NodePubkey,
+        is_member: &MemberCheck,
+    ) -> Option<SocketAddr> {
+        if alpn == ALPN {
+            return Some(self.internal);
+        }
+        if alpn == GUEST_ALPN {
+            return self.guest;
+        }
+        if alpn == CLIENT_ALPN {
+            if is_member(dialer).await {
+                return Some(self.client);
+            }
+            // Glassbox: this is the branch that used to be an unconditional
+            // forward, so it must be visible when it fires (§9.1).
+            tracing::info!(
+                target: "transport",
+                dialer = %hex::encode(dialer.0),
+                downgraded = self.guest.is_some(),
+                "iroh(mesh): CLIENT_ALPN dial from a non-member — routing to the                  bearer-checking listener (closing if it did not bind)"
+            );
+            return self.guest;
+        }
+        if alpn == RPC_ALPN {
+            if is_member(dialer).await {
+                return self.rpc;
+            }
+            tracing::warn!(
+                target: "transport",
+                dialer = %hex::encode(dialer.0),
+                "iroh(mesh): REFUSED an RPC_ALPN dial from a non-member — the                  rpc-server authenticates nothing, so there is no safe downgrade"
+            );
+            return None;
+        }
+        None
+    }
+}
+
 impl MeshIrohAccess {
     /// Bind the endpoint from `<data_dir>/node_key` and route by ALPN
     /// to the daemon's two loopback listeners. Returns `None` when
@@ -241,6 +351,8 @@ impl MeshIrohAccess {
         data_dir: &Path,
         internal_port: u16,
         client_port: u16,
+        guest_addr: Option<SocketAddr>,
+        member_check: MemberCheck,
         enabled: bool,
         relay_cfg: &RelayConfig,
     ) -> Option<MeshIrohAccess> {
@@ -271,6 +383,16 @@ impl MeshIrohAccess {
         if rpc_forward.is_some() {
             alpns.push(RPC_ALPN.to_vec());
         }
+        // A guest is a different principal from a peer, so it gets a different
+        // protocol — forwarded to the daemon's SECOND bind of the client
+        // router, the one whose auth layer does not treat this acceptor's
+        // loopback forward hop as proof of a local caller. Advertised only
+        // when that listener exists, so a dial on GUEST_ALPN either reaches a
+        // credential-checking listener or is refused at the handshake; it can
+        // never fall through to the trusting one.
+        if guest_addr.is_some() {
+            alpns.push(GUEST_ALPN.to_vec());
+        }
         let endpoint = match build_mesh_endpoint(secret, alpns, relay_cfg).await {
             Ok(ep) => ep,
             Err(e) => {
@@ -285,18 +407,30 @@ impl MeshIrohAccess {
 
         let internal_addr: SocketAddr = ([127, 0, 0, 1], internal_port).into();
         let client_addr: SocketAddr = ([127, 0, 0, 1], client_port).into();
-        let mut routes: HashMap<Vec<u8>, SocketAddr> = HashMap::new();
-        routes.insert(ALPN.to_vec(), internal_addr);
-        routes.insert(CLIENT_ALPN.to_vec(), client_addr);
         if let Some(rpc_addr) = rpc_forward {
-            routes.insert(RPC_ALPN.to_vec(), rpc_addr);
             tracing::info!(
                 target: "transport",
                 rpc_forward = %rpc_addr,
-                "iroh(mesh): accepting RPC_ALPN → local ggml rpc-server"
+                "iroh(mesh): accepting RPC_ALPN → local ggml rpc-server (MEMBERS ONLY)"
             );
         }
-        let acceptor = IrohAcceptor::spawn_routed(endpoint.clone(), routes);
+        if let Some(guest) = guest_addr {
+            tracing::info!(
+                target: "transport",
+                guest_forward = %guest,
+                "iroh(mesh): accepting GUEST_ALPN → bearer-only client listener"
+            );
+        }
+        let routes = AcceptorRoutes {
+            internal: internal_addr,
+            client: client_addr,
+            guest: guest_addr,
+            rpc: rpc_forward,
+        };
+        let acceptor = IrohAcceptor::spawn_admitting(endpoint.clone(), move |alpn, dialer| {
+            let is_member = member_check.clone();
+            async move { routes.forward_for(&alpn, dialer, &is_member).await }
+        });
 
         tracing::info!(
             endpoint_id = %endpoint.id(),
@@ -563,5 +697,143 @@ mod tests {
         assert!(has_explicit_iroh_routes(&section(
             |t| t.model_transfer = Some("iroh".into())
         )));
+    }
+
+    // ── who a dial reaches ──────────────────────────────────────────
+    //
+    // The dial string that reaches this endpoint is PUBLIC — it rides in
+    // every invite's `dial=` and is gossiped as `node_pubkey`. These pin the
+    // decision table that keeps holding it from being a credential.
+
+    use commonwealth_core::ids::NodePubkey;
+
+    const MEMBER: NodePubkey = NodePubkey([7u8; 32]);
+    const STRANGER: NodePubkey = NodePubkey([9u8; 32]);
+
+    fn only_the_member() -> MemberCheck {
+        std::sync::Arc::new(|k| Box::pin(std::future::ready(k == MEMBER)))
+    }
+
+    fn addr(port: u16) -> SocketAddr {
+        ([127, 0, 0, 1], port).into()
+    }
+
+    fn routes() -> AcceptorRoutes {
+        AcceptorRoutes {
+            internal: addr(9742),
+            client: addr(9741),
+            guest: Some(addr(41000)),
+            rpc: Some(addr(50052)),
+        }
+    }
+
+    /// THE fix. A stranger holding the dial string must not land on the
+    /// listener that admits loopback — it lands on the one that reads a
+    /// bearer, which is what a LAN caller would meet.
+    #[tokio::test]
+    async fn a_stranger_on_the_client_alpn_is_routed_to_the_bearer_gate() {
+        let r = routes();
+        assert_eq!(
+            r.forward_for(CLIENT_ALPN, STRANGER, &only_the_member())
+                .await,
+            r.guest,
+        );
+    }
+
+    /// And the arm that must keep working: a member presents no bearer at
+    /// all on federated inference, and its key is the credential.
+    #[tokio::test]
+    async fn a_member_on_the_client_alpn_reaches_the_daemons_own_listener() {
+        let r = routes();
+        assert_eq!(
+            r.forward_for(CLIENT_ALPN, MEMBER, &only_the_member()).await,
+            Some(r.client),
+        );
+    }
+
+    /// Fail CLOSED. With no bearer-checking listener there is nothing safe to
+    /// downgrade a stranger to, and the trusting listener is not a fallback.
+    #[tokio::test]
+    async fn a_stranger_is_closed_rather_than_promoted_when_the_guest_listener_is_absent() {
+        let r = AcceptorRoutes {
+            guest: None,
+            ..routes()
+        };
+        assert_eq!(
+            r.forward_for(CLIENT_ALPN, STRANGER, &only_the_member())
+                .await,
+            None,
+        );
+        // The member arm is unaffected — this is not "refuse everything".
+        assert_eq!(
+            r.forward_for(CLIENT_ALPN, MEMBER, &only_the_member()).await,
+            Some(r.client),
+        );
+    }
+
+    /// The rpc-server speaks tensor operations and authenticates nothing.
+    /// There is no listener to downgrade to, so a stranger is refused.
+    #[tokio::test]
+    async fn the_rpc_alpn_admits_members_only_and_has_no_downgrade() {
+        let r = routes();
+        assert_eq!(
+            r.forward_for(RPC_ALPN, MEMBER, &only_the_member()).await,
+            r.rpc,
+        );
+        assert_eq!(
+            r.forward_for(RPC_ALPN, STRANGER, &only_the_member()).await,
+            None,
+        );
+    }
+
+    /// A guest is by definition not a member; the listener behind this ALPN
+    /// reads its bearer, so the dialer's key decides nothing here.
+    #[tokio::test]
+    async fn the_guest_alpn_admits_any_dialer_because_its_listener_checks() {
+        let r = routes();
+        assert_eq!(
+            r.forward_for(GUEST_ALPN, STRANGER, &only_the_member())
+                .await,
+            r.guest,
+        );
+    }
+
+    /// Deliberate, and the reason it is deliberate is load-bearing: a JOINING
+    /// node is not a member yet, and `/internal/join` is how it stops being a
+    /// stranger. Gating this would make the mesh unjoinable over its own
+    /// transport.
+    #[tokio::test]
+    async fn the_internal_alpn_stays_open_so_a_joiner_can_become_a_member() {
+        let r = routes();
+        assert_eq!(
+            r.forward_for(ALPN, STRANGER, &only_the_member()).await,
+            Some(r.internal),
+        );
+    }
+
+    /// An ALPN nobody routes is closed, never sent to whatever is nearest.
+    #[tokio::test]
+    async fn an_unknown_alpn_is_closed() {
+        let r = routes();
+        assert_eq!(
+            r.forward_for(b"cwth/not-a-protocol/0", MEMBER, &only_the_member())
+                .await,
+            None,
+        );
+    }
+
+    /// The safe default: a host that never wired a real check treats every
+    /// dialer as a stranger. Forgetting cannot widen access.
+    #[tokio::test]
+    async fn the_default_check_admits_no_one() {
+        let r = routes();
+        assert_eq!(
+            r.forward_for(CLIENT_ALPN, MEMBER, &admits_no_one()).await,
+            r.guest,
+        );
+        assert_eq!(
+            r.forward_for(RPC_ALPN, MEMBER, &admits_no_one()).await,
+            None,
+        );
     }
 }

@@ -9,7 +9,7 @@
 //! a site we miss still resolves correctly.
 //!
 //!   * **Path resolution falls back to the legacy name.** The data-dir
-//!     getters ([`svrnmesh_root`], [`mesh_data_dir`], and the duplicate in
+//!     getters ([`svrnmesh_root`], [`data_dir`], and the duplicate in
 //!     `setup_config::default_data_dir`) prefer the rebranded dir but
 //!     transparently use a *populated* legacy dir when the new one doesn't
 //!     exist yet, so correctness never depends on migration having run.
@@ -149,26 +149,21 @@ pub fn svrnmesh_root_explained() -> (PathBuf, RootChoice) {
     }
 }
 
-/// Platform-native data dir for the embedded mesh's shared storage
-/// (`dirs::data_dir()/svrnmesh`, e.g. `~/Library/Application Support/svrnmesh`
-/// on macOS), with the same legacy fallback as [`svrnmesh_root`].
-pub fn mesh_data_dir() -> PathBuf {
-    match dirs::data_dir() {
-        Some(data) => resolve_branded_dir(data.join(BRAND), data.join(LEGACY)),
-        None => PathBuf::from("."),
-    }
-}
-
 /// Platform-native *config* dir for settings a GUI owns (`dirs::config_dir()
 /// /svrnmesh` — `~/Library/Application Support/svrnmesh` on macOS,
 /// `~/.config/svrnmesh` on Linux), with the same legacy fallback as
 /// [`svrnmesh_root`].
 ///
-/// Deliberately NOT collapsed into [`mesh_data_dir`]. On macOS the two
-/// resolve to the same directory, which makes them look interchangeable;
-/// on Linux and Windows they do not (`~/.config` vs `~/.local/share`), so
-/// routing a settings file like `desktop.toml` through the data-dir
-/// accessor would silently relocate it out from under existing users.
+/// The ONLY surviving platform-dir accessor, and deliberately not collapsed
+/// into [`data_dir`]: it resolves a *config* location, not a data one. The
+/// sibling `mesh_data_dir` was deleted 2026-08-24 because it was a second
+/// derivation of the data root — [`data_dir`] is the SSOT and read sites must
+/// not re-derive it. This one survives on different grounds: `desktop.toml`
+/// genuinely lives under the GUI's config dir, and on Linux and Windows that
+/// is not the data dir (`~/.config` vs `~/.local/share`). On macOS the two
+/// happen to resolve to the same directory, which is exactly what makes them
+/// look interchangeable — route `desktop.toml` through the data accessor and
+/// it silently relocates out from under existing Linux users.
 /// One accessor per path (ARCH_PRINCIPLES §10.6).
 pub fn mesh_config_dir() -> PathBuf {
     match dirs::config_dir() {

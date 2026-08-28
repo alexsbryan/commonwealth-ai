@@ -1,0 +1,13 @@
+# Flight trees are EVIDENCE, not source, and they are large: a single web arm
+# carries ~2.1M chars of fetched pages plus a debug log that can reach 200MB.
+# What must survive a flight is committed elsewhere and is small:
+#   - the scored deliverable + judge output  -> drb/overall-derivation/flights-*
+#   - the fetched evidence itself            -> the daemon corpus the run
+#     ingests into (`dr-estate-dr-<run_id>`), which is what replay reads
+# So the run trees stay local. A finding that rests on one cites its run id.
+runs-acquisition-ab/
+runs-web-composite/
+runs-outline-ab/
+bed-binder/bed.json
+bed-binder/binder-replay.json
+runs-aiq-bar/

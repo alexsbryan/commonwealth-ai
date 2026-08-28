@@ -6,6 +6,7 @@ pub mod atlas_postinstall;
 pub mod atlas_status;
 pub mod atlas_view;
 pub mod attached_document_search;
+pub mod bundles;
 pub mod calendar;
 pub mod catalog;
 pub mod catalog_ingest;
@@ -98,7 +99,6 @@ pub use code::BuildTool;
 #[cfg(feature = "treesitter")]
 pub use code::CapabilityMapTool;
 #[cfg(feature = "treesitter")]
-pub use code::CheckDocPathsTool;
 #[cfg(all(feature = "treesitter", feature = "atos"))]
 pub use code::DesignSignalsExtractTool;
 #[cfg(all(feature = "treesitter", feature = "atos"))]
@@ -170,10 +170,10 @@ pub use wikipedia_fetch::WikipediaFetchTool;
 /// pre-extraction 16-tool registry.
 pub fn workflow_corpus_tools() -> Vec<Box<dyn sovereign_core::traits::Tool>> {
     vec![
-        Box::new(extract::ExtractTool),
-        Box::new(corpus_store::CorpusStoreTool),
-        Box::new(corpus_search::CorpusSearchTool),
-        Box::new(atlas_phase::gaps::AtlasGapsTool),
-        Box::new(atlas_phase::tensions::AtlasTensionsTool),
+        Box::new(extract::ExtractTool.declared()),
+        Box::new(corpus_store::CorpusStoreTool.declared()),
+        Box::new(corpus_search::CorpusSearchTool.declared()),
+        Box::new(atlas_phase::gaps::AtlasGapsTool.declared()),
+        Box::new(atlas_phase::tensions::AtlasTensionsTool.declared()),
     ]
 }

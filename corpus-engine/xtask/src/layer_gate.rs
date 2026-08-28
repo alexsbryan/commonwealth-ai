@@ -129,15 +129,30 @@ pub fn run(args: &[String]) -> i32 {
     // Dev-only upward edges are worth eyes but never enforcement.
     let dev_edges_up = edges.iter().filter(|e| e.kind == DepKind::Dev).count();
 
+    let default_absent = edges.iter().filter(|e| e.optional).count();
     eprintln!(
-        "layer-gate: {} members, {} internal edges ({} dev, exempt) vs {} layers; \
-         fan-in ratchet over {} crates",
+        "layer-gate: {} members, {} internal edges ({} dev, exempt; {} absent from the \
+         default build) vs {} layers; {} back-of-house patterns; fan-in ratchet over {} crates",
         names.len(),
         edges.len(),
         dev_edges_up,
+        default_absent,
         map.layers.len(),
+        map.backstage.len(),
         baseline.len()
     );
+    // An unconfigured rule and a satisfied rule must not print the same way.
+    // `parse` refuses an empty list at schema_version >= 2, so this can only be
+    // a deliberate v1 map — say which green this is rather than implying the
+    // stronger one.
+    if map.backstage.is_empty() {
+        eprintln!(
+            "  · back-of-house rule NOT CONFIGURED (schema_version {} declares no \
+             `backstage` crates) — this run says nothing about product→quality-control \
+             dependencies",
+            map.schema_version
+        );
+    }
     for v in &violations {
         eprintln!("  ✗ {}", v.describe());
     }
@@ -161,6 +176,20 @@ pub fn run(args: &[String]) -> i32 {
             "Layer/forbid violations: fix the edge or add a [[exception]] with a reason \
              (a reviewable policy diff). Stale exceptions: delete the entry."
         );
+        if violations
+            .iter()
+            .any(|v| matches!(v, arch_layers::Violation::BackstageEdge { .. }))
+        {
+            eprintln!(
+                "Back-of-house: the quality controls observe the product, never the \
+                 reverse. Fix by making the dep `optional = true` and leaving it out of \
+                 `default`. WHAT THIS GATE CANNOT SEE: its unit is the CRATE. Where \
+                 quality-control code shares a crate with product code it cannot tell \
+                 which module named the type, and an [[exception]] leaves the \
+                 back-of-house crate LINKED into the product binary. Read every \
+                 backstage [[exception]] as `the boundary is in the wrong place here`."
+            );
+        }
         eprintln!("{}", common::fix_footer("layer-gate"));
         1
     }
@@ -200,6 +229,7 @@ mod tests {
             from: from.into(),
             to: to.into(),
             kind,
+            optional: false,
         }
     }
 

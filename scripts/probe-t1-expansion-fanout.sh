@@ -159,7 +159,7 @@ EOF
 echo "probe-t1: netns sealed (loopback only). rig=$RIG corpora=$N_CORPORA"
 echo "probe-t1: throwaway HOME=$FAKE_HOME (operator corpora are NOT in the eligible set)"
 echo "probe-t1: prefilter=${PREFILTER:-OFF (production default)}"
-env HOME="$FAKE_HOME" SOVEREIGN_ALLOW_MULTIPLE_DAEMONS=1 \
+env HOME="$FAKE_HOME" \
   "$CLI" daemon run --config "$WORK/config.toml" > "$WORK/daemon.log" 2>&1 &
 DPID=$!
 for _ in $(seq 1 300); do

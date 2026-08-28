@@ -579,6 +579,19 @@ impl CorpusIndex {
                     url,
                     corpus_id: self.corpus_id.clone(),
                     score,
+                    // Stamped from the index's OWN facts at acquisition —
+                    // the only place they exist (TOPOLOGY §10 rung 9.1). The
+                    // custody and grain still come out of the legacy metadata
+                    // bag, which is what an index writes today; the point of
+                    // reading it HERE is that no downstream site has to read
+                    // it again, and none can spell it differently.
+                    provenance: crate::index::ChunkProvenance::Acquired(
+                        crate::index::Acquisition::stamped(
+                            self.corpus_id.clone(),
+                            crate::index::custody_of(&metadata),
+                            crate::index::grain_of(&metadata),
+                        ),
+                    ),
                     metadata,
                     chunk_id,
                     source_doc_id,
@@ -1190,6 +1203,19 @@ impl CorpusIndex {
                     // similarity score. Callers must not mix with
                     // search-scored chunks in a single rank.
                     score: 1.0,
+                    // Stamped from the index's OWN facts at acquisition —
+                    // the only place they exist (TOPOLOGY §10 rung 9.1). The
+                    // custody and grain still come out of the legacy metadata
+                    // bag, which is what an index writes today; the point of
+                    // reading it HERE is that no downstream site has to read
+                    // it again, and none can spell it differently.
+                    provenance: crate::index::ChunkProvenance::Acquired(
+                        crate::index::Acquisition::stamped(
+                            self.corpus_id.clone(),
+                            crate::index::custody_of(&metadata),
+                            crate::index::grain_of(&metadata),
+                        ),
+                    ),
                     metadata,
                     chunk_id,
                     source_doc_id,

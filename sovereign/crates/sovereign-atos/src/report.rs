@@ -26,7 +26,7 @@
 use std::collections::BTreeMap;
 
 use corpus_engine_atos::{AtosRunRow, FeatureRow, MilestoneRow};
-use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
+use corpus_engine_notes::{Note, NoteScope, NoteStore, ScopeFilter};
 
 use crate::{Error, ReportSection, Result};
 
@@ -62,7 +62,7 @@ fn render_milestone(
     milestones: &[MilestoneRow],
     runs: &[AtosRunRow],
     ordinal: i64,
-    notes: &[NoteRow],
+    notes: &[Note],
 ) -> String {
     let Some(milestone) = milestones.iter().find(|m| m.ordinal == ordinal) else {
         return format!(
@@ -101,7 +101,7 @@ fn render_milestone(
     }
 
     let ms_notes_owned = notes_since(notes, milestone.started_at);
-    let ms_notes: Vec<&NoteRow> = ms_notes_owned.iter().collect();
+    let ms_notes: Vec<&Note> = ms_notes_owned.iter().collect();
     render_uncertainty(&mut out, &ms_notes);
     render_postmortem(&mut out, &ms_notes);
     render_decision_log_summary(&mut out, &ms_notes);
@@ -111,7 +111,7 @@ fn render_milestone(
 
 // ─── Red team ────────────────────────────────────────────────────────────────
 
-fn render_red_team(feature: &FeatureRow, runs: &[AtosRunRow], notes: &[NoteRow]) -> String {
+fn render_red_team(feature: &FeatureRow, runs: &[AtosRunRow], notes: &[Note]) -> String {
     let mut out = String::new();
     out.push_str(&format!("# {} — red team report\n\n", feature.id));
     let rt_runs: Vec<&AtosRunRow> = runs.iter().filter(|r| r.mode == "redteam").collect();
@@ -138,7 +138,7 @@ fn render_red_team(feature: &FeatureRow, runs: &[AtosRunRow], notes: &[NoteRow])
     }
     out.push('\n');
 
-    let findings: Vec<&NoteRow> = notes
+    let findings: Vec<&Note> = notes
         .iter()
         .filter(|n| n.kind == "redteam_finding")
         .collect();
@@ -158,7 +158,7 @@ fn render_full(
     feature: &FeatureRow,
     milestones: &[MilestoneRow],
     runs: &[AtosRunRow],
-    notes: &[NoteRow],
+    notes: &[Note],
 ) -> String {
     let mut out = String::new();
     out.push_str(&format!("# {} — {}\n\n", feature.id, feature.title));
@@ -225,7 +225,7 @@ fn render_full(
     render_postmortem(&mut out, &notes.iter().collect::<Vec<_>>());
 
     // Red-team section if any findings exist.
-    let findings: Vec<&NoteRow> = notes
+    let findings: Vec<&Note> = notes
         .iter()
         .filter(|n| n.kind == "redteam_finding")
         .collect();
@@ -241,15 +241,15 @@ fn render_full(
 
 // ─── Section renderers ───────────────────────────────────────────────────────
 
-fn render_uncertainty(out: &mut String, notes: &[&NoteRow]) {
-    let items: Vec<&&NoteRow> = notes.iter().filter(|n| n.kind == "uncertainty").collect();
+fn render_uncertainty(out: &mut String, notes: &[&Note]) {
+    let items: Vec<&&Note> = notes.iter().filter(|n| n.kind == "uncertainty").collect();
     if items.is_empty() {
         return;
     }
     out.push_str("## What I'm uncertain about\n\n");
     // Group by the first files entry; unlisted items appear in an
     // "untagged" bucket.
-    let mut by_file: BTreeMap<String, Vec<&&NoteRow>> = BTreeMap::new();
+    let mut by_file: BTreeMap<String, Vec<&&Note>> = BTreeMap::new();
     for n in items {
         let key = n
             .files
@@ -274,8 +274,8 @@ fn render_uncertainty(out: &mut String, notes: &[&NoteRow]) {
     }
 }
 
-fn render_postmortem(out: &mut String, notes: &[&NoteRow]) {
-    let items: Vec<&&NoteRow> = notes
+fn render_postmortem(out: &mut String, notes: &[&Note]) {
+    let items: Vec<&&Note> = notes
         .iter()
         .filter(|n| n.kind == "postmortem_pointer")
         .collect();
@@ -312,11 +312,11 @@ enum RedteamStyle {
 /// bucket (high → medium → low), dropping empty buckets.
 fn render_redteam_findings_by_confidence(
     out: &mut String,
-    findings: &[&NoteRow],
+    findings: &[&Note],
     style: RedteamStyle,
 ) {
     for bucket in ["high", "medium", "low"] {
-        let in_bucket: Vec<&&NoteRow> = findings
+        let in_bucket: Vec<&&Note> = findings
             .iter()
             .filter(|n| decode_redteam_confidence(&n.content) == bucket)
             .collect();
@@ -354,7 +354,7 @@ fn render_redteam_findings_by_confidence(
     }
 }
 
-fn render_decision_log_summary(out: &mut String, notes: &[&NoteRow]) {
+fn render_decision_log_summary(out: &mut String, notes: &[&Note]) {
     let decisions = notes.iter().filter(|n| n.kind == "decision").count();
     let invariants = notes.iter().filter(|n| n.kind == "invariant").count();
     let attempts = notes.iter().filter(|n| n.kind == "attempt").count();
@@ -374,7 +374,7 @@ fn render_decision_log_summary(out: &mut String, notes: &[&NoteRow]) {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-async fn fetch_feature_notes(notes: &NoteStore, feature_id: &str) -> Result<Vec<NoteRow>> {
+async fn fetch_feature_notes(notes: &NoteStore, feature_id: &str) -> Result<Vec<Note>> {
     let filter = ScopeFilter {
         scopes: vec![NoteScope::Feature],
         feature_id: Some(feature_id.to_string()),
@@ -386,7 +386,7 @@ async fn fetch_feature_notes(notes: &NoteStore, feature_id: &str) -> Result<Vec<
     Ok(rows)
 }
 
-fn notes_since(notes: &[NoteRow], _since: Option<i64>) -> Vec<NoteRow> {
+fn notes_since(notes: &[Note], _since: Option<i64>) -> Vec<Note> {
     // M3.6 deliberately does not filter by milestone-start time.
     // Early feature milestones share context, and the per-milestone
     // artifact is a consolidated view anyway. M3.7 teardown uses

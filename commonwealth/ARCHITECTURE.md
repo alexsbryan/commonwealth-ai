@@ -613,8 +613,15 @@ POST /v1/chat/completions
      }
 
 GET  /v1/models
-     Lists models currently available on the mesh.
-     Includes OICP capability profiles and performance estimates.
+     Lists the model names this daemon can DISPATCH BY NAME right now —
+     one row per name, drawn from the local OICP manifest plus every
+     reachable peer's. That is the same source name resolution reads, so
+     an id on this list routes and an id off it does not.
+
+     Per row: "residency" ("resident" = weights in memory on some holder,
+     "cold" = a holder has them and loads on demand — normal for a lazy
+     primary, not an outage), and "advertised_by" (the holders, "local"
+     for this node). Plus OICP capability claims.
 ```
 
 Every node in the mesh can accept client requests. The daemon routes internally — the client always talks to localhost:9741.
@@ -975,12 +982,8 @@ commonwealth/
 │   ├── commonwealth-discovery/     # mDNS, gossip, latency probing
 │   ├── commonwealth-scheduler/     # Model selection, layer + knowledge assignment
 │   ├── commonwealth-orchestrator/  # Process management, index management
-│   ├── commonwealth-api/           # Axum HTTP server, OICP endpoint
-│   └── commonwealth-daemon/        # CLI + daemon entry point
-├── Cargo.toml
-└── contrib/
-    ├── systemd/
-    ├── launchd/
+│   └── commonwealth-api/           # Axum HTTP server, OICP endpoint
+└── Cargo.toml
     └── install.sh
 ```
 

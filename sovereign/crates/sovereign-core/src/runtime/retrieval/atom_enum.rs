@@ -72,6 +72,7 @@ impl Runtime {
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
         pool_corpora: &[String],
+        lane: &crate::runtime::Lane,
     ) -> Option<Vec<corpus_engine::ScoredChunk>> {
         let atom_enum_on = std::env::var("SOVEREIGN_ATOM_ENUM").ok().as_deref() == Some("1");
         // Default ON (parity push — surface atlas Claims for overview questions
@@ -99,6 +100,7 @@ impl Runtime {
                     enabled_corpora,
                     corpus_ceiling,
                     pool_corpora,
+                    lane,
                 )
                 .await;
         }
@@ -108,7 +110,7 @@ impl Runtime {
         // Need the atlas graph to enumerate against; bail before the
         // classify call if no provider is attached — otherwise we would
         // pay an LLM round-trip only to find nothing to enumerate.
-        let provider = self.atlas_context_provider.as_ref()?;
+        let provider = lane.atlas_context.as_ref()?;
 
         // ---- Stage 1: classify enumeration vs lookup (+ target type).
         // Question-shape only, no conversation context: whether a
@@ -308,7 +310,7 @@ impl Runtime {
             let Some(graph) = provider.graph(id) else {
                 continue;
             };
-            for view in graph.atoms_of_kind(crate::atlas_context::AtomKindTag::Entity) {
+            for view in graph.atoms_of_kind(corpus_engine::enrichment::atlas::AtomType::Entity) {
                 if view.subtype() != target_type {
                     continue;
                 }
@@ -417,7 +419,9 @@ impl Runtime {
             // Keyed by display string so identical relations dedup without
             // colliding with entity names.
             if include_relations {
-                for view in graph.atoms_of_kind(crate::atlas_context::AtomKindTag::Relation) {
+                for view in
+                    graph.atoms_of_kind(corpus_engine::enrichment::atlas::AtomType::Relation)
+                {
                     let label = view.label().trim();
                     // First evidence ref grounds the relationship; skip
                     // relations with no label or no evidence (same guard as
@@ -431,7 +435,7 @@ impl Runtime {
                     let parts: Vec<String> = view
                         .participants()
                         .filter_map(|pid| graph.atom(pid))
-                        .filter(|a| a.kind() == crate::atlas_context::AtomKindTag::Entity)
+                        .filter(|a| a.kind() == corpus_engine::enrichment::atlas::AtomType::Entity)
                         .filter_map(|a| {
                             let n = a.name().trim();
                             (!n.is_empty()).then(|| n.to_string())
@@ -664,6 +668,7 @@ impl Runtime {
                                 None,
                                 Some(&own_scope[..]),
                                 corpus_ceiling,
+                                lane,
                             )
                             .await
                             .into_iter()
@@ -733,8 +738,9 @@ impl Runtime {
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
         pool_corpora: &[String],
+        lane: &crate::runtime::Lane,
     ) -> Option<Vec<corpus_engine::ScoredChunk>> {
-        let provider = self.atlas_context_provider.as_ref()?;
+        let provider = lane.atlas_context.as_ref()?;
         let top_k: usize = std::env::var("SOVEREIGN_ATOM_ENUM_TOPK")
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
@@ -808,7 +814,7 @@ impl Runtime {
             let Some(graph) = provider.graph(id) else {
                 continue;
             };
-            for view in graph.atoms_of_kind(crate::atlas_context::AtomKindTag::Claim) {
+            for view in graph.atoms_of_kind(corpus_engine::enrichment::atlas::AtomType::Claim) {
                 let content = view.content().trim();
                 if content.is_empty() {
                     continue;
@@ -992,6 +998,7 @@ impl Runtime {
                                         None,
                                         Some(&own_scope[..]),
                                         corpus_ceiling,
+                                        lane,
                                     )
                                     .await
                                     .into_iter()
@@ -1045,6 +1052,10 @@ impl Runtime {
                     chunk_id: None,
                     source_doc_id: None,
                     vector_distance: None,
+                    // An atlas claim atom injected as a virtual chunk.
+                    provenance: corpus_engine::index::ChunkProvenance::manufactured(
+                        "atom_enum_claim",
+                    ),
                 });
             }
         }

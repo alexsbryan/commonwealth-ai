@@ -339,13 +339,37 @@ cargo_args+=(--all-targets)
 # (scripts/release-cli-local.sh passes it). Without it here the gate would
 # never COMPILE ~1,500 lines that real users run — a worse failure than a
 # gate that goes red, because nothing ever goes red. Same leaf-crate rule.
+#
+# `sovereign-cli/awareness` (2026-08-21, nc-26) is here for that exact reason,
+# and it is the closure loop for the bug that put it here. `awareness_cmd`
+# imported `crate::enrich_cmd::inference_client` from a crate that does not
+# contain `enrich_cmd`; `--features awareness` failed with two E0433 from the
+# 2026-05-22 slice-5 split until nc-26 found it — THREE MONTHS — because no
+# gate anywhere built the feature. The repair moved the module to the crate
+# that owns the import, which fixes today's break; this line is what stops the
+# next crate split from re-opening it silently. A feature nothing compiles is a
+# feature that rots, and the rot is invisible precisely because it is green.
+#
+# Cost measured when it was added, macOS peer, `cargo check --workspace
+# --all-targets` alternated A/A/B/B on one warm tree: 37s, 31s WITHOUT the
+# flag; 31s, 31s WITH it. Warm steady-state delta is ZERO to the second, and
+# the flip between feature sets costs nothing either — cargo fingerprints the
+# two configurations separately and keeps both. (Do not read the wall-clock of
+# the whole script the same way: `jobs:` is derived from FREE MEMORY, so two
+# runs minutes apart can differ by 2x for reasons that have nothing to do with
+# the feature list.)
+#
+# The reason it is nearly free: enabling it links sovereign-cli-llm into the
+# dispatcher — llama.cpp, the grammars, arrow — but this same workspace run
+# already builds every one of those for the sibling binary. What is genuinely
+# new is awareness_cmd's 7,526 lines, and it is paid once.
 features="corpus-engine/treesitter"
 if (( escalate_to_workspace )) || [[ ${#crates[@]} -eq 0 ]]; then
-    features+=",sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-mesh/mesh-sim"
+    features+=",sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-mesh/mesh-sim"
 else
     for c in "${crates[@]}"; do
         if [[ "$c" == "sovereign-cli" ]]; then
-            features+=",sovereign-cli/dev-tools,sovereign-cli/code-intel"
+            features+=",sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness"
         fi
         if [[ "$c" == "sovereign-mesh" ]]; then
             features+=",sovereign-mesh/mesh-sim"

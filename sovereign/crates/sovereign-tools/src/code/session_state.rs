@@ -31,16 +31,13 @@
 
 use std::path::{Path, PathBuf};
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_contracts::frame::{Frame, FrameSchema};
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::{
-    Effect, Idempotency, Latency, Permission, Scope, StepOutput, ToolContext, ToolDescriptor,
-    ToolExample,
-};
+use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_core::types::{StepOutput, ToolContext};
+use std::sync::Arc;
 
 /// The nine schema-v1 sections, in contract order (SESSION_CONTINUITY §2).
 ///
@@ -586,9 +583,26 @@ fn json_type(v: &serde_json::Value) -> &'static str {
     }
 }
 
-#[async_trait]
-impl Tool for SessionStateTool {
-    fn descriptor(&self) -> ToolDescriptor {
+impl SessionStateTool {
+    /// Bind this tool's state to its `session_state` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let mut manifest = sovereign_core::tool_manifest::require("session_state").clone();
+        manifest.parameters = Self::parameter_schema();
+        sovereign_core::tool_manifest::declared_from(manifest, move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
+    }
+
+    /// One property per `SECTION_PARAMS` entry, with `objective`'s bespoke
+    /// wording. Generated rather than copied into the row: the sections are a
+    /// Rust const the tool also validates against, and two copies of a closed
+    /// set is two deciders (ARCH principle 8).
+    fn parameter_schema() -> serde_json::Value {
         let mut properties = serde_json::Map::new();
         properties.insert(
             "session_id".into(),
@@ -641,79 +655,19 @@ impl Tool for SessionStateTool {
                 "description": "Note ids written this session — appended (deduped) to the frontmatter notes list."
             }),
         );
-        ToolDescriptor {
-            id: "session_state".to_string(),
-            name: "Session State Upsert".to_string(),
-            description: "Upsert your session frame (the successor-facing gist: objective, \
-                          goal, state, next, decisions, invariants, dead ends, working set, \
-                          verification) at transitions — task start, plan step done, \
-                          blocker hit — NOT only at session end. Provided sections \
-                          replace their previous body; others are preserved. Writes \
-                          are rejected over the 2.1k-token budget with per-section \
-                          counts so you trim instead of bloating. Encode-time writes \
-                          are the strong continuity path (self-reported frames grade \
-                          100% vs 17% for post-hoc distillation); a current frame is \
-                          what lets a successor session resume your work without \
-                          re-reading the repo. `objective` is the standing outcome the \
-                          work serves and is REQUIRED alongside any of goal/state/next/\
-                          decisions — inherit it from your predecessor rather than \
-                          restating it as a delta. Sections are FLAT string params — one \
-                          key per section (objective, goal, state, next, decisions, \
-                          invariants, dead_ends, working_set, verification); there is no \
-                          `sections` array and no `section`/`content` pair."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": properties,
-                "required": ["session_id"],
-                // The declarative twin of the unknown-key guard in
-                // `execute`: a validating client rejects the wrong shape
-                // before it costs a round trip.
-                "additionalProperties": false
-            }),
-            examples: vec![ToolExample {
-                situation: "A plan step just completed — bank the position before moving on."
-                    .into(),
-                call: json!({
-                    "session_id": "3fabc9ed-…",
-                    "state": "- H5 lever shipped + fleet-measured (f92bb3e7)\n- suite 7893/0",
-                    "next": "- E4a: register session_state tool daemon-side"
-                }),
-            }],
-            effect: Effect::Write,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Session,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "path": { "type": "string" },
-                    "created": { "type": "boolean" },
-                    "sections_updated": { "type": "array", "items": { "type": "string" } },
-                    "approx_tokens": { "type": "integer" },
-                    "budget_tokens": { "type": "integer" },
-                    "objective_sessions": { "type": "integer" },
-                    "carried": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "item": { "type": "string" },
-                                "depth": { "type": "integer" }
-                            }
-                        }
-                    },
-                    "advice": { "type": "string" }
-                }
-            })),
-        }
+        json!({
+            "type": "object",
+            "properties": properties,
+            "required": ["session_id"],
+            // The declarative twin of the unknown-key guard in
+            // `execute`: a validating client rejects the wrong shape
+            // before it costs a round trip.
+            "additionalProperties": false
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `session_state`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let obj = params.as_object().ok_or_else(|| {
             Error::InvalidInput("session_state: params must be a JSON object".into())
         })?;
@@ -1045,7 +999,7 @@ mod tests {
         let root = tmp_root("shape_array");
         let tool = SessionStateTool::new().with_sessions_root(root.clone());
         let err = tool
-            .execute(
+            .run(
                 &json!({
                     "session_id": "s7",
                     "sections": [{"name": "Goal", "content": "ship the thing"}]
@@ -1068,7 +1022,7 @@ mod tests {
         let root = tmp_root("shape_pair");
         let tool = SessionStateTool::new().with_sessions_root(root.clone());
         let err = tool
-            .execute(
+            .run(
                 &json!({"session_id": "s8", "section": "Goal", "content": "ship it"}),
                 &ctx(),
             )
@@ -1089,7 +1043,7 @@ mod tests {
         let root = tmp_root("shape_type");
         let tool = SessionStateTool::new().with_sessions_root(root.clone());
         let err = tool
-            .execute(&json!({"session_id": "s9", "next": ["a", "b"]}), &ctx())
+            .run(&json!({"session_id": "s9", "next": ["a", "b"]}), &ctx())
             .await
             .unwrap_err()
             .to_string();
@@ -1106,7 +1060,7 @@ mod tests {
         let root = tmp_root("shape_ok");
         let tool = SessionStateTool::new().with_sessions_root(root.clone());
         let out = tool
-            .execute(
+            .run(
                 &json!({
                     "session_id": "s10",
                     "objective": "- E4 continuity: successors resume without re-reading.",

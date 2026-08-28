@@ -16,7 +16,7 @@
 
   type FeedEntry = DashboardNoteEntry & { kindLabel: string };
 
-  // Merge + sort newest first. NoteRow.created_at is RFC 3339 — string
+  // Merge + sort newest first. Note.created_at is RFC 3339 — string
   // sort is correct because all entries share an offset.
   const merged: FeedEntry[] = $derived.by(() => {
     const out: FeedEntry[] = [

@@ -443,12 +443,10 @@ async fn phrase_gap_question(
          fact, document, or source that would settle the question. Output the \
          line only — no preface, no quotes."
     );
-    let mut request = crate::types::CompletionRequest::for_workload(
-        crate::slot_policy::Workload::Housekeep,
-        prompt,
-    )
-    .with_system("You phrase information requests precisely. Output one line only.")
-    .with_output_budget(PHRASE_MAX_TOKENS);
+    let mut request = crate::slot_policy::Workload::Housekeep
+        .request(prompt)
+        .with_system("You phrase information requests precisely. Output one line only.")
+        .with_output_budget(PHRASE_MAX_TOKENS);
     request.temperature = Some(0.0);
     let resp = inference.complete(&request).await.ok()?;
     let cleaned = crate::title::strip_think_blocks(&resp.text);

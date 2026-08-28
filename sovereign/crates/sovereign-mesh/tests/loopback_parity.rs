@@ -28,6 +28,9 @@
 //! `.layer(loopback_only)` because axum applies layers in reverse-
 //! addition order. So the spoofed `ConnectInfo` is in place by the
 //! time `loopback_only` reads it.
+mod common;
+use common::mesh_admin_services;
+
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -40,6 +43,7 @@ use axum::response::Response;
 use axum::Router;
 use corpus_engine_scip::ScipGraph;
 
+use sovereign_core::setup_config::SetupConfig;
 use sovereign_mesh::admin_http::admin_router;
 use sovereign_mesh::corpus_watch_http::corpus_watch_router;
 use sovereign_mesh::daemon::EmbeddedDaemon;
@@ -47,6 +51,7 @@ use sovereign_mesh::mesh_http::mesh_router;
 use sovereign_mesh::project_http::project_router;
 use sovereign_mesh::reading_http::reading_router;
 use sovereign_mesh::reindexer::Reindexer;
+use sovereign_mesh::turn_http::turn_router;
 
 /// Outer middleware that overrides `ConnectInfo<SocketAddr>` on the
 /// request to a *non-loopback* LAN address. Wraps a real router via
@@ -83,7 +88,11 @@ async fn spawn_with_spoof(router: Router) -> String {
 
 fn fresh_daemon() -> (tempfile::TempDir, Arc<EmbeddedDaemon>) {
     let tmp = tempfile::tempdir().unwrap();
-    let daemon = Arc::new(EmbeddedDaemon::new(tmp.path().to_path_buf()));
+    let daemon = EmbeddedDaemon::new(
+        tmp.path().to_path_buf(),
+        SetupConfig::unconfigured(),
+        mesh_admin_services(),
+    );
     (tmp, daemon)
 }
 
@@ -152,6 +161,25 @@ async fn project_http_rejects_non_loopback_via_list_projects() {
         resp.status(),
         reqwest::StatusCode::FORBIDDEN,
         "project_http loopback guard slipped — non-loopback caller got {}",
+        resp.status()
+    );
+}
+
+#[tokio::test]
+async fn turn_http_rejects_non_loopback_via_conversation_create() {
+    let (_tmp, daemon) = fresh_daemon();
+    let base = spawn_with_spoof(turn_router(daemon)).await;
+    let resp = reqwest::Client::new()
+        .post(format!("{base}/v1/conversations"))
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .expect("server reachable");
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "turn_http loopback guard slipped — a turn runs THIS host's tools \
+         against THIS host's corpora, and a non-loopback caller got {}",
         resp.status()
     );
 }
@@ -294,6 +322,9 @@ async fn every_router_fails_closed_when_connect_info_absent() {
     assert_500_on_bare_serve(reading_router(d4), "/internal/corpus/wikipedia/chunks/0").await;
 
     assert_500_on_bare_serve(corpus_watch_router(), "/internal/corpus/watch/list").await;
+
+    let (_t5, d5) = fresh_daemon();
+    assert_500_on_bare_serve(turn_router(d5), "/v1/conversations").await;
 }
 
 // Silence unused-import lint when the test build slims something

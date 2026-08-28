@@ -85,6 +85,9 @@ pub struct PhasePassOutcome {
     pub verification: Verification,
 }
 
+/// NOT `sovereign_contracts::types::epistemic::Verification` ({Verified,
+/// FailedOnce, FailOpen, Unverified}, a claim's standing); this is how ONE
+/// PHASES.md phase was confirmed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Verification {
     RanCommand { command: String },

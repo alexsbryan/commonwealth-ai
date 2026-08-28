@@ -283,6 +283,7 @@ mod tests {
                 embed: PathBuf::from("/m/embed.gguf"),
                 code: None,
                 context_size: None,
+                fast_context_size: None,
                 max_extras_memory_gb: None,
                 extra: std::collections::BTreeMap::new(),
                 primary_pool: None,
@@ -312,6 +313,7 @@ mod tests {
                 embed: PathBuf::from("/m/embed.gguf"),
                 code: None,
                 context_size: None,
+                fast_context_size: None,
                 max_extras_memory_gb: None,
                 extra: std::collections::BTreeMap::new(),
                 primary_pool: None,
@@ -399,14 +401,14 @@ mod tests {
         let path = write_cfg(&tmp, "/m/primary.gguf");
         let initial = SetupConfig::load_from(&path).unwrap();
 
-        let daemon = Arc::new(EmbeddedDaemon::new(tmp.path().to_path_buf()));
-        daemon.set_setup_config(initial).await;
         let counter = Arc::new(AtomicUsize::new(0));
-        daemon
-            .set_provider_factory(Arc::new(StubFactory {
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            initial,
+            crate::daemon_services::fixtures::headless_with_factory(Arc::new(StubFactory {
                 build_count: Arc::clone(&counter),
-            }))
-            .await;
+            })),
+        );
 
         let base = spawn(Arc::clone(&daemon)).await;
         let resp = reqwest::Client::new()
@@ -432,18 +434,16 @@ mod tests {
         let path = write_cfg(&tmp, "/m/primary-v1.gguf");
         let initial = SetupConfig::load_from(&path).unwrap();
 
-        let daemon = Arc::new(EmbeddedDaemon::new(tmp.path().to_path_buf()));
-        daemon.set_setup_config(initial).await;
         let counter = Arc::new(AtomicUsize::new(0));
-        daemon
-            .set_provider_factory(Arc::new(StubFactory {
+        // The headless profile carries the factory; the initial provider comes
+        // in through the core ring, so there is no seeding step any more.
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            initial,
+            crate::daemon_services::fixtures::headless_with_factory(Arc::new(StubFactory {
                 build_count: Arc::clone(&counter),
-            }))
-            .await;
-        // Seed an initial provider so we can observe the swap.
-        daemon
-            .set_inference_provider(Arc::new(StubProvider { version: 0 }))
-            .await;
+            })),
+        );
 
         // Change models.primary on disk, then POST reload.
         let _ = write_cfg(&tmp, "/m/primary-v2.gguf");
@@ -481,17 +481,18 @@ mod tests {
         let initial = SetupConfig::load_from(&path).unwrap();
         assert_eq!(initial.models.context_size, None, "fixture starts at auto");
 
-        let daemon = Arc::new(EmbeddedDaemon::new(tmp.path().to_path_buf()));
-        daemon.set_setup_config(initial.clone()).await;
+        // Commissioned through the total constructor, like every other test in
+        // this file. These two tests arrived on main written against the
+        // `set_*` builders daemon-convergence Phase 2 deleted; the merge took
+        // both sides' text and only the compiler noticed.
         let counter = Arc::new(AtomicUsize::new(0));
-        daemon
-            .set_provider_factory(Arc::new(StubFactory {
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            initial.clone(),
+            crate::daemon_services::fixtures::headless_with_factory(Arc::new(StubFactory {
                 build_count: Arc::clone(&counter),
-            }))
-            .await;
-        daemon
-            .set_inference_provider(Arc::new(StubProvider { version: 0 }))
-            .await;
+            })),
+        );
 
         let mut modified = initial;
         modified.models.context_size = Some(65_536);
@@ -532,17 +533,18 @@ mod tests {
         let path = write_cfg(&tmp, "/m/primary.gguf");
         let initial = SetupConfig::load_from(&path).unwrap();
 
-        let daemon = Arc::new(EmbeddedDaemon::new(tmp.path().to_path_buf()));
-        daemon.set_setup_config(initial.clone()).await;
+        // Commissioned through the total constructor, like every other test in
+        // this file. These two tests arrived on main written against the
+        // `set_*` builders daemon-convergence Phase 2 deleted; the merge took
+        // both sides' text and only the compiler noticed.
         let counter = Arc::new(AtomicUsize::new(0));
-        daemon
-            .set_provider_factory(Arc::new(StubFactory {
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            initial.clone(),
+            crate::daemon_services::fixtures::headless_with_factory(Arc::new(StubFactory {
                 build_count: Arc::clone(&counter),
-            }))
-            .await;
-        daemon
-            .set_inference_provider(Arc::new(StubProvider { version: 0 }))
-            .await;
+            })),
+        );
 
         let mut modified = initial;
         modified.models.code = Some(PathBuf::from("/m/coder.gguf"));
@@ -567,14 +569,14 @@ mod tests {
         let path = write_cfg(&tmp, "/m/primary.gguf");
         let initial = SetupConfig::load_from(&path).unwrap();
 
-        let daemon = Arc::new(EmbeddedDaemon::new(tmp.path().to_path_buf()));
-        daemon.set_setup_config(initial.clone()).await;
         let counter = Arc::new(AtomicUsize::new(0));
-        daemon
-            .set_provider_factory(Arc::new(StubFactory {
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            initial.clone(),
+            crate::daemon_services::fixtures::headless_with_factory(Arc::new(StubFactory {
                 build_count: Arc::clone(&counter),
-            }))
-            .await;
+            })),
+        );
 
         // Rewrite config with a different client_port.
         let mut modified = initial;
@@ -623,8 +625,11 @@ mod tests {
         let path = write_cfg(&tmp, "/m/primary.gguf");
         let initial = SetupConfig::load_from(&path).unwrap();
 
-        let daemon = Arc::new(EmbeddedDaemon::new(tmp.path().to_path_buf()));
-        daemon.set_setup_config(initial).await;
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            initial,
+            crate::daemon_services::fixtures::headless(),
+        );
 
         let app = admin_router(Arc::clone(&daemon));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -659,9 +664,14 @@ mod tests {
         let path = write_cfg(&tmp, "/m/primary-v1.gguf");
         let initial = SetupConfig::load_from(&path).unwrap();
 
-        let daemon = Arc::new(EmbeddedDaemon::new(tmp.path().to_path_buf()));
-        daemon.set_setup_config(initial).await;
-        // No factory installed on purpose.
+        // The DESKTOP profile, which declares it carries no ProviderFactory.
+        // The refusal must name the profile rather than report a missing
+        // installation — nothing is missing, this shape has no factory.
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            initial,
+            crate::daemon_services::fixtures::desktop(),
+        );
 
         let _ = write_cfg(&tmp, "/m/primary-v2.gguf");
 

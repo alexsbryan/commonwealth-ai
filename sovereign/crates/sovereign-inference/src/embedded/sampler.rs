@@ -531,10 +531,11 @@ pub(crate) fn build_sampler(
     let build_chain = |params: &ResolvedSampling, chain_temp: f32| {
         let mut samplers: Vec<LlamaSampler> = Vec::new();
         // MIGRATION 2026-05-17: llama-cpp-4 0.2.x reshaped DRY:
-        //   * Added `n_ctx_train` as the second positional arg — scopes
-        //     DRY's repetition-detection window; querying the model
-        //     gives us the model's actual training span instead of a
-        //     hard-coded guess.
+        //   * Added `n_ctx_train` as the second positional arg.
+        // MIGRATION 2026-08-26: upstream REMOVED `n_ctx_train` from
+        //   llama_sampler_init_dry again (common/sampling.cpp:353), so the
+        //   argument above is gone. Separately, llama_sampler_init_penalties
+        //   re-gained a leading n_vocab, so `penalties` now takes the model.
         //   * `dry` became a method on `&LlamaSampler` rather than a
         //     free constructor. Chain off `greedy()` (a no-op identity
         //     sampler at this position in the chain) to get a base we
@@ -542,7 +543,6 @@ pub(crate) fn build_sampler(
         //     the old constructed-fresh form.
         samplers.push(LlamaSampler::greedy().dry(
             model,
-            model.n_ctx_train() as i32,
             0.8,
             1.75,
             2,
@@ -550,6 +550,7 @@ pub(crate) fn build_sampler(
             breakers.iter().copied(),
         ));
         samplers.push(LlamaSampler::penalties(
+            model,
             128,
             rep_pen,
             freq_pen,

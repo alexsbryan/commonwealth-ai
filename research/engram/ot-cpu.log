@@ -1,0 +1,30 @@
+0.00.081.968 I llama_completion: llama backend init
+0.00.081.971 I llama_completion: load the model and apply lora adapter, if any
+0.29.038.232 I cmn          init: llama threadpool init, n_threads = 16
+0.29.041.794 I 
+0.29.041.847 I system_info: n_threads = 16 (n_threads_batch = 16) / 32 | CPU : SSE3 = 1 | SSSE3 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.29.041.848 I 
+0.29.042.095 I sampler seed: 42
+0.29.042.102 I sampler params: 
+	repeat_last_n = 64, repeat_penalty = 1.000, frequency_penalty = 0.000, presence_penalty = 0.000
+	dry_multiplier = 0.000, dry_base = 1.750, dry_allowed_length = 2, dry_penalty_last_n = 64
+	top_k = 20, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 1.000
+	mirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000, adaptive_target = -1.000, adaptive_decay = 0.900
+0.29.042.106 I sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> ?temp-ext -> dist 
+0.29.042.106 I generate: n_ctx = 4096, n_batch = 2048, n_predict = 128, n_keep = 0
+0.29.042.107 I 
+Explain, in three sentences, why memory bandwidth rather than compute is the binding constraint for single-stream LLM inference.
+
+<think>
+The user wants a concise three-sentence explanation of why memory bandwidth, not compute, is the bottleneck for single-stream (batch size = 1) LLM inference. Let me think through the key physics:
+
+1. During autoregressive generation with batch size 1, each forward pass processes only a single token. The model weights (tens of billions of parameters, stored as BF16/FP16) must be streamed from HBM to the compute units for every single token generated. The arithmetic intensity (FLOPs per byte of memory traffic) is very low — roughly O(1) FLO
+
+0.35.510.146 I common_perf_print:    sampling time =      23.71 ms
+0.35.510.148 I common_perf_print:    samplers time =      10.70 ms /   152 tokens
+0.35.510.150 I common_perf_print:        load time =     505.96 ms
+0.35.510.151 I common_perf_print: prompt eval time =     505.61 ms /    24 tokens (   21.07 ms per token,    47.47 tokens per second)
+0.35.510.152 I common_perf_print:        eval time =    5936.85 ms /   127 runs   (   46.75 ms per token,    21.39 tokens per second)
+0.35.510.154 I common_perf_print:       total time =    6468.36 ms /   151 tokens
+0.35.510.156 I common_perf_print: unaccounted time =       2.19 ms /   0.0 %      (total - sampling - prompt eval - eval) / (total)
+0.35.510.156 I common_perf_print:    graphs reused =          0

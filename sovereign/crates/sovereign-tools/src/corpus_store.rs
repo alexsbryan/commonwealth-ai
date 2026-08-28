@@ -19,56 +19,29 @@
 //! replaces its chunks rather than doubling them — the right semantic for the
 //! per-item ingest model. Effect is `Write` (a real side effect, never cached).
 
-use async_trait::async_trait;
-
 use corpus_engine::{CorpusIndex, InsertChunk};
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
+use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::*;
+use std::sync::Arc;
 
 pub struct CorpusStoreTool;
 
-#[async_trait]
-impl Tool for CorpusStoreTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "corpus_store".to_string(),
-            name: "corpus_store".to_string(),
-            description: "Write (chunk, embedding) pairs into a searchable corpus index. \
-                          Pairs the `chunks` and `embeddings` collections by position; \
-                          idempotent per `source_doc_id`."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "corpus": { "type": "string", "description": "Corpus id (directory under the index dir)" },
-                    "chunks": { "type": "string", "description": "JSON array of {text, index} (or strings) — e.g. {chunk.output}" },
-                    "embeddings": { "type": "string", "description": "JSON array of embedding vectors — e.g. {embed.output}" },
-                    "source_doc_id": { "type": "string", "description": "Document key; its prior rows are replaced (idempotency). Default: the corpus id." },
-                    "title": { "type": "string", "description": "Title stored on each chunk" },
-                    "embedding_model": { "type": "string", "description": "Embed model name recorded in corpus metadata (informational)" },
-                    "index_dir": { "type": "string", "description": "Index root. Default: ~/.svrnmesh/indexes" },
-                    "build_indexes": { "type": "boolean", "description": "Build vector+FTS indices after write (default true)" }
-                },
-                "required": ["corpus", "chunks", "embeddings"]
-            }),
-            examples: vec![],
-            // A real external side effect (writes the LanceDB table), so the
-            // content cache must never skip it. The per-doc overwrite makes
-            // re-execution idempotent regardless.
-            effect: Effect::Write,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Slow,
-            scope: Scope::Persistent,
-            output_schema: None,
-        }
+impl CorpusStoreTool {
+    /// Bind this tool's state to its `corpus_store` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("corpus_store", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `corpus_store`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus = str_param(params, "corpus")?;
         let title = params
             .get("title")
@@ -324,18 +297,6 @@ fn default_index_dir() -> std::path::PathBuf {
 mod tests {
     use super::*;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     /// Definition of done: store → search returns the chunk; re-store is
     /// idempotent (overwrites, doesn't duplicate). CI-safe — temp index dir,
     /// deterministic embeddings, FTS flat-scan search (no daemon/weights).
@@ -368,7 +329,10 @@ mod tests {
             "build_indexes": false
         });
 
-        let out = CorpusStoreTool.execute(&params, &ctx()).await.unwrap();
+        let out = CorpusStoreTool
+            .run(&params, &ToolContext::default())
+            .await
+            .unwrap();
         match out {
             StepOutput::Text(t) => assert!(t.contains("stored 3"), "{t}"),
             o => panic!("unexpected output: {o:?}"),
@@ -395,7 +359,10 @@ mod tests {
 
         // Idempotent: re-storing the same document replaces, not duplicates —
         // the row count stays 3, not 6.
-        CorpusStoreTool.execute(&params, &ctx()).await.unwrap();
+        CorpusStoreTool
+            .run(&params, &ToolContext::default())
+            .await
+            .unwrap();
         let index2 = CorpusIndex::open(&index_dir.join("conrad")).await.unwrap();
         assert_eq!(
             index2.chunk_count().await.unwrap(),

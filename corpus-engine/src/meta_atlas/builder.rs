@@ -472,7 +472,7 @@ pub fn read_meta_atlas(path: &Path) -> std::io::Result<MetaAtlasFile> {
 /// it doesn't carry a `stream` block, or when parsing fails. Used by
 /// the builder to attach per-corpus stability to each anchor.
 fn read_corpus_stability(corpus_dir: &Path) -> Option<Stability> {
-    let meta_path = corpus_dir.join("_corpus_meta.json");
+    let meta_path = crate::corpus::Corpus::meta_in(&corpus_dir);
     let s = std::fs::read_to_string(&meta_path).ok()?;
     let v: serde_json::Value = serde_json::from_str(&s).ok()?;
     let block: StreamAxes = serde_json::from_value(v.get("stream")?.clone()).ok()?;
@@ -544,7 +544,7 @@ mod tests {
                 }
             });
             fs::write(
-                corpus_dir.join("_corpus_meta.json"),
+                crate::corpus::Corpus::meta_in(&corpus_dir),
                 serde_json::to_string_pretty(&meta).unwrap(),
             )
             .unwrap();

@@ -130,9 +130,9 @@ impl MeshState {
             join_link: None,
             join_key: None,
             // Populated by the daemon's mesh_get_state wrapper from
-            // EmbeddedDaemon::founder_reachability() — None here, same as the
+            // EmbeddedDaemon::self_reachability() — None here, same as the
             // invite fields (this AppState path doesn't own the endpoint).
-            founder_reachability: None,
+            self_reachability: None,
         };
 
         Self {

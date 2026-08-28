@@ -340,6 +340,10 @@ impl Runtime {
             message_chars = message.len(),
             "handle_knowledge_query: begin"
         );
+        // The turn's enrichment providers, resolved ONCE (daemon-convergence
+        // Phase 4a). Handed to the pipeline on the state; every step reads
+        // `st.lane` rather than reaching through `rt`.
+        let lane = self.lane();
 
         // 1. Embed the query using the query-side function (applies
         //    instruction prefix for asymmetric models like Qwen3-Embedding).
@@ -389,6 +393,7 @@ impl Runtime {
             embedding,
             "KnowledgeQuery",
             "KnowledgeQuery".to_string(),
+            lane.clone(),
         );
         kq_pipeline().run(self, &mut pipeline_state).await;
         let PipelineState {
@@ -449,10 +454,31 @@ impl Runtime {
         // until bench fixtures are updated to a broader refusal-
         // vocabulary expected set.
         if chunks.is_empty() {
+            // The turn LOST a corpus it would have searched — say why, rather
+            // than "found nothing relevant", which reads as "there is nothing".
+            //
+            // Until 2026-08-25 this case never reached here: the
+            // `readiness_disclosure` pipeline step made the pool non-empty by
+            // injecting the same guidance as a `score: 1.0` chunk, so an
+            // unavailable corpus produced a turn that looked grounded, counted
+            // a hit it never retrieved, and handed the grounding gate a
+            // quotable leaf. Deleting the injector is what routes the case
+            // here; the disclosure rides the prompt, where instructions live.
+            let guidance =
+                crate::runtime::unavailability::unavailability_guidance(&unavailable_corpora);
+            if guidance.is_some() {
+                tracing::info!(
+                    target: "retrieval.pipeline",
+                    lost = unavailable_corpora.len(),
+                    "KnowledgeQuery: empty pool over a lost corpus — disclosing in the prompt"
+                );
+            }
             tracing::info!("KnowledgeQuery: no chunks — answering from parametric knowledge");
             let corpora = context.installed_corpora_display();
-            let prompt = format!(
-                "The user asked: \"{message}\"\n\n\
+            let prompt = match &guidance {
+                Some(g) => format!("The user asked: \"{message}\"\n\n{g}"),
+                None => format!(
+                    "The user asked: \"{message}\"\n\n\
                  A search of the installed sources ({corpora}) found nothing \
                  relevant, so you have no evidence from the user's own material. \
                  Your reply already opens by noting that — so continue straight \
@@ -473,7 +499,8 @@ impl Runtime {
                  \"<symbols>\", function calls) and never say you will \"search the \
                  codebase\" or \"look it up\" — you cannot. Answer directly or say \
                  plainly you don't have it."
-            );
+                ),
+            };
             let request = CompletionRequest {
                 prompt,
                 system_message: None,
@@ -501,7 +528,17 @@ impl Runtime {
                 // slot; this was the holdout bank's whole honesty gap,
                 // 0.64 vs a 0.91 counterfactual). The KQ stream spawn
                 // emits the prefix as visible text.
-                assistant_prefix: Some(crate::runtime::prompts::GK_CAVEAT_PREFIX.to_string()),
+                //
+                // EXCEPT on the disclosure branch. "Not in your sources — from
+                // general knowledge:" promises the very answer the guidance
+                // forbids ("do not answer from general knowledge or invent an
+                // answer"), so committing it there would make the structural
+                // prefix contradict the prompt it prefixes. A lost corpus is
+                // not a general-knowledge turn; it is a refusal.
+                assistant_prefix: match &guidance {
+                    Some(_) => None,
+                    None => Some(crate::runtime::prompts::GK_CAVEAT_PREFIX.to_string()),
+                },
                 cmd_prefix: None,
                 url_allowlist: None,
                 evidence_id_allowlist: None,
@@ -536,7 +573,14 @@ impl Runtime {
                 // Zero-retrieval parametric decline — a short honest
                 // "no sources" answer; lessons don't engage here.
                 lessons: crate::runtime::types::TurnLessons::default(),
-                general_knowledge: Some(crate::runtime::types::GkReason::ZeroChunk),
+                // Same fork, same reason: the disclosure branch is not
+                // answering from parametric knowledge, so labelling it
+                // `ZeroChunk` would tell every downstream reader of this
+                // field that it did.
+                general_knowledge: match &guidance {
+                    Some(_) => None,
+                    None => Some(crate::runtime::types::GkReason::ZeroChunk),
+                },
                 demands,
                 query_embedding: embedding,
                 // Zero retrieval never reaches the admission stage — there
@@ -678,7 +722,7 @@ impl Runtime {
         // the chunks, the call failed — it says so and nothing is
         // substituted (ARCH §18.3).
         use crate::runtime::grounding::native_grounding::admission::{self, AdmissionOutcome};
-        let admission = admission::admit(message, &chunks, self.rerank_fn.as_ref()).await;
+        let admission = admission::admit(message, &chunks, lane.rerank.f()).await;
         let native_verdict: Option<crate::types::GroundingVerdict> = match &admission {
             // Flag off: `admit` returned before doing anything at all.
             AdmissionOutcome::Disabled => None,
@@ -1025,9 +1069,9 @@ impl Runtime {
         // graph absent → empty set → no markers, behaviour
         // unchanged.
         let contested_titles: std::collections::HashSet<String> =
-            self.contested_titles_for_chunks(&chunks).await;
+            self.contested_titles_for_chunks(&chunks, &lane).await;
         let folder_meta = self.folder_metadata_snapshot().await;
-        self.rerank_conv_chunks_via_ppr(message, &mut chunks, &display_categories)
+        self.rerank_conv_chunks_via_ppr(message, &mut chunks, &display_categories, &lane)
             .await;
         // Late RAPTOR injection (SOVEREIGN_RAPTOR_LATE): inject summaries AFTER
         // the full leaf pipeline (reweight → … → ppr-rerank) so they cannot
@@ -1054,6 +1098,7 @@ impl Runtime {
                 &mut chunks,
                 "KnowledgeQuery",
                 context.conversation.enabled_corpora.as_deref(),
+                &lane,
             )
             .await;
             chunks = reserve_raptor_chunks(std::mem::take(&mut chunks));
@@ -1089,7 +1134,7 @@ impl Runtime {
             agentic_corpus_anchored = corpus_anchored;
         }
         let conv_briefing = self
-            .build_conv_briefing_block(&chunks, &display_categories)
+            .build_conv_briefing_block(&chunks, &display_categories, &lane)
             .await;
         let formatted_doc = format_scored_chunks_counted(
             &chunks,
@@ -1735,7 +1780,7 @@ impl Runtime {
             .await;
             grounding_gate_meta = Some(outcome.meta);
             gate_claims = Some(outcome.claims);
-            outcome.text
+            outcome.answer.text().to_string()
         } else {
             completion.text.clone()
         };
@@ -1896,6 +1941,9 @@ impl Runtime {
             None,
         );
         let provenance = ResponseProvenance {
+            // Which classifiers were live behind this route; `None` from a router
+            // that does not report. `routed_by_none()` marks a DEGRADED host.
+            router: self.router.stamp(),
             // Actual routed intent, not a hardcoded label — this handler serves
             // both KnowledgeQuery and ComparisonQuery (see the streaming twin).
             intent: format!("{intent:?}"),

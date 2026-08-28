@@ -124,6 +124,25 @@ impl ConversationStore for MockStore {
     async fn search_messages(&self, _query: &str) -> Result<Vec<Message>> {
         Ok(Vec::new())
     }
+    /// MockStore is a message log: `get_conversation` reconstructs a
+    /// conversation from the messages in it, so there is no row to seed
+    /// and an empty conversation cannot be represented here at all.
+    ///
+    /// It therefore refuses by name rather than returning `Ok(())`. The
+    /// trait's no-op default did the latter until 2026-08-25 and that is
+    /// the defect this refusal exists to keep out: a test that seeds a
+    /// conversation against this double is testing nothing, and should
+    /// fail saying so instead of passing (ARCH §18.3).
+    async fn insert_empty_conversation(
+        &self,
+        _id: &str,
+        _created_at: i64,
+        _surface_skill_id: Option<&str>,
+    ) -> Result<()> {
+        Err(Error::Storage(
+            "MockStore holds messages only and cannot seed a conversation row".into(),
+        ))
+    }
     async fn delete_conversation(&self, _id: &str) -> Result<()> {
         Ok(())
     }
@@ -744,7 +763,7 @@ async fn noop_planner_returns_not_implemented() {
 
 fn build_runtime(response: &str) -> (Runtime, Arc<MockStore>) {
     let store = Arc::new(MockStore::new());
-    let runtime = Runtime::new(
+    let runtime = Runtime::new(sovereign_core::RuntimeParts::new(
         Arc::new(MockInference::new(response)),
         Box::new(PassthroughRouter),
         Box::new(NoOpPlanner),
@@ -753,7 +772,10 @@ fn build_runtime(response: &str) -> (Runtime, Arc<MockStore>) {
         Arc::new(SkillRegistry::new()),
         Arc::new(AutoApprovalChannel),
         sovereign_core::types::InferenceConfig::default(),
-    );
+        // Phase 4b: enrichment is a required argument, not eight
+        // forgettable builders.
+        sovereign_core::runtime::lane::LaneSources::none(),
+    ));
     (runtime, store)
 }
 
@@ -1281,7 +1303,7 @@ async fn runtime_complex_task_end_to_end() {
 
     let store = Arc::new(MockStore::new());
     let skills = Arc::new(SkillRegistry::new());
-    let runtime = Runtime::new(
+    let runtime = Runtime::new(sovereign_core::RuntimeParts::new(
         inference,
         Box::new(ComplexTaskRouter),
         Box::new(LlmPlanner::new(
@@ -1293,7 +1315,10 @@ async fn runtime_complex_task_end_to_end() {
         skills,
         Arc::new(AutoApprovalChannel),
         sovereign_core::types::InferenceConfig::default(),
-    );
+        // Phase 4b: enrichment is a required argument, not eight
+        // forgettable builders.
+        sovereign_core::runtime::lane::LaneSources::none(),
+    ));
 
     let response = runtime
         .handle_message("compare Python and Rust", "c1")
@@ -1819,7 +1844,7 @@ fn build_runtime_with_finish(
     completion_tokens: Option<u32>,
 ) -> (Runtime, Arc<MockStore>) {
     let store = Arc::new(MockStore::new());
-    let runtime = Runtime::new(
+    let runtime = Runtime::new(sovereign_core::RuntimeParts::new(
         Arc::new(TruncatingMockInference {
             response_text: response.to_string(),
             finish_reason,
@@ -1832,7 +1857,10 @@ fn build_runtime_with_finish(
         Arc::new(SkillRegistry::new()),
         Arc::new(AutoApprovalChannel),
         sovereign_core::types::InferenceConfig::default(),
-    );
+        // Phase 4b: enrichment is a required argument, not eight
+        // forgettable builders.
+        sovereign_core::runtime::lane::LaneSources::none(),
+    ));
     (runtime, store)
 }
 
@@ -1982,7 +2010,7 @@ fn build_conation_runtime(
 ) {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     let store = Arc::new(MockStore::new());
-    let runtime = Runtime::new(
+    let runtime = Runtime::new(sovereign_core::RuntimeParts::new(
         Arc::new(MockInference::new(response)),
         Box::new(ConationRouter),
         Box::new(NoOpPlanner),
@@ -1991,7 +2019,10 @@ fn build_conation_runtime(
         Arc::new(SkillRegistry::new()),
         Arc::new(SpyLessonChannel { tx }),
         sovereign_core::types::InferenceConfig::default(),
-    );
+        // Phase 4b: enrichment is a required argument, not eight
+        // forgettable builders.
+        sovereign_core::runtime::lane::LaneSources::none(),
+    ));
     (runtime, store, rx)
 }
 
@@ -2255,17 +2286,22 @@ async fn lessons_shape_the_synthesis_request() {
     // the streaming path by construction.
     let (_dir, notes) = lesson_note_store(&[param_lesson_payload(), prompt_lesson_payload()]).await;
     let recording = Arc::new(RecordingInference::new("a fine answer"));
-    let runtime = Runtime::new(
-        recording.clone(),
-        Box::new(PassthroughRouter),
-        Box::new(NoOpPlanner),
-        Arc::new(ToolRegistry::new()),
-        Arc::new(MockStore::new()),
-        Arc::new(SkillRegistry::new()),
-        Arc::new(AutoApprovalChannel),
-        sovereign_core::types::InferenceConfig::default(),
-    )
-    .with_note_store(notes);
+    let runtime = Runtime::new(sovereign_core::RuntimeParts {
+        note_store: Some(notes),
+        ..sovereign_core::RuntimeParts::new(
+            recording.clone(),
+            Box::new(PassthroughRouter),
+            Box::new(NoOpPlanner),
+            Arc::new(ToolRegistry::new()),
+            Arc::new(MockStore::new()),
+            Arc::new(SkillRegistry::new()),
+            Arc::new(AutoApprovalChannel),
+            sovereign_core::types::InferenceConfig::default(),
+            // Phase 4b: enrichment is a required argument, not eight
+            // forgettable builders.
+            sovereign_core::runtime::lane::LaneSources::none(),
+        )
+    });
 
     runtime
         .handle_message("what is the meaning of x", "c1")
@@ -2305,17 +2341,22 @@ async fn streaming_turn_applies_term_avoid_and_whispers_once() {
     let (_dir, notes) = lesson_note_store(&[transform_lesson_payload()]).await;
     let mock_answer = "The corpus helps here. [Source: Corpus Handbook] More corpus talk.";
     let store = Arc::new(MockStore::new());
-    let runtime = Runtime::new(
-        Arc::new(RecordingInference::new(mock_answer)),
-        Box::new(PassthroughRouter),
-        Box::new(NoOpPlanner),
-        Arc::new(ToolRegistry::new()),
-        store.clone(),
-        Arc::new(SkillRegistry::new()),
-        Arc::new(AutoApprovalChannel),
-        sovereign_core::types::InferenceConfig::default(),
-    )
-    .with_note_store(notes);
+    let runtime = Runtime::new(sovereign_core::RuntimeParts {
+        note_store: Some(notes),
+        ..sovereign_core::RuntimeParts::new(
+            Arc::new(RecordingInference::new(mock_answer)),
+            Box::new(PassthroughRouter),
+            Box::new(NoOpPlanner),
+            Arc::new(ToolRegistry::new()),
+            store.clone(),
+            Arc::new(SkillRegistry::new()),
+            Arc::new(AutoApprovalChannel),
+            sovereign_core::types::InferenceConfig::default(),
+            // Phase 4b: enrichment is a required argument, not eight
+            // forgettable builders.
+            sovereign_core::runtime::lane::LaneSources::none(),
+        )
+    });
 
     // Turn 1: transform applies, whisper fires.
     drain(

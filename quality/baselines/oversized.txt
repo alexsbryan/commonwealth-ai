@@ -80,7 +80,7 @@
 1433	sovereign/crates/sovereign-contracts/src/skills.rs
 1692	sovereign/crates/sovereign-contracts/src/traits.rs
 1677	sovereign/crates/sovereign-contracts/src/types/mod.rs
-1968	sovereign/crates/sovereign-core/src/atlas_context.rs
+1968	corpus-engine/src/enrichment/atlas/context.rs
 1620	sovereign/crates/sovereign-core/src/executor.rs
 1318	sovereign/crates/sovereign-core/src/lessons.rs
 2543	sovereign/crates/sovereign-core/src/memory.rs

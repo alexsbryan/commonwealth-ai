@@ -228,7 +228,7 @@ mod tests {
         let canonical = src.path().join("test-corpus");
         fs::create_dir_all(canonical.join("chunks.lance/_versions")).unwrap();
         fs::write(
-            canonical.join("_corpus_meta.json"),
+            crate::corpus::Corpus::meta_in(&canonical),
             b"{\"corpus_id\":\"test\"}",
         )
         .unwrap();
@@ -257,8 +257,8 @@ mod tests {
         // File tree equality.
         let read = |p: &Path| std::fs::read(p).unwrap();
         assert_eq!(
-            read(&canonical.join("_corpus_meta.json")),
-            read(&dst_canonical.join("_corpus_meta.json"))
+            read(&crate::corpus::Corpus::meta_in(&canonical)),
+            read(&crate::corpus::Corpus::meta_in(&dst_canonical))
         );
         assert_eq!(
             read(&canonical.join("chunks.lance/manifest.json")),

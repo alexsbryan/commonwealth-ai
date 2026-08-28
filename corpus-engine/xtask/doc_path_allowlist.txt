@@ -66,3 +66,15 @@ init/
 # orphaned-DB split-brain. The passage describes the historical defect;
 # no such directory ever belonged in the repo.
 indexes/
+
+# §3 SEC-facts sidecar staging: `raw/` is the per-corpus download staging
+# directory under ~/.svrnmesh/indexes/_downloads/<corpus>/raw/. It is created
+# at ingest time and never exists in the repo — same class as
+# test-artifacts/a11y/ above.
+raw/
+
+# §3 names the Python decider it REPLACED by name — the passage's whole point
+# is that `scripts/sec_facts.py` was deleted (order `sec-facts-decider-port`)
+# after a parity test against its committed output. Same shape as
+# discovery/tls.rs above.
+scripts/sec_facts.py

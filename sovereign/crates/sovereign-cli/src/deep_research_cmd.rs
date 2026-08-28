@@ -73,8 +73,21 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
     // charter, the flags, and the replay harness read the same consts.
     let mut code_set_k = sovereign_core::deep_research::acquisition::DEFAULT_CODE_SET_K;
     let mut eps_quota = sovereign_core::deep_research::acquisition::DEFAULT_EPS_QUOTA;
-    let mut search_allowance = 4u32;
-    let mut fetch_allowance = 4u32;
+    // Greedy acquisition (2026-08-24). AIQ's own `resource_limits` are up
+    // to 20 research queries and 100 source-tool calls per job, and its
+    // InfoRecall lead over every frontier entry is a breadth result, not a
+    // scorer trick. Ours were 4 and 4 — a toy budget on a command named
+    // "deep research". Measured cost of the old shape on a logged DRB-I
+    // flight: a mean of 5 distinct sources per task, and 17.6% of the
+    // evidence available for those tasks ever reaching the window.
+    //
+    // These are CEILINGS, not spend: the round split
+    // (`budget::round_allowance_cap`) still divides them across rounds,
+    // the decider still refuses past them, and `--search` / `--fetch`
+    // still override. Nothing here makes a run spend more than the
+    // evidence it can actually find.
+    let mut search_allowance = 20u32;
+    let mut fetch_allowance = 100u32;
     // Which flags the operator ACTUALLY passed (order deep-research-t3a):
     // a `--resume` inherits the checkpoint's frozen values for flags that
     // were NOT passed — only explicitly-passed flags are verified against

@@ -33,7 +33,7 @@ Grouped by what each tool actually protects, not by where the code lives.
 |---|---|---|---|
 | **Atlas phase eval** | `sovereign enrich eval --corpus <id>` | Per-phase precision/recall/F1 (Sections, Facts, Tensions, …) against a golden-set TOML. The standard bench for parsing books and enrichment corpora. | `sovereign/crates/sovereign-cli/src/enrich_cmd/eval.rs` |
 | **Eval-median (variance)** | `sovereign enrich eval-median --corpus <id> --runs N` | Reset → build → eval N times. Reports min/median/max F1 per phase to separate signal from noise; flags phases that look stochastic. | `sovereign/crates/sovereign-cli/src/enrich_cmd/eval_median.rs` |
-| **Awareness eval** | `sovereign awareness eval [--from-template consulting\|startup\|team-lead]` | Person/org/initiative extraction P/R/F1 over personal-knowledge + conversation-history views. | `sovereign/crates/sovereign-cli/src/awareness_cmd/eval.rs` |
+| **Awareness eval** | `sovereign awareness eval [--from-template consulting\|startup\|team-lead]` | Person/org/initiative extraction P/R/F1 over personal-knowledge + conversation-history views. | `sovereign/crates/sovereign-cli-llm/src/awareness_cmd/eval.rs` |
 
 ### 4. Throughput & model-fit
 

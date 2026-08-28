@@ -1,0 +1,1134 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787887462",
+  "charter_hash": "81972347b9ca3ebf",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Based on the evidence provided, here is a detailed explanation of the differences and connections between Google's A2A protocol and the MCP protocol, along with an elaboration on the innovative aspects of A2A. [Source: ev-<ev-15>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "The primary distinction lies in their specific layer within the AI agent ecosystem stack; they are designed to be complementary rather than competing standards [Source: ev-<estate-13>][ev-<estate-5>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "*   **Scope and Function:**\n    *   **MCP (Model Context Protocol):** Introduced by Anthropic in November 2024, MCP focuses on connecting individual Large Language Models (LLMs) or agents to external tools, data sources, and APIs. [Source: ev-<ev-15>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "It acts as a \"model-to-world\" interface, standardizing how an AI accesses real-time data like databases or web services [Source: ev-<ev-28>][ev-<ev-43>][ev-<estate-2>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c5",
+      "text": "Its purpose is to solve the fragmentation of custom integrations required for every new tool (\"the M x N problem\") [Source: ev-<ev-36>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "*   **A2A (Agent-to-Agent Protocol):** Launched by Google in April 2025, A2A focuses on enabling autonomous agents to communicate with and delegate tasks to one another. [Source: ev-<ev-15>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "It acts as a horizontal \"agent-to-agent\" collaboration framework, allowing agents from different vendors or frameworks to discover each other and coordinate actions without needing direct code-level integration [Source: ev-<estate-17>][ev-<estate-4>][ev-<estate-9>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c8",
+      "text": "While MCP connects an agent to resources/tools, A2A connects agents to peers [Source: ev-<ev-38>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c9",
+      "text": "*   **Architecture and Communication:**\n    *   **MCP Architecture:** Utilizes a client-server model where the LLM (host) communicates via JSON-RPC 2.0 messages over HTTP/HTTPS or stdio with external servers providing context [Source: ev-<ev-24>][ev-<ev-43>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c10",
+      "text": "It is designed for request/response interactions regarding tool invocation [Source: ev-<ev-15>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c11",
+      "text": "*   **A2A Architecture:** Defines a similar client-server relationship but specifically between agents. [Source: ev-<ev-15>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c12",
+      "text": "A remote agent publishes an \"Agent Card\" at a `.well-known` URL describing its capabilities, skills, and endpoints. [Source: ev-<ev-15>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c13",
+      "text": "Clients query these cards to discover what other agents can do before initiating tasks [Source: ev-<estate-9>][ev-<estate-7>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c14",
+      "text": "Communication involves HTTP POST requests with JSON-RPC payloads over HTTPS, supporting streaming operations via Server-Sent Events (SSE) for long-running tasks [Source: ev-<ev-34>][ev-<estate-11>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c15",
+      "text": "*   **Governance and Adoption:**\n    *   **MCP Governance:** Remains under the stewardship of Anthropic as an open standard but has seen explosive adoption driven by major players like OpenAI, Microsoft, and Google DeepMind integrating it into their platforms [Source: ev-<ev-28>][ev-<ev-36>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c16",
+      "text": "*   **A2A Governance:** Donated to the Linux Foundation in June 2025 to ensure neutral governance and prevent vendor lock-in. [Source: ev-<ev-15>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c17",
+      "text": "This move attracted support from over 100 technology companies (including Amazon, Cisco, Salesforce) aiming for industry-wide collaboration rather than proprietary control [Source: ev-<estate-13>][ev-<estate-14>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c18",
+      "text": "The A2A protocol introduces several innovative mechanisms designed specifically for multi-agent orchestration:\n\n*   **Agent Cards as Discovery Mechanism:**\n    One of A2A's core innovations is the \"Agent Card,\" a standardized JSON document published at `.well-known/agent.json`. [Source: ev-<ev-34>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c19",
+      "text": "This card acts as an identity and capability manifest, detailing the agent's skills, supported modalities (e.g., text, code), authentication requirements, and pricing models. [Source: ev-<ev-34>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c20",
+      "text": "Other agents can query these cards to dynamically compose workflows without hard-coded integrations [Source: ev-<estate-9>][ev-<estate-7>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c21",
+      "text": "*   **Streaming Operations and Asynchronous Processing:**\n    Unlike traditional synchronous request/response patterns common in REST APIs or early MCP implementations, A2A natively supports streaming processing using Server-Sent Events (SSE). [Source: ev-<ev-34>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c22",
+      "text": "This allows clients to receive real-time incremental updates on task progress, status changes, and partial results during long-running operations like document generation or media processing. [Source: ev-<ev-34>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c23",
+      "text": "It also includes a push notification mechanism for asynchronous tasks suitable for mobile and serverless scenarios [Source: ev-<ev-34>][ev-<estate-11>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c24",
+      "text": "*   **Task Lifecycle Management:**\n    The protocol provides complete lifecycle management for agent interactions, including task tracking, status updates, artifact management, and error handling. [Source: ev-<ev-34>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c25",
+      "text": "This structured approach ensures that complex multi-step workflows can be monitored and managed effectively across different agents [Source: ev-<ev-34>][ev-<estate-9>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c26",
+      "text": "*   **Extension Mechanisms:**\n    A2A features a flexible extension system allowing custom behavior through data extensions (adding new fields), method extensions (new actions), and profile extensions. [Source: ev-<ev-34>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c27",
+      "text": "This modularity supports the evolution of the protocol without breaking existing implementations [Source: ev-<ev-34>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c28",
+      "text": "The development of A2A was driven by specific interoperability challenges identified in the current AI landscape:\n\n1. [Source: ev-<estate-10>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c29",
+      "text": "**Agent Fragmentation and Silos:** As organizations deploy agents from different vendors or frameworks, they often operate in silos because each uses proprietary APIs for identity, discovery, and messaging. [Source: ev-<estate-10>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c30",
+      "text": "A2A addresses this fragmentation by providing a standardized communication layer that allows heterogeneous agents to collaborate seamlessly [Source: ev-<estate-5>][ev-<estate-9>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c31",
+      "text": "2. [Source: ev-<estate-10>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c32",
+      "text": "**Vendor Lock-in:** The lack of standardization forces enterprises to build custom connectors for every new agent vendor, creating dependency on specific platforms. [Source: ev-<estate-10>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c33",
+      "text": "By moving under Linux Foundation governance with broad industry support (Amazon, Microsoft, etc.), A2A aims to mitigate these risks and promote an open ecosystem where agents can interact regardless of their origin [Source: ev-<estate-13>][ev-<estate-4>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c34",
+      "text": "3. [Source: ev-<estate-10>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c35",
+      "text": "**Coordination Complexity in Multi-Agent Systems:** Complex business problems often require multiple specialized agents working together across different domains or company boundaries. [Source: ev-<estate-10>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c36",
+      "text": "Without a common framework, coordinating these handoffs is difficult. [Source: ev-<estate-10>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c37",
+      "text": "A2A provides the necessary semantic model and version negotiation to facilitate this coordination [Source: ev-<ev-6>][ev-<ev-7>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c38",
+      "text": "*Note on Security Enhancements:* While the original specification had identified vulnerabilities regarding sensitive data handling (such as lack of token lifetime limits or strong customer authentication), research papers have proposed specific enhancements like explicit user consent orchestration (`USER_CONSENT_REQUIRED`) and direct data flow controllers to mitigate risks associated with prompt injection and unauthorized disclosure in multi-agent environments [Source: ev-<estate-10>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c39",
+      "text": "Based on the evidence provided, here is a synthesis of the facts regarding Google's A2A protocol:\n\n**Launch and Purpose**\nGoogle introduced the Agent-to-Agent (A2A) Protocol in April 2025 to address interoperability challenges within multi-agent systems. [Source: ev-<estate-11>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c40",
+      "text": "Its primary goal is to enable seamless communication and collaboration between AI agents regardless of their underlying frameworks or vendors [Source: ev-<estate-4>][Source: ev-<estate-9>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c41",
+      "text": "While Anthropic’s Model Context Protocol (MCP) focuses on connecting models to external tools and data sources, A2A specifically enables \"agent-to-agent\" coordination, allowing autonomous agents to discover one another, exchange information securely, and coordinate actions across diverse enterprise systems [Source: ev-<estate-11>][Source: ev-<estate-6>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c42",
+      "text": "This move was intended to ensure neutral governance, promote open standards, and foster industry collaboration while mitigating risks of vendor lock-in or conflicts of interest [Source: ev-<estate-13>][Source: ev-<estate-9>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c43",
+      "text": "Jim Zemlin, Executive Director of the Linux Foundation, stated this ensures long-term neutrality for the project [Source: ev-<estate-14>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c44",
+      "text": "The donation formalized a commitment to an \"open, interoperable Internet of Agents\" through community-driven development [Source: ev-<estate-14>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c45",
+      "text": "**Industry Support and Adoption**\nThe protocol has garnered significant backing. [Source: ev-<estate-11>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c46",
+      "text": "It is supported by over 50 technology partners at its launch (including Amazon, Cisco, Microsoft, Salesforce, ServiceNow, Atlassian, Box, LangChain) [Source: ev-<estate-5>][Source: ev-<estate-2>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c47",
+      "text": "Following the Linux Foundation's involvement in April 2026, support grew to surpass 150 organizations within that year [Source: ev-<estate-6>][Source: ev-<estate-13>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c48",
+      "text": "Major cloud providers have integrated A2A into their platforms; for instance, Microsoft embedded it in Azure AI Foundry and Copilot Studio, while AWS added support through Amazon Bedrock AgentCore Runtime [Source: ev-<estate-6>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c49",
+      "text": "The project has accumulated over 22,000 GitHub stars as of early 2026 [Source: ev-<estate-6>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c50",
+      "text": "**Technical Architecture**\nThe A2A protocol defines a client-server model where agents act either as clients (initiating tasks) or remote servers (receiving requests). [Source: ev-<estate-11>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c51",
+      "text": "Key components include:\n*   **Agent Cards:** Public metadata documents published at `.well-known/agent.json` that describe an agent's identity, capabilities (\"skills\"), and connection endpoints. [Source: ev-<estate-11>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c52",
+      "text": "These serve as the discovery mechanism for other agents [Source: ev-<estate-9>][Source: ev-<estate-5>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c53",
+      "text": "Clients initiate these via HTTP POST requests containing JSON-RPC 2.0 payloads over HTTPS [Source: ev-<estate-13>][Source: ev-<estate-7>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c54",
+      "text": "**Security Concerns and Enhancements**\nResearch indicates that the original A2A specification had critical security limitations regarding sensitive data handling. [Source: ev-<estate-11>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c55",
+      "text": "Identified vulnerabilities included an absence of token lifetime limits, lack of strong customer authentication (SCA), insufficiently granular token scopes, and potential excessive exposure of data to agents due to a lack of transparency or user consent flows [Source: ev-<estate-10>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c56",
+      "text": "**Comparison with MCP**\nThe ecosystem views A2A and MCP not as competitors but as complementary layers. [Source: ev-<estate-11>]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c57",
+      "text": "MCP provides the \"model-to-world\" interface (connecting models to tools/data), while A2A provides the \"agent-to-agent\" framework for collaboration between intelligent systems [Source: ev-<estate-2>][Source: ev-<estate-5>].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_unresolvable_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Based on the evidence provided, here is a synthesis of the facts regarding Google's A2A protocol:\n\n**Launch and Purpose**\nGoogle introduced the Agent-to-Agent (A2A) Protocol in April 2025 to address interoperability challenges within multi-agent systems. [Source: ev-<estate-11>]",
+      "actionable_query": "A) Protocol in April to address interoperability challenges within multi-agent systems. (2)",
+      "from_claim_id": "c39",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "Its primary goal is to enable seamless communication and collaboration between AI agents regardless of their underlying frameworks or vendors [Source: ev-<estate-4>][Source: ev-<estate-9>].",
+      "actionable_query": "Its primary goal is to enable seamless communication and collaboration between AI agents regardless of their underlying frameworks or vendor (2)",
+      "from_claim_id": "c40",
+      "corroboration": null
+    },
+    {
+      "id": "g3",
+      "text": "While Anthropic’s Model Context Protocol (MCP) focuses on connecting models to external tools and data sources, A2A specifically enables \"agent-to-agent\" coordination, allowing autonomous agents to discover one another, exchange information securely, and coordinate actions across diverse enterprise systems [Source: ev-<estate-11>][Source: ev-<estate-6>].",
+      "actionable_query": "A specifically enables \"agent-to-agent\" coordination, allowing autonomous agents to discover another, exchange information securely, and coo (2)",
+      "from_claim_id": "c41",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "This move was intended to ensure neutral governance, promote open standards, and foster industry collaboration while mitigating risks of vendor lock-in or conflicts of interest [Source: ev-<estate-13>][Source: ev-<estate-9>].",
+      "actionable_query": "This move was intended to ensure neutral governance, promote open standards, and foster industry collaboration while mitigating risks of ven (2)",
+      "from_claim_id": "c42",
+      "corroboration": null
+    },
+    {
+      "id": "g5",
+      "text": "Jim Zemlin, Executive Director of the Linux Foundation, stated this ensures long-term neutrality for the project [Source: ev-<estate-14>].",
+      "actionable_query": "Jim Zemlin, Executive Director of the Linux Foundation, stated this ensures long-term neutrality for the project . (2)",
+      "from_claim_id": "c43",
+      "corroboration": null
+    },
+    {
+      "id": "g6",
+      "text": "The donation formalized a commitment to an \"open, interoperable Internet of Agents\" through community-driven development [Source: ev-<estate-14>].",
+      "actionable_query": "The donation formalized a commitment to an \"open, interoperable Internet of Agents\" through community-driven development . (2)",
+      "from_claim_id": "c44",
+      "corroboration": null
+    },
+    {
+      "id": "g7",
+      "text": "**Industry Support and Adoption**\nThe protocol has garnered significant backing. [Source: ev-<estate-11>]",
+      "actionable_query": "**Industry Support and Adoption** The protocol has garnered significant backing. (2)",
+      "from_claim_id": "c45",
+      "corroboration": null
+    },
+    {
+      "id": "g8",
+      "text": "It is supported by over 50 technology partners at its launch (including Amazon, Cisco, Microsoft, Salesforce, ServiceNow, Atlassian, Box, LangChain) [Source: ev-<estate-5>][Source: ev-<estate-2>].",
+      "actionable_query": "It is supported by over technology partners at its launch (including Amazon, Cisco, Microsoft, Salesforce, ServiceNow, Atlassian, Box, LangC (2)",
+      "from_claim_id": "c46",
+      "corroboration": null
+    },
+    {
+      "id": "g9",
+      "text": "Following the Linux Foundation's involvement in April 2026, support grew to surpass 150 organizations within that year [Source: ev-<estate-6>][Source: ev-<estate-13>].",
+      "actionable_query": "Following the Linux Foundation's involvement in April support grew to surpass organizations within that year . (2)",
+      "from_claim_id": "c47",
+      "corroboration": null
+    },
+    {
+      "id": "g10",
+      "text": "Major cloud providers have integrated A2A into their platforms; for instance, Microsoft embedded it in Azure AI Foundry and Copilot Studio, while AWS added support through Amazon Bedrock AgentCore Runtime [Source: ev-<estate-6>].",
+      "actionable_query": "A into their platforms; for instance, Microsoft embedded it in Azure AI Foundry and Copilot Studio, while AWS added support through Amazon B (2)",
+      "from_claim_id": "c48",
+      "corroboration": null
+    },
+    {
+      "id": "g11",
+      "text": "The project has accumulated over 22,000 GitHub stars as of early 2026 [Source: ev-<estate-6>].",
+      "actionable_query": "The project has accumulated over GitHub stars as of early . (2)",
+      "from_claim_id": "c49",
+      "corroboration": null
+    },
+    {
+      "id": "g12",
+      "text": "**Technical Architecture**\nThe A2A protocol defines a client-server model where agents act either as clients (initiating tasks) or remote servers (receiving requests). [Source: ev-<estate-11>]",
+      "actionable_query": "A protocol defines a client-server model where agents act either as clients (initiating tasks) or remote servers (receiving requests). (2)",
+      "from_claim_id": "c50",
+      "corroboration": null
+    },
+    {
+      "id": "g13",
+      "text": "Key components include:\n*   **Agent Cards:** Public metadata documents published at `.well-known/agent.json` that describe an agent's identity, capabilities (\"skills\"), and connection endpoints. [Source: ev-<estate-11>]",
+      "actionable_query": "Key components include: * **Agent Cards:** Public metadata documents published at `.well-known/agent.json` that describe an agent's identity (2)",
+      "from_claim_id": "c51",
+      "corroboration": null
+    },
+    {
+      "id": "g14",
+      "text": "These serve as the discovery mechanism for other agents [Source: ev-<estate-9>][Source: ev-<estate-5>].",
+      "actionable_query": "These serve as the discovery mechanism for other agents . (2)",
+      "from_claim_id": "c52",
+      "corroboration": null
+    },
+    {
+      "id": "g15",
+      "text": "Clients initiate these via HTTP POST requests containing JSON-RPC 2.0 payloads over HTTPS [Source: ev-<estate-13>][Source: ev-<estate-7>].",
+      "actionable_query": "Clients initiate these via HTTP POST requests containing JSON-RPC payloads over HTTPS . (2)",
+      "from_claim_id": "c53",
+      "corroboration": null
+    },
+    {
+      "id": "g16",
+      "text": "**Security Concerns and Enhancements**\nResearch indicates that the original A2A specification had critical security limitations regarding sensitive data handling. [Source: ev-<estate-11>]",
+      "actionable_query": "A specification had critical security limitations regarding sensitive data handling. (2)",
+      "from_claim_id": "c54",
+      "corroboration": null
+    },
+    {
+      "id": "g17",
+      "text": "Identified vulnerabilities included an absence of token lifetime limits, lack of strong customer authentication (SCA), insufficiently granular token scopes, and potential excessive exposure of data to agents due to a lack of transparency or user consent flows [Source: ev-<estate-10>].",
+      "actionable_query": "Identified vulnerabilities included an absence of token lifetime limits, lack of strong customer authentication (SCA), insufficiently granul (2)",
+      "from_claim_id": "c55",
+      "corroboration": null
+    },
+    {
+      "id": "g18",
+      "text": "**Comparison with MCP**\nThe ecosystem views A2A and MCP not as competitors but as complementary layers. [Source: ev-<estate-11>]",
+      "actionable_query": "A and MCP not as competitors but as complementary layers. (2)",
+      "from_claim_id": "c56",
+      "corroboration": null
+    },
+    {
+      "id": "g19",
+      "text": "MCP provides the \"model-to-world\" interface (connecting models to tools/data), while A2A provides the \"agent-to-agent\" framework for collaboration between intelligent systems [Source: ev-<estate-2>][Source: ev-<estate-5>].",
+      "actionable_query": "A provides the \"agent-to-agent\" framework for collaboration between intelligent systems . (2)",
+      "from_claim_id": "c57",
+      "corroboration": null
+    },
+    {
+      "id": "g20",
+      "text": "Based on the evidence provided, here is a detailed explanation of the differences and connections between Google's A2A protocol and the MCP protocol, along with an elaboration on the innovative aspects of A2A. [Source: ev-<ev-15>]",
+      "actionable_query": "A. (2)",
+      "from_claim_id": "c1",
+      "corroboration": null
+    },
+    {
+      "id": "g21",
+      "text": "The primary distinction lies in their specific layer within the AI agent ecosystem stack; they are designed to be complementary rather than competing standards [Source: ev-<estate-13>][ev-<estate-5>].",
+      "actionable_query": "The primary distinction lies in their specific layer within the AI agent ecosystem stack; they are designed to be complementary rather than  (2)",
+      "from_claim_id": "c2",
+      "corroboration": null
+    },
+    {
+      "id": "g22",
+      "text": "*   **Scope and Function:**\n    *   **MCP (Model Context Protocol):** Introduced by Anthropic in November 2024, MCP focuses on connecting individual Large Language Models (LLMs) or agents to external tools, data sources, and APIs. [Source: ev-<ev-15>]",
+      "actionable_query": "* **Scope and Function:** * **MCP (Model Context Protocol):** Introduced by Anthropic in November MCP focuses on connecting individual Large (2)",
+      "from_claim_id": "c3",
+      "corroboration": null
+    },
+    {
+      "id": "g23",
+      "text": "It acts as a \"model-to-world\" interface, standardizing how an AI accesses real-time data like databases or web services [Source: ev-<ev-28>][ev-<ev-43>][ev-<estate-2>].",
+      "actionable_query": "It acts as a \"model-to-world\" interface, standardizing how an AI accesses real-time data like databases or web services [ev-<ev- >]. (2)",
+      "from_claim_id": "c4",
+      "corroboration": null
+    },
+    {
+      "id": "g24",
+      "text": "Its purpose is to solve the fragmentation of custom integrations required for every new tool (\"the M x N problem\") [Source: ev-<ev-36>].",
+      "actionable_query": "Its purpose is to solve the fragmentation of custom integrations required for every new tool (\"the M x N problem\") . (2)",
+      "from_claim_id": "c26",
+      "corroboration": null
+    },
+    {
+      "id": "g25",
+      "text": "It acts as a horizontal \"agent-to-agent\" collaboration framework, allowing agents from different vendors or frameworks to discover each other and coordinate actions without needing direct code-level integration [Source: ev-<estate-17>][ev-<estate-4>][ev-<estate-9>].",
+      "actionable_query": "It acts as a horizontal \"agent-to-agent\" collaboration framework, allowing agents from different vendors or frameworks to discover each othe (2)",
+      "from_claim_id": "c33",
+      "corroboration": null
+    },
+    {
+      "id": "g26",
+      "text": "It is designed for request/response interactions regarding tool invocation [Source: ev-<ev-15>].",
+      "actionable_query": "It is designed for request/response interactions regarding tool invocation . (2)",
+      "from_claim_id": "c21",
+      "corroboration": null
+    },
+    {
+      "id": "g27",
+      "text": "Clients query these cards to discover what other agents can do before initiating tasks [Source: ev-<estate-9>][ev-<estate-7>].",
+      "actionable_query": "Clients query these cards to discover what other agents can do before initiating tasks [ev-<estate- >]. (2)",
+      "from_claim_id": "c20",
+      "corroboration": null
+    },
+    {
+      "id": "g28",
+      "text": "Communication involves HTTP POST requests with JSON-RPC payloads over HTTPS, supporting streaming operations via Server-Sent Events (SSE) for long-running tasks [Source: ev-<ev-34>][ev-<estate-11>].",
+      "actionable_query": "Communication involves HTTP POST requests with JSON-RPC payloads over HTTPS, supporting streaming operations via Server-Sent Events (SSE) fo (2)",
+      "from_claim_id": "c23",
+      "corroboration": null
+    },
+    {
+      "id": "g29",
+      "text": "*   **Governance and Adoption:**\n    *   **MCP Governance:** Remains under the stewardship of Anthropic as an open standard but has seen explosive adoption driven by major players like OpenAI, Microsoft, and Google DeepMind integrating it into their platforms [Source: ev-<ev-28>][ev-<ev-36>].",
+      "actionable_query": "* **Governance and Adoption:** * **MCP Governance:** Remains under the stewardship of Anthropic as an open standard but has seen explosive a (2)",
+      "from_claim_id": "c15",
+      "corroboration": null
+    },
+    {
+      "id": "g30",
+      "text": "*   **A2A Governance:** Donated to the Linux Foundation in June 2025 to ensure neutral governance and prevent vendor lock-in. [Source: ev-<ev-15>]",
+      "actionable_query": "A Governance:** Donated to the Linux Foundation in June to ensure neutral governance and prevent vendor lock-in. (2)",
+      "from_claim_id": "c16",
+      "corroboration": null
+    },
+    {
+      "id": "g31",
+      "text": "This move attracted support from over 100 technology companies (including Amazon, Cisco, Salesforce) aiming for industry-wide collaboration rather than proprietary control [Source: ev-<estate-13>][ev-<estate-14>].",
+      "actionable_query": "This move attracted support from over technology companies (including Amazon, Cisco, Salesforce) aiming for industry-wide collaboration rath (2)",
+      "from_claim_id": "c17",
+      "corroboration": null
+    },
+    {
+      "id": "g32",
+      "text": "This allows clients to receive real-time incremental updates on task progress, status changes, and partial results during long-running operations like document generation or media processing. [Source: ev-<ev-34>]",
+      "actionable_query": "This allows clients to receive real-time incremental updates on task progress, status changes, and partial results during long-running opera (2)",
+      "from_claim_id": "c22",
+      "corroboration": null
+    },
+    {
+      "id": "g33",
+      "text": "This modularity supports the evolution of the protocol without breaking existing implementations [Source: ev-<ev-34>].",
+      "actionable_query": "This modularity supports the evolution of the protocol without breaking existing implementations . (2)",
+      "from_claim_id": "c27",
+      "corroboration": null
+    },
+    {
+      "id": "g34",
+      "text": "The development of A2A was driven by specific interoperability challenges identified in the current AI landscape:\n\n1. [Source: ev-<estate-10>]",
+      "actionable_query": "A was driven by specific interoperability challenges identified in the current AI landscape: (2)",
+      "from_claim_id": "c28",
+      "corroboration": null
+    },
+    {
+      "id": "g35",
+      "text": "2. [Source: ev-<estate-10>]",
+      "actionable_query": " (2)",
+      "from_claim_id": "c31",
+      "corroboration": null
+    },
+    {
+      "id": "g36",
+      "text": "3. [Source: ev-<estate-10>]",
+      "actionable_query": " (2)",
+      "from_claim_id": "c34",
+      "corroboration": null
+    },
+    {
+      "id": "g37",
+      "text": "Without a common framework, coordinating these handoffs is difficult. [Source: ev-<estate-10>]",
+      "actionable_query": "Without a common framework, coordinating these handoffs is difficult. (2)",
+      "from_claim_id": "c36",
+      "corroboration": null
+    },
+    {
+      "id": "g38",
+      "text": "A2A provides the necessary semantic model and version negotiation to facilitate this coordination [Source: ev-<ev-6>][ev-<ev-7>].",
+      "actionable_query": "A provides the necessary semantic model and version negotiation to facilitate this coordination [ev-<ev- >]. (2)",
+      "from_claim_id": "c37",
+      "corroboration": null
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

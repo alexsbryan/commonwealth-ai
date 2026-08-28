@@ -6,23 +6,26 @@
 //! persisted as a snapshot ([`BridgeEdgesFile`] at
 //! `~/.svrnmesh/meta-atlas/bridge_edges.json`, atomic tmp+rename) and
 //! every add/remove is also journalled to an append-only oplog
-//! ([`BridgeOplog`] at `bridge_oplog.jsonl`) so a bad alignment is
+//! (an [`crate::oplog::Oplog`] of [`BridgeAct`] at `bridge_oplog.jsonl`) so a bad alignment is
 //! reversible and auditable.
 //!
-//! The oplog mirrors the *discipline* of
-//! [`crate::enrichment::reconciliation::oplog`] (append-only JSONL, one
-//! line per op) but uses bridge-native types: the reconciliation
-//! `OpKind`/`OplogEntry` are atom-merge-shaped (`AtomId` + `MergeSignal`)
-//! and cannot model an edge add/remove without abuse. We borrow the
-//! pattern, not the schema.
+//! The oplog IS [`crate::oplog`] — since 2026-08-20, not merely "mirroring its
+//! discipline", which is what this comment used to say and which is how the
+//! same twenty lines of file IO came to be written three times. Only the ACT
+//! is bridge-native: the reconciliation act is atom-merge-shaped (`AtomId` +
+//! `MergeSignal`) and cannot model an edge add/remove, so [`BridgeAct`] is its
+//! own `K`. The envelope, the content-addressed id, the append and the read
+//! gate are shared, and this log gained an id, an actor and a version gate it
+//! never had.
 
-use std::fs::{self, OpenOptions};
-use std::io::{self, BufRead, BufReader, Write};
+use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
 use crate::atlas_canonical::lookup_key;
+use crate::oplog::{Journaled, Op};
 
 /// Typed relation, read FROM the left topic TO the right topic
 /// (`left` {relation} `right`).
@@ -107,6 +110,19 @@ pub enum EdgeSource {
     Deterministic,
     /// The relation was typed by the LLM adjudicator (uncertain band).
     Adjudicated,
+}
+
+impl EdgeSource {
+    /// Compact display tag. Lives here rather than in each renderer so the
+    /// spelling of a closed set is decided once — sovereign's meta-atlas
+    /// command carried its own two-arm copy of this until 2026-08-20, which
+    /// is why the enum crossed the domain boundary at all.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            EdgeSource::Deterministic => "det",
+            EdgeSource::Adjudicated => "llm",
+        }
+    }
 }
 
 /// A pointer to one topic on one side of an edge.
@@ -258,101 +274,69 @@ pub enum BridgeOpKind {
     RemoveEdge,
 }
 
-/// One line in `bridge_oplog.jsonl`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BridgeOp {
+/// What a bridge line records — the act, carried inside a
+/// [`crate::oplog::Op`] envelope that supplies the id, the timestamp, the
+/// actor and the format version.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BridgeAct {
     pub op: BridgeOpKind,
     pub left_key: String,
     pub right_key: String,
     pub relation: BridgeRelation,
     pub signals: Vec<BridgeSignal>,
     pub source: EdgeSource,
-    pub ts_unix: i64,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub rationale: String,
 }
 
-impl BridgeOp {
+/// Who a bridge line is attributed to. The aligner runs unattended; an honest
+/// machine label beats an empty `actor`.
+pub const ALIGNER: &str = "bridge:build";
+
+impl Journaled for BridgeAct {
+    const FILE: &'static str = "bridge_oplog.jsonl";
+    const ID_PREFIX: &'static str = "bridge";
+    const LABEL: &'static str = "bridge_oplog";
+}
+
+impl Op<BridgeAct> {
     pub fn add(edge: &BridgeEdge) -> Self {
-        Self {
-            op: BridgeOpKind::AddEdge,
-            left_key: edge.left.key(),
-            right_key: edge.right.key(),
-            relation: edge.relation,
-            signals: edge.signals_fired.clone(),
-            source: edge.source,
-            ts_unix: crate::stream_axes::timestamp_now() as i64,
-            rationale: edge.rationale.clone().unwrap_or_default(),
-        }
+        Op::new(
+            BridgeAct {
+                op: BridgeOpKind::AddEdge,
+                left_key: edge.left.key(),
+                right_key: edge.right.key(),
+                relation: edge.relation,
+                signals: edge.signals_fired.clone(),
+                source: edge.source,
+                rationale: edge.rationale.clone().unwrap_or_default(),
+            },
+            crate::stream_axes::timestamp_now() as i64,
+            ALIGNER,
+        )
     }
 
     pub fn remove(edge: &BridgeEdge, rationale: impl Into<String>) -> Self {
-        Self {
-            op: BridgeOpKind::RemoveEdge,
-            left_key: edge.left.key(),
-            right_key: edge.right.key(),
-            relation: edge.relation,
-            signals: edge.signals_fired.clone(),
-            source: edge.source,
-            ts_unix: crate::stream_axes::timestamp_now() as i64,
-            rationale: rationale.into(),
-        }
-    }
-}
-
-/// Append-only reader+writer over `bridge_oplog.jsonl`.
-pub struct BridgeOplog {
-    pub path: PathBuf,
-}
-
-impl BridgeOplog {
-    pub fn new(dir: impl Into<PathBuf>) -> Self {
-        Self {
-            path: dir.into().join("bridge_oplog.jsonl"),
-        }
-    }
-
-    pub fn append(&self, op: &BridgeOp) -> io::Result<()> {
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        let line = serde_json::to_string(op).map_err(io::Error::other)?;
-        let mut f = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.path)?;
-        f.write_all(line.as_bytes())?;
-        f.write_all(b"\n")?;
-        Ok(())
-    }
-
-    pub fn read_all(&self) -> io::Result<Vec<BridgeOp>> {
-        if !self.path.exists() {
-            return Ok(Vec::new());
-        }
-        let reader = BufReader::new(fs::File::open(&self.path)?);
-        let mut out = Vec::new();
-        for (lineno, line) in reader.lines().enumerate() {
-            let line = line?;
-            if line.trim().is_empty() {
-                continue;
-            }
-            match serde_json::from_str::<BridgeOp>(&line) {
-                Ok(op) => out.push(op),
-                Err(e) => tracing::warn!(
-                    path = %self.path.display(),
-                    line = lineno + 1,
-                    "bridge_oplog: malformed line skipped ({e})"
-                ),
-            }
-        }
-        Ok(out)
+        Op::new(
+            BridgeAct {
+                op: BridgeOpKind::RemoveEdge,
+                left_key: edge.left.key(),
+                right_key: edge.right.key(),
+                relation: edge.relation,
+                signals: edge.signals_fired.clone(),
+                source: edge.source,
+                rationale: rationale.into(),
+            },
+            crate::stream_axes::timestamp_now() as i64,
+            ALIGNER,
+        )
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::oplog::Oplog;
 
     fn edge() -> BridgeEdge {
         BridgeEdge {
@@ -425,21 +409,24 @@ mod tests {
     #[test]
     fn oplog_add_then_remove_round_trips() {
         let tmp = tempfile::tempdir().unwrap();
-        let log = BridgeOplog::new(tmp.path());
+        let log: Oplog<BridgeAct> = Oplog::new(tmp.path());
         let e = edge();
-        log.append(&BridgeOp::add(&e)).unwrap();
-        log.append(&BridgeOp::remove(&e, "operator reversed a bad alignment"))
+        log.append(&Op::add(&e)).unwrap();
+        log.append(&Op::remove(&e, "operator reversed a bad alignment"))
             .unwrap();
         let ops = log.read_all().unwrap();
         assert_eq!(ops.len(), 2);
-        assert_eq!(ops[0].op, BridgeOpKind::AddEdge);
-        assert_eq!(ops[1].op, BridgeOpKind::RemoveEdge);
-        assert_eq!(ops[1].rationale, "operator reversed a bad alignment");
+        assert_eq!(ops[0].kind.op, BridgeOpKind::AddEdge);
+        assert_eq!(ops[1].kind.op, BridgeOpKind::RemoveEdge);
+        assert!(ops[1].id.as_str().starts_with("bridge-"));
+        assert_eq!(ops[1].actor, ALIGNER);
+        assert_eq!(ops[1].kind.rationale, "operator reversed a bad alignment");
     }
 
     #[test]
     fn oplog_missing_file_is_empty() {
         let tmp = tempfile::tempdir().unwrap();
-        assert!(BridgeOplog::new(tmp.path()).read_all().unwrap().is_empty());
+        let log: Oplog<BridgeAct> = Oplog::new(tmp.path());
+        assert!(log.read_all().unwrap().is_empty());
     }
 }

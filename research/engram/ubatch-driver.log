@@ -1,0 +1,8 @@
+/home/alexbryan/.bashrc: line 51: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+[00:34:01] === n_ubatch experiment start ===
+[00:34:01] stopping daemon to free GTT (operator-authorized)
+[00:34:10] pre-run: GTT 4060 MiB, MemAvailable 119188 MiB
+[00:34:10] running sweep: -b 4096 -ub 512,1024,2048,4096 -p 4096 -n 128 -r 3 (no -ngl, see frame dead-end)
+[00:39:14] llama-bench rc=0   peak GTT 85503 MiB   min avail 10069 MiB
+[00:39:14] === sweep done, restoring daemon ===
+DRIVER_EXIT=0

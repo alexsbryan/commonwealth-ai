@@ -7,14 +7,13 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_notes::{NoteScope, NoteStore, ScopeFilter};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Anchors whose notes are OPERATIONAL RECORD rather than knowledge.
 ///
@@ -77,19 +76,14 @@ fn resolve_workspace_root(explicit: Option<&std::path::Path>) -> Option<std::pat
     if let Some(p) = explicit {
         return Some(p.to_path_buf());
     }
-    if let Ok(env) = std::env::var("SOVEREIGN_WORKSPACE_DIR") {
-        if !env.is_empty() {
-            return Some(std::path::PathBuf::from(env));
-        }
-    }
-    if let Ok(home) = std::env::var("HOME") {
-        let f = std::path::PathBuf::from(&home).join(".svrnmesh/workspace");
-        if let Ok(content) = std::fs::read_to_string(&f) {
-            let p = std::path::PathBuf::from(content.trim());
-            if p.is_dir() {
-                return Some(p);
-            }
-        }
+    // The two CONFIGURED sources, resolved the daemon's way because there is
+    // now only one way (`sovereign_contracts::workspace`). This block used to
+    // re-derive them under a comment claiming it mirrored the daemon: it
+    // accepted an untrimmed `" "` as a workspace, returned paths that do not
+    // exist, and read `$HOME/.svrnmesh/workspace` directly — so on a host with
+    // a relocated root it read a DIFFERENT pin file than the daemon wrote.
+    if let Some(p) = sovereign_contracts::workspace::configured_workspace_dir() {
+        return Some(p);
     }
     if let Ok(cwd) = std::env::current_dir() {
         for dir in cwd.ancestors() {
@@ -207,207 +201,30 @@ impl ReadNotesTool {
     }
 }
 
-#[async_trait]
-impl Tool for ReadNotesTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "notes".to_string(),
-            name: "Read Notes".to_string(),
-            description: "Retrieve working notes written by write_note. \
-                          Search by keyword (FTS), filter by symbol names, \
-                          file paths, or note kind. Call at session start \
-                          to recover context from previous sessions, and \
-                          before modifying a symbol to find related decisions \
-                          or invariants. Every note carries `author` (the \
-                          machine that wrote it, e.g. \"BeefyMac (peer)\") and \
-                          `author_relation` (self|peer|unknown|ambiguous|\
-                          unattributed). Notes about MACHINE STATE — GPU load, \
-                          a held daemon lock, a running job — apply only to the \
-                          machine in `author`; notes about the CODE apply \
-                          everywhere regardless of who wrote them. \
-                          OPERATIONAL RECORD is withheld by default: notes \
-                          anchored to the anchors registered in \
-                          quality/operational-anchors.toml (an open registry; \
-                          today: comaintainer-seat, order-seat, directive-log) \
-                          are not returned unless your `query` names the \
-                          anchor, you pass `related_to`, or you set \
-                          `include_operational: true` (the seat's ambient \
-                          read — ordinary sessions must not set it). When \
-                          any are withheld the response says how many and \
-                          names the anchor. Identical-content duplicate \
-                          rows (same kind/content/related_entity — e.g. \
-                          the same commit-message note harvested once per \
-                          corpus session) are collapsed to one \
-                          representative row; when any are collapsed the \
-                          response names the count (`collapsed_duplicates`)."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Full-text search query. Omit to retrieve recent notes."
-                    },
-                    "symbols": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Return only notes mentioning any of these symbols"
-                    },
-                    "files": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Return only notes mentioning any of these file paths"
-                    },
-                    "kinds": {
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                            "enum": [
-                                "decision", "attempt", "invariant", "todo", "reflection",
-                                "uncertainty", "postmortem_pointer", "redteam_finding",
-                                "deviation", "commitment", "follow_up", "goal",
-                                "research_finding", "capability_request", "recipe_issue",
-                                "checkpoint", "checkpoint_restored", "deferred_question",
-                                "tool_decision"
-                            ]
-                        },
-                        "description": "Return only notes of these kinds. \
-                                        decision/attempt/invariant/todo: classic working notes. \
-                                        reflection: tool calibration notes from prior sessions. \
-                                        uncertainty/postmortem_pointer/redteam_finding/deviation: ATOS notes. \
-                                        commitment/follow_up/goal: relational + strategic notes \
-                                        anchored to a Person, Organization, or Initiative."
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "default": 10,
-                        "description": "Maximum number of notes to return (capped at 100)"
-                    },
-                    "scope": {
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                            "enum": ["global", "feature", "session"]
-                        },
-                        "description": "ATOS scope filter. Omit for legacy behavior (all scopes). \
-                                        Common use: scope=['global','feature'] with feature_id \
-                                        returns globals plus one feature's notes."
-                    },
-                    "feature_id": {
-                        "type": "string",
-                        "description": "Feature id to pair with scope=['feature']. Notes \
-                                        in other features are excluded."
-                    },
-                    "related_to": {
-                        "type": "string",
-                        "description": "When set, ignore query/symbols/files and return \
-                                        notes related to this symbol/file/entity via the \
-                                        T2 entity-graph (co-occurrence ranking). Use this \
-                                        to discover decisions, invariants, or attempts \
-                                        thematically connected to a symbol even when the \
-                                        symbol isn't mentioned in their content."
-                    },
-                    "semantic": {
-                        "type": "boolean",
-                        "default": true,
-                        "description": "When `query` is set and the daemon's embed slot is \
-                                        wired, blend BM25 with cosine similarity over the \
-                                        note embeddings (T1 retrieval). Default on; set \
-                                        false to force FTS5-only behavior."
-                    },
-                    "include_operational": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "When true, skip operational-record withholding \
-                                        entirely: anchored records are returned like any \
-                                        note and nothing is reported withheld. This is the \
-                                        SEAT's ambient read (UC-D4 inverse) — set it only \
-                                        when this session owns the coordination rail. \
-                                        Ordinary sessions must not set it; the withheld \
-                                        report is what keeps seat bookkeeping out of their \
-                                        context."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You're starting work on a symbol and want to know if any previous session recorded a decision, invariant, or failed attempt about it. Do this BEFORE reading code — it can save you from re-discovering constraints the hard way.".into(),
-                    call: serde_json::json!({ "symbols": ["EmbedSlot"] }),
-                },
-                ToolExample {
-                    situation: "You're picking up a session and want to find open tasks or recent decisions relevant to the area you're working on.".into(),
-                    call: serde_json::json!({ "query": "embedding GPU Metal", "kinds": ["invariant", "attempt"] }),
-                },
-                ToolExample {
-                    situation: "You want to check what the session_reflection tool has flagged about a tool you're about to use heavily — surface known blind spots before relying on it.".into(),
-                    call: serde_json::json!({ "kinds": ["reflection"], "query": "blast_radius" }),
-                },
-                ToolExample {
-                    situation: "You're about to modify a symbol and want every note thematically connected to it — even notes whose content doesn't literally mention the symbol. Uses the T2 entity-graph co-occurrence path; surfaces invariants, decisions, and attempts on the same conceptual axis.".into(),
-                    call: serde_json::json!({ "related_to": "UrlAllowlistConstraint" }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "notes": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "id":         { "type": "string" },
-                                "kind":       { "type": "string" },
-                                "content":    { "type": "string" },
-                                "symbols":    { "type": "array", "items": { "type": "string" } },
-                                "files":      { "type": "array", "items": { "type": "string" } },
-                                "scope":      { "type": "string" },
-                                "feature_id": { "type": "string" },
-                                "created_at": { "type": "integer" },
-                                "session_id": { "type": "string" },
-                                "author": {
-                                    "type": "string",
-                                    "description": "Machine that wrote this note, e.g. \"RuggedFox (this machine)\" or \"BeefyMac (peer)\". \"unknown origin\" when the note predates author tracking."
-                                },
-                                "author_relation": {
-                                    "type": "string",
-                                    "enum": ["self", "peer", "unknown", "ambiguous", "unattributed"],
-                                    "description": "Machine-readable form of `author`. Only \"self\" means this note was written on the machine now reading it — treat notes about machine state (GPU load, held locks, running jobs) as applying ONLY to the machine named in `author`."
-                                }
-                            }
-                        }
-                    },
-                    "total": { "type": "integer" }
-                }
-            })),
-        }
+impl ReadNotesTool {
+    /// Bind this tool's state to its `notes` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("notes", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_signal({
+            let state = Arc::clone(&state);
+            Arc::new(move || {
+                let state = Arc::clone(&state);
+                Box::pin(async move { state.signal_now().await })
+                    as std::pin::Pin<Box<dyn std::future::Future<Output = Option<String>> + Send>>
+            })
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    /// Signal: count of unretired `todo`-kind notes. Surfaces backlog
-    /// the agent might otherwise miss, without needing a feature
-    /// context. Silent when the todo list is empty.
-    async fn signal(&self) -> Option<String> {
-        // Cap the query at 50 — we only need the count for the signal
-        // and an order-of-magnitude is enough context. If there are
-        // 50+ open todos the agent already knows there's a backlog.
-        let open = self.store.open_todos(50).await.ok()?;
-        if open.is_empty() {
-            return None;
-        }
-        let n = open.len();
-        let suffix = if n >= 50 { "+" } else { "" };
-        Some(format!("{n}{suffix} open todo note(s)"))
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `notes`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let query = params.get("query").and_then(|v| v.as_str());
         let symbols: Vec<String> = params
             .get("symbols")
@@ -646,6 +463,19 @@ impl Tool for ReadNotesTool {
         }
         Ok(StepOutput::Json(out))
     }
+
+    async fn signal_now(&self) -> Option<String> {
+        // Cap the query at 50 — we only need the count for the signal
+        // and an order-of-magnitude is enough context. If there are
+        // 50+ open todos the agent already knows there's a backlog.
+        let open = self.store.open_todos(50).await.ok()?;
+        if open.is_empty() {
+            return None;
+        }
+        let n = open.len();
+        let suffix = if n >= 50 { "+" } else { "" };
+        Some(format!("{n}{suffix} open todo note(s)"))
+    }
 }
 
 #[cfg(test)]
@@ -866,7 +696,7 @@ mod tests {
 
         let tool = ReadNotesTool::new(Arc::clone(&store));
         let out = tool
-            .execute(&json!({"query": "chaos", "limit": 10}), &ctx())
+            .run(&json!({"query": "chaos", "limit": 10}), &ctx())
             .await
             .unwrap();
         let StepOutput::Json(v) = out else {

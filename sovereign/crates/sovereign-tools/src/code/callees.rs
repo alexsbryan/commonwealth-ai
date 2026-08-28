@@ -9,10 +9,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
-use async_trait::async_trait;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine::CorpusEngine;
@@ -20,6 +18,7 @@ use corpus_engine_scip::scip_graph::{CallKind, ScipGraph};
 
 use super::index_health::IndexHealthChecker;
 use super::is_valid_symbol_name;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// A hot-reloadable SCIP graph handle. The server's polling task may swap
 /// the inner `Arc<ScipGraph>` while the tool is executing; every query
@@ -48,70 +47,26 @@ impl FindCalleesTool {
     }
 }
 
-#[async_trait]
-impl Tool for FindCalleesTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "callees".to_string(),
-            name: "Find Callees".to_string(),
-            description: "Find all functions and methods that a given symbol calls, \
-                          using the SCIP symbol graph. More precise than parsing \
-                          function bodies — resolves trait dispatch and method calls \
-                          that body-parsing misses. Staleness is communicated in \
-                          the response when the graph is not fresh. Call \
-                          `sovereign corpus scip <corpus-id>` to refresh."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "symbol": {
-                        "type": "string",
-                        "description": "Exact symbol name"
-                    }
-                },
-                "required": ["symbol"]
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You're about to read an entire function body to understand what it calls. Don't — this returns the exact outbound call graph, including trait dispatch that reading source would miss.".into(),
-                    call: serde_json::json!({ "symbol": "handle_tools_call" }),
-                },
-                ToolExample {
-                    situation: "You need to understand what a function depends on before refactoring it. Knowing its callees tells you what interfaces must remain stable.".into(),
-                    call: serde_json::json!({ "symbol": "run_embed_batch_sync" }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Markdown list of outbound call sites, one per line, \
-                                with `file:line` locations. Empty-result line when \
-                                the symbol has no outbound calls or is unknown."
-            })),
-        }
+impl FindCalleesTool {
+    /// Bind this tool's state to its `callees` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("callees", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        let symbol = params
-            .get("symbol")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::InvalidInput("find_callees requires 'symbol'".to_string()))?;
-        if !is_valid_symbol_name(symbol) {
-            return Err(Error::InvalidInput(format!(
-                "invalid symbol name '{symbol}': must be alphanumeric plus _, ::, or $, and \u{2264}256 chars"
-            )));
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `callees`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let symbol = params
             .get("symbol")
             .and_then(|v| v.as_str())
@@ -177,5 +132,18 @@ impl Tool for FindCalleesTool {
             }
         }
         Ok(StepOutput::Text(out))
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+        let symbol = params
+            .get("symbol")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::InvalidInput("find_callees requires 'symbol'".to_string()))?;
+        if !is_valid_symbol_name(symbol) {
+            return Err(Error::InvalidInput(format!(
+                "invalid symbol name '{symbol}': must be alphanumeric plus _, ::, or $, and \u{2264}256 chars"
+            )));
+        }
+        Ok(())
     }
 }

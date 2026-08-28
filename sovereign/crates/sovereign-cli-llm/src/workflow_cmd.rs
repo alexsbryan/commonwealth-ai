@@ -24,7 +24,14 @@ use sovereign_workflow_host::{
 // way. Two backends, one surface — the recipe install path stays intact.
 use crate::corpus_cmd::{param_json_value, submit_install_request};
 
-const DEFAULT_DAEMON: &str = "http://localhost:9741";
+/// The daemon this CLI talks to, resolved through the ONE decider — env
+/// (`SOVEREIGN_DAEMON_URL`), then `[daemon] client_port`, then the compiled
+/// default. Was a compiled literal, so the flag below was the only way to
+/// move it and a session pointed at a second daemon silently missed this
+/// verb (§10.6).
+fn default_daemon() -> String {
+    sovereign_core::setup_config::client_daemon_base()
+}
 
 /// A name on the unified `workflow` surface resolves to one of two artifact kinds,
 /// each with its own backend: a **workflow** (run in-process by the workflow host)
@@ -112,7 +119,7 @@ pub async fn run_workflow(args: &[String]) -> i32 {
 /// server-side and returns the partner-facing reply. One authoring turn — re-run
 /// with more detail (or edit the saved TOML) to iterate.
 async fn cmd_author(args: &[String]) -> i32 {
-    let mut daemon = DEFAULT_DAEMON.to_string();
+    let mut daemon = default_daemon();
     let mut desc: Option<String> = None;
     let mut i = 0;
     while i < args.len() {
@@ -263,7 +270,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
 async fn cmd_run(args: &[String]) -> i32 {
     let mut file: Option<String> = None;
     let mut concurrency = 4usize;
-    let mut daemon = DEFAULT_DAEMON.to_string();
+    let mut daemon = default_daemon();
     let mut no_cache = false;
     let mut params: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
     let mut i = 0;
@@ -612,18 +619,18 @@ pub(crate) async fn run_assembled(
 /// uses only the standard set + MCP).
 fn enrich_tools() -> Vec<Box<dyn Tool>> {
     vec![
-        Box::new(crate::enrich_cmd::atlas_resolve::AtlasResolveTool),
-        Box::new(crate::enrich_cmd::atlas_phase_cmd::AtlasClusterTool),
-        Box::new(crate::enrich_cmd::workflow_primitives::ExemplarSelectTool),
-        Box::new(crate::enrich_cmd::workflow_primitives::PipelineComposeTool),
-        Box::new(crate::enrich_cmd::workflow_primitives::PipelineParseTool),
-        Box::new(crate::enrich_cmd::workflow_primitives::AtlasChaptersTool),
-        Box::new(crate::enrich_cmd::workflow_primitives::AtlasSeedTool),
-        Box::new(crate::enrich_cmd::workflow_primitives::AtlasClustersTool),
-        Box::new(crate::enrich_cmd::workflow_primitives::AtlasClusterExcerptsTool),
-        Box::new(crate::enrich_cmd::workflow_primitives::PipelineAssembleTool),
-        Box::new(crate::enrich_cmd::workflow_primitives::AtlasSummaryTool),
-        Box::new(crate::enrich_cmd::workflow_primitives::AtlasWriteConfigurationsTool),
+        Box::new(crate::enrich_cmd::atlas_resolve::AtlasResolveTool.declared()),
+        Box::new(crate::enrich_cmd::atlas_phase_cmd::AtlasClusterTool.declared()),
+        Box::new(crate::enrich_cmd::workflow_primitives::ExemplarSelectTool.declared()),
+        Box::new(crate::enrich_cmd::workflow_primitives::PipelineComposeTool.declared()),
+        Box::new(crate::enrich_cmd::workflow_primitives::PipelineParseTool.declared()),
+        Box::new(crate::enrich_cmd::workflow_primitives::AtlasChaptersTool.declared()),
+        Box::new(crate::enrich_cmd::workflow_primitives::AtlasSeedTool.declared()),
+        Box::new(crate::enrich_cmd::workflow_primitives::AtlasClustersTool.declared()),
+        Box::new(crate::enrich_cmd::workflow_primitives::AtlasClusterExcerptsTool.declared()),
+        Box::new(crate::enrich_cmd::workflow_primitives::PipelineAssembleTool.declared()),
+        Box::new(crate::enrich_cmd::workflow_primitives::AtlasSummaryTool.declared()),
+        Box::new(crate::enrich_cmd::workflow_primitives::AtlasWriteConfigurationsTool.declared()),
     ]
 }
 
@@ -687,6 +694,7 @@ mod artifact_tests {
 
 #[cfg(test)]
 mod tests {
+    use sovereign_core::tool_manifest::DeclaredTool;
     use std::pin::Pin;
     use std::sync::Arc;
 
@@ -694,10 +702,10 @@ mod tests {
     use futures::Stream;
     use sovereign_core::error::Result as CoreResult;
     use sovereign_core::registry::ToolRegistry;
-    use sovereign_core::traits::{InferenceProvider, Tool};
+    use sovereign_core::traits::InferenceProvider;
     use sovereign_core::types::{
-        CompletionRequest, CompletionResponse, Depth, Effect, Idempotency, Latency, Permission,
-        ProviderCapabilities, Scope as ToolScope, Speed, StepOutput, ToolContext, ToolDescriptor,
+        CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed, StepOutput,
+        ToolContext,
     };
     use sovereign_tools::mcp::config::{McpAuthConfig, McpServerConfig, McpTransportConfig};
     use sovereign_tools::mcp::McpServerManager;
@@ -926,7 +934,7 @@ input = "{element.text}"
 
         let mk_registry = || {
             let mut tools = ToolRegistry::new();
-            tools.register(Box::new(ChunkerTool));
+            tools.register(Box::new(ChunkerTool.declared()));
             StepRegistry::new(
                 Some(Arc::new(DeterministicEmbed) as Arc<dyn InferenceProvider>),
                 Arc::new(tools),
@@ -1298,29 +1306,21 @@ structured_output = { type = "object", properties = { questions = { type = "arra
     /// not a stand-in. Reads its `path` param and emits the `1→N` collection.
     struct ChunkerTool;
 
-    #[async_trait]
-    impl Tool for ChunkerTool {
-        fn descriptor(&self) -> ToolDescriptor {
-            ToolDescriptor {
-                id: "chunk".to_string(),
-                name: "chunk".to_string(),
-                description: "split a file into the corpus chunker's chunks".to_string(),
-                parameters: serde_json::json!({
-                    "type": "object",
-                    "properties": { "path": { "type": "string" } }
-                }),
-                examples: vec![],
-                effect: Effect::Read,
-                idempotency: Idempotency::Idempotent,
-                latency: Latency::Fast,
-                scope: ToolScope::Session,
-                output_schema: None,
-            }
+    impl ChunkerTool {
+        /// Bind this tool's state to its `chunk` manifest row.
+        ///
+        /// The declared half — id, schema, permissions, retry — is the row in
+        /// `tool-manifests/`. What is left here is the part that runs.
+        pub fn declared(self) -> DeclaredTool {
+            let state = Arc::new(self);
+            sovereign_core::tool_manifest::declared("chunk", move |params, ctx| {
+                let state = Arc::clone(&state);
+                async move { state.run(&params, &ctx).await }
+            })
         }
-        fn required_permissions(&self) -> Vec<Permission> {
-            vec![]
-        }
-        async fn execute(
+
+        /// The executable half of `chunk`.
+        async fn run(
             &self,
             params: &serde_json::Value,
             _ctx: &ToolContext,

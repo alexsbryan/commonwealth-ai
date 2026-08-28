@@ -1,0 +1,1030 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! `svrn mesh grant` and `svrn mesh use` — the two ends of an ephemeral mesh
+//! link.
+//!
+//! An invite makes someone a **member**: they receive `mesh_secret`, they
+//! gossip, and they can mint further invites. A grant makes them a **guest**:
+//! a short-lived bearer, exactly the routes its scope names, exactly the models
+//! it lists, revocable in one call. They never enter `Mesh.members`, so "a
+//! guest cannot invite people" is not a check anyone had to remember to write.
+//!
+//! These live outside `mesh_cmd.rs` because that file is long past the §3.1
+//! split threshold and is the file a peer session is most likely to be editing.
+//! The dispatch there is two arms; everything else is here.
+//!
+//! # The two honest failure modes, both caught at MINT time
+//!
+//! A link that cannot work should fail while the operator is still looking at
+//! the terminal, not on the guest's first request an hour later:
+//!
+//! - **A daemon nothing can reach** publishes an address no guest can use. We
+//!   refuse rather than print a link that is inert by construction.
+//! - **A model name nothing advertises** produces a grant that 403s on first
+//!   use with a message about scope, which sends the guest hunting in the wrong
+//!   place. The mint route validates against `dispatchable_ids` for us.
+//!
+//! # Two ways in, and the link names exactly one
+//!
+//! On a plaintext mesh a guest reaches the client API directly, and the link
+//! carries `url`. On an ENCRYPTED mesh that API is loopback-only — the mesh
+//! policy forces it there, whatever `client_bind` says — and the only ingress
+//! is the iroh acceptor, so the link carries `dial` and the guest tunnels on
+//! `GUEST_ALPN`. [`resolve_guest_path`] decides which, by asking the daemon
+//! rather than reading config, and the link never carries a preference order
+//! for the guest to resolve.
+
+use sovereign_cli_shared::help::{Help, HelpSection};
+use sovereign_mesh::deep_link::{build_guest_link, parse_deep_link, DeepLink};
+
+use crate::guest_link::{self, GuestLink};
+
+/// Read the daemon's client port from `SetupConfig` rather than hardcoding
+/// 9741 — a sandbox pointed at its own daemon must not mint against the
+/// operator's.
+fn daemon_client_port() -> u16 {
+    sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.daemon.client_port)
+        .unwrap_or(9741)
+}
+
+/// What `[daemon] client_bind` resolves to. Loopback here means no guest can
+/// reach this node no matter what address the link carries.
+fn client_bind() -> String {
+    sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.daemon.client_bind)
+        .unwrap_or_else(|_| "127.0.0.1".to_string())
+}
+
+fn bind_is_loopback(bind: &str) -> bool {
+    let b = bind.trim();
+    if b.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    b.parse::<std::net::IpAddr>()
+        .map(|ip| ip.is_loopback())
+        .unwrap_or(false)
+}
+
+/// `2h`, `30m`, `90s`, `1d`, or a bare seconds count.
+///
+/// Bare digits mean SECONDS, matching the `ttl_secs` field on the wire — one
+/// unit, so a `--ttl 30` cannot mean minutes here and seconds there.
+fn parse_ttl(raw: &str) -> Result<u64, String> {
+    let s = raw.trim();
+    let (digits, mult) = if let Some(d) = s.strip_suffix('s') {
+        (d, 1)
+    } else if let Some(d) = s.strip_suffix('m') {
+        (d, 60)
+    } else if let Some(d) = s.strip_suffix('h') {
+        (d, 3_600)
+    } else if let Some(d) = s.strip_suffix('d') {
+        (d, 86_400)
+    } else {
+        (s, 1)
+    };
+    let n: u64 = digits
+        .trim()
+        .parse()
+        .map_err(|_| format!("--ttl: expected a duration like 30m, 2h, 1d — got '{raw}'"))?;
+    if n == 0 {
+        return Err("--ttl must be greater than zero".to_string());
+    }
+    n.checked_mul(mult)
+        .ok_or_else(|| format!("--ttl: '{raw}' overflows"))
+}
+
+/// Render a seconds count the way an operator reads a window.
+fn human_duration(secs: u64) -> String {
+    if secs >= 86_400 {
+        format!("{}d{}h", secs / 86_400, (secs % 86_400) / 3_600)
+    } else if secs >= 3_600 {
+        format!("{}h{}m", secs / 3_600, (secs % 3_600) / 60)
+    } else if secs >= 60 {
+        format!("{}m", secs / 60)
+    } else {
+        format!("{secs}s")
+    }
+}
+
+/// Normalise an operator-supplied base URL: scheme optional, `/v1` and
+/// trailing slashes trimmed. The link's `url` is a BASE — `RemoteApiProvider`
+/// appends `/v1` itself, and a doubled `/v1/v1` is the shape of bug that only
+/// shows up on the guest's machine.
+fn normalise_base(raw: &str) -> String {
+    let s = raw.trim();
+    let with_scheme = if s.starts_with("http://") || s.starts_with("https://") {
+        s.to_string()
+    } else {
+        format!("http://{s}")
+    };
+    with_scheme
+        .trim_end_matches('/')
+        .trim_end_matches("/v1")
+        .trim_end_matches('/')
+        .to_string()
+}
+
+/// Where a guest should send the bearer.
+///
+/// Three sources, most-specific first, and none of them invented here —
+/// "what address are we reachable at" already has an owner, and an invite and
+/// a guest link disagreeing about it would be the §10.6 failure:
+///
+/// 1. `--url`, the operator saying it outright.
+/// 2. `SOVEREIGN_ADVERTISE_ADDR`, read through
+///    `mesh_discovery::read_advertise_addr_override` — the SAME parse the
+///    daemon uses to stamp `MemberRecord.addresses`. This is the cloud-peer
+///    escape hatch: a containerised daemon's `if-addrs` table lists the Docker
+///    bridge before the tailnet, so without it a guest link would carry
+///    `172.17.0.3` and be inert.
+/// 3. `mesh_discovery::relay_candidates`, which ranks Tailscale over LAN over
+///    IPv6 — the same ordering the invite's relay picker uses.
+fn guest_base_url(explicit: Option<&str>, client_port: u16) -> Result<String, String> {
+    if let Some(u) = explicit {
+        return Ok(normalise_base(u));
+    }
+    if let Some(addr) = sovereign_mesh::mesh_discovery::read_advertise_addr_override(client_port)
+        .and_then(|addrs| addrs.into_iter().next())
+    {
+        return Ok(format!("http://{addr}"));
+    }
+    let candidates = sovereign_mesh::mesh_discovery::relay_candidates(client_port);
+    let picked = candidates
+        .iter()
+        .find(|c| c.recommended)
+        .or_else(|| candidates.first())
+        .ok_or_else(|| {
+            "this node has no routable address to publish, so a guest link would be inert.\n\
+             Connect a network, set SOVEREIGN_ADVERTISE_ADDR, or pass --url <base>."
+                .to_string()
+        })?;
+    Ok(format!("http://{}", picked.url_fragment))
+}
+
+/// The one way in a guest link will name.
+///
+/// Two variants, never a preference order on the wire: whichever the mint
+/// resolves is what the guest uses, and a guest that cannot take that path is
+/// told so rather than silently trying the other one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum GuestPath {
+    /// The lender's client API answers on `base_url` — plaintext, direct.
+    Direct { base_url: String },
+    /// The client API is closed to the network (an encrypted mesh) and the
+    /// lender is reached by dialing its iroh endpoint. `base_url` rides along
+    /// as provenance — it names whose machine this is — and is never dialled.
+    Tunnel { dial: String, base_url: String },
+}
+
+/// This node's own iroh dial string, or `None` when the endpoint is off or has
+/// no reachable address yet.
+///
+/// Read from the daemon's `/v1/mesh/status`, not assembled here: the daemon
+/// holds the live endpoint and already publishes exactly this string for
+/// invites. A second assembler would be a second answer to "how is this node
+/// dialled" (§10.6), and it would be the stale one.
+async fn node_dial_string(port: u16) -> Option<String> {
+    let client = http_client(5).ok()?;
+    let resp = client
+        .get(format!("http://127.0.0.1:{port}/v1/mesh/status"))
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let body: serde_json::Value = resp.json().await.ok()?;
+    body.get("self_reachability")?
+        .get("dial")?
+        .as_str()
+        .map(str::to_string)
+        .filter(|d| !d.is_empty())
+}
+
+/// Decide the path this link will name — by asking, never by inferring.
+///
+/// Reading `[daemon] client_bind` is NOT sufficient and this is not
+/// hypothetical; it was measured on 2026-08-27. On an ENCRYPTED mesh
+/// `start_daemon` forces the client listener back to loopback whatever the
+/// config says (`sovereign-mesh/src/daemon.rs`, "encrypted mesh: forcing
+/// client API to loopback-only"). A host with `client_bind = "0.0.0.0"` in
+/// config and an encrypted mesh on disk would therefore have passed a
+/// config-only check and bound `127.0.0.1` anyway.
+///
+/// So: probe the address before publishing it, and when nothing answers, ask
+/// whether the daemon is dialable by key instead of refusing. `/status` is in
+/// `AUTH_EXEMPT_PATHS`, so the probe needs no credential, and one probe covers
+/// every cause — encrypted-mesh forcing, a daemon not restarted since the
+/// config changed, a firewall, a wrong advertised interface — rather than
+/// enumerating the ones we thought of.
+async fn resolve_guest_path(url_override: Option<&str>, port: u16) -> Result<GuestPath, String> {
+    // Why the direct arm could not be taken, kept so the refusal at the bottom
+    // can name the real cause instead of the last one.
+    let mut direct_refusal: Option<String> = None;
+    // The lender's published address, once resolved — reused as provenance on
+    // the tunnel path rather than re-derived.
+    let mut published: Option<String> = None;
+
+    let bind = client_bind();
+    if url_override.is_some() || !bind_is_loopback(&bind) {
+        match guest_base_url(url_override, port) {
+            Ok(base) => match probe_reachable(&base).await {
+                Ok(()) => return Ok(GuestPath::Direct { base_url: base }),
+                Err(e) => {
+                    direct_refusal = Some(format!("{base} did not answer: {e}"));
+                    published = Some(base);
+                }
+            },
+            Err(e) => direct_refusal = Some(e),
+        }
+    } else {
+        direct_refusal = Some(format!(
+            "this daemon binds {bind} — loopback only, so no guest can reach it directly"
+        ));
+    }
+
+    if let Some(dial) = node_dial_string(port).await {
+        // No probe here, and deliberately: dialing our own endpoint from this
+        // process would prove nothing about a guest's ability to reach it, and
+        // a self-dial that succeeded on loopback would be the instrument
+        // reporting on itself (§18.4). The daemon publishes this string only
+        // once it holds a reachable address.
+        let base_url = published.unwrap_or_else(|| {
+            guest_base_url(url_override, port)
+                .unwrap_or_else(|_| format!("http://127.0.0.1:{port}"))
+        });
+        return Ok(GuestPath::Tunnel { dial, base_url });
+    }
+
+    Err(direct_refusal
+        .unwrap_or_else(|| "this node published no address a guest could use".to_string()))
+}
+
+fn http_client(timeout_secs: u64) -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_secs))
+        .build()
+        .map_err(|e| format!("failed to build HTTP client: {e}"))
+}
+
+/// Pull `error` out of an `ErrorBody` response, falling back to the raw text.
+async fn error_text(resp: reqwest::Response) -> String {
+    let status = resp.status();
+    match resp.text().await {
+        Ok(body) => serde_json::from_str::<serde_json::Value>(&body)
+            .ok()
+            .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
+            .unwrap_or_else(|| {
+                if body.trim().is_empty() {
+                    format!("daemon returned {status}")
+                } else {
+                    body
+                }
+            }),
+        Err(e) => format!("daemon returned {status} and the body would not read: {e}"),
+    }
+}
+
+// ───────────────────────────── grant (host side) ─────────────────────────────
+
+pub(crate) const HELP_MESH_GRANT: Help = Help {
+    command: "svrn mesh grant",
+    summary: "Lend named models to someone who is NOT a mesh member, for a bounded window.",
+    sections: &[
+        HelpSection::Usage(
+            "svrn mesh grant --model <id> [--model <id>…] [--ttl 2h] [--label <text>] [--url <base>]\n\
+             svrn mesh grant --list\n\
+             svrn mesh grant --revoke <token>",
+        ),
+        HelpSection::Flags(&[
+            (
+                "--model <id>",
+                "A model this grant may dispatch. Repeatable. Exact ids from `/v1/models`.",
+            ),
+            (
+                "--ttl <dur>",
+                "Lifetime: 30m, 2h, 1d, or bare seconds. Default 2h, capped at 24h.",
+            ),
+            ("--label <text>", "Your own note, shown by --list. Never sent to the guest."),
+            (
+                "--url <base>",
+                "Base URL the guest should reach you at. Default: this node's published address.",
+            ),
+            ("--list", "Show outstanding grants, including revoked and expired ones."),
+            ("--revoke <token>", "Kill a link immediately. The token is the one in the link."),
+        ]),
+        HelpSection::Notes(
+            "A guest is not a member: they never receive the mesh secret, never gossip, and\n\
+             cannot mint invites or further grants. They may call exactly /v1/models and\n\
+             /v1/chat/completions, and only for the models named here.\n\n\
+             On a PLAINTEXT mesh the daemon must be bound non-loopback for a guest to reach\n\
+             it — set `[daemon] client_bind = \"0.0.0.0\"` in ~/.svrnmesh/config.toml. On an\n\
+             ENCRYPTED mesh that API is closed by policy and the link carries this node's\n\
+             iroh dial string instead; the guest tunnels in. Either way the mint checks\n\
+             reachability before printing a link.",
+        ),
+    ],
+};
+
+pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
+    if sovereign_cli_shared::help::wants_help(args) {
+        sovereign_cli_shared::help::print(&HELP_MESH_GRANT);
+        return 0;
+    }
+
+    let mut models: Vec<String> = Vec::new();
+    let mut ttl_secs: Option<u64> = None;
+    let mut label: Option<String> = None;
+    let mut url_override: Option<String> = None;
+    let mut list = false;
+    let mut revoke: Option<String> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--model" => {
+                i += 1;
+                match args.get(i) {
+                    Some(v) => models.push(v.clone()),
+                    None => {
+                        eprintln!("--model needs a model id");
+                        return 2;
+                    }
+                }
+            }
+            "--ttl" => {
+                i += 1;
+                let Some(v) = args.get(i) else {
+                    eprintln!("--ttl needs a duration");
+                    return 2;
+                };
+                match parse_ttl(v) {
+                    Ok(s) => ttl_secs = Some(s),
+                    Err(e) => {
+                        eprintln!("{e}");
+                        return 2;
+                    }
+                }
+            }
+            // Both error on a missing value rather than falling back. A
+            // trailing `--url` that silently reverted to auto-discovery would
+            // publish a different address than the operator typed and say
+            // nothing — the substitution this whole surface refuses.
+            "--label" => {
+                i += 1;
+                label = match args.get(i) {
+                    Some(v) => Some(v.clone()),
+                    None => {
+                        eprintln!("--label needs a value");
+                        return 2;
+                    }
+                };
+            }
+            "--url" => {
+                i += 1;
+                url_override = match args.get(i) {
+                    Some(v) => Some(v.clone()),
+                    None => {
+                        eprintln!("--url needs a base URL");
+                        return 2;
+                    }
+                };
+            }
+            "--list" => list = true,
+            "--revoke" => {
+                i += 1;
+                revoke = args.get(i).cloned();
+                if revoke.is_none() {
+                    eprintln!("--revoke needs the token from the link");
+                    return 2;
+                }
+            }
+            other => {
+                eprintln!("Unknown arg: {other}");
+                eprintln!("Run `svrn mesh grant --help`.");
+                return 2;
+            }
+        }
+        i += 1;
+    }
+
+    let port = daemon_client_port();
+    if !crate::mesh_cmd::daemon_listening_on(port).await {
+        eprintln!("No daemon detected on :{port} — minting a grant needs one.");
+        eprintln!("Start it with `svrn daemon start`, then re-run.");
+        return 1;
+    }
+
+    if list {
+        return grant_list(port).await;
+    }
+    if let Some(token) = revoke {
+        return grant_revoke(port, &token).await;
+    }
+
+    if models.is_empty() {
+        eprintln!("A grant must name at least one model: --model <id>");
+        eprintln!("`svrn mesh grant --list` shows what is already outstanding.");
+        return 2;
+    }
+
+    // Which way in — asked, not inferred. See `resolve_guest_path`.
+    let path = match resolve_guest_path(url_override.as_deref(), port).await {
+        Ok(p) => p,
+        Err(why) => {
+            eprintln!("No guest could reach this node, so any link would be inert.");
+            eprintln!("  {why}");
+            eprintln!();
+            eprintln!("Two ways to fix it, and they are different:");
+            eprintln!("  - PLAINTEXT: set `[daemon] client_bind = \"0.0.0.0\"` in");
+            eprintln!("    ~/.svrnmesh/config.toml and restart the daemon (or pass --url <base>");
+            eprintln!("    if something else fronts it). Does NOT work on an encrypted mesh —");
+            eprintln!(
+                "    the mesh policy forces that API loopback-only whatever the config says."
+            );
+            eprintln!("  - ENCRYPTED: the guest tunnels in over iroh instead, but this daemon");
+            eprintln!("    published no dial string. Check `svrn mesh status` — a node with no");
+            eprintln!("    reachable relay or direct address cannot be dialled either.");
+            eprintln!();
+            eprintln!("Nothing was minted.");
+            return 1;
+        }
+    };
+    let (base_url, dial) = match &path {
+        GuestPath::Direct { base_url } => (base_url.clone(), None),
+        GuestPath::Tunnel { base_url, dial } => (base_url.clone(), Some(dial.clone())),
+    };
+
+    let client = match http_client(15) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("{e}");
+            return 1;
+        }
+    };
+    let body = serde_json::json!({
+        "scopes": { "models": models },
+        "ttl_secs": ttl_secs,
+        "label": label,
+    });
+    let url = format!("http://127.0.0.1:{port}/internal/guest/grant");
+    let resp = match client.post(&url).json(&body).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Failed to reach the daemon at {url}: {e}");
+            return 1;
+        }
+    };
+    if !resp.status().is_success() {
+        eprintln!("Could not mint the grant: {}", error_text(resp).await);
+        return 1;
+    }
+    let payload: serde_json::Value = match resp.json().await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Daemon returned a non-JSON grant response: {e}");
+            return 1;
+        }
+    };
+    let (Some(token), Some(expires_at_ms)) = (
+        payload.get("token").and_then(|v| v.as_str()),
+        payload.get("expires_at_ms").and_then(|v| v.as_u64()),
+    ) else {
+        eprintln!("Daemon's grant response was missing `token` or `expires_at_ms`.");
+        return 1;
+    };
+    let summary = payload
+        .get("summary")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    // The link carries SECONDS (`exp=`), the store milliseconds. One
+    // conversion, here, so the two never disagree about when the window shuts.
+    let expires_at_secs = expires_at_ms / 1_000;
+    let link = build_guest_link(
+        token,
+        &base_url,
+        dial.as_deref(),
+        expires_at_secs,
+        (!summary.is_empty()).then_some(summary),
+    );
+
+    let now = guest_link::now_secs();
+    println!();
+    println!("Guest link minted.");
+    println!();
+    println!("  Grants:   {summary}");
+    match &path {
+        GuestPath::Direct { base_url } => println!("  Reach at: {base_url}"),
+        // Say WHY the tunnel, not just that there is one: an operator who
+        // expected a plain address needs to know the mesh's own policy chose
+        // this, and that nothing was silently downgraded.
+        GuestPath::Tunnel { dial, .. } => {
+            println!("  Reach at: over the mesh tunnel (this mesh encrypts, so its");
+            println!("            plaintext API is closed to the network)");
+            println!("  Dial:     {dial}");
+        }
+    }
+    println!(
+        "  Expires:  in {} (unix {expires_at_secs})",
+        human_duration(expires_at_secs.saturating_sub(now))
+    );
+    println!();
+    println!("Send them this, and have them run:");
+    println!();
+    println!("  svrn mesh use '{link}'");
+    println!();
+    println!("Revoke at any time with:");
+    println!();
+    println!("  svrn mesh grant --revoke {token}");
+    println!();
+    0
+}
+
+async fn grant_list(port: u16) -> i32 {
+    let client = match http_client(10) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("{e}");
+            return 1;
+        }
+    };
+    let url = format!("http://127.0.0.1:{port}/internal/guest/grant/list");
+    let resp = match client.get(&url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Failed to reach the daemon at {url}: {e}");
+            return 1;
+        }
+    };
+    if !resp.status().is_success() {
+        eprintln!("Could not list grants: {}", error_text(resp).await);
+        return 1;
+    }
+    let rows: Vec<serde_json::Value> = match resp.json().await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Daemon returned a non-JSON grant list: {e}");
+            return 1;
+        }
+    };
+    if rows.is_empty() {
+        println!("No guest grants outstanding.");
+        return 0;
+    }
+    let now = guest_link::now_secs();
+    println!();
+    println!(
+        "{:<10}  {:<8}  {:<10}  {:<28}  {}",
+        "TOKEN", "STATE", "EXPIRES", "GRANTS", "LABEL"
+    );
+    for row in &rows {
+        let prefix = row
+            .get("token_prefix")
+            .and_then(|v| v.as_str())
+            .unwrap_or("?");
+        let summary = row.get("summary").and_then(|v| v.as_str()).unwrap_or("");
+        let labelled = row.get("label").and_then(|v| v.as_str()).unwrap_or("");
+        let exp_secs = row
+            .get("expires_at_ms")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0)
+            / 1_000;
+        // Revoked and expired are DIFFERENT states and are reported as such —
+        // "I revoked that, right?" is the question this surface answers, and a
+        // list that collapses them into "dead" cannot.
+        let state = if row.get("revoked").and_then(|v| v.as_bool()) == Some(true) {
+            "revoked"
+        } else if row.get("live").and_then(|v| v.as_bool()) == Some(true) {
+            "live"
+        } else {
+            "expired"
+        };
+        let when = if state == "live" {
+            human_duration(exp_secs.saturating_sub(now))
+        } else {
+            "-".to_string()
+        };
+        println!("{prefix:<10}  {state:<8}  {when:<10}  {summary:<28}  {labelled}");
+    }
+    println!();
+    0
+}
+
+async fn grant_revoke(port: u16, token: &str) -> i32 {
+    let client = match http_client(10) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("{e}");
+            return 1;
+        }
+    };
+    let url = format!("http://127.0.0.1:{port}/internal/guest/grant/revoke");
+    let resp = match client
+        .post(&url)
+        .json(&serde_json::json!({ "token": token }))
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Failed to reach the daemon at {url}: {e}");
+            return 1;
+        }
+    };
+    if !resp.status().is_success() {
+        eprintln!("Could not revoke: {}", error_text(resp).await);
+        return 1;
+    }
+    let payload: serde_json::Value = resp.json().await.unwrap_or(serde_json::Value::Null);
+    // Revoking something that was never there is reported as such rather than
+    // as success — an operator who mistyped a token must not walk away
+    // believing a live link is dead.
+    if payload.get("revoked").and_then(|v| v.as_bool()) == Some(true) {
+        println!("Revoked. The next request bearing that token is refused.");
+        0
+    } else {
+        eprintln!("No grant with that token — nothing was revoked.");
+        eprintln!("`svrn mesh grant --list` shows the outstanding ones by prefix.");
+        1
+    }
+}
+
+// ───────────────────────────── use (guest side) ──────────────────────────────
+
+pub(crate) const HELP_MESH_USE: Help = Help {
+    command: "svrn mesh use",
+    summary: "Accept a guest link — `svrn chat` then routes to the issuing node.",
+    sections: &[
+        HelpSection::Usage(
+            "svrn mesh use <sovereign://guest/…>\n\
+             svrn mesh use --status\n\
+             svrn mesh use --forget",
+        ),
+        HelpSection::Flags(&[
+            ("--status", "Show the link currently in effect, if any."),
+            (
+                "--forget",
+                "Drop the stored link and go back to your own daemon.",
+            ),
+            (
+                "--no-verify",
+                "Store the link without first checking that the issuing node answers.",
+            ),
+        ]),
+        HelpSection::Notes(
+            "This does NOT join a mesh. You stay outside it: no mesh secret, no gossip, no\n\
+             membership. The link expires on its own, and the issuing node can revoke it at\n\
+             any moment.\n\n\
+             While a link is in effect, `svrn chat` sends its completions to the issuing\n\
+             node instead of your local daemon and says so on stderr.\n\n\
+             A link minted on an ENCRYPTED mesh carries a dial string instead of a plain\n\
+             address, because that mesh closes its plaintext API. Your requests then ride a\n\
+             QUIC tunnel to the lending node. There is no plaintext fallback: if the tunnel\n\
+             cannot open you are told, never quietly re-routed.",
+        ),
+    ],
+};
+
+pub(crate) async fn cmd_use(args: &[String]) -> i32 {
+    if sovereign_cli_shared::help::wants_help(args) {
+        sovereign_cli_shared::help::print(&HELP_MESH_USE);
+        return 0;
+    }
+
+    let mut link_arg: Option<String> = None;
+    let mut forget = false;
+    let mut status = false;
+    let mut no_verify = false;
+    for arg in args {
+        match arg.as_str() {
+            "--forget" => forget = true,
+            "--status" => status = true,
+            "--no-verify" => no_verify = true,
+            other if other.starts_with('-') => {
+                eprintln!("Unknown arg: {other}");
+                eprintln!("Run `svrn mesh use --help`.");
+                return 2;
+            }
+            other => link_arg = Some(other.to_string()),
+        }
+    }
+
+    if forget {
+        return match guest_link::forget() {
+            Ok(true) => {
+                println!("Guest link dropped. `svrn chat` is back on your own daemon.");
+                0
+            }
+            Ok(false) => {
+                println!("No guest link was stored.");
+                0
+            }
+            Err(e) => {
+                eprintln!("Could not remove {}: {e}", guest_link::path().display());
+                1
+            }
+        };
+    }
+
+    if status || link_arg.is_none() {
+        let now = guest_link::now_secs();
+        // Deliberately `load`, not `load_live`: `--status` must be able to
+        // SHOW an expired link. An accessor that hides the thing the operator
+        // is asking about answers a different question.
+        return match guest_link::load() {
+            Some(l) => {
+                println!();
+                println!("  Host:     {}", describe(&l));
+                println!(
+                    "  Grants:   {}",
+                    l.summary.as_deref().unwrap_or("(not stated)")
+                );
+                match l.remaining_secs(now) {
+                    Some(rem) => println!("  Expires:  in {}", human_duration(rem)),
+                    None => println!("  Expires:  EXPIRED — `svrn mesh use --forget` to clear it"),
+                }
+                println!("  Stored:   {}", guest_link::path().display());
+                println!();
+                0
+            }
+            None => {
+                if status {
+                    println!("No guest link in effect — `svrn chat` uses your own daemon.");
+                    0
+                } else {
+                    eprintln!("Missing link.");
+                    eprintln!("Usage: svrn mesh use <sovereign://guest/…>");
+                    1
+                }
+            }
+        };
+    }
+
+    let raw = link_arg.expect("checked above");
+    // Matched exhaustively rather than with a `Guest`-or-bust `if let`: a JOIN
+    // link arriving here is the mistake a first-time user actually makes, and
+    // it deserves its own message. A third `DeepLink` variant added later is a
+    // compile error at this arm rather than a silently-refused link.
+    let stored = match parse_deep_link(&raw) {
+        Some(DeepLink::Guest {
+            token,
+            url,
+            dial,
+            expires_at,
+            summary,
+        }) => GuestLink {
+            token,
+            url,
+            dial,
+            expires_at,
+            summary,
+        },
+        Some(DeepLink::Join { .. }) => {
+            eprintln!("That is a JOIN link, not a guest link.");
+            eprintln!("It would make you a mesh MEMBER — run `svrn mesh join {raw}` if that is");
+            eprintln!("what you meant. A guest link looks like sovereign://guest/<token>?url=…");
+            return 1;
+        }
+        None => {
+            eprintln!("Not a usable guest link: {raw}");
+            eprintln!("Expected sovereign://guest/<token>?url=<base>&exp=<unix-seconds>");
+            return 1;
+        }
+    };
+
+    let now = guest_link::now_secs();
+    if now >= stored.expires_at {
+        eprintln!("That link has already expired. Ask for a fresh one.");
+        return 1;
+    }
+
+    if !no_verify {
+        // Prove the link works BEFORE it takes over `svrn chat`'s routing. A
+        // stored-but-dead link is worse than no link: every subsequent chat
+        // silently aims at an unreachable host, and the error surfaces three
+        // layers down in bootstrap.
+        match verify_link(&stored).await {
+            Ok(models) => {
+                println!();
+                println!("Verified against {} — models in scope:", describe(&stored));
+                for m in &models {
+                    println!("  {m}");
+                }
+            }
+            Err(e) => {
+                eprintln!("The issuing node did not accept this link: {e}");
+                eprintln!();
+                eprintln!("Nothing was stored. Re-run with --no-verify to keep it anyway.");
+                return 1;
+            }
+        }
+    }
+
+    if let Err(e) = guest_link::save(&stored) {
+        eprintln!("Could not write {}: {e}", guest_link::path().display());
+        return 1;
+    }
+
+    println!();
+    println!("Guest link accepted.");
+    println!(
+        "  {} for the next {}",
+        stored.summary.as_deref().unwrap_or("(scope not stated)"),
+        human_duration(stored.expires_at.saturating_sub(now))
+    );
+    println!();
+    println!(
+        "  svrn chat ask \"hello\"      # now served by {}",
+        describe(&stored)
+    );
+    println!("  svrn mesh use --forget     # go back to your own daemon");
+    println!();
+    0
+}
+
+/// Can anything reach `base_url`? GET `<base>/status`, which is in
+/// `AUTH_EXEMPT_PATHS` and therefore needs no credential.
+///
+/// The mint-side twin of [`verify_link`]. Both exist for the same reason: a
+/// credential that names an unreachable address fails on someone else's
+/// machine, minutes later, with an error that describes the symptom and not
+/// the cause.
+async fn probe_reachable(base_url: &str) -> Result<(), String> {
+    let client = http_client(5)?;
+    let url = format!("{base_url}/status");
+    // A response of ANY status proves something is listening there, which is
+    // the whole claim. Only a transport failure means inert — refusing on a
+    // 404 or a 401 would block a legitimate reverse proxy that answers
+    // differently than the daemon does.
+    match client.get(&url).send().await {
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("{url}: {e}")),
+    }
+}
+
+/// How a guest should read where their questions go. The URL for a direct
+/// link; the lender's address plus "over the mesh tunnel" for a dialled one,
+/// because printing a bare loopback bridge port would name this machine for
+/// work that happens on someone else's.
+fn describe(link: &GuestLink) -> String {
+    match &link.dial {
+        None => link.url.clone(),
+        Some(_) => format!("{} (over the mesh tunnel)", link.url),
+    }
+}
+
+/// GET `<base>/v1/models` with the bearer. Returns the ids the grant exposes.
+///
+/// `/v1/models` is in `Scope::Models`'s own path set, so this needs no
+/// privilege the link did not already carry — and the host filters the listing
+/// to the granted ids, which is exactly what we want to print back.
+///
+/// Goes through `guest_link::open_route`, so a dialled link is verified over
+/// the tunnel it will actually use rather than against an address it will
+/// never touch — the check has to exercise the path, or it is not the check.
+async fn verify_link(link: &GuestLink) -> Result<Vec<String>, String> {
+    let client = http_client(10)?;
+    let base = guest_link::open_route(link).await?;
+    let url = format!("{base}/v1/models");
+    let resp = client
+        .get(&url)
+        .bearer_auth(&link.token)
+        .send()
+        .await
+        .map_err(|e| format!("{} is unreachable: {e}", describe(link)))?;
+    if !resp.status().is_success() {
+        return Err(error_text(resp).await);
+    }
+    let payload: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("{url} returned a non-JSON body: {e}"))?;
+    let ids: Vec<String> = payload
+        .get("data")
+        .and_then(|d| d.as_array())
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|r| r.get("id").and_then(|v| v.as_str()).map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    if ids.is_empty() {
+        // A grant whose listing is empty permits nothing dispatchable. Saying
+        // "verified" here would be the substitution this feature exists to
+        // refuse (§18.3).
+        return Err("the node accepted the token but lists no models for it".to_string());
+    }
+    Ok(ids)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ttl_accepts_the_suffixes_the_help_advertises() {
+        assert_eq!(parse_ttl("90"), Ok(90));
+        assert_eq!(parse_ttl("90s"), Ok(90));
+        assert_eq!(parse_ttl("30m"), Ok(1_800));
+        assert_eq!(parse_ttl("2h"), Ok(7_200));
+        assert_eq!(parse_ttl("1d"), Ok(86_400));
+    }
+
+    #[test]
+    fn ttl_refuses_rather_than_defaulting() {
+        // Each of these once had a "reasonable" reading. A grant is a security
+        // object: an unparseable window must not become a default one.
+        assert!(parse_ttl("soon").is_err());
+        assert!(parse_ttl("2 hours").is_err());
+        assert!(parse_ttl("0").is_err());
+        assert!(parse_ttl("0h").is_err());
+        assert!(parse_ttl("").is_err());
+        assert!(parse_ttl("-1h").is_err());
+    }
+
+    #[test]
+    fn loopback_binds_are_recognised_in_every_form_config_allows() {
+        assert!(bind_is_loopback("127.0.0.1"));
+        assert!(bind_is_loopback("127.0.0.53"));
+        assert!(bind_is_loopback("::1"));
+        assert!(bind_is_loopback("localhost"));
+        assert!(bind_is_loopback("  127.0.0.1  "));
+        assert!(!bind_is_loopback("0.0.0.0"));
+        assert!(!bind_is_loopback("192.168.1.10"));
+        assert!(!bind_is_loopback("::"));
+    }
+
+    /// The link carries a BASE; `RemoteApiProvider` appends `/v1`. An operator
+    /// pasting the URL they use with curl must not produce `/v1/v1`.
+    #[test]
+    fn base_url_normalisation_strips_v1_and_adds_a_scheme() {
+        assert_eq!(normalise_base("box:9741"), "http://box:9741");
+        assert_eq!(normalise_base("http://box:9741/"), "http://box:9741");
+        assert_eq!(normalise_base("http://box:9741/v1"), "http://box:9741");
+        assert_eq!(normalise_base("http://box:9741/v1/"), "http://box:9741");
+        assert_eq!(normalise_base("https://box/v1"), "https://box");
+    }
+
+    #[test]
+    fn an_explicit_url_wins_over_discovery() {
+        assert_eq!(
+            guest_base_url(Some("10.0.0.7:9741"), 9741).unwrap(),
+            "http://10.0.0.7:9741"
+        );
+    }
+
+    /// The cloud-peer case. Reads the env var directly (rather than through a
+    /// seam) because that is what the daemon does, and a guest link carrying a
+    /// different address than `MemberRecord.addresses` would be the bug.
+    ///
+    /// Serialised with the other env-touching test by running them in one
+    /// body: `cargo test` shares a process, and two tests mutating the same
+    /// var race.
+    #[test]
+    fn the_advertise_override_beats_interface_enumeration_but_not_an_explicit_url() {
+        // No other test in this module reads or writes this var, so the
+        // shared-process mutation is contained.
+        std::env::set_var("SOVEREIGN_ADVERTISE_ADDR", "100.112.195.45");
+        assert_eq!(
+            guest_base_url(None, 9741).unwrap(),
+            "http://100.112.195.45:9741",
+            "a containerised daemon publishes the tailnet IP, not the docker bridge"
+        );
+        assert_eq!(
+            guest_base_url(Some("box.example:9741"), 9741).unwrap(),
+            "http://box.example:9741",
+            "--url is still the most specific instruction"
+        );
+        std::env::remove_var("SOVEREIGN_ADVERTISE_ADDR");
+    }
+
+    /// What a guest is told, and what they must never be told. The tunnel's
+    /// local port is this machine's; naming it would say the work happens
+    /// here, which is the opposite of the truth.
+    #[test]
+    fn a_dialled_link_is_described_by_the_lender_never_by_the_local_bridge() {
+        let mut link = GuestLink {
+            token: "tok".into(),
+            url: "http://box:9741".into(),
+            dial: None,
+            expires_at: 9_000,
+            summary: None,
+        };
+        assert_eq!(describe(&link), "http://box:9741");
+        link.dial = Some("beef@https://relay.example".into());
+        assert_eq!(describe(&link), "http://box:9741 (over the mesh tunnel)");
+        assert!(
+            !describe(&link).contains("127.0.0.1"),
+            "the guest is told whose machine answers, not which local port carries it"
+        );
+    }
+
+    #[test]
+    fn durations_render_at_the_scale_an_operator_reads() {
+        assert_eq!(human_duration(45), "45s");
+        assert_eq!(human_duration(90), "1m");
+        assert_eq!(human_duration(7_200), "2h0m");
+        assert_eq!(human_duration(90_000), "1d1h");
+    }
+}

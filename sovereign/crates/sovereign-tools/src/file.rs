@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::path::{Path, PathBuf};
 
-use async_trait::async_trait;
-
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
+use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::*;
+use std::sync::Arc;
 
 /// Scoped filesystem tool. All operations are restricted to allowed root directories.
 pub struct FileTool {
@@ -38,50 +37,21 @@ impl FileTool {
     }
 }
 
-#[async_trait]
-impl Tool for FileTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "file".to_string(),
-            name: "File".to_string(),
-            description: "Read, write, list, and search files within allowed directories"
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "action": { "type": "string", "enum": ["read", "write", "list", "search"] },
-                    "path": { "type": "string" },
-                    "content": { "type": "string", "description": "For write action" },
-                    "pattern": { "type": "string", "description": "Glob pattern for search" }
-                },
-                "required": ["action", "path"]
-            }),
-            examples: vec![],
-            effect: Effect::ReadWrite,
-            idempotency: Idempotency::NonIdempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            // Shape depends on action — read returns file contents,
-            // write returns a status string, list returns a newline
-            // list. Leave unschema'd rather than promise structure
-            // that doesn't hold across actions.
-            output_schema: None,
-        }
+impl FileTool {
+    /// Bind this tool's state to its `file` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("file", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        // The tool multiplexes read/write/list/search on `action`.
-        // The approval gate walks this vec per invocation and stores
-        // a (tool_id, scope) grant per permission — so the operator
-        // grants `FileRead` the first time a `read`/`list`/`search`
-        // fires, and `FileWrite` the first time a `write` fires.
-        // Returning both keeps the check correct regardless of
-        // action; the Effect::ReadWrite declaration on the
-        // descriptor matches.
-        vec![Permission::FileRead, Permission::FileWrite]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `file`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let action = params
             .get("action")
             .and_then(|v| v.as_str())

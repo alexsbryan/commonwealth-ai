@@ -59,7 +59,8 @@ impl Planner for LlmPlanner {
             // SLOT_POLICY §3 Passthrough: agentic plan generation — the
             // model reasoning about the task. Bundle latency=Normal →
             // shadow Speed::Slow (Primary), unchanged.
-            let mut request = CompletionRequest::for_workload(Workload::Passthrough, prompt)
+            let mut request = Workload::Passthrough
+                .request(prompt)
                 .with_system(PLAN_SYSTEM_PROMPT)
                 .with_output_budget(1024);
             request.temperature = Some(0.0);
@@ -150,7 +151,8 @@ impl Planner for LlmPlanner {
         );
 
         // SLOT_POLICY §3 Passthrough: replan-after-failure reasoning.
-        let mut request = CompletionRequest::for_workload(Workload::Passthrough, prompt)
+        let mut request = Workload::Passthrough
+            .request(prompt)
             .with_system(PLAN_SYSTEM_PROMPT)
             .with_output_budget(1024);
         request.temperature = Some(0.0);

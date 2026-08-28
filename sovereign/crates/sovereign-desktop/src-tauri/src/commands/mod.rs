@@ -62,6 +62,8 @@ pub struct CreateConversationResponse {
     pub created_at: i64,
 }
 
+/// NOT `sovereign_tools_base::web::search::SearchResult` (a WEB result);
+/// this is a conversation-search hit.
 #[derive(Serialize)]
 pub struct SearchResult {
     pub content: String,
@@ -77,6 +79,9 @@ pub struct SkillEntry {
     pub trust_level: String,
 }
 
+/// NOT `sovereign_contracts::setup_config::SetupConfig`, which is the
+/// `config.toml` structure; this is the setup WIZARD's inbound payload from
+/// the frontend and is Deserialize-only.
 #[derive(Deserialize)]
 pub struct SetupConfig {
     pub model_path: String,
@@ -111,6 +116,9 @@ pub struct SetupConfig {
     pub auto_escalate_to_web: Option<bool>,
 }
 
+/// NOT `sovereign_core::deep_research::icd::CorpusEntry` (an estate row:
+/// `{corpus_id, kind, chunks_count, searchable, custody}`); this is the
+/// catalog-browser card the UI renders.
 #[derive(Serialize)]
 pub struct CorpusEntry {
     pub id: String,
@@ -289,6 +297,25 @@ macro_rules! require_runtime {
             return Err("Backend is still loading. Please wait.".to_string());
         }
         guard
+    }};
+}
+
+/// The `require_runtime!` shape for commands that need the DATABASE, not
+/// the chat Runtime — conversation list/rename/delete, memory tombstones,
+/// message search, answer export. Yields an owned `Arc<dyn StateStore>`
+/// (the same handle `Runtime::new` is given, see `AppState::store`) and
+/// drops the read guard, so no lock is held across the caller's awaits.
+///
+/// Same not-ready string as `require_runtime!` on purpose: the repoint
+/// (daemon-convergence Phase 0) must not change what the frontend renders
+/// while bootstrap is in flight.
+macro_rules! require_store {
+    ($state:expr) => {{
+        let guard = $state.store.read().await;
+        match guard.as_ref() {
+            Some(store) => std::sync::Arc::clone(store),
+            None => return Err("Backend is still loading. Please wait.".to_string()),
+        }
     }};
 }
 

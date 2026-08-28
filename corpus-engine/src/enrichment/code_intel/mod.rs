@@ -81,6 +81,83 @@ static SYMBOL_ENRICHMENT_SYSTEM: LazyLock<&'static str> = LazyLock::new(|| {
     )
 });
 
+/// The same lever for TYPES. A struct has no behaviour to describe, and the
+/// function prompt's "anchor on what it RETURNS" is meaningless for one — asked
+/// that way, the model answers about the prompt instead of the code ("This
+/// function is not present in the provided code; only a `Label` struct
+/// definition was given...").
+static TYPE_ENRICHMENT_SYSTEM: LazyLock<&'static str> = LazyLock::new(|| {
+    load_or_baked(
+        "code_intel/type_enrichment_system.md",
+        include_str!("prompts/type_enrichment_system.md"),
+    )
+});
+
+/// Which prompt a symbol is asked with.
+///
+/// Two, not one, and the split is load-bearing: measured on this graph
+/// 2026-08-24, the enrichable population was 61,706 symbols of which only
+/// 32,739 (53%) were callable. The other 47% — 4,945 types, 3,164 modules and
+/// 20,858 non-callable terms — were all being handed a prompt that says "ONE
+/// function" six times.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PromptKind {
+    /// Free functions, methods, trait methods — things with behaviour.
+    Callable,
+    /// Structs, enums, traits, aliases — things that represent, not act.
+    Type,
+}
+
+impl PromptKind {
+    /// Short, stable id. Appears in the cache key, so it must never be
+    /// re-spelled casually — a changed id silently invalidates that slice.
+    pub fn id(self) -> &'static str {
+        match self {
+            PromptKind::Callable => "fn",
+            PromptKind::Type => "ty",
+        }
+    }
+
+    fn system(self) -> &'static str {
+        match self {
+            PromptKind::Callable => *SYMBOL_ENRICHMENT_SYSTEM,
+            PromptKind::Type => *TYPE_ENRICHMENT_SYSTEM,
+        }
+    }
+
+    fn noun(self) -> &'static str {
+        match self {
+            PromptKind::Callable => "FUNCTION",
+            PromptKind::Type => "TYPE",
+        }
+    }
+}
+
+/// Bump when a prompt's TEXT changes in a way that should re-generate.
+///
+/// # Why this exists, and why it is per-kind
+///
+/// The cache was keyed on `body_hash` ALONE, so a prompt improvement was
+/// invisible: every existing summary kept the old prompt's output forever and
+/// no re-run could dislodge it. `store.rs` records this exact bug being found
+/// and fixed for `RENDER_VERSION` — the rendering half — but the GENERATION
+/// half kept the defect.
+///
+/// It is keyed per-kind on purpose, and that is the cost mitigation. Bumping
+/// the type prompt re-generates ~4,945 type summaries, not all 37,684. Had
+/// this landed after a full corpus run instead of before one, fixing a prompt
+/// would have meant regenerating everything — measured at 3.5s/symbol under
+/// load, that is the difference between an hour and a day and a half.
+pub const PROMPT_VERSION: u32 = 1;
+
+/// The cache identity for one symbol: body, prompt, and prompt version.
+///
+/// Everything that can change the OUTPUT belongs in the key. A key that names
+/// only the input describes a cache that cannot be corrected.
+pub fn cache_key(kind: PromptKind, body: &str) -> String {
+    format!("{}/{}v{PROMPT_VERSION}", body_hash(body), kind.id())
+}
+
 /// Identity + location of a code symbol to enrich. Sourced from the SCIP
 /// graph (`SymbolRow`) in a later slice; defined here decoupled so the
 /// generator carries no dependency on the SCIP reader.
@@ -112,6 +189,12 @@ pub struct SymbolEnrichment {
     /// re-generation. Matches the `atoms.rs::short_hash` / chunk
     /// `content_hash` convention.
     pub body_hash: String,
+    /// `{body_hash}/{prompt}v{version}` — the full identity this summary was
+    /// generated under. Defaulted when absent so a pre-versioning cache file
+    /// still loads; such entries simply miss and re-generate once, which is
+    /// the correct behaviour for a summary whose prompt is unknown.
+    #[serde(default)]
+    pub cache_key: String,
     /// One plain-English sentence on the real-world job the symbol does.
     pub summary: String,
     /// Plain-English questions a user might ask that this answers (the
@@ -124,6 +207,10 @@ pub struct SymbolEnrichment {
 pub struct SymbolSource {
     pub meta: SymbolMeta,
     pub body: String,
+    /// Which prompt this symbol is asked with. Decided by the enumerator from
+    /// the SCIP descriptor, which is the reliable signal — the graph's `kind`
+    /// column is not (see `is_enrichable_kind`).
+    pub kind: PromptKind,
 }
 
 /// Glassbox counts for one incremental batch — the patchability cost model
@@ -145,7 +232,7 @@ pub struct IncrementalReport {
 /// (`engine/reindex.rs`), so a symbol's key is stable and comparable across
 /// the pipeline.
 pub fn body_hash(body: &str) -> String {
-    blake3::hash(body.as_bytes()).to_hex().to_string()[..16].to_string()
+    kernel_types::ContentHash::of_str(body).short()
 }
 
 /// Extract a symbol's body from source text, starting at the 0-based `line_start`.
@@ -239,8 +326,21 @@ pub fn is_enrichable_kind(kind: &str) -> bool {
 /// body like `blast_radius` from the bare name and invented "machines in a
 /// cluster"; with them it stays in the right domain.
 pub fn compose_symbol_prompt(qualified_name: &str, file_path: &str, body: &str) -> ChatPrompt {
-    let user = format!("FUNCTION: {qualified_name}\nFILE: {file_path}\n\nCODE:\n{body}");
-    ChatPrompt::new(*SYMBOL_ENRICHMENT_SYSTEM, user)
+    compose_symbol_prompt_for(PromptKind::Callable, qualified_name, file_path, body)
+}
+
+/// Compose the prompt for one symbol, asked as the right kind of thing.
+pub fn compose_symbol_prompt_for(
+    kind: PromptKind,
+    qualified_name: &str,
+    file_path: &str,
+    body: &str,
+) -> ChatPrompt {
+    let user = format!(
+        "{}: {qualified_name}\nFILE: {file_path}\n\nCODE:\n{body}",
+        kind.noun()
+    );
+    ChatPrompt::new(kind.system(), user)
         .with_phase_id(PHASE_ID)
         .with_temperature(TEMPERATURE)
         .with_max_output_tokens(MAX_OUTPUT_TOKENS)
@@ -324,7 +424,17 @@ pub async fn enrich_symbol(
     meta: SymbolMeta,
     body: &str,
 ) -> Result<SymbolEnrichment> {
-    let prompt = compose_symbol_prompt(&meta.qualified_name, &meta.file_path, body);
+    enrich_symbol_as(chat, PromptKind::Callable, meta, body).await
+}
+
+/// Enrich one symbol, asked as the right kind of thing.
+pub async fn enrich_symbol_as(
+    chat: &ChatCompletionFn,
+    kind: PromptKind,
+    meta: SymbolMeta,
+    body: &str,
+) -> Result<SymbolEnrichment> {
+    let prompt = compose_symbol_prompt_for(kind, &meta.qualified_name, &meta.file_path, body);
     let raw = (chat)(&prompt).await?;
     let (summary, asks) = parse_symbol_response(&raw);
     if summary.is_empty() {
@@ -337,6 +447,7 @@ pub async fn enrich_symbol(
     }
     Ok(SymbolEnrichment {
         body_hash: body_hash(body),
+        cache_key: cache_key(kind, body),
         meta,
         summary,
         asks,
@@ -365,7 +476,9 @@ pub async fn enrich_symbols_incremental(
     let mut indexed: Vec<(usize, SymbolEnrichment)> = Vec::new();
     let mut to_enrich: Vec<(usize, SymbolSource)> = Vec::new();
     for (i, src) in symbols.into_iter().enumerate() {
-        let hash = body_hash(&src.body);
+        // The KEY is body + prompt + prompt version. Keyed on the body alone,
+        // a prompt fix could never dislodge a bad summary.
+        let hash = cache_key(src.kind, &src.body);
         if let Some(prev) = prior.get(&hash) {
             // Body unchanged (hash-keyed) — reuse the summary, refresh meta in
             // case the symbol moved or was renamed with an identical body.
@@ -391,7 +504,7 @@ pub async fn enrich_symbols_incremental(
         futures::stream::iter(to_enrich.into_iter().map(|(i, src)| {
             let chat = chat.clone();
             async move {
-                match enrich_symbol(&chat, src.meta.clone(), &src.body).await {
+                match enrich_symbol_as(&chat, src.kind, src.meta.clone(), &src.body).await {
                     Ok(e) => (i, Some(e)),
                     Err(err) => {
                         tracing::warn!(
@@ -670,10 +783,12 @@ mod tests {
         // First pass: empty prior -> everything regenerates.
         let syms = vec![
             SymbolSource {
+                kind: PromptKind::Callable,
                 meta: meta("f"),
                 body: "fn f() { 1 }".to_string(),
             },
             SymbolSource {
+                kind: PromptKind::Callable,
                 meta: meta("g"),
                 body: "fn g() { 2 }".to_string(),
             },
@@ -686,16 +801,18 @@ mod tests {
 
         // Build the cache from the first pass.
         let cache: HashMap<String, SymbolEnrichment> =
-            set.into_iter().map(|e| (e.body_hash.clone(), e)).collect();
+            set.into_iter().map(|e| (e.cache_key.clone(), e)).collect();
 
         // Second pass: f unchanged (reused, no call), g body edited (one call).
         calls.store(0, Ordering::SeqCst);
         let syms2 = vec![
             SymbolSource {
+                kind: PromptKind::Callable,
                 meta: meta("f"),
                 body: "fn f() { 1 }".to_string(),
             },
             SymbolSource {
+                kind: PromptKind::Callable,
                 meta: meta("g"),
                 body: "fn g() { 2 + 2 }".to_string(),
             },
@@ -718,6 +835,7 @@ mod tests {
         let (set, _) = enrich_symbols_incremental(
             &chat,
             vec![SymbolSource {
+                kind: PromptKind::Callable,
                 meta: meta("original"),
                 body: body.to_string(),
             }],
@@ -725,13 +843,14 @@ mod tests {
         )
         .await;
         let cache: HashMap<String, SymbolEnrichment> =
-            set.into_iter().map(|e| (e.body_hash.clone(), e)).collect();
+            set.into_iter().map(|e| (e.cache_key.clone(), e)).collect();
 
         // Rename: identical body, new name -> reused, meta refreshed, zero calls.
         calls.store(0, Ordering::SeqCst);
         let (set2, rep) = enrich_symbols_incremental(
             &chat,
             vec![SymbolSource {
+                kind: PromptKind::Callable,
                 meta: meta("renamed"),
                 body: body.to_string(),
             }],
@@ -751,10 +870,30 @@ mod tests {
         assert_eq!(set2[0].summary, "a job.", "summary carried over");
     }
 
+    /// The trap this fix exists for: the cache was keyed on the body alone, so
+    /// a prompt improvement could never dislodge a bad summary. The key must
+    /// move when the prompt does — and must NOT move when only the body is the
+    /// same but the kind differs.
+    #[test]
+    fn the_cache_key_separates_prompts_so_a_prompt_fix_can_take_effect() {
+        let body = "fn f() { g(); }";
+        let as_fn = cache_key(PromptKind::Callable, body);
+        let as_ty = cache_key(PromptKind::Type, body);
+        assert_ne!(
+            as_fn, as_ty,
+            "one body asked two ways must not share a cache entry"
+        );
+        assert!(as_fn.contains(&body_hash(body)), "{as_fn}");
+        assert!(as_fn.ends_with(&format!("fnv{PROMPT_VERSION}")), "{as_fn}");
+        // Same inputs, same key — the reuse path still works.
+        assert_eq!(as_fn, cache_key(PromptKind::Callable, body));
+    }
+
     fn enr_for(name: &str, body_hash: &str) -> SymbolEnrichment {
         SymbolEnrichment {
             meta: meta(name),
             body_hash: body_hash.to_string(),
+            cache_key: String::new(),
             summary: format!("summary of {name}"),
             asks: vec![],
         }

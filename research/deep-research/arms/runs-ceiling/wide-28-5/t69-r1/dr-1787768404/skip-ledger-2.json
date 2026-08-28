@@ -1,0 +1,1809 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787768404",
+  "charter_hash": "9a40ca214c62420d",
+  "round": 2,
+  "entries": [
+    {
+      "url": "https://agentstoday.substack.com/p/agents-today-15-ai-agent-interoperability",
+      "title": "https://agentstoday.substack.com/p/agents-today-15-ai-agent-interoperability",
+      "score": 0.03159204125404358,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q11",
+      "snippet": "ement tools that plug into that layer. This is likely where we will see innovation around privacy, security and safety policies being developed and applied.\nA2A is tackling higher-level agent society problems (discusses in prior posts) communication, cooperation, specialization, and governance among AI agents.\nLooking Forward: Building with Both MCP and A2A\nAs we look to the future of AI agent ecosystems, it's clear that MCP and A2A will likely coexist as complementary standards rather than competing ones. The most powerful agent systems will leverage both protocols to create truly interoperab"
+    },
+    {
+      "url": "https://agentstoday.substack.com/p/agents-today-15-ai-agent-interoperability",
+      "title": "https://agentstoday.substack.com/p/agents-today-15-ai-agent-interoperability",
+      "score": 0.03159204125404358,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q12",
+      "snippet": "ement tools that plug into that layer. This is likely where we will see innovation around privacy, security and safety policies being developed and applied.\nA2A is tackling higher-level agent society problems (discusses in prior posts) communication, cooperation, specialization, and governance among AI agents.\nLooking Forward: Building with Both MCP and A2A\nAs we look to the future of AI agent ecosystems, it's clear that MCP and A2A will likely coexist as complementary standards rather than competing ones. The most powerful agent systems will leverage both protocols to create truly interoperab"
+    },
+    {
+      "url": "https://agentstoday.substack.com/p/agents-today-15-ai-agent-interoperability",
+      "title": "https://agentstoday.substack.com/p/agents-today-15-ai-agent-interoperability",
+      "score": 0.03159204125404358,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q13",
+      "snippet": "ement tools that plug into that layer. This is likely where we will see innovation around privacy, security and safety policies being developed and applied.\nA2A is tackling higher-level agent society problems (discusses in prior posts) communication, cooperation, specialization, and governance among AI agents.\nLooking Forward: Building with Both MCP and A2A\nAs we look to the future of AI agent ecosystems, it's clear that MCP and A2A will likely coexist as complementary standards rather than competing ones. The most powerful agent systems will leverage both protocols to create truly interoperab"
+    },
+    {
+      "url": "https://a2aprotocol.ai/blog/impact-analysis-google-donating-a2a-protocol-linux-foundation",
+      "title": "https://a2aprotocol.ai/blog/impact-analysis-google-donating-a2a-protocol-linux-foundation",
+      "score": 0.03154495730996132,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q13",
+      "snippet": "es from Google Opal, Gemini Enterprise, and Flutter GenUI SDK.\na2ui\nRead article\nAgent Gateway Protocol (AGP): Practical Tutorial and Specification\nLearn the Agent Gateway Protocol (AGP): what it is, problems it solves, core spec (capability announcements, intent payloads, routing and error codes), routing algorithm, and how to run a working simulation.\nExtension\nRead article\nIntegrating A2A Protocol - Intelligent Agent Communication Solution for BeeAI Framework\nUsing A2A protocol instead of ACP is a better choice for BeeAI, reducing protocol fragmentation and improving ecosystem integration.\n"
+    },
+    {
+      "url": "https://codilime.com/blog/a2a-protocol-explained",
+      "title": "https://codilime.com/blog/a2a-protocol-explained",
+      "score": 0.03151364624500275,
+      "rank": 11,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q4",
+      "snippet": "ntend Software Services\nNetwork Professional Services\nR&D\nCOMPANY\nAbout\nNews\nCareers\nKNOWLEDGE BASE\nCase studies\nBlog\nResources\n© CodiLime 2026 - All rights reserved.\nPrivacy Policy/Terms of service/Information Security Policy"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Model_Context_Protocol",
+      "title": "https://en.wikipedia.org/wiki/Model_Context_Protocol",
+      "score": 0.03125,
+      "rank": 12,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q15",
+      "snippet": "}\"},\"industry\":{\"wt\":\"[[Artificial intelligence]]\"},\"image\":{\"wt\":\"Model Context Protocol logo.svg{{!}}class=skin-invert\"}},\"i\":0}}]}'Model Context ProtocolDeveloped byAnthropicIntroducedNovember 25, 2024; 20 months ago (2024-11-25)IndustryArtificial intelligenceConnector type\nTypeScript\nPython\nJava\nKotlin\nC#\nGo\nPHP\nPerl\nRuby\nRust\nSwift\nWebsitemodelcontextprotocol.io Relationship between MCP host, MCP clients and MCP servers The Model Context Protocol (MCP) is an open standard and open-source framework introduced by Anthropic in November 2024 to standardize the way artificial intelligence (AI)"
+    },
+    {
+      "url": "https://agentstoday.substack.com/p/agents-today-15-ai-agent-interoperability",
+      "title": "https://agentstoday.substack.com/p/agents-today-15-ai-agent-interoperability",
+      "score": 0.03125,
+      "rank": 13,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q17",
+      "snippet": " as an open standard for connecting AI models to external data sources and tools. As Anthropic described it, MCP aims to \"help frontier models produce better, more relevant responses\" by providing a \"universal, open standard for connecting AI systems with data sources, replacing fragmented integrations with a single protocol.\"\nMCP follows a client-server architecture with three key components:\nHost: The main AI application that users interact with (e.g., Claude or Gemini)\nMCP Client: A connector that manages communication with a specific server\nMCP Server: A service that exposes data sources o"
+    },
+    {
+      "url": "https://a2aprotocol.ai/blog/impact-analysis-google-donating-a2a-protocol-linux-foundation",
+      "title": "https://a2aprotocol.ai/blog/impact-analysis-google-donating-a2a-protocol-linux-foundation",
+      "score": 0.03100961446762085,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q2",
+      "snippet": "cluding Amazon, Cisco, Microsoft, Salesforce, and others. Potential Benefits\nNeutral Governance and Standardization\nThe Linux Foundation's neutral governance ensures A2A is not controlled by a single company, reducing vendor lock-in risks and promoting it as an industry standard (InfoWorld).\nBroader Adoption\nThe open source model attracts more developers and companies to participate, with support from over 100 companies indicating A2A's potential to become the AI agent communication standard (The New Stack).\nIndustry Collaboration and Innovation\nParticipation from giants like Amazon and Micros"
+    },
+    {
+      "url": "https://www.anthropic.com/news/model-context-protocol",
+      "title": "https://www.anthropic.com/news/model-context-protocol",
+      "score": 0.03095238283276558,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q15",
+      "snippet": ". Whether you’re an AI tool developer, an enterprise looking to leverage existing data, or an early adopter exploring the frontier, we invite you to build the future of context-aware AI together.\nRelated content\nHow Claude’s text watermark works\nIn this article, we share answers to some of the questions we’ve received about how our chosen watermarking method works, whether it affects Claude’s outputs, and why we’re making this change.\nRead more\nImproving Fable 5s biology safeguards\nWe’re making updates to Claude Fable 5’s biology safeguards in a way that substantially reduces fal"
+    },
+    {
+      "url": "https://codilime.com/blog/a2a-protocol-explained",
+      "title": "https://codilime.com/blog/a2a-protocol-explained",
+      "score": 0.03067915514111519,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q20",
+      "snippet": "pically include ready-made server and client implementations, strongly-typed models for AgentCards, skills, tasks, messages/parts, and artifacts, plus helpers for capability discovery, task lifecycle management, and structured task updates. In practice, they help teams move from “reading a spec and implementing it manually” to dropping in a compliant A2A server wrapper around an existing agent (or consuming a remote agent via a client), while benefiting from production-friendly integrations such as HTTP frameworks (e.g., FastAPI/Starlette), optional gRPC transport support, and OpenTelemetr"
+    },
+    {
+      "url": "https://tfir.io/ciscos-agntcy-takes-on-ai-agent-fragmentation-under-linux-foundation-umbrella",
+      "title": "https://tfir.io/ciscos-agntcy-takes-on-ai-agent-fragmentation-under-linux-foundation-umbrella",
+      "score": 0.030621785670518875,
+      "rank": 17,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q2",
+      "snippet": "lti-agent apps, and even agent-to-tool protocols like MCP. Decentralized Agent Directory: Think DNS for agents — but built on distributed hash tables and P2P principles to ensure no single point of control. Decentralized Identity Service: Designed for task-based authorization across dynamic, non-deterministic agent interactions. Identity is extensible, privacy-aware, and not bound to a central authority. SLIM (Secure, Low-latency Interactive Messaging): A gRPC-based communication layer that supports many-to-many interactions, voice/video support, real-time guarantees, and post-quantum crypto"
+    },
+    {
+      "url": "https://agentstoday.substack.com/p/agents-today-15-ai-agent-interoperability",
+      "title": "https://agentstoday.substack.com/p/agents-today-15-ai-agent-interoperability",
+      "score": 0.03055037185549736,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q18",
+      "snippet": "ramework\"). Understanding these protocols and their complementary nature is essential for developers and enterprises looking to build sophisticated, interoperable agent systems. These aren't actually competing standards, rather MCP and A2A represent different layers of an AI agent interoperability stack that together could unlock the potential of multi-agent systems.\nMike's Insights\nThroughout my career I've observed that the most powerful applications rarely exist in isolation. True AI agent potential emerges when systems can seamlessly connect to data sources, tools, and other AI agents.\nI a"
+    },
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.030414745211601257,
+      "rank": 19,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q10",
+      "snippet": "arning Glossary Comparisons Connect\nEvents & Webinars Support\nDocumentation User Center Report 2026 State of AI Security\nResearch Pod Meet our team that discovers and analyzes cloud risks.\nDiscovered Vulnerabilities Critical cloud vulnerabilities discovered by the Orca Research Pod.\nOpen Source Projects Cloud security tools for developers and security teams.\n“Orca Watch” Series Blog series that highlights new trends and risks seen by the Orca Platform.\nTechnical Deep Dives In-depth, technical articles on cloud security and recommended best practices.\nReport 2026 State of AI Security\nCustom"
+    },
+    {
+      "url": "https://mastra.ai/blog/what-is-agent-to-agent-protocol",
+      "title": "https://mastra.ai/blog/what-is-agent-to-agent-protocol",
+      "score": 0.030365770682692528,
+      "rank": 20,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q9",
+      "snippet": " turns that into a loud VersionNotSupportedError instead of quietly misreading fields. The remote cant produce a format you accept. You get ContentTypeNotSupportedError at the boundary, not a garbage response to clean up. A paused task never wakes up. The timeout is yours to set, tasks/cancel kills it, and TaskNotCancelableError tells you when its already too far along to stop. The network flakes. The client retries with backoff. How does Mastra handle each stage?\nMastra implements both sides of A2A. You can expose a Mastra agent so that other systems can delegate work to it over the protocol,"
+    },
+    {
+      "url": "https://tyk.io/learning-center/a2a-protocol-architecture-and-technical-specification",
+      "title": "https://tyk.io/learning-center/a2a-protocol-architecture-and-technical-specification",
+      "score": 0.03028232976794243,
+      "rank": 21,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q9",
+      "snippet": " point, the stream closes. In v1.0 the stream-closure mechanism replaces the v0.x final: true boolean.\nFor very long-running or disconnected scenarios, A2A also defines Push Notifications: The server POSTs StreamResponse payloads to a webhook URL the client registered via CreateTaskPushNotificationConfig. The webhook authenticates the incoming notification via PushNotificationConfig.authentication (signed JWT, HMAC, or mTLS).\nMessages, parts, and multi-modal artifacts\nAgents exchange state and contextual data using Message and Artifact objects. A Message carries a role (user/agent or, in v1.0 "
+    },
+    {
+      "url": "https://www.digitalapplied.com/blog/google-a2a-protocol-agent-to-agent-communication-guide",
+      "title": "https://www.digitalapplied.com/blog/google-a2a-protocol-agent-to-agent-communication-guide",
+      "score": 0.030117753893136978,
+      "rank": 22,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q20",
+      "snippet": "ror details that the client agent can use to decide whether to retry with different parameters, escalate to a different agent, or report the failure upstream.\ncancelled\nThe task was terminated before completion, either by a client cancellation request or by the server agent due to resource constraints or policy violations. Partial results may be included in the response.\nThe artifact model in A2A deserves special attention. Task results are not returned as raw text but as typed artifacts with metadata. An artifact has an ID, a MIME type, and either inline data or a reference to external storag"
+    },
+    {
+      "url": "https://agentstoday.substack.com/p/agents-today-15-ai-agent-interoperability",
+      "title": "https://agentstoday.substack.com/p/agents-today-15-ai-agent-interoperability",
+      "score": 0.03009049780666828,
+      "rank": 23,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q15",
+      "snippet": " work together to create a more interoperable AI agent ecosystem.\nSummary\nThe AI agent ecosystem is facing an interoperability challenge that limits its potential. Anthropic's MCP, introduced in late 2024, has gained significant traction as an open standard for connecting AI models to external tools and data sources, effectively solving the \"having to build a new tool for every data problem\" by standardizing these connections. Similar to how USB became a hardware protocol across mobile devices instead of a proprietary connector for each brand. Google's A2A protocol, announced in today with sup"
+    },
+    {
+      "url": "https://stellagent.ai/insights/a2a-protocol-google-agent-to-agent",
+      "title": "https://stellagent.ai/insights/a2a-protocol-google-agent-to-agent",
+      "score": 0.030000001192092896,
+      "rank": 24,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q7",
+      "snippet": "t layer — theyre complementary. With v1.0s Signed Agent Cards and the AP2 extension, A2A is now the horizontal bus for agentic commerce. One Year In, Agents Finally Learned to Talk to Each Other\nOn April 9, 2026, PR Newswire marked the one-year anniversary of the A2A Protocol. More than 150 organizations participate, the GitHub repo has passed 22,000 stars, and production deployments now exist inside Azure AI Foundry and Amazon Bedrock AgentCore. The numbers in the PR Newswire release are an entirely different order of magnitude from the 50-partner Cloud Next launch a year ago.\nThis article "
+    },
+    {
+      "url": "https://agentstoday.substack.com/p/agents-today-15-ai-agent-interoperability",
+      "title": "https://agentstoday.substack.com/p/agents-today-15-ai-agent-interoperability",
+      "score": 0.02991071343421936,
+      "rank": 25,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q4",
+      "snippet": "e specialized agents can work together seamlessly, combining their capabilities to solve even more complex problems on even longer timelines.\n2\nShare\nPreviousNext\nDiscussion about this post\nCommentsRestacks\nTopLatestDiscussions\nNo posts\nReady for more?\nSubscribe\n© 2026 Mike Clark · Privacy ∙ Terms ∙ Collection notice\nStart your SubstackGet the app\nSubstack is the home for great culture\nThis site requires JavaScript to run correctly. Please turn on JavaScript or unblock scripts"
+    },
+    {
+      "url": "https://a2aprotocol.ai/blog/impact-analysis-google-donating-a2a-protocol-linux-foundation",
+      "title": "https://a2aprotocol.ai/blog/impact-analysis-google-donating-a2a-protocol-linux-foundation",
+      "score": 0.029906954616308212,
+      "rank": 26,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q11",
+      "snippet": "es from Google Opal, Gemini Enterprise, and Flutter GenUI SDK.\na2ui\nRead article\nAgent Gateway Protocol (AGP): Practical Tutorial and Specification\nLearn the Agent Gateway Protocol (AGP): what it is, problems it solves, core spec (capability announcements, intent payloads, routing and error codes), routing algorithm, and how to run a working simulation.\nExtension\nRead article\nIntegrating A2A Protocol - Intelligent Agent Communication Solution for BeeAI Framework\nUsing A2A protocol instead of ACP is a better choice for BeeAI, reducing protocol fragmentation and improving ecosystem integration.\n"
+    },
+    {
+      "url": "https://a2aprotocol.ai/blog/impact-analysis-google-donating-a2a-protocol-linux-foundation",
+      "title": "https://a2aprotocol.ai/blog/impact-analysis-google-donating-a2a-protocol-linux-foundation",
+      "score": 0.029906954616308212,
+      "rank": 27,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q12",
+      "snippet": "es from Google Opal, Gemini Enterprise, and Flutter GenUI SDK.\na2ui\nRead article\nAgent Gateway Protocol (AGP): Practical Tutorial and Specification\nLearn the Agent Gateway Protocol (AGP): what it is, problems it solves, core spec (capability announcements, intent payloads, routing and error codes), routing algorithm, and how to run a working simulation.\nExtension\nRead article\nIntegrating A2A Protocol - Intelligent Agent Communication Solution for BeeAI Framework\nUsing A2A protocol instead of ACP is a better choice for BeeAI, reducing protocol fragmentation and improving ecosystem integration.\n"
+    },
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.029726775363087654,
+      "rank": 28,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q4",
+      "snippet": "n greater in A2A-style environments, where agents are expected to discover and communicate with one another over open protocols. A single misconfigured endpoint in this setup can inadvertently expose internal context to unauthorized peers or attackers posing as trusted agents. Without strict access controls and proper scoping, even a small configuration mistake can grant visibility into project directories, user metadata, or system internals turning a simple oversight into a critical entry point.\n3. Supply Chain Attack Risk\nMany MCP-like use cases involve usage of plugins, extensions or extern"
+    },
+    {
+      "url": "https://akka.io/blog/mcp-a2a-acp-what-does-it-all-mean",
+      "title": "https://akka.io/blog/mcp-a2a-acp-what-does-it-all-mean",
+      "score": 0.029726775363087654,
+      "rank": 29,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q5",
+      "snippet": "ization August 5, 2026 Scaling Agentic AI with Governance at the Core July 1, 2026 The Autonomous Operating Environment May 27, 2026 Platform\nOverview Specify Verify Optimize SDK Industries\nFinancial Services Telecommunications Retail & E-commerce Manufacturing Media & Streaming Public Sector Customers\nManulife John Deere Swiggy Tubi Verizon Capital One Walmart Doctolib Norwegian Cruise Line CERN Renault Amazon eero Deloitte All customer stories → Compare\nAWS Bedrock AgentCore Azure AI Foundry CrewAI Databricks Mosaic AI Gemini Enterprise LangChain LlamaIndex n8n NVIDIA Orkes Conductor Pydan"
+    },
+    {
+      "url": "https://arxiv.org/html/2505.02279v1",
+      "title": "https://arxiv.org/html/2505.02279v1",
+      "score": 0.02943722903728485,
+      "rank": 30,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q5",
+      "snippet": "ecuted by downstream systems. This approach unifies natural language understanding and action invocation, enabling real-time data fetches, database queries, and transactional operations from within a single LLM response.\nBuilding on this core capability, several frameworks have emerged to simplify agent development:\n• LangChain provides abstractions for chaining LLM calls, memory buffers, and function invocation in modular workflows, with built-in support for retrievers, vector stores, and agent loops [30].\n• LlamaIndex (formerly GPT Index) focuses on integrating LLMs with custom knowledge"
+    },
+    {
+      "url": "https://atlan.com/know/google-a2a-protocol",
+      "title": "https://atlan.com/know/google-a2a-protocol",
+      "score": 0.029386531561613083,
+      "rank": 31,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q7",
+      "snippet": " (HTTP, SSE, JSON-RPC 2.0).\nThe protocol was contributed to the Linux Foundation in June 2025 and is maintained as an open-source project under the Apache 2.0 license. As of April 2026, more than 150 organizations support A2A, including Google, Microsoft, AWS, Salesforce, SAP, ServiceNow, Workday, and IBM. Azure AI Foundry, Amazon Bedrock AgentCore, and Google Cloud have all integrated A2A natively into their platform offerings.\nHow the A2A protocol works technically\nPermalink to “How the A2A protocol works technically” #\nA2A defines a client-remote model: a client agent identifies a task "
+    },
+    {
+      "url": "https://arxiv.org/html/2505.02279v1",
+      "title": "https://arxiv.org/html/2505.02279v1",
+      "score": 0.029386531561613083,
+      "rank": 32,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q20",
+      "snippet": "2A agents to operate interoperably across diverse systems.\nMessages serve as the primary communication channel between agents. These encapsulate data exchange and coordination activities such as task submission, intermediate status updates, or artifact delivery—and can be composed of multiple typed parts including plain text, structured data, or file references. Without Messages, inter-agent interaction would not be possible, making them foundational to the A2A protocol. Artifacts are the tangible outputs of skill execution. Once a Remote Agent completes a task, it generates Artifacts that m"
+    },
+    {
+      "url": "https://tfir.io/ciscos-agntcy-takes-on-ai-agent-fragmentation-under-linux-foundation-umbrella",
+      "title": "https://tfir.io/ciscos-agntcy-takes-on-ai-agent-fragmentation-under-linux-foundation-umbrella",
+      "score": 0.02932489663362503,
+      "rank": 33,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q3",
+      "snippet": "tors can explore the project at AGNTCY.org. There you’ll find docs, Slack links, and reference apps like coffeeAGNTCY.\nThe code is open. The architecture is modular. And the roadmap is increasingly community-driven.\nIn Pandey’s words: “We believe in an open, interoperable internet of agents — and that starts with shared infrastructure.”\nPosted in Cloud Native Tagged with agenticAI\nKubernetes\nOpen Source\nThe Linux Foundation 0 AWS on A2A, Valkey, and the Foundations of Agentic AI\nPrevious article\nWeekly TFiR Wrap: The AI Transformation Reality Check: From Hype to Enterprise Implementa"
+    },
+    {
+      "url": "https://codilime.com/blog/a2a-protocol-explained",
+      "title": "https://codilime.com/blog/a2a-protocol-explained",
+      "score": 0.029236022382974625,
+      "rank": 34,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q18",
+      "snippet": "↔ tools/resources/prompts). A helpful mental model is: A2A is coordination between autonomous actors, while MCP is capability/context injection into a single actor. A2A has been explicitly framed as complementary to MCP rather than a replacement.\nThey still share important common ground. Both protocols exist because the ecosystem was becoming a patchwork of bespoke integrations: every tool needed custom glue code, and every framework exposed capabilities differently. Both promote standardized discovery and invocation, and both assume enterprise realities: governance, auditability, policy enf"
+    },
+    {
+      "url": "https://nevermined.ai/blog/model-context-protocol-adoption-statistics",
+      "title": "https://nevermined.ai/blog/model-context-protocol-adoption-statistics",
+      "score": 0.02904040366411209,
+      "rank": 35,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q15",
+      "snippet": "vity creates a massive opportunity for monetization solutions that integrate quickly.\n16. 42% use FastMCP for MCP server development\nDeveloper tooling preferences show 42% using FastMCP and 38% using Anthropics SDK for server development. Nevermined gets you from zero to a working payment integration in 5 minutes, with SDKs for both TypeScript and Python.\n17. Only 19% build MCP servers from scratch\nThe low percentage of developers building from scratch demonstrates the value of pre-built SDK solutions. Nevermineds low-code approach aligns with this preference for rapid deployment.\n18. 58% of M"
+    },
+    {
+      "url": "https://www.helpnetsecurity.com/2025/06/24/the-linux-foundation-agent2agent",
+      "title": "https://www.helpnetsecurity.com/2025/06/24/the-linux-foundation-agent2agent",
+      "score": 0.029009878635406494,
+      "rank": 36,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q3",
+      "snippet": "ater autonomy and multiplying productivity. Weve always believed in the vision of an open, interoperable Internet of Agents, and were joining the A2A Project as foundational members because community-driven development is the fastest path to widespread agent-to-agent adoption. Were integrating A2A support directly into key AGNTCY open source components the Directory, Identity, SLIM Messaging, and Observability frameworks to build the interoperability layer that actually works across vendor boundaries, said Vijoy Pandey, GM and SVP, Outshift by Cisco.\nMore about\nCisco Google Cloud The Linux Fou"
+    },
+    {
+      "url": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "title": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "score": 0.028949543833732605,
+      "rank": 37,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q7",
+      "snippet": "tially with 50+ founding technology and services partners, per the Google Developers Blog announcement. After Google donated A2A to the Linux Foundation in June 2025, the supporter count grew to 150+ organizations, according to IBM Think. A2A is the infrastructure layer that lets independently built AI agents discover each other, authenticate, and exchange work without requiring custom integration code on either side.\nAs the Google Developers Blog stated at launch: \"The A2A protocol will allow AI agents to communicate with each other, securely exchange information, and coordinate actions on to"
+    },
+    {
+      "url": "https://atlan.com/know/google-a2a-protocol",
+      "title": "https://atlan.com/know/google-a2a-protocol",
+      "score": 0.028860028833150864,
+      "rank": 38,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q9",
+      "snippet": "(a complex data analysis, a multi-step compliance check, a report generation workflow), A2A supports streaming via Server-Sent Events (SSE), so the client receives status updates in real time without polling.\nTransport and security\nPermalink to “Transport and security” #\nA2A is intentionally built on existing web standards rather than a new transport layer:\nJSON-RPC 2.0 over HTTPS handles all core task communications Server-Sent Events (SSE) enable streaming for long-running tasks Push notifications support fully asynchronous workflows where the client does not stay connected Authenticatio"
+    },
+    {
+      "url": "https://www.helpnetsecurity.com/2025/06/24/the-linux-foundation-agent2agent",
+      "title": "https://www.helpnetsecurity.com/2025/06/24/the-linux-foundation-agent2agent",
+      "score": 0.028850145637989044,
+      "rank": 39,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q10",
+      "snippet": "linked attack knocked UK power plant offline for days CISAs logging guidance works beyond government A hollowed out data layer is making CISOs fly blind into AI attacks Download: 2026 Credential Risk Report\nResources Download: The High-Performance Team Playbook Simplify security management with CIS SecureSuite Platform Download: The IT and security field guide to AI adoption Don't miss Suspected Iran-linked attack knocked UK power plant offline for days CISAs logging guidance works beyond government A hollowed out data layer is making CISOs fly blind into AI attacks Hazmat: Open-source contain"
+    },
+    {
+      "url": "https://www.digitalapplied.com/blog/google-a2a-protocol-agent-to-agent-communication-guide",
+      "title": "https://www.digitalapplied.com/blog/google-a2a-protocol-agent-to-agent-communication-guide",
+      "score": 0.028850145637989044,
+      "rank": 40,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q18",
+      "snippet": "uggests A2A is on a path to becoming the industry standard for enterprise multi-agent interoperability.\nTable of Contents\nWhat Youll Learn\n01What Is the A2A Protocol\n02A2A vs. MCP: Complementary, Not Competing\n03Agent Cards and Capability Discovery\n04Task Lifecycle, Streaming, and Artifacts\n05Security, Authentication, and Enterprise Trust\n06Ecosystem Adoption and Partner Integrations\n07Building A2A-Compatible Agents\n08Real-World Multi-Agent Workflow Examples\n09Limitations and Current State\nArtificial intelligence agents are becoming more capable, but they are also becoming more specialized. Ra"
+    },
+    {
+      "url": "https://galileo.ai/blog/google-agent2agent-a2a-protocol-guide",
+      "title": "https://galileo.ai/blog/google-agent2agent-a2a-protocol-guide",
+      "score": 0.02878725901246071,
+      "rank": 41,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q2",
+      "snippet": "ich vendor built each agent.\nJackson Wells\n')\"\nAsk AI for a summary about Galileo\nLinkedIn\nYouTube\nPodcast\nX\nGitHub\nBook a Demo\nPlatform Overview\nAgent Reliability\nSignals\nLuna-2\nProtect\nDocs\nPricing\nCompany\nCareers\nResponsible Disclosure Program\nCase Studies\nBlog\nMastering RAG eBook\nMastering Agents\nMastering LLM as a Judge\nMastering Multi Agent Systems\nMastering GenAI Series\nEval Engineering\nAgent Leaderboard\nResearch\nSign up\n© 2026 Galileo. All rights reserved. Terms\nPrivacy\nBook a Demo\n')\"\nAsk AI for a summary about Galileo\nLinkedIn\nYouTube\nPodcast\nX\nGitHub\nPlatform Overview\nAgent Reliabi"
+    },
+    {
+      "url": "https://tfir.io/ciscos-agntcy-takes-on-ai-agent-fragmentation-under-linux-foundation-umbrella",
+      "title": "https://tfir.io/ciscos-agntcy-takes-on-ai-agent-fragmentation-under-linux-foundation-umbrella",
+      "score": 0.028629031032323837,
+      "rank": 42,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q1",
+      "snippet": "d Galileo, has rapidly expanded to include over 75 contributing organizations. The move to Linux Foundation governance brings heavyweight backing from five founding members: Cisco, Dell Technologies, Google Cloud, Oracle, and Red Hat.\nWe picked Linux Foundation because they have the neutrality of governance and the resources to nurture and grow communities, Pandey notes. Its similar to how Google donated Kubernetes to CNCF, creating an ecosystem that spawned hundreds of projects and startups.\nFour Pillars of Agent Infrastructure\nAGNTCY addresses four critical areas of agent communication: disc"
+    },
+    {
+      "url": "https://arxiv.org/html/2505.02279v1",
+      "title": "https://arxiv.org/html/2505.02279v1",
+      "score": 0.028370220214128494,
+      "rank": 43,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q4",
+      "snippet": "ut formats, supported protocols, and authentication requirements. This Agent Card acts as both an advertisement and an interface contract for interacting agents.\nThe Remote Agent must also manage its internal Resource Usage, ensuring fair allocation of compute, memory, network, and storage resources during task execution. Alongside execution, it is responsible for enforcing Security and Access Control mechanisms. This includes authenticating Clients, verifying message integrity, and authorizing access to specific skills based on access policies or token scopes. By abstracting service capabilit"
+    },
+    {
+      "url": "https://www.digitalapplied.com/blog/google-a2a-protocol-agent-to-agent-communication-guide",
+      "title": "https://www.digitalapplied.com/blog/google-a2a-protocol-agent-to-agent-communication-guide",
+      "score": 0.028370220214128494,
+      "rank": 44,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q6",
+      "snippet": "-system workflows that were previously impossible without custom integration work — for example, a Salesforce opportunity agent collaborating with a Workday resource planning agent and a ServiceNow project setup agent to onboard a new client.\nThe consulting firm commitments signal that A2A is becoming part of the enterprise AI implementation conversation. When Deloitte, Accenture, and Capgemini commit to building A2A-compatible solutions for their clients, they are also committing to training their consultants, developing implementation frameworks, and creating reference architectures — al"
+    },
+    {
+      "url": "https://onereach.ai/blog/guide-choosing-mcp-vs-a2a-protocols",
+      "title": "https://onereach.ai/blog/guide-choosing-mcp-vs-a2a-protocols",
+      "score": 0.028324153274297714,
+      "rank": 45,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q14",
+      "snippet": "sing the A2A protocol, organizations can connect their entire AI ecosystem into one collaborative network. This allows agents to communicate, share goals, and synchronize operations. MCP vs A2A: Core Differences, Best Fit, and Strategic Choice\nEnterprise IT leaders exploring different agentic AI architectures face a strategic decision: when does it make sense to use the Model Context Protocol (MCP), the Agent-to-Agent protocol (A2A), or both? The answer lies in understanding their complementary roles and deployment scenarios.\nMCP serves as a universal adapter, connecting AI agents to tools, AP"
+    },
+    {
+      "url": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+      "title": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+      "score": 0.02829820290207863,
+      "rank": 46,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q14",
+      "snippet": "nt2Agent protocol)?” #\nThe Agent2Agent (A2A) protocol is an open standard released by Google in April 2025 that enables AI agents built on different frameworks or platforms to communicate, discover each other’s capabilities, and delegate tasks. Where MCP handles the vertical connection between a model and its tools, A2A handles the horizontal coordination between multiple agents. That makes it the right tool for multi-agent system orchestration at scale.\nAccording to the Google Developers Blog announcement (April 2025), A2A launched with 50+ technology partners including Atlassian, Salesfo"
+    },
+    {
+      "url": "https://www.prnewswire.com/news-releases/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year-302737641.html",
+      "title": "https://www.prnewswire.com/news-releases/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year-302737641.html",
+      "score": 0.028219396248459816,
+      "rank": 47,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q3",
+      "snippet": "announced the Xen Safety Committee, a collaborative...\nLinux Foundation Announces Key Industry Support for Linux Vendor Firmware Service The Linux Foundation, the nonprofit organization enabling mass innovation through open source, today announced expanded industry support for the...\nMore Releases From This Source Explore\nComputer & Electronics\nComputer Software\nComputer Software\nArtificial Intelligence\nNews Releases in Similar Topics -- Contact PR Newswire\nCall PR Newswire at 888-776-0942 from 8 AM - 9 PM ET Chat with an Expert Contact Us General Inquiries Editorial Bureaus Partnerships Media"
+    },
+    {
+      "url": "https://www.thefastmode.com/technology-solutions/48034-linux-foundation-s-a2a-protocol-gains-rapid-enterprise-adoption-across-cloud-giants",
+      "title": "https://www.thefastmode.com/technology-solutions/48034-linux-foundation-s-a2a-protocol-gains-rapid-enterprise-adoption-across-cloud-giants",
+      "score": 0.028177224099636078,
+      "rank": 48,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q6",
+      "snippet": "iaAustralia and South Pacific daily  weekly end subscribe_widget_item --- RELATED CONTENT\nIBM Brings Native Arm Support to Z and LinuxONE with New Processor Google Cloud, Verizon Expand Enterprise AI Partnership Tech Mahindra, ServiceNow Expand AI Platform Partnership for Enterprise Scale IBM Connects Cryogenic Modules for Fault-Tolerant Quantum Computing Oracle, AWS Expand Strategic Collaboration as AI Database Adoption Accelerates IBM, OpenAI Partner to Accelerate Secure Enterprise AI Deployment Google Expands Americas Connectivity with Alisios, Canoa and OlaLuz Subsea Cables Macquarie Cloud"
+    },
+    {
+      "url": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+      "title": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+      "score": 0.028177224099636078,
+      "rank": 49,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q16",
+      "snippet": "” #\nThe decision is not competitive; it follows from your architecture.\nUse MCP when:\nA model needs to read from or write to an external system (database, file system, API, metadata catalog) You are standardizing how one or more models access the same data source, effectively applying AI agent primitives to data connection Your architecture is single-agent, or the agent does not need to coordinate with other agents Use A2A when:\nYou are building a multi-agent system where one agent needs to delegate work to another Your agents run on different frameworks or are managed by different teams You"
+    },
+    {
+      "url": "https://www.anthropic.com/news/model-context-protocol",
+      "title": "https://www.anthropic.com/news/model-context-protocol",
+      "score": 0.02816092036664486,
+      "rank": 50,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q8",
+      "snippet": "er education\nK-12 teachers\nLegal\nLife sciences\nNonprofits\nSmall business\nClaude Platform\nOverview\nDeveloper docs\nPricing\nEcosystem\nMarketplace\nRegional compliance\nClaude on AWS\nGoogle Cloud\nMicrosoft Foundry\nConsole login\nResources\nBlog\nClaude partner network\nCommunity\nConnectors\nCourses\nCustomer stories\nEngineering at Anthropic\nEvents\nPlugins\nPowered by Claude\nService partners\nTutorials\nUse cases\nPrograms\nStartups\nResearch Labs\nHelp and security\nAvailability\nStatus\nSupport center\nCompany\nAnthropic\nCareers\nLeadership\nPolicy\nEconomic Futures\nResearch\nNews\nClaude’s Constitution\nClaude Corps\nKe"
+    },
+    {
+      "url": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "title": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "score": 0.028039216995239258,
+      "rank": 51,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q10",
+      "snippet": "s a blocking problem for anyone building at scale.\nThis article covers what A2A actually is, how its three-step flow works end to end, how it differs from MCP (and why that distinction matters), what security research says that most coverage ignores, and why the agent protocol landscape is consolidating faster than most developers realize.\nTL;DR: Google's A2A Protocol (launched April 2025, now Linux Foundation-governed) is the open standard for AI agent-to-agent communication. It works over HTTP/JSON-RPC 2.0 with Agent Card-based discovery and five official SDKs. With 150+ organizational suppo"
+    },
+    {
+      "url": "https://atlan.com/know/google-a2a-protocol",
+      "title": "https://atlan.com/know/google-a2a-protocol",
+      "score": 0.028039216995239258,
+      "rank": 52,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q19",
+      "snippet": "contributed to the Linux Foundation in June 2025 and is maintained as an open-source project under the Apache 2.0 license. As of April 2026, more than 150 organizations support A2A, including Google, Microsoft, AWS, Salesforce, SAP, ServiceNow, Workday, and IBM. Azure AI Foundry, Amazon Bedrock AgentCore, and Google Cloud have all integrated A2A natively into their platform offerings.\nHow the A2A protocol works technically\nPermalink to “How the A2A protocol works technically” #\nA2A defines a client-remote model: a client agent identifies a task it needs to delegate, locates an appropriate "
+    },
+    {
+      "url": "https://tyk.io/learning-center/a2a-protocol-architecture-and-technical-specification",
+      "title": "https://tyk.io/learning-center/a2a-protocol-architecture-and-technical-specification",
+      "score": 0.028030304238200188,
+      "rank": 53,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q20",
+      "snippet": "ess each part by its declared mediaType.\nHow to implement a basic A2A workflow (with code)\nImplementing an A2A workflow is a standardized sequence: capability discovery, task submission via JSON-RPC, asynchronous state subscription via SSE, and final artifact retrieval.\nStep 1: Discovery and skill parsing\nBefore transmitting a task, a client must verify that the remote agent advertises the required skill. It does this by GET-ting the Agent Card from /.well-known/agent-card.json and inspecting skills[].\nimport requests\nremote_agent_url = https://flights.internal.corp\nresponse = requests.get(f{r"
+    },
+    {
+      "url": "https://news.ycombinator.com/item?id=48582679",
+      "title": "https://news.ycombinator.com/item?id=48582679",
+      "score": 0.028021348640322685,
+      "rank": 54,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q20",
+      "snippet": "d also has commercial products), although I feel they havent found the corresponding profit point and PMF.\nesafak 67 days ago | prev | next [–]\nI had the same question in mind while reading another submission on the front page: https:news.ycombinator.comitem?id=48573268\nI am not using A2A. I think it is too early for such a thing.\nsiva7 67 days ago | prev | next [–]\nI work at some megacorp and have direct insight about any ai use - nope, not a single use case i witnessed used a2a in the final product. I still dont get a2a but you probably have to work at Google or something to see this as "
+    },
+    {
+      "url": "https://medium.com/@astropomeai/a-comprehensive-overview-of-the-model-context-protocol-mcp-f65150da0aa0",
+      "title": "https://medium.com/@astropomeai/a-comprehensive-overview-of-the-model-context-protocol-mcp-f65150da0aa0",
+      "score": 0.028006266802549362,
+      "rank": 55,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q15",
+      "snippet": "itecture\nAI applications (like the Claude Desktop app or in-editor AI agents) integrate an MCP client that connects to various MCP servers. These servers expose tools, data, or pre-defined prompt templates over standardized interfaces using protocols such as JSON-RPC 2.0. Transports may include STDIO for local communications or HTTP plus Server-Sent Events (SSE) for remote connections.\nBidirectional Communication and Context Extension\nBeyond data retrieval, MCP supports commands and data updates. This two-way communication allows AI systems to maintain context while integrating multiple tools "
+    },
+    {
+      "url": "https://cloudsecurityalliance.org/blog/2025/04/30/threat-modeling-google-s-a2a-protocol-with-the-maestro-framework",
+      "title": "https://cloudsecurityalliance.org/blog/2025/04/30/threat-modeling-google-s-a2a-protocol-with-the-maestro-framework",
+      "score": 0.027973394840955734,
+      "rank": 56,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q2",
+      "snippet": "use the most secure protocol version. M3.3.2 Deprecation Policy: Clearly define and enforce a deprecation policy for older protocol versions. Threat T3.4: Malicious A2A Server Impersonating a Trusted Company: An attacker sets up a malicious A2A server disguised to appear as if it's operated by a trusted company or organization, potentially deceiving agents into communicating with it and divulging sensitive information or executing malicious tasks.\nVulnerability: Agents rely on the Agent Card for identifying A2A servers, and Agent Cards can be spoofed or manipulated. Lack of robust server-side "
+    },
+    {
+      "url": "https://medium.com/@plawanrath/case-study-building-a-multi-agent-research-assistant-with-a2a-protocol-0df1d6eb71c3",
+      "title": "https://medium.com/@plawanrath/case-study-building-a-multi-agent-research-assistant-with-a2a-protocol-0df1d6eb71c3",
+      "score": 0.027912385761737823,
+      "rank": 57,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q10",
+      "snippet": "act).\nCritique/Score each paper on certain dimensions (novelty, relevance, etc.).\nAnalyze Trends across the papers (find emerging topics).\nPlan a Reading List of the top papers and generate a summary report for the user.\nThis pipeline naturally breaks down into different tasks — perfect for different agents to handle. I implemented the following agents (each as an independent component of the system):\nFetcher Agent: Searches external resources for new papers on the topic (in my example I query the arXiv API and Semantic Scholar API). It compiles a list of papers (title, authors, publication "
+    },
+    {
+      "url": "https://akka.io/blog/mcp-a2a-acp-what-does-it-all-mean",
+      "title": "https://akka.io/blog/mcp-a2a-acp-what-does-it-all-mean",
+      "score": 0.027809742838144302,
+      "rank": 58,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q8",
+      "snippet": ", introducing large-scale distributed systems and autonomous agents that collaborate, reason, and perform complex workflows. For senior technologists and business leaders, understanding communication protocols like MCP, A2A, and ACP are needed for building scalable, interoperable agentic AI solutions.\nIn this blog, we'll look at three influential communication protocols—Model Context Protocol (MCP), Agent-to-Agent (A2A), and Agent Communication Protocol (ACP). We’ll discuss their key characteristics, features, and provide message calling examples.\n1. Model Context Protocol (MCP)\nOverview:\n"
+    },
+    {
+      "url": "https://medium.com/@astropomeai/a-comprehensive-overview-of-the-model-context-protocol-mcp-f65150da0aa0",
+      "title": "https://medium.com/@astropomeai/a-comprehensive-overview-of-the-model-context-protocol-mcp-f65150da0aa0",
+      "score": 0.027783136814832687,
+      "rank": 59,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q8",
+      "snippet": "hropic’s Claude Desktop (note: the web version is currently not MCP-enabled) uses MCP to connect with local data sources like file systems and databases.\nMicrosoft (Azure AI Agent Service / Copilot Studio)\nMicrosoft has integrated MCP into its Azure ecosystem, allowing agents to access Bing search results and internal data sources in real time.\nZapier\nWith MCP, Zapier connects over 7,000 applications, enabling unified management of various tools and services.\nReplit, Codeium, and Cursor\nThese development platforms leverage MCP to enhance coding assistance by integrating AI into their environ"
+    },
+    {
+      "url": "https://www.koyeb.com/blog/a2a-and-mcp-start-of-the-ai-agent-protocol-wars",
+      "title": "https://www.koyeb.com/blog/a2a-and-mcp-start-of-the-ai-agent-protocol-wars",
+      "score": 0.0277777798473835,
+      "rank": 60,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q18",
+      "snippet": "r users send into the model, whereas A2A focuses on the second category: coordination between intelligent agents. On the other hand,\nBy separating tools from agents, Google is able to position A2A as complementary to — rather than in competition with — MCP. We’ll dig deeper into this point later.\nProtocols don’t just define how systems communicate with one another — they define who builds what, which tools thrive, and how fast ecosystems connect.\nWhat is Google’s A2A?\nAccording to the docs and announcement, A2A says it does exactly what its name implies: it standardizes how AI agen"
+    },
+    {
+      "url": "https://www.linuxfoundation.org/press/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year",
+      "title": "https://www.linuxfoundation.org/press/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year",
+      "score": 0.027757078409194946,
+      "rank": 61,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q7",
+      "snippet": "Log In English | Japan | China | Europe 6 MIN READ A2A Protocol Surpasses 150 Organizations, Lands in Major Cloud Platforms, and Sees Enterprise Production Use in First Year\nThe Linux Foundation | 09 April 2026 Follow us on Twitter\nFollow us on Facebook\nFollow us on LinkedIn\nFirst production-ready open standard for global AI agent interoperability\nSAN FRANCISCO – April 9, 2026 – The A2A (Agent-to-Agent) Protocol project, hosted by the Linux Foundation, today announced major adoption milestones at its one-year mark, with more than 150 organizations supporting the standard, deep integration "
+    },
+    {
+      "url": "https://tfir.io/ciscos-agntcy-takes-on-ai-agent-fragmentation-under-linux-foundation-umbrella",
+      "title": "https://tfir.io/ciscos-agntcy-takes-on-ai-agent-fragmentation-under-linux-foundation-umbrella",
+      "score": 0.027629397809505463,
+      "rank": 62,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q6",
+      "snippet": "or adoption. The platform integrates with Googles A2A (Agent-to-Agent) protocol and Anthropics MCP (Model Context Protocol), positioning itself as complementary infrastructure rather than competitive technology.\nWere not about specific protocols, Pandey clarifies. We provide the missing pieces around protocols to create a working stack for multi-agent architectures.\nAs AI agents become increasingly central to enterprise operations, the standardization battle reminds many of the early internets evolution. Whether AGNTCY becomes the TCP/IP of agent communication remains to be seen, but with Linu"
+    },
+    {
+      "url": "https://bytebridge.medium.com/from-rest-to-mcp-why-developers-should-embrace-the-model-context-protocol-003e3806874a",
+      "title": "https://bytebridge.medium.com/from-rest-to-mcp-why-developers-should-embrace-the-model-context-protocol-003e3806874a",
+      "score": 0.027629397809505463,
+      "rank": 63,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q17",
+      "snippet": "bility are additional pain points. Each REST API has its own endpoints, data formats, auth mechanisms, and idiosyncrasies. An AI agent must be explicitly taught or coded to use each one. There’s no universal way for a model to say “what actions can I perform?” or to seamlessly chain outputs from one API into inputs of another. Complex workflows — say, retrieving data from a database, then using it to call a SaaS service, then updating an internal system — require painstakingly orchestrating multiple HTTP calls and juggling intermediate state on the client side. REST APIs by themselve"
+    },
+    {
+      "url": "https://www.helpnetsecurity.com/2025/06/24/the-linux-foundation-agent2agent",
+      "title": "https://www.helpnetsecurity.com/2025/06/24/the-linux-foundation-agent2agent",
+      "score": 0.02752639539539814,
+      "rank": 64,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q1",
+      "snippet": "ability\nThe Linux Foundation launched the Agent2Agent (A2A) project, an open protocol for secure agent-to-agent communication and collaboration.\nThe A2A protocol is a collaborative effort launched by Google in April and with growing support from more than 100 leading technology companies. The protocol addresses the growing need for agents to operate in dynamic, multi-agent environments, coordinating actions across a wide array of applications and data infrastructure. A2A enables autonomous agents to discover one another, exchange information securely and collaborate across systems.\nThis allows"
+    },
+    {
+      "url": "https://zbrain.ai/understanding-the-a2a-protocol",
+      "title": "https://zbrain.ai/understanding-the-a2a-protocol",
+      "score": 0.02750455215573311,
+      "rank": 65,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q2",
+      "snippet": "port (TLS), strong authentication (OAuth 2.0, OIDC, JWTs) and granular, least-privileged authorization for every agent and task. Security teams gain visibility and control at every step.\nOpen, vendor-neutral standard: As an open protocol, A2A prevents vendor lock-in. Agents can interoperate across any cloud, framework or provider, protecting AI investments and enabling best-of-breed adoption.\nInternal marketplace of AI capabilities: A2A lets teams publish agents as discoverable, reusable services. This reduces redundant development, accelerates innovation and enables enterprise-wide reuse of c"
+    },
+    {
+      "url": "https://atlan.com/know/google-a2a-protocol",
+      "title": "https://atlan.com/know/google-a2a-protocol",
+      "score": 0.02747976779937744,
+      "rank": 66,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q4",
+      "snippet": "f integration effort with a single open standard.\nA2A addresses this by defining three foundational things: a way for agents to advertise what they can do (Agent Cards), a structure for the work they exchange (Tasks), and a transport for sending that work over the wire (HTTP, SSE, JSON-RPC 2.0).\nThe protocol was contributed to the Linux Foundation in June 2025 and is maintained as an open-source project under the Apache 2.0 license. As of April 2026, more than 150 organizations support A2A, including Google, Microsoft, AWS, Salesforce, SAP, ServiceNow, Workday, and IBM. Azure AI Foundry, Amazo"
+    },
+    {
+      "url": "https://onereach.ai/blog/guide-choosing-mcp-vs-a2a-protocols",
+      "title": "https://onereach.ai/blog/guide-choosing-mcp-vs-a2a-protocols",
+      "score": 0.02744361013174057,
+      "rank": 67,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q17",
+      "snippet": "n and delegation between autonomous AI agents. Each protocol effectively addresses a different layer of interoperability: MCP standardizes access to capabilities (how agents interact with the outside world), while A2A enables collaborative workflows (how AI agents work together). For enterprises, the decision is less about the merits of one protocol versus the other than about the appropriate protocol that supports the desired outcome: streamlined data/tool connectivity, scalable multi-agent orchestration, or both. Most modern, scalable agentic AI systems will ultimately leverage both protocol"
+    },
+    {
+      "url": "https://huggingface.co/blog/1bo/a2a-protocol-explained",
+      "title": "https://huggingface.co/blog/1bo/a2a-protocol-explained",
+      "score": 0.02742537297308445,
+      "rank": 68,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q20",
+      "snippet": "t this, indicating that tasks are stored in memory.\nThe key focus here is the AgentExecutor base class, whose basic definition is as follows:\nfrom abc import ABC, abstractmethod from a2a.server.agent_execution.context import RequestContext from a2a.server.events.event_queue import EventQueue class AgentExecutor(ABC): \"\"\"Agent executor interface. Classes implementing this interface contain the core logic of an agent, executing tasks based on requests and publishing updates to the event queue. \"\"\" @abstractmethod async def execute( self, context: RequestContext, event_queue: EventQueue ) -> None"
+    },
+    {
+      "url": "https://alicelabs.ai/en/insights/best-ai-agent-frameworks-2026",
+      "title": "https://alicelabs.ai/en/insights/best-ai-agent-frameworks-2026",
+      "score": 0.027304966002702713,
+      "rank": 69,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q19",
+      "snippet": "300K weekly npm downloads) — de-facto TypeScript-first default; (10) AG2 0.12.2 (Apache 2.0; community AutoGen fork, pre-1.0) — legacy option for teams that started on AutoGen 0.4/0.5. All 10 now support MCP (7 natively); A2A is native in Microsoft Agent Framework 1.0 and Google ADK, community adapters elsewhere. An engineer's ranking of the 10 leading AI agent frameworks as of August 2026, benchmarked across 100+ Alice Labs production AI implementations. Covers LangGraph 1.x, Microsoft Agent Framework 1.0, Claude Agent SDK, OpenAI Agents SDK, Google ADK 2.0, CrewAI 1.14.7, LlamaIndex Work"
+    },
+    {
+      "url": "https://arxiv.org/html/2505.02279v1",
+      "title": "https://arxiv.org/html/2505.02279v1",
+      "score": 0.027272727340459824,
+      "rank": 70,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q2",
+      "snippet": "y static: agents must be re-initialized whenever new APIs are added or schemas change, preventing truly dynamic discovery. Security boundaries—such as authentication tokens, rate limits, and access control—are ad-hoc and framework-specific, increasing the risk of unauthorized calls. Moreover, each framework employs its own metadata conventions, hindering cross-framework reuse of tools and requiring bespoke adapters for interoperability [33]. Addressing these challenges requires protocol-level standards that prescribe a common schema for function metadata, dynamic capability negotiation, an"
+    },
+    {
+      "url": "https://www.infoq.com/articles/ai-agent-transport-layer",
+      "title": "https://www.infoq.com/articles/ai-agent-transport-layer",
+      "score": 0.027271050959825516,
+      "rank": 71,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q3",
+      "snippet": "ities, migrate frameworks, and modernize legacy code across every repo. Try Moderne Free.\nRelated Content\nThe InfoQ Newsletter\nA round-up of last weeks content on InfoQ sent out every Tuesday. Join a community of over 250,000 senior developers. View an example Enter your e-mail address Select your country Select a country I consent to InfoQ.com handling my data as explained in this Privacy Notice. We protect your privacy. Development DRAM Controller Register Manipulation Breaks CPU Memory Isolation\nHow PGSimCity Turns PostgreSQL Complexity into a Virtual City 3D Simulation\nLLM-Generated GraphQ"
+    },
+    {
+      "url": "https://galileo.ai/blog/google-agent2agent-a2a-protocol-guide",
+      "title": "https://galileo.ai/blog/google-agent2agent-a2a-protocol-guide",
+      "score": 0.027252906933426857,
+      "rank": 72,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q3",
+      "snippet": "tecture enables agents built with different frameworks to communicate without requiring knowledge of internal implementations. Microsoft has demonstrated this interoperability by integrating Semantic Kernel agents with the A2A protocol, enabling heterogeneous agent systems to coordinate with agents from different vendors and platforms operating alongside each other.\nEnterprise security requires multiple authentication layers\nEnterprise-grade security becomes essential when agents operated by different organizations communicate across trust boundaries. A2A incorporates multiple authentication m"
+    },
+    {
+      "url": "https://www.helpnetsecurity.com/2025/06/24/the-linux-foundation-agent2agent",
+      "title": "https://www.helpnetsecurity.com/2025/06/24/the-linux-foundation-agent2agent",
+      "score": 0.027236653491854668,
+      "rank": 73,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q7",
+      "snippet": " news Suspected Iran-linked attack knocked UK power plant offline for days CISAs logging guidance works beyond government A hollowed out data layer is making CISOs fly blind into AI attacks Download: 2026 Credential Risk Report\nResources Download: The High-Performance Team Playbook Simplify security management with CIS SecureSuite Platform Download: The IT and security field guide to AI adoption Don't miss Suspected Iran-linked attack knocked UK power plant offline for days CISAs logging guidance works beyond government A hollowed out data layer is making CISOs fly blind into AI attacks Hazmat"
+    },
+    {
+      "url": "https://nevermined.ai/blog/model-context-protocol-adoption-statistics",
+      "title": "https://nevermined.ai/blog/model-context-protocol-adoption-statistics",
+      "score": 0.027222223579883575,
+      "rank": 74,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q17",
+      "snippet": "tem is responding at pace: by early 2025, over 1,000 MCP servers were already available, with enterprise application vendors accelerating productization and standardizing on MCP as a core integration interface. This expansion creates new monetization endpoints across the software landscape.\n27. MCP is becoming an industry standard alongside REST APIs\nMCP is rapidly achieving the status of a foundational integration protocol. Major AI platform providers, including OpenAI and Anthropic, have adopted MCP support, positioning it as a standard layer for AI agent interoperability rather than an opti"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Model_Context_Protocol",
+      "title": "https://en.wikipedia.org/wiki/Model_Context_Protocol",
+      "score": 0.027205882593989372,
+      "rank": 75,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q17",
+      "snippet": " ↑ \"OpenAI adds 'powerful but dangerous' support for MCP in ChatGPT dev mode\". VentureBeat. September 11, 2025. Retrieved 2026-04-09. ↑ \"Using the Model Context Protocol in Azure and beyond\". InfoWorld. 2025-05-01. Retrieved 2026-06-14. ↑ \"Cloudflare Outlines MCP Architecture as Enterprises Confront Security and Governance Risks\". InfoQ. 2026-04-22. Retrieved 2026-06-14. ↑ \"AAIF's MCP Dev Summit: Gateways, gRPC, and Observability Signal Protocol Hardening\". InfoQ. 2026-04-14. Retrieved 20 April 2026. ↑ Johnson, O'Ryan (28 May 2026). \"Salesforce waves bye-bye to UI in 'headless' embra"
+    },
+    {
+      "url": "https://arxiv.org/html/2505.02279v1",
+      "title": "https://arxiv.org/html/2505.02279v1",
+      "score": 0.027071520686149597,
+      "rank": 76,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q10",
+      "snippet": "ping or log flush events.\n4.6 Security Challenges and Mitigations Across the MCP Lifecycle\nAs MCP adoption increases in enterprise and developer ecosystems, its lifecycle introduces multiple security vulnerabilities spanning initialization, operation, and update phases. These risks include tool poisoning, privilege persistence, and command injection, among others, many of which are amplified by LLMs’ susceptibility to prompt manipulation and opaque execution traces.\nTable 3 summarizes the most critical security threats identified across each lifecycle phase of MCP deployments, alongside thei"
+    },
+    {
+      "url": "https://arxiv.org/html/2505.02279v1",
+      "title": "https://arxiv.org/html/2505.02279v1",
+      "score": 0.027051560580730438,
+      "rank": 77,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q17",
+      "snippet": "rade-offs in interaction modes, discovery mechanisms, communication models, and security frameworks. A phased adoption roadmap sequences MCP, A2A, ACP, and ANP to guide progressive deployment in real-world agent ecosystems.\nThe remainder of the paper is organized as follows. Section 2 discusses challenges in agent interoperability. Section 3 reviews background and related work. Sections 4–7 describe the architectures of MCP, A2A, ACP, and ANP, respectively. Section 8 presents the comparative evaluation. Section 9 outlines the phased adoption roadmap. Section 10 concludes and suggests future "
+    },
+    {
+      "url": "https://news.ycombinator.com/item?id=48582679",
+      "title": "https://news.ycombinator.com/item?id=48582679",
+      "score": 0.026919757947325706,
+      "rank": 78,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q5",
+      "snippet": "scusses A2A and their thoughts on it. If youre a pure vibe coder who doesnt know how to code, A2A is for you. If you know the basics of programming and could even do some web crawling, there are many accessible options.\nGoogle and the industry is honing in on these vibe coders who will look at 10 million tokens consumed to make a checklist application and think nothing of it. The agent to agent (A2A) protocol is for them. Personally, I think its useful to describe what Im already doing to people who arent experts.\nGuidelines | FAQ | Lists | API | Security | Legal | Apply to YC | Contact\nSearch"
+    },
+    {
+      "url": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+      "title": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+      "score": 0.02687074989080429,
+      "rank": 79,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q18",
+      "snippet": "s to tools and data (vertical). Standard: JSON-RPC 2.0 over stdio/SSE. Creator: Anthropic (Nov 2024).\nA2A: Agent coordinates with agents (horizontal). Standard: HTTP/S + JSON-LD Agent Cards. Creator: Google (Apr 2025).\nBoth together: Production multi-agent systems use MCP for data access and A2A for coordination.\nIs your AI context ready?\nAssess Your Context Maturity\nTwo agent interoperability protocols now sit at the center of enterprise AI architecture. MCP (Model Context Protocol), released by Anthropic in November 2024, connects AI models to tools and data sources through a standardized in"
+    },
+    {
+      "url": "https://www.helpnetsecurity.com/2025/06/24/the-linux-foundation-agent2agent",
+      "title": "https://www.helpnetsecurity.com/2025/06/24/the-linux-foundation-agent2agent",
+      "score": 0.02684684842824936,
+      "rank": 80,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q2",
+      "snippet": " home of the Agent2Agent Protocol project, said Jim Zemlin, Executive Director of the Linux Foundation. “By joining the Linux Foundation, A2A is ensuring the long-term neutrality, collaboration and governance that will unlock the next era of agent-to-agent powered productivity.”\nUnder the Linux Foundation’s governance, A2A will remain vendor neutral, emphasize inclusive contributions and continue the protocol’s focus on extensibility, security and real-world usability across industries.\nThe Agent2Agent protocol establishes a vital open standard for communication, enabling the industry "
+    },
+    {
+      "url": "https://huggingface.co/blog/1bo/a2a-protocol-explained",
+      "title": "https://huggingface.co/blog/1bo/a2a-protocol-explained",
+      "score": 0.026779422536492348,
+      "rank": 81,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q9",
+      "snippet": "lly or provide real-time progress updates. The client initiates the interaction with the server using message/stream. The server responds with an open HTTP connection, sending a stream of Server-Sent Events (SSE). These events can be Task, Message, TaskStatusUpdateEvent (for state changes), or TaskArtifactUpdateEvent (for new or updated artifacts). This requires the server to advertise streaming capability in its agent card. Push Notifications\nFor very long-running tasks or scenarios where maintaining a persistent connection (e.g., SSE) is impractical. The client may provide a webhook URL when"
+    },
+    {
+      "url": "https://bytebridge.medium.com/from-rest-to-mcp-why-developers-should-embrace-the-model-context-protocol-003e3806874a",
+      "title": "https://bytebridge.medium.com/from-rest-to-mcp-why-developers-should-embrace-the-model-context-protocol-003e3806874a",
+      "score": 0.026748251169919968,
+      "rank": 82,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q8",
+      "snippet": "c 30, 2025)\nAnthropic News — “Since then, MCP has achieved incredible adoption: … now more than 10,000 active public MCP servers… adopted by ChatGPT, Cursor, Gemini, Microsoft Copilot, Visual Studio Code, and other popular AI products… Claude now has a directory with over 75 connectors (powered by MCP), and we recently launched Tool Search and Programmatic Tool Calling capabilities in our API to help optimize production-scale MCP deployments, handling thousands of tools efficiently and reducing latency in complex agent workflows.” (Anthropic Announcement, Dec 9, 2025)\nReddit (r/mcp"
+    },
+    {
+      "url": "https://atlan.com/know/google-a2a-protocol",
+      "title": "https://atlan.com/know/google-a2a-protocol",
+      "score": 0.026742734014987946,
+      "rank": 83,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q16",
+      "snippet": "is stored in a shared, governed layer, not in any single agent’s local memory.\n3. Shared transport across all protocols. The same governed context is accessible through A2A, MCP, OSI, SQL, and REST APIs. Agents do not need bespoke integrations to pull context from the shared layer. Whatever protocol the agent speaks, the context layer responds in kind.\nAtlan’s Context Lakehouse is built on Apache Iceberg with native graph and vector search. It speaks every protocol: MCP and A2A natively, plus SQL and REST/Graph APIs, making it the governed substrate that multi-agent systems can build on wi"
+    },
+    {
+      "url": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "title": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "score": 0.02674258127808571,
+      "rank": 84,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q4",
+      "snippet": "rmine whether the remote agent can handle a given task. Think of it as a machine-readable job listing that any other agent can read before deciding to hire the specialist. No centralized registry, no vendor-specific discovery service, just a standard HTTP path.\nPhase 2: Authentication Before any task delegation happens, the client agent authenticates to the remote agent using the scheme declared in the Agent Card: OAuth 2.0, OIDC, or API key. The opaque agent model kicks in here: the remote agent accepts the authenticated request and handles the task, but never reveals the internal tools or re"
+    },
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.026709401980042458,
+      "rank": 85,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q8",
+      "snippet": "t promising developments in this direction is the Model Context Protocol (MCP) introduced by Anthropic. But Anthropic isn’t alone other platforms like Google’s A2A protocol and Gemini, OpenAI and Copilot are also building toward similar context-awareness mechanisms.\nIn this blog, well explore:\nWhat MCP, A2A, and other agent context protocols are and why they matter How similar ideas are being approached by each major player The risks of using agent context protocols How to best protect ourselves as we’re moving towards the future What Does it Really Mean to Bring Memory to AI?\nWhen we ta"
+    },
+    {
+      "url": "https://stellagent.ai/insights/a2a-protocol-google-agent-to-agent",
+      "title": "https://stellagent.ai/insights/a2a-protocol-google-agent-to-agent",
+      "score": 0.026690078899264336,
+      "rank": 86,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q1",
+      "snippet": "Stage Framework, Beauty Genius, and the Vertical Stack Behind It\nRetail & Cases\nCommerce, Rebuilt for AI Agents.\nProducts\nStella StorefrontStella LLMOAgentic Commerce StudioPresso\nCompany\nAboutNews\nResources\nResearchInsightsContact\n© 2026 Stellagent, Inc. All rights reserved.\nPrivacy Policy"
+    },
+    {
+      "url": "https://galileo.ai/blog/google-agent2agent-a2a-protocol-guide",
+      "title": "https://galileo.ai/blog/google-agent2agent-a2a-protocol-guide",
+      "score": 0.026690078899264336,
+      "rank": 87,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q19",
+      "snippet": "rting with non-critical workflows to gain operational experience, expanding to more critical systems as the ecosystem matures. Implement abstraction layers that accommodate protocol evolution or alternative standards.\nLinux Foundation governance reduces long-term vendor risk\nThe transfer to Linux Foundation governance represents a fundamental shift from Google proprietary control to vendor-neutral community development under an open governance model. This governance structure reduces long-term vendor lock-in risk compared to single-vendor controlled specifications.\nActive standards development"
+    },
+    {
+      "url": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "title": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "score": 0.026687875390052795,
+      "rank": 88,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q1",
+      "snippet": "by Google and released on April 9, 2025, initially with 50+ founding technology and services partners, per the Google Developers Blog announcement. After Google donated A2A to the Linux Foundation in June 2025, the supporter count grew to 150+ organizations, according to IBM Think. A2A is the infrastructure layer that lets independently built AI agents discover each other, authenticate, and exchange work without requiring custom integration code on either side.\nAs the Google Developers Blog stated at launch: \"The A2A protocol will allow AI agents to communicate with each other, securely exchan"
+    },
+    {
+      "url": "https://agentstoday.substack.com/p/agents-today-15-ai-agent-interoperability",
+      "title": "https://agentstoday.substack.com/p/agents-today-15-ai-agent-interoperability",
+      "score": 0.02651914209127426,
+      "rank": 89,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q2",
+      "snippet": "k to Agent B via A2A and B fails, A2A can convey that error back in a structured way, so A can decide to retry or use a fallback agent. MCP alone can't manage workflows.\n5. Unified Agent Management & Governance - From a business perspective, once you deploy dozens of AI agents, you need a way to manage them—what are they allowed to do? who can they talk to? how to monitor their interactions? MCP doesn't help here because it's about connecting to data, not managing agents themselves. A2A, by introducing a standard agent-to-agent layer, opens the door to agent management tools that plug into t"
+    },
+    {
+      "url": "https://cohorte.co/blog/googles-agent2agent-a2a-protocol-a-new-era-of-ai-agent-interoperability",
+      "title": "https://cohorte.co/blog/googles-agent2agent-a2a-protocol-a-new-era-of-ai-agent-interoperability",
+      "score": 0.026500526815652847,
+      "rank": 90,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q4",
+      "snippet": "ry something like:‍\nconvert 100 USD to EUR\nHit enter, and watch the CLI. The client has sent your request as an A2A task to the agent. The LangGraph agent, upon receiving this, will likely call its internal tool to get conversion rates, possibly stream progress if it’s doing step-by-step reasoning, and finally return an answer. You should see a response appear in the CLI, for example:‍\nAgent: 100 USD is approximately 92 EUR.\nYou can continue the conversation (the CLI keeps the session open). For instance, you could ask a follow-up like “What about GBP?” and the agent can handle the m"
+    },
+    {
+      "url": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "title": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "score": 0.026470588520169258,
+      "rank": 91,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q18",
+      "snippet": "odel Context Protocol) connects AI agents to external tools, databases, APIs, and file systems. A2A (Google's Agent2Agent Protocol) connects AI agents to other AI agents for task delegation. They are complementary layers in a multi-agent architecture: an agent uses A2A to delegate work to a specialist, which then uses MCP to call the tools it needs. Neither protocol replaces the other; production multi-agent systems will use both.\nThis distinction is frequently confused, and that confusion has consequences. As of April 2026, ChatGPT provides factually incorrect answers about both protocols, ac"
+    },
+    {
+      "url": "https://zbrain.ai/understanding-the-a2a-protocol",
+      "title": "https://zbrain.ai/understanding-the-a2a-protocol",
+      "score": 0.026399333029985428,
+      "rank": 92,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q13",
+      "snippet": "from SOAP and WS-Security (robust but heavyweight enterprise service buses) to cloud-native protocols such as OAuth 2.0 and JWTs, and the adoption of zero-trust architectures. Each addressed specific aspects of agent identity, message security and access management, but none provided a universal, agent-first standard for communication across diverse frameworks and vendors.\nCurrent challenges: The fragmentation of agentic AI\nToday’s enterprise AI landscape is characterized by the proliferation of specialized agents – autonomous systems that excel in particular tasks, ranging from analytics "
+    },
+    {
+      "url": "https://zbrain.ai/understanding-the-a2a-protocol",
+      "title": "https://zbrain.ai/understanding-the-a2a-protocol",
+      "score": 0.026377689093351364,
+      "rank": 93,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q11",
+      "snippet": "from SOAP and WS-Security (robust but heavyweight enterprise service buses) to cloud-native protocols such as OAuth 2.0 and JWTs, and the adoption of zero-trust architectures. Each addressed specific aspects of agent identity, message security and access management, but none provided a universal, agent-first standard for communication across diverse frameworks and vendors.\nCurrent challenges: The fragmentation of agentic AI\nToday’s enterprise AI landscape is characterized by the proliferation of specialized agents – autonomous systems that excel in particular tasks, ranging from analytics "
+    },
+    {
+      "url": "https://zbrain.ai/understanding-the-a2a-protocol",
+      "title": "https://zbrain.ai/understanding-the-a2a-protocol",
+      "score": 0.026377689093351364,
+      "rank": 94,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q12",
+      "snippet": "from SOAP and WS-Security (robust but heavyweight enterprise service buses) to cloud-native protocols such as OAuth 2.0 and JWTs, and the adoption of zero-trust architectures. Each addressed specific aspects of agent identity, message security and access management, but none provided a universal, agent-first standard for communication across diverse frameworks and vendors.\nCurrent challenges: The fragmentation of agentic AI\nToday’s enterprise AI landscape is characterized by the proliferation of specialized agents – autonomous systems that excel in particular tasks, ranging from analytics "
+    },
+    {
+      "url": "https://atlan.com/know/google-a2a-protocol",
+      "title": "https://atlan.com/know/google-a2a-protocol",
+      "score": 0.02637362666428089,
+      "rank": 96,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q18",
+      "snippet": "e identity infrastructure. No new auth system is required.\nA2A vs MCP: different layers, complementary roles\nPermalink to “A2A vs MCP: different layers, complementary roles” #\nA2A and MCP are not competing standards. They solve different problems at different layers of the multi-agent stack, and production systems use both.\nMCP (Model Context Protocol) was introduced by Anthropic in November 2024. It is a vertical protocol: it defines how a single agent connects to external tools and data sources. When an agent needs to query a database, call an API, retrieve documents, or access a governe"
+    },
+    {
+      "url": "https://a2aprotocol.ai/blog/impact-analysis-google-donating-a2a-protocol-linux-foundation",
+      "title": "https://a2aprotocol.ai/blog/impact-analysis-google-donating-a2a-protocol-linux-foundation",
+      "score": 0.02627962827682495,
+      "rank": 97,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q6",
+      "snippet": "and Outlook\nReferences\nA2A Protocol\nAn open protocol for agent interoperability, enabling seamless collaboration between AI agents across platforms.\ngithub\nemail\nProtocol\nSpecification\nImplementation\nPartners\nResources\nDocumentation\nA2A Inspector\nTypeScript Guide\nPython Tutorial\nBlog\nInsights\nAP2 Protocol\nAbout\nOverview\nPartners\nNews\nContact\n© 2025 A2A Protocol. All rights reserved.\nPrivacy PolicyTerms of ServiceCookie Policy"
+    },
+    {
+      "url": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "title": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "score": 0.026263296604156494,
+      "rank": 98,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q3",
+      "snippet": "cate, and delegate tasks to other AI agents across different platforms and frameworks. Unlike MCP, which connects agents to tools, A2A connects agents to agents. The protocol is governed by the Linux Foundation and counts 150+ organizational supporters as of mid-2025, according to IBM Think.\nSearch interest is accelerating. According to DataForSEO Keyword Overview (April 2026), 'a2a protocol' search volume grew 22% month-over-month and 52% quarter-over-quarter, with 'agent2agent protocol' up 88% quarter-over-quarter. The reason is simple: as multi-agent systems move from research projects to p"
+    },
+    {
+      "url": "https://www.backslash.security/blog/what-is-mcp-model-context-protocol",
+      "title": "https://www.backslash.security/blog/what-is-mcp-model-context-protocol",
+      "score": 0.02626262605190277,
+      "rank": 99,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q15",
+      "snippet": "tablishing itself as a foundational standard for interoperable and \"agentic\" AI.\nWhat Exactly Is the Model Context Protocol (MCP)?\nAt its core, MCP is an open protocol introduced by Anthropic in late 2024. Its fundamental purpose is to enable AI models to securely connect to external resources in a standardized way. Before MCP, integrating an AI model with each distinct data source or tool required a custom, one-off job – a complex and unsustainable engineering challenge often dubbed the \"M x N problem\". MCP solves this by acting as a universal adapter, defining a common language (built on J"
+    },
+    {
+      "url": "https://onereach.ai/blog/guide-choosing-mcp-vs-a2a-protocols",
+      "title": "https://onereach.ai/blog/guide-choosing-mcp-vs-a2a-protocols",
+      "score": 0.026234567165374756,
+      "rank": 100,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q16",
+      "snippet": "CP), the Agent-to-Agent protocol (A2A), or both? The answer lies in understanding their complementary roles and deployment scenarios.\nMCP serves as a universal adapter, connecting AI agents to tools, APIs, and data sources, while A2A is the standard for secure, structured communication and delegation between autonomous AI agents. Each protocol effectively addresses a different layer of interoperability: MCP standardizes access to capabilities (how agents interact with the outside world), while A2A enables collaborative workflows (how AI agents work together). For enterprises, the decision is l"
+    },
+    {
+      "url": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "title": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "score": 0.02619047649204731,
+      "rank": 101,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q20",
+      "snippet": "yer each protocol operates at.\nWho supports the A2A Protocol? A2A launched on April 9, 2025 with 50+ founding partners including Atlassian, Salesforce, SAP, ServiceNow, PayPal, Workday, and all major management consultancies, Accenture, BCG, Deloitte, McKinsey, and PwC, per the Google Developers Blog announcement. After Google donated the protocol to the Linux Foundation in June 2025, support grew from 50+ to 150+ organizations, according to IBM Think. IBM's independently developed Agent Communication Protocol (ACP) merged with A2A in 2025, with DeepLearning.AI and IBM Research co-building an "
+    },
+    {
+      "url": "https://tyk.io/learning-center/agent-protocols-a-complete-guide-to-mcp-a2a-and-acp",
+      "title": "https://tyk.io/learning-center/agent-protocols-a-complete-guide-to-mcp-a2a-and-acp",
+      "score": 0.026161327958106995,
+      "rank": 102,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q16",
+      "snippet": "understanding while specialist agents handle the messy backend integrations behind a simple, dynamic-discovery interface.\nSecuring and operating agent protocols in production\nAn autonomous agent with access to tools and other agents presents a new attack surface. Deploying agentic systems in production requires treating every A2A and MCP interaction as a managed API call that must be authenticated, authorized, and observed.\nCommon security threats: A checklist for developers\nThreatDescriptionMitigationTool poisoning (MCP)A compromised MCP server returns malicious tool output that the agent the"
+    },
+    {
+      "url": "https://tyk.io/learning-center/agent-protocols-a-complete-guide-to-mcp-a2a-and-acp",
+      "title": "https://tyk.io/learning-center/agent-protocols-a-complete-guide-to-mcp-a2a-and-acp",
+      "score": 0.026144906878471375,
+      "rank": 103,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q19",
+      "snippet": "the Agent Card advertises its own protocolBinding.\nAgents expose their capabilities through a public Agent Card served at /.well-known/agent-card.json (per RFC 8615). The card declares name, version, supportedInterfaces[] (url + protocolBinding), capabilities flags (streaming, pushNotifications, extendedAgentCard), skills[] (each with id, name, description, tags, examples, inputModes, outputModes), and security schemes. In production, the card SHOULD also carry signatures. AgentCardSignature uses JWS (RFC 7515) over a canonicalized (JCS, RFC 8785) version of the card so clients can detect tamp"
+    },
+    {
+      "url": "https://cloudsecurityalliance.org/blog/2025/04/30/threat-modeling-google-s-a2a-protocol-with-the-maestro-framework",
+      "title": "https://cloudsecurityalliance.org/blog/2025/04/30/threat-modeling-google-s-a2a-protocol-with-the-maestro-framework",
+      "score": 0.026120660826563835,
+      "rank": 104,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q13",
+      "snippet": "change over time. Moreover, they can dynamically obtain and present verifiable credentials, altering their trusted status. Considering these factors is essential in addressing the following potential problems:.\nUnintended Tool Use: How does the MAESTRO framework safeguard against agents using tools incorrectly or maliciously due to non-deterministic decision-making? Message Injection: With autonomy in play, how does MAESTRO prevent attackers from manipulating agent behavior by injecting malicious content into messages? Data Poisoning: Given the dynamic nature of agent identity, how do compromi"
+    },
+    {
+      "url": "https://www.linuxfoundation.org/press/linux-foundation-launches-the-agent2agent-protocol-project-to-enable-secure-intelligent-communication-between-ai-agents",
+      "title": "https://www.linuxfoundation.org/press/linux-foundation-launches-the-agent2agent-protocol-project-to-enable-secure-intelligent-communication-between-ai-agents",
+      "score": 0.026022912934422493,
+      "rank": 105,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q3",
+      "snippet": "vasubramanian, VP of AWS Agentic AI, AWS\n\"We've always believed in the vision of an open, interoperable Internet of Agents, and we're joining the A2A Project as foundational members because community-driven development is the fastest path to widespread agent-to-agent adoption. We're integrating A2A support directly into key AGNTCY open source components - the Directory, Identity, SLIM Messaging, and Observability frameworks - to build the interoperability layer that actually works across vendor boundaries.\"\n– Vijoy Pandey, GM and SVP, Outshift by Cisco\n\"At Salesforce, we believe the future o"
+    },
+    {
+      "url": "https://onereach.ai/blog/guide-choosing-mcp-vs-a2a-protocols",
+      "title": "https://onereach.ai/blog/guide-choosing-mcp-vs-a2a-protocols",
+      "score": 0.026022912934422493,
+      "rank": 106,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q5",
+      "snippet": "cisions, and 19.9% do not trust AI in any decision-making. [1]\nIt’s imperative for leaders to create cross-functional committees from IT, data, and legal to define agent lifecycles. Establish clear rules when it comes to agent autonomy, data handling, and escalation protocols, especially when decisions impact regulated processes. Ongoing monitoring and audit trails are essential to ensure trust, transparency, and accountability as agents act autonomously. Managing Change and Accountability\nHuman teams need to understand how and why AI agents work. Transparent communication, training of adapt"
+    },
+    {
+      "url": "https://alicelabs.ai/en/insights/best-ai-agent-frameworks-2026",
+      "title": "https://alicelabs.ai/en/insights/best-ai-agent-frameworks-2026",
+      "score": 0.026022912934422493,
+      "rank": 107,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q7",
+      "snippet": "rization hardening, and a formal deprecation policy. Final spec locks 28 July 2026. Agent-to-Agent (A2A) protocol — 150+ organisations, native in three major clouds. prnewswire.com/a2a-protocol-150-organizations. As of April 2026, A2A has crossed 150 adopting organisations, is natively integrated in Azure AI Foundry, AWS Bedrock AgentCore, and Google Cloud, and ships production SDKs in Python, JavaScript, Java, Go, and .NET. Adopters include Google, Microsoft, AWS, Salesforce, SAP, ServiceNow, Workday, and IBM. Complements MCP: MCP connects agents to tools; A2A connects agents to other agent"
+    },
+    {
+      "url": "https://alicelabs.ai/en/insights/best-ai-agent-frameworks-2026",
+      "title": "https://alicelabs.ai/en/insights/best-ai-agent-frameworks-2026",
+      "score": 0.0260210819542408,
+      "rank": 108,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q3",
+      "snippet": "ore maintainers who created AutoGen at Microsoft Research. Currently 0.12.2 with a v1.0 roadmap announced (legacy API deprecated at v0.14). Beta API launched March 2026 and expanded in 0.12.x — the foundation for v1.0 — runs alongside legacy without breakage. Continued convergence with MCP; A2A support via community adapters. Positioned explicitly as the non-Microsoft option for teams that want AutoGen's group-chat / nested-chat semantics without Azure gravity. Original Microsoft AutoGen has been in maintenance mode since October 2025. Alice Labs Production Score: 6/10.\nBest for: Teams tha"
+    },
+    {
+      "url": "https://tfir.io/ciscos-agntcy-takes-on-ai-agent-fragmentation-under-linux-foundation-umbrella",
+      "title": "https://tfir.io/ciscos-agntcy-takes-on-ai-agent-fragmentation-under-linux-foundation-umbrella",
+      "score": 0.025974027812480927,
+      "rank": 110,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q19",
+      "snippet": "-deterministic agent interactions. Identity is extensible, privacy-aware, and not bound to a central authority. SLIM (Secure, Low-latency Interactive Messaging): A gRPC-based communication layer that supports many-to-many interactions, voice/video support, real-time guarantees, and post-quantum cryptography. What binds all these components together is a deep focus on interoperability at scale — across clouds, frameworks, and vendors.\n“It’s not enough to define agent protocols,” says Pandey. “We need discoverability, real-time messaging, authorization models, and observability — all"
+    },
+    {
+      "url": "https://bytebridge.medium.com/from-rest-to-mcp-why-developers-should-embrace-the-model-context-protocol-003e3806874a",
+      "title": "https://bytebridge.medium.com/from-rest-to-mcp-why-developers-should-embrace-the-model-context-protocol-003e3806874a",
+      "score": 0.025941837579011917,
+      "rank": 111,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q5",
+      "snippet": "nsures that credentials are never exposed to the AI or anywhere outside the vault.\nFurthermore, every tool invocation is mediated by Peta’s policy engine. You can define fine-grained access control rules and approval workflows in the Peta Console (a web admin interface) . For example, you might configure that the SalesAI agent is allowed to read from the customer database but not delete, or that any request to initiate a wire transfer must be approved by a human manager before execution. When the AI attempts those actions via MCP, Peta will check its identity, the requested action, and the p"
+    },
+    {
+      "url": "https://www.thefastmode.com/technology-solutions/48034-linux-foundation-s-a2a-protocol-gains-rapid-enterprise-adoption-across-cloud-giants",
+      "title": "https://www.thefastmode.com/technology-solutions/48034-linux-foundation-s-a2a-protocol-gains-rapid-enterprise-adoption-across-cloud-giants",
+      "score": 0.025904204696416855,
+      "rank": 112,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q7",
+      "snippet": "it to capture strong cryptographic evidence of the user's consent to purchase.This extends A2A into high-trust, regulated environments where transactional integrity is required.\nEcosystem Scale\nSince April 2025, the number of supporting organizations has grown from more than 50 to over 150 — including AWS, Cisco, Google, IBM, Microsoft, Salesforce, SAP, and ServiceNow. The core repository has surpassed 22,000 GitHub stars, and the SDK ecosystem has expanded from a single Python implementation to five production-ready languages, including JavaScript, Java, Go, and .NET.\nAt the standards level"
+    },
+    {
+      "url": "https://tyk.io/learning-center/agent-protocols-a-complete-guide-to-mcp-a2a-and-acp",
+      "title": "https://tyk.io/learning-center/agent-protocols-a-complete-guide-to-mcp-a2a-and-acp",
+      "score": 0.02585919201374054,
+      "rank": 113,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q4",
+      "snippet": " Policies & Governance Kubernetes OpenAPI Tyk vs. Kong Tyk vs. Gravitee Tyk vs. Mulesoft Tyk Performance Benchmarks Customers\nRBFCU Zeiss TAB Bank paymenttools Vinci Construction Koç University Land Information New Zealand Company\nContact About Us Current Vacancies Working at Tyk Partnering with Tyk Latest\nAI Control Stack Tyk AI Studio LEAP 2026 LEAPxFinance LEAP 2.0 APIM in Financial services The AI supply chain Resources\nCloud Login Cloud Status Github Documentation Blog Learning Center Community Events AWS Advanced Technology Partner.\nAvailable on AWS Marketplace\nISO 9001 is a quality man"
+    },
+    {
+      "url": "https://www.prnewswire.com/news-releases/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year-302737641.html",
+      "title": "https://www.prnewswire.com/news-releases/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year-302737641.html",
+      "score": 0.025856390595436096,
+      "rank": 114,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q6",
+      "snippet": "ty is required.\nEcosystem Scale\nSince April 2025, the number of supporting organizations has grown from more than 50 to over 150 — including AWS, Cisco, Google, IBM, Microsoft, Salesforce, SAP, and ServiceNow. The core repository has surpassed 22,000 GitHub stars, and the SDK ecosystem has expanded from a single Python implementation to five production-ready languages, including JavaScript, Java, Go, and .NET.\nAt the standards level, A2A is complementary to the Model Context Protocol (MCP), another Linux Foundation project. A2A defines how agents communicate and coordinate with each other ac"
+    },
+    {
+      "url": "https://www.anthropic.com/news/model-context-protocol",
+      "title": "https://www.anthropic.com/news/model-context-protocol",
+      "score": 0.025856390595436096,
+      "rank": 115,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q17",
+      "snippet": "oration. We are excited to partner on a protocol and use it to build agentic systems, which remove the burden of the mechanical so people can focus on the creative.”\nInstead of maintaining separate connectors for each data source, developers can now build against a standard protocol. As the ecosystem matures, AI systems will maintain context as they move between different tools and datasets, replacing todays fragmented integrations with a more sustainable architecture.\nGetting started\nDevelopers can start building and testing MCP connectors today. All Claude.ai plans support connecting MCP s"
+    },
+    {
+      "url": "https://galileo.ai/blog/google-agent2agent-a2a-protocol-guide",
+      "title": "https://galileo.ai/blog/google-agent2agent-a2a-protocol-guide",
+      "score": 0.02581612393260002,
+      "rank": 116,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q4",
+      "snippet": "nguage-agnostic integration through standardized request/response patterns.\nThe client-server architecture enables agents built with different frameworks to communicate without requiring knowledge of internal implementations. Microsoft has demonstrated this interoperability by integrating Semantic Kernel agents with the A2A protocol, enabling heterogeneous agent systems to coordinate with agents from different vendors and platforms operating alongside each other.\nEnterprise security requires multiple authentication layers\nEnterprise-grade security becomes essential when agents operated by diff"
+    },
+    {
+      "url": "https://www.prnewswire.com/news-releases/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year-302737641.html",
+      "title": "https://www.prnewswire.com/news-releases/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year-302737641.html",
+      "score": 0.02577996626496315,
+      "rank": 117,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q1",
+      "snippet": "more about the A2A Protocol:\nVisit a2a-protocol.org Review the technical specification Check out the project's progress and codebase on GitHub Enroll in the new DeepLearning.AI short course, A2A: The Agent2Agent Protocol Dive into the Tutorials and Samples or consult the SDK Reference to begin developing with the production-ready standard Supporting Quotes\n\"I began working on agentic AI at the end of 2024, when it was already clear that multi‑agent systems would only scale if discovery and communication were treated as first‑class problems. At Cisco, that led us to create AGNTCY and contri"
+    },
+    {
+      "url": "https://cohorte.co/blog/googles-agent2agent-a2a-protocol-a-new-era-of-ai-agent-interoperability",
+      "title": "https://cohorte.co/blog/googles-agent2agent-a2a-protocol-a-new-era-of-ai-agent-interoperability",
+      "score": 0.025561705231666565,
+      "rank": 118,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q9",
+      "snippet": "d (and a similar route for subscribe if you support streaming) to receive new tasks, POST /tasks/cancel to allow clients to cancel a task, possibly POST /tasks/pushNotification/set if you enable push notifications, etc. Google’s sample A2AServer class (in samples/python/common) can be used or referenced – it essentially wraps a web server and handles the routing for you​. You don’t have to start from scratch; you can use these common libraries to register your logic.\nImplement Task Handling Logic: This is the “brain” of your agent – when it receives a task request, what does it d"
+    },
+    {
+      "url": "https://zbrain.ai/understanding-the-a2a-protocol",
+      "title": "https://zbrain.ai/understanding-the-a2a-protocol",
+      "score": 0.025561705231666565,
+      "rank": 119,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q10",
+      "snippet": "d records. Use alerts and anomaly detection to flag suspicious behavior, such as repeated failed authentications or unusual task patterns.\nDependency management: Scan all open-source dependencies for vulnerabilities. Maintain a software bill of materials (SBOM) and apply regular updates.\nIncident response: Establish clear procedures for detecting, mitigating and recovering from breaches.\nA2A protocol security controls and mechanisms\nControl / Mechanism\nDescription\nExample\nAgent Card Protection\nEnsures agent capability metadata is securely hosted, authenticated and shielded from enumeration or "
+    },
+    {
+      "url": "https://www.digitalapplied.com/blog/google-a2a-protocol-agent-to-agent-communication-guide",
+      "title": "https://www.digitalapplied.com/blog/google-a2a-protocol-agent-to-agent-communication-guide",
+      "score": 0.025516796857118607,
+      "rank": 120,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q11",
+      "snippet": "ion about A2A is how it relates to the Model Context Protocol (MCP), which has become the de facto standard for connecting AI agents to tools and data sources. The answer is that they solve different problems at different layers of the same stack, and most sophisticated multi-agent systems will use both.\nMCP: Agent to Resources\nMCP defines how an AI agent connects to external tools, APIs, databases, and data sources. It answers: “How does this agent call a web search API, query a database, or read a file?” MCP servers expose capabilities as callable tools that agents invoke during task exe"
+    },
+    {
+      "url": "https://www.digitalapplied.com/blog/google-a2a-protocol-agent-to-agent-communication-guide",
+      "title": "https://www.digitalapplied.com/blog/google-a2a-protocol-agent-to-agent-communication-guide",
+      "score": 0.025516796857118607,
+      "rank": 121,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q12",
+      "snippet": "ion about A2A is how it relates to the Model Context Protocol (MCP), which has become the de facto standard for connecting AI agents to tools and data sources. The answer is that they solve different problems at different layers of the same stack, and most sophisticated multi-agent systems will use both.\nMCP: Agent to Resources\nMCP defines how an AI agent connects to external tools, APIs, databases, and data sources. It answers: “How does this agent call a web search API, query a database, or read a file?” MCP servers expose capabilities as callable tools that agents invoke during task exe"
+    },
+    {
+      "url": "https://github.com/a2aproject/A2A/commit/fde2bd8da8dcd4c6c5373de20f6e4e5b878d82f9",
+      "title": "https://github.com/a2aproject/A2A/commit/fde2bd8da8dcd4c6c5373de20f6e4e5b878d82f9",
+      "score": 0.02546333521604538,
+      "rank": 122,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q7",
+      "snippet": " (`a2a-sdk`), JS/TS (`@a2a-js/sdk`), Java, Go, C#/.NET.\n81+\n- **Integrations:** LangGraph, CrewAI, Google ADK, Genkit, AG2, BeeAI, PydanticAI, and more.\n0 commit comments\nComments\n0 (0)\nFooter\n&copy; 2026 GitHub, Inc. Footer navigation\nTerms Privacy Security Status Community Docs Contact Manage cookies Do not share my personal information You can’t perform that action at this time."
+    },
+    {
+      "url": "https://a2aprotocol.ai/blog/impact-analysis-google-donating-a2a-protocol-linux-foundation",
+      "title": "https://a2aprotocol.ai/blog/impact-analysis-google-donating-a2a-protocol-linux-foundation",
+      "score": 0.02538314089179039,
+      "rank": 123,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q18",
+      "snippet": "Impact Analysis: Google Donating A2A Protocol to Linux Foundation | A2A Protocol\nA2A ProtocolAboutFeaturesHow it WorksAP2 ProtocolDevelopers\nTools\nBlog8/25InsightsSubmitNew\nTopics\nLearn More\nImpact Analysis: Google Donating A2A Protocol to Linux Foundation\ndeutschEnglishespañolfrançaisहिंदी日本語한국어portuguêsрусский中文\nMILO•June 24, 2025\nShare\nConclusion\nGoogle's donation of the Agent2Agent (A2A) protocol to the Linux Foundation benefits the protocol's development. This move promotes open standards, industry collaboration, and broader adoption, despite risks of"
+    },
+    {
+      "url": "https://bytebridge.medium.com/from-rest-to-mcp-why-developers-should-embrace-the-model-context-protocol-003e3806874a",
+      "title": "https://bytebridge.medium.com/from-rest-to-mcp-why-developers-should-embrace-the-model-context-protocol-003e3806874a",
+      "score": 0.025124844163656235,
+      "rank": 124,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q11",
+      "snippet": ", or require human approval for certain high-impact actions — things that are very hard to bolt on after the fact in a traditional integration.\nIn summary, MCP matters because it addresses the very problems that RESTful APIs present in the era of AI agents: it standardizes tool access, cuts down integration effort, enables richer interactions, and lays a foundation of scalability and security for the next generation of AI-enabled software.\nManual Function Calls vs. Adopting MCP — A Developer’s Perspective\nHow does building AI integrations with MCP actually differ from the traditional app"
+    },
+    {
+      "url": "https://bytebridge.medium.com/from-rest-to-mcp-why-developers-should-embrace-the-model-context-protocol-003e3806874a",
+      "title": "https://bytebridge.medium.com/from-rest-to-mcp-why-developers-should-embrace-the-model-context-protocol-003e3806874a",
+      "score": 0.025124844163656235,
+      "rank": 125,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q12",
+      "snippet": ", or require human approval for certain high-impact actions — things that are very hard to bolt on after the fact in a traditional integration.\nIn summary, MCP matters because it addresses the very problems that RESTful APIs present in the era of AI agents: it standardizes tool access, cuts down integration effort, enables richer interactions, and lays a foundation of scalability and security for the next generation of AI-enabled software.\nManual Function Calls vs. Adopting MCP — A Developer’s Perspective\nHow does building AI integrations with MCP actually differ from the traditional app"
+    },
+    {
+      "url": "https://agent2agent.info/docs/topics/key-concepts",
+      "title": "https://agent2agent.info/docs/topics/key-concepts",
+      "score": 0.025019070133566856,
+      "rank": 126,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q9",
+      "snippet": "s, the client polls the server for updates.\nStreaming via Server-Sent Events (SSE): The client opens a stream to receive real-time, incremental results or status updates over an HTTP connection.\nPush notifications: For very long-running tasks or disconnected scenarios, the server can send asynchronous notifications to a client-provided webhook when important updates occur.\nFor more detail, see Streaming and Async .\nAgentCard An AgentCard is a JSON document that acts as a digital business card for discovery and interaction setup. Clients parse it to determine whether the agent is suitable for a"
+    },
+    {
+      "url": "https://onereach.ai/blog/guide-choosing-mcp-vs-a2a-protocols",
+      "title": "https://onereach.ai/blog/guide-choosing-mcp-vs-a2a-protocols",
+      "score": 0.024924011901021004,
+      "rank": 127,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q11",
+      "snippet": "ss different operational domains.\n2. Can organizations implement both MCP and A2A protocols together?\nYes. Combining MCP and A2A accelerates interoperability. MCP establishes structured data and tool connections, while A2A allows agents to exchange information and coordinate tasks dynamically. Together, they enable unified ecosystems where AI agents work across departments, tools, and use cases. MCP allows AI agents to be context-aware and tool-capable, while A2A enables those AI agents to collaborate flexibly across complex, multi-functional workflows. 3. What are the main benefits of adoptin"
+    },
+    {
+      "url": "https://onereach.ai/blog/guide-choosing-mcp-vs-a2a-protocols",
+      "title": "https://onereach.ai/blog/guide-choosing-mcp-vs-a2a-protocols",
+      "score": 0.024924011901021004,
+      "rank": 128,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q12",
+      "snippet": "ss different operational domains.\n2. Can organizations implement both MCP and A2A protocols together?\nYes. Combining MCP and A2A accelerates interoperability. MCP establishes structured data and tool connections, while A2A allows agents to exchange information and coordinate tasks dynamically. Together, they enable unified ecosystems where AI agents work across departments, tools, and use cases. MCP allows AI agents to be context-aware and tool-capable, while A2A enables those AI agents to collaborate flexibly across complex, multi-functional workflows. 3. What are the main benefits of adoptin"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Model_Context_Protocol",
+      "title": "https://en.wikipedia.org/wiki/Model_Context_Protocol",
+      "score": 0.024891775101423264,
+      "rank": 129,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q8",
+      "snippet": "encoder Vibe coding Vision transformer Word embedding Models\nText\nAmazon Nova Character.ai Claude Command DeepSeek Doubao Ernie EXAONE Gemini Gemma GLM GPT ChatGPT Grok IBM Granite Kimi MAI Microsoft Copilot Mistral MiniMax Muse Spark Nemotron Perplexity Solar Poe HKChat Qwen Tencent Hy Xiaomi MiMo You.com Image\nAdobe Firefly Flux GPT Image Ideogram Midjourney Nano Banana Recraft Seedream Stable Diffusion Video\nDream Machine Genie world model MiniMax H3 Kling AI LTX Runway Gen Seedance Sora Veo Speech\n15.ai Eleven Gemini Speech MiniMax Speech Music\nEleven Music Endel MiniMax Music Riffusion Su"
+    },
+    {
+      "url": "https://bytebridge.medium.com/from-rest-to-mcp-why-developers-should-embrace-the-model-context-protocol-003e3806874a",
+      "title": "https://bytebridge.medium.com/from-rest-to-mcp-why-developers-should-embrace-the-model-context-protocol-003e3806874a",
+      "score": 0.024877900257706642,
+      "rank": 130,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q13",
+      "snippet": ", or require human approval for certain high-impact actions — things that are very hard to bolt on after the fact in a traditional integration.\nIn summary, MCP matters because it addresses the very problems that RESTful APIs present in the era of AI agents: it standardizes tool access, cuts down integration effort, enables richer interactions, and lays a foundation of scalability and security for the next generation of AI-enabled software.\nManual Function Calls vs. Adopting MCP — A Developer’s Perspective\nHow does building AI integrations with MCP actually differ from the traditional app"
+    },
+    {
+      "url": "https://akka.io/blog/mcp-a2a-acp-what-does-it-all-mean",
+      "title": "https://akka.io/blog/mcp-a2a-acp-what-does-it-all-mean",
+      "score": 0.02485334873199463,
+      "rank": 131,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q17",
+      "snippet": "ructured JSON-over-HTTP approach for agent-to-agent communication, supporting clearly defined task lifecycles and real-time communication via SSE (Server-Sent Events) or webhooks. It aims to create a world where agents, possibly built on different frameworks and by different vendors, can seamlessly collaborate.\nA2A is like universal meeting rules for AI, ensuring smooth collaboration and information exchange between different agents.\nFeatures:\nRequest/Response follows JSON RPC 2.0 Clearly structured task states (submitted, working, completed) Agents can collaborate without needing to share pro"
+    },
+    {
+      "url": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "title": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "score": 0.024809740483760834,
+      "rank": 132,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q19",
+      "snippet": "e consolidation now, and A2A is positioned as the TCP/IP equivalent for agent-to-agent communication. IBM's decision to fold ACP into A2A rather than compete removes the most credible enterprise alternative.\nThe Linux Foundation governance model matters here too. It's the same structure that legitimized Kubernetes (from Google internal tool to the industry standard for container orchestration) and OpenTelemetry. Linux Foundation backing signals that A2A is infrastructure, not a product, meant to be depended on by everyone rather than controlled by anyone. That's a meaningful trust signal for e"
+    },
+    {
+      "url": "https://medium.com/@astropomeai/a-comprehensive-overview-of-the-model-context-protocol-mcp-f65150da0aa0",
+      "title": "https://medium.com/@astropomeai/a-comprehensive-overview-of-the-model-context-protocol-mcp-f65150da0aa0",
+      "score": 0.024696970358490944,
+      "rank": 133,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q16",
+      "snippet": "vity.\nReferences\nModel Context Protocol (MCP): Integrating Azure OpenAI for Enhanced Tool Integration and Prompting\nWhat is Model Context Protocol (MCP)? How it simplifies AI integrations compared to APIs\nA Deep Dive Into MCP and the Future of AI Tooling\nOpenAI adds MCP support to Agents SDK\nmcp-server-gemini: MCP server implementation for Google’s Gemini API\nIntroducing the Model Context Protocol\nIntroducing Model Context Protocol (MCP) in Copilot Studio\nZapier MCP\nEverything you need to know about MCP\nWhy MCP Won\nWhat Are MCP Servers? The New AI Trend Explained for Everyone\nMCP: What It Is"
+    },
+    {
+      "url": "https://atlan.com/know/google-a2a-protocol",
+      "title": "https://atlan.com/know/google-a2a-protocol",
+      "score": 0.024695120751857758,
+      "rank": 134,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q14",
+      "snippet": "% What is the Google A2A protocol?\nCopy summary\nThe A2A (Agent-to-Agent) protocol is an open standard Google announced in April 2025 that enables AI agents built by different vendors to discover each other, delegate tasks, and coordinate work across enterprise systems. It uses HTTP, Server-Sent Events, and JSON-RPC 2.0 for transport, and Agent Cards for capability advertisement. A2A sits alongside MCP (which handles agent-to-tool access) to form the interoperability stack for multi-agent systems.\nKey concepts\nAgent Cards capability advertisement at /.well-known/agent-card.json\nTask lifecycle s"
+    },
+    {
+      "url": "https://tyk.io/learning-center/agent-protocols-a-complete-guide-to-mcp-a2a-and-acp",
+      "title": "https://tyk.io/learning-center/agent-protocols-a-complete-guide-to-mcp-a2a-and-acp",
+      "score": 0.02469135820865631,
+      "rank": 135,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q1",
+      "snippet": " of a genuinely interoperable agent ecosystem.\nFrom three standards to two: How ACP folded into A2A\nThe most significant recent development is the consolidation of agent-to-agent protocols. In August 2025, IBM Research and Google announced that IBMs Agent Communication Protocol (ACP) would join forces with Googles Agent2Agent Protocol (A2A) under the Linux Foundations LF AI & Data umbrella. ACP development is now winding down; its assets and expertise are being contributed directly to A2A. Kate Blair (IBM Research, who led ACP) joined the A2A Technical Steering Committee, alongside representat"
+    },
+    {
+      "url": "https://tyk.io/learning-center/agent-protocols-a-complete-guide-to-mcp-a2a-and-acp",
+      "title": "https://tyk.io/learning-center/agent-protocols-a-complete-guide-to-mcp-a2a-and-acp",
+      "score": 0.02469135820865631,
+      "rank": 136,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q14",
+      "snippet": "I: ACP to A2A migration guide. ACP repos and docs continue to exist for historical reference, but new work should target A2A.\nFoundational concepts: Model protocols vs agent protocols\nThe fundamental differences between MCP and A2A are their scope and purpose. MCP defines the narrow interface between an AI application and its external tools, such as a specific API, database, or workflow. A2A defines a broader framework for how independent agents discover, interact, and collaborate to achieve a common goal.\nModel Context Protocol (MCP): The universal adapter for tools\nThe MCP docs describe it a"
+    },
+    {
+      "url": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "title": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "score": 0.02461491897702217,
+      "rank": 138,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q9",
+      "snippet": "s tasks that complete quickly. Streaming via Server-Sent Events handles tasks where incremental results are useful, like a research agent that streams findings as it discovers them. Asynchronous push notifications via webhooks handle long-running operations where the client shouldn't be blocked waiting. A single A2A implementation can use all three patterns depending on the task type.\nWhat is the difference between A2A and MCP? MCP (Anthropic's Model Context Protocol) connects AI agents to external tools, databases, APIs, and file systems. A2A (Google's Agent2Agent Protocol) connects AI agents"
+    },
+    {
+      "url": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+      "title": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+      "score": 0.024610823020339012,
+      "rank": 139,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q11",
+      "snippet": "en an AI model and the systems it accesses, replacing one-off, fragile integrations with a single, reusable connection layer. Anthropic’s own documentation describes MCP as the “USB-C for AI tool connections,” capturing how the protocol abstracts away point-to-point integration complexity.\nAccording to Anthropic’s MCP announcement (November 2024), the protocol’s goal is to let AI assistants work with the data and tools people already use, through a standard that any system can implement. MCP has since been adopted by OpenAI (March 2025, Agents SDK) and LangChain (early 2025, native s"
+    },
+    {
+      "url": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+      "title": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+      "score": 0.024610823020339012,
+      "rank": 140,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q12",
+      "snippet": "en an AI model and the systems it accesses, replacing one-off, fragile integrations with a single, reusable connection layer. Anthropic’s own documentation describes MCP as the “USB-C for AI tool connections,” capturing how the protocol abstracts away point-to-point integration complexity.\nAccording to Anthropic’s MCP announcement (November 2024), the protocol’s goal is to let AI assistants work with the data and tools people already use, through a standard that any system can implement. MCP has since been adopted by OpenAI (March 2025, Agents SDK) and LangChain (early 2025, native s"
+    },
+    {
+      "url": "https://atlan.com/know/google-a2a-protocol",
+      "title": "https://atlan.com/know/google-a2a-protocol",
+      "score": 0.02448979578912258,
+      "rank": 141,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q2",
+      "snippet": "outputs even when communicating via A2A. A shared context layer (a governed store of semantic definitions, data lineage, and business policies) ensures all agents reason from the same knowledge base, preventing contradictions at the source.\nWhat is OSI and how does it relate to A2A?\nOSI (Open Semantic Interchange) is an open standard for sharing semantic metadata (datasets, metrics, dimensions, relationships, and contextual metadata) across tools and platforms. The v1.0 spec was released in January 2026. Partners include Snowflake, Salesforce, dbt Labs, ThoughtSpot, and Atlan. While A2A standa"
+    },
+    {
+      "url": "https://www.digitalapplied.com/blog/google-a2a-protocol-agent-to-agent-communication-guide",
+      "title": "https://www.digitalapplied.com/blog/google-a2a-protocol-agent-to-agent-communication-guide",
+      "score": 0.024451319128274918,
+      "rank": 142,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q13",
+      "snippet": "ion about A2A is how it relates to the Model Context Protocol (MCP), which has become the de facto standard for connecting AI agents to tools and data sources. The answer is that they solve different problems at different layers of the same stack, and most sophisticated multi-agent systems will use both.\nMCP: Agent to Resources\nMCP defines how an AI agent connects to external tools, APIs, databases, and data sources. It answers: “How does this agent call a web search API, query a database, or read a file?” MCP servers expose capabilities as callable tools that agents invoke during task exe"
+    },
+    {
+      "url": "https://tyk.io/learning-center/a2a-protocol-architecture-and-technical-specification",
+      "title": "https://tyk.io/learning-center/a2a-protocol-architecture-and-technical-specification",
+      "score": 0.024336926639080048,
+      "rank": 143,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q14",
+      "snippet": "o, or remote via Streamable HTTP.Primary use caseMulti-agent orchestration and workflow handoffs across teams or vendors.Giving an LLM access to a database, file system, search engine, or specialised function.ComplexityHigh. Handles long-running tasks, state tracking, streaming, push notifications, multi-modal artifacts.Lower. Synchronous request/response over JSON-RPC, with structured outputs.\nThe hybrid architecture: Why you need both\nIn production enterprise systems, agents frequently implement both protocols at once. A scalable compound AI application relies on A2A for high-level orchestra"
+    },
+    {
+      "url": "https://cloudsecurityalliance.org/blog/2025/04/30/threat-modeling-google-s-a2a-protocol-with-the-maestro-framework",
+      "title": "https://cloudsecurityalliance.org/blog/2025/04/30/threat-modeling-google-s-a2a-protocol-with-the-maestro-framework",
+      "score": 0.024314764887094498,
+      "rank": 145,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q15",
+      "snippet": " \"Beyond AI: ChatGPT, Web3, and the Business Landscape of Tomorrow\" (Springer, 2023) - Strategic insights on AI and Web3's business impact. \"Generative AI Security: Theories and Practices\" (Springer, 2024) - A comprehensive guide on securing generative AI systems \"Practical Guide for AI Engineers\" (Volumes 1 and 2 by DistributedApps.ai, 2024) - Essential resources for AI and ML Engineers \"The Handbook for Chief AI Officers: Leading the AI Revolution in Business\" (DistributedApps.ai, 2024) - A Practical guide for CAIO in small or big organizations. \"Web3: Blockchain, the New Economy, and the Se"
+    },
+    {
+      "url": "https://atlan.com/know/google-a2a-protocol",
+      "title": "https://atlan.com/know/google-a2a-protocol",
+      "score": 0.024202898144721985,
+      "rank": 147,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q1",
+      "snippet": "o (Agent Cards), a structure for the work they exchange (Tasks), and a transport for sending that work over the wire (HTTP, SSE, JSON-RPC 2.0).\nThe protocol was contributed to the Linux Foundation in June 2025 and is maintained as an open-source project under the Apache 2.0 license. As of April 2026, more than 150 organizations support A2A, including Google, Microsoft, AWS, Salesforce, SAP, ServiceNow, Workday, and IBM. Azure AI Foundry, Amazon Bedrock AgentCore, and Google Cloud have all integrated A2A natively into their platform offerings.\nHow the A2A protocol works technically\nPermalink to"
+    },
+    {
+      "url": "https://medium.com/@armankamran/the-future-of-autonomous-conversations-googles-a2a-protocol-mcp-and-the-rise-of-ai-to-ai-8c98ba06d37a",
+      "title": "https://medium.com/@armankamran/the-future-of-autonomous-conversations-googles-a2a-protocol-mcp-and-the-rise-of-ai-to-ai-8c98ba06d37a",
+      "score": 0.024198167026042938,
+      "rank": 148,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q5",
+      "snippet": "quired\": true\n},\n\"callback_url\": \"https://a2a.network/response/clinical-review-4392\"\n}\nThis message could trigger:\nA parsing of the claim.\nRetrieval of FDA documentation.\nReasoning against compliance rules.\nReturn of a signed verification object.\nSample MCP Manifest\nA matching MCP file might look like this:\n{\n\"context_id\": \"drug_evaluation_2025Q2\",\n\"user_prompt\": \"Evaluate the legal viability of the new dopamine drug\",\n\"agents_involved\": [\n\"research-ai-001\",\n\"legal-ai-003\"\n],\n\"vision\": {\n\"goal\": \"Ensure the proposed compound meets regulatory compliance.\",\n\"constraints\": [\n\"No violation of 21CF"
+    },
+    {
+      "url": "https://github.com/a2aproject/A2A/commit/fde2bd8da8dcd4c6c5373de20f6e4e5b878d82f9",
+      "title": "https://github.com/a2aproject/A2A/commit/fde2bd8da8dcd4c6c5373de20f6e4e5b878d82f9",
+      "score": 0.02418551594018936,
+      "rank": 149,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q1",
+      "snippet": ",81 @@\n11\n# A2A (Agent2Agent) Protocol High-Level Summary\n22\n3-\nThis project defines and demonstrates the **Agent2Agent (A2A) protocol**, an open standard initiated by Google and donated to the Linux Foundation, designed to enable communication and interoperability between disparate AI agent systems. The core goal is to allow agents built on different frameworks (e.g., LangGraph, CrewAI, Google ADK, Genkit) or by different vendors to discover each others capabilities, negotiate interaction modes, and collaborate on tasks securely.\n3+\nThis project defines the **Agent2Agent (A2A) protocol**, an "
+    },
+    {
+      "url": "https://github.com/a2aproject/A2A/commit/fde2bd8da8dcd4c6c5373de20f6e4e5b878d82f9",
+      "title": "https://github.com/a2aproject/A2A/commit/fde2bd8da8dcd4c6c5373de20f6e4e5b878d82f9",
+      "score": 0.02418551594018936,
+      "rank": 150,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q19",
+      "snippet": " initiated by Google and donated to the Linux Foundation, designed to enable communication and interoperability between disparate AI agent systems. The core goal is to allow agents built on different frameworks (e.g., LangGraph, CrewAI, Google ADK, Genkit) or by different vendors to discover each others capabilities, negotiate interaction modes, and collaborate on tasks securely.\n3+\nThis project defines the **Agent2Agent (A2A) protocol**, an open standard initiated by Google and donated to the Linux Foundation, designed to enable communication and interoperability between disparate AI agent sy"
+    },
+    {
+      "url": "https://akka.io/blog/mcp-a2a-acp-what-does-it-all-mean",
+      "title": "https://akka.io/blog/mcp-a2a-acp-what-does-it-all-mean",
+      "score": 0.024184148758649826,
+      "rank": 151,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q3",
+      "snippet": "oke\" with the \"text\":  \"Why did the chicken cross the road? To get to the other side!\" 3. Agent Communication Protocol (ACP)\nOverview:\nThe Agent Communication Protocol (ACP, designed by BeeAI and the Linux Foundation) is an emerging open standard designed to enable interoperability between different AI agents, regardless of their underlying frameworks, technologies, or developers. Think of it as a potential \"HTTP for AI agents,\" aiming to transform the current landscape of siloed agents into a connected network.\nACP is like a universal power adapter for AI, allowing diverse agents to connect a"
+    },
+    {
+      "url": "https://alicelabs.ai/en/insights/best-ai-agent-frameworks-2026",
+      "title": "https://alicelabs.ai/en/insights/best-ai-agent-frameworks-2026",
+      "score": 0.02409297041594982,
+      "rank": 152,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q1",
+      "snippet": "opilot). Best when you already operate a large UiPath RPA estate and want to upgrade deterministic bots with agentic reasoning. Honourable mentions for narrower or adjacent use cases: Cognigy, Cohere North, Glean Agents, Sierra, Sana AI, Decagon, Adept, Anthropic Claude for Enterprise (the platform, distinct from the Claude Agent SDK). These remain important but are either domain-specific (customer support, internal search) or earlier in enterprise maturity. If your evaluation is stalling because you also need delivery capacity, our AI agent implementation services page covers the full lifecyc"
+    },
+    {
+      "url": "https://www.backslash.security/blog/what-is-mcp-model-context-protocol",
+      "title": "https://www.backslash.security/blog/what-is-mcp-model-context-protocol",
+      "score": 0.02409297041594982,
+      "rank": 153,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q10",
+      "snippet": "alancing, Queuing, and API Governance - by Valdez Ladd\nMCP Security Best Practices: How to Secure Model Context Protocol - ssojet.com\n(PDF) Model Context Protocol Servers: A Novel Paradigm for AI ... ResearchGate MCP Code Generation: How to Generate MCP Codes Efficiently. Byteplus A Deep Dive Into MCP and the Future of AI Tooling - Andreessen Horowitz Guide to the Dev Mode MCP Server – Figma Learn\nMCP ervers for Cursor - Cursor Directory. Cursor Modern Test Automation with AI(LLM) and Playwright MCP (Model Context Protocol)\n6 Top Model Context Protocol Automation Tools (MCP Guide 2025). test"
+    },
+    {
+      "url": "https://medium.com/@plawanrath/case-study-building-a-multi-agent-research-assistant-with-a2a-protocol-0df1d6eb71c3",
+      "title": "https://medium.com/@plawanrath/case-study-building-a-multi-agent-research-assistant-with-a2a-protocol-0df1d6eb71c3",
+      "score": 0.023959826678037643,
+      "rank": 154,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q20",
+      "snippet": "end needs in one go. The snapshot approach is handy for post-mortem analysis too — one can inspect old results without rerunning the pipeline. This is analogous to the final artifact in an A2A task lifecycle — I bundle all artifacts into one package. I even include the agent logs in the job record. This proved invaluable for debugging and for allowing the UI to display past results without recomputation.\nFailure recovery: If something went wrong partway (say the LLM service was down during summarization), I could potentially restart the job and the Fetcher agent would know not to duplicate"
+    },
+    {
+      "url": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+      "title": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+      "score": 0.02395295351743698,
+      "rank": 155,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q7",
+      "snippet": " MCP (Model Context Protocol), released by Anthropic in November 2024, connects AI models to tools and data sources through a standardized interface. A2A (Agent2Agent protocol), released by Google in April 2025 with 50+ enterprise partners, enables AI agents to delegate tasks to other agents. These protocols solve different problems at different layers of the stack. They are designed to work together, not compete.\nInside Atlan AI Labs & The 5x Accuracy Factor\nLearn how context engineering drove 5x AI accuracy in real customer systems. Explore real experiments, quantifiable results, and a repea"
+    },
+    {
+      "url": "https://bytebridge.medium.com/from-rest-to-mcp-why-developers-should-embrace-the-model-context-protocol-003e3806874a",
+      "title": "https://bytebridge.medium.com/from-rest-to-mcp-why-developers-should-embrace-the-model-context-protocol-003e3806874a",
+      "score": 0.023859649896621704,
+      "rank": 156,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q6",
+      "snippet": " Agents\nArtificial Intelligence\n--\n--\nWritten by ByteBridge\n465 followers\n·51 following\nWe are committed to solving complex and challenging problems using AI technology and AI agents, and we conduct research and carry out a variety of projects.\nHelp\nStatus\nAbout\nCareers\nPress\nBlog\nStore\nPrivacy\nRules\nTerms\nText to speech"
+    },
+    {
+      "url": "https://atlan.com/know/google-a2a-protocol",
+      "title": "https://atlan.com/know/google-a2a-protocol",
+      "score": 0.023709315806627274,
+      "rank": 157,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q11",
+      "snippet": "tem is required.\nA2A vs MCP: different layers, complementary roles\nPermalink to “A2A vs MCP: different layers, complementary roles” #\nA2A and MCP are not competing standards. They solve different problems at different layers of the multi-agent stack, and production systems use both.\nMCP (Model Context Protocol) was introduced by Anthropic in November 2024. It is a vertical protocol: it defines how a single agent connects to external tools and data sources. When an agent needs to query a database, call an API, retrieve documents, or access a governed metadata catalog, MCP is the mechanism. "
+    },
+    {
+      "url": "https://atlan.com/know/google-a2a-protocol",
+      "title": "https://atlan.com/know/google-a2a-protocol",
+      "score": 0.023709315806627274,
+      "rank": 158,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q12",
+      "snippet": "tem is required.\nA2A vs MCP: different layers, complementary roles\nPermalink to “A2A vs MCP: different layers, complementary roles” #\nA2A and MCP are not competing standards. They solve different problems at different layers of the multi-agent stack, and production systems use both.\nMCP (Model Context Protocol) was introduced by Anthropic in November 2024. It is a vertical protocol: it defines how a single agent connects to external tools and data sources. When an agent needs to query a database, call an API, retrieve documents, or access a governed metadata catalog, MCP is the mechanism. "
+    },
+    {
+      "url": "https://akka.io/blog/mcp-a2a-acp-what-does-it-all-mean",
+      "title": "https://akka.io/blog/mcp-a2a-acp-what-does-it-all-mean",
+      "score": 0.023689374327659607,
+      "rank": 159,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q6",
+      "snippet": "ge Guardrails & Evaluation Workflows Event Sourced Entities Views MCP Endpoints Model Providers Akka Libraries\nActors Streams Akka HTTP Akka gRPC Cluster Cluster Sharding Event Sourcing Durable State Projections Management Diagnostics Edge Resources\nAbout Contact Blog Support Platform Login Akkademy (Free Training) Samples & Blueprints Platform Capabilities Efficiency Calculator Guides Newsletter Reactive Principles Trust Center SOC 2 Report Resilience Guarantee Availability Guarantee Partners Release Notes Security Announcements ©2026 Lightbend, Inc. dba Akka. All rights reserved.\nTerms\nPriv"
+    },
+    {
+      "url": "https://atlan.com/know/google-a2a-protocol",
+      "title": "https://atlan.com/know/google-a2a-protocol",
+      "score": 0.02358163520693779,
+      "rank": 161,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q17",
+      "snippet": "n standard. Teams could write custom API integrations between specific agents, but every new agent pair required a new bespoke connector. Each framework had its own internal messaging format and task model, and there was no common discovery mechanism. A Salesforce agent could not delegate a sub-task to a ServiceNow agent without custom glue code; a Google Vertex agent could not coordinate with an AWS Bedrock agent without a hand-rolled bridge. A2A replaces that one-off integration effort with a single open standard.\nA2A addresses this by defining three foundational things: a way for agents to "
+    },
+    {
+      "url": "https://medium.com/@astropomeai/a-comprehensive-overview-of-the-model-context-protocol-mcp-f65150da0aa0",
+      "title": "https://medium.com/@astropomeai/a-comprehensive-overview-of-the-model-context-protocol-mcp-f65150da0aa0",
+      "score": 0.023532669991254807,
+      "rank": 162,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q14",
+      "snippet": " function calling feature is often implemented as a plugin within a specific platform. This means that integrations are confined to that platform’s ecosystem, requiring separate implementations for other services.\nMCP Advantages\nOpen, Standardized Protocol\nMCP separates tool implementation from the AI client, allowing for a standardized approach that works across multiple AI models and services.\nScalable and Flexible Integration\nIdeal for complex, multi-step workflows, MCP can maintain context over long dialogues and orchestrate multiple tool interactions, making it better suited for dynamic"
+    },
+    {
+      "url": "https://www.thefastmode.com/technology-solutions/48034-linux-foundation-s-a2a-protocol-gains-rapid-enterprise-adoption-across-cloud-giants",
+      "title": "https://www.thefastmode.com/technology-solutions/48034-linux-foundation-s-a2a-protocol-gains-rapid-enterprise-adoption-across-cloud-giants",
+      "score": 0.023403679952025414,
+      "rank": 163,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q19",
+      "snippet": "uth AmericaWestern EuropeEastern Europe and RussiaMiddle EastAfricaSouth AsiaSouth East AsiaEast AsiaAustralia and South Pacific daily  weekly end subscribe_widget_item --- RELATED CONTENT\nIBM Brings Native Arm Support to Z and LinuxONE with New Processor Google Cloud, Verizon Expand Enterprise AI Partnership Tech Mahindra, ServiceNow Expand AI Platform Partnership for Enterprise Scale IBM Connects Cryogenic Modules for Fault-Tolerant Quantum Computing Oracle, AWS Expand Strategic Collaboration as AI Database Adoption Accelerates IBM, OpenAI Partner to Accelerate Secure Enterprise AI Deploymen"
+    },
+    {
+      "url": "https://bytebridge.medium.com/from-rest-to-mcp-why-developers-should-embrace-the-model-context-protocol-003e3806874a",
+      "title": "https://bytebridge.medium.com/from-rest-to-mcp-why-developers-should-embrace-the-model-context-protocol-003e3806874a",
+      "score": 0.023306231945753098,
+      "rank": 165,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q2",
+      "snippet": "ss considerations in MCP’s design. The protocol emphasizes explicit user approval and sandboxing of tools by default . An AI can only use tools that have been deliberately connected and authorized, preventing it from going rogue on the open internet. For self-hosted scenarios, MCP servers often run locally or in controlled environments unless explicitly exposed remotely, keeping sensitive data under your oversight . Additionally, because all interactions funnel through the MCP client/server interface, it’s easier to audit and apply policies uniformly. We’ll touch more on advanced securit"
+    },
+    {
+      "url": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+      "title": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+      "score": 0.023296291008591652,
+      "rank": 166,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q15",
+      "snippet": " model (files, database records, API responses) via URI addressing Tools: Executable functions the model can invoke (search, query, write) with typed input/output schemas Prompts: Reusable prompt templates that encode workflows and can be parameterized at runtime Transport layer: stdio for in-process local tools; Server-Sent Events (SSE) over HTTP for remote servers Host/client/server architecture: The host (e.g., Claude Desktop, VS Code) manages the client; the client connects to MCP servers that expose capabilities to context-aware AI agents Building context-aware AI agents on MCP gives your"
+    },
+    {
+      "url": "https://atlan.com/know/google-a2a-protocol",
+      "title": "https://atlan.com/know/google-a2a-protocol",
+      "score": 0.023252688348293304,
+      "rank": 167,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q5",
+      "snippet": "the previous agent left off because the context is stored in a shared, governed layer, not in any single agent’s local memory.\n3. Shared transport across all protocols. The same governed context is accessible through A2A, MCP, OSI, SQL, and REST APIs. Agents do not need bespoke integrations to pull context from the shared layer. Whatever protocol the agent speaks, the context layer responds in kind.\nAtlan’s Context Lakehouse is built on Apache Iceberg with native graph and vector search. It speaks every protocol: MCP and A2A natively, plus SQL and REST/Graph APIs, making it the governed su"
+    },
+    {
+      "url": "https://a2aprotocol.ai/blog/impact-analysis-google-donating-a2a-protocol-linux-foundation",
+      "title": "https://a2aprotocol.ai/blog/impact-analysis-google-donating-a2a-protocol-linux-foundation",
+      "score": 0.023252688348293304,
+      "rank": 168,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q8",
+      "snippet": "ion that manages open source projects like the Linux kernel, excelling at promoting community-driven innovation. Industry Support: Supported by over 100 technology companies, including Amazon, Cisco, Microsoft, Salesforce, and others. Potential Benefits\nNeutral Governance and Standardization\nThe Linux Foundation's neutral governance ensures A2A is not controlled by a single company, reducing vendor lock-in risks and promoting it as an industry standard (InfoWorld).\nBroader Adoption\nThe open source model attracts more developers and companies to participate, with support from over 100 companies"
+    },
+    {
+      "url": "https://atlan.com/know/google-a2a-protocol",
+      "title": "https://atlan.com/know/google-a2a-protocol",
+      "score": 0.023140717297792435,
+      "rank": 169,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q13",
+      "snippet": "tem is required.\nA2A vs MCP: different layers, complementary roles\nPermalink to “A2A vs MCP: different layers, complementary roles” #\nA2A and MCP are not competing standards. They solve different problems at different layers of the multi-agent stack, and production systems use both.\nMCP (Model Context Protocol) was introduced by Anthropic in November 2024. It is a vertical protocol: it defines how a single agent connects to external tools and data sources. When an agent needs to query a database, call an API, retrieve documents, or access a governed metadata catalog, MCP is the mechanism. "
+    },
+    {
+      "url": "https://atlan.com/know/google-a2a-protocol",
+      "title": "https://atlan.com/know/google-a2a-protocol",
+      "score": 0.02307489514350891,
+      "rank": 171,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q20",
+      "snippet": "dards rather than a new transport layer:\nJSON-RPC 2.0 over HTTPS handles all core task communications Server-Sent Events (SSE) enable streaming for long-running tasks Push notifications support fully asynchronous workflows where the client does not stay connected Authentication aligns with OpenAPI security schemes: API keys, OAuth 2.0, and OpenID Connect Discovery. This means A2A integrates with existing enterprise identity infrastructure. No new auth system is required.\nA2A vs MCP: different layers, complementary roles\nPermalink to “A2A vs MCP: different layers, complementary roles” #\nA2A"
+    },
+    {
+      "url": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "title": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "score": 0.023064687848091125,
+      "rank": 172,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q13",
+      "snippet": " agent networking. Where A2A is designed around organizational trust boundaries and enterprise deployment patterns, ANP targets more open, peer-to-peer agent networks. They solve related but distinct problems, it's plausible that some production deployments will use both, depending on whether agents operate within or across organizational trust perimeters. This is the emerging question in agent protocol architecture: not which protocol wins, but which protocols serve which tiers of the agent communication stack.\nThe broader consolidation story is worth stating plainly. Just as the web standard"
+    },
+    {
+      "url": "https://tyk.io/learning-center/agent-protocols-a-complete-guide-to-mcp-a2a-and-acp",
+      "title": "https://tyk.io/learning-center/agent-protocols-a-complete-guide-to-mcp-a2a-and-acp",
+      "score": 0.023026317358016968,
+      "rank": 173,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q8",
+      "snippet": "TP and REST standardized web communication and unlocked decades of innovation, an emerging layer of open agent communication protocols is doing the same for AI. Major technology vendors (Google, IBM, Microsoft, AWS, Cisco, Salesforce, ServiceNow, SAP) are actively building these standards, and the space is consolidating under the Linux Foundation.\nThis guide is for developers, architects, and engineering leads who need to navigate agentic AI protocols. It covers: The practical difference between model and agent protocols\nA spec-accurate technical comparison of the Model Context Protocol (MCP) "
+    },
+    {
+      "url": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "title": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "score": 0.022991543635725975,
+      "rank": 176,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q5",
+      "snippet": "P-A2A merger deserves more attention than it's received. IBM didn't quietly sunset ACP, it actively merged it into A2A, which is a different signal entirely. It's the protocol equivalent of competing network standards consolidating around TCP/IP in the 1990s. Enterprise networks once ran fragmented protocols (DECnet, NetWare IPX/SPX, and others) before TCP/IP became the universal standard. The AI agent protocol landscape is going through the same consolidation now, and A2A is positioned as the TCP/IP equivalent for agent-to-agent communication. IBM's decision to fold ACP into A2A rather than c"
+    },
+    {
+      "url": "https://cohorte.co/blog/googles-agent2agent-a2a-protocol-a-new-era-of-ai-agent-interoperability",
+      "title": "https://cohorte.co/blog/googles-agent2agent-a2a-protocol-a-new-era-of-ai-agent-interoperability",
+      "score": 0.022800881415605545,
+      "rank": 178,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q19",
+      "snippet": "erated by the client) and the initial message (often representing a user’s query or command)​. If the client expects a continuous stream of results (for a long-running task), it could use an alternative tasks/sendSubscribe method to receive live updates​.\nProcessing: The remote agent receives the task request and begins working on it. Depending on complexity, two patterns are possible: (a) Synchronous: for quick tasks, the remote agent can process immediately and return a final result in the HTTP response. (b) Asynchronous/Streaming: for longer tasks, the remote agent may quickly acknowl"
+    },
+    {
+      "url": "https://github.com/a2aproject/A2A/commit/fde2bd8da8dcd4c6c5373de20f6e4e5b878d82f9",
+      "title": "https://github.com/a2aproject/A2A/commit/fde2bd8da8dcd4c6c5373de20f6e4e5b878d82f9",
+      "score": 0.022654958069324493,
+      "rank": 179,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q10",
+      "snippet": "python-version: 3.13\n5252\n53+\n- name: Setup uv\n54+\nuses: astral-sh/setup-uv@v5\n55+\n5356\n- name: Restore pip cache\n5457\nuses: actions/cache@v5\n5558\nwith:\n@@ -92,18 +95,6 @@ jobs:\n9295\n- name: Generate protocol specification files\n9396\nrun: ./scripts/build_docs.sh\n9497\n95-\n- name: Generate and Build Python SDK Docs\n96-\nrun: |\n97-\n# Find the path to the installed package\n98-\nPACKAGE_PATH=$(python -c \"import a2a, os; print(os.path.dirname(a2a.__file__))\")\n99-\necho \"Found a2a package at: ${PACKAGE_PATH}\"\n100-\n101-\n# Generate RST source files from the installed package\n102-\nsphinx-apidoc -f -o docs/"
+    },
+    {
+      "url": "https://www.helpnetsecurity.com/2025/06/24/the-linux-foundation-agent2agent",
+      "title": "https://www.helpnetsecurity.com/2025/06/24/the-linux-foundation-agent2agent",
+      "score": 0.0222662054002285,
+      "rank": 180,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q13",
+      "snippet": "platforms and systems, said Rao Surapaneni, VP and GM of Business Applications Platform, Google Cloud. By collaborating with the Linux Foundation and leading technology providers, we will enable more innovative and valuable AI capabilities under a trusted, open-governance framework.\nBy joining the Linux Foundation, A2A formalizes its commitment to an open, collaborative ecosystem – offering greater autonomy and multiplying productivity. Weve always believed in the vision of an open, interoperable Internet of Agents, and were joining the A2A Project as foundational members because community-d"
+    },
+    {
+      "url": "https://alicelabs.ai/en/insights/best-ai-agent-frameworks-2026",
+      "title": "https://alicelabs.ai/en/insights/best-ai-agent-frameworks-2026",
+      "score": 0.021889952942728996,
+      "rank": 182,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q15",
+      "snippet": "om/ag2-review Feb 2026 LangGraph 1.0.x patch series; DeltaChannel prototype; per-node timeout RFC github.com/langchain-ai/langgraph/releases Mar 2026 Pydantic AI V2 beta 1–3; capabilities primitive introduced ai.pydantic.dev Apr 3 2026 Microsoft Agent Framework 1.0 GA — Semantic Kernel + AutoGen merger, native MCP + A2A devblogs.microsoft.com Apr 15 2026 OpenAI Agents SDK Sandbox execution (UnixLocal + Docker + hosted backends), TypeScript parity openai.com/index/agents-sdk May 28 2026 CrewAI 1.14.6 stable github.com/crewAIInc/crewAI/releases Jun 11 2026 CrewAI Pluggable memory/knowledge/R"
+    },
+    {
+      "url": "https://www.prnewswire.com/news-releases/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year-302737641.html",
+      "title": "https://www.prnewswire.com/news-releases/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year-302737641.html",
+      "score": 0.021865716204047203,
+      "rank": 183,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q5",
+      "snippet": "r that makes agent‑to‑agent communication reliable and interoperable. What's most exciting is that this is just the beginning — there is enormous opportunity ahead to build richer semantics and interaction models that can turn an Internet of Agents into a planet‑scale reality.\"\n– Luca Muscariello, Distinguished Engineer, Cisco\n\"A2A provides the secure foundation for personal, team, and domain-specific agents to work together seamlessly across any platform. This protocol has established the foundations needed to move fragmented prototypes into a production-ready ecosystem where agents"
+    },
+    {
+      "url": "https://www.helpnetsecurity.com/2025/06/24/the-linux-foundation-agent2agent",
+      "title": "https://www.helpnetsecurity.com/2025/06/24/the-linux-foundation-agent2agent",
+      "score": 0.02129828929901123,
+      "rank": 185,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q6",
+      "snippet": "e Newsletter Editors choice newsletter sent twice a month Cybersecurity news alerts Periodical newsletter released for important security events and breaking news Cybersecurity jobs Weekly newsletter listing new cybersecurity job positions Open source Monthly newsletter focusing on open source cybersecurity tools Subscribe I have read and agree to the terms & conditions © Copyright 1998-2026 by Help Net Security Read our privacy policy | About us | Advertise Follow us &times;"
+    },
+    {
+      "url": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "title": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "score": 0.021279003471136093,
+      "rank": 187,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q16",
+      "snippet": "pLearning.AI, stated when announcing the official A2A course in February 2026: \"Connecting agents built with different frameworks usually requires extensive custom integration. A2A, the open protocol standardizing how agents discover each other and communicate, has emerged as the industry standard after IBM's ACP joined forces with A2A.\"\nIvan Nardini, a Google engineer and co-instructor of the DeepLearning.AI A2A course, framed the underlying problem directly: \"Building agents is the easy part. Getting them to talk to each other across different organizational boundaries and frameworks is anot"
+    },
+    {
+      "url": "https://news.ycombinator.com/item?id=48582679",
+      "title": "https://news.ycombinator.com/item?id=48582679",
+      "score": 0.016393441706895828,
+      "rank": 188,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q4",
+      "snippet": "ide), but no one has quite been able to define the boundaries of how that interacts when we dont own the full solution. Curious how others have been using it. Definitely seems designed for more of an internal or B2B use case where agents have super well defined behavior but are ultimately behind some other system entirely.\ndavid_shi 67 days ago | prev | next [–]\nIve changed my mind a few times on this, but given how substantial the adoption for MCP has been (Claude and OpenAI both use it for their native integrations) its only a matter of time before consolidation happens.\nTheres a way highe"
+    },
+    {
+      "url": "https://news.ycombinator.com/item?id=48582679",
+      "title": "https://news.ycombinator.com/item?id=48582679",
+      "score": 0.016393441706895828,
+      "rank": 189,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q8",
+      "snippet": "r.comitem?id=43631381 - April 2025 (280 comments)\nroblourens 67 days ago | prev | next [–]\nOn the vscode team were rebuilding our agent infrastructure on top of a new protocol, AHP: https:github.commicrosoftagent-host-protocol.\nIts a common protocol for talking to a host of multiple agentsharnesses.\nasdev 67 days ago | prev | next [–]\nSeems like over engineering just build an API in front of your agent, give the other agent the spec in a markdown file.\npocksuppet 67 days ago | parent | next [–]\nwhy dropbox when you can just rsync\ndewey 67 days ago | root | parent | next [–]\nIm a fan of"
+    },
+    {
+      "url": "https://news.ycombinator.com/item?id=48582679",
+      "title": "https://news.ycombinator.com/item?id=48582679",
+      "score": 0.016393441706895828,
+      "rank": 190,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q9",
+      "snippet": "es that honor those tokens is already handled well with HTTP. Fun fact, the original HTTP protocol (does anyone do RFCs anymore?) didnt support POSTs! So, most calls can be boiled down to doing a GET request somewhere with a token the remote end understands. Layer on SSL to hide the ? parameters, assuming its easy to get certs mapped to your house network.\nDiscovery can be handled a bunch of different ways but given the nature of where the agents are running, it can be DIFFICULT to connect them (hole poking comes to mind). Of course you could run stuff in the cloud. But, if you care about sove"
+    },
+    {
+      "url": "https://news.ycombinator.com/item?id=48582679",
+      "title": "https://news.ycombinator.com/item?id=48582679",
+      "score": 0.016393441706895828,
+      "rank": 191,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q11",
+      "snippet": "s themselves. I believe that companies will eventually start building agents to control and improve their customers experience. If they do this, A2A is the natural choice because it solves all of the problems associated with discovering, connecting, and communicating with agents over the internet.\nlazharichir 67 days ago | prev | next [–]\nI am using A2A at work. Its a bit like the \"microservices architecture\" for agents... Allows you or teams to develop agents independently and have them interact as and when they need to. No major hurdles so far.\nasim 67 days ago | parent | next [–]\nThis w"
+    },
+    {
+      "url": "https://news.ycombinator.com/item?id=48582679",
+      "title": "https://news.ycombinator.com/item?id=48582679",
+      "score": 0.016393441706895828,
+      "rank": 192,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q12",
+      "snippet": "s themselves. I believe that companies will eventually start building agents to control and improve their customers experience. If they do this, A2A is the natural choice because it solves all of the problems associated with discovering, connecting, and communicating with agents over the internet.\nlazharichir 67 days ago | prev | next [–]\nI am using A2A at work. Its a bit like the \"microservices architecture\" for agents... Allows you or teams to develop agents independently and have them interact as and when they need to. No major hurdles so far.\nasim 67 days ago | parent | next [–]\nThis w"
+    },
+    {
+      "url": "https://news.ycombinator.com/item?id=48582679",
+      "title": "https://news.ycombinator.com/item?id=48582679",
+      "score": 0.016393441706895828,
+      "rank": 193,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q14",
+      "snippet": " will eventually start building agents to control and improve their customers experience. If they do this, A2A is the natural choice because it solves all of the problems associated with discovering, connecting, and communicating with agents over the internet.\nlazharichir 67 days ago | prev | next [–]\nI am using A2A at work. Its a bit like the \"microservices architecture\" for agents... Allows you or teams to develop agents independently and have them interact as and when they need to. No major hurdles so far.\nasim 67 days ago | parent | next [–]\nThis was my assumption. Agents will supersed"
+    },
+    {
+      "url": "https://news.ycombinator.com/item?id=48582679",
+      "title": "https://news.ycombinator.com/item?id=48582679",
+      "score": 0.016393441706895828,
+      "rank": 194,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q17",
+      "snippet": " (hole poking comes to mind). Of course you could run stuff in the cloud. But, if you care about sovereignty, you probably want to avoid anything that will \"lock\" you into a service (or a single agentmodel for that matter).\nWhats 100% missing is payments, of course. Meet the 402, PAYMENT REQUIRED. Cloudflare (grumble) has something for that, but they stole it from Lightning Labs very own roasbeefs Aperture project a while back, which implements payments with the Lightning network.\nMake a bulk payment to a Bitcoin address. Stuff it in a Lightning invoice, send it to someone, they extract it and"
+    },
+    {
+      "url": "https://news.ycombinator.com/item?id=48582679",
+      "title": "https://news.ycombinator.com/item?id=48582679",
+      "score": 0.016393441706895828,
+      "rank": 195,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q18",
+      "snippet": "nts | ask | show | jobs | submitlogin\nAsk HN: Is anyone using the A2A protocol?96 points by asim 67 days ago | hide | past | favorite | 45 comments\nThe A2A protocol is an agent to agent protocol from Google. I was looking at it 6 months back but it didnt feel like I really understood how to use it at that point. Probably because we were all still trying to figure out agents and then the MCP protocol became quite a big deal. But now Im starting to think that once an agent has tools and services and data and then contacts. Actually, the point of interaction becomes the agent itself and then if y"
+    },
+    {
+      "url": "https://news.ycombinator.com/item?id=48582679",
+      "title": "https://news.ycombinator.com/item?id=48582679",
+      "score": 0.016129031777381897,
+      "rank": 196,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q10",
+      "snippet": " and think nothing of it. The agent to agent (A2A) protocol is for them. Personally, I think its useful to describe what Im already doing to people who arent experts.\nGuidelines | FAQ | Lists | API | Security | Legal | Apply to YC | Contact\nSearch:"
+    },
+    {
+      "url": "https://news.ycombinator.com/item?id=48582679",
+      "title": "https://news.ycombinator.com/item?id=48582679",
+      "score": 0.016129031777381897,
+      "rank": 197,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q16",
+      "snippet": "scusses A2A and their thoughts on it. If youre a pure vibe coder who doesnt know how to code, A2A is for you. If you know the basics of programming and could even do some web crawling, there are many accessible options.\nGoogle and the industry is honing in on these vibe coders who will look at 10 million tokens consumed to make a checklist application and think nothing of it. The agent to agent (A2A) protocol is for them. Personally, I think its useful to describe what Im already doing to people who arent experts.\nGuidelines | FAQ | Lists | API | Security | Legal | Apply to YC | Contact\nSearch"
+    },
+    {
+      "url": "https://news.ycombinator.com/item?id=48582679",
+      "title": "https://news.ycombinator.com/item?id=48582679",
+      "score": 0.01587301678955555,
+      "rank": 198,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q15",
+      "snippet": " (hole poking comes to mind). Of course you could run stuff in the cloud. But, if you care about sovereignty, you probably want to avoid anything that will \"lock\" you into a service (or a single agentmodel for that matter).\nWhats 100% missing is payments, of course. Meet the 402, PAYMENT REQUIRED. Cloudflare (grumble) has something for that, but they stole it from Lightning Labs very own roasbeefs Aperture project a while back, which implements payments with the Lightning network.\nMake a bulk payment to a Bitcoin address. Stuff it in a Lightning invoice, send it to someone, they extract it and"
+    },
+    {
+      "url": "https://tfir.io/ciscos-agntcy-takes-on-ai-agent-fragmentation-under-linux-foundation-umbrella",
+      "title": "https://tfir.io/ciscos-agntcy-takes-on-ai-agent-fragmentation-under-linux-foundation-umbrella",
+      "score": 0.015625,
+      "rank": 199,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q7",
+      "snippet": "ndor defines its own protocol. And each framework handles identity, discovery, and messaging differently — if at all. While agents are supposed to collaborate, today they often operate in silos.\nAs organizations deploy agents from different vendors and frameworks, the lack of standardized communication protocols is becoming a significant barrier to scaling AI initiatives. Enter AGNTCY, an open-source infrastructure project that recently moved under Linux Foundation governance, promising to solve interoperability challenges that could define the future of enterprise AI.\nFrom Cisco Lab to Linu"
+    },
+    {
+      "url": "https://tfir.io/ciscos-agntcy-takes-on-ai-agent-fragmentation-under-linux-foundation-umbrella",
+      "title": "https://tfir.io/ciscos-agntcy-takes-on-ai-agent-fragmentation-under-linux-foundation-umbrella",
+      "score": 0.015625,
+      "rank": 200,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q13",
+      "snippet": " messaging remain the biggest focus areas going forward. We used to think discovery comes first, then identity. But for enterprise adoption, identity, authorization, and security are becoming the key problems to solve.’\nThe scale requirements are staggering. Were not talking millions of agents—were headed toward trillions because every human and enterprise will have multiple agents representing them, Pandey notes. The architecture needs to be scalable from day one.\nThe team is doubling down on:\nTask-based authorization for agents with ambiguous or emergent behavior Real-time, many-to-many "
+    }
+  ]
+}

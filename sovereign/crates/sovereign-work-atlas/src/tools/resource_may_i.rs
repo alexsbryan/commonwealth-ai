@@ -26,18 +26,14 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::{json, Value};
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::{
-    Effect, Idempotency, Latency, Permission, Scope, StepOutput, ToolContext, ToolDescriptor,
-    ToolExample,
-};
+use sovereign_core::types::{StepOutput, ToolContext};
 
 use crate::model::ClaimRecord;
 use crate::store::{ScopeMatch, WorkAtlasStore};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Default TTL for a RESOURCE claim (`claim take`), in seconds —
 /// 30 minutes. One implementation per threshold (§10.6): this is the
@@ -214,60 +210,21 @@ pub fn resource_verdict(
     }
 }
 
-#[async_trait]
-impl Tool for ResourceMayITool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "resource_may_i".to_string(),
-            name: "Resource May I".to_string(),
-            description: "One-question check before touching a SHARED resource: is it \
-                          taken right now? Verdict `held` = a live claim names this \
-                          scope, with node attribution, intent, and time remaining; \
-                          `expired` = someone took it and never released (their work may \
-                          have died mid-run) — NOT the same as free; `free` = never \
-                          claimed or explicitly released (the work finished). \
-                          Deliberately NOT a lock: the verdict never blocks, and a seat \
-                          may always override with its reason recorded. Scope convention: \
-                          node-qualified names like `daemon:<node>:<action>` — exact \
-                          match, so `daemon:BeefyMac:restart` does not answer for \
-                          `daemon:BeefyMac:restart-verify`. Read `node_is_self` on each \
-                          claim to tell your own claim from a peer's."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "scope": {
-                        "type": "string",
-                        "description": "The resource scope, e.g. `daemon:<node>:restart`. Exact match."
-                    }
-                },
-                "required": ["scope"]
-            }),
-            examples: vec![ToolExample {
-                situation: "About to restart a shared daemon — is anyone using it right now?"
-                    .into(),
-                call: json!({ "scope": "daemon:BeefyMac:restart" }),
-            }],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "scope":  { "type": "string" },
-                    "verdict": { "type": "string", "enum": ["held", "expired", "free"] },
-                    "claims": { "type": "array", "items": { "type": "object" } }
-                }
-            })),
-        }
+impl ResourceMayITool {
+    /// Bind this tool's state to its `resource_may_i` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("resource_may_i", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &Value, ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `resource_may_i`.
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let scope = params
             .get("scope")
             .and_then(|v| v.as_str())
@@ -313,7 +270,6 @@ mod tests {
     use commonwealth_state::MeshStore;
     use sovereign_core::types::{ConversationId, ToolContext};
     use std::path::PathBuf;
-    use std::sync::Arc;
     use uuid::Uuid;
 
     fn mk_store() -> WorkAtlasStore {
@@ -593,12 +549,9 @@ mod tests {
         let store = mk_store();
         let tool = ResourceMayITool::new(Arc::new(store));
         let ctx = ctx();
-        let err = tool.execute(&json!({}), &ctx).await.unwrap_err();
+        let err = tool.run(&json!({}), &ctx).await.unwrap_err();
         assert!(err.to_string().contains("requires 'scope'"));
-        let err = tool
-            .execute(&json!({ "scope": "  " }), &ctx)
-            .await
-            .unwrap_err();
+        let err = tool.run(&json!({ "scope": "  " }), &ctx).await.unwrap_err();
         assert!(err.to_string().contains("must not be empty"));
     }
 }

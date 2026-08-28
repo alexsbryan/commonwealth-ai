@@ -657,51 +657,76 @@ impl Mode {
     }
 }
 
-#[derive(Debug, Default)]
+/// The flag surface, as a struct. THE FIELD LIST IS THE FLAG LIST — `clap`
+/// derives `--corpus-id` from `corpus_id`, the value coercion from the field
+/// type (`Option<PathBuf>` parses a path, `bool` is a presence flag), and the
+/// two exclusivity rules from the `group(...)` attributes below. Adding a flag
+/// here is adding a field; there is no second table to keep in sync and no
+/// parse loop to extend.
+///
+/// `clap` is free in this crate — it is already in the build graph via
+/// `sovereign-eval` (`cargo tree -p sovereign-cli-llm -i clap` → v4.6.1), so
+/// this costs no new dependency.
+///
+/// `disable_help_flag` because `--help` is served by [`HELP`] through
+/// `sovereign_cli_shared::help::print`, which is unchanged.
+#[derive(clap::Parser, Debug, Default)]
+#[command(
+    // The `Usage:` line inside a parse error says what the user TYPED. Taken
+    // from `HELP.command` rather than spelled again, so the two cannot drift;
+    // without it clap names the binary (`sovereign-cli-llm`), which is not a
+    // command anyone runs.
+    name = HELP.command,
+    no_binary_name = true,
+    disable_help_flag = true,
+    group(clap::ArgGroup::new("source").required(true).args(["corpus_id", "folder"])),
+    group(clap::ArgGroup::new("run_mode").args(["cold", "warm"])),
+)]
 struct Opts {
+    #[arg(long)]
     corpus_id: Option<String>,
+    #[arg(long)]
     folder: Option<PathBuf>,
-    mode: Option<Mode>,
+    #[arg(long)]
+    cold: bool,
+    #[arg(long)]
+    warm: bool,
+    #[arg(long)]
     enrich_model: Option<String>,
+    #[arg(long)]
     no_gliner: bool,
+    #[arg(long)]
     allow_watcher: bool,
+    #[arg(long)]
     output: Option<PathBuf>,
+    #[arg(long)]
     compare: Option<PathBuf>,
 }
 
-fn parse_args(args: &[String]) -> std::result::Result<Opts, String> {
-    let mut o = Opts::default();
-    let mut i = 0;
-    while i < args.len() {
-        let a = args[i].as_str();
-        let mut need = |label: &str| -> std::result::Result<String, String> {
-            i += 1;
-            args.get(i)
-                .cloned()
-                .ok_or_else(|| format!("{label} needs a value"))
-        };
-        match a {
-            "--corpus-id" => o.corpus_id = Some(need("--corpus-id")?),
-            "--folder" => o.folder = Some(PathBuf::from(need("--folder")?)),
-            "--cold" => o.mode = Some(Mode::Cold),
-            "--warm" => o.mode = Some(Mode::Warm),
-            "--enrich-model" => o.enrich_model = Some(need("--enrich-model")?),
-            "--no-gliner" => o.no_gliner = true,
-            "--allow-watcher" => o.allow_watcher = true,
-            "--output" => o.output = Some(PathBuf::from(need("--output")?)),
-            "--compare" => o.compare = Some(PathBuf::from(need("--compare")?)),
-            other => return Err(format!("unknown flag '{other}' (try --help)")),
+impl Opts {
+    /// Total, not `Option<Mode>`: [`parse_args`] rejects the neither case and
+    /// the `run_mode` group rejects the both case, so by the time an `Opts`
+    /// exists exactly one is set. This retires a
+    /// `.expect("parse_args guarantees a mode")` — the guarantee is now carried
+    /// by the type instead of by a comment (ARCH §7).
+    fn mode(&self) -> Mode {
+        if self.cold {
+            Mode::Cold
+        } else {
+            Mode::Warm
         }
-        i += 1;
     }
+}
 
-    if o.corpus_id.is_none() && o.folder.is_none() {
-        return Err("need --corpus-id <id> or --folder <path>".to_string());
-    }
-    if o.corpus_id.is_some() && o.folder.is_some() {
-        return Err("--corpus-id and --folder are mutually exclusive".to_string());
-    }
-    if o.mode.is_none() {
+fn parse_args(args: &[String]) -> std::result::Result<Opts, String> {
+    let o = sovereign_cli_shared::flag_surface::parse::<Opts>(args)?;
+    // The ONE rule kept by hand, deliberately. `run_mode` is declared
+    // non-required so that this message survives: clap's own "required
+    // arguments were not provided" is correct and says nothing about WHY the
+    // choice exists, and that reasoning is the point. The two rules it does
+    // not carry — source required, source exclusive — are mechanical, and
+    // clap's rendering of them is strictly better than the strings it replaced.
+    if !o.cold && !o.warm {
         return Err(
             "need --cold or --warm. A build-time number is only meaningful from a cold tree \
              (four checkpoint layers short-circuit a warm one); requiring the choice keeps a \
@@ -761,7 +786,7 @@ fn data_dir() -> PathBuf {
 }
 
 async fn run(opts: Opts) -> std::result::Result<VaultReportRun, String> {
-    let mode = opts.mode.clone().expect("parse_args guarantees a mode");
+    let mode = opts.mode();
     let data_dir = data_dir();
     let indexes_dir = data_dir.join("indexes");
     let recipes_dir = data_dir.join("recipes");
@@ -1611,7 +1636,14 @@ mod tests {
             "--cold".into(),
         ])
         .unwrap_err();
-        assert!(err.contains("mutually exclusive"), "got: {err}");
+        // Asserts the RULE, not the wording. The phrasing is clap's since the
+        // flag surface became `#[derive(clap::Parser)]` — it renders "cannot be
+        // used with" and names both flags, where the hand-rolled loop said
+        // "mutually exclusive". A user-facing text change, declared, not silent.
+        assert!(
+            err.contains("--corpus-id") && err.contains("--folder"),
+            "got: {err}"
+        );
     }
 
     #[test]
@@ -1809,5 +1841,75 @@ mod tests {
         obs.push_gap("staging", 100, 100 + UNATTRIBUTED_GAP_MS - 1);
         let (phases, _, _, _) = obs.snapshot();
         assert!(phases.is_empty(), "got: {phases:?}");
+    }
+
+    // ── flag surface ────────────────────────────────────────────────────
+    // These pin the BEHAVIOUR the hand-rolled loop had, so the conversion to
+    // `#[derive(clap::Parser)]` is a refactor and not a silent change of what
+    // the command accepts. They also show the next author how to test a flag
+    // surface without booting the command.
+
+    fn parse(argv: &[&str]) -> std::result::Result<Opts, String> {
+        super::parse_args(&argv.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+    }
+
+    #[test]
+    fn field_name_becomes_the_long_flag_and_the_type_does_the_coercion() {
+        let o = parse(&["--corpus-id", "vault", "--cold", "--output", "/tmp/r.json"]).unwrap();
+        assert_eq!(o.corpus_id.as_deref(), Some("vault"));
+        assert_eq!(o.output, Some(std::path::PathBuf::from("/tmp/r.json")));
+        assert!(o.cold && !o.warm);
+    }
+
+    #[test]
+    fn key_equals_value_is_accepted() {
+        // The form four hand-rolled CLIs silently dropped (nc-22b). clap takes
+        // it for free; the loop this replaced had to be taught it.
+        let o = parse(&["--corpus-id=vault", "--warm"]).unwrap();
+        assert_eq!(o.corpus_id.as_deref(), Some("vault"));
+    }
+
+    #[test]
+    fn mode_is_total_once_an_opts_exists() {
+        assert_eq!(
+            parse(&["--folder", "/tmp", "--cold"]).unwrap().mode(),
+            Mode::Cold
+        );
+        assert_eq!(
+            parse(&["--folder", "/tmp", "--warm"]).unwrap().mode(),
+            Mode::Warm
+        );
+    }
+
+    #[test]
+    fn a_source_is_required() {
+        // Exclusivity is already covered by
+        // `corpus_and_folder_are_mutually_exclusive` above; only the
+        // no-source-at-all case is new.
+        assert!(parse(&["--cold"]).is_err());
+    }
+
+    #[test]
+    fn both_modes_is_rejected_by_the_group() {
+        assert!(parse(&["--corpus-id", "v", "--cold", "--warm"]).is_err());
+    }
+
+    #[test]
+    fn an_unknown_flag_is_still_rejected() {
+        assert!(parse(&["--corpus-id", "v", "--cold", "--nope"]).is_err());
+    }
+
+    #[test]
+    fn a_parse_error_carries_one_prefix_and_names_the_typed_command() {
+        // Composed exactly as `cmd_vault_report` composes it. `clap`'s own
+        // rendering also opens `error: `, so before `flag_surface::parse`
+        // owned the stripping this read `error: error: …`; and the `Usage:`
+        // line named `sovereign-cli-llm`, a binary no user invokes.
+        let rendered = format!("error: {}", parse(&["--nope"]).unwrap_err());
+        assert!(!rendered.starts_with("error: error:"), "got: {rendered}");
+        assert!(
+            rendered.contains("Usage: svrn bench vault-report"),
+            "got: {rendered}"
+        );
     }
 }

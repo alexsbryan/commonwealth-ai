@@ -84,7 +84,7 @@ pub(super) async fn install_ocr_ctx(
 
         let roots = paddle_model_roots(
             data_dir,
-            std::env::var("SOVEREIGN_PADDLE_OCR_MODEL_DIR").ok(),
+            sovereign_tools::local_corpus::ocr::paddle::model_root_override(),
         );
         let Some(model_root) = roots
             .iter()
@@ -163,10 +163,10 @@ pub(super) async fn install_ocr_ctx(
 /// mutating process-global state, which under a parallel test runner is not
 /// a test but a race.
 #[cfg(feature = "ocr")]
-fn paddle_model_roots(data_dir: &Path, env_override: Option<String>) -> Vec<PathBuf> {
+fn paddle_model_roots(data_dir: &Path, env_override: Option<PathBuf>) -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = Vec::new();
     if let Some(env_path) = env_override {
-        roots.push(PathBuf::from(env_path));
+        roots.push(env_path);
     }
     roots.push(data_dir.join("models").join("paddle-ocr"));
     roots.push(

@@ -12,8 +12,6 @@
 //! deterministic leaf.) The LLM classification pass that promotes candidates to
 //! real `Tension` edges is a separate `model:` step.
 
-use async_trait::async_trait;
-
 use corpus_engine::enrichment::atlas::{
     analysis::tensions::{
         drop_same_named_speaker_pairs, select_candidates, CandidateSelectionInput,
@@ -22,46 +20,29 @@ use corpus_engine::enrichment::atlas::{
     read_atlas_atoms, write_tension_candidates, AtomEnvelope,
 };
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use crate::atlas_phase::atlas_dir_for;
+use sovereign_core::tool_manifest::DeclaredTool;
+use std::sync::Arc;
 
 pub struct AtlasTensionsTool;
 
-#[async_trait]
-impl Tool for AtlasTensionsTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "atlas_tensions".to_string(),
-            name: "atlas_tensions".to_string(),
-            description: "Literary-atlas Phase 6 (deterministic): enumerate tension candidate \
-                          pairs (claim↔claim / claim↔state sharing an entity) from the resolved \
-                          atlas. Reads atoms.json, writes tension_candidates.json. Graph strategy \
-                          (no model/embed)."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "corpus": { "type": "string", "description": "Corpus id (directory under the index dir)" },
-                    "index_dir": { "type": "string", "description": "Index root. Default: ~/.svrnmesh/indexes" }
-                },
-                "required": ["corpus"]
-            }),
-            examples: vec![],
-            effect: Effect::Write,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: None,
-        }
+impl AtlasTensionsTool {
+    /// Bind this tool's state to its `atlas_tensions` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("atlas_tensions", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `atlas_tensions`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus = params
             .get("corpus")
             .and_then(|v| v.as_str())
@@ -119,18 +100,6 @@ impl Tool for AtlasTensionsTool {
 mod tests {
     use super::*;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     /// The leaf wraps the real graph-strategy candidate selector: read atoms →
     /// `select_candidates` + de-noise → write `tension_candidates.json`, on the
     /// canonical atlas paths. Hermetic: a fresh atlas with no atoms yields zero
@@ -151,7 +120,10 @@ mod tests {
             "corpus": "c1",
             "index_dir": dir.path().to_string_lossy()
         });
-        let out = AtlasTensionsTool.execute(&params, &ctx()).await.unwrap();
+        let out = AtlasTensionsTool
+            .run(&params, &ToolContext::default())
+            .await
+            .unwrap();
         match out {
             StepOutput::Text(t) => assert!(t.contains("0 candidate"), "{t}"),
             o => panic!("unexpected output: {o:?}"),
@@ -168,6 +140,9 @@ mod tests {
         // A missing atlas is a loud error.
         let bad =
             serde_json::json!({ "corpus": "nope", "index_dir": dir.path().to_string_lossy() });
-        assert!(AtlasTensionsTool.execute(&bad, &ctx()).await.is_err());
+        assert!(AtlasTensionsTool
+            .run(&bad, &ToolContext::default())
+            .await
+            .is_err());
     }
 }

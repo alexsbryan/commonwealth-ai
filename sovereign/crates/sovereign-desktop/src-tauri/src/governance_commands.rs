@@ -3,7 +3,7 @@
 //! event-sourced common law (FR-9). This is the "one UX panel" the
 //! governance thesis ("one recipe + one pure fold + one UX panel") was
 //! missing: the CLI `svrn govern` verbs and this module write through the
-//! *same* corpus-engine library (`GovernanceView` + `GovernanceOplog`),
+//! *same* corpus-engine library (`GovernanceView` + the governance `Oplog`),
 //! so a decision the desktop appends is seen by `govern ask`'s active-set
 //! retrieval filter and vice-versa.
 //!
@@ -31,9 +31,8 @@ use tauri::State;
 use corpus_engine::enrichment::atlas::migrate_ids::migrate_atlas_ids;
 use corpus_engine::enrichment::atlas::{read_atlas_atoms, AtomEnvelope};
 use corpus_engine::enrichment::governance_view::section_titles;
-use corpus_engine::enrichment::{
-    GovernanceOp, GovernanceOpKind, GovernanceOplog, GovernanceView, TensionDisposition,
-};
+use corpus_engine::enrichment::{GovernanceOpKind, GovernanceView, TensionDisposition};
+use corpus_engine::oplog::{Op, Oplog};
 
 use crate::state::AppState;
 
@@ -80,9 +79,9 @@ use sovereign_core::time::unix_now as now_unix;
 
 /// Append ops to a corpus's oplog under the process-wide append lock.
 /// Returns the appended op ids (for the frontend's undo affordance).
-fn append_ops(dir: &Path, ops: &[GovernanceOp]) -> Result<Vec<String>, String> {
+fn append_ops(dir: &Path, ops: &[Op<GovernanceOpKind>]) -> Result<Vec<String>, String> {
     let _guard = APPEND_LOCK.lock().map_err(|_| "append lock poisoned")?;
-    let oplog = GovernanceOplog::new(dir);
+    let oplog = Oplog::<GovernanceOpKind>::new(dir);
     let mut ids = Vec::with_capacity(ops.len());
     for op in ops {
         oplog
@@ -225,7 +224,7 @@ pub async fn governance_get_view(
             let titles = section_titles(&root);
             let scopes = scope_names(&cid);
             let vocab = read_vocabulary(&cid);
-            let decisions: HashMap<String, DecisionMeta> = GovernanceOplog::new(&dir)
+            let decisions: HashMap<String, DecisionMeta> = Oplog::<GovernanceOpKind>::new(&dir)
                 .read_all()
                 .unwrap_or_default()
                 .into_iter()
@@ -329,7 +328,7 @@ fn resolve_at(
     // The Supersede is the substance; ResolveTension records that this
     // tension was adjudicated via it, so a later undo reverts the bundle
     // atomically. Both carry the endpoint pair for rebuild-durability.
-    let supersede = GovernanceOp::new(
+    let supersede = Op::new(
         GovernanceOpKind::Supersede {
             new_rule: keep.clone(),
             old_rules: vec![old.clone()],
@@ -338,7 +337,7 @@ fn resolve_at(
         ts,
         who.clone(),
     );
-    let resolve = GovernanceOp::new(
+    let resolve = Op::new(
         GovernanceOpKind::ResolveTension {
             tension: view
                 .tensions
@@ -390,7 +389,7 @@ fn accept_at(dir: &Path, tension_id: &str, rationale: &str) -> Result<Vec<String
         .find(|t| t.id.as_str() == tension_id)
         .map(|t| t.id.clone())
         .expect("tension existed above");
-    let op = GovernanceOp::new(
+    let op = Op::new(
         GovernanceOpKind::AcceptTension {
             tension: edge,
             rationale: rationale.to_string(),
@@ -428,7 +427,7 @@ fn dismiss_at(
         .find(|t| t.id.as_str() == tension_id)
         .map(|t| t.id.clone())
         .expect("tension existed above");
-    let op = GovernanceOp::new(
+    let op = Op::new(
         GovernanceOpKind::DismissTension {
             tension: edge,
             endpoints: Some((rule_a, rule_b)),
@@ -475,7 +474,7 @@ fn undo_at(dir: &Path, tension_id: &str) -> Result<String, String> {
     };
     // Reconstruct the bundle to revert: the winning op, plus (for a
     // resolve) the Supersede it was authored via.
-    let ops = GovernanceOplog::new(dir)
+    let ops = Oplog::<GovernanceOpKind>::new(dir)
         .read_all()
         .map_err(|e| format!("reading governance oplog: {e}"))?;
     let winner = ops
@@ -486,7 +485,7 @@ fn undo_at(dir: &Path, tension_id: &str) -> Result<String, String> {
     if let GovernanceOpKind::ResolveTension { via, .. } = &winner.kind {
         targets.push(via.clone());
     }
-    let revert = GovernanceOp::new(
+    let revert = Op::new(
         GovernanceOpKind::Revert {
             targets,
             rationale: "undo from desktop".into(),
@@ -523,7 +522,7 @@ fn seed_at(dir: &Path) -> Result<u32, String> {
             dir.display()
         )
     })?;
-    let oplog = GovernanceOplog::new(dir);
+    let oplog = Oplog::<GovernanceOpKind>::new(dir);
     let already: std::collections::HashSet<_> = oplog
         .read_all()
         .map_err(|e| format!("reading governance oplog: {e}"))?
@@ -540,7 +539,7 @@ fn seed_at(dir: &Path) -> Result<u32, String> {
             if already.contains(&c.id) {
                 continue;
             }
-            new_ops.push(GovernanceOp::new(
+            new_ops.push(Op::new(
                 GovernanceOpKind::AssertRule {
                     rule: c.id.clone(),
                     source_doc: None,
@@ -957,7 +956,7 @@ mod tests {
 
         // Migrate ran before seed: every governed rule id is content-hash,
         // not sequential — the property that lets rules survive a rebuild.
-        let ops = GovernanceOplog::new(dir).read_all().unwrap();
+        let ops = Oplog::<GovernanceOpKind>::new(dir).read_all().unwrap();
         let asserted: Vec<_> = ops
             .iter()
             .filter_map(|o| match &o.kind {

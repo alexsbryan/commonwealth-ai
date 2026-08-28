@@ -1,0 +1,38 @@
+# ═══════════════════════════════════════════════════════════════════════
+# NEGATIVE CONTROL — DO NOT SCHEDULE. DO NOT APPLY. KEPT FAILING ON PURPOSE.
+# ═══════════════════════════════════════════════════════════════════════
+#
+# `node_id: String -> NodeId` was planned as a "safe warm-up" and is the
+# measured near-miss the wire differ exists for: `NodeId` is
+# `define_id!`-generated (kernel-types/src/ids.rs), `[u8; 16]` with DERIVED
+# serde, so it serialises as a 16-integer JSON array. The String sites are
+# live HTTP response types (commonwealth-api/src/routes_status.rs:324,428,
+# routes_internal/mesh_admin.rs, routes_internal/corpus_collaborate.rs).
+# Applying this spec turns `"node_id":"node-6c955b5f1361aaaa"` into
+# `"node_id":[108,149,…]` on live mesh endpoints — and `cargo check` passes.
+#
+# The differ must FAIL this spec (`svrn code wire-check` exits 1, json
+# surface Failed with the bytes, sqlite could-not-judge). If it ever passes,
+# the gate is broken, not the spec:
+# sovereign-cli-dev/src/refactor_wire.rs pins that direction in
+# `negative_control_node_id_fails_with_the_production_bytes`.
+#
+# Filed by this gate's logic (confirm, do not re-derive): kernel-types holds
+# THREE incompatible id encodings — CorpusId transparent string, ContentHash
+# custom hex string, define_id! derived byte array. No define_id! id may be
+# adopted at a String site until that is resolved, and resolving it breaks
+# the sites already speaking the array form.
+
+id     = "node-id"
+kind   = "newtype"
+target = "kernel_types::NodeId"
+
+[discover]
+seed = { field = "node_id", from = "String" }
+
+[safety]
+# The claim the differ REFUTES. It stays "transparent" because that is what
+# a naive migration would have assumed — the control only controls if the
+# spec claims what the near-miss believed.
+wire     = "transparent"
+surfaces = ["json", "sqlite"]

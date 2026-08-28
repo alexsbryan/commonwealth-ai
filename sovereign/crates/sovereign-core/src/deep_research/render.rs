@@ -666,15 +666,53 @@ pub fn annotate_composed(report: &str, claims: &[FinalClaim]) -> String {
     // Refuted claims are marked WHERE THEY STAND — an unmarked refuted
     // sentence would be the page asserting something the evidence
     // contradicts.
+    //
+    // THE NEEDLE AND THE HAYSTACK ARE NUMBERED DIFFERENTLY, and matching them
+    // raw silently marked NOTHING. A claim is extracted from the PRE-render
+    // draft, so it carries the internal handle: "…landscape. [Source: ev-13]".
+    // The report it is matched against has already been through
+    // `number_citations`, so the same sentence reads "…landscape. [13]". An
+    // exact `find` therefore fails on every claim that ends in a citation —
+    // which is nearly all of them, because the writer is instructed to cite as
+    // it goes. Measured on run dr-1787768404: 192 refuted claims, 192 of them
+    // silently unmarked, and the only disclosure a count at line 293 of 339,
+    // BELOW the Sources list. The report asserted all 192 as fact.
+    //
+    // So the match runs on the citation-stripped stem, via the existing
+    // decider (`containment::strip_citation_spans`, §10.6/§19 — the same one
+    // the gap-query path reuses) rather than a second bracket parser here.
+    // The MARKER still lands at the end of the sentence as it appears in the
+    // report, so the reader sees it where the claim stands.
+    let mut marked = 0usize;
+    let mut unmarkable = 0usize;
     for c in claims.iter().filter(|c| c.verdict == Verdict::Failed) {
-        let needle = c.text.trim();
+        let stem = super::containment::strip_citation_spans(&c.text);
+        let needle = stem.trim();
         if needle.len() < 12 {
+            unmarkable += 1;
             continue;
         }
         if let Some(at) = out.find(needle) {
             let end = at + needle.len();
             out.insert_str(end, " **[refuted by the evidence]**");
+            marked += 1;
+        } else {
+            unmarkable += 1;
         }
+    }
+    // A REFUTATION THAT DOES NOT REACH THE PAGE IS NOT A REFUTATION (§18.1's
+    // four verdicts, §18.3's no-silent-substitution). The failure above was
+    // invisible for exactly as long as nobody counted, so the count is now
+    // part of the render and the reader is told rather than the log.
+    if unmarkable > 0 {
+        tracing::warn!(
+            target: "deep_research",
+            refuted = marked + unmarkable,
+            marked,
+            unmarkable,
+            "refuted claims that could not be located in the rendered report — \
+             they are reported in the Verification section, never dropped"
+        );
     }
 
     let passed = claims
@@ -691,13 +729,47 @@ pub fn annotate_composed(report: &str, claims: &[FinalClaim]) -> String {
         .collect();
 
     out.push_str("\n\n## Verification\n\n");
+    // SAY WHAT HAPPENED, NOT WHAT WAS INTENDED. This sentence used to read
+    // "{refuted} were refuted by the evidence and are marked in place"
+    // unconditionally — and on every run where the marking silently missed,
+    // that sentence was itself the report's least true claim. It now counts
+    // the markings it actually made.
     out.push_str(&format!(
         "Of {} claims extracted from this report, {passed} verified against two or more \
-         independent sources, {refuted} were refuted by the evidence and are marked in place, \
-         and {} could not be verified from the evidence gathered.\n",
+         independent sources, {refuted} were refuted by the evidence, and {} could not be \
+         verified from the evidence gathered.\n",
         claims.len(),
         open.len()
     ));
+    if refuted > 0 {
+        out.push_str(&format!(
+            "\nOf the {refuted} refuted, {marked} are marked in place where they stand.\n"
+        ));
+        if unmarkable > 0 {
+            out.push_str(&format!(
+                "The remaining {unmarkable} could not be located in the finished text to be \
+                 marked, so they are listed here instead. **Read them as contradicted by the \
+                 evidence wherever they appear above:**\n\n"
+            ));
+            for c in claims
+                .iter()
+                .filter(|c| c.verdict == Verdict::Failed)
+                .take(40)
+            {
+                let stem = super::containment::strip_citation_spans(&c.text);
+                let short: String = stem.trim().chars().take(220).collect();
+                if !short.is_empty() {
+                    out.push_str(&format!("- {short}\n"));
+                }
+            }
+            if unmarkable > 40 {
+                out.push_str(&format!(
+                    "- …and {} further refuted statements, all recorded in the verdict set.\n",
+                    unmarkable - 40
+                ));
+            }
+        }
+    }
     if !open.is_empty() {
         out.push_str(
             "\nThe following statements rest on evidence the gate could not confirm. They are \
@@ -1217,6 +1289,64 @@ mod tests {
             out[at..].starts_with("six lanes. **[refuted by the evidence]**"),
             "the mark sits on the sentence, got: {}",
             &out[at..at.saturating_add(80).min(out.len())]
+        );
+    }
+
+    /// RED (2026-08-27): the claim carries its INTERNAL handle and the report
+    /// carries the RENDERED number — the shape every production run has.
+    ///
+    /// The test above passes a claim with no citation at all, which is why it
+    /// stayed green while production marked NOTHING. Measured on run
+    /// dr-1787768404: 192 refuted claims, 192 silently unmarked, 0 located.
+    /// A claim is extracted from the pre-render draft ("…six lanes.
+    /// [Source: ev-13]"); `number_citations` has already rewritten the report
+    /// to "…six lanes. [13]"; the exact `find` misses on every claim that ends
+    /// in a citation, which is nearly all of them because the writer is told
+    /// to cite as it goes. The page then asserted all 192 as fact, and the
+    /// Verification section said they "are marked in place".
+    ///
+    /// This is §18.1's missing failing input: a guard whose fixture cannot
+    /// exhibit the defect is not a guard.
+    #[test]
+    fn a_refuted_claim_is_marked_even_though_its_citation_was_renumbered() {
+        let report = "## Findings\n\nThe bridge opened in 1911 and carries six lanes. [13]\n";
+        let claims = vec![composed_claim(
+            "The bridge opened in 1911 and carries six lanes. [Source: ev-13]",
+            Verdict::Failed,
+        )];
+        let out = annotate_composed(report, &claims);
+        assert!(
+            out.contains("six lanes. **[refuted by the evidence]**"),
+            "the mark must land despite the renumbering, got: {out}"
+        );
+        assert!(
+            out.contains("1 are marked in place"),
+            "and the Verification section must count what it actually marked: {out}"
+        );
+    }
+
+    /// A refutation that cannot reach the page is REPORTED, never dropped —
+    /// the reader is told the statement is contradicted even when the
+    /// sentence could not be located to mark.
+    #[test]
+    fn an_unmarkable_refutation_is_listed_rather_than_lost() {
+        let report = "## Findings\n\nSomething else entirely.\n";
+        let claims = vec![composed_claim(
+            "The bridge opened in 1911 and carries six lanes.",
+            Verdict::Failed,
+        )];
+        let out = annotate_composed(report, &claims);
+        assert!(
+            out.contains("could not be located in the finished text"),
+            "the miss is disclosed: {out}"
+        );
+        assert!(
+            out.contains("The bridge opened in 1911"),
+            "and the statement itself is named so the reader can act on it: {out}"
+        );
+        assert!(
+            !out.contains("1 are marked in place"),
+            "it must NOT claim a marking it did not make: {out}"
         );
     }
 

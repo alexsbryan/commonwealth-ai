@@ -346,16 +346,16 @@ pub async fn run(
     {
         let mut config = state.config.write().await;
         config.setup_complete = true;
-        // The default tools (`shell`, `search`, `web_fetch`,
-        // `document`) are already populated via `default_enabled_tools`
-        // — leave them alone unless they're explicitly empty.
+        // Populated via `default_enabled_tools` — leave them alone unless
+        // explicitly empty. This branch used to carry its own four-member
+        // literal that omitted `knowledge_lookup`, so completing setup with an
+        // empty list silently dropped a tool documented as default-on. Both
+        // sides derive from `ToolFamily::ALL` now (ARCH §10.6).
         if config.enabled_tools.is_empty() {
-            config.enabled_tools = vec![
-                "shell".into(),
-                "search".into(),
-                "web_fetch".into(),
-                "document".into(),
-            ];
+            config.enabled_tools = sovereign_contracts::tool_bundle::ToolFamily::ALL
+                .iter()
+                .map(|f| f.wire_id().to_string())
+                .collect();
         }
         config
             .save()

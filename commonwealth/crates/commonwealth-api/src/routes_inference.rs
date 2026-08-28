@@ -22,12 +22,62 @@ use crate::middleware::{
 use crate::openai_types::*;
 use crate::state::AppState;
 
+/// How this node names itself in `ModelObject::advertised_by`. A literal,
+/// not the mesh member name: the caller is talking TO this daemon, so
+/// "local" is the fact that distinguishes a slot here from a peer's, and it
+/// stays true when the operator renames the node.
+const LOCAL_HOLDER: &str = "local";
+
 /// POST /v1/chat/completions — OpenAI-compatible chat completions.
 pub async fn chat_completions(
     State(state): State<AppState>,
     headers: HeaderMap,
+    guest: Option<axum::Extension<crate::client_auth::Guest>>,
     Json(mut request): Json<ChatCompletionRequest>,
 ) -> Response {
+    // ── Guest scope refinement ────────────────────────────────────────
+    //
+    // `client_auth` already decided this caller may reach this ROUTE. What
+    // it cannot decide is which MODEL, because that is in the body. So the
+    // per-request half of `Scope::Models` lives here, next to the handler
+    // that serves it — a future scope refines against its own handler, not
+    // this one.
+    //
+    // This must REFUSE, never fall through. Below, an absent or unmatched
+    // `model` walks down to Priority 4 and gets `default_model_id()`, which
+    // for a guest would mean: asked for the model they were granted, got a
+    // different one, HTTP 200, no way to tell. That is §18.3's `d45489a3`
+    // verbatim — same model string, seconds apart, served by something else.
+    if let Some(axum::Extension(crate::client_auth::Guest(grant))) = guest.as_ref() {
+        let named = request.model.as_deref().map(str::trim).unwrap_or("");
+        if !grant.allows_model(named) {
+            let asked = if named.is_empty() {
+                "no model named".to_string()
+            } else {
+                format!("model '{named}'")
+            };
+            warn!(
+                asked = %named,
+                grants = %grant.summary(),
+                "chat_completions: refusing a guest request outside its grant"
+            );
+            return (
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({
+                    "error": {
+                        "message": format!(
+                            "this guest link does not cover {asked} — it grants: {}. \
+                             Name one of those in `model`.",
+                            grant.summary()
+                        ),
+                        "type": "guest_scope",
+                        "code": "model_not_granted",
+                    }
+                })),
+            )
+                .into_response();
+        }
+    }
     // ── Foreground-yield bump ─────────────────────────────────────────
     //
     // Fire-and-forget atomic store of the current unix-ts. The
@@ -667,23 +717,205 @@ pub async fn embeddings(
     (StatusCode::OK, Json(resp)).into_response()
 }
 
-/// GET /v1/models — list models the daemon can actually serve right now.
+/// GET /v1/models — the names this daemon can dispatch by name right now.
 ///
-/// Filters out entries whose owning peer is currently unreachable in the
-/// mesh: the `inference_store` accumulates every model any peer has
-/// gossiped, but if the advertising peer is offline a chat-completions
-/// request targeting that model would 503 with no fallback. The contract
-/// for `/v1/models` is "what the daemon can route this instant," so we
-/// drop the unreachable ones rather than make callers do liveness
-/// guessing themselves.
+/// **The contract is dispatchability**, and it is testable: every id
+/// returned here resolves through the same name resolution
+/// `/v1/chat/completions` runs (`MeshInferenceProvider::locate_named_model`).
+/// `models_endpoint_lists_only_dispatchable_names` is the gate.
 ///
-/// A model is kept when either:
-///   - its store entry was last written by an online peer (or by us), or
-///   - the local daemon currently has the model loaded
-///     (covers the case where the latest gossip overwrote our entry's
-///     origin with a now-offline peer's NodeId, even though we still
-///     hold the weights).
-pub async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
+/// ## Why this reads manifests and not the store
+///
+/// Until 2026-08-27 this scanned `inference_store` — the gossiped KV — and
+/// kept an entry when *the node that last wrote it* was online. That tests
+/// the wrong proposition. An online peer that never loaded (or has since
+/// unloaded) a model still vouches for its store entry, so the endpoint
+/// advertised ids that a chat completion refused with:
+///
+/// > no node in this mesh advertises model 'X' — check `/v1/models` for
+/// > available names
+///
+/// The refusal pointed at the list that was wrong. Measured on a live
+/// 2-node mesh: 12 entries returned, 6 in the manifest, one name listed
+/// twice, two ids provably undispatchable. The cause was two registries
+/// behind one question — the KV store here, live `ProviderManifest`s in the
+/// resolver — with nothing reconciling them (ARCH §10.6, and §18.3: the
+/// store path *defaulted* absent availability to present).
+///
+/// So the list is now built from the resolver's own inputs: this node's
+/// manifest plus [`LocalInferenceService::peer_manifests`], which contracts
+/// to return the same peers, under the same quarantine and cache rules,
+/// that `locate_named_model` consults.
+///
+/// The store path survives as [`store_rows`] for the orchestrator daemon,
+/// which has no embedded engine and therefore no manifest to read. It is a
+/// strictly narrower claim than it used to make — see its own docs.
+pub async fn list_models(
+    State(state): State<AppState>,
+    guest: Option<axum::Extension<crate::client_auth::Guest>>,
+) -> impl IntoResponse {
+    let mut data = match manifest_rows(&state).await {
+        Some(rows) => rows,
+        None => store_rows(&state).await,
+    };
+    // A guest sees only what their grant covers. This is the SAME contract the
+    // rest of this handler keeps — every id returned is dispatchable — held for
+    // one caller instead of for the node. Listing a name a guest would be
+    // refused reintroduces exactly the defect this endpoint was rewritten to
+    // remove, in a new place: the list would advertise, and the request would
+    // refuse, and the refusal would point back at the list.
+    if let Some(axum::Extension(crate::client_auth::Guest(grant))) = guest.as_ref() {
+        data.retain(|m| grant.allows_model(&m.id));
+    }
+    // Stable order, and the dedup key is the id a caller would actually
+    // send. Deterministic output matters for the Ollama `/api/tags` shim
+    // and for anyone diffing the list across polls.
+    data.sort_by(|a, b| a.id.cmp(&b.id));
+    Json(ModelListResponse {
+        object: "list".into(),
+        data,
+    })
+}
+
+/// Build the list from the manifests name resolution reads. `None` when
+/// this node has no local inference service (the orchestrator daemon), so
+/// the caller falls back to the store.
+///
+/// One row per distinct id, holders unioned. Two nodes advertising the same
+/// model are ONE dispatchable name — the old store path emitted two rows
+/// (observed: `Qwen3.8-27B-UD-Q6_K_XL` twice) because its key was
+/// `hash(role, absolute path)`, which differs per machine for the same
+/// weights. Grouping on the id a caller sends fixes that without touching
+/// the `ModelId` scheme.
+/// Every model id this node can dispatch by name right now, as
+/// `/v1/models` would report it to an ungated caller.
+///
+/// Exists so the guest-grant mint route can refuse an unknown `--model`
+/// against the SAME set the request path will resolve against. Re-deriving
+/// that set at the mint site would be a second answer to "what can this node
+/// serve" (§10.6) — and the failure would be quiet: a grant minted for a name
+/// nothing advertises produces a link that looks fine and 403s on first use.
+pub(crate) async fn dispatchable_ids(state: &AppState) -> Vec<String> {
+    match manifest_rows(state).await {
+        Some(rows) => rows,
+        None => store_rows(state).await,
+    }
+    .into_iter()
+    .map(|m| m.id)
+    .collect()
+}
+
+/// `None` means "this node has no manifest surface at all", which is the
+/// only condition that licenses the store fallback. An EMPTY manifest is
+/// `Some(vec![])`, not `None`: a node advertising nothing can dispatch
+/// nothing, and answering that with a list of store entries is precisely
+/// the substitution this change removes (ARCH §18.3 — report the absence).
+async fn manifest_rows(state: &AppState) -> Option<Vec<ModelObject>> {
+    let service = state.inner.local_inference.as_ref()?;
+    let local = service.provider_manifest()?;
+
+    // (holder display name, model). Local first so it wins the
+    // first-writer fields (claims, alias target) on a tie.
+    let mut holders: Vec<(String, commonwealth_inference::oicp::ProviderModel)> = local
+        .models
+        .into_iter()
+        .map(|m| (LOCAL_HOLDER.to_string(), m))
+        .collect();
+    // Peers in name order, so `advertised_by` reads the same across polls.
+    // `peer_inference_endpoints` orders by whatever the roster yields, which
+    // is not stable across gossip rounds, and a listing that reshuffles
+    // itself is one nobody can diff.
+    let mut peers = service.peer_manifests().await;
+    peers.sort_by(|a, b| a.0.cmp(&b.0));
+    for (peer_name, manifest) in peers {
+        for model in manifest.models {
+            holders.push((peer_name.clone(), model));
+        }
+    }
+
+    let slot_aliases = state.inner.slot_aliases.load();
+    let mut rows: Vec<ModelObject> = Vec::new();
+    let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+
+    for (holder, model) in holders {
+        let resident = model.status.loaded;
+        if let Some(&row) = index.get(&model.id) {
+            let existing: &mut ModelObject = &mut rows[row];
+            if !existing.advertised_by.contains(&holder) {
+                existing.advertised_by.push(holder);
+            }
+            // ANY holder with the weights in memory makes the name warm:
+            // the resolver load-balances across holders and will pick one.
+            // A cold row upgrading to Resident is the honest direction; the
+            // reverse would let one cold peer mask a warm local slot.
+            if resident {
+                existing.residency = Some(Residency::Resident);
+                if let Some(perf) = existing.performance.as_mut() {
+                    perf.loaded = true;
+                }
+            }
+            continue;
+        }
+
+        let residency = if resident {
+            Residency::Resident
+        } else {
+            Residency::Cold
+        };
+        index.insert(model.id.clone(), rows.len());
+        rows.push(ModelObject {
+            // An alias (`primary`, `commonwealth/fast`) is a first-class
+            // dispatchable name, not a synthetic decoration: it appears here
+            // because a manifest advertised it, so it is resolvable by
+            // definition. The pre-2026-08-27 handler appended aliases from
+            // `slot_aliases` unconditionally, which is how `embed` came to be
+            // listed on a node whose manifest never advertised it.
+            //
+            // The target named here is THIS node's binding. That is the right
+            // one to show even on a row a peer also advertises: an alias is
+            // dereferenced by whichever node ends up serving, so "what does
+            // `primary` resolve to" is node-relative by design, and this is
+            // the answer that applies if the request stays here.
+            owned_by: match slot_aliases.get(&model.id) {
+                Some(target) => format!("alias→{target}"),
+                None => "mesh".into(),
+            },
+            id: model.id,
+            object: "model".into(),
+            created: 0,
+            // The manifest's capability CLAIMS, which is what the scheduler
+            // actually scores. The store path published a `CapabilityProfile`
+            // here instead — a different shape for the same field, and the
+            // one further from the routing decision.
+            capabilities: serde_json::to_value(&model.claims).ok(),
+            performance: Some(ModelPerformance {
+                // The manifest carries per-claim throughput, not a per-model
+                // estimate; the orchestrator's shard plan was the only source
+                // of these and it does not exist on the embedded path. Zeroed
+                // rather than omitted so `loaded` stays readable — absence
+                // here is what made availability invisible before.
+                estimated_tokens_per_sec: 0.0,
+                estimated_ttft_ms: 0,
+                loaded: resident,
+            }),
+            residency: Some(residency),
+            advertised_by: vec![holder],
+        });
+    }
+
+    Some(rows)
+}
+
+/// The pre-2026-08-27 store scan, kept for the orchestrator daemon — the
+/// topology with no embedded engine, where llama-servers are spawned per
+/// model and `inference_store` IS the local record of what was scheduled.
+///
+/// **This path cannot promise dispatchability**, only that the entry's last
+/// writer is reachable. It is retained because on the orchestrator there is
+/// no manifest to consult and a narrower list would be empty; it is not the
+/// path any mesh node with local inference takes. Deduped by name like the
+/// manifest path, so the duplicate-row bug is fixed on both.
+async fn store_rows(state: &AppState) -> Vec<ModelObject> {
     let local_id = state.self_node_id();
     let live_nodes: HashSet<NodeId> = {
         let mesh = state.inner.mesh.read().await;
@@ -758,15 +990,43 @@ pub async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
                     }),
                     None => None,
                 },
+                residency: Some(if loaded {
+                    Residency::Resident
+                } else {
+                    Residency::Cold
+                }),
+                // The store cannot answer this. Its key is the model, not
+                // (node, model), and `ModelInfo::available_on` — the field
+                // built to hold it — is unpopulated at every construction
+                // site and unpopulat*able* (`NodeId` serialises as a byte
+                // array, so a `HashMap<NodeId, _>` fails to round-trip and
+                // entries vanish from this very endpoint). Reporting the
+                // absence rather than inventing a holder (ARCH §18.3).
+                advertised_by: Vec::new(),
             }
         })
         .collect();
 
-    // Append synthetic entries for each registered slot alias so
-    // discovery surfaces (opencode's model picker, /v1/models curl)
-    // see the slot names alongside the GGUF stems. These are
-    // dereferenced server-side at request time — no client config
-    // churn when an operator swaps GGUFs in `[models]`.
+    // One row per NAME. The store keys on `hash(role, absolute path)`, so
+    // the same GGUF on two machines is two entries with one name, and a
+    // re-registration under a second role duplicates it on one machine.
+    // Both showed up live as a doubled `Qwen3.8-27B-UD-Q6_K_XL`. Callers
+    // dispatch by name, so the name is the identity here (ARCH §7.5).
+    let mut seen: HashSet<String> = HashSet::new();
+    data.retain(|m| seen.insert(m.id.clone()));
+
+    // Append an entry for each registered slot alias so discovery surfaces
+    // (opencode's model picker, `/v1/models` curl) see the slot names
+    // alongside the GGUF stems. Both the bare and `commonwealth/`-namespaced
+    // forms are listed: opencode treats them as separate ids and we want
+    // either spelling to be findable. Dereferenced server-side at request
+    // time — no client config churn when an operator swaps GGUFs.
+    //
+    // Only the ORCHESTRATOR needs this. On the embedded path the aliases
+    // are advertised by the manifest itself, which is what makes them
+    // dispatchable; synthesising them from `slot_aliases` there is how the
+    // `embed` alias came to be listed on a node whose manifest never
+    // carried it, permanently un-dispatchable.
     let slot_aliases = state.inner.slot_aliases.load();
     let mut alias_entries: Vec<(String, String)> = slot_aliases
         .iter()
@@ -774,25 +1034,28 @@ pub async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
         .collect();
     alias_entries.sort();
     for (alias, target) in alias_entries {
-        // Skip namespaced duplicates when the bare form already
-        // appears — opencode treats them as separate ids and we want
-        // both visible (operator typing `commonwealth/primary` finds
-        // the namespaced entry; bare CLI users find `primary`).
-        let owned_by = format!("alias→{target}");
+        if !seen.insert(alias.clone()) {
+            continue;
+        }
+        // An alias is exactly as warm as the slot behind it — resolve
+        // through the target rather than reporting the alias as unknown.
+        let residency = data
+            .iter()
+            .find(|m| m.id == target)
+            .and_then(|m| m.residency);
         data.push(ModelObject {
             id: alias,
             object: "model".into(),
             created: 0,
-            owned_by,
+            owned_by: format!("alias→{target}"),
             capabilities: None,
             performance: None,
+            residency,
+            advertised_by: Vec::new(),
         });
     }
 
-    Json(ModelListResponse {
-        object: "list".into(),
-        data,
-    })
+    data
 }
 
 // ── Local-inference serving helpers ────────────────────────────
@@ -1514,5 +1777,485 @@ mod shed_rendering_tests {
         )
         .await;
         assert_reads_as_backpressure(resp, "streaming").await;
+    }
+}
+
+#[cfg(test)]
+mod list_models_tests {
+    //! `/v1/models` promises DISPATCHABILITY. These pin that promise to the
+    //! one thing that can keep it: the list is a function of the manifests
+    //! name resolution reads, and of nothing else.
+    //!
+    //! The failure they encode was measured on a live 2-node mesh
+    //! (2026-08-27), not imagined. `/v1/models` returned 12 entries against
+    //! 6 in the capability manifest, listed `Qwen3.8-27B-UD-Q6_K_XL` twice,
+    //! and advertised `Qwen3-Embedding-0.6B-Q8_0`, which chat completions
+    //! refused with "no node in this mesh advertises model
+    //! 'Qwen3-Embedding-0.6B-Q8_0' — check `/v1/models` for available
+    //! names". The refusal named the list that was wrong.
+    //!
+    //! ## Which of these actually has teeth
+    //!
+    //! Measured, by forcing `manifest_rows` to return `None` and watching:
+    //! FOUR go red — `a_store_entry_no_manifest_carries_is_not_listed`,
+    //! `one_name_held_by_two_nodes_is_one_row_naming_both`,
+    //! `a_name_is_resident_when_any_holder_has_it_resident`,
+    //! `a_held_but_unloaded_model_lists_as_cold_not_missing`.
+    //!
+    //! `every_listed_id_is_advertised_by_some_manifest` does NOT, and it
+    //! reads like the headline gate, so say so plainly: it passes
+    //! vacuously whenever the list is empty, which is what the store path
+    //! produces in this fixture. It states the contract; it does not
+    //! defend it. **The load-bearing one is
+    //! `a_store_entry_no_manifest_carries_is_not_listed`** — it fails
+    //! exactly when a non-manifest source gets back into the listing,
+    //! which is the whole regression class. Reach for that one first if
+    //! you are changing this handler.
+
+    use super::*;
+    use crate::state::{test_app_state, LocalInferenceError, LocalInferenceService};
+    use commonwealth_inference::oicp::{ModelStatus, ProviderManifest, ProviderModel};
+    use futures::Stream;
+    use std::pin::Pin;
+    use std::sync::Arc;
+
+    fn model(id: &str, loaded: bool) -> ProviderModel {
+        ProviderModel {
+            id: id.into(),
+            base_model: None,
+            quantization: None,
+            context_tokens: 32_768,
+            status: ModelStatus {
+                available: true,
+                loaded,
+                estimated_tokens_per_sec: None,
+                estimated_ttft_ms: None,
+                estimated_load_time_sec: None,
+            },
+            size_gb: None,
+            claims: vec![],
+            fingerprint: None,
+        }
+    }
+
+    /// A node whose manifest carries `local`, and whose one reachable peer
+    /// carries `shared` (which it also holds, cold) plus `peer-only`.
+    struct TwoNodeMesh;
+
+    #[async_trait::async_trait]
+    impl LocalInferenceService for TwoNodeMesh {
+        /// Echoes back the model it was asked to serve.
+        ///
+        /// It used to `unimplemented!()` — listing does not generate. The
+        /// guest tests need the ADMITTED arm of the scope gate to be
+        /// observable, and "the request reached dispatch" is only observable
+        /// if dispatch answers. Echoing the model id also makes a silent
+        /// substitution visible: if the gate ever let a request through and
+        /// something downstream swapped the name, this response says so.
+        async fn chat_completion(
+            &self,
+            r: ChatCompletionRequest,
+        ) -> Result<ChatCompletionResponse, LocalInferenceError> {
+            Ok(ChatCompletionResponse {
+                id: "test".into(),
+                object: "chat.completion".into(),
+                created: 0,
+                model: r.model.unwrap_or_default(),
+                choices: vec![],
+                usage: None,
+            })
+        }
+        async fn chat_completion_stream(
+            &self,
+            _r: ChatCompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>, LocalInferenceError> {
+            unimplemented!("listing does not generate")
+        }
+        async fn embed(&self, _i: &str) -> Result<Vec<f32>, String> {
+            unimplemented!("listing does not embed")
+        }
+        fn provider_manifest(&self) -> Option<ProviderManifest> {
+            Some(ProviderManifest::new(vec![
+                model("local-fast", true),
+                // Held here, idle-unloaded. The lazy primary's steady state.
+                model("shared-primary", false),
+            ]))
+        }
+        async fn peer_manifests(&self) -> Vec<(String, ProviderManifest)> {
+            vec![(
+                "RuggedFox".into(),
+                ProviderManifest::new(vec![
+                    // Same name, other machine, and WARM there.
+                    model("shared-primary", true),
+                    model("peer-only", true),
+                ]),
+            )]
+        }
+    }
+
+    async fn rows(service: Arc<dyn LocalInferenceService>) -> Vec<ModelObject> {
+        let state = test_app_state().with_local_inference(service);
+        let resp = list_models(State(state), None).await.into_response();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .expect("body reads");
+        serde_json::from_slice::<ModelListResponse>(&body)
+            .expect("body is a model list")
+            .data
+    }
+
+    /// THE gate. Every id returned must come from a manifest, because a
+    /// manifest is what `locate_named_model` resolves against — so an id
+    /// here is an id that dispatches. An entry sourced from anywhere else
+    /// (the gossiped KV store, a synthesised alias) is the regression.
+    #[tokio::test]
+    async fn every_listed_id_is_advertised_by_some_manifest() {
+        let advertised: HashSet<String> = ["local-fast", "shared-primary", "peer-only"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        for row in rows(Arc::new(TwoNodeMesh)).await {
+            assert!(
+                advertised.contains(&row.id),
+                "'{}' is listed but no manifest advertises it — a chat \
+                 completion naming it would be refused with 'no node in this \
+                 mesh advertises model', pointing the operator back at this list",
+                row.id
+            );
+        }
+    }
+
+    /// The KV store is no longer an input. Registering a model there — the
+    /// only thing the pre-fix handler read — must not put it on the list.
+    #[tokio::test]
+    async fn a_store_entry_no_manifest_carries_is_not_listed() {
+        let state = test_app_state().with_local_inference(Arc::new(TwoNodeMesh));
+        state.register_model(commonwealth_inference::ModelInfo {
+            id: commonwealth_core::ModelId::from_u128(7),
+            name: "ghost-from-gossip".into(),
+            repo: String::new(),
+            file: "ghost.gguf".into(),
+            size_bytes: 1,
+            total_layers: 0,
+            architecture: commonwealth_inference::model::ModelArchitecture::Other,
+            available_on: std::collections::HashMap::new(),
+            oicp_capabilities: Default::default(),
+            quantization: String::new(),
+            min_memory_gb: 0,
+            preferred_memory_gb: 0,
+            supports_parallel_instances: false,
+            supports_pipeline_shard: false,
+        });
+
+        let resp = list_models(State(state), None).await.into_response();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let list: ModelListResponse = serde_json::from_slice(&body).unwrap();
+        assert!(
+            !list.data.iter().any(|m| m.id == "ghost-from-gossip"),
+            "a gossiped store entry is not evidence that anything can serve it"
+        );
+    }
+
+    /// One name, one row, both holders. The store keyed on
+    /// `hash(role, absolute path)`, so the same weights on two machines were
+    /// two entries with one name — which is what put the 27B on the live
+    /// list twice.
+    #[tokio::test]
+    async fn one_name_held_by_two_nodes_is_one_row_naming_both() {
+        let rows = rows(Arc::new(TwoNodeMesh)).await;
+        let shared: Vec<&ModelObject> = rows.iter().filter(|m| m.id == "shared-primary").collect();
+        assert_eq!(shared.len(), 1, "one dispatchable name is one row");
+        assert_eq!(
+            shared[0].advertised_by,
+            vec!["local".to_string(), "RuggedFox".to_string()],
+            "both holders are named — `owned_by: \"mesh\"` could not say this"
+        );
+    }
+
+    /// Cold here, warm on the peer: the name is warm, because the resolver
+    /// load-balances across holders and will pick the peer. The reverse
+    /// reading would let one idle-unloaded node mask a warm mesh.
+    #[tokio::test]
+    async fn a_name_is_resident_when_any_holder_has_it_resident() {
+        let rows = rows(Arc::new(TwoNodeMesh)).await;
+        let by_id = |id: &str| -> ModelObject {
+            rows.iter().find(|m| m.id == id).cloned().expect("listed")
+        };
+        assert_eq!(by_id("shared-primary").residency, Some(Residency::Resident));
+        assert_eq!(by_id("local-fast").residency, Some(Residency::Resident));
+        assert_eq!(
+            by_id("shared-primary")
+                .performance
+                .expect("performance block is always present on this path")
+                .loaded,
+            true,
+            "the legacy flag agrees with the new field rather than contradicting it"
+        );
+    }
+
+    /// A node with weights nobody has loaded is still dispatchable — the
+    /// first request pays a cold load. That is normal operation for a lazy
+    /// primary and must not read as unavailable.
+    #[tokio::test]
+    async fn a_held_but_unloaded_model_lists_as_cold_not_missing() {
+        struct ColdOnly;
+        #[async_trait::async_trait]
+        impl LocalInferenceService for ColdOnly {
+            async fn chat_completion(
+                &self,
+                _r: ChatCompletionRequest,
+            ) -> Result<ChatCompletionResponse, LocalInferenceError> {
+                unimplemented!()
+            }
+            async fn chat_completion_stream(
+                &self,
+                _r: ChatCompletionRequest,
+            ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>, LocalInferenceError>
+            {
+                unimplemented!()
+            }
+            async fn embed(&self, _i: &str) -> Result<Vec<f32>, String> {
+                unimplemented!()
+            }
+            fn provider_manifest(&self) -> Option<ProviderManifest> {
+                Some(ProviderManifest::new(vec![model("big-primary", false)]))
+            }
+        }
+        let rows = rows(Arc::new(ColdOnly)).await;
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, "big-primary");
+        assert_eq!(rows[0].residency, Some(Residency::Cold));
+    }
+
+    /// A provider with no manifest (the orchestrator daemon) falls back to
+    /// the store rather than returning nothing. The fallback is narrower
+    /// than the manifest path and says so in its docs; what it must not do
+    /// is disappear.
+    #[tokio::test]
+    async fn no_local_inference_falls_back_to_the_store() {
+        let state = test_app_state();
+        state.register_model(commonwealth_inference::ModelInfo {
+            id: commonwealth_core::ModelId::from_u128(9),
+            name: "orchestrated".into(),
+            repo: String::new(),
+            file: "o.gguf".into(),
+            size_bytes: 1,
+            total_layers: 0,
+            architecture: commonwealth_inference::model::ModelArchitecture::Other,
+            available_on: std::collections::HashMap::new(),
+            oicp_capabilities: Default::default(),
+            quantization: String::new(),
+            min_memory_gb: 0,
+            preferred_memory_gb: 0,
+            supports_parallel_instances: false,
+            supports_pipeline_shard: false,
+        });
+        let resp = list_models(State(state), None).await.into_response();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let list: ModelListResponse = serde_json::from_slice(&body).unwrap();
+        assert!(list.data.iter().any(|m| m.id == "orchestrated"));
+    }
+
+    // ── guest scope refinement ───────────────────────────────────────────
+    //
+    // `client_auth` decided this caller may reach the ROUTE. These pin the
+    // half it cannot decide, because it lives in the body: WHICH MODEL.
+    //
+    // Both were watched fail — see `guest_falsification` in
+    // `tests/client_auth.rs` for the probe and what went red.
+
+    use commonwealth_knowledge::{GuestGrant, Scope};
+
+    /// A live grant over `models`, as `client_auth` would have inserted it.
+    fn guest_for(models: &[&str]) -> Option<axum::Extension<crate::client_auth::Guest>> {
+        Some(axum::Extension(crate::client_auth::Guest(Arc::new(
+            GuestGrant {
+                token: "t".into(),
+                scopes: vec![Scope::Models(
+                    models.iter().map(|m| m.to_string()).collect(),
+                )],
+                label: None,
+                issued_at_ms: 0,
+                expires_at_ms: u64::MAX,
+                revoked: false,
+            },
+        ))))
+    }
+
+    async fn chat_as_guest(
+        model: Option<&str>,
+        granted: &[&str],
+    ) -> (StatusCode, serde_json::Value) {
+        let state = test_app_state().with_local_inference(Arc::new(TwoNodeMesh));
+        let request: ChatCompletionRequest = serde_json::from_value(serde_json::json!({
+            "model": model,
+            "messages": [{"role": "user", "content": "hello"}],
+        }))
+        .expect("request shape");
+        let resp = chat_completions(
+            State(state),
+            HeaderMap::new(),
+            guest_for(granted),
+            Json(request),
+        )
+        .await;
+        let status = resp.status();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+        )
+    }
+
+    /// **THE §18.3 gate**, and the reason this refinement is in the handler
+    /// rather than the auth layer. Without the refusal, an out-of-scope
+    /// `model` walks down to Priority 4 and is served by `default_model_id()`:
+    /// asked for one model, got another, HTTP 200, no way to tell. That is
+    /// `d45489a3` verbatim — so the assertion is on the BODY, not the status.
+    #[tokio::test]
+    async fn a_guest_naming_an_ungranted_model_is_refused_not_served_the_default() {
+        let (status, body) = chat_as_guest(Some("peer-only"), &["shared-primary"]).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(body["error"]["type"], "guest_scope");
+        assert_eq!(body["error"]["code"], "model_not_granted");
+        let message = body["error"]["message"].as_str().unwrap_or_default();
+        assert!(
+            message.contains("peer-only") && message.contains("shared-primary"),
+            "the refusal names what was asked AND what is granted: {message}"
+        );
+    }
+
+    /// The subtler half. An absent `model` is exactly what reaches the default
+    /// today — so "no model named" must refuse too, or the gate is bypassed by
+    /// omitting a field rather than by naming the wrong one.
+    #[tokio::test]
+    async fn a_guest_naming_no_model_at_all_is_refused_rather_than_defaulted() {
+        let (status, body) = chat_as_guest(None, &["shared-primary"]).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(body["error"]["code"], "model_not_granted");
+        assert!(body["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("no model named"));
+    }
+
+    /// Whitespace is not a widening. `" shared-primary "` trims to the granted
+    /// name; `"shared-primary-v2"` does not become it.
+    #[tokio::test]
+    async fn the_model_match_is_exact_after_trimming() {
+        let (padded, _) = chat_as_guest(Some("  shared-primary  "), &["shared-primary"]).await;
+        assert_ne!(
+            padded,
+            StatusCode::FORBIDDEN,
+            "a trimmed exact name is inside the grant"
+        );
+        let (prefixed, _) = chat_as_guest(Some("shared-primary-v2"), &["shared-primary"]).await;
+        assert_eq!(
+            prefixed,
+            StatusCode::FORBIDDEN,
+            "a longer name that merely starts with a granted one is NOT granted"
+        );
+    }
+
+    /// The ADMITTED arm, and the reason the refusal tests are not vacuous: a
+    /// granted model reaches dispatch, and comes back as ITSELF. Without this
+    /// the whole gate could be "refuse every guest" and every other test here
+    /// would still pass.
+    #[tokio::test]
+    async fn a_guest_naming_a_granted_model_is_served_that_model() {
+        let (status, body) = chat_as_guest(Some("shared-primary"), &["shared-primary"]).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            body["model"], "shared-primary",
+            "served the model that was asked for, not a default"
+        );
+    }
+
+    /// The listing keeps the same contract for one caller that it keeps for
+    /// the node: every id returned is dispatchable BY THEM. A guest shown a
+    /// name they would be refused reintroduces the `/v1/models` defect in a
+    /// new place — the list would advertise and the request would refuse, and
+    /// the refusal would point back at the list.
+    #[tokio::test]
+    async fn a_guest_sees_only_the_models_its_grant_names() {
+        let state = test_app_state().with_local_inference(Arc::new(TwoNodeMesh));
+        let ungated = list_models(State(state.clone()), None)
+            .await
+            .into_response();
+        let ungated: ModelListResponse = serde_json::from_slice(
+            &axum::body::to_bytes(ungated.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        // The fixture advertises more than one name, or the filter below would
+        // pass vacuously.
+        assert!(
+            ungated.data.len() > 1,
+            "fixture must list several models for the filter to mean anything"
+        );
+
+        let gated = list_models(State(state), guest_for(&["shared-primary"]))
+            .await
+            .into_response();
+        let gated: ModelListResponse = serde_json::from_slice(
+            &axum::body::to_bytes(gated.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        let ids: Vec<&str> = gated.data.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, vec!["shared-primary"]);
+    }
+
+    /// A grant naming a model this node cannot serve lists NOTHING — it does
+    /// not conjure a row from the grant. The mint route is what stops such a
+    /// grant existing; this pins that the listing never papers over one.
+    #[tokio::test]
+    async fn a_grant_naming_an_unserved_model_lists_nothing() {
+        let state = test_app_state().with_local_inference(Arc::new(TwoNodeMesh));
+        let resp = list_models(State(state), guest_for(&["not-on-this-node"]))
+            .await
+            .into_response();
+        let list: ModelListResponse = serde_json::from_slice(
+            &axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(list.data.is_empty());
+    }
+
+    /// `dispatchable_ids` is what the mint route gates `--model` against. It
+    /// must be the SAME set `/v1/models` reports to an ungated caller — a
+    /// second answer here is how a grant gets minted for a name the request
+    /// path will refuse (§10.6).
+    #[tokio::test]
+    async fn dispatchable_ids_matches_what_an_ungated_listing_reports() {
+        let state = test_app_state().with_local_inference(Arc::new(TwoNodeMesh));
+        let resp = list_models(State(state.clone()), None)
+            .await
+            .into_response();
+        let listed: ModelListResponse = serde_json::from_slice(
+            &axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        let mut from_listing: Vec<String> = listed.data.iter().map(|m| m.id.clone()).collect();
+        let mut from_mint_gate = dispatchable_ids(&state).await;
+        from_listing.sort();
+        from_mint_gate.sort();
+        assert_eq!(from_mint_gate, from_listing);
+        assert!(
+            !from_mint_gate.is_empty(),
+            "fixture must advertise something"
+        );
     }
 }

@@ -19,10 +19,10 @@ mod audit;
 pub(crate) use audit::cmd_audit;
 mod phase;
 pub(crate) use phase::{cmd_phase, cmd_phase_pass};
-mod charter_amend;
+// `pub(crate)` for `hash_charter`, which `amend.rs` and `audit` also stamp
+// with. It came here when `found.rs` was deleted (2026-08-26).
+pub(crate) mod charter_amend;
 pub(crate) use charter_amend::{cmd_amend, cmd_charter};
-mod registry_watch;
-pub(crate) use registry_watch::{cmd_list, cmd_register, cmd_unregister, cmd_watch, daemon_get};
 mod hooks;
 use hooks::cmd_install_hooks;
 mod serve;
@@ -107,10 +107,6 @@ pub async fn run_project(args: &[String]) -> i32 {
             cmd_serve(&args[1..]).await
         }
         "install-hooks" => cmd_install_hooks(&args[1..]).await,
-        "register" => cmd_register(&args[1..]).await,
-        "unregister" => cmd_unregister(&args[1..]).await,
-        "list" => cmd_list(&args[1..]).await,
-        "watch" => cmd_watch(&args[1..]).await,
         other => {
             eprintln!("Unknown project subcommand: {other}");
             sovereign_cli_shared::help::print(&HELP);
@@ -514,6 +510,34 @@ fn derive_corpus_id(root: &Path) -> String {
         .and_then(|n| n.to_str())
         .unwrap_or("project")
         .to_string()
+}
+
+/// GET a daemon endpoint and parse the JSON body. Sibling of
+/// [`daemon_post`]. Moved here 2026-08-21 when `registry_watch.rs` was
+/// deleted: the `register` / `unregister` / `list` / `watch` verbs it
+/// held had been unreachable since the shipped dispatcher started
+/// serving them in-process (`sovereign-cli/src/project_registry.rs`),
+/// and this was the one live function left in that file.
+pub(crate) async fn daemon_get(path: &str) -> Result<serde_json::Value, String> {
+    let url = format!("{}{path}", daemon_base());
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build http client: {e}"))?;
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("GET {path}: {e}"))?;
+    let status = resp.status();
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .unwrap_or(serde_json::json!({"error": "non-JSON response"}));
+    if !status.is_success() {
+        return Err(format!("{status}: {body}"));
+    }
+    Ok(body)
 }
 
 async fn daemon_post(path: &str, body: serde_json::Value) -> Result<serde_json::Value, String> {

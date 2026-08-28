@@ -18,18 +18,22 @@
     meshGetState,
     meshIsRunning,
     meshLeave,
+    meshList,
     meshListPeerPreferences,
     meshRelayCandidates,
     meshRotateInvite,
     meshSetPeerPreference,
+    meshSwitch,
     saveConfig,
     suggestNodeName,
   } from "../api";
   import { joinLinkStore } from "../stores/joinLink.svelte";
   import { meshMembership } from "../stores/meshMembership.svelte";
   import MeshDiagnosticsPanel from "./MeshDiagnosticsPanel.svelte";
+  import MeshList from "./MeshList.svelte";
   import type {
     CreateMeshResponse,
+    KnownMesh,
     DesktopConfig,
     MeshStateResponse,
     NodeContributionsDto,
@@ -117,12 +121,64 @@
   // through that window instead of hard-erroring on the expected outage.
   let reconnecting = $state(false);
 
+  // Every mesh this node has joined — active and parked. Drives MeshList.
+  let knownMeshes = $state<KnownMesh[]>([]);
+  // mesh_id currently being switched to, or null. Disables the whole list
+  // so a double-click can't queue two switches through one daemon bounce.
+  let switching = $state<string | null>(null);
+
   // A solo mesh (just this node) is the node's default posture. "Leaving"
   // it only bounces the daemon into another identical solo mesh —
   // pointless AND jarring — so for solo we hide Leave and promote joining
   // another mesh instead (which uses join_mesh's in-process auto-leave, so
   // it doesn't bounce the daemon at all).
-  const isSolo = $derived(!!meshState && meshState.status.members_total <= 1);
+  //
+  // `knownMeshes.length <= 1` is load-bearing since multi-mesh membership:
+  // a node whose ACTIVE mesh is solo but which has parked meshes is not in
+  // the "it's just you here so far" situation — it wants the switcher, not
+  // the onboarding pitch. Without this clause the promotion misfires every
+  // time someone parks a populated mesh and lands on a solo one.
+  const isSolo = $derived(
+    !!meshState &&
+      meshState.status.members_total <= 1 &&
+      knownMeshes.length <= 1,
+  );
+
+  async function refreshKnownMeshes() {
+    try {
+      knownMeshes = (await meshList()) ?? [];
+    } catch (e) {
+      // Non-fatal: the switcher just doesn't render. An older daemon in
+      // attach mode has no `meshes` array at all.
+      console.error("Failed to list meshes:", e);
+    }
+  }
+
+  /** Park the active mesh and bring `m` up.
+   *
+   *  Switching drops and rebinds :9741 exactly as Leave does, so this reuses
+   *  the same reconnecting banner and `waitForDaemonAndRefresh` probe rather
+   *  than inventing a second bounce-handling path. */
+  async function doSwitch(m: KnownMesh) {
+    if (switching) return;
+    switching = m.mesh_id;
+    error = null;
+    try {
+      await meshSwitch(m.mesh_id);
+      running = false;
+      meshState = null;
+      reconnecting = true;
+      const back = await waitForDaemonAndRefresh();
+      if (!back) {
+        error = `Switched to "${m.name}", but the daemon is taking longer than expected to come back. It should reconnect on its own shortly.`;
+      }
+    } catch (e) {
+      error = `Failed to switch mesh: ${e}`;
+    } finally {
+      switching = null;
+      reconnecting = false;
+    }
+  }
 
   // Rotate-invite confirmation. Rotating revokes the link the user
   // already shared, which is destructive enough to warrant an
@@ -301,6 +357,7 @@
       } catch (e) {
         console.error("Failed to refresh mesh state:", e);
       }
+      await refreshKnownMeshes();
       await refreshMeshHealth();
     }, 5000);
   });
@@ -314,6 +371,7 @@
     error = null;
     try {
       running = await meshIsRunning();
+      await refreshKnownMeshes();
       if (running) {
         meshState = await meshGetState();
         await refreshMeshHealth();
@@ -637,8 +695,8 @@
             {#if meshState.status.model_name}
               · Model: {meshState.status.model_name}
             {/if}
-            {#if meshState.status.founder_reachability}
-              {@const fr = meshState.status.founder_reachability}
+            {#if meshState.status.self_reachability}
+              {@const fr = meshState.status.self_reachability}
               · <span
                   class="reach"
                   class:reach-degraded={fr.degraded}
@@ -680,6 +738,16 @@
         </p>
         {@render joinBox("Join another mesh")}
       </div>
+    {:else}
+      <!-- The switcher. Renders the list only when there is more than one
+           mesh to choose between; below that it is just the paste box, which
+           is what the solo branch above already shows. -->
+      <MeshList
+        meshes={knownMeshes}
+        {switching}
+        onSwitch={doSwitch}
+        {joinBox}
+      />
     {/if}
 
     <!-- Invite card — present whenever the daemon has cached the
@@ -995,27 +1063,6 @@
          clutter the main view. The MeshJoinDialog auto-leaves the
          current mesh on confirm; the hint here makes that action
          explicit before the user even commits. -->
-    <details class="switch-mesh">
-      <summary>Join a different mesh</summary>
-      <p class="hint">
-        Pasting a link will leave
-        <strong>"{meshState.status.name}"</strong> first.
-      </p>
-      <div class="join-row">
-        <input
-          type="text"
-          class="join-input"
-          placeholder="sovereign://join/cwth-xxxx-xxxx-xxxx"
-          bind:value={joinLinkInput}
-          onkeydown={(e) => e.key === "Enter" && submitJoinLink()}
-        />
-        <button class="primary" onclick={submitJoinLink}>Preview</button>
-      </div>
-      {#if joinLinkError}
-        <div class="alert error small">{joinLinkError}</div>
-      {/if}
-    </details>
-
   {/if}
 
   <!-- ─── Leave confirmation modal ──────────────────────── -->
@@ -1497,24 +1544,6 @@
     font-size: 1.05rem;
     line-height: 1;
     margin-top: 0;
-  }
-
-  /* ── Switch-mesh details on the active-mesh view ── */
-  .switch-mesh {
-    margin-top: 4px;
-    padding: 12px 14px;
-    border: 1px dashed var(--border);
-    border-radius: var(--radius);
-  }
-  .switch-mesh > summary {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    cursor: pointer;
-    font-weight: 500;
-  }
-  .switch-mesh > .hint,
-  .switch-mesh > .join-row {
-    margin-top: 10px;
   }
 
   .form-card label {

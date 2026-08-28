@@ -45,11 +45,18 @@ use crate::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
 
 // ── Resolved candidate content ──────────────────────────────────────
 
-/// Discriminator carried alongside an atom's text so the classifier
+/// Which side of a tension pair an atom's text came from, so the classifier
 /// prompt knows whether each side is a Claim or a State.
+///
+/// NOT an atom kind — it is a two-valued prompt discriminator over the only
+/// two atom types a tension candidate can hold. Named `AtomKind` until
+/// 2026-08-20, colliding with `axis_catalog::AtomKind` (now `AxisAtomShape`)
+/// and reading as a subset of [`crate::enrichment::atlas::atoms::AtomType`].
+/// The serialised field names (`source_kind` / `target_kind`) and the
+/// snake_case wire values are unchanged.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum AtomKind {
+pub enum TensionSide {
     Claim,
     State,
 }
@@ -61,10 +68,10 @@ pub enum AtomKind {
 pub struct CandidateContent {
     pub candidate_id: String,
     pub source_atom: AtomId,
-    pub source_kind: AtomKind,
+    pub source_kind: TensionSide,
     pub source_text: String,
     pub target_atom: AtomId,
-    pub target_kind: AtomKind,
+    pub target_kind: TensionSide,
     pub target_text: String,
     /// Display name of the entity both atoms reference, when the
     /// candidate's `discovery == EntityOverlap`. `None` for
@@ -193,12 +200,12 @@ pub fn resolve_candidate_content(
 fn atom_text_and_evidence<'a>(
     id: &AtomId,
     index: &'a AtomIndex<'_>,
-) -> Option<(AtomKind, String, &'a [ChunkRef])> {
+) -> Option<(TensionSide, String, &'a [ChunkRef])> {
     if let Some(c) = index.claims.get(id) {
-        return Some((AtomKind::Claim, c.content.clone(), c.evidence.as_slice()));
+        return Some((TensionSide::Claim, c.content.clone(), c.evidence.as_slice()));
     }
     if let Some(s) = index.states.get(id) {
-        return Some((AtomKind::State, s.label.clone(), s.evidence.as_slice()));
+        return Some((TensionSide::State, s.label.clone(), s.evidence.as_slice()));
     }
     None
 }
@@ -393,8 +400,8 @@ mod tests {
             shared_entity: Some(entity.id.clone()),
         };
         let content = resolve_candidate_content(&cand, &index).expect("resolves");
-        assert_eq!(content.source_kind, AtomKind::Claim);
-        assert_eq!(content.target_kind, AtomKind::State);
+        assert_eq!(content.source_kind, TensionSide::Claim);
+        assert_eq!(content.target_kind, TensionSide::State);
         assert_eq!(content.shared_entity_name.as_deref(), Some("Macbeth"));
         assert_eq!(content.evidence.len(), 2, "evidence dedupes across atoms");
     }
@@ -501,10 +508,10 @@ mod tests {
         let content = CandidateContent {
             candidate_id: cand.id.clone(),
             source_atom: cand.source_atom.clone(),
-            source_kind: AtomKind::Claim,
+            source_kind: TensionSide::Claim,
             source_text: String::new(),
             target_atom: cand.target_atom.clone(),
-            target_kind: AtomKind::State,
+            target_kind: TensionSide::State,
             target_text: String::new(),
             shared_entity_name: None,
             shared_entity_id: None,

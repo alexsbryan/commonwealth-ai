@@ -38,7 +38,7 @@ use std::path::Path;
 use chrono::{Datelike, NaiveDateTime, Timelike};
 use serde::{Deserialize, Serialize};
 
-use super::{excerpt_prefix, Citation, ConvDoc, Excerpt, TopicStat};
+use super::{excerpt_prefix, CitedSpan, ConvDoc, Excerpt, TopicStat};
 
 // ─── Thresholds ──────────────────────────────────────────────────────
 
@@ -275,7 +275,7 @@ pub fn resolve_entity_citation(
     entity: &str,
     chunk_ids: &[u64],
     content: &HashMap<u64, String>,
-) -> Option<Citation> {
+) -> Option<CitedSpan> {
     let needle = normalize(entity);
     if needle.is_empty() {
         return None;
@@ -286,7 +286,7 @@ pub fn resolve_entity_citation(
         };
         // Fast path: the entity is already verbatim.
         if let Some(pos) = text.find(entity) {
-            return Some(Citation {
+            return Some(CitedSpan {
                 chunk_id: cid,
                 char_start: pos,
                 char_end: pos + entity.len(),
@@ -304,7 +304,7 @@ pub fn resolve_entity_citation(
         let last = offsets[hit + needle.len() - 1];
         let end = last + text[last..].chars().next().map(char::len_utf8).unwrap_or(1);
         let span = text.get(start..end)?;
-        return Some(Citation {
+        return Some(CitedSpan {
             chunk_id: cid,
             char_start: start,
             char_end: end,
@@ -440,7 +440,7 @@ pub struct ThemeIndex {
     /// measured against.
     pub prior: HashMap<String, usize>,
     /// Normalised theme key → a resolved verbatim citation.
-    pub citation: HashMap<String, Citation>,
+    pub citation: HashMap<String, CitedSpan>,
     /// Normalised theme key → an entity-type label, where one is known.
     pub label: HashMap<String, String>,
 }
@@ -449,7 +449,7 @@ pub struct ThemeIndex {
 struct ThemeAcc {
     display: String,
     label: Option<String>,
-    citation: Option<Citation>,
+    citation: Option<CitedSpan>,
     convs: HashSet<String>,
     mentions: Vec<ThemeMention>,
 }
@@ -523,7 +523,7 @@ impl ThemeIndex {
             // quality_rows already proved this span verbatim in its own
             // chunk, so the citation is the row itself.
             if entry.citation.is_none() && content.contains_key(&r.chunk_id) {
-                entry.citation = Some(Citation {
+                entry.citation = Some(CitedSpan {
                     chunk_id: r.chunk_id,
                     char_start: r.char_start,
                     char_end: r.char_end,

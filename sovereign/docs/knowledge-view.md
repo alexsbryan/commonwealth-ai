@@ -175,13 +175,17 @@ your actual question.
   JSON, openable in any editor.
 - **Reset one view** — delete its index directory; Sovereign
   re-ingests on the next session.
-- **Turn off entirely** — three places, depending on how you run
+- **Turn off entirely** — two places, depending on how you run
   Sovereign:
   - *Desktop app*: Settings → Knowledge → "Enable KnowledgeView"
     (requires a restart).
-  - *CLI*: pass `--no-knowledge-view`.
   - *Server*: set `[knowledge_view] enabled = false` in
     `sovereign-server.toml`.
+
+  There was a third, `sovereign --no-knowledge-view`, on the
+  interactive REPL. That REPL became `svrn chat` in the 2026-05-22
+  split and the flag stopped being read then; it was removed on
+  2026-08-23.
 
   When off, Sovereign starts every session from zero, as it did
   before this feature existed.

@@ -613,7 +613,7 @@ fn cmd_audit(
 
 fn render_notes_summary(m: &manifest::Manifest) -> String {
     let mut out = String::new();
-    let mut push_section = |label: &str, ns: &[manifest::NoteRow]| {
+    let mut push_section = |label: &str, ns: &[manifest::ManifestNote]| {
         out.push_str(&format!("{} ({}):\n", label, ns.len()));
         for n in ns {
             out.push_str(&format!("  - {}\n", n.content.lines().next().unwrap_or("")));

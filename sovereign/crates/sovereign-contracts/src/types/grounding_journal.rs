@@ -134,6 +134,20 @@ pub enum GateCallMechanism {
     /// The study-only batched support pre-pass
     /// (`judge::claims_support_batched`, `SOVEREIGN_GATE_BATCH_VERIFY`).
     BatchedSupport,
+    /// The deep-research audit's LOCATED-SPAN triage — ONE generation that
+    /// scores every candidate span of a single claim
+    /// (`judge::spans_supporting_claim_batched`,
+    /// `SOVEREIGN_DR_AUDIT_BATCH_LOCATE`).
+    ///
+    /// The TRANSPOSE of [`Self::BatchedSupport`]: that register asks N claims
+    /// against one window, this asks one claim against N passages. It is
+    /// TRIAGE ONLY and can never be the released verdict — every span it
+    /// admits is re-judged by the calibrated [`Self::PerClaimJudge`] register
+    /// against `SUPPORT_FLOOR` before it may bind as support. Its own name
+    /// exists so the census can price the triage separately from the
+    /// confirmations it saves; sharing `BatchedSupport` would have made the
+    /// two indistinguishable, which is the blindness this type ended.
+    LocatedSpanTriage,
     /// One surgical span edit (`surgical::edit_sentence`). N per repair
     /// pass, one prefill each.
     Surgery,
@@ -176,6 +190,7 @@ impl GateCallMechanism {
             GateCallMechanism::ChunkJudge => "chunk_judge",
             GateCallMechanism::SpecificsScan => "specifics_scan",
             GateCallMechanism::BatchedSupport => "batched_support",
+            GateCallMechanism::LocatedSpanTriage => "located_span_triage",
             GateCallMechanism::Surgery => "surgery",
             GateCallMechanism::Rewrite => "rewrite",
             GateCallMechanism::Retry => "retry",
@@ -581,6 +596,7 @@ mod tests {
             GateCallMechanism::ChunkJudge,
             GateCallMechanism::SpecificsScan,
             GateCallMechanism::BatchedSupport,
+            GateCallMechanism::LocatedSpanTriage,
             GateCallMechanism::Surgery,
             GateCallMechanism::Rewrite,
             GateCallMechanism::Retry,

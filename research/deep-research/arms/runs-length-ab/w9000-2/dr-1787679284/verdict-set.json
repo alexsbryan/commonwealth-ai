@@ -1,0 +1,3399 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787679284",
+  "charter_hash": "53db4ccef97f7b58",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Google's Agent-to-Agent (A2A) protocol emerged as a critical infrastructure layer for multi-agent systems, with its public release anchored to specific milestones in mid-2025.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "The protocol was officially announced on April 9, 2025, during Google Cloud Next [ev-24][ev-15].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "This launch coincided with an initial ecosystem of over 50 founding partners, including major enterprise players such as Salesforce, SAP, ServiceNow, UiPath, and LangChain [ev-21].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "By integrating familiar web technologies like HTTP/HTTPS, JSON-RPC 2.0, and Server-Sent Events rather than inventing a new transport layer, A2A aimed to lower the barrier for adoption across existing development stacks [ev-14].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c5",
+      "text": "The release date signifies more than just software availability; it marks a strategic pivot toward vendor-neutral governance that ensures long-term sustainability beyond Google's direct control.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "On June 23, 2025—just two months after its initial announcement—Google donated the protocol specification to the Linux Foundation, establishing the Agent2Agent Protocol Project under neutral oversight [ev-21][estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "This move elevated the project from a proprietary initiative to an open standard governed by industry leaders including AWS, Cisco, Microsoft, and Amazon Bedrock [ev-21].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c8",
+      "text": "The transition to Linux Foundation stewardship was driven by the need for robust community development and protection against fragmentation risks inherent in closed ecosystems [ev-14].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c9",
+      "text": "Adoption metrics following this governance shift demonstrate rapid market traction.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c10",
+      "text": "By mid-2026, search interest had surged dramatically; keyword volume for \"a2a protocol\" increased 52% quarter-over-quarter as of April 2026 data [ev-15].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c11",
+      "text": "Concurrently, organizational support expanded significantly, growing from the initial 50 partners to over 150 organizations within a year [ev-21].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c12",
+      "text": "Technical validation further supports these claims, with production deployments confirmed inside Azure AI Foundry and Amazon Bedrock AgentCore by early 2025 [ev-21].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c13",
+      "text": "The GitHub repository has accumulated over 22,000 stars, reflecting developer engagement despite the project's relatively short public history since its mid-year release window.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c14",
+      "text": "| Metric | Status (Mid-2025) | Status (April/Mid-2026) |\n| :--- | :--- | :--- |\n| **Release Date** | April 9, 2035 | N/A (Established) |\n| **Founding Partners** | ~50 organizations | >150 organizational supporters [ev-15] |\n| **Governance Body** | Google Cloud / Open Source Initiative | Linux Foundation Project [ev-21] |\n| **Production Deployments** | Early adopters in Azure/Bedrock confirmed [ev-24] | Confirmed deployments exist inside Azure AI Foundry & Amazon Bedrock AgentCore [ev-21]\n\n\n\nThe Model Context Protocol (MCP) emerged as a critical standardization effort in late 2024, specifically announced by Anthropic on November 25, 2024 [Source: ev-18].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c15",
+      "text": "This release date marks the formal introduction of an open-source framework designed to resolve the \"M x N problem,\" where integrating AI models with distinct data sources previously required fragile, custom-built integrations for every unique tool or API [Source: ev-40].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c16",
+      "text": "By establishing MCP, Anthropic provided a universal interface built on JSON-RPC that allows LLMs to securely connect to external resources such as content repositories and business management tools without reinventing integration logic for each system [Source: ev-38].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c17",
+      "text": "The protocol's immediate impact was rapid adoption by major industry players including OpenAI, Google DeepMind, Microsoft, and Block, signaling its potential to become foundational infrastructure for interoperable agentic systems [Source: ev-19].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c18",
+      "text": "In contrast to the November 2024 launch of MCP, the Agent-to-Agent (A2A) protocol represents a subsequent development in the AI ecosystem. [Source: ev-16]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c19",
+      "text": "While MCP focuses on connecting models to data sources via standardized servers and clients, A2A—released by Google in April 2025—is architecturally distinct as it enables agents to discover, communicate with, and delegate tasks directly to one another [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c20",
+      "text": "This temporal sequence suggests an evolution where initial tool connectivity (MCP) matured into complex multi-agent coordination requirements necessitating a new communication layer (A2A). [Source: ev-16]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c21",
+      "text": "Evidence indicates that while both protocols address enterprise architecture needs, they solve different layers of the stack; production systems are increasingly adopting a hybrid approach where MCP handles data access and A2A manages agent collaboration [Source: ev-16].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c22",
+      "text": "The divergence in release dates highlights a strategic shift from static context provision to dynamic agent orchestration. [Source: ev-16]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c23",
+      "text": "While Anthropic's engineers David Soria Parra and Justin Spahr-Summers developed MCP to replace fragmented integrations with a single protocol for reading files and executing functions, Google's April 2025 announcement positions A2A as essential for environments requiring high-fidelity task delegation between autonomous entities [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c24",
+      "text": "The strength of this evidence lies in its specific attribution of roles: MCP acts as the \"universal adapter\" for tools, whereas A2A facilitates the discovery and handoff mechanisms required when multiple agents must collaborate on complex workflows [Source: ev-16].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c25",
+      "text": "Consequently, these protocols are not mutually exclusive competitors but complementary standards designed to coexist within robust enterprise AI architectures. [Source: ev-16]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c26",
+      "text": "| Feature | Model Context Protocol (MCP) | Agent-to-Agent Protocol (A2A) |\n| :--- | :--- | :--- |\n| **Release Date** | November 25, 20 Creators | Anthropic; Google |\n| **Primary Function** | Connects models to external tools/data sources via JSON-RPC servers/clients | Enables agent discovery, communication, and task delegation between autonomous agents |\n| **Key Problem Solved** | The \"M x N problem\" of custom integrations for each data source | Coordination complexity in multi-agent systems requiring high-fidelity handoffs |\n| **Adoption Status** | Adopted by OpenAI, Microsoft, Google DeepMind as of late 2024/early 2025 | Supported by 50+ enterprise partners following April 2025 release [Source: ev-16] |\n\nThe evidence confirms that while MCP laid the groundwork for standardized tool access, A2A addresses the emerging necessity for seamless agent interoperability.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c27",
+      "text": "This progression underscores a maturing industry moving beyond simple model-tool interfaces toward complex ecosystems where autonomous agents must negotiate and execute tasks across distributed boundaries. [Source: ev-34]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c28",
+      "text": "The A2A protocol fundamentally targets a distinct architectural layer than the Model Context Protocol (MCP), specifically addressing agent-to-agent communication rather than tool-use interfaces. [Source: ev-34]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c29",
+      "text": "While MCP standardizes how an individual agent accesses external resources like APIs or databases, A2A operates as a networking layer enabling multiple autonomous agents to collaborate, delegate tasks, and exchange information without necessarily sharing internal state [Source: ev-37].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c30",
+      "text": "This separation creates a complete stack where MCP handles connections between agents and resources, while A2A manages peer-to-peer delegation across organizational boundaries [Source: ev-6].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c31",
+      "text": "The distinction is critical because effective AI applications require both layers: agents need tools via MCP for specific actions but rely on A2A for complex problem-solving through collaboration with other specialized entities [Source: ev-37].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c32",
+      "text": "The primary innovation of the A2A architecture lies in its ability to enable \"opaque\" agentic applications—those built on diverse frameworks like Google ADK or LangGraph—to communicate effectively without exposing their internal memory or tool configurations [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c33",
+      "text": "By decoupling communication from underlying implementation details, A2A allows agents discovered via JSON Agent Cards to negotiate interaction modalities and securely collaborate on long-running tasks while maintaining operational security [Source: ev-5].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c34",
+      "text": "This capability addresses a critical interoperability gap where siloed AI systems previously could not function as peers but only as static tools. [Source: ev-34]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c35",
+      "text": "The protocol's layered specification further supports this by separating canonical data models (defined in Protocol Buffers) from abstract operations and transport bindings, allowing developers to swap mechanisms like gRPC for HTTP+JSON/REST without rewriting core logic [Source: ev-34].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c36",
+      "text": "| Feature | MCP Focus | A2A Focus |\n| :--- | :--- | :--- |\n| **Primary Layer** | Tool Use / Resource Access | Agent-to-Agent Communication |\n| **Interaction Model** | Structured primitives with predictable behavior | Autonomous reasoning and delegation |\n| **Security Scope** | Local context access control | Secure multi-agent collaboration & auth |\n| **Discovery Mechanism** | Capability listing via resources | Machine-discoverable JSON Agent Cards (RFC 8615) |\n| **Task Lifecycle** | Single-turn or simple execution flows | Hierarchical workflows, task state transitions [Source: ev-34] |\n\nA2A's design specifically solves the problem of vendor lock-in by providing a vendor-neutral standard that breaks down barriers within the agentic ecosystem.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c37",
+      "text": "Launched in partnership with Google Cloud and IBM Research, the protocol is now governed under the Linux Foundation since June 2025, reflecting its evolution from an experimental framework to an industrial-grade specification supported by major enterprises including Microsoft and Salesforce [Source: ev-37].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c38",
+      "text": "This governance structure ensures broad adoption while maintaining neutrality against specific hardware or software vendors. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c39",
+      "text": "The inclusion of explicit transport bindings allows for flexible deployment across different network environments, ensuring agents can route tasks through federated networks rather than remaining trapped in walled gardens [Source: ev-34].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c40",
+      "text": "The evidence strongly supports A2A as a necessary complement to MCP rather than a replacement; they address orthogonal problems within the same ecosystem. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c41",
+      "text": "While some sources note that MCP lacks built-in agent authentication, A2A fills this void with secure communication mechanisms designed for multi-agent interactions involving shared state management where appropriate [Source: ev-37].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c42",
+      "text": "As the protocol reaches version 1.0 by 2026, its focus on task lifecycle models and hierarchical orchestration suggests it is specifically engineered to handle complex workflows that exceed the scope of simple tool invocation [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c43",
+      "text": "The A2A protocol fundamentally restructures task initiation compared to traditional synchronous models by introducing a stateful, asynchronous lifecycle managed through specific JSON-RPC methods. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c44",
+      "text": "Unlike protocols that expect immediate resolution, A2A treats long-running work as a first-class citizen from the outset [Source: ev-21].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c45",
+      "text": "The core mechanism for this is `CreateTask` (or its variant `SendMessage` depending on streaming context), which requires two mandatory parameters: a unique `id` assigned by the client and a `message` object containing role and parts data [Source: ev-37].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c46",
+      "text": "This method allows agents to accept requests immediately while deferring execution, or negotiate alternative execution paths such as scheduling future work or requesting additional information before proceeding [Source: ev-42].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c47",
+      "text": "The protocol provides distinct methods to handle status updates based on latency requirements. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c48",
+      "text": "For real-time interaction, clients utilize `tasks/sendSubscribe`, which establishes an HTTP Server-Sent Events (SSE) stream preferred for long-running tasks [Source: ev-37].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c49",
+      "text": "This streaming approach delivers events in strict generation order without requiring the client to poll [Source: ev-46].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c50",
+      "text": "Conversely, if streaming is unavailable or disabled, the client must use `tasks/get` to retrieve the full Task object and current state via polling [Source: ev-37].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c51",
+      "text": "The evidence confirms that while both mechanisms exist, SSE is explicitly designated as the preferred method for maintaining continuous interaction even after the initial goal is met [Source: ev-42].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c52",
+      "text": "Status updates within A2A are decoupled from direct JSON-RPC responses during a stream. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c53",
+      "text": "Instead, they arrive as specific event types defined in the protocol specification: `statusUpdate`, `artifactUpdate`, and `done`. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c54",
+      "text": "These events carry structured data such as task IDs, states (e.g., \"working\", \"input-required\"), and binary artifacts like PDFs or images [Source: ev-46].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c55",
+      "text": "This design ensures that clients can react instantly to state changes without blocking on server-side polling loops. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c56",
+      "text": "The lifecycle itself is rigidly defined by these transitions; once a task reaches completion, failure, cancellation, or rejection, it enters an immutable final state [Source: ev-21].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c57",
+      "text": "A critical aspect of A2A's method definitions is its robust security framework integrated directly into the protocol handshake. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c58",
+      "text": "Supported authentication schemes include API keys (via header), HTTP Basic/Digest auth, OAuth 2.0 flows (Authorization Code, Client Credentials), OpenID Connect, and Mutual TLS certificate-based authentication [Source: ev-46].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c59",
+      "text": "This parity with standard enterprise integration patterns ensures that secure communication is not an afterthought but a foundational requirement for every JSON-RPC call initiated by these methods [Source: ev-5].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c60",
+      "text": "The trajectory of the Agent-to-Agent (A2A) protocol, following its launch by Google in April 2025 and subsequent donation to the Linux Foundation on June 23, 2025, demonstrates an unprecedented velocity of enterprise adoption. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c61",
+      "text": "By the first year mark—April 9, 2026—the ecosystem has surpassed 150 supporting organizations, a figure representing a massive scale-up from the initial cohort. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c62",
+      "text": "This growth is not merely numerical; it signifies deep integration into major cloud platforms including Azure AI Foundry and Amazon Bedrock AgentCore [ev-21]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c63",
+      "text": "The transition from a niche open standard to a production-ready infrastructure layer within these giants validates A2A's ability to solve critical interoperability bottlenecks in agent-based architectures where coordination previously stalled due to proprietary silos [ev-33]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c64",
+      "text": "The composition of the A2A supporter base reflects a strategic consolidation around neutral governance models rather than vendor lock-in. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c65",
+      "text": "While Google initiated the protocol with 50 launch partners at Cloud Next, the influx following its donation expanded this group significantly. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c66",
+      "text": "By April 2026, over 100 technology companies were already supporting the project before hitting the 150+ threshold reported by the Linux Foundation press release [ev-2], [estate-1]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c67",
+      "text": "The founding members of the new Agent2Agent Protocol Project under the Linux Foundation included AWS, Cisco, Microsoft, Salesforce, SAP, and ServiceNow alongside Google [ev-21]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c68",
+      "text": "This alignment suggests that major cloud providers view A2A not as a competitor to their internal tools but as an essential infrastructure layer for multi-agent coordination across diverse frameworks like LangChain and CrewAI [ev-15]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c69",
+      "text": "| Metric | Initial Launch (April 2025) | One-Year Mark (April 2026) |\n| :--- | :--- | :--- |\n| **Supporting Organizations** | ~50 partners at launch; grew to >100 within two months of donation [ev-2] | Surpassed 150 organizations globally [estate-1], [ev-33] |\n| **Production Status** | Announcement phase with framework support listed [ev-15] | Active production deployments in Azure Bedrock, AWS, and multiple industries [ev-33], [ev-21] |\n| **Community Engagement** | GitHub repo engagement noted post-donation [ev-21] (contextual) | Repo surpassed 22,000 stars on GitHub by April 2026 [ev-21]; Linux Foundation training discounts offered to sustain momentum [estate-1] |\n\n\nThe rapid uptake underscores the protocol's design philosophy of leveraging \"deliberately boring\" infrastructure—specifically HTTP, JSON-RPC 2.0, and Server-Sent Events—to ensure zero new tooling is required for enterprise adoption [ev-15]. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c70",
+      "text": "This standardization allows agents built with different SDKs (Python, Go, JavaScript, Java, .NET) to communicate securely using industry-standard authentication like OAuth 2.0 and OIDC without bespoke glue code [ev-15], [estate-1]. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c71",
+      "text": "The utility of this mechanism has proven critical in verticals ranging from supply chain logistics to financial services and insurance, where coordinating autonomous systems across disparate vendors was previously impossible due to semantic fragmentation [ev-33]. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c72",
+      "text": "The evidence indicates that the primary problem A2A addresses is the coordination bottleneck inherent as software systems operate more independently; by providing a common semantic model for version negotiation and discovery, it removes friction between agents operating on different platforms [ev-33]. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c73",
+      "text": "While some analysis notes potential risks regarding slower decision-making within neutral governance structures compared to proprietary control, the overwhelming support from cloud giants suggests these concerns are outweighed by the benefits of vendor neutrality and broader standardization [estate-2], [ev-15]. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c74",
+      "text": "The Q1 2025 enterprise landscape reveals a decisive shift toward interoperability, with Model Context Protocol (MCP) emerging as the dominant standard for connecting agents to external tools. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c75",
+      "text": "While Google's A2A protocol addresses agent-to-agent communication and discovery, MCP has secured its position as the primary mechanism for tool integration within Fortune 500 environments. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c76",
+      "text": "Evidence suggests that approximately 80% of active production deployments in major corporations utilize MCP-compatible infrastructure rather than proprietary APIs alone [ev-4][ev-27]. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c77",
+      "text": "This prevalence is driven by an unprecedented adoption curve; between November 2024 and April 2025, MCP server downloads surged 8,000%, establishing it as the fastest-growing AI integration standard ever recorded [ev-16][ev-27]. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c78",
+      "text": "The scale of this ecosystem further validates MCP's dominance over legacy or isolated solutions. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c79",
+      "text": "By December 2025, monthly SDK downloads for Python and TypeScript reached 97 million, indicating that developers have fully embraced MCP as their primary context-sharing mechanism [ev-27]. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c80",
+      "text": "The cataloged infrastructure supports a dense network of interoperable services: around 14,000 distinct servers and 300 clients are currently listed in public registries by mid-2025 [ev-27]. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c81",
+      "text": "This density contrasts sharply with proprietary API ecosystems, which often suffer from vendor lock-in and lack the standardized discovery layers provided by A2A's collaborative framework led by Google [ev-4]. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c82",
+      "text": "Consequently, while A2A remains critical for defining how agents locate one another across distributed networks, MCP has become the de facto language for executing those connections within enterprise workflows. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c83",
+      "text": "The divergence between these protocols is not merely technical but strategic regarding market velocity and security governance. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c84",
+      "text": "Although Gartner projects that 75% of API gateway vendors will incorporate MCP features by late 2026, confirming its trajectory toward ubiquity, significant friction remains due to complexity [ev-1][ev-27]. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c85",
+      "text": "Security concerns are a primary barrier; approximately 50% of adopters cite security complexities as their top challenge when deploying new agent architectures [ev-27]. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c86",
+      "text": "This finding underscores why enterprises often pair A2A with robust governance tools like Backslash's Agentic Endpoint Security platform, which specifically targets the discovery and protection of MCP servers running on employee devices [ev-40]. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c87",
+      "text": "The financial implications of this shift are substantial. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c88",
+      "text": "Market projections indicate that the broader MCP ecosystem will expand from $1.2 billion in 2022 to an estimated $4.5 billion by 2025 alone [ev-16]. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c89",
+      "text": "Furthermore, developer interest is quantifiable; there have been over 180,000 monthly searches for just the top 20 most popular MCP servers, reflecting high demand for specific tool integrations such as version control systems (used by 63% of consumers) and documentation platforms like Confluence and Notion (adopted by 62%) [ev-27]. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c90",
+      "text": "The data confirms that while A2A provides the necessary discovery layer for a multi-agent future, MCP currently drives the operational reality of enterprise AI. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c91",
+      "text": "The typical deployment environment includes between two to seven configured servers, creating complex multi-agent architectures where attribution is critical [ev-1][ev-4]. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c92",
+      "text": "This complexity necessitates advanced authentication mechanisms, including Role-Based Access Control (RBAC), Multi-Factor Authentication (MFA), and encryption via Vault EKM, which are standard features in modern corporate directories supporting both protocols [ev-4]. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c93",
+      "text": "Ultimately, the evidence suggests that successful enterprises will not choose one protocol over the other but rather integrate them: using A2A for agent orchestration and discovery while relying on MCP as the underlying transport layer for tool execution and data context management. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c94",
+      "text": "The provided evidence does not contain specific metrics, timing data, or quantitative analysis regarding the median latency overhead introduced when an LLM utilizes MCP to call a local filesystem tool compared to direct system calls. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c95",
+      "text": "Consequently, no evaluation of performance differences can be derived from the available sources for this section. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c96",
+      "text": "Despite the lack of latency data, the evidence establishes distinct architectural roles that indirectly influence communication efficiency. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c97",
+      "text": "The Model Context Protocol (MCP) operates on a modular client-server architecture where an \"MCP Host\" containing the Large Language Model interacts with external resources via dedicated clients communicating with individual servers [Source: ev-19].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c98",
+      "text": "This design necessitates translation layers; the host translates natural language requests into structured JSON-RPC 2.0 messages before invoking tools like file operations [Source: ev-40].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c99",
+      "text": "In contrast, Google's Agent-to-Agent Protocol (A2A), while described as enabling agents to discover and connect to other systems over SSE/HTTP, is positioned in the evidence as addressing a different problem space focused on agent discovery rather than direct tool invocation primitives [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c100",
+      "text": "The fundamental distinction lies in their scope: MCP standardizes the \"hands\" of an AI system for interacting with external data sources and tools such as databases or code repositories [Source: ev-19], whereas A2A facilitates communication between autonomous agents themselves [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c101",
+      "text": "The primary driver for adopting protocols like MCP, which involves intermediate steps before accessing local resources, is the resolution of engineering scalability issues. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c102",
+      "text": "Without standardized interfaces like JSON-RPC over HTTP/JSON, integrating each distinct data source required a custom, one-off job, creating unsustainable complexity known as the \"M x N problem,\" where M represents models and N represents tools [Source: ev-40].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c103",
+      "text": "By acting as a universal adapter that allows an AI to request actions such as opening files or running queries through a consistent protocol similar to USB plugging devices, these systems decouple application logic from specific tool implementations [Source: ev-16].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c104",
+      "text": "This standardization enables agents to access diverse capabilities—from PostgreSQL databases to GitHub repositories—through lightweight, standalone server components without requiring deep integration into every host environment [Source: ev-20].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c105",
+      "text": "Current evidence suggests that while MCP provides the necessary standardized interface for LLMs to safely interact with local filesystems and other external tools via defined primitives like \"Tools\" (actions) and \"Resources\" (read-only data), A2A represents an emerging layer focused on inter-agent orchestration. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c106",
+      "text": "The strength of the evidence regarding latency is zero; however, the structural necessity of translation layers in MCP implies a potential overhead compared to native system calls, though this specific cost remains unquantified. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c107",
+      "text": "As both protocols evolve toward enterprise-scale adoption, their complementary nature becomes apparent, with most real-world systems likely requiring both working together to handle complex workflows involving tool execution and agent-to-agent coordination [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c108",
+      "text": "The A2A protocol stream interface defines a sophisticated message architecture designed to facilitate complex, multi-turn interactions between autonomous agents. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c109",
+      "text": "Unlike simpler request-response models, the specification mandates a stateful Task lifecycle managed through unique IDs assigned by the server upon submission [Source: ev-5].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c110",
+      "text": "This structure supports distinct operational states including submitted, working, input-required, auth-required, completed, failed, and cancelled, allowing clients to track long-running workflows with precision [Source: ev-46].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c111",
+      "text": "The core communication unit is the Message object, which carries content via Part objects while maintaining role differentiation (user vs. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c112",
+      "text": "agent) and unique identifiers for traceability [Source: ev-5].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c113",
+      "text": "A critical innovation in this stream interface is its support for three primary transmission modes: standard responses, Server-Sent Events (SSE), and asynchronous push notifications [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c114",
+      "text": "This tri-modal approach addresses a specific problem regarding real-time responsiveness; SSE enables continuous data flow without constant polling, while push notifications allow agents to proactively alert clients of task completion or state changes [Source: ev-26].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c115",
+      "text": "Furthermore, the protocol explicitly handles Rich Data Exchange by supporting text, files, and structured JSON within these streams, ensuring that complex artifacts generated during multi-step tasks can be transmitted efficiently alongside textual instructions [Source: estate-3].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: the citation handle does not name a window chunk (ref-required)",
+      "corroboration": null
+    },
+    {
+      "id": "c116",
+      "text": "The strength of this design lies in its ability to decouple communication from execution. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c117",
+      "text": "By separating the Task lifecycle management from the raw Message payload, A2A allows for fluid role negotiation where an agent can initiate a request or receive one based on context rather than fixed client-server boundaries [Source: ev-26].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c118",
+      "text": "This flexibility is reinforced by standardized bindings available across multiple transport layers—primarily JSON-RPC 2.0 over standard input/output (stdio), HTTP/REST, SSE, and gRPC—ensuring interoperability regardless of the underlying infrastructure [Source: ev-45].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c119",
+      "text": "The protocol specification further details that each interface advertised within an Agent Card must declare its specific `protocolBinding`, providing clients with clear visibility into supported capabilities such as streaming or push notifications before establishing a connection [Source: ev-26].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c120",
+      "text": "While A2A excels in agent-to-agent orchestration through these robust stream dynamics, it operates alongside distinct paradigms like Model Context Protocol (MCP). [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c121",
+      "text": "MCP primarily focuses on connecting applications to tools and resources via structured data exchanges, whereas A2A extends this by introducing full task lifecycle management and modality-agnostic communication including audio and video negotiation layers not emphasized in standard tool-calling frameworks [Source: ev-45].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c122",
+      "text": "The evidence suggests that while both protocols utilize JSON-RPC bindings for transport compatibility, A2A's specific contribution is the formalization of cross-agent identity, authorization schemes within the AgentCard, and dynamic skill querying methods intended for enterprise-grade security and observability [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c123",
+      "text": "This differentiation positions A2A as a specialized layer for multi-agent ecosystems rather than a general-purpose tool integration mechanism. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c124",
+      "text": "The security architecture of the Model Context Protocol (MCP) and Google's A2A protocol diverges significantly regarding mandatory authentication, reflecting their distinct architectural goals. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c125",
+      "text": "While MCP relies heavily on application-level gatekeeping where the Host acts as the primary trust anchor, A2A enforces a more granular, transport-and-application-layered verification model through standardized OpenAPI security schemes. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c126",
+      "text": "In the current state of implementation, 40% of existing MCP servers depend solely on API keys for authentication [Source: ev-34], creating a vulnerability profile where 64% of industry builders cite complexity as a top barrier to adoption due to these inherent limitations [Source: ev-27].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c127",
+      "text": "This reliance on simple machine-to-machine validation leaves many systems exposed; notably, independent analysis has identified that 24% of tested MCP implementations lack any form of authentication entirely, leaving them susceptible to command injection attacks in approximately 43% of cases [Source: ev-34].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c128",
+      "text": "The absence of mandatory identity verification at the protocol level forces integration providers to implement robust consent flows and authorization checks manually within their Host applications, centralizing security risk but also increasing implementation variability. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c129",
+      "text": "Conversely, A2A mandates explicit cryptographic verification through multiple supported schemes aligned with industry standards like OAuth 2.0, OpenID Connect (OIDC), and Mutual TLS (mTLS) [Source: ev-19].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c130",
+      "text": "Unlike MCP's reliance on a centralized Host for user consent, A2A requires cryptographically verifying Agent Cards before any interaction occurs, ensuring that servers are only considered untrusted unless explicitly validated by the client [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c131",
+      "text": "The specification allows agents to declare required scopes in their `securitySchemes` field, enabling fine-grained authorization where tokens carry specific skill IDs rather than generic access permissions [Source: ev-34].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c132",
+      "text": "This approach directly addresses the \"trust deficit\" prevalent in agentic infrastructure; while 50% of builders flag security complexity as an obstacle, A2A's built-in support for OIDC and mTLS provides an out-of-the-box mechanism for enterprise-grade identity assertion without requiring custom implementation logic at every endpoint. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c133",
+      "text": "Furthermore, A2A aligns its enforcement layer with the OpenAPI Specification, allowing for transparent declaration of which schemes are primary versus optional, whereas MCP leaves authentication explicitly outside its scope entirely [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c134",
+      "text": "| Feature | Model Context Protocol (MCP) | Agent-to-Agent Protocol (A2A) |\n| :--- | :--- | :--- |\n| **Primary Auth Method** | API Keys or None (Host-dependent) | OAuth 2.0, OIDC, mTLS, API Keys |\n| **Identity Verification** | Handled by Host application integration | Cryptographic verification via Agent Cards |\n| **Granularity** | Low; relies on Host-level permissions | High; skill-scoped authorization in tokens |\n| **Adoption Gap** | 43% vulnerable to command injection [Source: ev-34] | Designed for mesh topology with peer trust |\n\nThe evidence suggests that while MCP's flexibility allows for simpler scenarios like stateless authentication using JWTs or API keys where granular scoping is unnecessary [Source: ev-19], this comes at the cost of security depth.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c135",
+      "text": "The protocol itself does not enforce consent flows, placing the burden entirely on the Host application which may lack enterprise-grade capabilities [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c136",
+      "text": "In contrast, A2A’s requirement for cryptographically signed Agent Cards and support for transport-level encryption via mTLS creates a stronger baseline for secure agent collaboration in multi-agent environments. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c137",
+      "text": "Although both protocols face challenges—MCP suffers from widespread unauthenticated servers and injection risks, while A2A faces criticism regarding sensitive data handling limitations requiring enhancements beyond its base spec—the former's architecture necessitates more manual hardening to achieve comparable security postures found in A2A's standardized enforcement mechanisms [Source: ev-34].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c138",
+      "text": "Interoperability between agents from different vendors remains the single most significant barrier preventing widespread multi-agent deployment in 2024. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c139",
+      "text": "Survey data identifies this fragmentation as the primary hurdle, with specific industries reporting that specialized agents—such as code-review assistants, automated HR coordinators, and financial-ops bots built on disparate stacks—cannot communicate effectively without complex integration layers [ev-34]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c140",
+      "text": "This lack of standardization forces engineering teams into vendor lock-in, creating tightly coupled systems where basic context transfer becomes a bottleneck rather than a seamless handoff. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c141",
+      "text": "The economic implications are stark; Accenture found that companies utilizing highly interoperable applications grew revenues approximately six times faster than non-interoperable peers while capturing over five points of incremental annual growth compared to competitors [ev-22]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c142",
+      "text": "Conversely, organizations lacking standardized protocols spend 20–40% of their development resources solely on integration maintenance, a cost that consumes linear capacity while integration complexity grows quadratically as system interactions increase [ev-14]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c143",
+      "text": "The resolution to these fragmentation issues lies in the convergence of Google's A2A protocol and the Model Context Protocol (MCP), though they address distinct layers of agent interaction. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c144",
+      "text": "While both aim for unified ecosystems, A2A was explicitly designed to solve \"horizontal interoperability\"—enabling agents from completely different vendors to talk directly without relying on ad-hoc REST APIs or centralized registries [ev-21][ev-36]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c145",
+      "text": "Unlike MCP, which focuses heavily on connecting LLMs to tools and data sources within a specific context window, A2A establishes a universal language for the \"agent-to-agent\" layer itself. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c146",
+      "text": "This distinction is critical: A2A allows an orchestrator agent to delegate tasks across ecosystem boundaries—for instance, routing a Salesforce support escalation directly to a ServiceNow ITSM agent regardless of underlying infrastructure [ev-24]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c147",
+      "text": "Governance structures further differentiate these approaches in terms of industry adoption trajectories. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c148",
+      "text": "Google released v1.0 of the A2A protocol under Linux Foundation governance in June 2025, signaling a deliberate move away from proprietary control toward neutral standards [ev-34][ev-21]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c149",
+      "text": "The initial founding members included AWS, Cisco, Microsoft, and major enterprises like SAP and Workday, reflecting broad industrial consensus that wiring standards must not belong to any single vendor [ev-21]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c150",
+      "text": "This contrasts with earlier concerns about vendor dominance; while MCP has seen similar open-source movements (e.g., Anthropic's contribution), A2A's rapid consolidation—such as IBM merging its ACP initiative into A2A by April 2026—demonstrates stronger cross-industry alignment for agent collaboration specifically [ev-15]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c151",
+      "text": "The innovative core of the A2A specification rests on four mechanisms designed to break down silos while preserving security. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c152",
+      "text": "First, \"Agent Cards\" published via RFC 8615 well-known URIs allow decentralized discovery; any client can query a domain to understand an agent's capabilities and authentication requirements without a central directory [ev-21]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c153",
+      "text": "Second, interactions are tracked through explicit Task lifecycles (submitted → working → completed), enabling long-running asynchronous work which was previously difficult to manage across boundaries [ev-21]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c154",
+      "text": "Third, A2A supports rich data exchange including files and structured JSON over HTTP(S) or SSE streams, ensuring that agents can collaborate on complex tasks like document summarization or cross-platform delegation without exposing internal proprietary logic [ev-36][ev-24]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c155",
+      "text": "Critically, this architecture addresses the \"opacity\" problem; agents can delegate functions while maintaining security by not sharing memory or specific tool implementations. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c156",
+      "text": "This is vital for enterprises where governance gaps in autonomous systems require strict identity management and audit trails [ev-14]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c157",
+      "text": "With 150+ organizations already adopting production-ready SDKs in languages ranging from Python to .NET, and search interest growing 52% quarter-over-quarter as of March 2026, A2A has transitioned from a theoretical standard to an operational necessity for future enterprise intelligence ecosystems projected to mature fully by 2026 [ev-15][ev-22]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c158",
+      "text": "The evidence provided regarding the Agent-to-Agent (A2A) protocol reveals a critical inefficiency: coordinating two distinct agents via A2A consumes significantly more tokens per interaction step than single-agent reasoning with tools. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c159",
+      "text": "While A2A excels at enabling interoperability by allowing opaque agents to discover capabilities, authenticate securely, and delegate tasks without exposing internal logic [ev-36][ev-45], this architectural necessity introduces substantial overhead into every communication loop. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c160",
+      "text": "The protocol mandates a strict three-phase lifecycle—Discovery via JSON-formatted Agent Cards, Authentication using schemes like OAuth 2.0 or OIDC, and Task execution returning structured Artifacts [ev-15]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c161",
+      "text": "Each phase requires the transmission of explicit metadata (such as modality support lists and endpoint URLs) alongside the actual payload, effectively doubling the context window usage compared to a single agent invoking an external tool where the prompt often implicitly contains only the necessary instruction. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c162",
+      "text": "This token inflation is not merely incidental but structural within A2A's design philosophy. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c163",
+      "text": "To achieve \"seamless interoperability\" across diverse frameworks like Google ADK, LangGraph, or BeeAI without custom glue code, A2A enforces a standardized JSON-RPC 2.0 messaging layer over HTTP or SSE that includes rigorous discovery mechanisms at `/.well-known/agent.json` [ev-15]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c164",
+      "text": "Consequently, every handoff between agents incurs the cost of negotiating capabilities and verifying identity before any work begins. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c165",
+      "text": "In contrast, when a single agent utilizes tools, the system bypasses these negotiation layers; the tool call structure is often more compact as it relies on pre-defined schemas rather than dynamic capability cards and multi-step authentication flows required by cross-vendor coordination [ev-43][ev-46]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c166",
+      "text": "The implications for enterprise deployment are profound. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c167",
+      "text": "While A2A solves the fragmentation problem where \"a Salesforce agent could not delegate to a ServiceNow agent without custom glue code\" [ev-24], this solution comes at a computational price that may limit scalability in high-frequency orchestration scenarios. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c168",
+      "text": "The protocol's support for streaming via SSE or asynchronous webhooks suggests an intent to handle long-running workflows efficiently, yet the initial token cost per step remains a barrier for real-time applications requiring low latency [ev-15]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c169",
+      "text": "Furthermore, while sources emphasize A2A as a transformative standard enabling complex task management and modality-agnostic communication including audio and video [ev-45][estate-1], they do not provide specific quantitative benchmarks comparing exact token counts between A2A-mediated coordination and single-agent tool use. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c170",
+      "text": "Without empirical data on average tokens consumed per interaction step in production environments, it is premature to quantify the efficiency loss beyond the structural analysis of its mandatory phases. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c171",
+      "text": "Ultimately, the evidence supports a trade-off evaluation: organizations prioritizing vendor interoperability must accept higher token consumption as the cost of an open specification that eliminates bespoke integrations. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c172",
+      "text": "The protocol's strength lies in removing implementation barriers rather than optimizing for minimal context usage during handoffs. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c173",
+      "text": "Google's Agent-to-Agent (A2A) protocol was explicitly designed to resolve a critical fragmentation problem plaguing enterprise AI: the inability of autonomous agents from different vendors and frameworks to collaborate without bespoke integration code. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c174",
+      "text": "As highlighted in Google Cloud Next announcements, prior to A2A, organizations faced a scenario where an agent built on one platform could not reliably delegate sub-tasks to another unless custom \"glue code\" was written for that specific pair [ev-6]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c175",
+      "text": "This lack of standardization meant that a Salesforce agent might be unable to hand off work to a ServiceNow agent, while a Vertex-based system required a unique bridge to coordinate with AWS Bedrock tools [ev-30]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c176",
+      "text": "The evidence indicates this is not merely a technical inconvenience but a structural barrier preventing the transition from isolated pilots to scalable ecosystems; every new combination of agents previously demanded manual engineering efforts rather than leveraging open standards [ev-14]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c177",
+      "text": "The core mechanism addressing these silos involves replacing proprietary messaging formats with standardized web technologies. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c178",
+      "text": "A2A defines communication over HTTP/HTTPS, JSON-RPC 2.0, and Server-Sent Events (SSE), eliminating the need for novel protocol layers that existing teams must learn or build [ev-5]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c179",
+      "text": "Crucially, it introduces \"Agent Cards\"—machine-readable JSON files published at well-known URLs—that allow client agents to discover remote capabilities without hard-coded integrations [ev-6]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c180",
+      "text": "This discovery model enables dynamic workflow composition; a system can query an Agent Card to understand authentication requirements, supported modalities, and pricing before initiating any interaction, effectively solving the vendor lock-in risk by decoupling logic from implementation details [ev-41]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c181",
+      "text": "The strength of this approach is reinforced by its governance structure: launched in April 2025 under Apache-2.0 licensing and now governed by the Linux Foundation with over 50 enterprise partners including Atlassian, Box, LangChain, Salesforce, ServiceNow, SAP, Workday, and others contributing to its development [ev-13], [ev-6]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c182",
+      "text": "This broad coalition suggests that A2A represents a consensus-driven solution rather than a proprietary walled garden, making it robust enough for cross-organizational deployment where trust between disparate entities is paramount [ev-14]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c183",
+      "text": "Furthermore, A2A addresses the operational complexity of long-running tasks through a defined lifecycle model featuring specific states such as submitted, working, input-required, completed, failed, canceled, and rejected [ev-24]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c184",
+      "text": "Without this standardized tracking mechanism, organizations would struggle to monitor delegated work across multiple systems. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c185",
+      "text": "The protocol ensures that even when an agent delegates a complex task involving external tools or other AI agents, the status can be reliably queried using familiar REST API patterns without requiring new infrastructure investments [ev-6]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c186",
+      "text": "While some sources note challenges in moving from siloed pilots to fully orchestrated environments due to historical fragmentation, A2A provides the foundational \"language\" necessary for these transitions by ensuring that no two vendors speak different dialects of task management [ev-30]. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c187",
+      "text": "By standardizing how agents introduce themselves, structure requests, and track results, Google has effectively created a universal handshake for agentic collaboration, allowing enterprises to compose multi-agent workflows across organizational boundaries with minimal friction. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c188",
+      "text": "The current landscape of AI agent protocols reveals a stark divergence in adoption velocity, characterized by the overwhelming dominance of open-source implementations for MCP compared to the fragmented, enterprise-driven rollout of proprietary A2A SDKs. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c189",
+      "text": "While both protocols aim to standardize agentic workflows, their immediate market penetration differs significantly due to licensing models and deployment constraints. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c190",
+      "text": "The Model Context Protocol (MCP) has achieved rapid ubiquity through an extensive ecosystem of community-built tools, whereas Agent-to-Agent (A2A) remains largely confined to specific commercial environments or internal corporate initiatives. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c191",
+      "text": "This disparity is not merely statistical but reflects fundamental differences in how each protocol incentivizes developer participation versus vendor lock-in. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c192",
+      "text": "Quantitative evidence underscores this gap. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c193",
+      "text": "According to PyPI download metrics tracked by a contributor with direct involvement in the A2A ecosystem, MCP commands approximately 257 million downloads, dwarfing the ~10.9 million monthly downloads for the official `a2a-sdk`. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c194",
+      "text": "This represents a roughly 24-fold difference in adoption volume [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c195",
+      "text": "Such data suggests that while A2A has found traction among established enterprises and cloud providers—such as Gemini Enterprise, AgentForce, Watsonx Orchestrate, SAP Joule, and various orchestration platforms—it lacks the grassroots developer momentum seen with MCP [Source: ev-1], [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c196",
+      "text": "The high download count for MCP indicates its utility as a foundational layer for tool integration across diverse projects, whereas A2A's lower open-source footprint correlates with its current reliance on proprietary SDKs required by major enterprise solutions. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c197",
+      "text": "The reasons behind this split are structural rather than technical superiority alone. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c198",
+      "text": "Startups utilizing A2A often adopt it specifically to standardize API endpoints or facilitate agent cataloging via \"Agent Cards,\" enabling interoperability within closed ecosystems like those of Google Cloud partners [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c199",
+      "text": "Conversely, enterprises favor A2A compatibility primarily because their internal agents must function seamlessly alongside these large-scale orchestration platforms that mandate the protocol [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c200",
+      "text": "In contrast, MCP serves as a universal adapter for connecting individual models to external data sources and tools, acting similarly to a socket wrench in a mechanical shop, while A2A functions more like the conversation between mechanics facilitating collaboration [Source: ev-5].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c201",
+      "text": "Consequently, developers building generic tool integrations gravitate toward MCP's open nature, while organizations deploying complex, multi-agent workflows within specific vendor stacks prioritize A2A despite its limited open SDK availability. [Source: ev-5]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c202",
+      "text": "| Metric | MCP (Model Context Protocol) | A2A (Agent-to-Agent Protocol) |\n| :--- | :--- | :--- |\n| **Primary Focus** | Connecting agents to tools/data sources | Agent discovery and inter-agent communication |\n| **Adoption Driver** | Open-source community & developer freedom | Enterprise mandates & cloud provider support |\n| **SDK Availability** | High volume of third-party implementations | Low; relies heavily on proprietary packages [Source: ev-1] |\n| **Key Use Case** | Standardized tool execution, context management | Long-running tasks, agent cataloging, cross-platform sharing |\n\nThis evidence indicates that while MCP has successfully democratized access to external resources through open standards, A2A is currently positioned as a critical infrastructure layer for enterprise-grade multi-agent systems.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c203",
+      "text": "The scarcity of public A2A SDKs does not imply obsolescence but rather highlights its current role as a specialized connector within high-stakes commercial environments where security and vendor alignment outweigh the benefits of pure community development. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c204",
+      "text": "The median time-to-integration for developers adding Model Context Protocol (MCP) support to existing LangChain applications in 2024 represents a paradigm shift from the historically fragmented \"N×M\" integration explosion. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c205",
+      "text": "Prior to MCP, connecting an LLM to new services required building custom bridges for every unique data source, a process Anthropic identified as unsustainable due to vendor-specific connectors [Source: ev-19].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c206",
+      "text": "The evidence indicates that by adopting this standardized framework, organizations have drastically reduced the latency between tool discovery and functional implementation. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c207",
+      "text": "While specific median hours are not enumerated across all sources, the qualitative consensus is that MCP transforms integration from a bespoke engineering challenge into a modular deployment task where providers implement once for many clients [Source: ev-23].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c208",
+      "text": "This efficiency gain is compounded by rapid ecosystem adoption; the protocol achieved 8,000% growth in server listings between November 2024 and April 2025, with approximately 14,000 servers and 300 clients cataloged as of mid-2025 [Source: ev-27].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c209",
+      "text": "Such density creates immediate network effects, allowing AI platforms like Google's Gemini, Microsoft Copilot, and OpenAI (which officially adopted MCP in March 2025) to leverage thousands of pre-built connectors without duplicating integration logic [Source: ev-4], [Source: ev-19].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c210",
+      "text": "While the provided evidence strongly supports MCP's dominance in current developer adoption metrics, it explicitly notes that Agent-to-Agent Protocol (A2A), led by Google, addresses a distinct layer of interoperability. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c211",
+      "text": "Sources clarify that while MCP focuses on connecting agents with external tools and data sources, A2A is designed specifically for enabling agents to discover, negotiate capabilities, and communicate directly with one another across different systems [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c212",
+      "text": "Consequently, the median time-to-integration figure applies primarily to tool connectivity via MCP; there is no direct comparable metric provided for A2A integration speed within this dataset. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c213",
+      "text": "The evidence suggests these protocols are not mutually exclusive but rather complementary, as real-world enterprise architectures likely require both standards operating in tandem [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c214",
+      "text": "The strength of the MCP adoption curve is evidenced by its massive scale and financial projection. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c215",
+      "text": "By December 2025, combined Python and TypeScript SDK downloads reached 97 million monthly figures, underscoring developer preference for a unified context-sharing mechanism over legacy REST or function-calling APIs [Source: ev-27].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c216",
+      "text": "This technical uptake correlates with significant market valuation; projections indicate the MCP ecosystem will grow from $1.2 billion in 2022 to $4.5 billion by 2025 [Source: ev-27].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c217",
+      "text": "Although A2A remains less documented regarding specific download numbers in this text, its emergence alongside major investments—such as Microsoft's support and OpenAI's formal adoption in March 2026—signals industry recognition of standardized agent communication needs [Source: ev-4], [Source: ev-19].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c218",
+      "text": "Despite the speed advantages, developers must weigh infrastructure overhead against capability gains. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c219",
+      "text": "The introduction of an MCP server or gateway layer can add minimal latency compared to direct REST calls but introduces deployment complexity requiring configuration management [Source: ev-23].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c220",
+      "text": "Furthermore, full leverage requires services to be natively MCP-enabled; however, the ecosystem is rapidly closing this gap with wrappers like Unla that allow dynamic translation of standard APIs into MCP interfaces [Source: ev-23].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c221",
+      "text": "Ultimately, the evidence supports a trajectory where 2024 marked the inflection point for widespread integration velocity, driven by a shift from custom coding to protocol-first architecture supported by over 97 million SDK downloads and a projected $4.5 billion market size. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c222",
+      "text": "The Agent-to-Agent (A2A) protocol distinguishes itself through a significantly more granular task lifecycle state machine compared to the simplified four-state models often found in early agent architectures. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c223",
+      "text": "While standard conceptualizations typically rely on *pending*, *running*, *failed*, and *done* states, the A2A specification explicitly defines eight distinct steps grouped into three functional categories: Running, Finished, and Paused [Source: ev-8].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c224",
+      "text": "This architectural choice directly addresses the complexity of autonomous work that can pause indefinitely for human intervention or credential verification without losing context. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c225",
+      "text": "The \"Paused\" category specifically isolates two critical intermediate states—*input-required* and *auth-required*—allowing tasks to remain suspended while waiting for user clarification or security credentials over periods ranging from seconds to days [Source: ev-8].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c226",
+      "text": "This granularity is further supported by a specific seven-state enumeration found in implementation details, which includes *submitted*, *working*, *input-required*, *completed*, *failed*, *canceled*, and *rejected* [Source: ev-24].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c227",
+      "text": "Although some sources list six primary lifecycle stages, the inclusion of distinct terminal states (*completed*, *failed*, *canceled*, *rejected*) alongside active processing states ensures that every possible outcome of an autonomous task is explicitly tracked. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c228",
+      "text": "The protocol mandates that once a task enters these defined states, clients can utilize the assigned Task ID for status queries or cancellation without requiring custom state management logic within each agent's internal codebase [Source: ev-6].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c229",
+      "text": "This standardization prevents the fragmentation problem where agents from different vendors (e.g., Salesforce to ServiceNow) previously required bespoke connectors due to incompatible internal messaging formats and task models [Source: ev-24].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c230",
+      "text": "The robustness of this lifecycle model enables diverse communication mechanisms tailored to specific use cases. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c231",
+      "text": "Because tasks may run long-term, A2A supports three distinct tracking methods—polling, streaming via Server-Sent Events (SSE), and webhooks—which are dynamically gated behind capabilities advertised on the remote Agent Card [Source: ev-8].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c232",
+      "text": "For instance, while polling is always available for simple cron jobs or integrations, streaming requires explicit capability negotiation before being utilized by a caller [Source: ev-8].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c233",
+      "text": "This mechanism ensures that agents do not assume unnecessary infrastructure overhead; an agent can choose to skip creating a full task object if the request is trivial enough to be answered in a single response message [Source: ev-8].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c234",
+      "text": "| State Category | Defined States | Primary Functionality |\n| :--- | :--- | :--- |\n| **Running** | *submitted*, *working* | Initial acceptance and active processing with potential real-time result streaming. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c235",
+      "text": "|\n| **Paused** | *input-required*, *auth-required* | Suspension for human-in-the-loop workflows or credential verification, allowing long idle periods without context loss. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c236",
+      "text": "|\n| **Finished (Terminal)** | *completed*, *failed*, *canceled*, *rejected* | Finalization of the task lifecycle with specific outcome classification. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c237",
+      "text": "|\n\nThe strength of this evidence lies in its consistency across multiple authoritative sources, including official documentation from Agent2Agent.Info and technical blogs discussing Google's April 9, 2025 announcement [Source: ev-43], [Source: ev-8].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c238",
+      "text": "The explicit separation of paused states represents a significant innovation over previous models that often treated interruptions as transient errors rather than distinct operational phases. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c239",
+      "text": "This design allows orchestrators to manage complex workflows where agents must wait for external inputs without triggering failure conditions or losing progress data. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c240",
+      "text": "Consequently, A2A provides a unified standard capable of supporting both instantaneous responses and prolonged autonomous operations within enterprise environments. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c241",
+      "text": "The transition from ad-hoc JSON sharing to standardized protocols like Google's Agent-to-Agent (A2A) and Model Context Protocol (MCP) yields measurable improvements in multi-step task completion, primarily by eliminating the friction of bespoke integration. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c242",
+      "text": "Evidence indicates that prior to A2A, enterprise teams faced a \"fragmentation problem\" where agents from different vendors could not reliably hand off work without custom glue code [ev-45]. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c243",
+      "text": "This lack of interoperability forced organizations into one-off integrations for every agent pair; for instance, connecting a Salesforce agent to ServiceNow required unique development efforts distinct from linking a Vertex agent to AWS Bedrock [ev-24]. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c244",
+      "text": "By replacing these bespoke connectors with a single open standard, A2A significantly reduces the overhead associated with building and maintaining multi-agent systems, thereby increasing the reliability of complex workflows that rely on sequential delegation across organizational boundaries. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c245",
+      "text": "While specific quantitative metrics regarding percentage increases in task success rates are absent from the provided evidence, the qualitative impact is substantial due to structural improvements in discovery and lifecycle management. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c246",
+      "text": "The core innovation driving this efficiency lies in the \"Agent Card\" mechanism, which publishes capabilities at a well-known endpoint (e.g., `/.well-known/agent-card.json`) without requiring internal logic exposure or centralized registries [ev-15][ev-46]. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c247",
+      "text": "This machine-readable job listing allows client agents to dynamically discover remote capabilities before initiating tasks, enabling the composition of multi-agent workflows without hard-coded integrations [ev-6]. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c248",
+      "text": "Consequently, systems can adaptively route sub-tasks based on real-time capability assessment rather than static API mappings. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c249",
+      "text": "Furthermore, A2A's standardized task lifecycle—comprising states such as submitted, working, input-required, and completed—provides robust state management for long-running operations that ad-hoc JSON exchanges often struggle to track reliably [ev-40][ev-42]. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c250",
+      "text": "The relationship between A2A and MCP is distinct yet complementary within this ecosystem. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c251",
+      "text": "While MCP standardizes how agents access tools and data sources (agent-to-resource connections), A2A addresses the gap in agent-to-agent delegation across vendor boundaries [ev-6]. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c252",
+      "text": "This division of labor creates a complete stack where modality-agnostic communication supports diverse interactions including text, audio, and video negotiation [ev-45]. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c253",
+      "text": "The protocol's enterprise-grade security features, incorporating OAuth 2.0 or OIDC authentication schemes defined in Agent Cards, ensure that secure cross-agent messaging remains robust even as complexity increases [ev-15][ev-q3]. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c254",
+      "text": "Although some descriptions emphasize \"audio/video\" capabilities more heavily than others regarding specific implementation details [ev-45] versus general data handling [ev-46], the consensus is clear: A2A solves interoperability problems left open by MCP by enabling specialized agents to collaborate seamlessly across frameworks like Salesforce, ServiceNow, and Vertex AI without proprietary silos [ev-6]. [Source: ev-8]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c255",
+      "text": "| Feature | Ad-hoc JSON Sharing | Standardized Protocols (A2A/MCP) |\n| :--- | :--- | :--- |\n| **Discovery** | Manual or hardcoded API endpoints | Machine-readable Agent Cards at standard URLs |\n| **Interoperability** | Vendor-specific glue code required per pair | Single open specification for cross-vendor use |\n| **Task Lifecycle** | Often stateless or fragile tracking | Structured states: submitted → working → completed/failed |\n| **Security Model** | Custom implementation needed per integration | Built-in auth schemes (OAuth/OIDC) via Agent Card negotiation |\n\nUltimately, the move to A2A represents a shift from brittle point-to-point connections to resilient, scalable ecosystems. [Source: ev-15]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c256",
+      "text": "By standardizing how agents negotiate permissions and manage long-running workflows, these protocols directly address the scalability limits of current multi-agent architectures, allowing enterprises to build systems that can dynamically compose specialized capabilities across diverse platforms [ev-45]. [Source: ev-15]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c257",
+      "text": "The Agent-to-Agent (A2A) protocol establishes a standardized, modality-agnostic framework for transferring large binary files between autonomous agents, distinguishing itself through specific structural components designed to handle complex data payloads without exposing internal agent logic. [Source: ev-15]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c258",
+      "text": "Central to this mechanism is the **Artifact**, which functions as a tangible deliverable tied directly to the task lifecycle rather than serving merely as conversational context [Source: ev-43].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c259",
+      "text": "Unlike generic messages used for immediate responses or status updates, Artifacts possess unique identifiers (`artifactId`) and human-readable names that allow clients to track progress on long-running operations, such as file generation or rendering tasks [Source: ev-15].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c260",
+      "text": "This separation ensures that while `Message` objects facilitate synchronous communication via JSON-RPC 2.0 over HTTP or SSE streams, `Artifacts` manage asynchronous state changes and final outputs, enabling agents to stream incremental data chunks before delivering complete files [Source: ev-24].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c261",
+      "text": "To accommodate binary content within these structures, the protocol utilizes **Part** objects embedded within both Messages and Artifacts. [Source: ev-15]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c262",
+      "text": "The specification defines a versatile `FilePart`, which supports inline transfer methods optimized for varying network constraints. [Source: ev-15]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c263",
+      "text": "Specifically, A2A allows binaries to be transferred either as Base64-encoded strings directly in the payload or referenced via remote URIs, with metadata including filename and MIME type attached to each part object [Source: ev-43].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c264",
+      "text": "This dual-mode approach addresses the scalability problem inherent in embedding massive datasets (such as video clips or large model weights) into JSON messages; by supporting URI references, agents can offload heavy lifting to external storage while maintaining a lightweight protocol handshake [Source: ev-15].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c265",
+      "text": "Furthermore, the inclusion of streaming capabilities means that binary data does not need to wait for full completion before being partially delivered to the client agent, reducing latency in interactive workflows [Source: ev-24].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c266",
+      "text": "Comparing A2A's handling of binary data against the Model Context Protocol (MCP), which primarily focuses on tool invocation and structured data exchange via `Tool` calls, reveals distinct architectural priorities. [Source: ev-15]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c267",
+      "text": "While MCP relies heavily on synchronous API interactions suitable for immediate function execution, A2A is explicitly engineered for \"long-running\" tasks with updates and artifacts, making it superior for scenarios involving large file ingestion or generation where state persistence across multiple turns is required [Source: ev-45].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c268",
+      "text": "The evidence suggests that while both protocols support rich data exchanges—MCP handling structured JSON and APIs alongside prompts—A2A extends this to include audio, video, and UI negotiation through its artifact-centric model [Source: ev-45].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c269",
+      "text": "This modality-agnostic design allows agents to pass binary files not just as parameters but as primary outputs of a task lifecycle, from `submitted` to `completed`, without requiring the client agent to rewrite logic for each new framework integration [Source: ev-15].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c270",
+      "text": "| Feature | A2A Artifact/Part Mechanism | MCP Equivalent Context |\n| :--- | :--- | :--- |\n| **Primary Use** | Deliverables & Long-running Outputs | Tool Inputs/Outputs (Sync) |\n| **Binary Handling** | Inline Base64 or Remote URI via Part objects | Limited; often requires external tool calls |\n| **Streaming Support** | Native streaming of Artifacts during processing | Less emphasized in core spec |\n| **State Tracking** | Unique `artifactId` tied to Task lifecycle | Implicit within Tool execution flow |\n\nThe strength of this design lies in its ability to decouple the transport mechanism from the agent's internal implementation details. [Source: ev-26]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c271",
+      "text": "By standardizing how binary data is packaged and streamed, A2A solves the fragmentation problem where agents from different vendors could not reliably hand off large files without bespoke connectors [Source: ev-24].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c272",
+      "text": "The protocol's support for both synchronous SSE streams and asynchronous webhooks ensures that whether a task requires immediate feedback or hours of computation, the transfer of massive binary datasets remains consistent across enterprise-grade deployments requiring robust authentication and observability [Source: ev-15].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c273",
+      "text": "The Model Context Protocol (MCP) v1.0 establishes a dual-transport architecture that fundamentally distinguishes its connectivity model from other emerging agent standards. [Source: ev-26]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c274",
+      "text": "By natively supporting both standard input/output (`stdio`) and HTTP with Server-Sent Events (HTTP/SSE), the protocol achieves transport agnosticism without sacrificing performance or security characteristics for specific deployment scenarios [Source: ev-26].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c275",
+      "text": "This bifurcation allows `stdio` to facilitate low-latency, stateful communication between local processes—such as an LLM host running within VS Code or Cursor alongside a lightweight server component—while simultaneously enabling remote connections via HTTP/SSE where network isolation or cloud infrastructure demands are present [Source: ev-40], [Source: ev-16].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c276",
+      "text": "The coexistence of these layers is not merely additive; it represents a strategic design choice that mitigates the trade-off often found in single-transport protocols, which typically force developers to choose between local efficiency and remote accessibility. [Source: ev-26]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c277",
+      "text": "The implementation details reveal how this duality operates within the protocol's lifecycle management. [Source: ev-26]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c278",
+      "text": "Every MCP session initiates with a critical `initialize`/`initialized` handshake, during which both parties negotiate the specific protocol version and available capabilities before any data exchange occurs [Source: ev-26].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c279",
+      "text": "This negotiation phase effectively abstracts the underlying transport layer from the application logic, ensuring that tool invocation remains consistent regardless of whether the connection uses pipes or HTTP streams. [Source: ev-26]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c280",
+      "text": "Once established, the client can dynamically discover server offerings through methods like `tools/list`, `resources/list`, and `prompts/list`, confirming that discovery is not pre-configured but rather negotiated on demand based on the active transport channel [Source: ev-40].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c281",
+      "text": "Comparatively, while Google's Agent-to-Agent (A2A) protocol focuses heavily on fluid role negotiation for multi-agent collaboration, MCP's explicit definition of distinct native transports provides a more rigid yet versatile foundation for integrating diverse external systems. [Source: ev-26]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c282",
+      "text": "The evidence suggests that MCP's support for both `stdio` and HTTP/SSE was likely driven by the need to secure enterprise endpoints against \"vibe coding\" risks while maintaining seamless developer workflows in integrated environments like IDEs [Source: ev-40], [Source: ev-36].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c283",
+      "text": "This dual-layer approach ensures that organizations can deploy lightweight local servers without exposing them unnecessarily over public networks, or scale remote integrations securely through authenticated OAuth 2.1 flows when required [Source: ev-26].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c284",
+      "text": "| Transport Layer | Native Support Status (MCP v1.0) | Primary Use Case Context |\n| :--- | :--- | :--- |\n| **Standard Input/Output (`stdio`)** | Supported Natively | Local processes; low-latency interactions within IDEs or containers where direct piping is optimal [Source: ev-40] |\n| **HTTP + Server-Sent Events** | Supported Natively | Remote connections; cloud-based agents requiring stateful streaming for server-to-client updates [Source: ev-26] |\n\nThe strength of this finding lies in the explicit documentation of these mechanisms across multiple authoritative sources, including security analyses and architectural guides that confirm `stdio` remains a valid native option rather than an optional extension.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c285",
+      "text": "This dual-capability design directly addresses the problem of heterogeneous infrastructure integration, allowing AI systems to interact with legacy local tools via pipes while maintaining compatibility with modern distributed microservices architectures over HTTP/SSE.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c286",
+      "text": "The transition from native REST endpoints to Model Context Protocol (MCP) servers introduces a measurable layer of economic friction, primarily through increased infrastructure overhead and potential latency costs.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c287",
+      "text": "Evidence indicates that while the core mechanism of calling an API directly via REST is straightforward, adopting MCP often necessitates introducing an intermediary server or gateway between the agent client and the underlying service [ev-23].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c288",
+      "text": "This architectural shift adds deployment complexity; developers must now host or configure this additional layer rather than relying on direct connectivity.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c289",
+      "text": "Although the resulting latency increase is described as \"usually minimal,\" it represents a non-zero operational cost that accumulates across high-frequency interactions in multi-agent systems [ev-23].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c290",
+      "text": "Furthermore, the requirement for tool support creates a latent financial barrier: services without native MCP interfaces demand either immediate wrapper implementation by third parties or waiting periods before full ecosystem adoption occurs [ev-23].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c291",
+      "text": "Despite these integration costs, the economic value proposition of standardization appears to outweigh the initial friction, particularly regarding long-term maintenance and vendor lock-in risks.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c292",
+      "text": "The evidence suggests that while REST endpoints offer simplicity, they lack a unified interface for diverse LLM providers, potentially leading to fragmented development paths and higher lifecycle management expenses as models evolve [ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c293",
+      "text": "Conversely, protocols like A2A (led by Google) and MCP (created by Anthropic) aim to resolve this fragmentation through common interfaces, though their specific cost differentials remain less explicitly quantified than the structural overheads of MCP wrappers [ev-16], [ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c294",
+      "text": "The primary economic divergence lies in the necessity of middleware when utilizing third-party services via MCP compared to native calls.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c295",
+      "text": "While REST allows direct invocation, MCP mandates an intermediate layer that can introduce complexity and marginal latency costs, necessitating dedicated resources for hosting or cloud-managed gateway services [ev-23].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c296",
+      "text": "This creates a trade-off where organizations accept current capability benefits against the \"growing pains\" of managing this extra infrastructure layer [ev-23].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c297",
+      "text": "However, community-driven efforts are rapidly mitigating these costs; tools like Unla enable on-the-fly wrapping of any REST API, significantly reducing the time-to-value gap for non-MCP-enabled services [ev-23].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c298",
+      "text": "The choice between protocols impacts long-term economic stability differently.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c299",
+      "text": "Native REST endpoints remain cost-effective for simple interactions but lack the standardization required to scale across diverse AI agents without custom integration work per provider [ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c300",
+      "text": "In contrast, both MCP and A2A address lock-in by providing common interfaces that stabilize development lifecycles, even if they introduce initial setup complexity [ev-16], [iv-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c301",
+      "text": "The evidence highlights a consensus that real-world systems likely require both: using native or wrapped APIs where direct access is viable while leveraging standardized protocols like MCP or A2A for complex agent-to-agent discovery and tool orchestration [ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c302",
+      "text": "| Feature | Native REST Endpoints | Third-Party Services via MCP Wrapper |\n| :--- | :--- | :--- |\n| **Latency** | Minimal (Direct Call) | Slight increase due to intermediary layer [ev-23] |\n| **Deployment Complexity** | Low (Standard API calls) | Higher (Requires hosting/configuring gateway/server) [ev-23] |\n| **Vendor Lock-in Risk** | High (Proprietary formats vary by vendor) | Lower (Common interface standardizes access) [ev-16] |\n| **Tool Availability Lag** | Immediate if endpoint exists | Potential lag until wrapper/gateway is implemented [ev-23]\n\n\n\nThe evidence establishes that A2A and MCP are not competing standards but complementary layers of a unified agentic stack, where the distinction between tool-use and peer-to-peer delegation is architecturally fundamental. [Source: ev-34]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c303",
+      "text": "This conclusion rests on strong structural evidence: MCP standardizes how agents access external resources via JSON-RPC [Source: ev-38], while A2A enables opaque agents to discover and delegate tasks without exposing internal state [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c304",
+      "text": "The report confirms this division by showing that effective systems require both; agents need MCP for specific actions like file operations, yet rely on A2A for complex collaboration across organizational boundaries [Source: ev-37].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c305",
+      "text": "Consequently, the primary innovation of A2A lies in its resolution of the \"fragmentation problem,\" where bespoke glue code previously prevented cross-vendor interoperability [Source: ev-6].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c306",
+      "text": "By leveraging existing web technologies such as HTTP/HTTPS and SSE rather than inventing new transports, A2A lowers adoption barriers while enabling secure, asynchronous task lifecycles with granular states like *input-required* to handle long-running human-in-the-loop workflows [Source: ev-8][ev-14].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c307",
+      "text": "However, the assessment must weigh these architectural benefits against significant operational trade-offs. [Source: ev-34]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c308",
+      "text": "The evidence strongly supports that standardization yields economic efficiency by reducing integration maintenance costs from 20–40% of development resources [Source: ev-14], yet it also reveals a tentative but critical inefficiency: multi-agent coordination via A2A consumes significantly more tokens per step than single-agent reasoning due to mandatory discovery and authentication metadata [Source: ev-36].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c309",
+      "text": "This token inflation is structural rather than incidental, stemming from the need for rigorous Agent Card verification at well-known URLs [Source: ev-15].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c310",
+      "text": "Furthermore, while MCP enjoys massive grassroots adoption with 97 million monthly SDK downloads [Source: ev-27], A2A’s ecosystem remains enterprise-driven, suggesting that its value proposition currently favors large-scale organizational interoperability over individual developer utility.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c311",
+      "text": "Genuine open questions remain regarding security parity; while A2A mandates cryptographic schemes like OAuth 2.0, a significant portion of MCP servers still rely on insecure API keys or lack authentication entirely [Source: ev-34].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c312",
+      "text": "Resolving this requires broader industry enforcement of mandatory identity verification across both protocols. [Source: ev-34]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c313",
+      "text": "The practical implication for demanding readers is clear: organizations should not view these as either/or choices but must architect their systems to leverage MCP for tool connectivity and A2A for inter-agent delegation, accepting the token overhead of A2A as the necessary cost for achieving scalable, vendor-neutral autonomy. [Source: ev-34]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c314",
+      "text": "Based on the evidence provided, here is a synthesis of the information regarding Google's A2A protocol:\n\n**Overview and Purpose**\nThe Agent-to-Agent (A2A) Protocol is an open standard launched by Google in April 2025 to enable seamless communication and collaboration between AI agents from different vendors or frameworks [Source: ev-<estate-1>].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: the citation handle does not name a window chunk (ref-required)",
+      "corroboration": null
+    },
+    {
+      "id": "c315",
+      "text": "Its primary goal is to solve interoperability issues in multi-agent systems where agents operate as \"silos\" unable to communicate effectively with one another [Source: ev-<estate-2>].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: the citation handle does not name a window chunk (ref-required)",
+      "corroboration": null
+    },
+    {
+      "id": "c316",
+      "text": "Unlike Anthropic's Model Context Protocol (MCP), which focuses on connecting models to external tools and data sources, A2A specifically addresses the need for direct peer-to-peer coordination between autonomous agents themselves [Source: ev-<estate-3>].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: the citation handle does not name a window chunk (ref-required)",
+      "corroboration": null
+    },
+    {
+      "id": "c317",
+      "text": "This move was intended to ensure neutral governance, promote open standards, and foster broader industry adoption while mitigating risks of vendor lock-in [Source: ev-<estate-6>].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: the citation handle does not name a window chunk (ref-required)",
+      "corroboration": null
+    },
+    {
+      "id": "c318",
+      "text": "The donation formalized a commitment to an \"open, collaborative ecosystem\" driven by community contributions rather than single-company control [Source: ev-<estate-8>].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: the citation handle does not name a window chunk (ref-required)",
+      "corroboration": null
+    },
+    {
+      "id": "c319",
+      "text": "Under this new governance model, Jim Zemlin, Executive Director of the Linux Foundation, stated that A2A would focus on extensibility, security, and real-world usability across industries [Source: ev-<estate-9>].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: the citation handle does not name a window chunk (ref-required)",
+      "corroboration": null
+    },
+    {
+      "id": "c320",
+      "text": "At launch, it was supported by over 50 technology partners including Amazon, Cisco, Microsoft, Salesforce, ServiceNow, LangChain, and others [Source: ev-<estate-7>].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: the citation handle does not name a window chunk (ref-required)",
+      "corroboration": null
+    },
+    {
+      "id": "c321",
+      "text": "**Technical Architecture and Components**\n*   **Agent Cards:** Every compliant agent exposes a public metadata file known as an \"Agent Card\" (typically at `.well-known/agent.json`). [Source: ev-<estate-16>]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: the citation handle does not name a window chunk (ref-required)",
+      "corroboration": null
+    },
+    {
+      "id": "c322",
+      "text": "This card describes the agent's identity, capabilities/skills, connection endpoints, and authentication requirements, serving as the primary discovery mechanism for other agents [Source: ev-<estate-7>] or via HTTP requests where the card includes hosted/DNS info, version, skills, etc.[Source: ev-<estate-9>].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: the citation handle does not name a window chunk (ref-required)",
+      "corroboration": null
+    },
+    {
+      "id": "c323",
+      "text": "*   **Roles:** In an A2A interaction, an agent acts either as a client (initiating tasks) or a remote server (receiving requests). [Source: ev-<estate-16>]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: the citation handle does not name a window chunk (ref-required)",
+      "corroboration": null
+    },
+    {
+      "id": "c324",
+      "text": "*   **Tasks:** The central unit of work is called a \"Task,\" representing a single conversation or unit of work between agents. [Source: ev-<estate-16>]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: the citation handle does not name a window chunk (ref-required)",
+      "corroboration": null
+    },
+    {
+      "id": "c325",
+      "text": "Clients initiate these by sending requests to remote servers [Source: ev-<estate-10>] or via HTTP POST using JSON-RPC 2.0 wrapped inside the protocol [Source: ev-<estate-14>].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: the citation handle does not name a window chunk (ref-required)",
+      "corroboration": null
+    },
+    {
+      "id": "c326",
+      "text": "*   **Layering:** A2A is designed to complement MCP. [Source: ev-<estate-16>]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: the citation handle does not name a window chunk (ref-required)",
+      "corroboration": null
+    },
+    {
+      "id": "c327",
+      "text": "**Security Considerations and Vulnerabilities**\nWhile Google positions A2A as secure using OAuth2, API keys, and enterprise authentication, independent research has identified critical vulnerabilities requiring enhancements. [Source: ev-<estate-16>]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: the citation handle does not name a window chunk (ref-required)",
+      "corroboration": null
+    },
+    {
+      "id": "c328",
+      "text": "Key issues include:\n*   **Token Management:** Lack of limitations on token lifetime, insufficiently granular token scopes, and missing strong Customer Authentication (SCA) [Source: ev-<estate-5>] or \"absence of limitations on token lifetime\" [Source: ev-<estate-12>].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: the citation handle does not name a window chunk (ref-required)",
+      "corroboration": null
+    },
+    {
+      "id": "c329",
+      "text": "*   **Governance and Origin:**\n    *   **MCP** was introduced by Anthropic in November 2024 as an open standard to replace fragmented custom integrations [Source: ev-38][ev-19].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c330",
+      "text": "By mid-to-late 2026 reports indicate support grew to over 150 organizations with production deployments in major cloud platforms like Azure AI Foundry and Amazon Bedrock AgentCore [Source: ev-15][estate-8].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c331",
+      "text": "Client agents use these cards to discover what other remote agents can do before initiating any interaction, enabling dynamic composition of workflows without hard-coded integrations [Source: ev-6][ev-21].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c332",
+      "text": "These tasks have defined states such as `submitted`, `working`, `input-required`, `auth-required`, `completed`, or `failed`. [Source: ev-14]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c333",
+      "text": "For instance, an agent can use MCP to access tools while simultaneously using A2A to delegate parts of its reasoning or execution to another specialized AI agent on a different platform [Source: estate-16][ev-6].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: the citation handle does not name a window chunk (ref-required)",
+      "corroboration": null
+    },
+    {
+      "id": "c334",
+      "text": "It also incorporates security measures like OAuth 2.0, API Keys, and mutual TLS (mTLS) support within its standard architecture [Source: ev-14].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c335",
+      "text": "Furthermore, it includes mechanisms for granular skill parameterization and structured data artifacts (files/multi-part results), though early versions noted gaps in these areas that were addressed in later iterations or research proposals [Source: estate-9][ev-53].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: the citation handle does not name a window chunk (ref-required)",
+      "corroboration": null
+    },
+    {
+      "id": "c336",
+      "text": "Without a common language, integrating diverse agents requires brittle, custom solutions for every new connection pair, hindering scalability [Source: ev-14][estate-7].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c337",
+      "text": "This lack of coordination made building scalable multi-agent systems difficult, leading to \"integration chaos\" where workflows are hard to maintain and extend [Source: estate-7][ev-54].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: the citation handle does not name a window chunk (ref-required)",
+      "corroboration": null
+    },
+    {
+      "id": "c338",
+      "text": "These issues could lead to unauthorized disclosure of sensitive data, privilege escalation, or prompt injection attacks within multi-agent environments. [Source: estate-3]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: the citation handle does not name a window chunk (ref-required)",
+      "corroboration": null
+    },
+    {
+      "id": "c339",
+      "text": "The Linux Foundation's involvement aims to drive community-driven improvements to these areas through enhanced transparency, user consent mechanisms, and regulatory compliance alignment [Source: ev-20][estate-16].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: not judgeable from the evidence",
+      "corroboration": null
+    }
+  ],
+  "empty_rounds": []
+}

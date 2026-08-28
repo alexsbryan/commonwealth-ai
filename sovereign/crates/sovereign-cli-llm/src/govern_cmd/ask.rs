@@ -18,7 +18,8 @@
 
 use std::io::Write;
 
-use corpus_engine::enrichment::{GovernanceOpKind, GovernanceOplog, RuleStatus};
+use corpus_engine::enrichment::{GovernanceOpKind, RuleStatus};
+use corpus_engine::oplog::Oplog;
 use futures::StreamExt as _;
 
 use sovereign_core::types::Intent;
@@ -86,47 +87,32 @@ pub async fn cmd_ask(args: &[String]) -> i32 {
     // Pin the intent: governance questions are always factual lookups over
     // the sealed corpus, so bypass the router (which can misclassify a
     // lookup as Conation/Simple and skip the active-set filter + gate).
-    let mut answer = String::new();
-    match session
-        .runtime
-        .handle_message_stream_as(question, &conv_id, Intent::KnowledgeQuery)
-        .await
-    {
-        Ok(handle) => {
-            let mut stream = handle.stream;
-            while let Some(item) = stream.next().await {
-                match item {
-                    Ok(chunk) => {
-                        print!("{chunk}");
-                        let _ = std::io::stdout().flush();
-                        answer.push_str(&chunk);
-                    }
-                    Err(e) => {
-                        eprintln!("\n[stream error] {e}");
-                        break;
-                    }
-                }
-            }
-            println!();
-        }
-        Err(sovereign_core::error::Error::NotImplemented(_)) => {
-            // Non-streamable intent: take the one-shot path.
-            match session.runtime.handle_message(question, &conv_id).await {
-                Ok(resp) => {
-                    println!("{}", resp.message.content);
-                    answer = resp.message.content;
-                }
-                Err(e) => {
-                    eprintln!("turn failed: {e}");
-                    return 1;
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("stream start failed: {e}");
-            return 1;
-        }
+    // ONE turn driver (TOPOLOGY §10 phase 6). This was a hand-rolled
+    // stream drain plus a `NotImplemented` fallback to `handle_message` —
+    // and that fallback double-wrote the user's message, because the
+    // streaming path persists it before refusing a document-attached turn.
+    // `serve_turn` decides that case up front, so the bug is unreachable.
+    let sink = crate::turn_sink::StdoutTurnSink::default();
+    sovereign_core::runtime::serve_turn(
+        &session.runtime,
+        session.store.as_ref(),
+        &conv_id,
+        question,
+        sovereign_contracts::types::TurnMode::Grounded,
+        // Pinned: these are factual lookups over the sealed corpus, and the
+        // router can misclassify one as Conation/Simple and skip the
+        // active-set filter + gate.
+        Some(Intent::KnowledgeQuery),
+        None,
+        &sink,
+    )
+    .await;
+    println!();
+    if let Some(e) = sink.failure() {
+        eprintln!("turn failed: {e}");
+        return 1;
     }
+    let answer = sink.text();
 
     // Glass-box: surface the verbatim source passages retrieval actually fed
     // this answer — post active-set filter, so only *current* law — each with
@@ -243,7 +229,7 @@ fn render_supersession_provenance(corpus_id: &str, answer: &str) {
     let Ok(view) = load_view(corpus_id) else {
         return;
     };
-    let ops = match GovernanceOplog::new(atlas_dir(corpus_id)).read_all() {
+    let ops = match Oplog::<GovernanceOpKind>::new(atlas_dir(corpus_id)).read_all() {
         Ok(o) => o,
         Err(_) => return,
     };

@@ -187,7 +187,7 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
     // Probe daemon — fail fast if it's down.
     if !probe_daemon(&cfg.base_url).await {
         eprintln!(
-            "error: daemon is not responding at {} — start it with `commonwealth daemon start` or equivalent",
+            "error: daemon is not responding at {} — start it with `svrn daemon start` or equivalent",
             cfg.base_url
         );
         return 2;
@@ -832,7 +832,7 @@ fn read_failures_for_retry(
         // Checkpoint exists but is empty — fall through to run-file
         // scan in case a legacy `--full` (no checkpoint) ran prior.
     }
-    read_latest_failures(runs_dir)
+    read_latest_run(runs_dir).map(|opt| opt.map(|r| (r.path, r.failures)))
 }
 
 /// Locate the most recent `questions-*.json` run file under the
@@ -845,9 +845,19 @@ fn read_failures_for_retry(
 ///
 /// `pub(super)` because the `build` orchestration reads this to
 /// decide whether to auto-retry after an Extract step fails.
-pub(super) fn read_latest_failures(
-    runs_dir: &std::path::Path,
-) -> Result<Option<(PathBuf, Vec<(String, PhaseFailureKind)>)>, String> {
+/// What the newest run file records. One reader, not two: finding "the
+/// newest `questions-*.json`" is a single decision and lives in one
+/// place (ARCH §10.6).
+#[derive(Debug, Clone)]
+pub(super) struct LatestRun {
+    pub path: PathBuf,
+    /// Chapters that produced an extraction.
+    pub extracted: usize,
+    /// Chapters that did not, with the kind that stopped them.
+    pub failures: Vec<(String, PhaseFailureKind)>,
+}
+
+pub(super) fn read_latest_run(runs_dir: &std::path::Path) -> Result<Option<LatestRun>, String> {
     if !runs_dir.exists() {
         return Ok(None);
     }
@@ -881,12 +891,17 @@ pub(super) fn read_latest_failures(
             latest.display()
         )
     })?;
-    let ids: Vec<(String, PhaseFailureKind)> = parsed
+    let extracted = parsed.questions_by_chapter.len();
+    let failures: Vec<(String, PhaseFailureKind)> = parsed
         .failures
         .into_iter()
         .map(|f| (f.chapter_id, f.failure_kind))
         .collect();
-    Ok(Some((latest.clone(), ids)))
+    Ok(Some(LatestRun {
+        path: latest.clone(),
+        extracted,
+        failures,
+    }))
 }
 
 /// Public entry point used by the integration test so it can exercise
@@ -1083,14 +1098,14 @@ mod tests {
     }
 
     #[test]
-    fn read_latest_failures_returns_none_when_runs_dir_missing() {
+    fn read_latest_run_returns_none_when_runs_dir_missing() {
         let dir = tempfile::tempdir().unwrap();
-        let got = read_latest_failures(&dir.path().join("runs")).unwrap();
+        let got = read_latest_run(&dir.path().join("runs")).unwrap();
         assert!(got.is_none());
     }
 
     #[test]
-    fn read_latest_failures_picks_newest_run_and_extracts_ids() {
+    fn read_latest_run_picks_newest_run_and_extracts_ids() {
         use std::fs;
         let dir = tempfile::tempdir().unwrap();
         let runs = dir.path().join("runs");
@@ -1101,7 +1116,8 @@ mod tests {
         // Ensure the "new" file has a strictly later mtime.
         std::thread::sleep(std::time::Duration::from_millis(1100));
         fs::write(runs.join("questions-full-002.json"), new).unwrap();
-        let (path, ids) = read_latest_failures(&runs).unwrap().unwrap();
+        let run = read_latest_run(&runs).unwrap().unwrap();
+        let (path, ids) = (run.path, run.failures);
         assert!(
             path.ends_with("questions-full-002.json"),
             "got: {}",
@@ -1115,7 +1131,7 @@ mod tests {
     }
 
     #[test]
-    fn read_latest_failures_returns_failure_kinds_for_terse_filtering() {
+    fn read_latest_run_returns_failure_kinds_for_terse_filtering() {
         // When the run file carries `failure_kind` per entry, the
         // caller should be able to partition failures by kind —
         // that's what `--terse --retry-failed` does to target the
@@ -1136,7 +1152,7 @@ mod tests {
           "written_at": "t"
         }"#;
         fs::write(runs.join("questions-full-001.json"), payload).unwrap();
-        let (_, ids) = read_latest_failures(&runs).unwrap().unwrap();
+        let ids = read_latest_run(&runs).unwrap().unwrap().failures;
         assert_eq!(ids.len(), 3);
         let think_truncs: Vec<&String> = ids
             .iter()

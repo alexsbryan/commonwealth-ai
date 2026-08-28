@@ -1,0 +1,37 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787730496",
+  "charter_hash": "e872b3993ffc1291",
+  "rounds_planned": 2,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "The number of distinct architectural layers defined in the Agent2Agent (A2A) protocol specification versus the Model Context Protocol (MCP) specification",
+      "The count of supported transport mechanisms listed in the official A2A documentation compared to the MCP documentation",
+      "The percentage change in GitHub star counts for the a2a-project repository and the modelcontextprotocol organization between Q1 2025 and Q3 2024",
+      "The median latency overhead measured when using A2A JSON-RPC messages versus standard HTTP REST calls in benchmark tests",
+      "The share of enterprise AI agents currently integrating A2A protocols according to industry surveys from Gartner or Forrester in 2025",
+      "The number of core components defined in an A2A Agent Card (e.g., capabilities, skills) versus the tools/resources/prompts primitives in MCP",
+      "The count of major tech companies listed as founding members of the Linux Foundation's A2A initiative compared to Anthropic's initial partners for MCP",
+      "The ratio of cross-vendor interoperability test cases passed by A2A implementations across different LLM providers in public benchmarks",
+      "The specific problem statement regarding \"agent silos\" quantified by the estimated percentage reduction in integration time claimed by Google Cloud engineers",
+      "The median size in bytes of a typical A2A task message payload including artifacts versus an MCP tool call request body",
+      "The number of distinct error codes defined in the A2A protocol specification table 4.1 versus the MCP error handling section",
+      "The share of developer attention (measured by search volume) for \"Agent2Agent protocol\" vs \"Model Context Protocol\" on Stack Overflow and GitHub issues from January to June 2025",
+      "The count of supported artifact types (e.g., text, file, structured data) explicitly enumerated in the A2A spec compared to resource types in MCP",
+      "The percentage increase in token consumption when using A2A streaming responses versus non-streaming batch requests as reported in Google's technical whitepaper",
+      "The number of authentication schemes (OAuth 2.0, API keys) natively specified in the A2A security framework compared to MCP's current implementation status",
+      "The median time-to-first-token latency difference between agents communicating via A2A vs direct function calling via MCP in comparative performance studies",
+      "The count of distinct \"skills\" or capabilities that can be advertised in an A2A agent card versus the maximum number of tools registered in a single MCP server instance",
+      "The share of open-source LLM frameworks (LangChain, AutoGen, CrewAI) that have released official adapters for A2A versus those with MCP support as of mid-2025",
+      "The specific numerical threshold for context window utilization where A2A offloading reduces token cost by more than 10% according to Google's case study data",
+      "The number of versions of the A2A protocol spec published on GitHub compared to the version history tags available in the modelcontextprotocol repository"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2"
+    ]
+  }
+}

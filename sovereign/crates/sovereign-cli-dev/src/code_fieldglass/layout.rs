@@ -178,6 +178,11 @@ fn invert(order: &[usize]) -> Vec<usize> {
 /// grouping duplication-arc endpoints. Deterministic: ids assigned in
 /// insertion order, and `communities()` returns components sorted by their
 /// lexicographically-smallest member.
+///
+/// Keyed by STRING with insertion-ordered ids;
+/// `sovereign_tools::code::dry_report`'s same-named helper is private and
+/// indexes by `usize`. Same algorithm, different key domain — no owner to
+/// import.
 #[derive(Default)]
 pub struct UnionFind {
     ids: std::collections::BTreeMap<String, usize>,

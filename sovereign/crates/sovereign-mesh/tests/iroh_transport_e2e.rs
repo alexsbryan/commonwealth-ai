@@ -118,7 +118,7 @@ async fn gossip_round_trips_over_iroh_dialed_by_pubkey() {
     assert!(base_url.starts_with("http://127.0.0.1:"), "{base_url}");
 
     // ── A real gossip round through the tunnel ──────────────────
-    // Our view: the founder's mesh (same id + join_key_hash, so the
+    // Our view: the founder's mesh (same id + invite_key_hash, so the
     // auth boundary admits it) plus one member the founder doesn't
     // know yet.
     let mut my_view = founder_mesh.clone();
@@ -134,7 +134,7 @@ async fn gossip_round_trips_over_iroh_dialed_by_pubkey() {
         "mesh": {
             "id": my_view.id,
             "name": my_view.name,
-            "join_key_hash": my_view.join_key_hash,
+            "join_key_hash": my_view.invite_key_hash,
             "members": wire_members,
             "peers": [],
         }

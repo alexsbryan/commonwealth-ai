@@ -75,28 +75,19 @@ impl Runtime {
             .await
     }
 
-    /// Non-streaming entry that honours workspace agent-loops. A
-    /// conversation tagged `recipe-author` runs the long-lived tool
-    /// loop (the same dispatch the desktop streaming path uses at
-    /// [`Self::handle_message_stream`]), drained to a single
-    /// [`Response`]; every other conversation falls through to the
-    /// standard [`Self::handle_message`] turn chain, unchanged. The
-    /// daemon conversation API calls this so a headless caller reaches
-    /// the real recipe-author loop rather than a side-channel.
-    pub async fn handle_message_any(
-        &self,
-        message: &str,
-        conversation_id: &str,
-    ) -> Result<Response> {
-        if self.resolve_active_mode(conversation_id).await.as_deref()
-            == Some(crate::intent_policy::MODE_RECIPE_AUTHOR)
-        {
-            return self
-                .handle_message_stream_drain(message, conversation_id)
-                .await;
-        }
-        self.handle_message(message, conversation_id).await
-    }
+    // `handle_message_any` used to live here. It answered "run a turn, no
+    // stream, and route recipe-author conversations into the agent loop" —
+    // and it existed ONLY because `sovereign-server`'s REST route needed a
+    // non-streaming door. The recipe-author half was a second implementation
+    // of a decision `handle_message_stream` already makes internally (see
+    // "Recipe-author workspace dispatch" in `runtime/streaming.rs`), so the
+    // two could disagree, and the streaming one is the one both apps
+    // exercise (ARCH §10.6).
+    //
+    // Deleted 2026-08-25 (TOPOLOGY §10 phase 6). The non-streaming door is
+    // `runtime::collect_turn`: the same `serve_turn` driver with a
+    // collecting sink instead of a forwarding one, so there is one answer to
+    // "which handler runs" regardless of whether the caller wants deltas.
 
     /// Drive the streaming turn pipeline and drain it into a single
     /// [`Response`]. Reuses [`Self::handle_message_stream`] wholesale —
@@ -154,8 +145,13 @@ impl Runtime {
         fields(conversation_id = %conversation_id, message_chars = message.len())
     )]
     pub async fn handle_turn(&self, message: &str, conversation_id: &str) -> Result<Response> {
+        // The turn's enrichment providers, resolved ONCE here and passed
+        // down (daemon-convergence Phase 4a). Every stage below receives
+        // this value; none of them reaches back into the Runtime for a
+        // provider, which is what lets the Runtime collapse to core.
+        let lane = self.lane();
         let turn_start = std::time::Instant::now();
-        let has_doc_prefix = message.starts_with("[Document attached: ");
+        let has_doc_prefix = crate::runtime::is_document_attached(message);
         tracing::info!(has_doc_prefix, "runtime: turn begin");
 
         // PR2e — same oversize guard the streaming path applies.
@@ -307,7 +303,7 @@ impl Runtime {
                 &scope,
                 message,
                 5,
-                self.rerank_fn.as_ref(),
+                lane.rerank.f(),
             )
             .await
             {
@@ -553,7 +549,7 @@ impl Runtime {
         // evidence universe and the typed store is not the authority
         // over it. See `runtime/authority_guard.rs::guard_story`'s
         // coverage table.
-        if let Some(rest) = message.strip_prefix("[Document attached: ") {
+        if let Some(rest) = message.strip_prefix(crate::runtime::DOCUMENT_ATTACHED_PREFIX) {
             if let Some(end) = rest.find(']') {
                 let source = rest[..end].to_string();
                 let user_query = rest[end + 1..].trim().to_string();
@@ -744,17 +740,12 @@ impl Runtime {
         // upstream FTS retrieval (`context.memories`) + any
         // temporal tensions so the witness contract can execute
         // its contradiction-across-time moves.
-        let dispatch = match intent {
-            Intent::ComplexTask => "handle_complex_task",
-            Intent::KnowledgeQuery | Intent::ComparisonQuery => "handle_knowledge_query",
-            Intent::CodeQuery => "handle_code_query",
-            Intent::MetalingualQuery => "handle_metalingual_query",
-            Intent::ConationQuery => "handle_conation_query",
-            Intent::CommissiveQuery => "handle_commissive_query",
-            Intent::ExpressiveQuery => "handle_expressive_query",
-            Intent::GenerativeQuery => "handle_generative_query",
-            _ => "handle_simple",
-        };
+        // The glassbox label is the `dispatch` column of the intent table, so a
+        // new intent cannot reach this line with no label — the row would not
+        // compile. The column is pinned to the closed set of runtime handler
+        // names by `dispatch_column_names_a_runtime_handler`; that a given row
+        // names the arm actually taken below is still a reading, not a test.
+        let dispatch = intent.row().dispatch;
         tracing::info!(dispatch, "runtime: dispatching");
 
         let result = match intent {

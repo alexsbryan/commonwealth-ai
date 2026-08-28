@@ -27,7 +27,7 @@ use super::{
     atlas_tensions_classify, config::EnrichConfig, extract, paths, schema_review, seed_cmd,
 };
 use corpus_engine::enrichment::pipeline::{
-    BuildStep, EnrichProgress, EnrichProgressFn, PipelineRegistry, SeedStrategy,
+    progress::wire, BuildStep, EnrichProgress, EnrichProgressFn, PipelineRegistry, SeedStrategy,
 };
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 use std::sync::Arc;
@@ -100,13 +100,25 @@ pub async fn cmd_build(args: &[String]) -> i32 {
         }
     };
 
-    // Emitter that prints each progress event as a CLI-style
-    // banner. Desktop callers pass their own emitter (Tauri
-    // channel) instead — the orchestration is identical either
-    // way.
-    let progress: EnrichProgressFn = Arc::new(|evt: EnrichProgress| {
-        print_cli_event(&evt);
-    });
+    // Two renderings of one event stream, and the parent picks.
+    //
+    // A human gets banners. A parent process that set
+    // `SOVEREIGN_ENRICH_PROGRESS=json` gets one `@progress {…}` line per
+    // event on stdout — the wire `corpus_engine::…::progress::wire` declares,
+    // which is what `sovereign_tools::enrich` reads. Before 2026-08-26 there
+    // was no second rendering and that runner regex-matched THESE banners, so
+    // rewording one silently changed what the desktop believed about a running
+    // enrichment (TOPOLOGY §9.3).
+    //
+    // The env var is read here, at the ONE place that decides how to render.
+    let machine = std::env::var(wire::REQUEST_ENV)
+        .map(|v| v == wire::REQUEST_VALUE)
+        .unwrap_or(false);
+    let progress: EnrichProgressFn = if machine {
+        Arc::new(|evt: EnrichProgress| println!("{}", wire::encode(&evt)))
+    } else {
+        Arc::new(|evt: EnrichProgress| print_cli_event(&evt))
+    };
     build_with_progress(&parsed, Some(progress)).await
 }
 
@@ -170,34 +182,35 @@ pub async fn build_with_progress(parsed: &ParsedBuild, progress: Option<EnrichPr
             ordinal,
             total,
         });
-        let code = run_step(step, parsed).await;
-        if code != 0 {
-            let message = format!("step `{}` exited with code {code}", step.label());
-            eprintln!();
-            eprintln!("error: {message}. Build stopped.");
-            emit(EnrichProgress::StepFailed {
-                corpus_id: parsed.corpus_id.clone(),
-                step: build_step,
-                message,
-                exit_code: code,
-            });
-            emit(EnrichProgress::Aborted {
-                corpus_id: parsed.corpus_id.clone(),
-                failed_step: build_step,
-                exit_code: code,
-            });
-            return code;
-        }
+        let outcome = match run_step(step, parsed).await {
+            Ok(o) => o,
+            Err(failure) => {
+                let code = failure.exit_code;
+                eprintln!();
+                eprintln!("error: {}. Build stopped.", failure.message);
+                emit(EnrichProgress::StepFailed {
+                    corpus_id: parsed.corpus_id.clone(),
+                    step: build_step,
+                    message: failure.message,
+                    exit_code: code,
+                });
+                emit(EnrichProgress::Aborted {
+                    corpus_id: parsed.corpus_id.clone(),
+                    failed_step: build_step,
+                    exit_code: code,
+                });
+                return code;
+            }
+        };
         emit(EnrichProgress::StepDone {
             corpus_id: parsed.corpus_id.clone(),
             step: build_step,
-            // Per-step summaries land in the CLI's stdout; the
-            // progress event carries a terse marker so the UI
-            // renders a checkmark without re-reading the CLI
-            // output. Richer summaries can ride on the event when
-            // each step's `cmd_*` function grows a structured
-            // result type.
-            summary: format!("{} complete", build_step.display_name()),
+            // Supplied by the step, never by this loop. A step that
+            // ran, a step that was skipped because its output was
+            // cached, and a step that found nothing are three
+            // different outcomes; until 2026-08-26 all three put the
+            // same fabricated `"<step> complete"` on the wire.
+            summary: outcome.summary(),
         });
     }
 
@@ -384,7 +397,69 @@ fn resolve_cache_is_structural_placeholder(cache_path: &std::path::Path) -> bool
         .unwrap_or(true)
 }
 
-async fn run_step(step: Step, parsed: &ParsedBuild) -> i32 {
+// ── The step seam ────────────────────────────────────────────
+//
+// `run_step` used to return `i32`, and both halves of that were escape
+// hatches. `0` meant "the step succeeded and I have nothing to tell
+// you" — so `StepDone.summary`, a field on the typed progress wire, was
+// filled with `format!("{step} complete")`: a value computed from the
+// step's NAME, identical whether the step ran, was skipped as cached, or
+// found nothing. Nothing reads that field today — `sovereign-tools`'
+// wire reader decodes the event and never touches `summary`, and no
+// frontend does either — which is what let it survive: a fabricated
+// value nobody consumes looks exactly like a working one. The first
+// consumer to read it would have got the step's own name back.
+// ARCH §18.3: absence is reported, never defaulted.
+//
+// Nonzero meant "it failed and I have nothing to tell you", so
+// `StepFailed.message` could only restate the number — and that one IS
+// read, by `build_with_progress`'s own `eprintln!` to the operator.
+//
+// Both are now values the step supplies.
+
+/// What a step reported — the step's own words, in its own words.
+///
+/// A newtype rather than a bare `String` so there is exactly one way to
+/// build one, and building one requires having something to say.
+///
+/// There was briefly a second variant, `Untyped`, carrying a named
+/// absence for steps still on the `-> i32` contract. It was DELETED when
+/// the last of the nine converted, and that deletion is the ratchet: the
+/// type now refuses to compile a step that reports nothing, instead of a
+/// census having to notice one later.
+#[derive(Debug, Clone)]
+struct StepOutcome(String);
+
+impl StepOutcome {
+    fn did(summary: impl Into<String>) -> Self {
+        Self(summary.into())
+    }
+
+    /// The line for `StepDone.summary`, verbatim.
+    fn summary(&self) -> String {
+        self.0.clone()
+    }
+}
+
+/// Why a step stopped.
+#[derive(Debug, Clone)]
+struct StepFailure {
+    /// What went wrong, in the step's own words.
+    message: String,
+    /// The code `enrich build` exits with.
+    exit_code: i32,
+}
+
+impl StepFailure {
+    fn new(message: impl Into<String>, exit_code: i32) -> Self {
+        Self {
+            message: message.into(),
+            exit_code,
+        }
+    }
+}
+
+async fn run_step(step: Step, parsed: &ParsedBuild) -> Result<StepOutcome, StepFailure> {
     let corpus = parsed.corpus_id.as_str();
 
     // ── Idempotency gate ───────────────────────────────────────
@@ -418,13 +493,13 @@ async fn run_step(step: Step, parsed: &ParsedBuild) -> i32 {
                 // File-exists alone is not enough for two steps whose
                 // canonical output can be a STALE placeholder another code
                 // path wrote:
-                //   - Extract: a legacy non-atlas `questions.json` has no
-                //     section_extraction payloads → the cluster step dies.
-                //   - Resolve: every `corpus install` fires a model-free
-                //     structural atlas that writes an EMPTY `atoms.json`.
-                //     Treating that as "resolve done" leaves the corpus with
-                //     a 0-atom atlas even though Phase 1 extraction was rich
-                //     (the in-app custom-atlas enrich bug).
+                // - Extract: a legacy non-atlas `questions.json` has no
+                // section_extraction payloads → the cluster step dies.
+                // - Resolve: every `corpus install` fires a model-free
+                // structural atlas that writes an EMPTY `atoms.json`.
+                // Treating that as "resolve done" leaves the corpus with
+                // a 0-atom atlas even though Phase 1 extraction was rich
+                // (the in-app custom-atlas enrich bug).
                 let stale_reason: Option<&str> = if matches!(step, Step::Extract)
                     && !extract_cache_has_atlas_payloads(&cache_path)
                 {
@@ -456,19 +531,72 @@ async fn run_step(step: Step, parsed: &ParsedBuild) -> i32 {
                         cache_path.display()
                     );
                     println!("    To force re-run: rm {}", cache_path.display());
-                    return 0;
+                    return Ok(StepOutcome::did(format!(
+                        "skipped — {} already on disk",
+                        cache_path.display()
+                    )));
                 }
             }
         }
     }
 
     match step {
-        Step::Seed => seed_cmd::cmd_seed(&[corpus.into()]).await,
+        // Converted to the verb triple: the seed list's own size and
+        // origin become the step's summary.
+        Step::Seed => {
+            let params = seed_cmd::ParsedSeed {
+                corpus_id: corpus.to_string(),
+                force: false,
+            };
+            match seed_cmd::run(&params).await {
+                Ok(report) => {
+                    seed_cmd::render(&report);
+                    Ok(StepOutcome::did(report.summary()))
+                }
+                Err(e) => Err(StepFailure::new(e.message(), e.exit_code())),
+            }
+        }
         Step::Extract => run_extract_step(parsed).await,
-        Step::Cluster => atlas_phase_cmd::cmd_cluster_atlas(&[corpus.into()]).await,
-        Step::Name => atlas_phase_cmd::cmd_name_atlas_clusters(&[corpus.into()]).await,
+        // Converted to the verb triple: the per-facet cluster counts
+        // become the step's summary.
+        Step::Cluster => {
+            let params = atlas_phase_cmd::ParsedCluster {
+                corpus_id: corpus.to_string(),
+            };
+            match atlas_phase_cmd::run_cluster(&params).await {
+                Ok(report) => {
+                    atlas_phase_cmd::render_cluster(corpus, &report);
+                    Ok(StepOutcome::did(report.summary()))
+                }
+                Err(message) => Err(StepFailure::new(message, 1)),
+            }
+        }
+        // Converted to the verb triple: how many clusters were named,
+        // how many failed and why, and whether any were named without
+        // few-shot exemplars all become the step's summary.
+        Step::Name => {
+            let params = atlas_phase_cmd::ParsedName {
+                corpus_id: corpus.to_string(),
+            };
+            match atlas_phase_cmd::run_name(&params).await {
+                Ok(report) => {
+                    atlas_phase_cmd::render_name(&report);
+                    Ok(StepOutcome::did(report.summary()))
+                }
+                Err(message) => Err(StepFailure::new(message, 1)),
+            }
+        }
+        // Converted to the verb triple: what resolution produced —
+        // and which phase produced it — becomes the step's summary.
         Step::Resolve => {
-            atlas_resolve::cmd_atlas_resolve(&[corpus.into(), "--phase".into(), "all".into()]).await
+            let params = atlas_resolve::ParsedResolve {
+                corpus_id: corpus.to_string(),
+                phase: atlas_resolve::ResolvePhase::All,
+            };
+            match atlas_resolve::run(&params).await {
+                Ok(report) => Ok(StepOutcome::did(report.summary())),
+                Err(message) => Err(StepFailure::new(message, 1)),
+            }
         }
         Step::Tensions => {
             // Phase 6 has two halves: deterministic candidate
@@ -479,42 +607,102 @@ async fn run_step(step: Step, parsed: &ParsedBuild) -> i32 {
             // builds get a no-op second call. A non-zero exit from
             // the deterministic half short-circuits — there are no
             // candidates to classify if the enumerator failed.
-            let det = atlas_tensions::cmd_atlas_tensions(&[corpus.into()]).await;
-            if det != 0 {
-                return det;
+            let det_params = atlas_tensions::ParsedTensions {
+                corpus_id: corpus.to_string(),
+            };
+            let det = match atlas_tensions::run(&det_params).await {
+                Ok(report) => {
+                    atlas_tensions::render(&report);
+                    report
+                }
+                Err(message) => return Err(StepFailure::new(message, 1)),
+            };
+
+            let classify_params = atlas_tensions_classify::ParsedClassify {
+                corpus_id: corpus.to_string(),
+                max_candidates: None,
+                dry_run: false,
+            };
+            match atlas_tensions_classify::run(&classify_params).await {
+                // Both halves speak. The classifier's four
+                // classified-nothing outcomes are now distinguishable
+                // from a run that actually classified something.
+                Ok(outcome) => Ok(StepOutcome::did(format!(
+                    "{}; {}",
+                    det.summary(),
+                    outcome.summary()
+                ))),
+                Err(message) => Err(StepFailure::new(message, 1)),
             }
-            atlas_tensions_classify::cmd_atlas_tensions_classify(&[corpus.into()]).await
         }
-        Step::Gaps => atlas_gaps::cmd_atlas_gaps(&[corpus.into()]).await,
-        Step::Configure => atlas_configuration::cmd_atlas_configuration(&[corpus.into()]).await,
-        Step::Report => schema_review::cmd_schema_report(&[corpus.into()]).await,
+        // Converted to the verb triple: no argv is built, and the
+        // report the detectors produced becomes the step's summary.
+        Step::Gaps => {
+            let params = atlas_gaps::ParsedGaps {
+                corpus_id: corpus.to_string(),
+            };
+            match atlas_gaps::run(&params) {
+                Ok(report) => {
+                    atlas_gaps::render(&report);
+                    Ok(StepOutcome::did(report.summary()))
+                }
+                Err(message) => Err(StepFailure::new(message, 1)),
+            }
+        }
+        // Converted to the verb triple: how many configurations Phase 8
+        // produced — and how many the model invented and lost — become
+        // the step's summary.
+        Step::Configure => {
+            let params = atlas_configuration::ParsedConfig {
+                corpus_id: corpus.to_string(),
+            };
+            match atlas_configuration::run(&params).await {
+                Ok(report) => Ok(StepOutcome::did(report.summary())),
+                Err(e) => Err(StepFailure::new(e.message(), e.exit_code())),
+            }
+        }
+        // Converted to the verb triple: the §12 report's own counts
+        // become the step's summary.
+        Step::Report => {
+            let params = schema_review::ParsedReport {
+                corpus_id: corpus.to_string(),
+                as_json: false,
+            };
+            match schema_review::run(&params) {
+                Ok(outcome) => match schema_review::render(&params, &outcome) {
+                    Ok(()) => Ok(StepOutcome::did(outcome.summary())),
+                    Err(message) => Err(StepFailure::new(message, 1)),
+                },
+                Err(message) => Err(StepFailure::new(message, 1)),
+            }
+        }
     }
 }
 
 /// Run the Extract step with an auto-retry pass on transient
 /// failure kinds (ThinkTruncated + ParseDrift). The pattern:
 ///
-///   1. Run `cmd_extract --full` (or `--chapters …`). If clean,
-///      done.
-///   2. If non-zero AND the run file shows ONLY retry-eligible
-///      failures, invoke `--retry-failed --terse` once. A
-///      different model seed + bumped output budget recovers
-///      ~80-90% of drift cases (measured on the Dopesick Jesus
-///      smoke before structured retries were wired).
-///   3. After retry, re-check the final failure set. If it's
-///      empty or has only non-retriable kinds (ChatError,
-///      Skipped), promote whatever we have and return 0; the
-///      caller can still `enrich errors <corpus>` to surface
-///      what's left.
-///   4. If retry-eligible failures remain, return 1 — the
-///      operator gets the same glassbox output as before.
+/// 1. Run `cmd_extract --full` (or `--chapters …`). If clean,
+/// done.
+/// 2. If non-zero AND the run file shows ONLY retry-eligible
+/// failures, invoke `--retry-failed --terse` once. A
+/// different model seed + bumped output budget recovers
+/// ~80-90% of drift cases (measured on the Dopesick Jesus
+/// smoke before structured retries were wired).
+/// 3. After retry, re-check the final failure set. If it's
+/// empty or has only non-retriable kinds (ChatError,
+/// Skipped), promote whatever we have and return 0; the
+/// caller can still `enrich errors <corpus>` to surface
+/// what's left.
+/// 4. If retry-eligible failures remain, return 1 — the
+/// operator gets the same glassbox output as before.
 ///
 /// An operator can opt out of the auto-retry by setting
 /// `SOVEREIGN_ENRICH_AUTO_RETRY=0`. Defaults to on. The
 /// env-var (rather than a CLI flag) keeps the common case —
 /// CI invocations + the desktop UI — from having to thread a
 /// boolean through every orchestrator.
-async fn run_extract_step(parsed: &ParsedBuild) -> i32 {
+async fn run_extract_step(parsed: &ParsedBuild) -> Result<StepOutcome, StepFailure> {
     use corpus_engine::enrichment::pipeline::PhaseFailureKind;
 
     let corpus = parsed.corpus_id.as_str();
@@ -537,14 +725,25 @@ async fn run_extract_step(parsed: &ParsedBuild) -> i32 {
     // state the promote would produce.
     if matches!(&parsed.selection, Selection::Chapters(_)) && first_code == 0 {
         if let Err(e) = promote_subset_to_cache(corpus) {
-            eprintln!("error: promoting subset run to cache: {e}");
-            return 1;
+            return Err(StepFailure::new(
+                format!("promoting subset run to cache: {e}"),
+                1,
+            ));
         }
         println!("  · promoted subset run → cache/questions.json");
     }
 
     if first_code == 0 {
-        return 0;
+        // `cmd_extract` is still on the `-> i32` contract, so the count
+        // is not in its return value — but it IS in the run file it just
+        // wrote. Reading it beats inventing one, and beats a summary
+        // that says nothing.
+        let summary = match extract::read_latest_run(&paths::runs_dir(corpus)) {
+            Ok(Some(run)) => format!("{} chapter(s) extracted", run.extracted),
+            Ok(None) => "extract reported success but wrote no run file".to_string(),
+            Err(e) => format!("extract succeeded; its run file was unreadable ({e})"),
+        };
+        return Ok(StepOutcome::did(summary));
     }
 
     // The first pass failed. Decide whether to auto-retry.
@@ -552,20 +751,34 @@ async fn run_extract_step(parsed: &ParsedBuild) -> i32 {
         .map(|v| v != "0" && v.to_lowercase() != "false")
         .unwrap_or(true);
     if !auto_retry_enabled {
-        return first_code;
+        return Err(StepFailure::new(
+            format!(
+                "extract failed (exit {first_code}); auto-retry is off (SOVEREIGN_ENRICH_AUTO_RETRY)"
+            ),
+            first_code,
+        ));
     }
 
     let runs_dir = paths::runs_dir(corpus);
-    let failures = match extract::read_latest_failures(&runs_dir) {
-        Ok(Some((_, ids))) => ids,
+    let failures = match extract::read_latest_run(&runs_dir) {
+        Ok(Some(run)) => run.failures,
         Ok(None) => {
             // No run file means extract never produced one —
             // probably a config error. Nothing to retry.
-            return first_code;
+            return Err(StepFailure::new(
+                format!(
+                    "extract failed (exit {first_code}) and wrote no run file — nothing to auto-retry, which usually means a config error"
+                ),
+                first_code,
+            ));
         }
         Err(msg) => {
-            eprintln!("  · auto-retry skipped: reading latest run file: {msg}");
-            return first_code;
+            return Err(StepFailure::new(
+                format!(
+                    "extract failed (exit {first_code}); auto-retry skipped — reading latest run file: {msg}"
+                ),
+                first_code,
+            ));
         }
     };
 
@@ -584,7 +797,13 @@ async fn run_extract_step(parsed: &ParsedBuild) -> i32 {
     if retriable_count == 0 {
         // Nothing the terse retry can help with (chat errors,
         // empty extractions, etc.). Let the operator handle.
-        return first_code;
+        return Err(StepFailure::new(
+            format!(
+                "extract failed (exit {first_code}) with {} failure(s), none of them retriable — see `svrn enrich errors {corpus}`",
+                failures.len()
+            ),
+            first_code,
+        ));
     }
 
     println!();
@@ -606,8 +825,8 @@ async fn run_extract_step(parsed: &ParsedBuild) -> i32 {
     // be in the cache for downstream phases. If retriable kinds
     // are still present, treat the retry as having not resolved
     // the issue and return the original failure exit.
-    let remaining = match extract::read_latest_failures(&runs_dir) {
-        Ok(Some((_, ids))) => ids,
+    let remaining = match extract::read_latest_run(&runs_dir) {
+        Ok(Some(run)) => run.failures,
         Ok(None) => Vec::new(),
         Err(_) => Vec::new(),
     };
@@ -642,23 +861,29 @@ async fn run_extract_step(parsed: &ParsedBuild) -> i32 {
         // "questions cache is missing".)
         if matches!(&parsed.selection, Selection::Chapters(_)) {
             if let Err(e) = promote_subset_to_cache(corpus) {
-                eprintln!("error: promoting subset run to cache after retry: {e}");
-                return 1;
+                return Err(StepFailure::new(
+                    format!("promoting subset run to cache after retry: {e}"),
+                    1,
+                ));
             }
             println!("  · promoted subset run → cache/questions.json");
         }
-        return 0;
+        return Ok(StepOutcome::did(format!(
+            "auto-retry recovered {} chapter(s); {} non-retriable failure(s) remain",
+            retriable_count - remaining_retriable,
+            remaining.len()
+        )));
     }
 
     // Retry didn't recover everything. Surface the original
     // failure exit and let the operator intervene via
     // `enrich errors <corpus>`.
-    eprintln!();
-    eprintln!(
-        "  ! auto-retry left {} retriable failure(s) unresolved; build stopped.",
-        remaining_retriable
-    );
-    retry_code
+    Err(StepFailure::new(
+        format!(
+            "auto-retry left {remaining_retriable} retriable failure(s) unresolved — see `svrn enrich errors {corpus}`"
+        ),
+        retry_code,
+    ))
 }
 
 /// Copy the most recent subset run into cache/questions.json so
@@ -1026,6 +1251,77 @@ fn parse_args(args: &[String]) -> Result<ParsedBuild, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The defect this seam deleted: `StepDone.summary` was
+    /// `format!("{step} complete")`, computed by the orchestrator from
+    /// the step's NAME. Every step therefore put the same sentence on
+    /// the wire, so a consumer could not tell a step that ran from one
+    /// skipped as cached from one that found nothing. (No consumer reads
+    /// the field yet — which is why the fabrication survived unnoticed.)
+    ///
+    /// Falsifier: re-derive a `Did` summary from the step name — decorate
+    /// it, prefix it, fall back to it when the string is empty — and this
+    /// fails. The step's own words reach the wire unaltered.
+    #[test]
+    fn a_reported_summary_reaches_the_wire_verbatim() {
+        let spoken = "4 gap(s): 3 open-question, 1 ungrounded-claim";
+        let outcome = StepOutcome::did(spoken);
+        assert_eq!(outcome.summary(), spoken);
+    }
+
+    /// The failure half of the same seam.
+    ///
+    /// `StepFailure` used to have a second constructor, `from_code`,
+    /// which manufactured `"step `seed` exited with code 1"` from a step
+    /// name and an exit code — a sentence that restates the number and
+    /// tells the operator nothing. It was deleted with the last `-> i32`
+    /// step, so a failure message can now only be words a step wrote.
+    ///
+    /// Falsifier: reintroduce a constructor that builds a message out of
+    /// the step name and code, and this assertion is what it violates.
+    #[test]
+    fn a_failure_carries_a_written_reason_not_a_restated_exit_code() {
+        let f = StepFailure::new("reading atlas/atoms.json: no such file", 1);
+        assert_eq!(f.exit_code, 1);
+        assert!(
+            !f.message.contains("exited with code"),
+            "a failure must name a cause, got: {}",
+            f.message
+        );
+    }
+
+    /// The three outcomes that used to be indistinguishable.
+    ///
+    /// A step that ran, a step skipped because its output was already on
+    /// disk, and a step that ran and found nothing all produced
+    /// `format!("{step} complete")` before 2026-08-26 — the same sentence
+    /// for all three, computed from the step's NAME. Each now carries its
+    /// own words.
+    ///
+    /// Falsifier: route any of them back through a summary derived from
+    /// the step rather than the run, and two of these collapse together.
+    #[test]
+    fn ran_skipped_and_found_nothing_are_three_different_summaries() {
+        let ran = StepOutcome::did("4 gap(s): 3 open-question, 1 ungrounded-claim");
+        let skipped = StepOutcome::did("skipped — /x/atlas/gaps.json already on disk");
+        let found_nothing =
+            StepOutcome::did("no gaps over 400 claim(s) + 12 state(s) + 7 question(s)");
+
+        let summaries = [ran.summary(), skipped.summary(), found_nothing.summary()];
+        let distinct: std::collections::HashSet<&String> = summaries.iter().collect();
+        assert_eq!(
+            distinct.len(),
+            3,
+            "these three outcomes must not share a summary: {summaries:?}"
+        );
+        for s in &summaries {
+            assert_ne!(
+                s,
+                &format!("{} complete", BuildStep::Gaps.display_name()),
+                "this is the fabricated summary the seam deleted"
+            );
+        }
+    }
 
     #[test]
     fn extract_cache_atlas_detection() {

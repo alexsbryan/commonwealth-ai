@@ -50,6 +50,26 @@ pub async fn run_tests(
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .kill_on_drop(true);
+    // Demand MACHINE-READABLE output from whatever the verify command runs.
+    //
+    // Everything downstream of here PARSES this output — how many tests
+    // passed, how many failed, which ones. `FORCE_COLOR` (set by several agent
+    // harnesses and CI runners) makes pytest and CPython emit ANSI escapes even
+    // into a pipe, and then `1 error in 0.06s` arrives as
+    // `\x1b[31m\x1b[1m1 error\x1b[0m\x1b[31m in 0.06s\x1b[0m` and matches
+    // nothing. The run does not fail — it reports `0p/0f`, which reads as "no
+    // tests" rather than "could not read the result", so the solver stalls
+    // against a repo that is working fine (ARCH §18.3: absence reported as a
+    // result). Observed 2026-08-25 under `FORCE_COLOR=3`.
+    //
+    // This is the one seam every verify command goes through, whatever the
+    // language, so the normalisation belongs here and not in each parser.
+    command
+        .env("NO_COLOR", "1")
+        .env("PYTHON_COLORS", "0")
+        .env("CARGO_TERM_COLOR", "never")
+        .env_remove("FORCE_COLOR")
+        .env_remove("CLICOLOR_FORCE");
     #[cfg(unix)]
     command.process_group(0);
     let child = match command.spawn() {

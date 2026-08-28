@@ -957,6 +957,9 @@ mod tests {
             callee_qualified: b.to_string(),
             file_path: "src/x.rs".into(),
             line: 1,
+            start_col: -1,
+            end_line: -1,
+            end_col: -1,
             ref_kind: "direct".into(),
         }
     }

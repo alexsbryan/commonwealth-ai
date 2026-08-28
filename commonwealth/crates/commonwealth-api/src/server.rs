@@ -41,8 +41,26 @@ pub const MAX_REQUEST_BODY_BYTES: usize = 8 * 1024 * 1024;
 /// 8 MB body uploads well within this on any real link.
 const REQUEST_BODY_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
-/// Build the client-facing API router (port 9741).
+/// Build the client-facing API router (port 9741) for the daemon's own
+/// listener, which trusts a loopback caller.
 pub fn client_router(state: AppState) -> Router {
+    client_router_with(state, crate::client_auth::ClientAuthPolicy::default())
+}
+
+/// [`client_router`] with an explicit auth posture.
+///
+/// The daemon binds this router more than once. `:9741` gets the default
+/// posture; the loopback-only listener the iroh acceptor forwards
+/// `GUEST_ALPN` to gets [`ClientAuthPolicy::UNTRUSTED_LOOPBACK`], because
+/// every request reaching it arrives from the acceptor's own forward hop and
+/// so wears a loopback address it did not earn. See
+/// `crate::client_auth` module docs.
+///
+/// [`ClientAuthPolicy::UNTRUSTED_LOOPBACK`]: crate::client_auth::ClientAuthPolicy::UNTRUSTED_LOOPBACK
+pub fn client_router_with(
+    state: AppState,
+    auth_policy: crate::client_auth::ClientAuthPolicy,
+) -> Router {
     // Per-route admission gate applied to peer-reachable inference
     // endpoints. Local requests (no `X-Node-Id`) pass through; peer
     // requests are checked against pause / foreground-yield / ceiling
@@ -135,6 +153,24 @@ pub fn client_router(state: AppState) -> Router {
             "/internal/inference/warmup",
             post(routes_internal::inference_warmup),
         )
+        // Guest-grant lifecycle. Mounted HERE for the same reason warmup is,
+        // one route up: on `internal_router` these would be reachable by any
+        // mesh PEER with no auth gate, i.e. a "forge a credential for an
+        // outsider" lever. Behind `client_auth` they are loopback-or-full-token
+        // — and a guest cannot reach them because no `Scope` names these paths,
+        // so grants cannot mint grants without a check anywhere.
+        .route(
+            "/internal/guest/grant",
+            post(routes_internal::guest_grant_issue),
+        )
+        .route(
+            "/internal/guest/grant/revoke",
+            post(routes_internal::guest_grant_revoke),
+        )
+        .route(
+            "/internal/guest/grant/list",
+            get(routes_internal::guest_grant_list),
+        )
         // OICP capability manifest.
         .route("/oicp/v1/capabilities", get(routes_oicp::capabilities))
         // OICP v0.4 §5 ingest extension: install a corpus by recipe id,
@@ -185,7 +221,7 @@ pub fn client_router(state: AppState) -> Router {
         // `AUTH_EXEMPT_PATHS` (federation/health) pass through. See
         // `crate::client_auth`.
         .layer(axum::middleware::from_fn_with_state(
-            state.clone(),
+            crate::client_auth::ClientAuthState::new(state.clone(), auth_policy),
             crate::client_auth::client_auth_layer,
         ))
         // Outermost frontdoor: bound request-body size + slow-dribble time
@@ -791,7 +827,7 @@ mod tests {
         // After the gossip handler was wired for real (replacing the
         // accept-any-JSON stub), the minimal shape it accepts is a
         // full `MeshWire` payload. A test AppState has mesh_id=1 and
-        // an all-zero join_key_hash; posting a body with a different
+        // an all-zero invite_key_hash; posting a body with a different
         // mesh_id proves the auth guard fires. The full "merges
         // incoming delta" happy path is covered by the dedicated
         // tests/gossip_route.rs integration file.

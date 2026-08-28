@@ -1,0 +1,12 @@
+  judge 540s (attempt 1)
+{
+ "id": 69,
+ "overall_score": 0.5089975372215382,
+ "comprehensiveness": 0.51,
+ "insight": 0.5228571428571429,
+ "instruction_following": 0.5052219321148825,
+ "readability": 0.480392156862745,
+ "target_total": 9.09375,
+ "reference_total": 8.77225
+}
+OVERALL x100 = 50.8998

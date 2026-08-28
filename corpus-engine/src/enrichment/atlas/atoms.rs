@@ -234,8 +234,7 @@ impl AtomId {
 /// 16-char prefix of blake3 hex digest. 64-bit truncation; safe for
 /// <10M atoms per corpus by birthday bound.
 fn short_hash(input: &str) -> String {
-    let full = blake3::hash(input.as_bytes()).to_hex().to_string();
-    full[..16].to_string()
+    kernel_types::ContentHash::of_str(input).short()
 }
 
 /// Reference to a specific passage in the corpus. Step 3a fills
@@ -963,6 +962,55 @@ pub enum AtomType {
     Asset,
 }
 
+impl AtomType {
+    /// Every atom kind, in on-disk byte order (see `store::kind_u8`). The
+    /// closed set as DATA, so a consumer that needs to iterate kinds — a
+    /// per-kind count, a UI filter list — does not hand-roll a twelfth
+    /// fan-out. `atom_type_is_a_closed_set_that_round_trips` fails if a
+    /// variant is added to the enum and not to this list.
+    /// Compact lowercase tag for this kind — `"entity"`, `"argument"`,
+    /// `"configuration"`. The single decider for the LABEL spelling.
+    ///
+    /// Deliberately NOT the serde repr: `AtomType` serialises PascalCase
+    /// (`"ArgumentReconstruction"`) because that is the on-disk `atom_type`
+    /// tag, and the two must not be confused. `ArgumentReconstruction` is
+    /// `"argument"` here — a curated label, not a mechanical lowercasing,
+    /// which is exactly why it needs one home.
+    ///
+    /// Byte-identical copies of this fan-out lived in
+    /// `atlas_traversal::spans` and in `sovereign-mesh::reading_formatters`,
+    /// on both sides of the domain boundary. Deleted 2026-08-20.
+    pub fn label(&self) -> &'static str {
+        match self {
+            AtomType::Entity => "entity",
+            AtomType::Event => "event",
+            AtomType::State => "state",
+            AtomType::Relation => "relation",
+            AtomType::Claim => "claim",
+            AtomType::Question => "question",
+            AtomType::Configuration => "configuration",
+            AtomType::ArgumentReconstruction => "argument",
+            AtomType::Position => "position",
+            AtomType::Opposition => "opposition",
+            AtomType::Asset => "asset",
+        }
+    }
+
+    pub const ALL: [AtomType; 11] = [
+        AtomType::Entity,
+        AtomType::Event,
+        AtomType::State,
+        AtomType::Relation,
+        AtomType::Claim,
+        AtomType::Question,
+        AtomType::Configuration,
+        AtomType::ArgumentReconstruction,
+        AtomType::Position,
+        AtomType::Opposition,
+        AtomType::Asset,
+    ];
+}
+
 /// On-disk representation of a single atom. Untagged body per
 /// `atom_type` keeps the JSON spec-compliant while still typing the
 /// payload in Rust.
@@ -1002,6 +1050,32 @@ pub enum AtomEnvelope {
 }
 
 impl AtomEnvelope {
+    /// This atom's kind. The single canonical envelope-to-[`AtomType`]
+    /// accessor — callers (the v2 store projection, the atlas readers,
+    /// sovereign's atlas views) must use this rather than re-matching the
+    /// variants, so a new atom kind cannot silently acquire a second, divergent
+    /// classification. Same discipline as [`AtomEnvelope::evidence`].
+    ///
+    /// Until 2026-08-20 a parallel mirror enum (`projection::AtomKindTag`)
+    /// carried the same eleven variants with its own eleven-arm fan-out, and
+    /// crossed the corpus-engine/sovereign boundary as a second name for one
+    /// concept. Deleted; this is the only decider (ARCH §10.6).
+    pub fn atom_type(&self) -> AtomType {
+        match self {
+            AtomEnvelope::Entity(_) => AtomType::Entity,
+            AtomEnvelope::Event(_) => AtomType::Event,
+            AtomEnvelope::State(_) => AtomType::State,
+            AtomEnvelope::Relation(_) => AtomType::Relation,
+            AtomEnvelope::Claim(_) => AtomType::Claim,
+            AtomEnvelope::Question(_) => AtomType::Question,
+            AtomEnvelope::Configuration(_) => AtomType::Configuration,
+            AtomEnvelope::ArgumentReconstruction(_) => AtomType::ArgumentReconstruction,
+            AtomEnvelope::Position(_) => AtomType::Position,
+            AtomEnvelope::Opposition(_) => AtomType::Opposition,
+            AtomEnvelope::Asset(_) => AtomType::Asset,
+        }
+    }
+
     pub fn id(&self) -> &AtomId {
         match self {
             AtomEnvelope::Entity(a) => &a.id,
@@ -1054,6 +1128,166 @@ impl AtomEnvelope {
             AtomEnvelope::Asset(_) => Vec::new(),
         }
     }
+
+    /// Every other atom this atom names through its type-specific reference
+    /// fields — participants, causal antecedents, the entity a State describes,
+    /// a Claim's attribution, a Question's answering claims, a Configuration's
+    /// constituents, an Opposition's two sides, an Asset's describing atom.
+    ///
+    /// The single canonical accessor over those fields, for the same reason
+    /// [`AtomEnvelope::evidence`] is one: a new atom kind that carries an
+    /// atom-id reference must not be able to silently escape the link graph.
+    /// This fan-out lived as `build_referenced_atoms` in `sovereign-tools`'
+    /// `atlas_view::atom_detail` until 2026-08-20 — a second crate reading
+    /// these variants' private fields to answer a question about the atom's own
+    /// shape (ARCH §10.6). Resolving the ids to labels is still the reader's
+    /// business; producing them is the atom's.
+    ///
+    /// Ids come out in declaration order and may repeat — a caller wanting a
+    /// set dedupes. Evidence chunks are NOT here; those are
+    /// [`AtomEnvelope::evidence`].
+    pub fn referenced_atom_ids(&self) -> Vec<&AtomId> {
+        match self {
+            AtomEnvelope::Entity(a) => a.participants.iter().collect(),
+            AtomEnvelope::Event(a) => a
+                .participants
+                .iter()
+                .chain(a.causal_antecedents.iter())
+                .collect(),
+            AtomEnvelope::State(a) => vec![&a.entity_id],
+            AtomEnvelope::Relation(a) => a.participants.iter().collect(),
+            AtomEnvelope::Claim(a) => a.attributed_to.iter().collect(),
+            AtomEnvelope::Question(a) => {
+                let mut refs: Vec<&AtomId> = a.addressed_by.iter().collect();
+                match &a.resolution_status {
+                    ResolutionStatus::Resolved { claim_id } => refs.push(claim_id),
+                    ResolutionStatus::Contested { claim_ids } => refs.extend(claim_ids.iter()),
+                    ResolutionStatus::Open | ResolutionStatus::Dissolved => {}
+                }
+                refs
+            }
+            AtomEnvelope::Configuration(a) => a.constituent_atoms.iter().collect(),
+            AtomEnvelope::ArgumentReconstruction(a) => a.proponent.iter().collect(),
+            AtomEnvelope::Position(a) => {
+                a.proponent_id.iter().chain(a.evidence_ids.iter()).collect()
+            }
+            AtomEnvelope::Opposition(a) => a
+                .left_atom_id
+                .iter()
+                .chain(a.right_atom_id.iter())
+                .collect(),
+            AtomEnvelope::Asset(a) => a.described_by.iter().collect(),
+        }
+    }
+
+    /// Best human label for this atom, and the single decider for WHICH field
+    /// names each kind — `canonical_name` for Entity and Position,
+    /// `canonical_label` for Opposition, `label` for State / Relation /
+    /// Configuration, `name` for ArgumentReconstruction, the filename (or a
+    /// `<kind> asset <sha-prefix>` fallback) for Asset.
+    ///
+    /// Three kinds — Event, Claim, Question — label themselves with PROSE
+    /// rather than a name, which is why `truncate_prose_to` exists: pass
+    /// `Some(n)` and only those three are clipped to `n` chars plus an
+    /// ellipsis. That keeps "which kinds are prose" here, with the kinds,
+    /// instead of in every renderer. `None` returns every label verbatim.
+    ///
+    /// Two byte-identical copies of this fan-out lived in
+    /// `sovereign-tools::atlas_view` (`atom_browse` and `atom_detail`) with a
+    /// comment calling the duplication intentional and "tiny"; it was 45 lines
+    /// across two files and a third copy of the truncation constant. Deleted
+    /// 2026-08-20 (ARCH §10.6).
+    pub fn display_name(&self, truncate_prose_to: Option<usize>) -> String {
+        let prose = |s: &str| match truncate_prose_to {
+            Some(max) if s.chars().count() > max => {
+                let mut out: String = s.chars().take(max).collect();
+                out.push('…');
+                out
+            }
+            _ => s.to_string(),
+        };
+        match self {
+            AtomEnvelope::Entity(a) => a.canonical_name.clone(),
+            AtomEnvelope::Event(a) => prose(&a.description),
+            AtomEnvelope::State(a) => a.label.clone(),
+            AtomEnvelope::Relation(a) => a.label.clone(),
+            AtomEnvelope::Claim(a) => prose(&a.content),
+            AtomEnvelope::Question(a) => prose(&a.content),
+            AtomEnvelope::Configuration(a) => a.label.clone(),
+            AtomEnvelope::ArgumentReconstruction(a) => a.name.clone(),
+            AtomEnvelope::Position(a) => a.canonical_name.clone(),
+            AtomEnvelope::Opposition(a) => a.canonical_label.clone(),
+            AtomEnvelope::Asset(a) => {
+                if a.original_filename.is_empty() {
+                    format!(
+                        "{} asset {}",
+                        a.asset_kind,
+                        &a.sha256[..12.min(a.sha256.len())]
+                    )
+                } else {
+                    a.original_filename.clone()
+                }
+            }
+        }
+    }
+
+    /// Every `(section_or_chunk_id, optional_preview)` this atom anchors to,
+    /// in written order. Broader than [`AtomEnvelope::evidence`]: Event and
+    /// ArgumentReconstruction lead with their `section_position` — the section
+    /// they occur in, which is an anchor even when no evidence chunk was
+    /// recorded — and the pair shape is what a reading surface needs to link a
+    /// passage.
+    ///
+    /// Existed as two copies in `sovereign-mesh` and `sovereign-desktop`, and
+    /// THEY DISAGREED: the desktop copy answered
+    /// `unreachable!("typed atoms wired in Gap B Stage 4")` for `Position` and
+    /// `Opposition`, two kinds `atlas::resolution` produces and
+    /// `atlas::writer` chains straight into `atoms.json`. The desktop reading
+    /// surface panicked on them; the mesh returned their `first_appearance`.
+    /// Same stale assumption as the one that was frozen into the edge labels,
+    /// in the same file. Collapsed here 2026-08-20.
+    pub fn evidence_anchors(&self) -> Vec<(String, Option<String>)> {
+        let pair = |c: &ChunkRef| (c.chunk_id.clone(), c.passage_preview.clone());
+        let led_by = |section: &SectionPosition, ev: &[ChunkRef]| {
+            let mut out = vec![(section.section_id.clone(), None)];
+            out.extend(ev.iter().map(pair));
+            out
+        };
+        match self {
+            AtomEnvelope::Event(a) => led_by(&a.section_position, &a.evidence),
+            AtomEnvelope::ArgumentReconstruction(a) => led_by(&a.section_position, &a.evidence),
+            // Everything else is exactly its evidence, and `evidence()` is the
+            // one place that knows which field each kind keeps it in.
+            _ => self.evidence().into_iter().map(pair).collect(),
+        }
+    }
+
+    /// The atom's scalar prominence score, where its kind carries one:
+    /// `Entity.salience` and `Configuration.confidence`. `None` for the nine
+    /// kinds that have no scalar — NOT `Some(0.0)`, so a caller ranking atoms
+    /// can tell "no score" from "scored zero".
+    pub fn salience(&self) -> Option<f32> {
+        match self {
+            AtomEnvelope::Entity(a) => Some(a.salience),
+            AtomEnvelope::Configuration(a) => Some(a.confidence),
+            _ => None,
+        }
+    }
+
+    /// `source_doc_id` of the document this atom is anchored in — the join key
+    /// into `_doc_freshness.json`. Derived from the atom's FIRST evidence
+    /// chunk via [`AtomEnvelope::evidence`], so a new atom kind inherits the
+    /// behaviour instead of silently returning `None`. Asset atoms stamp the
+    /// id directly and need no chunk hop.
+    pub fn source_doc_id(&self) -> Option<&str> {
+        if let AtomEnvelope::Asset(a) = self {
+            return (!a.first_seen_source_doc_id.is_empty())
+                .then(|| a.first_seen_source_doc_id.as_str());
+        }
+        self.evidence()
+            .first()
+            .and_then(|c| c.source_doc_id.as_deref())
+    }
 }
 
 /// Top-level atom file written to `atlas/atoms.json`.
@@ -1096,6 +1330,81 @@ impl AtomsFile {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn atom_type_is_a_closed_set_that_round_trips() {
+        // `AtomType::ALL` and the enum are two spellings of one closed set;
+        // this pins them together. A variant added to the enum and not to ALL
+        // fails on the length assert — which is the only reason ALL is safe to
+        // iterate as "every kind".
+        assert_eq!(AtomType::ALL.len(), 11);
+        let mut seen: Vec<String> = Vec::new();
+        for t in AtomType::ALL {
+            let v = serde_json::to_value(t).unwrap();
+            let tag = v
+                .as_str()
+                .expect("AtomType serialises as a string")
+                .to_string();
+            assert_eq!(serde_json::from_value::<AtomType>(v).unwrap(), t);
+            seen.push(tag);
+        }
+        seen.sort();
+        let n = seen.len();
+        seen.dedup();
+        assert_eq!(seen.len(), n, "two AtomType variants share an on-disk tag");
+    }
+
+    #[test]
+    fn atom_type_accessor_agrees_with_the_on_disk_tag() {
+        // `AtomEnvelope` serialises with `#[serde(tag = "atom_type")]`, so the
+        // JSON tag and `atom_type()` are two renderings of one closed set.
+        // Verified red-first: flipping the Entity arm of `atom_type()` to
+        // `AtomType::Event` fails this assert before it fails anything else.
+        let env = AtomEnvelope::Entity(sample_entity());
+        let tag = serde_json::to_value(&env).unwrap()["atom_type"]
+            .as_str()
+            .expect("every envelope serialises with an atom_type tag")
+            .to_string();
+        assert_eq!(env.atom_type(), AtomType::Entity);
+        assert_eq!(
+            serde_json::to_value(env.atom_type()).unwrap().as_str(),
+            Some(tag.as_str()),
+            "AtomType and the envelope tag serialise differently"
+        );
+    }
+
+    #[test]
+    fn display_name_truncates_prose_kinds_only() {
+        // The four canonical accessors replaced eleven hand-copied fan-outs
+        // across four crates. This is the behaviour those copies had to agree
+        // on and now cannot disagree about: a NAME is never clipped, PROSE is.
+        let long = "x".repeat(50);
+
+        let event = AtomEnvelope::Event(Event {
+            id: AtomId::event(1),
+            description: long.clone(),
+            event_type: EventType::Action,
+            participants: Vec::new(),
+            evidence: Vec::new(),
+            section_position: SectionPosition::section("sec_0001"),
+            causal_antecedents: Vec::new(),
+            enrichment_depth: EnrichmentDepth::Structural,
+        });
+        assert_eq!(event.display_name(Some(8)).chars().count(), 9); // 8 + ellipsis
+        assert_eq!(event.display_name(None), long);
+        assert_eq!(event.salience(), None, "Event carries no scalar score");
+
+        let entity = AtomEnvelope::Entity(Entity {
+            canonical_name: long.clone(),
+            ..sample_entity()
+        });
+        assert_eq!(
+            entity.display_name(Some(8)),
+            long,
+            "a name is never clipped"
+        );
+        assert_eq!(entity.salience(), Some(0.1));
+    }
 
     #[test]
     fn atom_id_constructors_produce_zero_padded_ids() {
@@ -1534,9 +1843,9 @@ mod tests {
         assert!(json.contains("\"atoms\":[]"));
     }
 
-    #[test]
-    fn atom_envelope_exposes_id_and_depth_without_matching() {
-        let entity = Entity {
+    /// One Entity atom, shared by the accessor tests below.
+    fn sample_entity() -> Entity {
+        Entity {
             id: AtomId::entity(5),
             canonical_name: "X".into(),
             aliases: Vec::new(),
@@ -1552,8 +1861,12 @@ mod tests {
             provenance: Default::default(),
             attributes: serde_json::Map::new(),
             concept_kind: None,
-        };
-        let env = AtomEnvelope::Entity(entity);
+        }
+    }
+
+    #[test]
+    fn atom_envelope_exposes_id_and_depth_without_matching() {
+        let env = AtomEnvelope::Entity(sample_entity());
         assert_eq!(env.id().as_str(), "entity-0005");
         assert_eq!(env.enrichment_depth(), EnrichmentDepth::Structural);
     }

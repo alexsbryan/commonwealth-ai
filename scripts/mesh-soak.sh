@@ -238,15 +238,17 @@ EOF
   # detect→escalate→rebuild→recover cycles under the soak.
   local reach_env=""
   [ "$REACH_CHAOS" = 1 ] && reach_env="SOVEREIGN_MESH_WATCHDOG_POLL_SECS=5 SOVEREIGN_MESH_WATCHDOG_GRACE_SECS=8 SOVEREIGN_MESH_WATCHDOG_COOLDOWN_SECS=20 SOVEREIGN_MESH_WATCHDOG_CHAOS_DROP_SECS=45"
-  # SOVEREIGN_ALLOW_MULTIPLE_DAEMONS is MANDATORY for this harness and was
-  # missing entirely (it appears nowhere else in scripts/ or .github/). The
-  # daemon takes a per-HOME run lock (lifecycle.rs:569-591), so node0 acquires it
-  # and EVERY other node exits with "another daemon already holds the run lock".
-  # The failure was near-invisible: the surviving one-node mesh still passes the
-  # invariant pack, because convergence and pairwise liveness are trivially true
-  # over a single reachable node. A 3-node soak was really a 1-node soak
-  # reporting green. See the bind assertion at the bring-up loop.
-  env SOVEREIGN_ALLOW_MULTIPLE_DAEMONS=1 $rust_log $reach_env \
+  # Every node gets its own `[data] dir = $d` above, and the run lock is keyed
+  # on the DATA ROOT, so all three nodes claim independently. It was keyed on
+  # $HOME until 2026-08-24, which meant node0 took the lock and EVERY other
+  # node exited with "another daemon already holds the run lock" — and the
+  # failure was near-invisible, because the surviving one-node mesh still
+  # passed the invariant pack (convergence and pairwise liveness are trivially
+  # true over a single reachable node). A 3-node soak was really a 1-node soak
+  # reporting green. The SOVEREIGN_ALLOW_MULTIPLE_DAEMONS escape hatch that
+  # papered over it is deleted with the re-key. See the bind assertion at the
+  # bring-up loop.
+  env $rust_log $reach_env \
     "$CLI" daemon run --config "$d/config.toml" > "$d/daemon.$RANDOM.log" 2>&1 &
   PIDS[$i]=$!
 }

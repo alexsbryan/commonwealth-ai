@@ -295,7 +295,7 @@ async fn get_chunk(
     if let Err(r) = enforce_localhost(&peer) {
         return r;
     }
-    let engine = match daemon.corpus_engine().await {
+    let engine = match daemon.corpus_engine() {
         Some(e) => e,
         None => return service_unavailable("corpus engine not initialised"),
     };
@@ -326,7 +326,7 @@ async fn get_neighbors(
         return r;
     }
     let radius = radius.min(5);
-    let engine = match daemon.corpus_engine().await {
+    let engine = match daemon.corpus_engine() {
         Some(e) => e,
         None => return service_unavailable("corpus engine not initialised"),
     };
@@ -385,7 +385,7 @@ async fn get_atom_card(
     if let Err(r) = enforce_localhost(&peer) {
         return r;
     }
-    let engine = match daemon.corpus_engine().await {
+    let engine = match daemon.corpus_engine() {
         Some(e) => e,
         None => return service_unavailable("corpus engine not initialised"),
     };
@@ -421,7 +421,7 @@ async fn get_atom_elsewhere(
     if let Err(r) = enforce_localhost(&peer) {
         return r;
     }
-    let engine = match daemon.corpus_engine().await {
+    let engine = match daemon.corpus_engine() {
         Some(e) => e,
         None => return service_unavailable("corpus engine not initialised"),
     };
@@ -442,7 +442,7 @@ async fn get_atom_elsewhere(
         return not_found("atom not found");
     };
 
-    let evidence = atom_evidence_section_refs(atom);
+    let evidence = atom.evidence_anchors();
     let unique_sections: Vec<String> = {
         let mut seen = std::collections::HashSet::new();
         evidence
@@ -527,7 +527,7 @@ async fn atlas_dir_for_corpus(
 
 /// Convert an `AtomEnvelope` to the wire shape: render atom-type
 /// label + extract surface fields. Mirrors the
-/// `atlas_traversal::spans::atom_type_label` mapping; kept inline
+/// `AtomType::label` mapping; kept inline
 /// here to avoid leaking the spans module's pub seam.
 fn build_atom_card(
     corpus_id: &str,
@@ -536,7 +536,7 @@ fn build_atom_card(
     edges: &[Edge],
     cross_edges: &[CrossCorpusEdge],
 ) -> AtomCard {
-    let atom_type = atom_type_label(atom);
+    let atom_type = atom.atom_type().label();
     let (canonical_name, aliases, description, salience) = atom_surface_fields(atom);
 
     let target_id = atom.id();
@@ -553,9 +553,9 @@ fn build_atom_card(
             let (other_name, _, _, _) = atom_surface_fields(other);
             Some(RelatedAtom {
                 atom_id: other_id.as_str().to_string(),
-                atom_type: atom_type_label(other),
+                atom_type: other.atom_type().label(),
                 canonical_name: other_name,
-                edge_type: edge_type_label(e.edge_type),
+                edge_type: e.edge_type.label(),
                 role,
                 confidence: e.confidence,
             })
@@ -578,9 +578,7 @@ fn build_atom_card(
     }
 }
 
-use crate::reading_formatters::{
-    atom_evidence_section_refs, atom_surface_fields, atom_type_label, edge_type_label,
-};
+use crate::reading_formatters::atom_surface_fields;
 
 fn cross_corpus_links_for_atom(
     atom_id: &AtomId,
@@ -593,7 +591,7 @@ fn cross_corpus_links_for_atom(
             peer_corpus_id: e.peer.corpus_id.clone(),
             peer_atom_id: e.peer.atom_id.as_str().to_string(),
             peer_canonical_name: e.peer.canonical_name.clone(),
-            edge_type: edge_type_label(e.edge.edge_type),
+            edge_type: e.edge.edge_type.label(),
             signal: e.trace.signal.clone(),
             confidence: e.trace.confidence,
         })
@@ -716,7 +714,7 @@ pub(crate) async fn maybe_resolve_conversation_meta(
     }
     let conversation_id = row.source_doc_id.clone()?;
     let segments = parse_conversation_segments(&row.content);
-    let store = daemon.state_store().await;
+    let store = daemon.state_store();
     let (title, updated_at) = match store {
         Some(s) => match s.get_conversation(&conversation_id).await {
             Ok(c) => (c.title.clone(), Some(c.updated_at)),

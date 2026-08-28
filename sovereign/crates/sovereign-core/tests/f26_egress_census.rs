@@ -142,12 +142,22 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // stops spawning the CLI to reach it — the classification did not
     // change with the crate.
     ("sovereign/crates/sovereign-core/src/deep_research/port.rs", Class::LocalDaemon, 1),
+    // sovereign-turn-client: the client half of the turn protocol, minted
+    // 2026-08-25 (TOPOLOGY §10 phase 6). One `reqwest::Client` for
+    // `POST /v1/conversations` + the conversation-end call; the turn itself
+    // is a WebSocket. Loopback to this host's own daemon — `turn_http` is
+    // loopback-only at both layers and refuses anything else — so the class
+    // is LocalDaemon, not egress. Nothing here leaves the machine.
+    ("sovereign/crates/sovereign-turn-client/src/lib.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-mesh: the estate's own transport (Mesh) ----
     // Peer-to-peer / daemon-mesh HTTP; own auth + custody class.
     // Not third-party egress — the boundary does not gate the estate's
     // own substrate.
-    ("sovereign/crates/sovereign-mesh/src/mesh_http.rs", Class::Mesh, 15),
+    // 15 -> 17 (2026-08-27): the `mesh_switch` handler and the two new rotate
+    // tests each construct a client for loopback calls to our own daemon.
+    // Class unchanged — mesh transport, never third-party egress.
+    ("sovereign/crates/sovereign-mesh/src/mesh_http.rs", Class::Mesh, 17),
     ("sovereign/crates/sovereign-mesh/src/rpc_warm_http.rs", Class::Mesh, 7),
     ("sovereign/crates/sovereign-mesh/src/worker_http.rs", Class::Mesh, 6),
     // 5 -> 7 (2026-08-23): the two reload-diff regression tests
@@ -205,7 +215,21 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // typed refusal). The file's three remaining sites are local:
     // the embed one-shot client + two /v1/models probes.
     ("sovereign/crates/sovereign-cli-llm/src/enrich_cmd/inference_client.rs", Class::LocalDaemon, 3),
-    ("sovereign/crates/sovereign-cli-llm/src/mesh_cmd.rs", Class::Mesh, 7),
+    // 7 -> 10 (2026-08-27): `mesh rotate`, `mesh leave` and `mesh switch` each
+    // now prefer the running daemon over an in-process fallback (the `cmd_join`
+    // pattern), so each builds a client for 127.0.0.1 loopback. `mesh rotate`
+    // in particular HAD to move: an offline rotation was reverted by the next
+    // gossip round. Class unchanged — loopback to our own daemon.
+    ("sovereign/crates/sovereign-cli-llm/src/mesh_cmd.rs", Class::Mesh, 10),
+    // NEW 2026-08-27: `svrn mesh grant` / `svrn mesh use`, the two ends of an
+    // ephemeral guest link. One shared `http_client()` builder serves both
+    // directions — loopback to our own daemon to mint/revoke/list, and one
+    // outbound GET to the ISSUING node's `/v1/models` so `mesh use` can refuse
+    // a dead link before storing it. Both are Commonwealth nodes, so Mesh is
+    // the honest class: no third-party model or search traffic passes here,
+    // and nothing on this path may construct a RemotePayload/QueryEgress
+    // client (that stays in the boundary).
+    ("sovereign/crates/sovereign-cli-llm/src/mesh_guest.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/mod.rs", Class::LocalDaemon, 3),
     ("sovereign/crates/sovereign-cli-llm/src/recipe_agent_live_trial.rs", Class::LocalDaemon, 3),
     ("sovereign/crates/sovereign-cli-llm/src/mesh_bench.rs", Class::Mesh, 3),
@@ -227,16 +251,34 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli-llm/src/bench_cmd/atlas.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/alignment_cmd.rs", Class::LocalDaemon, 1),
 
-    // ---- sovereign-cli-dev (LocalDaemon; doc_fetcher is InboundOnly) ----
-    ("sovereign/crates/sovereign-cli-dev/src/code_cmd.rs", Class::LocalDaemon, 4),
+    // ---- sovereign-cli-dev (all LocalDaemon) ----
+    // `doc_fetcher.rs` held this family's only InboundOnly row until
+    // 2026-08-26, when it was deleted with `honesty.rs` as a closed pair
+    // that had been unreachable since `de34eb36` (commit 2bbcb480). The
+    // row outlived the file by one commit and the census caught it as a
+    // STALE ROW — which is the census working.
+    // code_cmd 4 -> 3 (2026-08-20): the fourth site was
+    // `build_daemon_embed_fn`'s /v1/models probe, which left with the rest of
+    // `svrn code index` for sovereign-cli-shared::code_index. The three that
+    // remain are cmd_facts' http client and cmd_watch's two.
+    ("sovereign/crates/sovereign-cli-dev/src/code_cmd.rs", Class::LocalDaemon, 3),
     ("sovereign/crates/sovereign-cli-dev/src/tools_cmd/registry.rs", Class::LocalDaemon, 3),
-    ("sovereign/crates/sovereign-cli-dev/src/project_cmd/mod.rs", Class::LocalDaemon, 2),
+    // 2 -> 3 on 2026-08-21 (nc-27): `daemon_get` MOVED here from
+    // `project_cmd/registry_watch.rs` when that file was deleted as an
+    // unreachable fork. Same loopback client, same class — a relocation,
+    // not a new egress site.
+    ("sovereign/crates/sovereign-cli-dev/src/project_cmd/mod.rs", Class::LocalDaemon, 3),
     ("sovereign/crates/sovereign-cli-dev/src/plan_enricher.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-dev/src/code_map.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-dev/src/atos_cmd/doctor.rs", Class::LocalDaemon, 2),
-    ("sovereign/crates/sovereign-cli-dev/src/project_cmd/registry_watch.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-dev/src/drift_cmd_orchestrator.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-dev/src/doc_fetcher.rs", Class::InboundOnly, 1),
+    // refactor_cmd/label_model: the name-group adjudication pass. One client,
+    // pinned to the local daemon — it posts Rust source snippets and the
+    // code-intel descriptions of the types under judgement, which are estate
+    // content, so LocalDaemon is the class that keeps them on the machine. A
+    // future `--daemon-url` pointing off-box would be the review moment, not
+    // a count change.
+    ("sovereign/crates/sovereign-cli-dev/src/refactor_cmd/label_model.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-dev/src/design_session.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-dev/src/code_capability_graph.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-dev/src/atos_cmd/run.rs", Class::LocalDaemon, 1),
@@ -244,7 +286,15 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli-dev/src/atos_cmd/ab.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-cli-daemon (LocalDaemon — daemon self-control) ----
-    ("sovereign/crates/sovereign-cli-daemon/src/doctor_cmd.rs", Class::LocalDaemon, 3),
+    // `doctor_cmd.rs` was split along its three declared layers; the three
+    // construction sites moved with the code they probe with. Same class,
+    // same total, new paths.
+    ("sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/probe.rs", Class::LocalDaemon, 2),
+    (
+        "sovereign/crates/sovereign-cli-daemon/src/doctor_cmd/checks_freshness.rs",
+        Class::LocalDaemon,
+        1,
+    ),
     ("sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/lifecycle.rs", Class::LocalDaemon, 3),
     ("sovereign/crates/sovereign-cli-daemon/src/setup_cmd/fim.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-daemon/src/setup_cmd/finish.rs", Class::LocalDaemon, 1),
@@ -257,10 +307,37 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli/src/serve_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli/src/project_init/mod.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli/src/notes_cmd.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli/src/code_index_cmd.rs", Class::LocalDaemon, 1),
+    // code_index_cmd.rs has no row since 2026-08-20: the dispatcher's copy of
+    // `svrn code index` (and with it the probe client) moved to
+    // sovereign-cli-shared::code_index; what is left here is a 42-line
+    // subcommand shim that constructs nothing.
 
     // ---- sovereign-cli-shared (LocalDaemon: daemon MCP proxy + project-local) ----
     ("sovereign/crates/sovereign-cli-shared/src/mcp_client.rs", Class::LocalDaemon, 3),
+    // code_index.rs (2026-08-20): `svrn code index` was two copies, one per
+    // binary, and one of them carried a live `--help` defect; converging it put
+    // `build_daemon_embed_fn` here. CLASSIFIED FRESH, not carried across, since
+    // a client constructor moving from a leaf binary into a SHARED library is a
+    // different reachability story on its face. Three checks, and all three say
+    // LocalDaemon is still right:
+    //   - Destination is pinned, not passed. The one site builds a 2s-timeout
+    //     probe for `format!("http://localhost:{port}/v1")/models`, where only
+    //     the PORT comes from config. No parameter of the function names a
+    //     host, so no caller can aim it off-box. The classes in this registry
+    //     are about where the bytes go, and these go to loopback.
+    //   - It carries nothing out. The site is a bare GET liveness probe; no
+    //     estate content, not even a query, is in the request.
+    //   - Reachability did not actually widen. `code_index` is behind the
+    //     `code-index` feature, enabled by exactly `sovereign-cli` (via
+    //     `code-intel`) and `sovereign-cli-dev` — the same two binaries that
+    //     held the code before. The other two crates depending on this one
+    //     (sovereign-cli-daemon, sovereign-cli-llm) leave the feature off, so
+    //     the module is not compiled into them at all.
+    // What this row does NOT guarantee: if someone later gives
+    // `build_daemon_embed_fn` an endpoint parameter, the count stays 1 and this
+    // census stays green. The pinned-localhost literal is the invariant; a
+    // change to it is the review moment, not a change to the count.
+    ("sovereign/crates/sovereign-cli-shared/src/code_index.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-tools ----
     // knowledge_lookup: the tool-registry web-search evidence path —
@@ -351,7 +428,6 @@ const REGISTRY: &[(&str, Class, usize)] = &[
 
     // ---- commonwealth (the estate's own web app + shards; Mesh / LocalDaemon) ----
     ("commonwealth/crates/commonwealth-knowledge/src/shard_manager.rs", Class::Mesh, 3),
-    ("commonwealth/crates/commonwealth-daemon/src/main.rs", Class::LocalDaemon, 3),
     ("commonwealth/crates/commonwealth-knowledge/src/embed_http.rs", Class::LocalDaemon, 2),
     ("commonwealth/crates/commonwealth-api/src/routes_internal/corpus_collaborate.rs", Class::Mesh, 2),
     ("commonwealth/crates/commonwealth-api/src/routes_knowledge.rs", Class::Mesh, 1),

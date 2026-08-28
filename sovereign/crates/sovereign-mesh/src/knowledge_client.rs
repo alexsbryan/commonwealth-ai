@@ -170,6 +170,17 @@ impl MeshKnowledgeSource for MeshKnowledgeClient {
                 // in `metadata["peer_name"]` when the hit came from
                 // a fan-out leg. Absent for locally-served hits.
                 let peer_name = r.metadata.get("peer_name").cloned();
+                // The wire spelling is parsed HERE and nowhere else: one
+                // boundary, the canonical parsers, and a typo reads as absent
+                // rather than as a class (TOPOLOGY §10 rung 9.1).
+                let custody = r
+                    .custody
+                    .as_deref()
+                    .and_then(sovereign_contracts::types::Custody::parse_wire);
+                let grain = r
+                    .grain
+                    .as_deref()
+                    .and_then(sovereign_contracts::types::Grain::parse_wire);
                 MeshScoredChunk {
                     content: r.content,
                     title: r.title,
@@ -179,6 +190,8 @@ impl MeshKnowledgeSource for MeshKnowledgeClient {
                     peer_name,
                     chunk_id: r.chunk_id,
                     source_doc_id: r.source_doc_id,
+                    custody,
+                    grain,
                 }
             })
             .collect();

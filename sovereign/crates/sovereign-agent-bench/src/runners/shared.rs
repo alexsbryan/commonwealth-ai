@@ -19,98 +19,56 @@
 //!    fitness function. No LLM-eval, no rubric scoring, no role
 //!    diagnosis — those live downstream in the witness layer.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
 use commonwealth_agent_tools::executor::{execute, ExecCtx};
 use commonwealth_agent_tools::{
     PatchFileArgs, Primitive, ReplaceFunctionArgs, ToolError, WriteFileArgs,
 };
-use regex::Regex;
 use serde_json::{json, Value};
 use tokio::process::Command;
 
-use crate::problem::WitnessLanguage;
-use crate::witness::test_result_parser::{parse_test_output, TestParseResult};
+/// The edit-action schema, response parser, workdir snapshotter,
+/// source-file discovery and prompt renderer are `commonwealth_tdd`'s.
+/// Re-exported here because both runners import them through
+/// `runners::shared` — this module is now the bench's adapter over
+/// the TDD machine's primitives rather than a second copy of them.
+pub use commonwealth_tdd::shared::{discover_source_file, render_with_line_numbers, snapshot_dir};
+pub use commonwealth_tdd::{EditAction, ParsedResponse, TestRunResult};
 
-// ── edit action schema ───────────────────────────────────────────
-
-/// Discriminated edit shape the model chooses per turn.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "action", rename_all = "snake_case")]
-pub enum EditAction {
-    /// Rewrite an entire named function or class.
-    RewriteFunction { name: String },
-    /// Replace lines `start..=end` (1-indexed inclusive).
-    PatchLines { start: u32, end: u32 },
-    /// Insert before `line` (1-indexed); existing content at and
-    /// below `line` is preserved.
-    InsertBefore { line: u32 },
-    /// Replace the entire file contents.
-    WriteFile,
-}
-
-/// Parsed model output: an EditAction plus the python/rust/etc.
-/// source block to apply with it.
-#[derive(Debug, Clone)]
-pub struct ParsedResponse {
-    pub action: EditAction,
-    pub body: String,
-}
-
-/// Extract the JSON action header and the source code block from the
-/// model's chat response. Returns None when either is missing or the
-/// JSON doesn't conform to EditAction. Tolerates the model emitting
-/// the JSON inline (without a fence) and tolerates missing closing
-/// fences on the source block (truncation-friendly).
+/// Parse a model turn into an edit action + source block, declining
+/// `commonwealth_tdd`'s header-inference fallback.
+///
+/// The PARSING is tdd's. The ACCEPTANCE POLICY is the bench's, and
+/// they differ on purpose. tdd will infer an edit shape from a bare
+/// source block with no JSON action header, justified by ITS
+/// monotonic fitness gate ("worst case equals the parse-fail this
+/// replaces") — but the bench SCORES candidates instead of landing
+/// only strict improvements, so that argument does not transfer.
+/// Accepting inferred candidates here would make `agent-coding-gate`
+/// — a HARD tail gate (`scripts/sovereign-ci-bench.sh:55`) — more
+/// permissive across all 15 problems in every language, mechanically
+/// raising scores against the five committed baselines in
+/// `sovereign/bench/agent-coding/baselines/ci/` without any model
+/// improvement. That is a change to the veto deciding whether a
+/// candidate counts as an attempt at all: ARCH_PRINCIPLES §18.6, a
+/// scoring decision to be taken on its own evidence and with a
+/// re-baseline — not a ride-along on a deduplication commit.
+///
+/// This filter is therefore load-bearing, not redundant: deleting it
+/// silently changes bench scores. Adopting the fallback deliberately
+/// is filed as `bench-adopt-header-inference-fallback`.
 pub fn parse_response(content: &str) -> Option<ParsedResponse> {
-    let action = parse_action_json(content)?;
-    let body = parse_source_block(content)?;
-    Some(ParsedResponse { action, body })
+    let parsed = commonwealth_tdd::shared::parse_response(content)?;
+    if parsed.inferred {
+        return None;
+    }
+    Some(parsed)
 }
 
-fn parse_action_json(content: &str) -> Option<EditAction> {
-    // Prefer ```json fenced block.
-    let fenced = Regex::new(r"(?s)```json\s*\n(\{[^`]*?\})\s*\n```").unwrap();
-    if let Some(c) = fenced.captures(content) {
-        if let Ok(v) = serde_json::from_str::<EditAction>(&c[1]) {
-            return Some(v);
-        }
-    }
-    // Inline {"action": ...} object.
-    let inline = Regex::new(r#"(\{[^{}]*?"action"\s*:\s*"[^"]+?"[^{}]*?\})"#).unwrap();
-    if let Some(c) = inline.captures(content) {
-        if let Ok(v) = serde_json::from_str::<EditAction>(&c[1]) {
-            return Some(v);
-        }
-    }
-    None
-}
-
-fn parse_source_block(content: &str) -> Option<String> {
-    // Closed code fence (any language tag, prefer specific languages).
-    let closed = Regex::new(r"(?s)```(?:python|py|rust|rs|go|ts|tsx|js)\s*\n(.*?)```").unwrap();
-    if let Some(c) = closed.captures(content) {
-        return Some(c[1].to_string());
-    }
-    // Any closed code fence (skip the json one — handled by caller).
-    let any_closed = Regex::new(r"(?s)```(\w*)\s*\n(.*?)```").unwrap();
-    let mut last_non_json: Option<String> = None;
-    for cap in any_closed.captures_iter(content) {
-        if !cap[1].eq_ignore_ascii_case("json") {
-            last_non_json = Some(cap[2].to_string());
-        }
-    }
-    if let Some(b) = last_non_json {
-        return Some(b);
-    }
-    // Truncation-friendly: opening fence without close.
-    let open_only = Regex::new(r"(?s)```(?:python|py|rust|rs)\s*\n(.*)").unwrap();
-    if let Some(c) = open_only.captures(content) {
-        return Some(c[1].to_string());
-    }
-    None
-}
+use crate::problem::WitnessLanguage;
+use crate::witness::test_result_parser::parse_test_output;
 
 // ── edit application ─────────────────────────────────────────────
 
@@ -188,54 +146,16 @@ pub async fn apply_edit(
                 new_content,
             })
         }
-        EditAction::WriteFile => Primitive::WriteFile(WriteFileArgs {
+        // tdd's `WriteFile` carries an optional `path`; the bench
+        // always routes to its discovered `source_file`, which is
+        // what it did before adoption (its unit variant made serde
+        // drop the key). Bench problems are single-file.
+        EditAction::WriteFile { .. } => Primitive::WriteFile(WriteFileArgs {
             path: source_file.to_string(),
             content: response.body.clone(),
         }),
     };
     execute(ctx, &primitive).await.map(|_| ())
-}
-
-// ── workdir snapshot / restore ───────────────────────────────────
-
-/// Copy `src` to `dst` recursively. Used to snapshot a workdir per
-/// candidate so test runs against one candidate don't pollute the
-/// state for the others. Existing content at `dst` is removed first.
-/// Skips heavy build-output directories (target, node_modules, etc.).
-pub fn snapshot_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
-    if dst.exists() {
-        std::fs::remove_dir_all(dst)?;
-    }
-    std::fs::create_dir_all(dst)?;
-    copy_dir_filtered(src, dst)
-}
-
-fn copy_dir_filtered(src: &Path, dst: &Path) -> std::io::Result<()> {
-    const SKIP: &[&str] = &[
-        "target",
-        "node_modules",
-        ".git",
-        "__pycache__",
-        ".pytest_cache",
-    ];
-    std::fs::create_dir_all(dst)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let name = entry.file_name();
-        let name_str = name.to_string_lossy();
-        if SKIP.iter().any(|s| *s == name_str) {
-            continue;
-        }
-        let s = entry.path();
-        let d = dst.join(&name);
-        let ft = entry.file_type()?;
-        if ft.is_dir() {
-            copy_dir_filtered(&s, &d)?;
-        } else if ft.is_file() {
-            std::fs::copy(&s, &d)?;
-        }
-    }
-    Ok(())
 }
 
 // ── test execution ───────────────────────────────────────────────
@@ -294,113 +214,6 @@ pub async fn run_tests(
         tail: tail(&combined, 1500),
     }
 }
-
-#[derive(Debug, Clone)]
-pub struct TestRunResult {
-    pub parsed: TestParseResult,
-    /// Last ~1.5 KB of combined stdout/stderr for the prompt.
-    pub tail: String,
-}
-
-impl TestRunResult {
-    fn empty(reason: &str) -> Self {
-        Self {
-            parsed: TestParseResult {
-                passed: 0,
-                failed: 0,
-                total: 0,
-                failed_names: vec![],
-            },
-            tail: reason.to_string(),
-        }
-    }
-}
-
-// ── source file discovery ─────────────────────────────────────────
-
-/// Find the primary source file in the agent's workdir. Walks up
-/// to 3 levels deep skipping common test / build directories.
-/// Returns the workdir-relative path (e.g. `"src/lib.rs"` for Rust
-/// scaffolds, `"evaluator.py"` for flat Python scaffolds). None
-/// when no candidate is present.
-pub fn discover_source_file(workdir: &Path) -> Option<String> {
-    let exts = [".py", ".rs", ".ts", ".tsx", ".go"];
-    let mut hits: Vec<PathBuf> = Vec::new();
-    walk_for_sources(workdir, workdir, 0, &exts, &mut hits);
-    // Prefer files at shallower depth, then alphabetically.
-    hits.sort_by_key(|p| (p.components().count(), p.clone()));
-    hits.into_iter()
-        .next()
-        .map(|p| p.to_string_lossy().into_owned())
-}
-
-fn walk_for_sources(root: &Path, dir: &Path, depth: usize, exts: &[&str], out: &mut Vec<PathBuf>) {
-    if depth > 3 {
-        return;
-    }
-    const SKIP: &[&str] = &[
-        "target",
-        "node_modules",
-        ".git",
-        "__pycache__",
-        ".pytest_cache",
-        "tests",
-        "test",
-        "dist",
-        "build",
-        "vendor",
-    ];
-    let Ok(rd) = std::fs::read_dir(dir) else {
-        return;
-    };
-    let mut entries: Vec<_> = rd.flatten().collect();
-    entries.sort_by_key(|e| e.file_name());
-    for entry in entries {
-        let name = entry.file_name();
-        let name_str = name.to_string_lossy();
-        if SKIP.iter().any(|s| *s == name_str) {
-            continue;
-        }
-        let p = entry.path();
-        let Ok(ft) = entry.file_type() else { continue };
-        if ft.is_dir() {
-            walk_for_sources(root, &p, depth + 1, exts, out);
-            continue;
-        }
-        if !ft.is_file() {
-            continue;
-        }
-        let n = name_str.as_ref();
-        if n.starts_with("test_") {
-            continue;
-        }
-        if exts.iter().any(|ext| n.ends_with(ext)) {
-            if let Ok(rel) = p.strip_prefix(root) {
-                out.push(rel.to_path_buf());
-            }
-        }
-    }
-}
-
-// ── prompt rendering ──────────────────────────────────────────────
-
-/// Render a file's contents prefixed with right-aligned line numbers.
-/// Mirrors the format the v2/v3 isolation probes used — the model
-/// references line numbers in its JSON action.
-pub fn render_with_line_numbers(path: &Path) -> String {
-    let Ok(content) = std::fs::read_to_string(path) else {
-        return String::new();
-    };
-    let lines: Vec<&str> = content.lines().collect();
-    let width = lines.len().to_string().len();
-    lines
-        .iter()
-        .enumerate()
-        .map(|(i, l)| format!("{:>w$}: {l}", i + 1, w = width))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 // ── small utilities ──────────────────────────────────────────────
 
 fn tail(s: &str, max_bytes: usize) -> String {
@@ -562,6 +375,27 @@ if c == "<"
         assert!(parse_response(content).is_none());
     }
 
+    /// The bench declines tdd's header-inference fallback. Without
+    /// this filter the input below parses as an inferred
+    /// `RewriteFunction` and the candidate is ACCEPTED, which makes
+    /// the HARD `agent-coding-gate` more permissive across every
+    /// problem and invalidates the five committed CI baselines with
+    /// no model improvement (ARCH_PRINCIPLES §18.6). Named input, so
+    /// the filter is a gate rather than a comment.
+    #[test]
+    fn parse_response_declines_tdd_header_inference() {
+        let content = "```python\ndef tokenize(s):\n    return s.split()\n```";
+        // tdd infers an action from the bare block ...
+        let inferred = commonwealth_tdd::shared::parse_response(content)
+            .expect("tdd infers an action from a bare source block");
+        assert!(
+            inferred.inferred,
+            "guard is meaningless if tdd stops inferring"
+        );
+        // ... and the bench declines it, preserving HEAD's semantics.
+        assert!(parse_response(content).is_none());
+    }
+
     #[test]
     fn render_with_line_numbers_pads_to_widest_index() {
         let tmp = tempfile::tempdir().unwrap();
@@ -593,6 +427,25 @@ if c == "<"
         std::fs::write(tmp.path().join("config_applier.py"), "pass\n").unwrap();
         let f = discover_source_file(tmp.path()).expect("should find file");
         assert_eq!(f, "config_applier.py");
+    }
+
+    /// Tool configs are infrastructure, not source. They sort FIRST
+    /// (fewest path components), so without an explicit filter a
+    /// webapp's `playwright.config.ts` becomes the file the prompt
+    /// points the model at — and candidates "fix" the test runner
+    /// instead of the app (live receipts, job 09777dfe, 2026-07-07).
+    #[test]
+    fn discover_source_file_skips_tool_configs() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("playwright.config.ts"),
+            "export default {}\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(tmp.path().join("src")).unwrap();
+        std::fs::write(tmp.path().join("src/app.ts"), "export const x = 1;\n").unwrap();
+        let f = discover_source_file(tmp.path()).expect("should find file");
+        assert_eq!(f, "src/app.ts");
     }
 
     #[test]

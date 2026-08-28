@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::sync::Arc;
 
-use async_trait::async_trait;
-
 use sovereign_core::error::{Error, Result};
 use sovereign_core::slot_policy::Workload;
-use sovereign_core::traits::{InferenceProvider, StateStore, Tool};
+use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::*;
 
 const CHUNKS_PER_BATCH: usize = 4;
@@ -46,15 +45,13 @@ impl DocumentTool {
             // SLOT_POLICY §3 Housekeep: document map-phase section
             // summarize/analyze — advisory context feeding the reduce,
             // not durable truth.
-            let mut request = CompletionRequest::for_workload(
-                Workload::Housekeep,
-                format!("{map_prompt}\n\n---\n\n{batch_text}"),
-            )
-            .with_system(&format!(
-                "You are processing section {} of a larger document. {map_prompt}",
-                batch_idx + 1,
-            ))
-            .with_output_budget(512);
+            let mut request = Workload::Housekeep
+                .request(format!("{map_prompt}\n\n---\n\n{batch_text}"))
+                .with_system(&format!(
+                    "You are processing section {} of a larger document. {map_prompt}",
+                    batch_idx + 1,
+                ))
+                .with_output_budget(512);
             request.temperature = Some(0.3);
             // POLICY-DEBT(SLOT_POLICY §3 Housekeep): None preserved for P1
             // neutrality (bundle is Some(0)); P5 confirms.
@@ -109,13 +106,13 @@ impl DocumentTool {
 
                 // SLOT_POLICY §3 Synthesize: final reduce composing a
                 // coherent document summary/analysis for the user.
-                let mut request =
-                    CompletionRequest::for_workload(Workload::Synthesize, reduce_prompt)
-                        .with_system(
-                            "You are synthesizing a final summary from section summaries. \
+                let mut request = Workload::Synthesize
+                    .request(reduce_prompt)
+                    .with_system(
+                        "You are synthesizing a final summary from section summaries. \
                      Produce a coherent, comprehensive result.",
-                        )
-                        .with_output_budget(1024);
+                    )
+                    .with_output_budget(1024);
                 request.temperature = Some(0.5);
 
                 let response = self.inference.complete(&request).await?;
@@ -154,70 +151,27 @@ impl DocumentTool {
     }
 }
 
-#[async_trait]
-impl Tool for DocumentTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "document".to_string(),
-            name: "Document".to_string(),
-            description: "Process an entire ingested document with a fixed operation \
-                          (summarize | analyze). Reliable for those two common cases — \
-                          smaller models call it correctly because the operation is \
-                          constrained. For a custom operation described in natural \
-                          language (e.g. \"extract character arcs\", \"find legal \
-                          risks\"), use `document_operation` instead."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "source": {
-                        "type": "string",
-                        "description": "The source path of the ingested document"
-                    },
-                    "operation": {
-                        "type": "string",
-                        "enum": ["summarize", "analyze"],
-                        "description": "What to do with the document"
-                    }
-                },
-                "required": ["source", "operation"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Slow,
-            scope: Scope::Session,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Synthesised summary or analysis prose. Shape depends \
-                                on the `operation` param."
-            })),
-        }
+impl DocumentTool {
+    /// Bind this tool's state to its `document` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("document", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
+        .with_family(sovereign_contracts::tool_bundle::ToolFamily::Document)
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![] // Reading own documents doesn't need special permission.
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        if params.get("source").and_then(|v| v.as_str()).is_none() {
-            return Err(Error::InvalidInput(
-                "Document tool requires a 'source' parameter".to_string(),
-            ));
-        }
-        let operation = params
-            .get("operation")
-            .and_then(|v| v.as_str())
-            .unwrap_or("summarize");
-        if !["summarize", "analyze"].contains(&operation) {
-            return Err(Error::InvalidInput(format!(
-                "Unknown operation: {operation}. Use 'summarize' or 'analyze'."
-            )));
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `document`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let source = params
             .get("source")
             .and_then(|v| v.as_str())
@@ -266,6 +220,24 @@ impl Tool for DocumentTool {
 
         self.process_chunks(&chunks, operation, source).await
     }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+        if params.get("source").and_then(|v| v.as_str()).is_none() {
+            return Err(Error::InvalidInput(
+                "Document tool requires a 'source' parameter".to_string(),
+            ));
+        }
+        let operation = params
+            .get("operation")
+            .and_then(|v| v.as_str())
+            .unwrap_or("summarize");
+        if !["summarize", "analyze"].contains(&operation) {
+            return Err(Error::InvalidInput(format!(
+                "Unknown operation: {operation}. Use 'summarize' or 'analyze'."
+            )));
+        }
+        Ok(())
+    }
 }
 
 impl DocumentTool {
@@ -297,7 +269,8 @@ impl DocumentTool {
 
             // SLOT_POLICY §3 Synthesize: small-document direct
             // summary/analysis composed for the user (no map-reduce).
-            let mut request = CompletionRequest::for_workload(Workload::Synthesize, prompt)
+            let mut request = Workload::Synthesize
+                .request(prompt)
                 .with_system(&format!(
                     "You are processing the document \"{source}\". Provide a thorough {operation}."
                 ))

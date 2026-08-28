@@ -40,6 +40,7 @@ use std::path::{Path, PathBuf};
 
 use corpus_engine::index::CorpusIndex;
 use corpus_engine_scip::capability_map::{is_function, pkg_and_desc};
+use corpus_engine_scip::converge::SourceScope;
 use corpus_engine_scip::ScipGraph;
 use sovereign_core::error::{Error, Result};
 
@@ -110,7 +111,13 @@ pub struct DryReport {
     pub min_lines: usize,
     pub near_threshold: f32,
     pub scope: Option<String>,
-    /// Total code symbols (function/method) seen before the min-lines filter.
+    /// Which files counted as first-party production code. Carried into the
+    /// output for the same reason `Census::scope` is: a count that travels
+    /// without its method is unquotable (`ARCH_PRINCIPLES` §18.4).
+    pub source_scope: SourceScope,
+    /// First-party production code symbols (function/method) seen before the
+    /// min-lines filter. Excluded paths never enter this count — the source
+    /// scope defines the universe, it is not a narrowing of it.
     pub total_symbols: usize,
     /// Distinct source locations considered after filtering + dedup.
     pub considered: usize,
@@ -137,6 +144,14 @@ fn err(id: &str, message: String) -> Error {
 
 pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
     let t0 = std::time::Instant::now();
+    // The one decider for "is this file ours, and is it production?" (§10.6).
+    // `converge` has owned that answer since 2026-08-20; this report used to
+    // answer it with silence, which is why its headline read 3,151 exact
+    // groups / ~96k redundant lines — seven copies of one vendored llama.cpp
+    // helper across `target/` build-hash dirs, `vendor/`, `research/`, and the
+    // agent worktree shadows under `.claude/`, all counted as duplication a
+    // human should go fix.
+    let source_scope = SourceScope::default();
     let index = CorpusIndex::open(inputs.index_path)
         .await
         .map_err(|e| err("open", e.to_string()))?;
@@ -175,6 +190,13 @@ pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
         let line_start = v.get("line_start").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
         let line_end = v.get("line_end").and_then(|x| x.as_u64()).unwrap_or(0) as u32;
         let lines = (line_end.saturating_sub(line_start) as usize) + 1;
+        // Before the counter, not after: an excluded path is not a symbol this
+        // report has an opinion about, so it must not inflate the denominator
+        // either. `--scope` below is a user's narrowing of the universe; this
+        // is the universe.
+        if !source_scope.admits(file) {
+            continue;
+        }
         total_symbols += 1;
 
         if let Some(prefix) = inputs.scope {
@@ -234,13 +256,18 @@ pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
     // must drop those (the embedding index tags them as functions too).
     let db_path = inputs.index_path.join("scip_graph.db");
     let source_root = corpus_source_root(inputs.index_path);
-    let (exact_clones, alias_syms) =
-        exact_clones_from_source(&db_path, inputs.corpus_id, &source_root, inputs.scope)
-            .await
-            .unwrap_or_else(|e| {
-                eprintln!("dry_report: exact-clone tier unavailable ({e}); near clones only");
-                (Vec::new(), HashSet::new())
-            });
+    let (exact_clones, alias_syms) = exact_clones_from_source(
+        &db_path,
+        inputs.corpus_id,
+        &source_root,
+        inputs.scope,
+        &source_scope,
+    )
+    .await
+    .unwrap_or_else(|e| {
+        eprintln!("dry_report: exact-clone tier unavailable ({e}); near clones only");
+        (Vec::new(), HashSet::new())
+    });
     eprintln!(
         "dry_report: exact tier found {} clone group(s) from source (SCIP, un-deduped)",
         exact_clones.len()
@@ -429,6 +456,7 @@ pub async fn build_dry_report(inputs: DryInputs<'_>) -> Result<DryReport> {
         min_lines: inputs.min_lines,
         near_threshold: inputs.near_threshold,
         scope: inputs.scope.map(String::from),
+        source_scope,
         total_symbols,
         considered,
         skipped_no_embedding,
@@ -505,6 +533,7 @@ async fn exact_clones_from_source(
     corpus_id: &str,
     source_root: &Path,
     scope: Option<&str>,
+    source_scope: &SourceScope,
 ) -> Result<(Vec<ExactClone>, HashSet<(String, String)>)> {
     let graph = ScipGraph::open(db_path, corpus_id).map_err(|e| err("scip_open", e.to_string()))?;
     let syms = graph
@@ -525,6 +554,9 @@ async fn exact_clones_from_source(
         }
         let span = (rec.line_end - rec.line_start + 1).max(0) as usize;
         if span < EXACT_MIN_LINES {
+            continue;
+        }
+        if !source_scope.admits(&rec.file_path) {
             continue;
         }
         if let Some(prefix) = scope {
@@ -677,6 +709,18 @@ pub fn render_dry_report(r: &DryReport) -> String {
          (≥{} lines) · near-clone threshold cosine ≥ {:.2}\n\n",
         r.total_symbols, r.considered, r.min_lines, r.near_threshold
     ));
+    // The method, next to the number it produced. Without this line the
+    // headline is unquotable: a reader cannot tell first-party production
+    // duplication from seven copies of a vendored helper in `target/`.
+    out.push_str(&format!(
+        "First-party production code only — path segments excluded: {}.\n\n",
+        r.source_scope
+            .exclude_segments
+            .iter()
+            .map(|s| format!("`{s}`"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    ));
     out.push_str(&format!(
         "**{}** exact-clone groups · **{}** near-clone clusters · \
          ~**{}** redundant lines (lower bound).\n\n",
@@ -738,6 +782,36 @@ mod tests {
 
     fn body(lines: &[&str]) -> Vec<String> {
         normalize_body(lines)
+    }
+
+    /// The scope this report now applies, asserted on the exact paths that
+    /// made its headline unquotable. Before 2026-08-20 `dry_report` had no
+    /// source scope at all, so its 3,151 exact groups / ~96k redundant lines
+    /// counted one vendored llama.cpp helper SEVEN times across `target/`
+    /// build-hash directories. These are the failing inputs (§18.1).
+    #[test]
+    fn build_artifacts_and_vendored_code_are_out_of_scope() {
+        let s = SourceScope::default();
+        for excluded in [
+            "target/debug/build/llama-cpp-sys-4-9f1/out/llama.cpp/convert.py",
+            "vendor/llama-cpp-sys-4/llama.cpp/tools/server/tests/unit/test_chat.py",
+            "research/deep-research/drb/vendor/pkg/mod.rs",
+            ".claude/worktrees/agent-a99/sovereign/crates/sovereign-tools/src/code/dry_report.rs",
+            "corpus-engine/tests/extractor_smoke.rs",
+            "sovereign/crates/sovereign-core/benches/embed.rs",
+        ] {
+            assert!(!s.admits(excluded), "should be out of scope: {excluded}");
+        }
+        // …and first-party production code is still in. `deep_research` is the
+        // one that regressed once already: `research` as a SUBSTRING swallowed
+        // it, which is why the exclusions match whole path segments.
+        for included in [
+            "sovereign/crates/sovereign-tools/src/code/dry_report.rs",
+            "sovereign/crates/sovereign-core/src/deep_research/icd.rs",
+            "corpus-engine/src/extractors/mod.rs",
+        ] {
+            assert!(s.admits(included), "should be in scope: {included}");
+        }
     }
 
     #[test]

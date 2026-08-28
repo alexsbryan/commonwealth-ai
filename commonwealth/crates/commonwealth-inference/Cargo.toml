@@ -11,7 +11,9 @@ corpus-engine = { workspace = true }
 
 serde = { workspace = true }
 serde_json = { workspace = true }
-toml = { workspace = true }
+# `toml` went with the forked `model_aliases` / `oicp_registry` modules
+# (nc-22c): the TOML parsing lives in `commonwealth-core`, which this crate
+# now re-exports rather than re-declares.
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

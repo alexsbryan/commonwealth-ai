@@ -1,0 +1,2575 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Code-intelligence tool manifests — the DECLARED half of every tool under
+# `sovereign-tools/src/code/`: identity, behavioural properties, parameter
+# schema, worked examples, required permissions.
+#
+# Adding a tool here is a DATA change. See `tool_manifest/mod.rs` for the
+# schema and `ToolManifest::to_descriptor` for how a row becomes the
+# `ToolDescriptor` the router, planner and MCP surface read.
+
+[[tool]]
+id = "arch_posture"
+name = "Architecture Posture"
+description = "Fast headline read of the persisted architecture report: top god-crate, hub crates, cross-crate coupling count, declared↔observed deltas, observed layer violations, file cycles, hidden temporal coupling — plus a freshness verdict (the report fingerprints its inputs; stale means Cargo.toml/Cargo.lock/ARCH_LAYERS.toml or the SCIP index changed since it was written). Use at session start; run `sovereign code arch-report` to refresh."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = []
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.corpus_id]
+type = "string"
+description = "Code corpus id. Optional when exactly one persisted report exists."
+
+[tool.output_schema]
+type = "string"
+description = "Markdown posture headline with freshness verdict."
+
+[[tool.examples]]
+situation = "Session start on a shared codebase — you want the architectural headlines (god-crates, coupling, violations) without paying for a full graph recompute."
+call = {  }
+
+[[tool]]
+id = "arch_report"
+name = "Architecture Report"
+description = "The architectural posture of a codebase, from the SCIP graph: god-crate fan-in/instability table, the heaviest cross-crate coupling edges WITH the symbols that carry them (the input for interface extraction), declared-vs-observed dependency deltas (removable Cargo edges; re-export-hidden coupling), SCIP-observed layer-map violations, file fan-in hotspots, intra-crate file cycles, file-size offenders, feature-axis spread, and (when git history is enabled) temporal coupling — file pairs that change together without any structural edge. Deterministic, no model. Use before refactors that move boundaries, and to answer 'where is the coupling actually?'."
+effect = "read"
+idempotency = "idempotent"
+latency = "slow"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = []
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.corpus_id]
+type = "string"
+description = "Code corpus id (an indexed repo). Optional when exactly one code corpus is indexed."
+
+[tool.parameters.properties.include_git]
+type = "boolean"
+description = "Compute the temporal-coupling section from git history (adds seconds)."
+default = false
+
+[tool.output_schema]
+type = "string"
+description = "Markdown architecture report derived from the SCIP graph (+ cargo metadata + git when rooted)."
+
+[[tool.examples]]
+situation = "You're planning to split a hub crate or move a boundary and need to know which symbols actually carry the coupling between crates — do NOT grep imports one file at a time; the reference graph already knows."
+call = { corpus_id = "commonwealth-ai", include_git = true }
+
+[[tool]]
+id = "archive_feature"
+name = "Archive Feature"
+description = "Mark an ATOS feature as archived. Notes tagged to the feature remain queryable via read_notes with scope=['feature'] + feature_id but stop being injected into fresh sessions. Use after the compliance review passes and any promotable notes have been promoted to global scope."
+effect = "write"
+idempotency = "idempotent"
+latency = "instant"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["id", "reason"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.id]
+type = "string"
+description = "Feature id (as returned by provision_feature)."
+
+[tool.parameters.properties.reason]
+type = "string"
+description = "Why the feature is archived (e.g. 'shipped v0.5', 'abandoned in favor of <other>')."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.archived]
+type = "boolean"
+
+[tool.output_schema.properties.id]
+type = "string"
+
+[[tool.examples]]
+situation = "Milestone 1 of the atos-version-flag feature passed review and the operator asked you to wrap it up. Archive it and move on."
+call = { id = "atos-version-flag", reason = "shipped; --version flag lives in atos_cmd.rs" }
+
+[[tool]]
+id = "atos_plan_emit"
+name = "ATOS plan emit (structured)"
+description = "Emit a structured implementation plan for the ATOS Runner during PLAN or REASSESS phases. Pass `workdir` (the absolute path the runner gave you in the atos-context block) and `steps` (an array of step objects). The tool validates the schema, auto-increments the revision against any prior plan, and writes the canonical plan.json to <workdir>/.sovereign/. Use this tool INSTEAD of writing a JSON code block in your reply — free-form prose JSON is brittle for plan-shaped data and the runner's parser will struggle with it. The tool is the deterministic path."
+effect = "write"
+idempotency = "nonidempotent"
+latency = "instant"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["workdir", "steps"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.workdir]
+type = "string"
+description = "Absolute path to the workdir. Read from the atos-context block — it lists the canonical workdir path verbatim. Must be absolute (start with `/`)."
+
+[tool.parameters.properties.steps]
+type = "array"
+minItems = 1
+maxItems = 32
+description = "Plan steps in execution order. 3-12 steps for a normal feature; 32 is a hard cap."
+
+[tool.parameters.properties.steps.items]
+type = "object"
+required = ["id", "goal", "verify_cmd"]
+
+[tool.parameters.properties.steps.items.properties]
+
+[tool.parameters.properties.steps.items.properties.id]
+type = "string"
+description = "Stable id like `step-01`. The runner's merge logic keys execution state on this — keep ids consistent across REASSESS revisions."
+
+[tool.parameters.properties.steps.items.properties.goal]
+type = "string"
+description = "One sentence describing what this step delivers in code terms."
+
+[tool.parameters.properties.steps.items.properties.files_touched]
+type = "array"
+description = "Workdir-relative paths the step will write or edit. The hollow-file gate uses this to verify real work happened."
+
+[tool.parameters.properties.steps.items.properties.files_touched.items]
+type = "string"
+
+[tool.parameters.properties.steps.items.properties.verify_cmd]
+type = "string"
+description = "Shell command that exits 0 when the step is complete. Runs from workdir root. Strict verification: a step is not done until this command passes."
+
+[tool.parameters.properties.steps.items.properties.rationale]
+type = "string"
+description = "Why this step before/after others. Optional but surfaces in PLAN.md."
+
+[tool.parameters.properties.feature_id]
+type = "string"
+description = "Optional. The runner carries it over from any prior plan; only set on first PLAN if you know the id."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.plan_path]
+type = "string"
+
+[tool.output_schema.properties.steps]
+type = "integer"
+
+[tool.output_schema.properties.revision]
+type = "integer"
+
+[tool.output_schema.properties.feature_id]
+type = "string"
+
+[[tool.examples]]
+situation = "PLAN phase: the agent has read DESIGN.md and decomposed the work into 5 steps. Emit the plan as a tool call instead of prose JSON."
+call = { workdir = "/Users/me/dev/myproject", steps = [{ id = "step-01", goal = "Scaffold Cargo.toml + src/lib.rs", files_touched = ["Cargo.toml", "src/lib.rs"], verify_cmd = "cargo check", rationale = "Phase 0 skeleton must build before any types" }, { id = "step-02", goal = "Define core wire types with serde annotations", files_touched = ["src/lib.rs"], verify_cmd = "cargo check", rationale = "Phase 1: types before behaviour" }] }
+
+[[tool]]
+id = "atos_verify"
+name = "ATOS step verification"
+description = "Run a step's verify command and check that the agent actually modified the files it claimed to. Three gates: (1) shell verify command exits zero, (2) touched files are not empty/near-empty (hollow), (3) at least one touched file was modified after `since_unix_ts` (untouched — gate is skipped unless the caller supplies a pre-iteration timestamp). Returns passed=true only when every applicable gate passes."
+effect = "readwrite"
+idempotency = "nonidempotent"
+latency = "slow"
+scope = "session"
+permissions = ["Shell"]
+
+[tool.parameters]
+type = "object"
+required = ["workdir", "verify_cmd"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.workdir]
+type = "string"
+description = "Absolute path to the project workdir"
+
+[tool.parameters.properties.verify_cmd]
+type = "string"
+description = "Shell command to run (e.g. 'cargo test --test test_foo -- bar')"
+
+[tool.parameters.properties.files_touched]
+type = "array"
+description = "Workdir-relative paths the step was supposed to modify"
+
+[tool.parameters.properties.files_touched.items]
+type = "string"
+
+[tool.parameters.properties.since_unix_ts]
+type = "number"
+description = "Optional. Epoch seconds snapshotted before the agent ran. When set, the untouched gate fires if no file in files_touched has an mtime newer than this."
+
+[[tool.examples]]
+situation = "After implementing step-02 (define CapabilityHint enum), verify the step"
+call = { workdir = "/Users/user/dev/atos-experiment-oicp-types", verify_cmd = "cargo test --test test_capability_hint -- roundtrip", files_touched = ["src/lib.rs", "tests/test_capability_hint.rs"], since_unix_ts = 1715000000 }
+
+[[tool]]
+id = "blast"
+name = "Blast Radius"
+description = "Compute the transitive impact of changing a symbol: all callers at every depth level up to max_depth. Use before modifying a function signature, removing a method, or changing a trait definition. Separates production callers from test callers and groups by module. Backed by the SCIP call graph — compiler-resolved, not grep. IMPORTANT: Before using on a large refactor, call read_notes(kinds=[\"reflection\"], query=\"blast_radius\") to check for known limitations recorded by previous sessions (e.g. macro-generated call sites not traversed by SCIP)."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["symbol"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.symbol]
+type = "string"
+description = "Symbol name to analyse (function, method, struct, trait)"
+
+[tool.parameters.properties.max_depth]
+type = "integer"
+default = 3
+description = "BFS depth (1=direct callers, 2=callers of callers, …). Capped at 5."
+
+[tool.parameters.properties.max_symbols]
+type = "integer"
+default = 100
+description = "Maximum total callers to return. Capped at 200."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.symbol]
+type = "string"
+
+[tool.output_schema.properties.depth_reached]
+type = "integer"
+
+[tool.output_schema.properties.total_callers]
+type = "integer"
+
+[tool.output_schema.properties.levels]
+type = "array"
+
+[tool.output_schema.properties.levels.items]
+type = "object"
+
+[tool.output_schema.properties.macro_hints]
+type = "array"
+
+[tool.output_schema.properties.macro_hints.items]
+type = "string"
+
+[tool.output_schema.properties.concurrent]
+type = "array"
+description = "Live work-atlas claims on this symbol (present-but-possibly-empty)."
+
+[tool.output_schema.properties.concurrent.items]
+type = "object"
+
+[tool.output_schema.properties.health]
+type = "string"
+enum = ["ok", "stale", "missing"]
+
+[[tool.examples]]
+situation = "You're about to modify a trait or widely-used function. Call this BEFORE touching any code — it tells you exactly how many things will break and whether a refactor is a 2-file change or a 20-file change."
+call = { symbol = "InferenceProvider", max_depth = 2 }
+
+[[tool.examples]]
+situation = "You want to check if a function is safe to change. A total of 0 callers means it's safe; high counts mean you need a migration strategy."
+call = { symbol = "execute_step_inner" }
+
+[[tool.examples]]
+situation = "You're auditing a type for hidden macro usages (derive, register_tool!, etc.) that the call graph wouldn't capture. The macro_hints field in the response covers these."
+call = { symbol = "ToolRegistry", max_depth = 1 }
+
+[[tool]]
+id = "briefing"
+name = "Session Briefing"
+description = "Assemble the session-orientation brief for this repo: working set (from git), live peer work-in-flight, drift posture, area principles, active decision/invariant notes, structural atoms, and recent activity — one token-budgeted markdown document. Call at session start (or after a long gap) instead of reading files to orient. Same renderer as `svrn code brief`, so hook-injected briefs and this tool never disagree."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "session"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = []
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.strategy]
+type = "string"
+enum = ["recent", "branch", "explicit"]
+default = "recent"
+description = "Working-set detection: `recent` = files touched by commits in the last `hours` (best for orientation on a clean tree); `branch` = diff vs the default branch; `explicit` = use `files`."
+
+[tool.parameters.properties.hours]
+type = "integer"
+default = 48
+description = "Window for the `recent` strategy."
+
+[tool.parameters.properties.files]
+type = "array"
+description = "Repo-relative working-set files (for `explicit`)."
+
+[tool.parameters.properties.files.items]
+type = "string"
+
+[tool.parameters.properties.budget_tokens]
+type = "integer"
+default = 1500
+description = "Token budget for the rendered brief."
+
+[tool.parameters.properties.feature_id]
+type = "string"
+description = "Optional ATOS feature id to scope notes."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.markdown]
+type = "string"
+description = "The rendered brief."
+
+[tool.output_schema.properties.working_set_size]
+type = "integer"
+
+[tool.output_schema.properties.work_in_flight_count]
+type = "integer"
+
+[tool.output_schema.properties.strategy]
+type = "string"
+
+[tool.output_schema.properties.budget_tokens]
+type = "integer"
+
+[[tool.examples]]
+situation = "Session start — orient on what changed recently and who else is active."
+call = { strategy = "recent", hours = 48 }
+
+[[tool]]
+id = "build"
+name = "Build"
+description = "Return the workspace's compile/lint status from the background watcher: pass/fail summary, top 5 errors with their output, and freshness markers. NEVER run `cargo check` or `cargo build` via Bash — the watcher holds the Cargo file lock continuously; running cargo alongside it stalls both processes indefinitely. This tool reads the cached run in microseconds with zero contention. Pass `full: true` to receive untruncated output for each error (use sparingly — long failures balloon the response). Read the `watcher` object first: `{live, reason, configured, heartbeat_age_secs, hint}`. When `live` is false the result is orphaned — no watcher is running to keep it current. Status: 'fresh_passing' (clean), 'fresh_failing' (errors in response), 'stale' (files changed since last run — watcher will rerun on next save), 'running' (in progress — check again in ~15s), 'watcher_down' (a completed run exists but NO live watcher — fall back per `watcher.hint`), 'never_run' (no run yet — see `watcher.reason`)."
+effect = "read"
+idempotency = "idempotent"
+latency = "instant"
+scope = "session"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = []
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.full]
+type = "boolean"
+default = false
+description = "Include untruncated output for every error in the response."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.status]
+type = "string"
+enum = ["fresh_passing", "fresh_failing", "stale", "running", "watcher_down", "never_run"]
+
+[tool.output_schema.properties.age_seconds]
+type = "integer"
+
+[tool.output_schema.properties.summary]
+type = "object"
+
+[tool.output_schema.properties.errors]
+type = "array"
+
+[tool.output_schema.properties.warnings]
+type = "array"
+
+[tool.output_schema.properties.stale_since]
+type = "array"
+
+[tool.output_schema.properties.watcher_active]
+type = "boolean"
+
+[tool.output_schema.properties.watcher]
+type = "object"
+description = "Liveness {live, reason, configured, heartbeat_age_secs, hint}. Read before trusting status."
+
+[tool.output_schema.properties.watched_scope]
+type = "string"
+
+[[tool.examples]]
+situation = "You've edited one or more files and want to know if the code still compiles."
+call = {  }
+
+[[tool.examples]]
+situation = "The default response truncated an error you need to read in full."
+call = { full = true }
+
+[[tool]]
+id = "callees"
+name = "Find Callees"
+description = "Find all functions and methods that a given symbol calls, using the SCIP symbol graph. More precise than parsing function bodies — resolves trait dispatch and method calls that body-parsing misses. Staleness is communicated in the response when the graph is not fresh. Call `sovereign corpus scip <corpus-id>` to refresh."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["symbol"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.symbol]
+type = "string"
+description = "Exact symbol name"
+
+[tool.output_schema]
+type = "string"
+description = "Markdown list of outbound call sites, one per line, with `file:line` locations. Empty-result line when the symbol has no outbound calls or is unknown."
+
+[[tool.examples]]
+situation = "You're about to read an entire function body to understand what it calls. Don't — this returns the exact outbound call graph, including trait dispatch that reading source would miss."
+call = { symbol = "handle_tools_call" }
+
+[[tool.examples]]
+situation = "You need to understand what a function depends on before refactoring it. Knowing its callees tells you what interfaces must remain stable."
+call = { symbol = "run_embed_batch_sync" }
+
+[[tool]]
+id = "callers"
+name = "Find Callers"
+description = "Find all call sites of a given symbol in the codebase, using the SCIP symbol graph. No false positives from string matching — results are compiler-resolved. Use depth=2 to find callers of callers (impact radius). Staleness is communicated in the response when the graph is not fresh."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["symbol"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.symbol]
+type = "string"
+description = "Exact symbol name"
+
+[tool.parameters.properties.depth]
+type = "integer"
+description = "Traversal depth: 1 (direct callers only) or 2 (callers of callers). Default: 1."
+default = 1
+
+[tool.output_schema]
+type = "string"
+description = "Markdown list of inbound call sites, one per line, with `file:line` locations. Use depth=2 to see transitive callers; response groups by depth."
+
+[[tool.examples]]
+situation = "You're about to change a function signature and want to know all callers first. Do NOT grep — grep misses trait dispatch and dynamic calls entirely, giving false confidence about blast radius."
+call = { symbol = "execute_step" }
+
+[[tool.examples]]
+situation = "You're removing a method and need to verify nothing calls it. grep would miss calls through trait objects. This is compiler-resolved — if it returns empty, the method is truly uncalled."
+call = { symbol = "record_call" }
+
+[[tool.examples]]
+situation = "You want to understand the full impact of changing a low-level utility. Use depth=2 to see callers of callers — the full blast radius two hops out."
+call = { symbol = "embed", depth = 2 }
+
+[[tool]]
+id = "capability_findings"
+name = "Capability Findings"
+description = "Query the capability-reconciliation findings without re-running the pipeline. Sibling to `capability_posture` (freshness gate) and `drift_findings`. Filter by `kind` (`drifted` — docs contradict the code; `undocumented` — code does it, no doc describes it; `corroborated` — docs and code agree; `any`) and/or a `query` substring matched against the capability label + evidence. Returns matches sorted drifted → undocumented → corroborated. Reads `~/.svrnmesh/capabilities/<corpus>/capability_findings.json`; returns `never_run` if no artifact exists — check `capability_posture` for freshness before acting on results."
+effect = "read"
+idempotency = "idempotent"
+latency = "instant"
+scope = "session"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = []
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.kind]
+type = "string"
+enum = ["drifted", "undocumented", "corroborated", "any"]
+description = "Filter by finding kind. Default `any`."
+
+[tool.parameters.properties.query]
+type = "string"
+description = "Optional substring matched against the capability label + evidence."
+
+[tool.parameters.properties.corpus]
+type = "string"
+description = "Corpus id (subdir under ~/.svrnmesh/capabilities). Defaults to the only corpus when unambiguous."
+
+[tool.parameters.properties.limit]
+type = "integer"
+description = "Max findings to return (default 30), sorted drifted→undocumented→corroborated."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.status]
+type = "string"
+enum = ["ok", "never_run", "no_matches"]
+
+[tool.output_schema.properties.corpus_id]
+type = "string"
+
+[tool.output_schema.properties.report_path]
+type = ["string", "null"]
+
+[tool.output_schema.properties.match_count]
+type = "integer"
+
+[tool.output_schema.properties.findings]
+type = "array"
+
+[tool.output_schema.properties.findings.items]
+type = "object"
+
+[tool.output_schema.properties.findings.items.properties]
+
+[tool.output_schema.properties.findings.items.properties.kind]
+type = "string"
+
+[tool.output_schema.properties.findings.items.properties.label]
+type = "string"
+
+[tool.output_schema.properties.findings.items.properties.entries]
+type = "integer"
+
+[tool.output_schema.properties.findings.items.properties.core_fns]
+type = "integer"
+
+[tool.output_schema.properties.findings.items.properties.evidence]
+type = "string"
+
+[tool.output_schema.properties.findings.items.properties.docs]
+type = ["string", "null"]
+
+[[tool.examples]]
+situation = "List the capabilities the architecture docs don't describe."
+call = { kind = "undocumented" }
+
+[[tool.examples]]
+situation = "Does the reconcile say anything about corpus_search?"
+call = { query = "corpus_search", kind = "any" }
+
+[[tool]]
+id = "capability_map"
+name = "Capability Map"
+description = "Derive a map of what a codebase DOES — its capabilities — from the SCIP call graph. A capability is a cluster of entry points (CLI verbs, HTTP routes, tools, handlers) that share a reachable call spine. Returns a markdown inventory: multi-entry capabilities with their core functions and the shared services they lean on, plus a standalone-by-module histogram. Organized by what the system does, not by file. Deterministic, no model. Pass corpus_id to pick a code corpus; omit it when only one is indexed."
+effect = "read"
+idempotency = "idempotent"
+latency = "slow"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = []
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.corpus_id]
+type = "string"
+description = "Code corpus id (an indexed repo). Optional when exactly one code corpus is indexed."
+
+[tool.parameters.properties.provider]
+type = "string"
+enum = ["heuristic", "fallback"]
+description = "Entry-point detection: framework-aware heuristic (default) or the universal in-degree/dispatcher fallback."
+default = "heuristic"
+
+[tool.parameters.properties.jaccard]
+type = "number"
+description = "Reach-set overlap threshold for clustering entry points into capabilities. Default 0.5."
+default = 0.5
+
+[tool.output_schema]
+type = "string"
+description = "Markdown capability inventory derived from the SCIP call graph."
+
+[[tool.examples]]
+situation = "You want a high-level map of what this codebase does, organized by capability rather than by file — the entry points and the call spines behind them. Do NOT read files one by one to reconstruct this; the call graph already knows."
+call = { corpus_id = "commonwealth-ai" }
+
+[[tool]]
+id = "capability_posture"
+name = "Capability Posture"
+description = "Return the freshness state of the capability-reconciliation artifact (`sovereign enrich capability-reconcile` output) without re-running the LLM pipeline. Sibling to `drift_posture`: cheap, idempotent, no model calls. Use to decide whether the corroborated/undocumented/drifted findings you're about to cite are current against the architecture docs (SYSTEM_OVERVIEW.md + ARCH_PRINCIPLES.md by default). Status: `fresh` (every narrative hash matches the recorded fingerprint), `stale` (a narrative was edited since the last reconcile — re-run it), `partial` (fingerprint missing a requested narrative), `never_run` (no artifact yet). When present, the response carries the corroborated/undocumented/drifted counts."
+effect = "read"
+idempotency = "idempotent"
+latency = "instant"
+scope = "session"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = []
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.corpus]
+type = "string"
+description = "Corpus id (subdir under ~/.svrnmesh/capabilities). Defaults to the only corpus when unambiguous."
+
+[tool.parameters.properties.narrative]
+type = "array"
+description = "Override the narrative-doc set. Defaults to sovereign/SYSTEM_OVERVIEW.md + sovereign/ARCH_PRINCIPLES.md relative to the workspace root."
+
+[tool.parameters.properties.narrative.items]
+type = "string"
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.status]
+type = "string"
+enum = ["fresh", "stale", "partial", "never_run"]
+
+[tool.output_schema.properties.corpus_id]
+type = "string"
+
+[tool.output_schema.properties.last_run_at_unix]
+type = ["integer", "null"]
+
+[tool.output_schema.properties.age_seconds]
+type = ["integer", "null"]
+
+[tool.output_schema.properties.corroborated]
+type = ["integer", "null"]
+
+[tool.output_schema.properties.undocumented]
+type = ["integer", "null"]
+
+[tool.output_schema.properties.drifted]
+type = ["integer", "null"]
+
+[tool.output_schema.properties.stale_paths]
+type = "array"
+
+[tool.output_schema.properties.stale_paths.items]
+type = "string"
+
+[tool.output_schema.properties.output_path]
+type = ["string", "null"]
+
+[[tool.examples]]
+situation = "Decide whether to cite the capability findings or warn they're stale against the docs."
+call = {  }
+
+[[tool]]
+id = "code_search"
+name = "Code Search"
+description = "Semantic search over the indexed codebase. PREFER THIS OVER READING FILES when you need to understand how something is done, find implementations of a pattern, or locate relevant code before making a change. Returns the 3-5 most relevant chunks — typically 30-50 tokens each — versus reading an entire file which may cost 200-500 tokens and contain mostly irrelevant content. Use read_file only when you need a complete, authoritative view of a specific file you have already located."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["query"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.query]
+type = "string"
+description = "Description of what you're looking for"
+
+[tool.parameters.properties.language]
+type = "string"
+description = "Optional language filter: rust, typescript, javascript, go, python"
+default = ""
+
+[tool.output_schema]
+type = "string"
+description = "Fenced code blocks ranked by relevance; same format as symbol_lookup (`// file:start-end [kind] (corpus)`). Lower relevance than symbol_lookup — results are approximate."
+
+[[tool.examples]]
+situation = "You need to find how a pattern is implemented before writing something similar. Don't read random files — search for the pattern semantically and get the 3-5 most relevant chunks."
+call = { query = "streaming SSE response handler" }
+
+[[tool.examples]]
+situation = "You're about to write a Python/shell script to grep for examples of a pattern across the codebase. This does it in one call and ranks results by relevance."
+call = { query = "retry logic with exponential backoff" }
+
+[[tool.examples]]
+situation = "You know the concept but not the exact symbol name. Use this to find it, then follow up with symbol_lookup for the precise definition."
+call = { query = "tool permission validation before execute", language = "rust" }
+
+[[tool]]
+id = "delete_note"
+name = "Delete Note"
+description = "Delete a working note by its ID (returned by write_note or visible in read_notes results). Returns an error if the note does not exist."
+effect = "write"
+idempotency = "idempotent"
+latency = "instant"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["id"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.id]
+type = "string"
+description = "The note ID to delete"
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.deleted]
+type = "boolean"
+
+[[tool.examples]]
+situation = "You just completed the work described in a todo note, or a decision note has been superseded by a better approach. Clean it up so it doesn't mislead future sessions. The ID comes from the read_notes response."
+call = { id = "note_abc123" }
+
+[[tool]]
+id = "design_signals_extract"
+name = "Design Signals Extract"
+description = "Parse a DESIGN.md file and return the structural signals the solo-mode fallback and agent-collaborative session both rely on: the Anchors block's bullets, structural gaps (TBD markers, empty/placeholder sections, open X-vs-Y choices, literal question sentences), and keyword-bucket presence flags (time / persistence / api / queue / concurrency / secrets / consumers). Strictly structural — does NOT interpret semantics. Run after each substantive edit to a DESIGN.md to see which gaps the user should still resolve."
+effect = "read"
+idempotency = "idempotent"
+latency = "instant"
+scope = "session"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = []
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.design_path]
+type = "string"
+description = "Path to the DESIGN.md file. Defaults to `DESIGN.md` at the project root (the canonical location). Absolute paths are used as-is."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.design_path]
+type = "string"
+
+[tool.output_schema.properties.anchors]
+type = "array"
+
+[tool.output_schema.properties.anchors.items]
+type = "string"
+
+[tool.output_schema.properties.gap_count]
+type = "integer"
+
+[tool.output_schema.properties.gaps]
+type = "array"
+
+[tool.output_schema.properties.gaps.items]
+type = "object"
+
+[tool.output_schema.properties.gaps.items.properties]
+
+[tool.output_schema.properties.gaps.items.properties.section]
+type = "string"
+
+[tool.output_schema.properties.gaps.items.properties.reason]
+type = "string"
+
+[tool.output_schema.properties.gaps.items.properties.line]
+type = "integer"
+
+[tool.output_schema.properties.gaps.items.properties.snippet]
+type = "string"
+
+[tool.output_schema.properties.keywords]
+type = "object"
+
+[tool.output_schema.properties.sections]
+type = "array"
+
+[tool.output_schema.properties.sections.items]
+type = "object"
+
+[tool.output_schema.properties.sections.items.properties]
+
+[tool.output_schema.properties.sections.items.properties.heading]
+type = "string"
+
+[tool.output_schema.properties.sections.items.properties.level]
+type = "integer"
+
+[tool.output_schema.properties.sections.items.properties.line]
+type = "integer"
+
+[[tool.examples]]
+situation = "The user just edited DESIGN.md — check which structural gaps remain before asking another question."
+call = { design_path = "DESIGN.md" }
+
+[[tool.examples]]
+situation = "Running from a subdirectory; verify the doc at the known project root."
+call = { design_path = "/absolute/path/to/DESIGN.md" }
+
+[[tool]]
+id = "drift"
+name = "Drift"
+description = "Report which `.sovereign/features/*/spec.md` files have drifted from their committed (approved) version. A feature is 'drifted' when the working-tree spec hash differs from the most recent commit's hash, 'clean' when they match, and 'unapproved' when the spec has never been committed. Use before declaring a feature done — drift means the implementation is operating against a spec the team hasn't formally accepted. The verdict matches the daemon's approval_gate middleware so what `drift` reports is what the gate enforces. Pass `feature_id` to scope to one feature; omit to report on every feature directory."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = ["FileRead"]
+
+[tool.parameters]
+type = "object"
+required = []
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.feature_id]
+type = "string"
+description = "Restrict drift detection to a single feature."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.repo_root]
+type = "string"
+
+[tool.output_schema.properties.drifted]
+type = "array"
+
+[tool.output_schema.properties.clean]
+type = "array"
+
+[tool.output_schema.properties.unapproved]
+type = "array"
+
+[[tool.examples]]
+situation = "Before declaring a feature complete, verify its spec hasn't drifted from the approved commit."
+call = { feature_id = "p0-payments" }
+
+[[tool.examples]]
+situation = "Survey the workspace — are any feature specs out of sync with their approval?"
+call = {  }
+
+[[tool]]
+id = "drift_findings"
+name = "Drift Findings"
+description = "Return drift-report findings that reference a code symbol, file path, or substring — without re-running `sovereign drift detect`. Sibling to `drift_posture` (freshness gate) and `symbols`/`callers`/`blast` (code-side intelligence). Use this BEFORE editing a function, struct, or HTTP route to learn whether the architecture docs make any normative claim about it — the same way you'd run `callers(name)` to learn the code-side blast radius. Match modes (set via `kind`): `anchor` (default) — substring against `narrative.canonical_name`, which is the model-extracted code anchor for Claim atoms. `path` — substring against the source chunk id (narrative section). `any` — union of anchor, path, and quotable-excerpt substring. Reads `~/.svrnmesh/drift/latest.md.json` (canonical mirror written by every drift detect run). Returns `never_run` if no report exists yet; check `drift_posture` to confirm freshness before acting on results."
+effect = "read"
+idempotency = "idempotent"
+latency = "instant"
+scope = "session"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["query"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.query]
+type = "string"
+description = "Code symbol, file path, or substring to search for. Required."
+
+[tool.parameters.properties.kind]
+type = "string"
+enum = ["anchor", "path", "any"]
+description = "Match strategy. Default `anchor` — substring match against the claim's extracted code anchor. Use `path` for chunk-id matches, `any` for the union."
+
+[tool.parameters.properties.limit]
+type = "integer"
+description = "Maximum number of findings to return (default 20). Sorted by severity (Critical first)."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.status]
+type = "string"
+enum = ["ok", "never_run", "no_matches"]
+description = "`ok` when matches found. `never_run` when no drift report on disk. `no_matches` when report exists but query found nothing."
+
+[tool.output_schema.properties.report_path]
+type = ["string", "null"]
+
+[tool.output_schema.properties.match_count]
+type = "integer"
+
+[tool.output_schema.properties.match_mode]
+type = "string"
+
+[tool.output_schema.properties.findings]
+type = "array"
+
+[tool.output_schema.properties.findings.items]
+type = "object"
+
+[tool.output_schema.properties.findings.items.properties]
+
+[tool.output_schema.properties.findings.items.properties.severity]
+type = "string"
+
+[tool.output_schema.properties.findings.items.properties.kind]
+type = "string"
+
+[tool.output_schema.properties.findings.items.properties.anchor]
+type = "string"
+
+[tool.output_schema.properties.findings.items.properties.headline]
+type = "string"
+
+[tool.output_schema.properties.findings.items.properties.atlas_id]
+type = "string"
+
+[tool.output_schema.properties.findings.items.properties.atom_id]
+type = "string"
+
+[tool.output_schema.properties.findings.items.properties.chunk_id]
+type = ["string", "null"]
+
+[tool.output_schema.properties.findings.items.properties.quotable]
+type = ["string", "null"]
+
+[tool.output_schema.properties.findings.items.properties.action]
+type = "string"
+
+[[tool.examples]]
+situation = "About to refactor `open_index_for_corpus`. Check whether the architecture docs make any normative claim about it before changing the signature."
+call = { query = "open_index_for_corpus" }
+
+[[tool.examples]]
+situation = "Editing the file `corpus-engine/src/recipe.rs`. Find every drift finding tied to that file's narrative sections."
+call = { query = "recipe.rs", kind = "any" }
+
+[[tool.examples]]
+situation = "Want to see whether the narrative mentions `LocalOnly` anywhere — even in quotes, even if the anchor is something else."
+call = { query = "LocalOnly", kind = "any", limit = 5 }
+
+[[tool]]
+id = "drift_posture"
+name = "Drift Posture"
+description = "Return the freshness state of the architectural-drift report (`sovereign drift detect` output) without re-running the LLM pipeline. Sibling to `lint_status`: cheap, idempotent, no cargo lock contention. Use to decide whether the drift digest you're about to cite is current against the narrative docs (SYSTEM_OVERVIEW.md + ARCH_PRINCIPLES.md by default). Status: `fresh` (every narrative hash matches the recorded fingerprint), `stale` (one or more narratives edited since last run — re-run `sovereign drift detect`), `partial` (fingerprint missing a requested narrative — new doc added since last run), `never_run` (no fingerprint or report exists yet). When fresh, the response carries the Act-on count and top-3 critical findings extracted from the report's JSON sidecar."
+effect = "read"
+idempotency = "idempotent"
+latency = "instant"
+scope = "session"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = []
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.narrative]
+type = "array"
+description = "Override the narrative-doc set. Defaults to sovereign/SYSTEM_OVERVIEW.md + sovereign/ARCH_PRINCIPLES.md resolved relative to the workspace root."
+
+[tool.parameters.properties.narrative.items]
+type = "string"
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.status]
+type = "string"
+enum = ["fresh", "stale", "partial", "never_run"]
+
+[tool.output_schema.properties.last_run_at_unix]
+type = ["integer", "null"]
+
+[tool.output_schema.properties.age_seconds]
+type = ["integer", "null"]
+
+[tool.output_schema.properties.act_on_count]
+type = ["integer", "null"]
+
+[tool.output_schema.properties.top_critical]
+type = "array"
+
+[tool.output_schema.properties.top_critical.items]
+type = "object"
+
+[tool.output_schema.properties.top_critical.items.properties]
+
+[tool.output_schema.properties.top_critical.items.properties.doc]
+type = "string"
+
+[tool.output_schema.properties.top_critical.items.properties.section]
+type = ["string", "null"]
+
+[tool.output_schema.properties.top_critical.items.properties.claim]
+type = "string"
+
+[tool.output_schema.properties.narrative_paths]
+type = "array"
+
+[tool.output_schema.properties.narrative_paths.items]
+type = "string"
+
+[tool.output_schema.properties.stale_paths]
+type = "array"
+
+[tool.output_schema.properties.stale_paths.items]
+type = "string"
+
+[tool.output_schema.properties.output_path]
+type = ["string", "null"]
+
+[[tool.examples]]
+situation = "Decide whether to cite the drift report in the session-start brief, or warn that it's stale."
+call = {  }
+
+[[tool]]
+id = "facts"
+name = "Code Facts"
+description = "Query the deterministic, tree-sitter code fact base: function definitions, `Type { field: value }` construction-site config values, and string literals — each cited to an exact file:line. The embed-free structural companion to `symbols`/`callers` (call graph) and `code_search` (semantic). Use it to answer, WITHOUT reading source: does function X exist and where? What value does config field Y get constructed with? Where is literal Z written? It reads the same fact base `sovereign code facts` builds and `check-spec` audits. Reading facts NEVER touches the inference/embedding slots, so it is safe to call freely mid-task. Every response is freshness-stamped (`freshness`): when the facts were built, their age, and whether the code graph has moved since — so you always know how much to trust them. If `status` is `no_facts`, the fact base has not been built for that corpus yet (`sovereign code facts <repo> --corpus-id <id>`)."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "session"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["query"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.query]
+type = "string"
+description = "Name or substring to match. Matched (case-insensitive) against function names, construction struct/field/value, and literal content. Required."
+
+[tool.parameters.properties.corpus_id]
+type = "string"
+description = "Which corpus's facts to query. Omit to search every corpus that has a built fact base."
+
+[tool.parameters.properties.kind]
+type = "string"
+enum = ["function", "config", "literal", "all"]
+description = "Restrict to one fact kind. Default `all`. `function` = definitions, `config` = construction-site field values, `literal` = string literals."
+
+[tool.parameters.properties.limit]
+type = "integer"
+description = "Max results PER fact kind (default 30)."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.status]
+type = "string"
+enum = ["ok", "no_facts", "no_matches"]
+description = "`ok` = matches found. `no_facts` = no fact base built for the searched corpora. `no_matches` = fact base present but query matched nothing."
+
+[tool.output_schema.properties.query]
+type = "string"
+
+[tool.output_schema.properties.corpora_searched]
+type = "array"
+
+[tool.output_schema.properties.corpora_searched.items]
+type = "string"
+
+[tool.output_schema.properties.match_count]
+type = "integer"
+
+[tool.output_schema.properties.freshness]
+type = "object"
+description = "Per the OLDEST fact base searched — the worst case. `lags_graph` true means the SCIP graph was rebuilt after these facts were extracted, so a recent code change may not be reflected here."
+
+[tool.output_schema.properties.freshness.properties]
+
+[tool.output_schema.properties.freshness.properties.built_at_unix]
+type = ["integer", "null"]
+
+[tool.output_schema.properties.freshness.properties.age_hours]
+type = ["number", "null"]
+
+[tool.output_schema.properties.freshness.properties.staleness]
+type = "string"
+enum = ["fresh", "aging", "stale", "unknown"]
+
+[tool.output_schema.properties.freshness.properties.lags_graph]
+type = "boolean"
+
+[tool.output_schema.properties.freshness.properties.note]
+type = "string"
+
+[tool.output_schema.properties.functions]
+type = "array"
+
+[tool.output_schema.properties.functions.items]
+type = "object"
+
+[tool.output_schema.properties.functions.items.properties]
+
+[tool.output_schema.properties.functions.items.properties.name]
+type = "string"
+
+[tool.output_schema.properties.functions.items.properties.file]
+type = "string"
+
+[tool.output_schema.properties.functions.items.properties.line]
+type = "integer"
+
+[tool.output_schema.properties.functions.items.properties.corpus]
+type = "string"
+
+[tool.output_schema.properties.config]
+type = "array"
+
+[tool.output_schema.properties.config.items]
+type = "object"
+
+[tool.output_schema.properties.config.items.properties]
+
+[tool.output_schema.properties.config.items.properties.struct_type]
+type = "string"
+
+[tool.output_schema.properties.config.items.properties.field]
+type = "string"
+
+[tool.output_schema.properties.config.items.properties.value]
+type = "string"
+
+[tool.output_schema.properties.config.items.properties.enclosing_fn]
+type = "string"
+
+[tool.output_schema.properties.config.items.properties.file]
+type = "string"
+
+[tool.output_schema.properties.config.items.properties.line]
+type = "integer"
+
+[tool.output_schema.properties.config.items.properties.corpus]
+type = "string"
+
+[tool.output_schema.properties.literals]
+type = "array"
+
+[tool.output_schema.properties.literals.items]
+type = "object"
+
+[tool.output_schema.properties.literals.items.properties]
+
+[tool.output_schema.properties.literals.items.properties.content]
+type = "string"
+
+[tool.output_schema.properties.literals.items.properties.enclosing_fn]
+type = "string"
+
+[tool.output_schema.properties.literals.items.properties.file]
+type = "string"
+
+[tool.output_schema.properties.literals.items.properties.line]
+type = "integer"
+
+[tool.output_schema.properties.literals.items.properties.corpus]
+type = "string"
+
+[[tool.examples]]
+situation = "Confirm `export_changed` exists and find where it's defined, without opening the file."
+call = { query = "export_changed", kind = "function" }
+
+[[tool.examples]]
+situation = "Find what value the `debounce` field is constructed with across the codebase (a config fact)."
+call = { query = "debounce", kind = "config" }
+
+[[tool.examples]]
+situation = "Locate every place the string `never_run` is written, scoped to one corpus."
+call = { query = "never_run", kind = "literal", corpus_id = "commonwealth-ai" }
+
+[[tool]]
+id = "get_lint_output"
+name = "Get Lint Output"
+description = "Retrieve the full raw output of a lint run by run_id. Call when lint_status shows output_truncated: true on an error. The run_id is in the lint_status summary."
+effect = "read"
+idempotency = "idempotent"
+latency = "instant"
+scope = "session"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["run_id"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.run_id]
+type = "integer"
+description = "The run ID from lint_status summary."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.run_id]
+type = "integer"
+
+[tool.output_schema.properties.output]
+type = "string"
+
+[tool.output_schema.properties.output_truncated]
+type = "boolean"
+
+[[tool.examples]]
+situation = "lint_status returned errors but the message was cut off with output_truncated: true. Call this with the run_id from that response to get the full compiler output — file paths, line numbers, and the complete error text."
+call = { run_id = 42 }
+
+[[tool]]
+id = "get_run_output"
+name = "Get Run Output"
+description = "Retrieve the full raw output of a test run by run_id. Call this when test_status shows output_truncated: true on a failure. The run_id is in the test_status summary."
+effect = "read"
+idempotency = "idempotent"
+latency = "instant"
+scope = "session"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["run_id"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.run_id]
+type = "integer"
+description = "The run ID from test_status summary."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.run_id]
+type = "integer"
+
+[tool.output_schema.properties.output]
+type = "string"
+
+[tool.output_schema.properties.output_truncated]
+type = "boolean"
+
+[[tool.examples]]
+situation = "test_status showed a failure but the output was truncated. Call this with the run_id from that response to get the full test output — panic message, assertion diff, and the exact line that failed."
+call = { run_id = 7 }
+
+[[tool]]
+id = "lint_status"
+name = "Lint Status"
+description = "Return lint/type-check status from the background watcher. NEVER run `cargo check` or `cargo build` via Bash — the watcher holds the Cargo file lock continuously; running cargo check alongside it causes BOTH processes to stall indefinitely waiting for the lock. This call reads cached results in microseconds with zero contention. Response fields to trust the result: `age_seconds` — how old the result is (typically < 30s after an edit; if large, the watcher may have been idle); `watched_scope` — the exact command the watcher runs (e.g. 'cargo check --workspace'), confirming which crates are covered; `watcher` — the liveness object `{live, reason, configured, heartbeat_age_secs, hint}`. Read it FIRST: when `live` is false the result below is orphaned (no watcher is running to keep it current), `reason` says why, `hint` says what to do. `watcher_active` mirrors `watcher.live` for back-compat. Status: 'fresh_passing' (clean, age_seconds shows recency), 'fresh_failing' (errors in response), 'stale' (files changed since last run — watcher will rerun automatically on next save), 'running' (in progress — check again in ~15s), 'watcher_down' (a completed run exists but NO live watcher — do not trust it; fall back to scripts/sovereign-lint.sh per `watcher.hint`), 'never_run' (no run yet — see `watcher.reason`)."
+effect = "read"
+idempotency = "idempotent"
+latency = "instant"
+scope = "session"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = []
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.files]
+type = "array"
+description = "Filter freshness to a specific set of paths. The response gains a per-file `files[]` array with status (`fresh_passing | fresh_failing | stale | never_checked`), `checked_at_unix`, `mtime_unix`, and per-file error/warning counts. Top-level `errors[]` / `warnings[]` are filtered to these files too. Paths may be absolute or workspace-relative."
+
+[tool.parameters.properties.files.items]
+type = "string"
+
+[tool.parameters.properties.changed]
+type = "boolean"
+description = "Shortcut for `files`: auto-derive the list from `git diff --name-only HEAD` + untracked `.rs` files. The killer query for active editing: 'are MY files clean?' Mutually-exclusive with `files`; if both provided, `files` wins."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.status]
+type = "string"
+enum = ["fresh_passing", "fresh_failing", "stale", "running", "watcher_down", "never_run"]
+
+[tool.output_schema.properties.age_seconds]
+type = "integer"
+
+[tool.output_schema.properties.pass_count]
+type = "integer"
+
+[tool.output_schema.properties.fail_count]
+type = "integer"
+
+[tool.output_schema.properties.warn_count]
+type = "integer"
+
+[tool.output_schema.properties.watcher_active]
+type = "boolean"
+
+[tool.output_schema.properties.watcher]
+type = "object"
+description = "Watcher liveness. Read before trusting `status`. When `live` is false the run below is orphaned."
+
+[tool.output_schema.properties.watcher.properties]
+
+[tool.output_schema.properties.watcher.properties.live]
+type = "boolean"
+
+[tool.output_schema.properties.watcher.properties.reason]
+type = "string"
+enum = ["live", "not_configured", "watcher_dead", "legacy_active", "inferred_from_age", "unknown"]
+
+[tool.output_schema.properties.watcher.properties.configured]
+type = "boolean"
+
+[tool.output_schema.properties.watcher.properties.heartbeat_age_secs]
+type = ["integer", "null"]
+
+[tool.output_schema.properties.watcher.properties.hint]
+type = ["string", "null"]
+
+[tool.output_schema.properties.watched_scope]
+type = "string"
+
+[tool.output_schema.properties.errors]
+type = "array"
+
+[tool.output_schema.properties.warnings]
+type = "array"
+
+[tool.output_schema.properties.run_id]
+type = "integer"
+
+[tool.output_schema.properties.output_truncated]
+type = "boolean"
+
+[tool.output_schema.properties.previous_run]
+type = "object"
+
+[tool.output_schema.properties.previous_run.properties]
+
+[tool.output_schema.properties.previous_run.properties.status]
+type = "string"
+enum = ["fresh_passing", "fresh_failing"]
+
+[tool.output_schema.properties.previous_run.properties.run_id]
+type = "integer"
+
+[tool.output_schema.properties.previous_run.properties.pass_count]
+type = "integer"
+
+[tool.output_schema.properties.previous_run.properties.fail_count]
+type = "integer"
+
+[tool.output_schema.properties.previous_run.properties.warn_count]
+type = "integer"
+
+[tool.output_schema.properties.previous_run.properties.exit_code]
+type = "integer"
+
+[tool.output_schema.properties.previous_run.properties.age_seconds]
+type = "integer"
+
+[tool.output_schema.properties.previous_run.properties.looks_like_compile_failure]
+type = "boolean"
+
+[tool.output_schema.properties.previous_run.properties.errors]
+type = "array"
+
+[tool.output_schema.properties.files]
+type = "array"
+description = "Per-file freshness, populated when the call passes `files` or `changed`. Each entry: { path, status, checked_at_unix, mtime_unix, errors, warnings }. `status` uses the same vocabulary as the top-level workspace status: `fresh_passing | fresh_failing | stale | never_checked`."
+
+[tool.output_schema.properties.files.items]
+type = "object"
+
+[tool.output_schema.properties.files.items.properties]
+
+[tool.output_schema.properties.files.items.properties.path]
+type = "string"
+
+[tool.output_schema.properties.files.items.properties.status]
+type = "string"
+enum = ["fresh_passing", "fresh_failing", "stale", "never_checked"]
+
+[tool.output_schema.properties.files.items.properties.checked_at_unix]
+type = ["integer", "null"]
+
+[tool.output_schema.properties.files.items.properties.mtime_unix]
+type = ["integer", "null"]
+
+[tool.output_schema.properties.files.items.properties.errors]
+type = "integer"
+
+[tool.output_schema.properties.files.items.properties.warnings]
+type = "integer"
+
+[[tool.examples]]
+situation = "You've edited one or more files and want to know if the code compiles. Do NOT run `cargo check` or `cargo build` — that fights the background watcher for the Cargo file lock and blocks both processes. This reads the watcher's cached result instantly with no contention."
+call = {  }
+
+[[tool.examples]]
+situation = "Active edit loop — you just touched a few files and want to know if THOSE files are clean. The workspace-wide check may still be running, but per-file freshness lands as soon as cargo finishes each crate."
+call = { changed = true }
+
+[[tool.examples]]
+situation = "Scripting / explicit query against a known file set (e.g. a pre-commit hook with a precomputed list)."
+call = { files = ["corpus-engine/src/recipe.rs", "sovereign/crates/sovereign-cli/src/drift_cmd_orchestrator.rs"] }
+
+[[tool]]
+id = "note"
+name = "Write Note"
+description = "Persist a working note that survives across sessions. Use to record decisions, failed attempts, known invariants, and open tasks. Notes tagged with symbols or files are retrieved by read_notes when you revisit that code. Use kind='todo' for cross-session tasks — they appear in the server startup summary."
+effect = "write"
+idempotency = "nonidempotent"
+latency = "instant"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["kind", "content"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.kind]
+type = "string"
+enum = ["decision", "attempt", "invariant", "todo", "commitment", "follow_up", "goal"]
+description = "decision=architectural choice, attempt=failed approach, invariant=must-not-break constraint, todo=open task, commitment=promise made to a named person/org (relational), follow_up=temporal marker tied to a named entity (relational), goal=declared desired outcome with success criterion (strategic)"
+
+[tool.parameters.properties.related_entity]
+type = "string"
+description = "Optional free-text name of the Person, Organization, or Initiative this note is anchored to. Surfaces in the relational/strategic digest when the entity is active. Required-shape (but not enforced) for kind=commitment | follow_up | goal."
+
+[tool.parameters.properties.content]
+type = "string"
+description = "The note content. Be specific enough to be useful in a future session."
+
+[tool.parameters.properties.symbols]
+type = "array"
+description = "Symbol names this note relates to (for filtered retrieval)"
+
+[tool.parameters.properties.symbols.items]
+type = "string"
+
+[tool.parameters.properties.files]
+type = "array"
+description = "File paths this note relates to (for filtered retrieval)"
+
+[tool.parameters.properties.files.items]
+type = "string"
+
+[tool.parameters.properties.session_id]
+type = "string"
+description = "Optional session identifier (defaults to 'mcp')"
+
+[tool.parameters.properties.scope]
+type = "string"
+enum = ["global", "feature", "session"]
+description = "ATOS scope. Defaults to 'global'. Pass 'feature' with a feature_id to tag this note to an ATOS feature."
+
+[tool.parameters.properties.feature_id]
+type = "string"
+description = "Required when scope='feature'. The id returned by provision_feature (same value as $SOVEREIGN_FEATURE_ID in the ATOS driver env)."
+
+[tool.parameters.properties.supersedes]
+type = "string"
+description = "Optional id of a prior note this one REPLACES. The superseded note is auto-retired (hidden from read_notes, with a 'superseded by <id>' reason) while its row is kept for the gossip-propagated supersedes chain. Use when a new decision/invariant reverses or updates an older one, so the two don't coexist and contradict."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.id]
+type = "string"
+
+[tool.output_schema.properties.kind]
+type = "string"
+
+[tool.output_schema.properties.scope]
+type = "string"
+
+[tool.output_schema.properties.feature_id]
+type = ["string", "null"]
+
+[tool.output_schema.properties.supersedes]
+type = ["string", "null"]
+
+[tool.output_schema.properties.retired]
+type = ["string", "null"]
+
+[[tool.examples]]
+situation = "You've just discovered a non-obvious constraint — something that would take another session hours to re-derive. Record it now as an invariant so it surfaces the next time anyone touches this code."
+call = { kind = "invariant", content = "EmbedSlot must use n_gpu_layers=0, offload_kqv=false, and op_offload=false. The GGML Metal scheduler crashes on embedding tensor graphs (GGML_ASSERT buf_src) without all three.", symbols = ["EmbedSlot", "EmbeddedLlamaCpp"], files = ["crates/sovereign-inference/src/embedded.rs"] }
+
+[[tool.examples]]
+situation = "You chose one implementation approach over others. Record the decision and reasoning so the next session doesn't relitigate it."
+call = { kind = "decision", content = "Used Mutex<HashMap> for tool call counters in ToolRegistry rather than DashMap — avoids adding a dependency to sovereign-core for a non-hot path.", symbols = ["ToolRegistry"] }
+
+[[tool.examples]]
+situation = "You tried an approach that failed in a non-obvious way. Record it so the next session skips straight to what works."
+call = { kind = "attempt", content = "Tried with_split_mode(LlamaSplitMode::None) to force CPU-only for embedding — has no effect on compute graph routing. op_offload=false is required.", symbols = ["EmbedSlot"] }
+
+[[tool]]
+id = "notes"
+name = "Read Notes"
+description = "Retrieve working notes written by write_note. Search by keyword (FTS), filter by symbol names, file paths, or note kind. Call at session start to recover context from previous sessions, and before modifying a symbol to find related decisions or invariants. Every note carries `author` (the machine that wrote it, e.g. \"BeefyMac (peer)\") and `author_relation` (self|peer|unknown|ambiguous|unattributed). Notes about MACHINE STATE — GPU load, a held daemon lock, a running job — apply only to the machine in `author`; notes about the CODE apply everywhere regardless of who wrote them. OPERATIONAL RECORD is withheld by default: notes anchored to the anchors registered in quality/operational-anchors.toml (an open registry; today: comaintainer-seat, order-seat, directive-log) are not returned unless your `query` names the anchor, you pass `related_to`, or you set `include_operational: true` (the seat's ambient read — ordinary sessions must not set it). When any are withheld the response says how many and names the anchor. Identical-content duplicate rows (same kind/content/related_entity — e.g. the same commit-message note harvested once per corpus session) are collapsed to one representative row; when any are collapsed the response names the count (`collapsed_duplicates`)."
+effect = "read"
+idempotency = "idempotent"
+latency = "instant"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = []
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.query]
+type = "string"
+description = "Full-text search query. Omit to retrieve recent notes."
+
+[tool.parameters.properties.symbols]
+type = "array"
+description = "Return only notes mentioning any of these symbols"
+
+[tool.parameters.properties.symbols.items]
+type = "string"
+
+[tool.parameters.properties.files]
+type = "array"
+description = "Return only notes mentioning any of these file paths"
+
+[tool.parameters.properties.files.items]
+type = "string"
+
+[tool.parameters.properties.kinds]
+type = "array"
+description = "Return only notes of these kinds. decision/attempt/invariant/todo: classic working notes. reflection: tool calibration notes from prior sessions. uncertainty/postmortem_pointer/redteam_finding/deviation: ATOS notes. commitment/follow_up/goal: relational + strategic notes anchored to a Person, Organization, or Initiative."
+
+[tool.parameters.properties.kinds.items]
+type = "string"
+enum = ["decision", "attempt", "invariant", "todo", "reflection", "uncertainty", "postmortem_pointer", "redteam_finding", "deviation", "commitment", "follow_up", "goal", "research_finding", "capability_request", "recipe_issue", "checkpoint", "checkpoint_restored", "deferred_question", "tool_decision"]
+
+[tool.parameters.properties.limit]
+type = "integer"
+default = 10
+description = "Maximum number of notes to return (capped at 100)"
+
+[tool.parameters.properties.scope]
+type = "array"
+description = "ATOS scope filter. Omit for legacy behavior (all scopes). Common use: scope=['global','feature'] with feature_id returns globals plus one feature's notes."
+
+[tool.parameters.properties.scope.items]
+type = "string"
+enum = ["global", "feature", "session"]
+
+[tool.parameters.properties.feature_id]
+type = "string"
+description = "Feature id to pair with scope=['feature']. Notes in other features are excluded."
+
+[tool.parameters.properties.related_to]
+type = "string"
+description = "When set, ignore query/symbols/files and return notes related to this symbol/file/entity via the T2 entity-graph (co-occurrence ranking). Use this to discover decisions, invariants, or attempts thematically connected to a symbol even when the symbol isn't mentioned in their content."
+
+[tool.parameters.properties.semantic]
+type = "boolean"
+default = true
+description = "When `query` is set and the daemon's embed slot is wired, blend BM25 with cosine similarity over the note embeddings (T1 retrieval). Default on; set false to force FTS5-only behavior."
+
+[tool.parameters.properties.include_operational]
+type = "boolean"
+default = false
+description = "When true, skip operational-record withholding entirely: anchored records are returned like any note and nothing is reported withheld. This is the SEAT's ambient read (UC-D4 inverse) — set it only when this session owns the coordination rail. Ordinary sessions must not set it; the withheld report is what keeps seat bookkeeping out of their context."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.notes]
+type = "array"
+
+[tool.output_schema.properties.notes.items]
+type = "object"
+
+[tool.output_schema.properties.notes.items.properties]
+
+[tool.output_schema.properties.notes.items.properties.id]
+type = "string"
+
+[tool.output_schema.properties.notes.items.properties.kind]
+type = "string"
+
+[tool.output_schema.properties.notes.items.properties.content]
+type = "string"
+
+[tool.output_schema.properties.notes.items.properties.symbols]
+type = "array"
+
+[tool.output_schema.properties.notes.items.properties.symbols.items]
+type = "string"
+
+[tool.output_schema.properties.notes.items.properties.files]
+type = "array"
+
+[tool.output_schema.properties.notes.items.properties.files.items]
+type = "string"
+
+[tool.output_schema.properties.notes.items.properties.scope]
+type = "string"
+
+[tool.output_schema.properties.notes.items.properties.feature_id]
+type = "string"
+
+[tool.output_schema.properties.notes.items.properties.created_at]
+type = "integer"
+
+[tool.output_schema.properties.notes.items.properties.session_id]
+type = "string"
+
+[tool.output_schema.properties.notes.items.properties.author]
+type = "string"
+description = "Machine that wrote this note, e.g. \"RuggedFox (this machine)\" or \"BeefyMac (peer)\". \"unknown origin\" when the note predates author tracking."
+
+[tool.output_schema.properties.notes.items.properties.author_relation]
+type = "string"
+enum = ["self", "peer", "unknown", "ambiguous", "unattributed"]
+description = "Machine-readable form of `author`. Only \"self\" means this note was written on the machine now reading it — treat notes about machine state (GPU load, held locks, running jobs) as applying ONLY to the machine named in `author`."
+
+[tool.output_schema.properties.total]
+type = "integer"
+
+[[tool.examples]]
+situation = "You're starting work on a symbol and want to know if any previous session recorded a decision, invariant, or failed attempt about it. Do this BEFORE reading code — it can save you from re-discovering constraints the hard way."
+call = { symbols = ["EmbedSlot"] }
+
+[[tool.examples]]
+situation = "You're picking up a session and want to find open tasks or recent decisions relevant to the area you're working on."
+call = { query = "embedding GPU Metal", kinds = ["invariant", "attempt"] }
+
+[[tool.examples]]
+situation = "You want to check what the session_reflection tool has flagged about a tool you're about to use heavily — surface known blind spots before relying on it."
+call = { kinds = ["reflection"], query = "blast_radius" }
+
+[[tool.examples]]
+situation = "You're about to modify a symbol and want every note thematically connected to it — even notes whose content doesn't literally mention the symbol. Uses the T2 entity-graph co-occurrence path; surfaces invariants, decisions, and attempts on the same conceptual axis."
+call = { related_to = "UrlAllowlistConstraint" }
+
+[[tool]]
+id = "project_context"
+name = "Project Context"
+description = "Search indexed project documentation (*.md files, .sovereign/conventions/) for relevant context. Use to check architectural decisions, coding conventions, API contracts, or onboarding guides before making changes. Results are BM25 keyword-ranked — use specific terms from your change context for best results. If results seem incomplete, call read_notes(kinds=[\"reflection\"], query=\"project_context\") to check for known gaps recorded by previous sessions."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["query"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.query]
+type = "string"
+description = "What to look for in project docs"
+
+[tool.parameters.properties.feature_id]
+type = "string"
+description = "Optional ATOS feature id. When set, the feature's charter and SOVEREIGN.md are returned as the first result (relevance=1.0) before BM25 matches. Use when you're running inside a provisioned feature."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.query]
+type = "string"
+
+[tool.output_schema.properties.total_results]
+type = "integer"
+
+[tool.output_schema.properties.results]
+type = "array"
+
+[tool.output_schema.properties.results.items]
+type = "object"
+
+[tool.output_schema.properties.results.items.properties]
+
+[tool.output_schema.properties.results.items.properties.file_path]
+type = "string"
+
+[tool.output_schema.properties.results.items.properties.snippet]
+type = "string"
+
+[tool.output_schema.properties.results.items.properties.score]
+type = "number"
+
+[[tool.examples]]
+situation = "You're about to implement something and want to check whether the project has established conventions for it before you guess or invent your own. Do this before writing any code."
+call = { query = "error handling conventions" }
+
+[[tool.examples]]
+situation = "You're unsure about the architectural boundary between two subsystems. Pull the documented decisions rather than inferring from code."
+call = { query = "corpus engine vs sovereign tools boundary" }
+
+[[tool.examples]]
+situation = "You got empty or low-relevance results from a code search. Check here — the answer may be in conventions docs rather than source code."
+call = { query = "testing strategy integration vs unit" }
+
+[[tool]]
+id = "promote_note"
+name = "Promote Note"
+description = "Copy a note to a higher scope (session/feature → feature/global). The source row stays in place for audit; the new row has promoted_from=<source id>. Pass new_content to rewrite the note with a more general framing suitable for the destination scope (global notes should read as codebase-wide invariants, not feature-local decisions)."
+effect = "write"
+idempotency = "idempotent"
+latency = "instant"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["id", "to_scope"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.id]
+type = "string"
+description = "Source note id (any scope)."
+
+[tool.parameters.properties.to_scope]
+type = "string"
+enum = ["feature", "global"]
+description = "Destination scope. 'global' is the common case at feature teardown; 'feature' is used to move a session-scoped scratch note into a feature's permanent record."
+
+[tool.parameters.properties.feature_id]
+type = "string"
+description = "Required when to_scope='feature'. Ignored otherwise."
+
+[tool.parameters.properties.new_content]
+type = "string"
+description = "Optional rewrite. When omitted, the source content is copied verbatim."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.promoted_id]
+type = "string"
+
+[tool.output_schema.properties.from_scope]
+type = "string"
+
+[tool.output_schema.properties.to_scope]
+type = "string"
+
+[[tool.examples]]
+situation = "At feature teardown, a decision about extending SourceKind turned out to be the general pattern for all new source types. Promote it to global with a codebase-wide framing."
+call = { id = "note-abc-123", to_scope = "global", new_content = "New source types extend SourceKind in corpus-engine/src/recipe.rs and add a match arm in engine/ingest.rs — do not create plugin registries for source type dispatch." }
+
+[[tool]]
+id = "provision_feature"
+name = "Provision Feature"
+description = "Create an ATOS feature charter. The feature holds the human-approved spec (charter_md), per-feature invariants (sovereign_md), and a machine-checkable stop condition. Returns the feature id to pass back to `start-milestone`. Fails if the id already exists."
+effect = "write"
+idempotency = "idempotent"
+latency = "instant"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["id", "title", "charter_md"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.id]
+type = "string"
+description = "Slug-style identifier, e.g. 'atos-version-flag'. Must be unique."
+
+[tool.parameters.properties.title]
+type = "string"
+description = "Human-readable title shown in status views."
+
+[tool.parameters.properties.charter_md]
+type = "string"
+description = "Approved specification in markdown. Includes the sections required by the ATOS spec gate: integration points, schema additions, files, invariants, test plan, milestones."
+
+[tool.parameters.properties.sovereign_md]
+type = "string"
+description = "Optional per-feature invariants and conventions surfaced via project_context when feature_id is set."
+
+[tool.parameters.properties.stop_condition]
+type = "string"
+description = "Shell command whose zero-exit status signals the feature is complete. Run by `sovereign atos end-milestone`."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.id]
+type = "string"
+
+[tool.output_schema.properties.title]
+type = "string"
+
+[[tool.examples]]
+situation = "The operator has approved a spec and wants to kick off ATOS milestone 1. Call this before any implementation tool to register the feature."
+call = { id = "atos-version-flag", title = "Add --version flag to `sovereign atos`", charter_md = """
+# atos-version-flag
+
+## Invariants
+- Output must match regex ^atos [0-9]+\\.\
+""", stop_condition = "cargo run -p sovereign-cli -- atos --version | grep -E '^atos [0-9]+\\.'" }
+
+[[tool]]
+id = "read_note_by_id"
+name = "Read Note By ID"
+description = "Return a single note row by its UUID. Use when a digest or compliance report references a note by id and you want the full content without re-running a filtered search."
+effect = "read"
+idempotency = "idempotent"
+latency = "instant"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["id"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.id]
+type = "string"
+description = "Note id (as returned by write_note or present in read_notes results)."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.note]
+type = ["object", "null"]
+description = "The full note row, or null if id not found"
+
+[[tool.examples]]
+situation = "A compaction digest said 'see note #abc-123'. Fetch the full row before relying on it."
+call = { id = "abc-123" }
+
+[[tool]]
+id = "read_note_digest"
+name = "Read Note Digest"
+description = "Return a markdown digest (≤2k tokens) summarizing notes that match the scope/feature/kinds filter. Cached per notes_version — a fresh call right after a write_note will regenerate. Use at session start or after a compaction event to rebuild working context without rehydrating every raw note. Reference notes by id via read_note_by_id when you need the full content."
+effect = "read"
+idempotency = "idempotent"
+latency = "slow"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = []
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.scope]
+type = "array"
+description = "Scope filter. Defaults to ['global','feature'] when feature_id is set, ['global'] otherwise."
+
+[tool.parameters.properties.scope.items]
+type = "string"
+enum = ["global", "feature", "session"]
+
+[tool.parameters.properties.feature_id]
+type = "string"
+description = "Pairs with scope=['feature']. Narrows to one feature."
+
+[tool.parameters.properties.kinds]
+type = "array"
+description = "Kind filter. Defaults to [decision,invariant,attempt]."
+
+[tool.parameters.properties.kinds.items]
+type = "string"
+enum = ["decision", "attempt", "invariant", "todo", "reflection"]
+
+[tool.parameters.properties.limit]
+type = "integer"
+default = 100
+description = "Max notes to consider (capped at 100)."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.markdown]
+type = "string"
+
+[tool.output_schema.properties.stale]
+type = "boolean"
+
+[tool.output_schema.properties.hit]
+type = "boolean"
+description = "True when the digest was served from cache"
+
+[[tool.examples]]
+situation = "You just came back from a compaction event and need to rebuild context for the active feature without fetching every raw note. Call this first, then expand any [note:...] reference you need."
+call = { scope = ["global", "feature"], feature_id = "atos-version-flag" }
+
+[[tool]]
+id = "recent_changes"
+name = "Recent Changes"
+description = "List symbols in files modified within the last N hours. Exact — based on file mtime at index time. Useful for orientation after a pull or reviewing recent work."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.hours]
+type = "integer"
+description = "How far back to look (hours)."
+default = 24
+minimum = 1
+
+[tool.output_schema]
+type = "string"
+description = "Markdown, grouped by file, showing symbols modified within the last N hours. Each symbol line includes `name  [kind]  mtime_ago`."
+
+[[tool.examples]]
+situation = "You're starting a session and want to understand what's been actively worked on before diving in. More useful than 'git log' because it shows the actual symbols changed, not just file names."
+call = { hours = 24 }
+
+[[tool.examples]]
+situation = "Something broke and you want to know what changed recently that could have caused it. Narrows the search to files actually modified in the last hour."
+call = { hours = 2 }
+
+[[tool]]
+id = "record_atos_event"
+name = "Record ATOS Event"
+description = "Append a tool-execution event to the ATOS run ledger. Called by the opencode plugin on tool.execute.before/after hooks. The `phase` discriminator distinguishes pre-call (args captured) from post-call (outcome + duration). Orphan events whose run_id is not in atos_runs are rejected."
+effect = "write"
+idempotency = "nonidempotent"
+latency = "instant"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["run_id", "call_id", "tool_name", "phase"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.run_id]
+type = "string"
+description = "$ATOS_RUN_ID exported by `sovereign atos start-milestone`."
+
+[tool.parameters.properties.call_id]
+type = "string"
+description = "Driver-scoped tool-call id (persists across before/after)."
+
+[tool.parameters.properties.tool_name]
+type = "string"
+description = "Name of the MCP tool that was invoked."
+
+[tool.parameters.properties.phase]
+type = "string"
+enum = ["before", "after", "parse_error"]
+description = "before=args captured, after=outcome captured, parse_error=tool_call JSON failed to parse."
+
+[tool.parameters.properties.args_json]
+type = "string"
+description = "Serialized arguments on phase=before. Omit on after."
+
+[tool.parameters.properties.outcome]
+type = "string"
+description = "'success'|'error'|'empty_result'|'parse_error' on phase=after."
+
+[tool.parameters.properties.duration_ms]
+type = "integer"
+description = "Wall-clock duration in ms on phase=after."
+
+[tool.parameters.properties.session_id]
+type = "string"
+description = "Optional driver session id; sets atos_runs.session_id on first capture."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.recorded]
+type = "boolean"
+
+[[tool.examples]]
+situation = "opencode's tool.execute.after hook just fired after read_notes returned success in ~18ms. Append the event."
+call = { run_id = "run_abc123", call_id = "call_42", tool_name = "read_notes", phase = "after", outcome = "success", duration_ms = 18 }
+
+[[tool]]
+id = "retire_note"
+name = "Retire Note"
+description = "Retire a working note by its ID: hide it from read_notes without deleting the row (its history and supersedes chain are kept). Use when a note is no longer true but you want a durable record of why. Prefer this over delete_note. The hide is PEER-CONVERGING: retire also tombstones the note, which is the event peers gossip, so a retired note disappears from other machines' reads too (UC-D1). Note: write_note with 'supersedes' already retires the superseded note automatically — call this only for a note that is stale with no replacement."
+effect = "write"
+idempotency = "idempotent"
+latency = "instant"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["id", "reason"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.id]
+type = "string"
+description = "The note ID to retire (from write_note or read_notes)."
+
+[tool.parameters.properties.reason]
+type = "string"
+description = "Why the note is retired (e.g. 'fixed in PR #88', 'the gate was removed'). Stored as retired_by and shown in history views."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.retired]
+type = "boolean"
+
+[tool.output_schema.properties.tombstoned]
+type = "boolean"
+description = "Always true on success — the peer-converging hide (UC-D1)."
+
+[tool.output_schema.properties.id]
+type = "string"
+
+[[tool.examples]]
+situation = "A prior invariant note no longer holds because the constraint was removed, and there's no single replacement note to supersede it with. Retire it with the reason so future sessions see why it's gone."
+call = { id = "note_abc123", reason = "the native-grammar path was deleted; this no longer applies" }
+
+[[tool]]
+id = "run_tests"
+name = "Run Tests"
+description = "Force an immediate test run, cancelling any in-progress run. Returns immediately — do NOT block waiting for results. Call test_status after ~30-60s to check progress; call again until status is no longer 'running'. Only needed when test_status is 'stale' and you need a guaranteed fresh result (before a commit, after a targeted fix). The file watcher triggers runs automatically on changes — run_tests is only for when you want to force ahead of the watcher's debounce."
+effect = "write"
+idempotency = "idempotent"
+latency = "instant"
+scope = "session"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = []
+
+[tool.parameters.properties]
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.triggered]
+type = "boolean"
+
+[tool.output_schema.properties.run_id]
+type = "integer"
+
+[tool.output_schema.properties.message]
+type = "string"
+
+[[tool.examples]]
+situation = "test_status returned 'stale' and you need a guaranteed fresh result before proceeding. Trigger this, then wait ~30-60s and poll test_status. Do NOT run `cargo test` directly."
+call = {  }
+
+[[tool]]
+id = "session_reflection"
+name = "Session Reflection"
+description = "Call this when a significant task is complete — a refactor lands, a bug is fixed, a feature is implemented. Record which tools helped, what you had to do manually that a tool should have handled, and what information would have saved steps if you had it earlier. This data surfaces to the developer as a product improvement backlog and is available to future agent sessions as tool calibration. Be specific — vague reflections are not useful. Future sessions can read these via: read_notes(kinds=[\"reflection\"], query=\"<tool_name>\")."
+effect = "write"
+idempotency = "nonidempotent"
+latency = "instant"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["task_summary"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.task_summary]
+type = "string"
+description = "One-sentence description of what was accomplished."
+
+[tool.parameters.properties.tool_name]
+type = "string"
+description = "The primary tool this reflection concerns (if any). Used as the grouping key in sovereign reflect output."
+
+[tool.parameters.properties.tools_that_helped]
+type = "array"
+description = "Tool IDs that made the task faster or easier."
+
+[tool.parameters.properties.tools_that_helped.items]
+type = "string"
+
+[tool.parameters.properties.manual_work_that_should_be_a_tool]
+type = "string"
+description = "Describe work you did manually (grep, file reads, etc.) that a tool should have handled. Be specific about what was missing."
+
+[tool.parameters.properties.misleading_outputs]
+type = "string"
+description = "Describe any tool output that was incorrect, incomplete, or led you down the wrong path."
+
+[tool.parameters.properties.wished_i_had_known]
+type = "string"
+description = "Information that would have saved steps if available at the start of the task."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.recorded]
+type = "boolean"
+
+[tool.output_schema.properties.id]
+type = "string"
+
+[[tool.examples]]
+situation = "You just fixed a bug where a tool gave you incomplete or wrong information — record exactly what it missed so the developer can improve it and future sessions know to work around it."
+call = { task_summary = "Fixed GGML_ASSERT crash in embedding context on Metal", tool_name = "code_search", tools_that_helped = ["find_callers", "symbol_lookup"], manual_work_that_should_be_a_tool = "Had to read llama-context.cpp source directly to find op_offload parameter — no tool surfaces llama.cpp context param semantics", wished_i_had_known = "op_offload=true (the default) routes compute ops to Metal even when n_gpu_layers=0. All three flags must be set: n_gpu_layers=0, offload_kqv=false, op_offload=false." }
+
+[[tool.examples]]
+situation = "A refactor touched many files and you want to record which tools were accurate, which were stale, and what you had to do by hand — so the next session starts calibrated."
+call = { task_summary = "Wired IndexHealthChecker into all 6 MCP tools", tools_that_helped = ["blast_radius", "find_callers", "symbol_lookup"], misleading_outputs = "rust-analyzer diagnostics showed stale errors after edits — confirmed by reading file that the fixes were already applied", manual_work_that_should_be_a_tool = "Had to grep for all NodeCapabilities struct literal sites across 17 files after adding a field — blast_radius only covers call graph, not struct initialization sites" }
+
+[[tool]]
+id = "spec"
+name = "Spec"
+description = "Return the active feature's spec.md, ARCHITECTURE.md, and CHARTER.md in a single response so the agent can read the contract it's working under without three separate file reads. Pass `feature_id` to target a specific feature; omit it when there's exactly one `.sovereign/features/*/` directory and the spec is the obvious target. Each document is markdown, truncated to 32 KB with a `*_truncated` flag when larger. Use `spec()` BEFORE modifying code in a feature directory, BEFORE deciding whether your change matches the documented invariants, and AFTER spec drift is reported by the daemon."
+effect = "read"
+idempotency = "idempotent"
+latency = "instant"
+scope = "persistent"
+permissions = ["FileRead"]
+
+[tool.parameters]
+type = "object"
+required = []
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.feature_id]
+type = "string"
+description = "Feature id to read. Omit to auto-resolve when there's exactly one feature directory."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.feature_id]
+type = ["string", "null"]
+
+[tool.output_schema.properties.repo_root]
+type = "string"
+
+[tool.output_schema.properties.spec]
+type = ["string", "null"]
+
+[tool.output_schema.properties.spec_truncated]
+type = "boolean"
+
+[tool.output_schema.properties.architecture]
+type = ["string", "null"]
+
+[tool.output_schema.properties.architecture_truncated]
+type = "boolean"
+
+[tool.output_schema.properties.charter]
+type = ["string", "null"]
+
+[tool.output_schema.properties.charter_truncated]
+type = "boolean"
+
+[[tool.examples]]
+situation = "You're about to modify code under a single-feature workspace and want to read the spec, architecture doc, and charter in one call."
+call = {  }
+
+[[tool.examples]]
+situation = "Multiple features are active; pick the one you're working on."
+call = { feature_id = "p0-payments" }
+
+[[tool]]
+id = "symbols"
+name = "Symbol Lookup"
+description = "Exact lookup of a named symbol (function, struct, trait, type). Use this when you know the name of what you are looking for. Returns definition location, signature, and doc comments. Faster and cheaper than grep or file search. If you do not know the exact name, use code_search instead."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["name"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.name]
+type = "string"
+description = "Exact symbol name (function, class, struct, trait, etc.)"
+
+[tool.parameters.properties.kind]
+type = "string"
+description = "Optional kind filter: function, method, class, struct, enum, trait, interface, impl, type, const, module"
+default = ""
+
+[tool.output_schema]
+type = "string"
+description = "Fenced code blocks, one per match. Each block is prefixed with `// <file>:<start>-<end>  [<kind>]  (<corpus>)` so downstream steps can extract locations via regex or pipe to reasoning."
+
+[[tool.examples]]
+situation = "You're about to grep for a struct or read an entire file to check its fields before writing code that uses it. Don't — this returns the exact definition, fields, and doc comments in one call."
+call = { name = "ToolRegistry" }
+
+[[tool.examples]]
+situation = "You need a function's exact signature before calling it. Reading the whole file wastes context. This returns only the definition line and its docs."
+call = { name = "record_call" }
+
+[[tool.examples]]
+situation = "You want to find all trait impls for a type. Pass kind='impl' to filter to implementation blocks only."
+call = { name = "InferenceProvider", kind = "trait" }
+
+[[tool]]
+id = "test_status"
+name = "Test Status"
+description = "Return test suite status from the background watcher. NEVER run `cargo test` via Bash — the watcher holds the Cargo file lock continuously; running cargo test alongside it causes BOTH processes to stall indefinitely waiting for the lock. This call reads cached results in microseconds with zero contention. Response fields to trust the result: `age_seconds` — how old the result is (if 0-60s, the watcher ran on your current changes); `watched_scope` — the exact command the watcher runs (e.g. 'cargo test --workspace'), confirming which crates are covered; `watcher` — the liveness object: `{live, reason, configured, heartbeat_age_secs, hint}`. Read this FIRST. When `live` is false the result below is orphaned (the watcher isn't running to keep it current); `reason` says why (not_configured / watcher_dead / unknown) and `hint` says what to do. `watcher_active` mirrors `watcher.live` for back-compat. Status: 'fresh_passing' (all pass — safe to proceed), 'fresh_failing' (failures in response), 'stale' (files changed since last run — call run_tests then poll), 'running' (in progress — check again in 30-60s), 'watcher_down' (a completed run exists but NO live watcher — do not trust it as current; fall back to scripts/sovereign-test.sh per `watcher.hint`), 'never_run' (no run yet — see `watcher.reason`)."
+effect = "read"
+idempotency = "idempotent"
+latency = "instant"
+scope = "session"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = []
+
+[tool.parameters.properties]
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.status]
+type = "string"
+enum = ["fresh_passing", "fresh_failing", "stale", "running", "watcher_down", "never_run"]
+
+[tool.output_schema.properties.age_seconds]
+type = "integer"
+
+[tool.output_schema.properties.pass_count]
+type = "integer"
+
+[tool.output_schema.properties.fail_count]
+type = "integer"
+
+[tool.output_schema.properties.watcher_active]
+type = "boolean"
+
+[tool.output_schema.properties.watcher]
+type = "object"
+description = "Watcher liveness. Read before trusting `status`. When `live` is false the run below is orphaned."
+
+[tool.output_schema.properties.watcher.properties]
+
+[tool.output_schema.properties.watcher.properties.live]
+type = "boolean"
+
+[tool.output_schema.properties.watcher.properties.reason]
+type = "string"
+enum = ["live", "not_configured", "watcher_dead", "legacy_active", "inferred_from_age", "unknown"]
+
+[tool.output_schema.properties.watcher.properties.configured]
+type = "boolean"
+
+[tool.output_schema.properties.watcher.properties.heartbeat_age_secs]
+type = ["integer", "null"]
+
+[tool.output_schema.properties.watcher.properties.hint]
+type = ["string", "null"]
+
+[tool.output_schema.properties.watched_scope]
+type = "string"
+
+[tool.output_schema.properties.failures]
+type = "array"
+
+[tool.output_schema.properties.run_id]
+type = "integer"
+
+[tool.output_schema.properties.output_truncated]
+type = "boolean"
+
+[tool.output_schema.properties.previous_run]
+type = "object"
+
+[tool.output_schema.properties.previous_run.properties]
+
+[tool.output_schema.properties.previous_run.properties.status]
+type = "string"
+enum = ["fresh_passing", "fresh_failing"]
+
+[tool.output_schema.properties.previous_run.properties.run_id]
+type = "integer"
+
+[tool.output_schema.properties.previous_run.properties.pass_count]
+type = "integer"
+
+[tool.output_schema.properties.previous_run.properties.fail_count]
+type = "integer"
+
+[tool.output_schema.properties.previous_run.properties.exit_code]
+type = "integer"
+
+[tool.output_schema.properties.previous_run.properties.age_seconds]
+type = "integer"
+
+[tool.output_schema.properties.previous_run.properties.looks_like_compile_failure]
+type = "boolean"
+
+[tool.output_schema.properties.previous_run.properties.failures]
+type = "array"
+
+[[tool.examples]]
+situation = "You've made a change and want to know if tests pass. Do NOT run `cargo test` — it contends with the background watcher for the Cargo file lock. This reads the watcher's result instantly. If status is 'stale', call run_tests to force a fresh run, then poll back here in ~30s."
+call = {  }
+
+[[tool]]
+id = "write_redteam_finding"
+name = "Write Red-Team Finding"
+description = "Record a red-team review finding. Structured around §5.3 of the ATOS design doc — {invariant, status, evidence, confidence}. The call must be made from a `mode=redteam` driver session against a provisioned feature_id; otherwise normal-mode `write_note` is the right tool."
+effect = "write"
+idempotency = "nonidempotent"
+latency = "instant"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["feature_id", "invariant", "status", "confidence"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.feature_id]
+type = "string"
+description = "Feature this finding applies to. Usually $SOVEREIGN_FEATURE_ID from the driver env."
+
+[tool.parameters.properties.invariant]
+type = "string"
+description = "The spec invariant being checked. Quote it from the charter verbatim."
+
+[tool.parameters.properties.status]
+type = "string"
+enum = ["violated", "potentially_violated", "not_found"]
+description = "Whether the invariant is violated, possibly violated, or no evidence either way was found."
+
+[tool.parameters.properties.evidence]
+type = "string"
+description = "The specific symbol, file, or line that led to the finding. Empty string for `status=not_found`."
+
+[tool.parameters.properties.confidence]
+type = "string"
+enum = ["high", "medium", "low"]
+description = "Reviewer confidence in the status verdict."
+
+[tool.parameters.properties.files]
+type = "array"
+description = "Optional: file paths the evidence points at. Drives report grouping."
+
+[tool.parameters.properties.files.items]
+type = "string"
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.id]
+type = "string"
+
+[tool.output_schema.properties.feature_id]
+type = "string"
+
+[tool.output_schema.properties.invariant]
+type = "string"
+
+[tool.output_schema.properties.status]
+type = "string"
+
+[tool.output_schema.properties.confidence]
+type = "string"
+
+[[tool.examples]]
+situation = "You found that ZoteroLibrary's factory method relies on a default for `scope=Local` when the charter said the field must be set explicitly. Medium confidence — the default currently happens to be correct but a refactor could silently flip it."
+call = { feature_id = "zotero-acquirer", invariant = "LocalCorpusConfig::zotero_library MUST set scope=Local explicitly, not via default.", status = "violated", evidence = "corpus-engine/src/acquirers/zotero.rs::factory() line 42 omits the field.", confidence = "medium", files = ["corpus-engine/src/acquirers/zotero.rs"] }
+
+[[tool]]
+id = "session_state"
+name = "Session State Upsert"
+description = "Upsert your session frame (the successor-facing gist: objective, goal, state, next, decisions, invariants, dead ends, working set, verification) at transitions \u2014 task start, plan step done, blocker hit \u2014 NOT only at session end. Provided sections replace their previous body; others are preserved. Writes are rejected over the 2.1k-token budget with per-section counts so you trim instead of bloating. Encode-time writes are the strong continuity path (self-reported frames grade 100% vs 17% for post-hoc distillation); a current frame is what lets a successor session resume your work without re-reading the repo. `objective` is the standing outcome the work serves and is REQUIRED alongside any of goal/state/next/decisions \u2014 inherit it from your predecessor rather than restating it as a delta. Sections are FLAT string params \u2014 one key per section (objective, goal, state, next, decisions, invariants, dead_ends, working_set, verification); there is no `sections` array and no `section`/`content` pair."
+effect = "write"
+idempotency = "idempotent"
+latency = "fast"
+scope = "session"
+permissions = []
+
+# `parameters` is GENERATED at construction — see the `declared()`
+# binding. It is derived from a Rust const the tool also validates
+# against, so a copy here would be a second decider that goes stale.
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.path]
+type = "string"
+
+[tool.output_schema.properties.created]
+type = "boolean"
+
+[tool.output_schema.properties.sections_updated]
+type = "array"
+
+[tool.output_schema.properties.sections_updated.items]
+type = "string"
+
+[tool.output_schema.properties.approx_tokens]
+type = "integer"
+
+[tool.output_schema.properties.budget_tokens]
+type = "integer"
+
+[tool.output_schema.properties.objective_sessions]
+type = "integer"
+
+[tool.output_schema.properties.carried]
+type = "array"
+
+[tool.output_schema.properties.carried.items]
+type = "object"
+
+[tool.output_schema.properties.carried.items.properties]
+
+[tool.output_schema.properties.carried.items.properties.item]
+type = "string"
+
+[tool.output_schema.properties.carried.items.properties.depth]
+type = "integer"
+
+[tool.output_schema.properties.advice]
+type = "string"
+
+
+[[tool]]
+id = "suggest_note"
+name = "Suggest Note"
+description = "Surface a commitment, follow-up, or goal you detected in the user's message \u2014 pending user confirmation. Use when the user said: \u2022 'I'll send X by Friday' (commitment) \u2022 'check back with Y in two weeks' (follow-up) \u2022 'we want under 5% churn by Q3' (goal) Do NOT use for: things you decide, things the assistant plans to do, or topics the user merely thinks about. The note is NOT written until the user approves it via the approval channel. On rejection the tool returns {dismissed:true} and the suggestion is dropped."
+effect = "write"
+idempotency = "nonidempotent"
+latency = "instant"
+scope = "persistent"
+permissions = []
+
+# `parameters` is GENERATED at construction — see the `declared()`
+# binding. It is derived from a Rust const the tool also validates
+# against, so a copy here would be a second decider that goes stale.
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.id]
+type = ["string", "null"]
+
+[tool.output_schema.properties.kind]
+type = "string"
+
+[tool.output_schema.properties.related_entity]
+type = ["string", "null"]
+
+[tool.output_schema.properties.dismissed]
+type = "boolean"

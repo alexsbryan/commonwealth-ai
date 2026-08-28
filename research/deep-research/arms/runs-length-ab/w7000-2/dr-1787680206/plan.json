@@ -1,0 +1,37 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787680206",
+  "charter_hash": "6e8a10f7ffe17702",
+  "rounds_planned": 2,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of core architectural components defined in the A2A specification, count",
+      "List of primary use cases cited by Google for the A2A protocol, list",
+      "Specific version number and release date of the initial public A2A announcement, date/count",
+      "Primary technical mechanism used by MCP to expose server capabilities to clients (e.g., tools vs. resources), string/definition (2)",
+      "Comparison between A2A's peer-to-peer agent communication model and MCP's client-server tool invocation model, qualitative comparison",
+      "Share of enterprise AI agents currently using MCP versus those adopting early-stage A2A pilots, percentage share",
+      "Maximum payload size limit specified in the A2A JSON-RPC message format compared to standard HTTP limits, byte count/ratio",
+      "Number of major tech companies joining Google’s A2A initiative at launch, count",
+      "Specific latency metrics or throughput benchmarks published for A2A inter-agent task execution, milliseconds/count per second",
+      "List of supported data types and serialization formats (e.g., JSON, YAML) mandated by the A2A protocol specification, list",
+      "Comparison between the authentication methods required by MCP (OAuth 2.0/JWT) and those proposed in the initial A2A draft, qualitative comparison/standard name",
+      "Count of distinct agent-to-agent interaction patterns (e.g., request-response vs. streaming) defined in the A2A spec, count",
+      "Percentage change in developer adoption interest for multi-agent frameworks following the release of both MCP and A2A within Q1-Q3 2024, percentage change",
+      "Specific problem statement regarding \"agent silos\" that Google cites as the primary motivation for creating A2A, string/description",
+      "Number of lines of code or API endpoints typically reduced when using A2A versus custom REST integrations for agent communication, ratio/count difference",
+      "List of specific security vulnerabilities identified by researchers in early MCP implementations that A2A aims to mitigate, list/qualitative description",
+      "Median time-to-integration reported by developers switching from single-agent architectures to A2A-enabled multi-agent systems, hours/days (median)",
+      "Comparison between the scope of data exchange in MCP (tool inputs/outputs only) and A2A (full task context/state), qualitative comparison/scope definition",
+      "Count of open-source reference implementations available on GitHub for both the official A2A SDK and standard MCP servers, count",
+      "Specific metric defining \"task completion rate\" or success criteria used in Google’s internal testing of A2A protocols before release, percentage/rate"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2"
+    ]
+  }
+}

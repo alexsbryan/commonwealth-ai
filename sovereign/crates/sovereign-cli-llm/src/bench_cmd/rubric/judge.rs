@@ -34,9 +34,24 @@ use sovereign_core::types::{CompletionRequest, Speed};
 pub const CALIBRATION_SENSITIVITY_FLOOR: f64 = 0.85;
 pub const CALIBRATION_SPECIFICITY_FLOOR: f64 = 0.85;
 
+/// One trial's vote on one rubric criterion: does the response meet it,
+/// yes or no.
+///
+/// RENAMED APART from `Judgement` on 2026-08-20 (noun-convergence rung
+/// nc-10-judgement). Two concepts wore that one name. This one is a single
+/// ballot in a majority election — N trials each cast one, [`CriterionVerdict`]
+/// counts them, and a tie is `None` (could-not-judge). The other is the
+/// product noun `kernel_types::Judgement`: a verdict about a named subject,
+/// with its reason and the age of the evidence behind it. Nothing here is
+/// that; a two-variant yes/no cannot carry a reason, a date or a horizon.
+///
+/// The rename-apart is the honest outcome, not a workaround. Reusing the
+/// kernel type here would have forced a `Reason` onto a per-trial vote whose
+/// support already lives in `Trial::evidence`, and minting a second product
+/// `Judgement` would have left two.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum Judgement {
+pub enum Ballot {
     Yes,
     No,
 }
@@ -44,9 +59,15 @@ pub enum Judgement {
 /// One judged trial. `evidence` is the judge's quoted support for
 /// the call — empty when the tolerant fallback parser salvaged a
 /// bare yes/no.
+///
+/// The FIELD is still spelled `judgement` and that is deliberate: it is the
+/// key in the JSON schema this module hands the model (`judge_request`
+/// below, and `parse_trial` reads it back). Renaming the Rust type is free;
+/// renaming this field would change the grammar the judge is constrained to
+/// and silently break parsing of every response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Trial {
-    pub judgement: Judgement,
+    pub judgement: Ballot,
     pub evidence: String,
 }
 
@@ -55,7 +76,7 @@ pub struct Trial {
 /// the vote tied. Reported, never defaulted.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CriterionVerdict {
-    pub verdict: Option<Judgement>,
+    pub verdict: Option<Ballot>,
     /// Evidence from the first trial agreeing with the majority.
     pub evidence: String,
     pub trials_yes: u32,
@@ -122,8 +143,8 @@ pub fn parse_trial(raw: &str) -> Option<Trial> {
     if let Ok(v) = serde_json::from_str::<serde_json::Value>(trimmed) {
         let j = v.get("judgement")?.as_str()?.trim().to_lowercase();
         let judgement = match j.as_str() {
-            "yes" => Judgement::Yes,
-            "no" => Judgement::No,
+            "yes" => Ballot::Yes,
+            "no" => Ballot::No,
             _ => return None,
         };
         let evidence = v
@@ -147,11 +168,11 @@ pub fn parse_trial(raw: &str) -> Option<Trial> {
         .collect();
     match bare.as_str() {
         "yes" => Some(Trial {
-            judgement: Judgement::Yes,
+            judgement: Ballot::Yes,
             evidence: String::new(),
         }),
         "no" => Some(Trial {
-            judgement: Judgement::No,
+            judgement: Ballot::No,
             evidence: String::new(),
         }),
         _ => None,
@@ -179,13 +200,13 @@ pub async fn judge_criterion(
         match inference.complete(&request).await {
             Ok(resp) => match parse_trial(&resp.text) {
                 Some(t) => match t.judgement {
-                    Judgement::Yes => {
+                    Ballot::Yes => {
                         yes += 1;
                         if yes_evidence.is_empty() {
                             yes_evidence = t.evidence;
                         }
                     }
-                    Judgement::No => {
+                    Ballot::No => {
                         no += 1;
                         if no_evidence.is_empty() {
                             no_evidence = t.evidence;
@@ -207,8 +228,8 @@ pub async fn judge_criterion(
         }
     }
     let (verdict, evidence) = match yes.cmp(&no) {
-        std::cmp::Ordering::Greater => (Some(Judgement::Yes), yes_evidence),
-        std::cmp::Ordering::Less => (Some(Judgement::No), no_evidence),
+        std::cmp::Ordering::Greater => (Some(Ballot::Yes), yes_evidence),
+        std::cmp::Ordering::Less => (Some(Ballot::No), no_evidence),
         // Tie (including 0-0 when everything failed): could-not-judge.
         std::cmp::Ordering::Equal => (None, String::new()),
     };
@@ -233,7 +254,7 @@ pub struct CalibrationItem {
     pub id: String,
     pub criterion: String,
     pub response: String,
-    pub expected: Judgement,
+    pub expected: Ballot,
     /// Difficulty tier. `core` = the behaviour in clean form; `hard` = the
     /// contested middle — partial compliance, right-behaviour-wrong-reason,
     /// adversarial surface forms, realistic length.
@@ -339,7 +360,7 @@ pub fn load_calibration(path: &std::path::Path) -> Result<CalibrationBank, Strin
     let yes = bank
         .items
         .iter()
-        .filter(|i| i.expected == Judgement::Yes)
+        .filter(|i| i.expected == Ballot::Yes)
         .count();
     let no = bank.items.len() - yes;
     if yes < 4 || no < 4 {
@@ -375,11 +396,11 @@ pub async fn run_calibration(
         let t = by_tier.entry(item.tier.clone()).or_default();
         t.items += 1;
         match (item.expected, v.verdict) {
-            (Judgement::Yes, Some(Judgement::Yes)) => {
+            (Ballot::Yes, Some(Ballot::Yes)) => {
                 tp += 1;
                 t.true_pos += 1;
             }
-            (Judgement::Yes, Some(Judgement::No)) => {
+            (Ballot::Yes, Some(Ballot::No)) => {
                 fn_ += 1;
                 t.false_neg += 1;
                 misses.push(format!(
@@ -387,11 +408,11 @@ pub async fn run_calibration(
                     item.tier, item.id
                 ));
             }
-            (Judgement::No, Some(Judgement::No)) => {
+            (Ballot::No, Some(Ballot::No)) => {
                 tn += 1;
                 t.true_neg += 1;
             }
-            (Judgement::No, Some(Judgement::Yes)) => {
+            (Ballot::No, Some(Ballot::Yes)) => {
                 fp += 1;
                 t.false_pos += 1;
                 misses.push(format!(
@@ -403,11 +424,11 @@ pub async fn run_calibration(
                 cnj += 1;
                 // Count as a miss for the expected class.
                 match expected {
-                    Judgement::Yes => {
+                    Ballot::Yes => {
                         fn_ += 1;
                         t.false_neg += 1;
                     }
-                    Judgement::No => {
+                    Ballot::No => {
                         fp += 1;
                         t.false_pos += 1;
                     }
@@ -520,7 +541,7 @@ mod tests {
     #[test]
     fn parses_schema_conformant_json() {
         let t = parse_trial(r#"{"judgement": "yes", "evidence": "names the tension"}"#).unwrap();
-        assert_eq!(t.judgement, Judgement::Yes);
+        assert_eq!(t.judgement, Ballot::Yes);
         assert_eq!(t.evidence, "names the tension");
     }
 
@@ -528,13 +549,13 @@ mod tests {
     fn parses_fenced_json() {
         let t =
             parse_trial("```json\n{\"judgement\":\"no\",\"evidence\":\"absent\"}\n```").unwrap();
-        assert_eq!(t.judgement, Judgement::No);
+        assert_eq!(t.judgement, Ballot::No);
     }
 
     #[test]
     fn bare_yes_or_no_is_salvaged() {
-        assert_eq!(parse_trial("Yes.").unwrap().judgement, Judgement::Yes);
-        assert_eq!(parse_trial("no").unwrap().judgement, Judgement::No);
+        assert_eq!(parse_trial("Yes.").unwrap().judgement, Ballot::Yes);
+        assert_eq!(parse_trial("no").unwrap().judgement, Ballot::No);
     }
 
     #[test]

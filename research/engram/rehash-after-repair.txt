@@ -1,0 +1,3 @@
+3f342f1c1580473f1ee94ddd5b28206e8c07a70fa1a366f59d1d6c922919a6c9  Qwen3.8-Flash-Next-UD-Q4_K_XL-00002-of-00004.gguf
+56758f40269cad5cd9b0d3d6fbae0f40f6d5be6de49e4ab392dbe83157d9cbd3  Qwen3.8-Flash-Next-UD-Q4_K_XL-00003-of-00004.gguf
+DONE

@@ -227,7 +227,7 @@ fn completion_request_builders() {
     assert_eq!(req.preferred_speed, Speed::Fast);
     assert_eq!(req.system_message.as_deref(), Some("You are helpful."));
 
-    let yn = CompletionRequest::yes_no("Is it raining?", "Weather: sunny");
+    let yn = sovereign_core::slot_policy::yes_no("Is it raining?", "Weather: sunny");
     assert_eq!(yn.preferred_speed, Speed::Fast);
     assert_eq!(yn.max_tokens, Some(5));
 }

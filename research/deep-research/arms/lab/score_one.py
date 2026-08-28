@@ -11,29 +11,20 @@ instead of ten.
                            (zero judge calls; the instrument-validation path)
   --article PATH --task N  one fresh judge call against the article
 """
-import json, sys, os, argparse, time, urllib.request
+import hashlib, json, sys, os, argparse, pathlib, time, urllib.request
 
-BASE = 'http://127.0.0.1:9741/v1'
+# The clone's driver imports `utils.api` transitively, and that module freezes
+# LLM_BACKEND / base_url / api_key / socket timeout at IMPORT time — so all of
+# it must be decided ABOVE that import. Both facts were learned here the hard
+# way (a first judge call that left the host carrying a real key; a task-83 run
+# cut off client-side at 600s and recorded NEVER-RAN), and both fixes lived in
+# THIS file only, while score_race.py had neither. They are instrument state,
+# so they now live in judge_instrument beside the sampling pin — one decider
+# for how a judge call is made (§10.6).
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
+from judge_instrument import configure_judge_client                # noqa: E402
 
-# The clone's driver imports `utils.api` transitively, and that module
-# freezes LLM_BACKEND / base_url / api_key at IMPORT time. Setting these
-# inside judge() was too late: the constants had already resolved to the
-# vendored default (openrouter), and the first judge call went to an
-# EXTERNAL provider carrying a real key. It 400'd on the local model id
-# rather than silently scoring with a different judge — but a valid id
-# would have bought a substituted instrument at real cost. Forced here,
-# before any clone import, and guarded again at call time.
-os.environ['LLM_BACKEND'] = 'openai'
-os.environ['OPENAI_BASE_URL'] = BASE
-os.environ.setdefault('OPENAI_API_KEY', 'local')
-# The vendored client freezes its socket timeout at import (utils/api.py:82,
-# `LLM_HTTP_TIMEOUT`, default 600s) and `judge()`'s own `timeout=` argument
-# never reached it. Task 83 is the largest prompt in the subset — a ~40k-token
-# reference plus our article — and at this host's prefill rate it needs ~8min
-# before the first token. It timed out CLIENT-side at 600s and was recorded
-# NEVER-RAN, which reads as a model refusal and is not one. A judge call is
-# allowed to be slow; it is not allowed to be silently cut off.
-os.environ.setdefault('LLM_HTTP_TIMEOUT', '3600')
+BASE = configure_judge_client()
 
 CLONE = '/home/alexbryan/dev/deep_research_bench'
 sys.path.insert(0, CLONE)
@@ -42,50 +33,11 @@ from prompt.score_prompt_en import generate_merged_score_prompt   # noqa: E402
 from utils.score_calculator import calculate_weighted_scores      # noqa: E402
 from utils.json_extractor import extract_json_from_markdown       # noqa: E402
 
-DIMS = ["comprehensiveness", "insight", "instruction_following", "readability"]
-
-
-# ── INSTRUMENT AMENDMENT 2026-08-23: the judge is made deterministic ────────
-#
-# The vendored client sends `model`, `messages`, `max_completion_tokens` and
-# `reasoning_effort` — and NO sampling parameters (utils/api.py:167-172). The
-# local daemon therefore applies its own default, and
-# `InferenceConfig::default().temperature` is **0.7**
-# (sovereign-contracts/src/types/mod.rs:107). Every RACE number this campaign
-# has recorded — the 17.3751 baseline, the 43.6696 Perplexity bar, the 44.3995
-# composite, every per-task delta — is ONE DRAW from a temperature-0.7
-# process.
-#
-# Measured, and this is why the pin exists: task 56's IDENTICAL article,
-# re-judged, scored **46.2359** against its recorded **43.1843**. A +3.05
-# swing on unchanged input, against a margin-of-interest of +0.52.
-#
-# The official protocol scores 100 tasks, so per-call noise averages out. We
-# score 10, where it dominates. Since the local 27B is already a declared
-# substitution for the official gemini/GPT-5.5-class judge, determinism is
-# worth more here than fidelity to that judge's sampler.
-#
-# Consequence, and it is not optional: the Perplexity bar and our own arm are
-# BOTH re-measured under this pin before any comparison is made. A pinned
-# reading cannot be compared against an unpinned one.
-JUDGE_TEMPERATURE = 0.0
-JUDGE_TOP_P = 1.0
-
-
-def pin_sampling(client):
-    """Force greedy decoding on the vendored client without editing the
-    pinned clone. `_post` is the single place every judge payload passes
-    through, so wrapping it is the one decider (§10.6) — adding the
-    parameters at each call site would let two paths disagree."""
-    original_post = client._post
-
-    def post(payload):
-        return original_post(dict(payload,
-                                  temperature=JUDGE_TEMPERATURE,
-                                  top_p=JUDGE_TOP_P))
-
-    client._post = post
-    return client
+# The judge instrument — sampling pin + the scorable-verdict predicate —
+# is ONE decider shared with drb/overall-derivation/score_race.py (§10.6).
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
+from judge_instrument import (DIMS, JUDGE_TEMPERATURE, JUDGE_TOP_P,   # noqa: E402
+                             pin_sampling, unscorable)
 
 
 def load(path):
@@ -150,13 +102,6 @@ def judge(task, article, model):
     if model not in ids:
         sys.exit('exit 2: judge guard — %r is not served locally (have %d models)'
                  % (model, len(ids)))
-    # The official driver checks only that each dimension KEY exists. A
-    # key whose list is EMPTY passes that check and then scores 0/0
-    # through calculate_weighted_scores — the dimension silently
-    # contributes nothing to either side, and a could-not-judge is
-    # recorded as a score. Measured on task 65: `readability` came back
-    # `[]` and the run reported 46.56 with a whole dimension missing.
-    # Four verdicts, not two (§18.1): this retries, then REFUSES.
     last = None
     for attempt in range(1, 4):
         t0 = time.time()
@@ -167,10 +112,8 @@ def judge(task, article, model):
             print('  attempt %d: %s' % (attempt, last), file=sys.stderr)
             continue
         jj = json.loads(js)
-        missing = [d for d in DIMS if d not in jj]
-        empty = [d for d in DIMS if d in jj and not jj[d]]
-        if missing or empty:
-            last = 'missing dims %s, empty dims %s' % (missing, empty)
+        last = unscorable(jj)
+        if last:
             print('  attempt %d: %s — retrying' % (attempt, last), file=sys.stderr)
             continue
         print('  judge %.0fs (attempt %d)' % (time.time() - t0, attempt), file=sys.stderr)
@@ -191,11 +134,23 @@ if __name__ == '__main__':
         row = next(r for r in load(a.replay) if int(r['id']) == a.task)
         jj = row['judge_output']
     else:
-        jj = judge(a.task, open(a.article).read(), a.model)
+        article = open(a.article).read()
+        jj = judge(a.task, article, a.model)
         if a.save_judge:
+            # Fingerprint WHAT was judged. Without it a stored sidecar proves
+            # only that some article scored X — a later replay cannot tell a
+            # re-judge of the same bytes from a judge of different ones, so
+            # neither a determinism check nor an A/B built on it is decidable
+            # (§11.1: cite, don't recall).
             with open(a.save_judge, 'a') as f:
-                f.write(json.dumps({'id': a.task, 'judge_model': a.model,
-                                    'judge_output': jj}) + '\n')
+                f.write(json.dumps({
+                    'id': a.task, 'judge_model': a.model,
+                    'article_path': str(pathlib.Path(a.article).resolve()),
+                    'article_sha256': hashlib.sha256(
+                        article.encode('utf-8')).hexdigest(),
+                    'article_chars': len(article),
+                    'temperature': JUDGE_TEMPERATURE, 'top_p': JUDGE_TOP_P,
+                    'judge_output': jj}) + '\n')
     rec = derive(a.task, jj)
     print(json.dumps(rec, indent=1))
     print('OVERALL x100 = %.4f' % (100 * rec['overall_score']))

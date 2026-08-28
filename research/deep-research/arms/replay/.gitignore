@@ -1,0 +1,15 @@
+# Regenerable by run.sh — the labeling SURFACE is a pure re-emission of
+# the logged flight, and every field it carries is repeated inside
+# admission-labels.jsonl (the labeler writes input + verdict per row).
+# Committing it would double 2MB of the same bytes.
+label-input.jsonl
+
+# A seeded stratified draw from admission-labels.jsonl (see the sampling
+# block in the session record) — reproducible, and the 27B's verdicts in
+# crosscheck-27b.jsonl carry every input field anyway.
+crosscheck-input.jsonl
+
+# Nothing else here is regenerable without a model run: admission-labels.jsonl
+# (843 rows, 4B), crosscheck-27b.jsonl (208, 27B), gapquery-arms.json (117
+# rewrites, 4B) and gapquery-selfcontainment.json (92 blind 27B verdicts) are
+# all measurement OUTPUT and are committed on purpose.

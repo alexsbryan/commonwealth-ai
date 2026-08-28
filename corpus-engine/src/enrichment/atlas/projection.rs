@@ -14,64 +14,24 @@
 //! records derive from the *same* projection by construction. (Formerly this also
 //! backed the v1 `atoms.rkyv` archive; that backend was retired in
 //! ATLAS_STORAGE_V2, leaving the projection types here, rkyv-free.)
+//!
+//! This module used to declare its own `AtomKindTag`, `ArchEdgeType` and
+//! `ArchChunkRef` — hand-synced mirrors of [`super::atoms::AtomType`],
+//! [`super::edges::EdgeType`] and [`super::atoms::ChunkRef`], two of which
+//! crossed into sovereign as a SECOND published name for a concept
+//! corpus-engine already published. All three were deleted 2026-08-20: the
+//! projection carries the canonical types and `super::store` maps them to
+//! their on-disk bytes directly. The byte values are unchanged, so
+//! `atoms.lance` and `edges.csr` written before the change read back
+//! identically (ARCH §10.6 — one decider, one name).
 
-use super::atoms::{AtomEnvelope, ChunkRef};
-use super::edges::EdgeType;
-
-/// Atom-type discriminant — the structured tag that lets a typed enumeration
-/// (`atoms_of_kind`) filter without parsing the payload. Mirrors
-/// [`super::atoms::AtomType`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AtomKindTag {
-    Entity,
-    Event,
-    State,
-    Relation,
-    Claim,
-    Question,
-    Configuration,
-    ArgumentReconstruction,
-    Position,
-    Opposition,
-    Asset,
-}
-
-/// Flattened evidence ref (the `Option`s collapsed to `""`). Carries the fields
-/// the consumers read off `ChunkRef` (`chunk_id`, `passage_preview`,
-/// `source_doc_id`).
-#[derive(Clone, Debug, PartialEq)]
-pub struct ArchChunkRef {
-    pub chunk_id: String,
-    pub passage_preview: String,
-    pub source_doc_id: String,
-}
-
-/// Edge-type discriminant — a compact mirror of [`super::edges::EdgeType`] used
-/// for the `edges.csr` type byte (via [`super::store`]'s `edge_type_u8`). Keep
-/// the variants in sync with `EdgeType`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ArchEdgeType {
-    Transition,
-    Causes,
-    Grounds,
-    Tension,
-    Involves,
-    Composes,
-    Configures,
-    Grounding,
-    Framing,
-    Provenance,
-    EvidenceFor,
-    Concedes,
-    OpposesIn,
-    Attaches,
-}
+use super::atoms::{AtomEnvelope, AtomType, ChunkRef};
 
 /// One atom: structured hot fields + the full-fidelity JSON payload.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AtomRecord {
     pub id: String,
-    pub kind: AtomKindTag,
+    pub kind: AtomType,
     /// `Entity.canonical_name` (else `""`).
     pub name: String,
     /// `Relation.label` (else `""`).
@@ -98,65 +58,15 @@ pub struct AtomRecord {
     pub aliases: Vec<String>,
     /// `Relation.participants` atom ids (else empty).
     pub participants: Vec<String>,
-    /// Normalised evidence refs (per-variant, mirrors `AtlasGraph::atom_evidence`).
-    pub evidence: Vec<ArchChunkRef>,
+    /// Normalised evidence refs, from the canonical `AtomEnvelope::evidence`
+    /// accessor. Carries `ChunkRef` itself: this field held a third mirror type
+    /// (`ArchChunkRef`, the same three fields with the `Option`s collapsed to
+    /// `""`) until 2026-08-20. The collapse is now the reader's business, so a
+    /// caller that needs to tell "no preview" from "empty preview" still can.
+    pub evidence: Vec<ChunkRef>,
     /// The full `AtomEnvelope` as canonical JSON — re-parsed only on the rare
     /// deep/point read, never in the bulk enumeration path.
     pub payload: Vec<u8>,
-}
-
-/// Map the corpus-engine [`EdgeType`] to its compact discriminant.
-pub fn arch_edge_type(t: EdgeType) -> ArchEdgeType {
-    match t {
-        EdgeType::Transition => ArchEdgeType::Transition,
-        EdgeType::Causes => ArchEdgeType::Causes,
-        EdgeType::Grounds => ArchEdgeType::Grounds,
-        EdgeType::Tension => ArchEdgeType::Tension,
-        EdgeType::Involves => ArchEdgeType::Involves,
-        EdgeType::Composes => ArchEdgeType::Composes,
-        EdgeType::Configures => ArchEdgeType::Configures,
-        EdgeType::Grounding => ArchEdgeType::Grounding,
-        EdgeType::Framing => ArchEdgeType::Framing,
-        EdgeType::Provenance => ArchEdgeType::Provenance,
-        EdgeType::EvidenceFor => ArchEdgeType::EvidenceFor,
-        EdgeType::Concedes => ArchEdgeType::Concedes,
-        EdgeType::OpposesIn => ArchEdgeType::OpposesIn,
-        EdgeType::Attaches => ArchEdgeType::Attaches,
-    }
-}
-
-/// Per-variant evidence refs — the single source of truth mirrored by the
-/// reader's `atom_evidence`. Keep in sync with `AtlasGraph::atom_evidence`.
-fn evidence_refs(atom: &AtomEnvelope) -> Vec<&ChunkRef> {
-    match atom {
-        AtomEnvelope::Entity(e) => vec![&e.first_appearance],
-        AtomEnvelope::Event(ev) => ev.evidence.iter().collect(),
-        AtomEnvelope::State(s) => s.evidence.iter().collect(),
-        AtomEnvelope::Relation(r) => r.evidence.iter().collect(),
-        AtomEnvelope::Claim(c) => c.evidence.iter().collect(),
-        AtomEnvelope::Question(q) => q.raised_at.iter().collect(),
-        AtomEnvelope::Configuration(cfg) => cfg.evidence.iter().collect(),
-        AtomEnvelope::ArgumentReconstruction(a) => a.evidence.iter().collect(),
-        AtomEnvelope::Position(p) => vec![&p.first_appearance],
-        AtomEnvelope::Opposition(o) => vec![&o.first_appearance],
-        AtomEnvelope::Asset(_) => Vec::new(),
-    }
-}
-
-fn kind_of(atom: &AtomEnvelope) -> AtomKindTag {
-    match atom {
-        AtomEnvelope::Entity(_) => AtomKindTag::Entity,
-        AtomEnvelope::Event(_) => AtomKindTag::Event,
-        AtomEnvelope::State(_) => AtomKindTag::State,
-        AtomEnvelope::Relation(_) => AtomKindTag::Relation,
-        AtomEnvelope::Claim(_) => AtomKindTag::Claim,
-        AtomEnvelope::Question(_) => AtomKindTag::Question,
-        AtomEnvelope::Configuration(_) => AtomKindTag::Configuration,
-        AtomEnvelope::ArgumentReconstruction(_) => AtomKindTag::ArgumentReconstruction,
-        AtomEnvelope::Position(_) => AtomKindTag::Position,
-        AtomEnvelope::Opposition(_) => AtomKindTag::Opposition,
-        AtomEnvelope::Asset(_) => AtomKindTag::Asset,
-    }
 }
 
 /// Project an atom to its hot-field record. Shared by the v2 store writer
@@ -165,7 +75,7 @@ fn kind_of(atom: &AtomEnvelope) -> AtomKindTag {
 /// projection rather than two functions kept in sync.
 pub(crate) fn project(atom: &AtomEnvelope) -> AtomRecord {
     let id = atom.id().as_str().to_string();
-    let kind = kind_of(atom);
+    let kind = atom.atom_type();
     let mut name = String::new();
     let mut label = String::new();
     let mut content = String::new();
@@ -199,14 +109,11 @@ pub(crate) fn project(atom: &AtomEnvelope) -> AtomRecord {
         }
         _ => {}
     }
-    let evidence = evidence_refs(atom)
-        .into_iter()
-        .map(|c| ArchChunkRef {
-            chunk_id: c.chunk_id.clone(),
-            passage_preview: c.passage_preview.clone().unwrap_or_default(),
-            source_doc_id: c.source_doc_id.clone().unwrap_or_default(),
-        })
-        .collect();
+    // `AtomEnvelope::evidence` is the canonical per-variant evidence accessor
+    // and says so in its own doc comment; this module used to carry a private
+    // byte-identical copy (`evidence_refs`) that nothing kept in sync. Deleted
+    // 2026-08-20 — one decider, one name (ARCH §10.6).
+    let evidence = atom.evidence().into_iter().cloned().collect();
     let payload = serde_json::to_vec(atom).unwrap_or_default();
     AtomRecord {
         id,

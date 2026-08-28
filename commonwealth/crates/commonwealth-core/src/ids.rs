@@ -2,70 +2,22 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-macro_rules! define_id {
-    ($name:ident, $prefix:expr) => {
-        #[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-        pub struct $name([u8; 16]);
-
-        impl $name {
-            pub fn generate() -> Self {
-                let mut bytes = [0u8; 16];
-                getrandom::fill(&mut bytes).expect("failed to generate random bytes");
-                Self(bytes)
-            }
-
-            /// Create an ID from a u128 value. Useful for deterministic test IDs.
-            pub fn from_u128(val: u128) -> Self {
-                Self(val.to_be_bytes())
-            }
-
-            pub fn as_bytes(&self) -> &[u8; 16] {
-                &self.0
-            }
-
-            /// Full 32-char lowercase hex of all 16 bytes — the wire form used
-            /// for `X-Node-Id` and `[shared_model] host_node_id`. (NOT the
-            /// truncated `Display`/`Debug` form, which is for humans.)
-            pub fn to_hex(&self) -> String {
-                hex::encode(self.0)
-            }
-
-            /// Inverse of [`to_hex`](Self::to_hex). `None` on malformed input
-            /// (non-hex, or not exactly 16 bytes).
-            pub fn from_hex(s: &str) -> Option<Self> {
-                let arr: [u8; 16] = hex::decode(s.trim()).ok()?.try_into().ok()?;
-                Some(Self(arr))
-            }
-        }
-
-        impl fmt::Display for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write!(f, "{}-{}", $prefix, hex::encode(&self.0[..8]))
-            }
-        }
-
-        impl fmt::Debug for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write!(f, "{}({})", stringify!($name), self)
-            }
-        }
-
-        impl PartialOrd for $name {
-            fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-                Some(self.cmp(other))
-            }
-        }
-
-        impl Ord for $name {
-            fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-                self.0.cmp(&other.0)
-            }
-        }
-    };
-}
+// The id shape moved to `kernel-types` (layer 0) on 2026-08-20,
+// noun-convergence rung nc-1-kernel. Why: `NodeId` is the one id all three
+// product domains must be able to name — `kernel_types::Origin::served_by`
+// cannot say "a peer served this evidence" without it — and this crate sits
+// three layers above the kernel with nine dependencies including
+// `ed25519-dalek`, so the kernel cannot reach up to here.
+//
+// Pulling ONE id out of a six-member macro family leaves either a duplicated
+// macro or an orphan. Moving the MACRO down and leaving the five
+// mesh-specific ids here does neither: there is still exactly one
+// implementation (ARCH §10.6), the five ids below are unchanged, and `NodeId`
+// is re-exported so all 755 existing reference sites are untouched.
+use kernel_types::define_id;
+pub use kernel_types::NodeId;
 
 define_id!(MeshId, "mesh");
-define_id!(NodeId, "node");
 define_id!(ModelId, "model");
 define_id!(ProcessId, "proc");
 define_id!(PlanId, "plan");
@@ -83,7 +35,7 @@ define_id!(HandoffId, "handoff");
 /// transport-ready.
 ///
 /// Serializes as a 32-byte array (same convention as
-/// `Mesh::join_key_hash`). Display is full lowercase hex — this is
+/// `Mesh::invite_key_hash`). Display is full lowercase hex — this is
 /// public key material, never secret.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NodePubkey(pub [u8; 32]);

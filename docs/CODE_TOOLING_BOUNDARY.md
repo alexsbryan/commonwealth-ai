@@ -84,9 +84,15 @@ pins):
 | `sovereign-contracts` | `oicp-types` only |
 | `oicp-client` | `sovereign-contracts`, `oicp-types` |
 
-`sovereign-contracts` is where `Tool`, `ToolDescriptor`, `ToolResult`, `Error`,
-`ToolRegistry`, `types` and `slot_policy` actually live;
-`sovereign-core/src/lib.rs:56-65` re-exports them verbatim. Every
+`sovereign-contracts` is where `Tool`, `ToolResult`, `Error`, `ToolRegistry`,
+`types` and `slot_policy` actually live; `sovereign-core/src/lib.rs:56-65`
+re-exports them verbatim. `ToolDescriptor` and the four behavioural properties
+it carries (`Effect`, `Idempotency`, `Latency`, `Scope`) moved DOWN to
+`oicp-types` in noun-convergence rung 2c so `commonwealth-api`'s injector
+middleware could stop reaching up a layer for them; `sovereign-contracts`
+re-exports them at their historical path, so a package crate that imports
+`sovereign_core::types::ToolDescriptor` still compiles and still stays inside
+the leaf budget above. Every
 `use sovereign_core::{error,types,traits}` in the package is that re-export, not
 a dependency on the runtime hub — see §6.
 

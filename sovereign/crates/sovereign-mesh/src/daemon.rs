@@ -6,7 +6,7 @@
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use tokio::sync::RwLock;
 use tracing::{info, warn};
@@ -14,12 +14,9 @@ use tracing::{info, warn};
 use commonwealth_api::state::{AppState, LocalInferenceService};
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
-use commonwealth_core::oicp::EmbedModelInfo;
 use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
 use commonwealth_discovery::membership;
 use corpus_engine::CorpusEngine;
-use corpus_engine_notes::NoteStore;
-use sovereign_core::registry::ToolRegistry;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::{InferenceProvider, StateStore};
 
@@ -68,7 +65,8 @@ fn mdns_enabled_effective(cfg_mdns: bool) -> bool {
     cfg_mdns && !env_force_off
 }
 
-use crate::admin_http::{ConfigDiff, ProviderFactory};
+use crate::admin_http::ConfigDiff;
+use crate::daemon_services::DaemonServices;
 use crate::deep_link::DeepLink;
 use crate::gossip::{self, GossipHandle};
 use crate::mcp_router;
@@ -76,143 +74,58 @@ use crate::mesh_discovery::{local_ip_candidates, reachable_addresses};
 use crate::persist;
 use crate::state::MeshState;
 
-/// Per-session MCP mount for the embedded daemon. When set, the daemon
-/// merges `mcp_router::mcp_router(...)` into its `:9741` client router
-/// so `/mcp`, `/mcp/message`, and `/mcp/stats` share the port with the
-/// OpenAI-compatible `/v1/*` endpoints.
-#[derive(Clone)]
-struct McpMount {
-    tools: Arc<ToolRegistry>,
-    notes: Arc<NoteStore>,
-    session_id: String,
-}
-
-/// The embedded Commonwealth daemon, managed by Sovereign's UI.
+/// The embedded Commonwealth daemon — the ONE daemon implementation, shared
+/// by `sovereign daemon run`, the desktop's Local mode, and `svrn mesh`.
+///
+/// **Everything a host supplies arrives as one value.** Until 2026-08-24 this
+/// struct carried 17 `RwLock<Option<T>>` slots punched in afterwards by 10
+/// `set_*` and 7 `install_*_router` methods; a slot a host forgot was
+/// indistinguishable from a slot a host deliberately declined, and the route
+/// behind it silently 404'd. [`DaemonServices`] replaces all seventeen — see
+/// `daemon_services`'s module docs for the pair-independence pass
+/// (`quality/TOPOLOGY.md` §4) that produced its three variants.
+///
+/// The two `RwLock<Option<…>>` that remain are **derived from the variant, not
+/// settable by a host**: both are seeded at construction and mutated only by
+/// `POST /v1/admin/reload`, which is itself reachable only on the variant that
+/// carries a `ProviderFactory`.
 pub struct EmbeddedDaemon {
     state: Arc<RwLock<DaemonState>>,
     /// Where to persist `mesh.json` so the daemon can auto-resume on
-    /// app restart. Set once at construction.
+    /// app restart. Empty means persistence is off (the in-memory
+    /// test constructor).
     data_dir: PathBuf,
-    /// The CorpusEngine this daemon consults when peers gossip-query
-    /// our knowledge over `/internal/knowledge/search`, and when we
-    /// publish our own `hosted_corpora` on gossip rounds.
-    ///
-    /// Held in an RwLock<Option<_>> because Sovereign's bootstrap
-    /// constructs the daemon *before* it builds the engine (the
-    /// engine needs an `EmbedFn` that isn't ready until the fast
-    /// model has loaded). The desktop calls `set_corpus_engine`
-    /// during bootstrap just before `try_resume`, so by the time
-    /// the daemon is Running the engine is always present. Tests
-    /// and the CLI's mesh subcommands keep it `None`.
-    corpus_engine: RwLock<Option<Arc<CorpusEngine>>>,
-    /// The Sovereign `InferenceProvider` that answers peer chat
-    /// completions hitting our `/v1/chat/completions`. Same
-    /// injection timing as `corpus_engine`: set during desktop
-    /// bootstrap before the daemon is started. When this is
-    /// absent, the daemon's handler falls through to the
-    /// scheduler/llama-server path (which is empty in the
-    /// Sovereign+mesh embed, so peer inference just 503s).
+    /// This daemon's own `Arc`, captured by `Arc::new_cyclic` at
+    /// construction. It is what lets `start_daemon` build the three routers
+    /// that are pure functions of the daemon — mesh, admin, reading — instead
+    /// of accepting them from a host that might not pass them. A serving
+    /// daemon therefore cannot be missing its own control surface.
+    self_weak: Weak<EmbeddedDaemon>,
+    /// What this host is and everything it supplies. Immutable for the
+    /// daemon's lifetime.
+    services: DaemonServices,
+    /// The config this daemon booted with. **Not** an `Option`:
+    /// `SetupConfig::unconfigured()` is byte-identical to every fallback this file
+    /// used to apply when the slot was `None` (`9741`/`9742`, loopback client
+    /// bind, `0.0.0.0` internal bind, no token), and `register_local_model_slots`
+    /// skips empty paths — so "no config installed" was never a distinct state,
+    /// only an unnamed one. `admin_http::reload` diffs the file on disk against
+    /// this value and advances it on success.
+    setup_config: RwLock<SetupConfig>,
+    /// The provider that answers peer chat completions on
+    /// `/v1/chat/completions`. Seeded from [`Self::services`]; swapped in place
+    /// by `reload_from_setup_config` when `models.*` changes on disk, which is
+    /// why it is behind a lock rather than living in the variant. `None`
+    /// exactly on [`DaemonServices::MeshAdmin`], which has no inference role —
+    /// never because a host forgot to install one.
     inference_provider: RwLock<Option<Arc<dyn InferenceProvider>>>,
-    /// Embedding model metadata advertised to mesh peers for
-    /// collaborative ingestion compatibility checks. Derived at
-    /// bootstrap from the loaded embed slot's actual dimensions,
-    /// pooling strategy, and config-specified `embed_family`.
-    /// `None` when no embed model is configured.
-    embed_model: RwLock<Option<EmbedModelInfo>>,
-    /// Optional MCP tool-server mount. When present, the client
-    /// router on `:9741` additionally serves `/mcp`, `/mcp/message`,
-    /// and `/mcp/stats`. Set at bootstrap via [`Self::set_mcp`].
-    /// `None` means the daemon only serves `/v1/*` (inference, OICP
-    /// capabilities, knowledge search) — no code-intelligence tools.
-    mcp: RwLock<Option<McpMount>>,
-    /// Pre-built axum `Router` merged into the client listener at
-    /// `start_daemon` time. The daemon can't hand out an `Arc<Self>`
-    /// from a `&self` method, so the caller (who already owns the
-    /// outer `Arc<EmbeddedDaemon>`) builds `mesh_http::mesh_router`
-    /// externally and stashes it here. `None` means the mesh HTTP
-    /// surface is disabled — tests and legacy callers skip it.
-    mesh_http_router: RwLock<Option<axum::Router>>,
-    /// Pre-built axum `Router` for the admin HTTP surface
-    /// (`POST /v1/admin/reload`). Same installation pattern as
-    /// `mesh_http_router`: the CLI/desktop builds
-    /// `admin_http::admin_router(Arc::clone(&daemon))` and hands it
-    /// here before `start_daemon`. `None` means no admin surface —
-    /// consumers must `kickstart`/`systemctl restart` to apply config
-    /// changes.
-    admin_http_router: RwLock<Option<axum::Router>>,
-    /// Same pattern — project_http router for `/v1/projects/*`.
-    /// Owned by the CLI / desktop side which holds the Reindexer.
-    project_http_router: RwLock<Option<axum::Router>>,
-    /// Knowledge-view HTTP router (`POST /v1/knowledge/landscape_digest`).
-    /// Built by `sovereign-cli`'s daemon bootstrap once the
-    /// `KnowledgeViewManager` exists; merged into the client listener
-    /// at `start_daemon` time. `None` in tests / paths without the
-    /// manager — the endpoint then 404s, which the desktop's
-    /// `MeshLandscapeDigestClient` handles by inserting an empty
-    /// digest list (identical to KnowledgeView=off).
-    knowledge_view_http_router: RwLock<Option<axum::Router>>,
-    /// Watched-folder HTTP router (`/internal/corpus/watch/...`).
-    /// Reads the `watched_folder_runtime` singleton internally —
-    /// `EmbeddedDaemon` doesn't carry the manager directly.
-    corpus_watch_http_router: RwLock<Option<axum::Router>>,
-    /// Reading-surface HTTP router
-    /// (`/internal/corpus/{corpus_id}/chunks/...`,
-    /// `/internal/corpus/{corpus_id}/atoms/...`). Built by
-    /// `reading_http::reading_router(daemon_arc)` and installed by
-    /// the bootstrap before `start_daemon`. `None` means the desktop
-    /// reading surface won't be reachable — the chat UI still works
-    /// (citation popovers fall back to the legacy path).
-    reading_http_router: RwLock<Option<axum::Router>>,
-    /// Solve-job HTTP router (`/v1/solve/jobs*`) — the daemon-hosted
-    /// TDD solver surface. Built by the CLI daemon bootstrap (which
-    /// owns the job table and the `commonwealth-tdd` dependency) and
-    /// installed before `start_daemon`. `None` means no solve
-    /// surface — the routes 404.
-    solve_http_router: RwLock<Option<axum::Router>>,
-    /// In-memory copy of the `SetupConfig` the daemon booted with.
-    /// `admin_http::reload` diffs this against the file on disk so it
-    /// knows which fields actually changed. Updated in place after a
-    /// successful reload. `None` in tests / legacy callers that skip
-    /// `set_setup_config`.
-    setup_config: RwLock<Option<SetupConfig>>,
-    /// How to rebuild an `InferenceProvider` when `models.*` changes
-    /// during a reload. The daemon itself can't import
-    /// `sovereign-inference` model loading without layering
-    /// violations; the CLI/desktop provide a concrete factory at
-    /// startup.
-    provider_factory: RwLock<Option<Arc<dyn ProviderFactory>>>,
     /// Cached plaintext of the active mesh's join key, mirroring
     /// `<data_dir>/join_key.secret`. The hash is one-way, so without
     /// this the share UI couldn't render the invite link after the
-    /// app restarts. Set on `create_mesh` / `join_mesh` /
-    /// `try_resume`; refreshed on `set_join_key` (called by the
-    /// rotate handler); cleared on `stop`.
+    /// app restarts. Genuine runtime state: set on `create_mesh` /
+    /// `join_mesh` / `try_resume`; refreshed on `set_join_key` (called
+    /// by the rotate handler); cleared on `stop`.
     join_key_plaintext: RwLock<Option<String>>,
-    /// Optional `StateStore` handle used by the reading-surface HTTP
-    /// router to resolve conversation-history chunks back to their
-    /// owning conversation (title, updated_at). The daemon doesn't
-    /// otherwise need a state store — search/inference goes through
-    /// the runtime — so this slot is only set by the desktop's
-    /// bootstrap when it wants reading-surface conversation
-    /// rendering. `None` means conversation chunks render with no
-    /// title metadata; the surface still shows the chunk text.
-    state_store: RwLock<Option<Arc<dyn StateStore>>>,
-    /// Optional `MeshStore` injected by the bootstrap. When set, the
-    /// daemon uses this for `AppState.mesh_store` instead of building
-    /// its own in-memory instance — letting other subsystems (e.g.
-    /// the work atlas) write into the SAME store the gossip layer
-    /// publishes from. Same injection timing as `set_corpus_engine`:
-    /// set during bootstrap before `start_daemon`. When `None`,
-    /// `start_daemon` falls back to the legacy in-memory MeshStore.
-    mesh_store: RwLock<Option<Arc<commonwealth_state::MeshStore>>>,
-    /// Optional `ConvergenceRecord` injected by the bootstrap (order
-    /// commons-fluency fix 9). When set, `start_daemon` installs it
-    /// into `AppStateInner.convergence` so the notes publish sink and
-    /// ingest poller stamp the SAME instance `/status` reads. Same
-    /// injection timing as `set_mesh_store`: set during bootstrap
-    /// before `start_daemon`. When `None`, `/status` honestly reads
-    /// `never` on both convergence arms.
-    convergence_recorder: RwLock<Option<Arc<commonwealth_api::state::ConvergenceRecord>>>,
     /// Endpoint→NodeId directory for discovered RPC workers: which mesh
     /// member owns each raw `ip:port` ggml-RPC endpoint. Written by
     /// [`Self::discover_rpc_workers`] at the moment the endpoint string is
@@ -267,6 +180,13 @@ enum DaemonState {
         /// Running variant means stopping the daemon also stops
         /// gossip; no explicit teardown.
         _gossip_handle: GossipHandle,
+        /// Aborts the peer-assisted ingest handoff loop on Drop. Same pattern
+        /// as `_gossip_handle`, and held for the same second reason the gossip
+        /// one is not: a spawner that returns nothing can lose its
+        /// `tokio::spawn` in a stray three-line diff and stay silent about it
+        /// for five weeks (`ec7ca66c`, 2026-07-21 — see
+        /// `auto_ingest::CollaborateHandle`).
+        _collaborate_handle: crate::auto_ingest::CollaborateHandle,
         _shutdown_tx: tokio::sync::oneshot::Sender<()>,
         /// The API-server task that owns the `:9741`/`:9742` listeners.
         /// Kept (not discarded) so `stop_inner` can await its exit after
@@ -288,7 +208,7 @@ enum DaemonState {
         /// self-discovery health and self-heals (nudge → relay bounce → endpoint
         /// rebuild) with no daemon restart. `None` when iroh is disabled. Aborts
         /// its task on Drop (tied to the Running variant, like `_gossip_handle`);
-        /// also read by `founder_reachability()` for the status surface.
+        /// also read by `self_reachability()` for the status surface.
         reachability_watchdog: Option<crate::iroh_watchdog::WatchdogHandle>,
     },
 }
@@ -341,6 +261,11 @@ pub(crate) fn install_iroh_access(
 enum StopMode {
     Leave,
     Shutdown,
+    /// Set this mesh down without giving it up: persistence is preserved
+    /// exactly as `Shutdown` does, and the caller announces `Offline` (never a
+    /// `removed_at` tombstone) so peers see us step away rather than depart.
+    /// The listeners are dropped so the next mesh can rebind them.
+    Park,
 }
 
 /// Result of creating a new mesh.
@@ -366,11 +291,11 @@ pub struct IrohPeerPath {
 }
 
 /// The founder's OWN iroh reachability (Track W hardening), for
-/// `/v1/mesh/status.founder_reachability` and the desktop "Reachable /
+/// `/v1/mesh/status.self_reachability` and the desktop "Reachable /
 /// Reconnecting" indicator. Flattens the reachability watchdog's live health
 /// snapshot so the wire object is one flat record.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct FounderReachability {
+pub struct SelfReachability {
     /// This node's current dial-by-key string (all relays + direct addrs), or
     /// `None` before any reachable address is known.
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -392,220 +317,163 @@ pub struct JoinMeshResult {
 }
 
 impl EmbeddedDaemon {
-    /// Construct a daemon that persists its running-mesh state to
-    /// `data_dir/mesh.json`. Call [`try_resume`](Self::try_resume)
-    /// once at app start to re-attach to a previously-created mesh.
-    pub fn new(data_dir: PathBuf) -> Self {
-        Self {
+    /// The only constructor. **Total**: the host names which of the three
+    /// live shapes it is and supplies everything that shape needs, in one
+    /// value, before the daemon exists. There is no window in which a request
+    /// can observe a half-wired daemon, and no slot a host can forget.
+    ///
+    /// `data_dir` is where `mesh.json` is persisted so the daemon can
+    /// auto-resume on restart; an empty path disables persistence (see
+    /// [`Self::in_memory`]). Call [`try_resume`](Self::try_resume) once at
+    /// app start to re-attach to a previously-created mesh.
+    ///
+    /// Returns an `Arc` because construction goes through `Arc::new_cyclic`:
+    /// the daemon keeps a `Weak` to itself so it can build its own mesh,
+    /// admin and reading routers at start. Those three used to be installed
+    /// by each host — and the desktop installed a different subset from the
+    /// CLI daemon, which is exactly the divergence this constructor retires.
+    pub fn new(
+        data_dir: PathBuf,
+        setup_config: SetupConfig,
+        services: DaemonServices,
+    ) -> Arc<Self> {
+        let provider = services
+            .serving()
+            .map(|s| Arc::clone(&s.core.inference_provider));
+
+        // Answer the variant question ONCE, at the top.
+        //
+        // This block used to ask it SEVEN times through seven `Option`-
+        // returning accessors. `DaemonServices` exposed ten; two are real
+        // forks (`serving`, `rails`) and eight are artifactual,
+        // wrapping fields that are not optional one level down
+        // (`quality/TOPOLOGY.md §10`). Reading through an artifactual one means
+        // a click lands on `.map()` rather than on a struct field — and worse,
+        // it STACKS a meaningless outer `Option` on top of the genuinely
+        // meaningful inner absence that `McpSurface` and `EmbedAdvertisement`
+        // carry with a reason (§18.3). Matching once leaves only the absences
+        // that mean something.
+        match services.serving() {
+            // `MeshAdmin` has no serving role at all. That emptiness is the
+            // shape, not a set of holes.
+            None => info!(
+                profile = services.label(),
+                "daemon: commissioned with no serving role"
+            ),
+            Some(serving) => {
+                info!(
+                    profile = services.label(),
+                    host_routers = services.host_routers().len(),
+                    // Structural, not probed. `ServingCore` holds both as plain
+                    // `Arc`s, so a serving daemon cannot lack either — the old
+                    // `.is_some()` pair could never report false here, which is
+                    // exactly what made them read as checks rather than facts.
+                    corpus_engine = true,
+                    inference = true,
+                    // Structural since Phase 3 as well: the crossing this line
+                    // used to report (`Desktop` has a store, `Headless` does
+                    // not) is closed, so every serving daemon has one and the
+                    // `.is_some()` here could no longer report false either.
+                    state_store = true,
+                    "daemon: commissioned"
+                );
+                match &serving.capability.mcp {
+                    crate::daemon_services::McpSurface::Mounted(m) => {
+                        info!(tools = m.tools.count(), "daemon: /mcp will be mounted");
+                    }
+                    crate::daemon_services::McpSurface::Unavailable { reason } => {
+                        warn!(%reason, "daemon: /mcp NOT mounted");
+                    }
+                }
+                if let crate::daemon_services::EmbedAdvertisement::Unavailable { reason } =
+                    &serving.advertise_embed
+                {
+                    warn!(
+                        %reason,
+                        "daemon: no embed model advertised — peers will NOT route \
+                         collaborative ingestion to this node"
+                    );
+                }
+            }
+        }
+        Arc::new_cyclic(|self_weak| Self {
             state: Arc::new(RwLock::new(DaemonState::Stopped)),
             data_dir,
-            corpus_engine: RwLock::new(None),
-            inference_provider: RwLock::new(None),
-            embed_model: RwLock::new(None),
-            mcp: RwLock::new(None),
-            mesh_http_router: RwLock::new(None),
-            admin_http_router: RwLock::new(None),
-            project_http_router: RwLock::new(None),
-            knowledge_view_http_router: RwLock::new(None),
-            corpus_watch_http_router: RwLock::new(None),
-            reading_http_router: RwLock::new(None),
-            solve_http_router: RwLock::new(None),
-            setup_config: RwLock::new(None),
-            provider_factory: RwLock::new(None),
+            self_weak: self_weak.clone(),
+            services,
+            setup_config: RwLock::new(setup_config),
+            inference_provider: RwLock::new(provider),
             join_key_plaintext: RwLock::new(None),
-            state_store: RwLock::new(None),
-            mesh_store: RwLock::new(None),
-            convergence_recorder: RwLock::new(None),
             rpc_endpoint_nodes: std::sync::RwLock::new(std::collections::HashMap::new()),
             rpc_worker_sticky: std::sync::RwLock::new(std::collections::HashMap::new()),
             rpc_worker_last_seen: std::sync::RwLock::new(std::collections::HashMap::new()),
-        }
+        })
     }
 
-    /// Inject a `MeshStore` for the daemon to use as `AppState.mesh_store`.
-    /// Call before `start_daemon`. Lets the bootstrap pre-construct a
-    /// shared `Arc<MeshStore>` and hand the same handle to other
-    /// subsystems (e.g. the work atlas) so writes from those modules
-    /// reach the gossip layer's `all_entries_for_gossip` enumeration.
-    pub async fn set_mesh_store(&self, store: Arc<commonwealth_state::MeshStore>) {
-        *self.mesh_store.write().await = Some(store);
+    /// A daemon with persistence disabled — no `mesh.json` is written and
+    /// `try_resume` always answers `false`. Tests that don't want to set up a
+    /// tempdir; production code uses [`Self::new`] with a real `data_dir`.
+    pub fn in_memory(setup_config: SetupConfig, services: DaemonServices) -> Arc<Self> {
+        Self::new(PathBuf::new(), setup_config, services)
     }
 
-    /// Inject the notes-rail convergence recorder (order commons-fluency
-    /// fix 9). Call before `start_daemon`: the bootstrap pre-constructs
-    /// one `Arc<ConvergenceRecord>`, installs it here, and hands the
-    /// SAME handle to the notes publish sink and ingest poller — so the
-    /// daemon-side writers and `/status`'s reader share one instance.
-    pub async fn set_convergence_recorder(
-        &self,
-        recorder: Arc<commonwealth_api::state::ConvergenceRecord>,
-    ) {
-        *self.convergence_recorder.write().await = Some(recorder);
+    /// What this daemon is and what its host gave it. Read by
+    /// `start_daemon`, by the HTTP routers, and by `/status`.
+    pub fn services(&self) -> &DaemonServices {
+        &self.services
     }
 
-    /// Legacy constructor that doesn't persist — use only in tests
-    /// where a tempdir isn't worth setting up. Production code must
-    /// prefer `new(data_dir)`.
-    pub fn new_in_memory() -> Self {
-        Self {
-            state: Arc::new(RwLock::new(DaemonState::Stopped)),
-            data_dir: PathBuf::new(),
-            corpus_engine: RwLock::new(None),
-            inference_provider: RwLock::new(None),
-            embed_model: RwLock::new(None),
-            mcp: RwLock::new(None),
-            mesh_http_router: RwLock::new(None),
-            admin_http_router: RwLock::new(None),
-            project_http_router: RwLock::new(None),
-            knowledge_view_http_router: RwLock::new(None),
-            corpus_watch_http_router: RwLock::new(None),
-            reading_http_router: RwLock::new(None),
-            solve_http_router: RwLock::new(None),
-            setup_config: RwLock::new(None),
-            provider_factory: RwLock::new(None),
-            join_key_plaintext: RwLock::new(None),
-            state_store: RwLock::new(None),
-            mesh_store: RwLock::new(None),
-            convergence_recorder: RwLock::new(None),
-            rpc_endpoint_nodes: std::sync::RwLock::new(std::collections::HashMap::new()),
-            rpc_worker_sticky: std::sync::RwLock::new(std::collections::HashMap::new()),
-            rpc_worker_last_seen: std::sync::RwLock::new(std::collections::HashMap::new()),
-        }
-    }
-
-    /// Install an MCP tool mount so the client router on `:9741` also
-    /// serves `/mcp`, `/mcp/message`, and `/mcp/stats`. Call once
-    /// during bootstrap *before* `try_resume` / `create_mesh` /
-    /// `join_mesh`. Passing a session id (e.g. `serve-<uuid>`) groups
-    /// per-process tool calls in `NoteStore::log_tool_call`.
-    pub async fn set_mcp(
-        &self,
-        tools: Arc<ToolRegistry>,
-        notes: Arc<NoteStore>,
-        session_id: String,
-    ) {
-        *self.mcp.write().await = Some(McpMount {
-            tools,
-            notes,
-            session_id,
-        });
-    }
-
-    /// Install the mesh HTTP API so `/v1/mesh/status` + `create` +
-    /// `join` + `rotate` + `leave` are served on the same `:9741`
-    /// listener. The caller builds the router with
-    /// [`mesh_http::mesh_router(Arc::clone(&daemon_arc))`]
-    /// (which captures the `Arc<EmbeddedDaemon>` the caller owns) and
-    /// hands it here. We can't build the router internally from
-    /// `&self` because axum handlers need an `Arc<Self>` and this
-    /// method can't conjure one.
+    /// Resolve the `(client_port, internal_port)` pair this daemon should
+    /// bind and advertise, from the config it was commissioned with.
     ///
-    /// Call once at bootstrap, before `start_daemon`. Calling again
-    /// later replaces the previously installed router; the change
-    /// won't take effect until the next `start_daemon` cycle.
-    pub async fn install_mesh_http_router(&self, router: axum::Router) {
-        *self.mesh_http_router.write().await = Some(router);
-    }
-
-    /// Install the admin HTTP router (`POST /v1/admin/reload`). Same
-    /// installation shape as [`install_mesh_http_router`] — the caller
-    /// builds `admin_http::admin_router(Arc::clone(&daemon))` and hands
-    /// it here. Must be called before `start_daemon` for the route to
-    /// be live; a later install affects only the next restart.
-    /// Install the project HTTP router (`GET /v1/projects`,
-    /// register / unregister / rebuild). Same shape as
-    /// [`install_admin_http_router`].
-    pub async fn install_project_http_router(&self, router: axum::Router) {
-        *self.project_http_router.write().await = Some(router);
-    }
-
-    pub async fn install_admin_http_router(&self, router: axum::Router) {
-        *self.admin_http_router.write().await = Some(router);
-    }
-
-    /// Install the knowledge-view HTTP router
-    /// (`POST /v1/knowledge/landscape_digest`). Same shape as
-    /// [`install_admin_http_router`] — caller builds
-    /// `landscape_digest_http::landscape_digest_router(Arc::clone(&mgr))`
-    /// and hands it here. `None` (no install) means the endpoint is
-    /// not exposed; an attached desktop's HTTP client soft-fails to
-    /// an empty digest list in that case.
-    pub async fn install_knowledge_view_http_router(&self, router: axum::Router) {
-        *self.knowledge_view_http_router.write().await = Some(router);
-    }
-
-    /// Install the watched-folder HTTP router
-    /// (`/internal/corpus/watch/...`). Same pattern as
-    /// [`install_knowledge_view_http_router`]: caller builds
-    /// `corpus_watch_http::corpus_watch_router()` and hands it here.
-    /// Must be called before `start_daemon` for the routes to bind;
-    /// a later install affects only the next restart.
-    pub async fn install_corpus_watch_http_router(&self, router: axum::Router) {
-        *self.corpus_watch_http_router.write().await = Some(router);
-    }
-
-    /// Install the reading-surface HTTP router
-    /// (`/internal/corpus/{corpus}/chunks/...` and
-    /// `/internal/corpus/{corpus}/atoms/...`). Same lifecycle as
-    /// the other `install_*_http_router` setters: caller builds
-    /// `reading_http::reading_router(Arc::clone(&daemon))` and
-    /// hands it here before `start_daemon`. Loopback-guarded.
-    pub async fn install_reading_http_router(&self, router: axum::Router) {
-        *self.reading_http_router.write().await = Some(router);
-    }
-
-    /// Install the solve-job HTTP router (`/v1/solve/jobs*`). Same
-    /// lifecycle as the other `install_*_http_router` setters: the
-    /// CLI daemon bootstrap builds the router around its job table
-    /// and hands it here before `start_daemon`. Loopback-guarded by
-    /// the builder.
-    pub async fn install_solve_http_router(&self, router: axum::Router) {
-        *self.solve_http_router.write().await = Some(router);
-    }
-
-    /// Record the `SetupConfig` this daemon booted with. The admin
-    /// reload handler diffs future on-disk states against this value
-    /// to figure out which fields actually changed. Called once by
-    /// `sovereign daemon run` right after it loads the config, and
-    /// again after every successful reload so the in-memory baseline
-    /// moves forward.
-    pub async fn set_setup_config(&self, cfg: SetupConfig) {
-        *self.setup_config.write().await = Some(cfg);
-    }
-
-    /// Resolve the `(client_port, internal_port)` pair this daemon
-    /// should bind and advertise. Pulls from
-    /// `setup_config.daemon.{client_port, internal_port}` when a
-    /// config has been installed (`set_setup_config`); otherwise
-    /// returns the historic `(9741, 9742)` defaults.
+    /// Use this in every place that previously hardcoded 9741 or 9742 for
+    /// *this* daemon's binding decisions: `create_mesh`, `join_mesh`,
+    /// `start_daemon`'s listener bind, the mDNS announce, and the
+    /// auto-collaborate loop's spawn.
     ///
-    /// Use this in every place that previously hardcoded 9741 or
-    /// 9742 for *this* daemon's binding decisions: `create_mesh`,
-    /// `join_mesh`, `start_daemon`'s listener bind, the mDNS
-    /// announce, and the auto-collaborate loop's spawn.
-    ///
-    /// **Scope note (peer-side uniformity).** The peer-targeting
-    /// rewrites in `peer_inference_endpoints` and
-    /// `auto_ingest`'s candidate-URL builder still assume every
-    /// peer uses the same port pair as this daemon — they apply
-    /// `client_port` from `resolved_ports` to all peers
-    /// uniformly. Mixed-port mesh deployments need a wire-protocol
-    /// change (a `client_port` field on `MemberRecord`) and are
-    /// tracked separately in §10.1.
+    /// **Scope note (peer-side uniformity).** The peer-targeting rewrites in
+    /// `peer_inference_endpoints` and `auto_ingest`'s candidate-URL builder
+    /// still assume every peer uses the same port pair as this daemon — they
+    /// apply `client_port` from `resolved_ports` to all peers uniformly.
+    /// Mixed-port mesh deployments need a wire-protocol change (a
+    /// `client_port` field on `MemberRecord`) and are tracked separately in
+    /// §10.1.
     pub(crate) async fn resolved_ports(&self) -> (u16, u16) {
-        if let Some(cfg) = self.setup_config.read().await.as_ref() {
-            (cfg.daemon.client_port, cfg.daemon.internal_port)
-        } else {
-            (9741, 9742)
-        }
+        let cfg = self.setup_config.read().await;
+        (cfg.daemon.client_port, cfg.daemon.internal_port)
     }
 
-    /// Install the `ProviderFactory` the admin reload handler uses to
-    /// rebuild an `InferenceProvider` when `models.*` fields change.
-    /// Without one, a reload that touches model paths fails at the
-    /// HTTP layer rather than silently swallowing the change.
-    pub async fn set_provider_factory(&self, factory: Arc<dyn ProviderFactory>) {
-        *self.provider_factory.write().await = Some(factory);
+    /// Borrow the `CorpusEngine` this host commissioned the daemon with, if
+    /// its variant carries one. `reading_http` and the knowledge handlers
+    /// call this; `MeshAdmin` answers `None` by construction.
+    pub fn corpus_engine(&self) -> Option<&Arc<CorpusEngine>> {
+        self.services.serving().map(|s| &s.core.corpus_engine)
+    }
+
+    /// Borrow the `StateStore` the reading surface uses to resolve
+    /// `conversation-history` chunks back to their conversation. `None` only
+    /// on [`DaemonServices::MeshAdmin`], which serves nothing — since
+    /// daemon-convergence Phase 3 BOTH serving variants own a store.
+    pub fn state_store(&self) -> Option<&Arc<dyn StateStore>> {
+        self.services.serving().map(|s| &s.core.state_store)
+    }
+
+    /// Borrow the `Runtime` this daemon serves turns with. `None` only on
+    /// [`DaemonServices::MeshAdmin`] — the same real fork the two accessors
+    /// above answer to, and the reason all three keep an `Option` where the
+    /// seven deleted in Phase 2 did not: `serving()` is a genuine question,
+    /// and the field one level down is not optional.
+    pub fn runtime(&self) -> Option<&Arc<sovereign_core::runtime::Runtime>> {
+        self.services.serving().map(|s| &s.core.runtime)
+    }
+
+    /// Swap the serving `InferenceProvider`. Private on purpose: the ONLY
+    /// caller is `reload_from_setup_config`, which is itself reachable only
+    /// on the variant that carries a `ProviderFactory`. A host cannot install
+    /// a provider after construction — it names one in its
+    /// [`DaemonServices`] or it has none.
+    async fn swap_inference_provider(&self, provider: Arc<dyn InferenceProvider>) {
+        *self.inference_provider.write().await = Some(provider);
     }
 
     /// Re-read `SetupConfig` from disk (or from `config_path_override`
@@ -615,8 +483,8 @@ impl EmbeddedDaemon {
     ///
     /// Semantics:
     /// - `models.*` changes → rebuild the provider via
-    ///   [`set_provider_factory`]'s factory, then swap atomically
-    ///   through [`set_inference_provider`]. In-flight requests
+    ///   the variant's `ProviderFactory`, then swap atomically
+    ///   through the private provider slot. In-flight requests
     ///   holding the old `Arc` continue against it; new ones see
     ///   the new provider.
     /// - `daemon.client_port` / `daemon.internal_port` / `data.dir`
@@ -634,12 +502,7 @@ impl EmbeddedDaemon {
         &self,
         config_path_override: Option<&Path>,
     ) -> Result<crate::admin_http::ReloadResponse, String> {
-        let current = self
-            .setup_config
-            .read()
-            .await
-            .clone()
-            .ok_or_else(|| "no SetupConfig installed on this daemon".to_string())?;
+        let current = self.setup_config.read().await.clone();
 
         let fresh = match config_path_override {
             Some(p) => SetupConfig::load_from(p)?,
@@ -658,14 +521,23 @@ impl EmbeddedDaemon {
         let mut reloaded: Vec<String> = vec![];
 
         if !diff.models_changed.is_empty() {
+            // No factory means this variant cannot rebuild a provider — the
+            // desktop's daemon has never carried one. Name the variant in
+            // the refusal rather than reporting a missing installation
+            // (ARCH §18.3): nothing is missing, this shape has no factory.
             let factory = self
-                .provider_factory
-                .read()
-                .await
-                .clone()
-                .ok_or_else(|| "models changed but no ProviderFactory installed".to_string())?;
+                .services
+                .rails()
+                .map(|r| Arc::clone(&r.provider_factory))
+                .ok_or_else(|| {
+                    format!(
+                        "models changed but the `{}` daemon profile carries no ProviderFactory — \
+                     restart to apply model changes",
+                        self.services.label()
+                    )
+                })?;
             let new_provider = factory.build_provider(&fresh).await?;
-            self.set_inference_provider(new_provider).await;
+            self.swap_inference_provider(new_provider).await;
             for f in &diff.models_changed {
                 reloaded.push((*f).to_string());
             }
@@ -687,78 +559,13 @@ impl EmbeddedDaemon {
         // otherwise a subsequent reload would keep reporting them
         // as "changed" even though the caller already acknowledged
         // them.
-        *self.setup_config.write().await = Some(fresh);
+        *self.setup_config.write().await = fresh;
 
         Ok(crate::admin_http::ReloadResponse {
             reloaded_fields: reloaded,
             restart_required_fields,
             restart_required,
         })
-    }
-
-    /// Install a `CorpusEngine` so that when the daemon starts, its
-    /// `AppState` has something to search — without this, the
-    /// handlers on `/v1/knowledge/search` and
-    /// `/internal/knowledge/search` return 503 and peers asking us
-    /// for philosophy passages see an empty mesh. Call once, during
-    /// Sovereign's bootstrap, *before* `try_resume` / `create_mesh`
-    /// / `join_mesh` so the first gossip round that runs after
-    /// startup already advertises our real `hosted_corpora`.
-    ///
-    /// If called while the daemon is already running, the engine is
-    /// swapped in — useful when bootstrap rebuilds the engine mid-
-    /// session (e.g. the user changes the embed model). Existing
-    /// Arc<AppState> instances captured by running HTTP tasks keep
-    /// the old engine; the next created `AppState` (after a
-    /// `stop` + restart) will pick up the new one.
-    pub async fn set_corpus_engine(&self, engine: Arc<CorpusEngine>) {
-        *self.corpus_engine.write().await = Some(engine);
-    }
-
-    /// Borrow the currently-installed `CorpusEngine`, if any. Used
-    /// by HTTP routers (notably `reading_http`) that need to fetch
-    /// chunks on demand without taking ownership. Returns `None`
-    /// when bootstrap hasn't installed an engine yet.
-    pub async fn corpus_engine(&self) -> Option<Arc<CorpusEngine>> {
-        self.corpus_engine.read().await.clone()
-    }
-
-    /// Install the `StateStore` the reading-surface HTTP router uses
-    /// to look up conversation metadata when serving
-    /// `conversation-history` chunks. Same injection-timing
-    /// expectations as `set_corpus_engine`: call from the desktop
-    /// bootstrap once the SQLite store is open, before
-    /// `start_daemon`. Tests / CLI mesh paths skip this and the
-    /// reading surface degrades gracefully (chunk text without a
-    /// resolved conversation title).
-    pub async fn set_state_store(&self, store: Arc<dyn StateStore>) {
-        *self.state_store.write().await = Some(store);
-    }
-
-    /// Borrow the currently-installed `StateStore`, if any.
-    /// `reading_http` calls this when a chunk's `corpus_id` is
-    /// `"conversation-history"` to resolve `source_doc_id` →
-    /// conversation title.
-    pub async fn state_store(&self) -> Option<Arc<dyn StateStore>> {
-        self.state_store.read().await.clone()
-    }
-
-    /// Install the `InferenceProvider` that answers peer chat
-    /// completions. Same injection timing as `set_corpus_engine`:
-    /// call during desktop bootstrap, before any mesh start. The
-    /// same provider Sovereign uses for the local user's chats —
-    /// a peer asking us for synthesis gets the same quality a
-    /// local user would.
-    pub async fn set_inference_provider(&self, provider: Arc<dyn InferenceProvider>) {
-        *self.inference_provider.write().await = Some(provider);
-    }
-
-    /// Record the embedding model metadata so that when the daemon starts,
-    /// the Commonwealth `AppState` can advertise the correct model to peers
-    /// evaluating collaborative ingestion compatibility. Call during desktop
-    /// bootstrap, after the embed model has been probed for actual dimensions.
-    pub async fn set_embed_model_info(&self, info: EmbedModelInfo) {
-        *self.embed_model.write().await = Some(info);
     }
 
     fn persistence_enabled(&self) -> bool {
@@ -769,7 +576,7 @@ impl EmbeddedDaemon {
     /// the daemon with that mesh so mDNS advertises immediately and
     /// existing members can reconnect without the user recreating.
     /// No-op if no persisted file exists or if persistence is
-    /// disabled (the `new_in_memory` constructor).
+    /// disabled (the [`in_memory`](Self::in_memory) constructor).
     pub async fn try_resume(&self) -> Result<bool, MeshError> {
         if !self.persistence_enabled() {
             return Ok(false);
@@ -777,6 +584,22 @@ impl EmbeddedDaemon {
         if self.is_running().await {
             return Ok(false);
         }
+        // One-time move of a pre-multi-mesh layout into `meshes/<id>/`, which
+        // also derives the `mesh_secret` this node will gossip. Idempotent, so
+        // it is cheap to attempt on every boot and there is no flag to forget.
+        if let Err(e) = persist::migrate_legacy_layout(&self.data_dir) {
+            warn!(error = %e, "mesh: legacy layout migration failed; continuing");
+        }
+        self.resume_active().await
+    }
+
+    /// Bring up whichever mesh `<data_dir>/active` names.
+    ///
+    /// This is the second half of both [`Self::try_resume`] and
+    /// [`Self::switch_mesh`] — a resume and a switch differ only in whether
+    /// the pointer moved first, which is exactly why re-entering a mesh whose
+    /// roster is still on disk costs no handshake and no invite.
+    async fn resume_active(&self) -> Result<bool, MeshError> {
         let loaded = match persist::load(&self.data_dir) {
             Ok(Some(p)) => p,
             Ok(None) => return Ok(false),
@@ -817,6 +640,97 @@ impl EmbeddedDaemon {
         // DEFAULT_GOSSIP_INTERVAL.
         self.trigger_initial_sync().await;
         Ok(true)
+    }
+
+    /// Every mesh this node is a member of — the active one and the parked
+    /// ones. Read straight off disk so it answers even when stopped.
+    pub fn known_meshes(&self) -> Vec<persist::PersistedMesh> {
+        if !self.persistence_enabled() {
+            return Vec::new();
+        }
+        persist::list_known(&self.data_dir)
+    }
+
+    /// Set the active mesh down and bring another one up, without giving up
+    /// membership in either.
+    ///
+    /// Re-entering the mesh we park costs nothing later: `mesh.json` keeps the
+    /// roster and the `mesh_secret`, and gossip authenticates on that secret,
+    /// so coming back is a resume rather than a join. No invite is redeemed,
+    /// no founder is involved, and an expired invite is irrelevant.
+    ///
+    /// `target` matches a mesh id (hex, full or unique prefix) or a mesh name,
+    /// because an operator types the name and a script has the id.
+    pub async fn switch_mesh(&self, target: &str) -> Result<String, MeshError> {
+        let known = self.known_meshes();
+        let found = persist::resolve_known(&known, target)
+            .ok_or_else(|| MeshError::UnknownMesh(target.to_string()))?;
+
+        if persist::active_mesh_id(&self.data_dir).as_ref() == Some(&found.mesh_id) {
+            return Err(MeshError::MeshAlreadyActive(found.name.clone()));
+        }
+        let target_name = found.name.clone();
+        let target_id = found.mesh_id;
+
+        // Tell the mesh we are stepping out BEFORE the listeners drop, and say
+        // "offline", not "departed" — a `removed_at` tombstone would read as a
+        // leave, and we intend to come back.
+        if let Some(app_state) = self.app_state().await {
+            crate::gossip::announce_presence_change(
+                &app_state,
+                crate::gossip::PresenceChange::Parked,
+            )
+            .await;
+        }
+        if self.is_running().await {
+            self.stop_inner(StopMode::Park).await?;
+        }
+
+        persist::set_active(&self.data_dir, &target_id)
+            .map_err(|e| MeshError::Config(format!("could not set active mesh: {e}")))?;
+
+        match self.resume_active().await {
+            Ok(true) => {
+                info!(mesh = %target_name, "mesh: switched");
+                Ok(target_name)
+            }
+            Ok(false) => Err(MeshError::Config(format!(
+                "'{target_name}' is listed but its mesh.json could not be read"
+            ))),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Drop a PARKED mesh from disk. Refuses on the active one — switch or
+    /// leave first, so "forget" can never strand the active pointer.
+    pub fn forget_mesh(&self, target: &str) -> Result<String, MeshError> {
+        let known = self.known_meshes();
+        // Same resolver as `switch_mesh`. It used not to be: forget refused the
+        // id prefix switch accepted, so a reference that could switch a mesh
+        // could not forget it.
+        let found = persist::resolve_known(&known, target)
+            .ok_or_else(|| MeshError::UnknownMesh(target.to_string()))?;
+        persist::forget(&self.data_dir, &found.mesh_id)
+            .map_err(|e| MeshError::Config(e.to_string()))?;
+        Ok(found.name.clone())
+    }
+
+    /// Any ONLINE peer whose credential generation we have not observed since
+    /// this daemon started. Drives the one confirmation round `rotate_invite`
+    /// runs before it is willing to refuse — see there for why.
+    ///
+    /// Reads `None`, not `false`: a peer we merged from and found pre-split is
+    /// already answered, and re-gossiping will not change it. Only genuine
+    /// absence is worth a round-trip.
+    async fn has_unconfirmed_online_peers(&self, app_state: &AppState) -> bool {
+        let mesh = app_state.inner.mesh.read().await;
+        let self_id = app_state.self_node_id();
+        mesh.members.values().any(|m| {
+            m.node_id != self_id
+                && m.is_active()
+                && m.status == commonwealth_core::mesh::NodeStatus::Online
+                && app_state.peer_split_generation(m.node_id).is_none()
+        })
     }
 
     /// Whether the daemon is currently running.
@@ -991,22 +905,25 @@ impl EmbeddedDaemon {
             // Clone the endpoint handle out of the state lock — the
             // relay wait below must not hold the daemon-state read
             // lock across its await.
-            let endpoint = {
+            let (endpoint, app_state_for_ttl) = {
                 let state = self.state.read().await;
                 match &*state {
                     DaemonState::Running {
                         app_state,
                         iroh_access: Some(access),
                         ..
-                    } => {
-                        if expires_at.is_some() {
-                            app_state.set_join_key_expiry(expires_at);
-                        }
-                        Some(access.endpoint_handle())
-                    }
-                    _ => None,
+                    } => (Some(access.endpoint_handle()), Some(app_state.clone())),
+                    DaemonState::Running { app_state, .. } => (None, Some(app_state.clone())),
+                    _ => (None, None),
                 }
             };
+            // Arm the TTL on the MESH, not on this node's AppState — it has to
+            // gossip and persist, or it is enforced only here and only until
+            // the next restart. Written after the state lock is dropped: the
+            // mesh guard is async and must not be taken inside the match.
+            if let (Some(exp), Some(app_state)) = (expires_at, app_state_for_ttl) {
+                app_state.inner.mesh.write().await.invite_expires_at = Some(exp);
+            }
             let dial = match &endpoint {
                 Some(ep) => {
                     crate::iroh_access::MeshIrohAccess::wait_for_relay(
@@ -1052,7 +969,10 @@ impl EmbeddedDaemon {
         if self.persistence_enabled() {
             if let DaemonState::Running { app_state, .. } = &*self.state.read().await {
                 let live = app_state.inner.mesh.read().await.clone();
-                if let Err(e) = persist::save(&self.data_dir, &live, node_id) {
+                // ESTABLISHING call: creating a mesh is one of exactly two acts
+                // that make a mesh this node's active one. `save` alone no
+                // longer moves the pointer — see `persist::save`.
+                if let Err(e) = persist::save_and_activate(&self.data_dir, &live, node_id) {
                     warn!(error = %e, "mesh.json write failed — mesh is in-memory only");
                 }
             }
@@ -1128,42 +1048,51 @@ impl EmbeddedDaemon {
         // mesh", not "AlreadyRunning error, please run leave first".
         // The solo case is harmless to auto-leave.
         if self.is_running().await {
-            // Snapshot member count under the read lock. We pull
-            // `app_state` here even though we don't keep a handle
-            // to it past the check — refusing without observing
-            // the live mesh would either always-refuse or
-            // always-allow, both worse than this honest probe.
-            let live_members: Option<(String, usize)> = {
+            // PARK the mesh we are in; never destroy it. This is the step that
+            // makes a node capable of holding more than one membership — every
+            // other multi-mesh surface (`known_meshes`, `mesh list|switch|
+            // forget`, the desktop `MeshList`) reads state that only ever comes
+            // into existence here.
+            //
+            // Until 2026-08-27 this branch auto-left a solo mesh and refused a
+            // populated one, so `persist::clear` deleted the outgoing
+            // `mesh.json` and a second membership could not exist outside
+            // tests. The switcher was complete and unreachable.
+            //
+            // Parking is safe where leaving was not: the outgoing mesh keeps
+            // its own `meshes/<id>/` directory and join key, `persist::save`
+            // re-points `active` at the mesh we are about to join, and the
+            // roster we set down is exactly the one `mesh switch` resumes. The
+            // 2026-05-10 incident this branch was written for — a join
+            // silently destroying peer relationships the user could not
+            // recover from local state — cannot happen when nothing is
+            // deleted.
+            let parked: Option<String> = {
                 let state = self.state.read().await;
                 match &*state {
                     DaemonState::Running { app_state, .. } => {
-                        let mesh = app_state.inner.mesh.read().await;
-                        Some((mesh.name.clone(), mesh.members.len()))
+                        Some(app_state.inner.mesh.read().await.name.clone())
                     }
                     DaemonState::Stopped => None,
                 }
             };
-            if let Some((mesh_name_now, member_count)) = live_members {
-                if member_count > 1 {
-                    tracing::warn!(
-                        mesh_name = %mesh_name_now,
-                        members = member_count,
-                        "join_mesh: refusing to auto-leave a populated mesh"
-                    );
-                    return Err(MeshError::AlreadyInPopulatedMesh {
-                        mesh_name: mesh_name_now,
-                        members: member_count,
-                    });
-                }
+            // Say "offline", not "departed", before the listeners drop: a
+            // `removed_at` tombstone would tell peers we left, and we have not.
+            if let Some(app_state) = self.app_state().await {
+                crate::gossip::announce_presence_change(
+                    &app_state,
+                    crate::gossip::PresenceChange::Parked,
+                )
+                .await;
+            }
+            self.stop_inner(StopMode::Park).await?;
+            if let Some(name) = parked {
                 tracing::info!(
-                    mesh_name = %mesh_name_now,
-                    "join_mesh: daemon is in a solo mesh — auto-leaving before joining"
+                    parked_mesh = %name,
+                    "join_mesh: parked the current mesh — it stays joined and \
+                     `svrn mesh switch` returns to it"
                 );
             }
-            // Solo mesh (or daemon already stopped — leave is a
-            // no-op then). Safe to clear state and proceed with
-            // the new handshake.
-            let _ = self.leave().await;
         }
 
         let (join_key, url_mesh_name, relay_hint, iroh_dial, invite_encrypted) = match link {
@@ -1181,6 +1110,19 @@ impl EmbeddedDaemon {
                 iroh_dial.clone(),
                 *encrypted,
             ),
+            // A guest link is deliberately NOT joinable. Refusing here with a
+            // message that names the right command is the whole difference
+            // between "this link is broken" and "you pasted the other kind" —
+            // and joining on a guest link would hand membership to someone the
+            // issuer meant to lend one model to.
+            DeepLink::Guest { .. } => {
+                return Err(MeshError::InvalidJoinKey(
+                    "that is a guest link, not an invite — it grants use of a \
+                     node's models without joining its mesh. Use `svrn mesh use \
+                     <link>` instead."
+                        .to_string(),
+                ))
+            }
         };
         let mesh_name = url_mesh_name
             .clone()
@@ -1248,16 +1190,11 @@ impl EmbeddedDaemon {
         // blocks n0's relays reaches the founder via the fleet's own
         // relay (W4), or with n0 fully severed (H1). Default = n0.
         let join_relay_cfg: commonwealth_transport::iroh::RelayConfig = {
-            let guard = self.setup_config.read().await;
-            guard
-                .as_ref()
-                .map(|c| {
-                    commonwealth_transport::iroh::RelayConfig::from_parts(
-                        c.iroh.relay_urls.clone(),
-                        c.iroh.discovery.as_deref(),
-                    )
-                })
-                .unwrap_or_default()
+            let c = self.setup_config.read().await;
+            commonwealth_transport::iroh::RelayConfig::from_parts(
+                c.iroh.relay_urls.clone(),
+                c.iroh.discovery.as_deref(),
+            )
         };
         let handshake = if let (Some(dial), true) = (iroh_dial.as_deref(), invite_encrypted) {
             // ENCRYPTED join: dial the founder by key over iroh and
@@ -1305,23 +1242,44 @@ impl EmbeddedDaemon {
         let handshake = match handshake {
             Ok(h) => h,
             Err(e) => {
-                // Roll back to a fresh SOLO mesh rather than leaving the
-                // daemon meshless. A failed join (bad key, peer offline,
-                // network blip) must NOT strand the client API on :9741 —
-                // that was the recurring "daemon alive but :9741 down"
-                // wedge. `leave_to_solo` tears down the placeholder join
-                // mesh (its persistence clear is a no-op — we never
-                // persisted the placeholder) and rebinds a solo mesh, so
-                // the caller's post-join reconnect poll finds a working
-                // daemon. Mirrors the user-facing Leave button, which also
-                // re-solos in-process. The join still returns Err so the UI
-                // reports the failure.
-                if let Err(re) = self.leave_to_solo().await {
-                    warn!(
-                        error = %re,
-                        "join rollback: re-solo after failed handshake failed \
-                         — daemon may be left meshless"
-                    );
+                // A failed join (bad key, peer offline, network blip) must NOT
+                // strand the client API on :9741 — that was the recurring
+                // "daemon alive but :9741 down" wedge.
+                //
+                // Roll back to the mesh we PARKED on the way in. Nothing was
+                // destroyed and `persist::save` never ran for the mesh we
+                // failed to join, so `active` still names the parked one and
+                // resuming it is exact: same roster, same join key, same id.
+                //
+                // This used to `leave_to_solo()`, which was right only while
+                // the pre-flight destroyed the outgoing mesh — there was
+                // nothing to go back TO, so a fresh solo mesh was the least-bad
+                // landing. Re-soloing now would mint a THIRD mesh and orphan
+                // the parked one, which is the clobber this path exists to
+                // prevent.
+                match self.resume_active().await {
+                    Ok(true) => {
+                        info!("join rollback: resumed the parked mesh after a failed handshake");
+                    }
+                    // No parked mesh to go back to (a first-ever join from a
+                    // meshless daemon). Solo is the correct landing there, and
+                    // is what keeps :9741 bound.
+                    Ok(false) => {
+                        if let Err(re) = self.leave_to_solo().await {
+                            warn!(
+                                error = %re,
+                                "join rollback: no parked mesh and re-solo failed \
+                                 — daemon may be left meshless"
+                            );
+                        }
+                    }
+                    Err(re) => {
+                        warn!(
+                            error = %re,
+                            "join rollback: parked mesh could not be resumed \
+                             — daemon may be left meshless"
+                        );
+                    }
                 }
                 return Err(MeshError::Network(e.to_string()));
             }
@@ -1358,7 +1316,11 @@ impl EmbeddedDaemon {
         if self.persistence_enabled() {
             if let DaemonState::Running { app_state, .. } = &*self.state.read().await {
                 let live = app_state.inner.mesh.read().await.clone();
-                if let Err(e) = persist::save(&self.data_dir, &live, adopted_node_id) {
+                // The other ESTABLISHING call. Joining a second mesh PARKS the
+                // first (P1) rather than leaving it, so the pointer move is the
+                // whole switch — it must be explicit here, not a side effect of
+                // whichever code path happened to persist last.
+                if let Err(e) = persist::save_and_activate(&self.data_dir, &live, adopted_node_id) {
                     warn!(error = %e, "mesh.json write failed — joined mesh is in-memory only");
                 }
             }
@@ -1503,13 +1465,39 @@ impl EmbeddedDaemon {
                     if let Err(e) = persist::clear_client_exposed(&self.data_dir) {
                         warn!(error = %e, "client-exposed marker could not be cleared on leave");
                     }
+                    // The pointer goes LAST, and it has to go at all: the three
+                    // deletions above resolve their targets THROUGH `active`, and
+                    // `active` used to survive every leave — still naming a
+                    // directory whose `mesh.json` we had just removed. Boot looked
+                    // healthy (`load` returns None, `resume_active` returns false)
+                    // while `forget` refused that mesh forever, because forget
+                    // refuses the ACTIVE one and nothing could move the pointer off
+                    // it. `persist::clear_active` was written for exactly this and
+                    // had no caller anywhere in the workspace.
+                    let departed = persist::active_mesh_id(&self.data_dir);
+                    if let Err(e) = persist::clear_active(&self.data_dir) {
+                        warn!(error = %e, "active-mesh pointer could not be cleared on leave");
+                    }
+                    // …and with the pointer gone, drop the husk. Leaving already
+                    // deleted everything inside it, so what remains is residue, and
+                    // `list_known` cannot show it (no mesh.json) which means
+                    // `forget` could never be aimed at it either.
+                    if let Some(id) = departed {
+                        if let Err(e) = persist::forget(&self.data_dir, &id) {
+                            warn!(error = %e, "left mesh's directory could not be removed");
+                        }
+                    }
                 }
-                if matches!(mode, StopMode::Leave) {
+                if matches!(mode, StopMode::Leave | StopMode::Park) {
+                    // Park clears the cache but not the file: the plaintext is
+                    // per-mesh on disk now, and `resume_active` reloads
+                    // whichever mesh comes up next.
                     *self.join_key_plaintext.write().await = None;
                 }
                 match mode {
                     StopMode::Leave => info!("mesh daemon stopped (left mesh)"),
                     StopMode::Shutdown => info!("mesh daemon stopped (preserving mesh state)"),
+                    StopMode::Park => info!("mesh daemon stopped (parked; state preserved)"),
                 }
                 Ok(())
             }
@@ -1611,12 +1599,12 @@ impl EmbeddedDaemon {
         // wart). No relay wait here: polls repeat.
         let dial =
             endpoint.and_then(|ep| crate::iroh_access::MeshIrohAccess::dial_for_endpoint(&ep));
-        // The exp param mirrors the ARMED founder-side expiry — read,
-        // never re-armed here, or every status poll would extend the
-        // invite forever. Rotation is what re-arms (see mesh_http's
-        // rotate handler).
+        // The exp param mirrors the armed expiry — read, never re-armed here,
+        // or every status poll would extend the invite forever. Rotation is
+        // what re-arms (see `rotate_invite`). Read from the mesh so a member
+        // that did not personally mint the invite still renders the real TTL.
         let expires_at = if require_encryption {
-            app_state.join_key_expiry()
+            app_state.inner.mesh.read().await.invite_expires_at
         } else {
             None
         };
@@ -1675,7 +1663,7 @@ impl EmbeddedDaemon {
     /// isn't running (mesh on the IP path). Clones the endpoint id / dial and the
     /// watchdog status handle out of the state lock BEFORE awaiting, per the
     /// codebase's clone-out-then-await rule.
-    pub async fn founder_reachability(&self) -> Option<FounderReachability> {
+    pub async fn self_reachability(&self) -> Option<SelfReachability> {
         let (dial, endpoint_id, status_arc) = {
             let state = self.state.read().await;
             match &*state {
@@ -1695,7 +1683,7 @@ impl EmbeddedDaemon {
             Some(arc) => arc.read().await.clone(),
             None => crate::iroh_watchdog::ReachabilityStatus::default(),
         };
-        Some(FounderReachability {
+        Some(SelfReachability {
             dial,
             endpoint_id,
             health,
@@ -1710,28 +1698,153 @@ impl EmbeddedDaemon {
         *self.join_key_plaintext.write().await = Some(key);
     }
 
-    /// Arm a fresh invite TTL for an ENCRYPTED mesh's rotated key.
-    /// Rotation is the one place a TTL gets re-armed — `current_invite`
-    /// only READS the armed expiry (re-arming on status polls would
-    /// extend the invite forever). No-op (returns `None`) on a
-    /// plaintext mesh or a stopped daemon.
-    pub async fn rearm_join_key_expiry(&self) -> Option<u64> {
-        let state = self.state.read().await;
-        let app_state = match &*state {
-            DaemonState::Running { app_state, .. } => app_state.clone(),
-            DaemonState::Stopped => return None,
-        };
-        drop(state);
-        if !app_state.inner.mesh.read().await.require_encryption {
-            return None;
-        }
+    /// Rotate the invite credential. **The one and only implementation of
+    /// what rotation means** (ARCH §10.6).
+    ///
+    /// Before the credential split this was spread across three callers that
+    /// each did a different amount of the job — the CLI wrote only disk, the
+    /// HTTP handler additionally refreshed the cached plaintext and re-armed a
+    /// node-local TTL, the desktop bypassed the daemon entirely — and *none*
+    /// of them wrote the live `Mesh`. Two failures fell out of that: the
+    /// gossip loop re-persists the in-memory mesh every round, so the new hash
+    /// on disk was silently reverted within seconds while `join_key.secret`
+    /// kept the new plaintext (the operator was left holding an invite that
+    /// hashed to nothing the mesh accepted); and if a restart landed inside
+    /// that window instead, the rotator came back with a hash no peer shared
+    /// and partitioned itself symmetrically.
+    ///
+    /// Now: mutate the live mesh first, persist from it, and let the ordinary
+    /// gossip round carry it. Rotation cannot touch `mesh_secret` — that is
+    /// enforced by [`Mesh::rotate_invite_key`] not being able to name the
+    /// field — so it can no longer partition anyone.
+    ///
+    /// `force` overrides the pre-split-peer refusal below. It must be typed;
+    /// silently partitioning a peer is the substitution ARCH §18.3 forbids.
+    pub async fn rotate_invite(&self, force: bool) -> Result<RotatedInvite, MeshError> {
+        let app_state = self.app_state().await.ok_or(MeshError::NotRunning)?;
+
+        let new_key = commonwealth_discovery::membership::generate_join_key();
+        let new_hash = commonwealth_discovery::membership::hash_join_key(&new_key);
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        let expires_at = now + INVITE_TTL_SECS;
-        app_state.set_join_key_expiry(Some(expires_at));
-        Some(expires_at)
+
+        // Never refuse on an instrument that has not been run (ARCH §18.4).
+        // The confirmation map is in-memory, so every restart empties it — and
+        // a rotate seconds after boot then reported a fully-migrated fleet as
+        // "still on a pre-split build" when the truth was that this daemon had
+        // not spoken to anyone yet. One round costs about one RTT per peer and
+        // answers exactly the question the guard is about to ask. Run it BEFORE
+        // taking the write lock: the round takes it too.
+        if !force && self.has_unconfirmed_online_peers(&app_state).await {
+            info!("rotate: peers unconfirmed since boot — one gossip round before deciding");
+            if let Err(e) =
+                gossip::run_one_round(&app_state, gossip::DEFAULT_OFFLINE_THRESHOLD).await
+            {
+                warn!(
+                    error = %e,
+                    "rotate: the confirmation round failed; deciding on what we already know"
+                );
+            }
+        }
+
+        let (mesh_name, expires_at, self_id) = {
+            let mut mesh = app_state.inner.mesh.write().await;
+
+            // A peer still on a pre-split build authorizes gossip on
+            // `invite_key_hash` (the compat arm in `Mesh::gossip_authorized`),
+            // so rotating now would drop exactly those nodes out of the mesh.
+            // Name them and refuse rather than partition them quietly.
+            if !force {
+                // Refuse unless every online peer is CONFIRMED post-split.
+                //
+                // The confirmation comes from `AppState::peer_confirmed_post_split`,
+                // which is fed by the gossip round from `MergeReport::peer_pre_split`.
+                // Unknown counts as unsafe: a peer we have not gossiped with
+                // since boot may be on either build, and rotating on the
+                // optimistic assumption is precisely the silent partition this
+                // whole change exists to remove (ARCH §18.3 — never substitute
+                // a success-shaped answer for an absent one).
+                //
+                // This read is deliberately NOT `mesh.mesh_secret`. That is OUR
+                // credential; it says nothing about any peer, and testing it
+                // here made the guard inert on every migrated node — the exact
+                // failure the guard was written to prevent.
+                // Why a rotate was refused is otherwise unanswerable from a
+                // deployed daemon: the guard's input is an in-memory map, not
+                // anything on disk or in the roster.
+                //
+                // Classify in THREE values, not two. "We merged from it and it
+                // offered neither a proof nor a secret" and "we have not merged
+                // from it at all" are different facts with different remedies —
+                // upgrade that node, versus wait one round — and collapsing
+                // them is what made the refusal tell operators their fleet was
+                // un-migrated when it was not. `peer_confirmed_post_split` is
+                // still the right SAFETY read (unknown is unsafe); it is the
+                // wrong DIAGNOSTIC one.
+                let mut pre_split: Vec<String> = Vec::new();
+                let mut unconfirmed: Vec<String> = Vec::new();
+                for m in mesh.members.values() {
+                    if m.node_id == app_state.self_node_id() {
+                        continue;
+                    }
+                    let generation = app_state.peer_split_generation(m.node_id);
+                    tracing::debug!(
+                        peer = %m.node_id,
+                        name = %m.name,
+                        status = ?m.status,
+                        active = m.is_active(),
+                        generation = ?generation,
+                        "rotate: pre-split check"
+                    );
+                    let online =
+                        m.is_active() && m.status == commonwealth_core::mesh::NodeStatus::Online;
+                    if !online {
+                        continue;
+                    }
+                    match generation {
+                        Some(true) => {}
+                        Some(false) => pre_split.push(m.name.clone()),
+                        None => unconfirmed.push(m.name.clone()),
+                    }
+                }
+                if !pre_split.is_empty() || !unconfirmed.is_empty() {
+                    return Err(MeshError::RotateWouldPartition {
+                        pre_split,
+                        unconfirmed,
+                    });
+                }
+            }
+
+            let expires_at = mesh.require_encryption.then_some(now + INVITE_TTL_SECS);
+            mesh.rotate_invite_key(new_hash, expires_at);
+            (mesh.name.clone(), expires_at, app_state.self_node_id())
+        };
+
+        // Persist FROM the live mesh, so disk and memory agree and the next
+        // gossip round has nothing to revert.
+        if self.persistence_enabled() {
+            let mesh = app_state.inner.mesh.read().await;
+            if let Err(e) = persist::save(&self.data_dir, &mesh, self_id) {
+                warn!(error = %e, "rotate: mesh.json could not be written");
+            }
+            if let Err(e) = persist::save_join_key(&self.data_dir, &new_key) {
+                warn!(error = %e, "rotate: join_key.secret could not be written");
+            }
+        }
+        *self.join_key_plaintext.write().await = Some(new_key.clone());
+
+        info!(
+            mesh_name,
+            expires_at = ?expires_at,
+            "rotate: invite key rotated; mesh_secret untouched"
+        );
+        Ok(RotatedInvite {
+            mesh_name,
+            join_key: new_key,
+            expires_at,
+        })
     }
 
     /// Get the Commonwealth API address (for internal use).
@@ -2296,9 +2409,15 @@ impl EmbeddedDaemon {
         // the same store gossip publishes from) inject one via
         // `set_mesh_store` before this point. Long-term persistence
         // for the legacy mesh state still flows through `mesh.json`.
-        let corpus_engine = self.corpus_engine.read().await.clone();
-        let mesh_store = match self.mesh_store.read().await.clone() {
-            Some(provided) => provided,
+        let corpus_engine = self
+            .services
+            .serving()
+            .map(|s| Arc::clone(&s.core.corpus_engine));
+        let mesh_store = match self.services.rails().map(|r| &r.mesh_store) {
+            Some(provided) => Arc::clone(provided),
+            // Only the headless daemon carries a shared store; the desktop and
+            // the mesh-admin one-shot get a private in-memory one, which is
+            // what their variants declare by not having the field.
             None => Arc::new(
                 commonwealth_state::MeshStore::in_memory().expect("in-memory MeshStore failed"),
             ),
@@ -2318,8 +2437,10 @@ impl EmbeddedDaemon {
         // `Arc<ConvergenceRecord>` to the publish sink + ingest
         // poller, so `/status`'s convergence section reads the
         // writers' stamps, never a parallel copy.
-        if let Some(recorder) = self.convergence_recorder.read().await.clone() {
-            app_state.inner.install_convergence_recorder(recorder);
+        if let Some(recorder) = self.services.rails().map(|r| &r.convergence_recorder) {
+            app_state
+                .inner
+                .install_convergence_recorder(Arc::clone(recorder));
         }
 
         // Route every peer dial through an `IpTransport` configured
@@ -2449,8 +2570,13 @@ impl EmbeddedDaemon {
         // ingest pipeline pays only the cost of one rwlock read +
         // one atomic load per embed batch when the feature is off.
         if let Some(engine) = corpus_engine.as_ref() {
-            if let Some(cfg) = self.setup_config.read().await.as_ref() {
-                let secs = cfg.daemon.yield_to_foreground_secs;
+            {
+                let secs = self
+                    .setup_config
+                    .read()
+                    .await
+                    .daemon
+                    .yield_to_foreground_secs;
                 app_state.set_yield_window_secs(secs);
                 info!(
                     yield_to_foreground_secs = secs,
@@ -2469,8 +2595,8 @@ impl EmbeddedDaemon {
         // peer fan-out is what OOM-killed the daemon. Apply the configured
         // ceiling (default 1) regardless of whether a corpus engine is present,
         // so a storage-only or inference-only node is still bounded.
-        if let Some(cfg) = self.setup_config.read().await.as_ref() {
-            let max = cfg.daemon.max_peer_inflight;
+        {
+            let max = self.setup_config.read().await.daemon.max_peer_inflight;
             app_state.set_contribution_max_peer_inflight(max);
             info!(
                 max_peer_inflight = max,
@@ -2483,7 +2609,11 @@ impl EmbeddedDaemon {
         // Without this, `get_local_embed_model()` returns None and the
         // collaborate handler falls back to the qwen3-embedding-0.6b default,
         // which won't match a peer running a different model.
-        if let Some(embed_info) = self.embed_model.read().await.as_ref() {
+        if let Some(embed_info) = self
+            .services
+            .serving()
+            .and_then(|s| s.advertise_embed.info())
+        {
             app_state
                 .inner
                 .inference_store
@@ -2500,6 +2630,13 @@ impl EmbeddedDaemon {
         // always-on so we don't have to race the first `register` call.
         let _reaper = app_state.start_work_queue_reaper();
 
+        // Sweep lapsed guest grants. Auth already fails closed on an expired
+        // grant (`GuestGrantStore::live` evaluates expiry per read), so this
+        // bounds the map rather than enforcing the TTL — but a `drain_dead`
+        // with no caller is exactly the shape that left `ingest_grant`'s
+        // expiry unenforced, so it gets a caller at birth.
+        let _guest_reaper = app_state.start_guest_grant_reaper();
+
         // Register the locally-loaded model slots so `/v1/models`
         // answers with something meaningful instead of an empty list.
         // Without this, the OpenAI-compatible models list returns
@@ -2508,8 +2645,9 @@ impl EmbeddedDaemon {
         // post-setup health check. We register one `ModelInfo` per
         // configured slot (primary / fast / embed) with a
         // deterministic ModelId so reloads don't create duplicates.
-        if let Some(cfg) = self.setup_config.read().await.as_ref() {
-            register_local_model_slots(&app_state, cfg, node_id);
+        {
+            let cfg = self.setup_config.read().await;
+            register_local_model_slots(&app_state, &cfg, node_id);
         }
 
         // Client API bind — the OpenAI-compatible public surface
@@ -2528,15 +2666,12 @@ impl EmbeddedDaemon {
         // first request. The internal port (`:9742`, mTLS) is unrelated
         // and always binds `0.0.0.0`.
         let (mut client_bind, configured_token, internal_bind) = {
-            let guard = self.setup_config.read().await;
-            match guard.as_ref() {
-                Some(c) => (
-                    c.daemon.client_bind.clone(),
-                    c.daemon.client_token.clone(),
-                    c.daemon.internal_bind.clone(),
-                ),
-                None => ("127.0.0.1".to_string(), None, "0.0.0.0".to_string()),
-            }
+            let c = self.setup_config.read().await;
+            (
+                c.daemon.client_bind.clone(),
+                c.daemon.client_token.clone(),
+                c.daemon.internal_bind.clone(),
+            )
         };
         let mut bind_is_loopback = client_bind == "127.0.0.1"
             || client_bind == "::1"
@@ -2635,8 +2770,8 @@ impl EmbeddedDaemon {
         // boot — forming the mesh from static seeds (`?relay=` /
         // `[discovery] seed_addrs`) instead.
         let mdns_enabled = {
-            let guard = self.setup_config.read().await;
-            mdns_enabled_effective(guard.as_ref().map(|c| c.discovery.mdns).unwrap_or(true))
+            let c = self.setup_config.read().await;
+            mdns_enabled_effective(c.discovery.mdns)
         };
         let (mdns, browse_handle): (Option<Arc<MdnsDiscovery>>, Option<BrowseHandle>) =
             if mdns_enabled {
@@ -2667,18 +2802,91 @@ impl EmbeddedDaemon {
                 (None, None)
             };
 
-        // Snapshot the MCP mount + installed mesh HTTP router (if any)
-        // before moving app_state into the spawn. Both are cheap:
-        // Option<McpMount> clones 3 Arc bumps, Option<axum::Router>
-        // clones internal Arcs.
-        let mcp_mount = self.mcp.read().await.clone();
-        let mesh_http = self.mesh_http_router.read().await.clone();
-        let admin_http = self.admin_http_router.read().await.clone();
-        let project_http = self.project_http_router.read().await.clone();
-        let knowledge_view_http = self.knowledge_view_http_router.read().await.clone();
-        let corpus_watch_http = self.corpus_watch_http_router.read().await.clone();
-        let reading_http = self.reading_http_router.read().await.clone();
-        let solve_http = self.solve_http_router.read().await.clone();
+        // Assemble every router this daemon serves, before moving `app_state`
+        // into the spawn. Cheap: `axum::Router` clones internal Arcs.
+        //
+        // The three routers that are pure functions of `Arc<Self>` — mesh,
+        // admin, reading — are built HERE from `self_weak`, not accepted from
+        // a host. That is the fix for the divergence this file used to
+        // document as ordinary: the desktop installed a different subset from
+        // the CLI daemon, and nothing could tell a declined router from a
+        // forgotten one. A serving daemon now always has its own control
+        // surface, and `mount_names` prints exactly what it has.
+        let mcp_mount = self
+            .services
+            .serving()
+            .and_then(|s| s.capability.mcp.mount())
+            .cloned();
+        let mut mounted: Vec<axum::Router> = Vec::new();
+        let mut mount_names: Vec<&'static str> = Vec::new();
+        if self.services.serves_host_surface() {
+            let self_arc = self
+                .self_weak
+                .upgrade()
+                .expect("EmbeddedDaemon::start_daemon runs behind the Arc that owns it");
+            mounted.push(crate::mesh_http::mesh_router(Arc::clone(&self_arc)));
+            mount_names.push("mesh_http");
+            mounted.push(crate::admin_http::admin_router(Arc::clone(&self_arc)));
+            mount_names.push("admin_http");
+            mounted.push(crate::reading_http::reading_router(Arc::clone(&self_arc)));
+            mount_names.push("reading_http");
+            // Phase 5c — the daemon answers. Built here from `Arc<Self>` like
+            // the three above, not accepted from a host, so a serving daemon
+            // cannot come up unable to serve a turn.
+            mounted.push(crate::turn_http::turn_router(self_arc));
+            mount_names.push("turn_http");
+            for (router, name) in self
+                .services
+                .host_routers()
+                .into_iter()
+                .zip(self.services.host_router_names())
+            {
+                mounted.push(router);
+                mount_names.push(name);
+            }
+        }
+        info!(
+            profile = self.services.label(),
+            mcp = mcp_mount.is_some(),
+            routers = ?mount_names,
+            "daemon: client router assembled"
+        );
+
+        // The GUEST listener: a second bind of the client router, loopback-only
+        // and on an ephemeral port, whose auth layer does NOT treat a loopback
+        // peer as a local caller. The iroh acceptor forwards `GUEST_ALPN`
+        // here, so a `sovereign://guest/…` bearer is actually read instead of
+        // being skipped by the loopback arm — see
+        // `commonwealth_api::client_auth`.
+        //
+        // Bound HERE, before the serve task is spawned, because
+        // `MeshIrohAccess::start` below needs the resolved port and the serve
+        // task runs concurrently. A bind failure is not fatal: it costs guest
+        // access over iroh and nothing else, so it is logged and the ALPN goes
+        // unadvertised (a guest dial is then refused at the handshake rather
+        // than silently landing on the trusting listener).
+        //
+        // It deliberately serves the BARE client router: no MCP, no mounted
+        // host surfaces. A guest's scope reaches `/v1/models` and
+        // `/v1/chat/completions`; mounting less than `permits_path` allows is
+        // free defence in depth.
+        let (guest_listener, guest_addr) = match tokio::net::TcpListener::bind(("127.0.0.1", 0u16))
+            .await
+        {
+            Ok(l) => match l.local_addr() {
+                Ok(a) => (Some(l), Some(a)),
+                Err(e) => {
+                    warn!("guest listener bound but has no local address ({e}) — guest links over iroh disabled");
+                    (None, None)
+                }
+            },
+            Err(e) => {
+                warn!(
+                    "guest listener could not bind loopback ({e}) — guest links over iroh disabled"
+                );
+                (None, None)
+            }
+        };
 
         // Spawn the API servers in the background. The JoinHandle is stored
         // in `DaemonState::Running` (not discarded) so `stop_inner` can await
@@ -2709,28 +2917,15 @@ impl EmbeddedDaemon {
                     mcp_router::McpNotifier::new(),
                 ));
             }
-            if let Some(mesh_http_router) = mesh_http {
-                client_router = client_router.merge(mesh_http_router);
+            for router in mounted {
+                client_router = client_router.merge(router);
             }
-            if let Some(admin_http_router) = admin_http {
-                client_router = client_router.merge(admin_http_router);
-            }
-            if let Some(project_http_router) = project_http {
-                client_router = client_router.merge(project_http_router);
-            }
-            if let Some(knowledge_view_http_router) = knowledge_view_http {
-                client_router = client_router.merge(knowledge_view_http_router);
-            }
-            if let Some(corpus_watch_http_router) = corpus_watch_http {
-                client_router = client_router.merge(corpus_watch_http_router);
-            }
-            if let Some(reading_http_router) = reading_http {
-                client_router = client_router.merge(reading_http_router);
-            }
-            if let Some(solve_http_router) = solve_http {
-                client_router = client_router.merge(solve_http_router);
-            }
-            let internal_router = commonwealth_api::server::internal_router(app_state_clone);
+            let internal_router =
+                commonwealth_api::server::internal_router(app_state_clone.clone());
+            let guest_router = commonwealth_api::server::client_router_with(
+                app_state_clone,
+                commonwealth_api::client_auth::ClientAuthPolicy::UNTRUSTED_LOOPBACK,
+            );
 
             // Phase 3 takeover: a `sovereign init` invocation may have
             // spawned a standalone `sovereign serve` process holding `:9741`.
@@ -2791,9 +2986,25 @@ impl EmbeddedDaemon {
             // on this listener. Regression test:
             // `admin_http::tests::loopback_guard_works_under_production_listener_shape`.
             let client_service = client_router.into_make_service_with_connect_info::<SocketAddr>();
+            // `ConnectInfo` matters here for the same reason it does on the
+            // client listener, and one reason more: without it the guest layer
+            // cannot identify the caller at all and fails closed with a 500 on
+            // every guest request.
+            let guest_service = guest_router.into_make_service_with_connect_info::<SocketAddr>();
+            // A daemon whose guest listener failed to bind still serves
+            // everything else; `pending()` just never resolves that arm.
+            let guest_serve = async move {
+                match guest_listener {
+                    Some(l) => {
+                        let _ = axum::serve(l, guest_service).await;
+                    }
+                    None => std::future::pending::<()>().await,
+                }
+            };
             tokio::select! {
                 _ = axum::serve(client_listener, client_service) => {}
                 _ = axum::serve(internal_listener, internal_router) => {}
+                _ = guest_serve => {}
                 _ = shutdown_rx => {
                     info!("Commonwealth daemon shutting down");
                 }
@@ -2830,7 +3041,8 @@ impl EmbeddedDaemon {
             persist_dir,
         );
 
-        crate::auto_ingest::spawn_auto_collaborate_loop(app_state.clone(), internal_port);
+        let collaborate_handle =
+            crate::auto_ingest::spawn_auto_collaborate_loop(app_state.clone(), internal_port);
 
         // Re-spawn any solo corpus ingest the daemon was running before
         // restart. The mesh auto-collaborate loop above only handles
@@ -2984,9 +3196,8 @@ impl EmbeddedDaemon {
             .setup_config
             .read()
             .await
-            .as_ref()
-            .map(|cfg| cfg.daemon.freshness_watchers_enabled)
-            .unwrap_or(true);
+            .daemon
+            .freshness_watchers_enabled;
         if !freshness_enabled {
             info!(
                 "freshness watchers skipped — [daemon].freshness_watchers_enabled = false in config.toml"
@@ -3065,18 +3276,15 @@ impl EmbeddedDaemon {
         // path untouched. Forwarding is lazy per stream, so binding
         // after the listener spawn (which races to bind) is safe.
         let (cfg_iroh_enabled, iroh_transport_cfg, iroh_relay_cfg) = {
-            let guard = self.setup_config.read().await;
-            match guard.as_ref() {
-                Some(c) => (
-                    c.iroh.enabled,
-                    c.iroh.transport.clone(),
-                    commonwealth_transport::iroh::RelayConfig::from_parts(
-                        c.iroh.relay_urls.clone(),
-                        c.iroh.discovery.as_deref(),
-                    ),
+            let c = self.setup_config.read().await;
+            (
+                c.iroh.enabled,
+                c.iroh.transport.clone(),
+                commonwealth_transport::iroh::RelayConfig::from_parts(
+                    c.iroh.relay_urls.clone(),
+                    c.iroh.discovery.as_deref(),
                 ),
-                None => (None, Default::default(), Default::default()),
-            }
+            )
         };
         // Enablement is tri-state: explicit `[iroh] enabled` wins;
         // otherwise mesh participation decides — the `client-exposed`
@@ -3090,10 +3298,28 @@ impl EmbeddedDaemon {
             persist::client_exposed(&self.data_dir),
             require_encryption,
         );
+        // Who the acceptor will treat as a member. Reads the LIVE mesh on every
+        // dial rather than a snapshot: a node that left must lose reachability
+        // with its membership, and one that just joined must gain it without a
+        // restart. `removed_at` tombstones are excluded here and nowhere else.
+        let member_check: crate::iroh_access::MemberCheck = {
+            let app_state = app_state.clone();
+            Arc::new(move |dialer: commonwealth_core::ids::NodePubkey| {
+                let app_state = app_state.clone();
+                Box::pin(async move {
+                    let mesh = app_state.inner.mesh.read().await;
+                    mesh.members
+                        .values()
+                        .any(|m| m.removed_at.is_none() && m.node_pubkey == Some(dialer))
+                })
+            })
+        };
         let iroh_access = crate::iroh_access::MeshIrohAccess::start(
             &self.data_dir,
             internal_port,
             client_port,
+            guest_addr,
+            member_check.clone(),
             iroh_enabled,
             &iroh_relay_cfg,
         )
@@ -3170,6 +3396,7 @@ impl EmbeddedDaemon {
             let ip_tx = ip_transport.clone();
             let routed = iroh_routed_classes.clone();
             let required = iroh_required_classes.clone();
+            let member_check = member_check.clone();
             let rebuild: crate::iroh_watchdog::RebuildFn = Arc::new(move || {
                 let state = state.clone();
                 let data_dir = data_dir.clone();
@@ -3177,11 +3404,14 @@ impl EmbeddedDaemon {
                 let ip_tx = ip_tx.clone();
                 let routed = routed.clone();
                 let required = required.clone();
+                let member_check = member_check.clone();
                 Box::pin(async move {
                     let new = crate::iroh_access::MeshIrohAccess::start(
                         &data_dir,
                         internal_port,
                         client_port,
+                        guest_addr,
+                        member_check.clone(),
                         iroh_enabled,
                         &relay_cfg,
                     )
@@ -3240,6 +3470,7 @@ impl EmbeddedDaemon {
             mdns,
             _browse_handle: browse_handle,
             _gossip_handle: gossip_handle,
+            _collaborate_handle: collaborate_handle,
             _shutdown_tx: shutdown_tx,
             serve_handle,
             iroh_access,
@@ -3642,15 +3873,6 @@ pub struct PeerInferenceEndpoint {
     /// the HTTP connection is the only place that branches on it.
     /// Spec: `sovereign/docs/PINNED_WORKER_AS_INFERENCE_PEER.md`.
     pub transport: Option<crate::pinned_transport::PinnedTransport>,
-}
-
-impl Default for EmbeddedDaemon {
-    /// In-memory default — useful for tests and quick scripts, but
-    /// never used from the desktop app which calls
-    /// `EmbeddedDaemon::new(data_dir)` to get persistence.
-    fn default() -> Self {
-        Self::new_in_memory()
-    }
 }
 
 /// How RPC-worker discovery uses the iroh bridge for ggml's raw-TCP
@@ -4080,7 +4302,10 @@ mod tests {
         // The warm orchestrator resolves worker identity through this
         // directory; an unknown endpoint (env-configured worker) is None so
         // callers fall back to raw-IP addressing.
-        let daemon = EmbeddedDaemon::new_in_memory();
+        let daemon = EmbeddedDaemon::in_memory(
+            SetupConfig::unconfigured(),
+            crate::daemon_services::DaemonServices::mesh_admin(),
+        );
         assert_eq!(daemon.rpc_endpoint_node("10.0.0.7:50052"), None);
 
         let node = NodeId::from_u128(42);
@@ -4136,9 +4361,12 @@ mod tests {
         use commonwealth_core::mesh::Mesh;
 
         let mesh = Mesh {
+            mesh_secret: [0u8; 32],
+            invite_expires_at: None,
             id: commonwealth_core::ids::MeshId::generate(),
             name: "test".into(),
-            join_key_hash: [0u8; 32],
+            invite_key_hash: [0u8; 32],
+            invite_version: 0,
             require_encryption: false,
             members: Default::default(),
             peers: vec![],
@@ -4158,6 +4386,7 @@ mod tests {
                 embed: PathBuf::from("/m/qwen3-embedding-0.6b.gguf"),
                 code: None,
                 context_size: None,
+                fast_context_size: None,
                 max_extras_memory_gb: None,
                 extra: std::collections::BTreeMap::new(),
                 primary_pool: None,
@@ -4265,6 +4494,34 @@ mod takeover_tests {
     }
 }
 
+/// Prose for [`MeshError::RotateWouldPartition`]. A free function rather than a
+/// format string because the right sentence depends on WHICH population is
+/// non-empty, and the two remedies are different actions — "upgrade that node"
+/// versus "wait one round". A single joined list could only say one of them.
+fn describe_rotate_refusal(pre_split: &[String], unconfirmed: &[String]) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if !pre_split.is_empty() {
+        parts.push(format!(
+            "{} peer(s) are still on a pre-split build ({}) — upgrade them first",
+            pre_split.len(),
+            pre_split.join(", ")
+        ));
+    }
+    if !unconfirmed.is_empty() {
+        parts.push(format!(
+            "{} peer(s) have not been confirmed since this daemon started ({}) — \
+             retry after the next gossip round",
+            unconfirmed.len(),
+            unconfirmed.join(", ")
+        ));
+    }
+    format!(
+        "Rotating now could partition the mesh: {}. Or re-run with --force to \
+         rotate anyway.",
+        parts.join("; ")
+    )
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum MeshError {
     #[error("Mesh daemon is already running")]
@@ -4282,18 +4539,45 @@ pub enum MeshError {
     #[error("Network error: {0}")]
     Network(String),
 
-    /// `join_mesh` was called on a daemon already in a populated mesh
-    /// (members beyond self). The auto-leave-then-join shortcut is
-    /// fine for switching out of a freshly-created solo mesh, but
-    /// against a real mesh it would persist::clear before attempting
-    /// the new handshake — if that handshake then failed for any
-    /// reason (bad key, no peer, network), the user is left with the
-    /// old mesh's `mesh.json` already deleted on disk. Refuse early
-    /// so the destructive step never runs without an explicit
-    /// `mesh leave` from the caller.
-    #[error(
-        "Cannot auto-switch meshes: already in '{mesh_name}' with {members} member(s). \
-         Run `sovereign mesh leave` first if you intend to switch."
-    )]
-    AlreadyInPopulatedMesh { mesh_name: String, members: usize },
+    // `AlreadyInPopulatedMesh` was removed 2026-08-27. It refused a join while
+    // the daemon was in a populated mesh, because `join_mesh` used to
+    // `persist::clear` the outgoing mesh before the handshake and a failed
+    // handshake then left the user with no mesh on disk. `join_mesh` now PARKS
+    // instead of leaving, so nothing is deleted and there is no destructive
+    // step to refuse in front of — and refusing was itself the reason a second
+    // membership could never exist. See `tests/join_parks_not_leaves.rs`.
+    /// `rotate_invite` refused because rotating now could drop an online peer
+    /// out of the mesh. Refusing loudly beats partitioning quietly (ARCH
+    /// §18.3); `--force` overrides.
+    ///
+    /// Two populations, deliberately kept apart because their remedies differ:
+    /// `pre_split` peers authorize gossip on `invite_key_hash` and need
+    /// UPGRADING; `unconfirmed` peers have simply not been merged from since
+    /// this daemon started and need one gossip ROUND. The old single-list
+    /// wording called both "still on a pre-split build", which sent operators
+    /// hunting for un-migrated nodes that did not exist.
+    #[error("{}", describe_rotate_refusal(pre_split, unconfirmed))]
+    RotateWouldPartition {
+        pre_split: Vec<String>,
+        unconfirmed: Vec<String>,
+    },
+
+    /// `switch_mesh` was given a mesh this node is not a member of.
+    #[error("Not a member of any mesh matching '{0}' — `svrn mesh list` shows what is joined")]
+    UnknownMesh(String),
+
+    /// `switch_mesh` was given the mesh that is already active.
+    #[error("Already active in '{0}'")]
+    MeshAlreadyActive(String),
+}
+
+/// Result of [`EmbeddedDaemon::rotate_invite`].
+#[derive(Debug, Clone)]
+pub struct RotatedInvite {
+    pub mesh_name: String,
+    /// Plaintext of the freshly-minted invite key. Shown once; the mesh keeps
+    /// only its hash.
+    pub join_key: String,
+    /// When the new invite lapses, for an encrypted mesh. `None` = no expiry.
+    pub expires_at: Option<u64>,
 }

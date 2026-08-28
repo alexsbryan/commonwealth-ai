@@ -1,0 +1,14 @@
+# Raw llama-bench stdout dumps whose DISTILLED result is committed beside them.
+# Each is ~400 KB of per-run scaffolding lines; nothing cites them, and the
+# numbers that carry the verdicts live in the sibling named here.
+#
+#   kv-*.log        -> kv-sweep.out            (the KV-per-token table)
+#   verbose-ot.log  -> ot-proof.samples.tsv    (the -ot placement A/B)
+#
+# The receipts that ARE tracked, deliberately:
+#   bench-flashnext.log  — cited by scripts/sovereign-ci-bench.sh's fix as the
+#                          run where two lanes reported PASS on nothing.
+#   synth-sep-n5.log     — the post-fix pin-thrash + quality run.
+#   *-sweep.json/.tsv    — the ubatch and prompt-length sweep results.
+kv-*.log
+verbose-ot.log

@@ -44,13 +44,67 @@ pub struct WarmCacheStats {
     pub cache_dir: PathBuf,
 }
 
-/// Default cache directory the in-process worker reads
-/// (`serve_rpc_worker_if_configured` → `rpc_cache_dir`).
+/// Where the in-process RPC worker looks for cached tensors — or `None` when
+/// the operator turned caching off (`SOVEREIGN_RPC_CACHE_DIR` = `off` / `0` /
+/// empty). Default: `~/.svrnmesh/rpc-cache`.
+///
+/// THE resolution of that variable (ARCH §10.6). There were three, and the
+/// third existed *because* this one was wrong: `sovereign-mesh`'s
+/// `rpc_warm_http::worker_cache_dir` carried a note saying
+/// "`sovereign-inference`'s `default_cache_dir` doesn't model the disabled
+/// case, which is why this lives here". It didn't — it returned
+/// `Some(PathBuf::from("off"))`, so with caching disabled the warm path wrote
+/// shards into a directory literally named `off` while the worker, which DOES
+/// model the disabled case, read nothing. The upload the cache exists to avoid
+/// happened anyway, into a junk directory.
 pub fn default_cache_dir() -> Option<PathBuf> {
-    std::env::var("SOVEREIGN_RPC_CACHE_DIR")
-        .ok()
-        .map(PathBuf::from)
-        .or_else(|| Some(sovereign_core::rebrand::svrnmesh_root().join("rpc-cache")))
+    resolve_cache_dir(
+        std::env::var("SOVEREIGN_RPC_CACHE_DIR").ok().as_deref(),
+        || sovereign_core::rebrand::svrnmesh_root().join("rpc-cache"),
+    )
+}
+
+/// The rule itself, with the environment and the home directory split off so
+/// the disabling spellings are testable.
+fn resolve_cache_dir(raw: Option<&str>, default: impl FnOnce() -> PathBuf) -> Option<PathBuf> {
+    match raw {
+        Some(v) => {
+            let v = v.trim();
+            (!(v.is_empty() || v.eq_ignore_ascii_case("off") || v == "0")).then(|| PathBuf::from(v))
+        }
+        None => Some(default()),
+    }
+}
+
+#[cfg(test)]
+mod cache_dir_tests {
+    use super::*;
+
+    /// Every spelling that means "off". The writer used to accept all of them
+    /// as directory NAMES and warm shards into `./off`.
+    #[test]
+    fn the_disabling_spellings_yield_no_directory() {
+        let d = || PathBuf::from("/default");
+        for off in ["off", "OFF", "0", "", "  ", " off "] {
+            assert_eq!(
+                resolve_cache_dir(Some(off), d),
+                None,
+                "{off:?} must disable the cache, not name a directory"
+            );
+        }
+    }
+
+    #[test]
+    fn unset_is_the_default_and_a_path_is_taken_trimmed() {
+        assert_eq!(
+            resolve_cache_dir(None, || PathBuf::from("/default")),
+            Some(PathBuf::from("/default"))
+        );
+        assert_eq!(
+            resolve_cache_dir(Some("  /tmp/cache  "), || PathBuf::from("/default")),
+            Some(PathBuf::from("/tmp/cache"))
+        );
+    }
 }
 
 #[derive(Debug)]
@@ -919,6 +973,16 @@ pub struct PlanOverheads {
     /// that only exists in the process driving the graph. Charged to the plan's
     /// LAST device (plan order is RPC workers first, host last).
     pub compute_host_bytes: u64,
+    /// Model WEIGHT bytes llama.cpp projects onto the host CPU buffer, i.e.
+    /// tensors it will leave resident in the mmap rather than copy into a
+    /// device buffer. These are file-backed and reclaimable, so they are NOT
+    /// demand the local-fit gate should charge against system memory.
+    ///
+    /// ONLY trustworthy when the load sets `no_host`. Without it the host
+    /// entry is the device's PINNED host buffer (`Vulkan_Host`), whose pages
+    /// are not reclaimable — discounting those would under-charge the gate by
+    /// exactly the bytes that can starve the host. See `gate_local`.
+    pub model_host_bytes: u64,
 }
 
 impl PlanOverheads {
@@ -1745,6 +1809,7 @@ mod tests {
             context_total_bytes: GIB,     // 256 MiB/block over 4 blocks
             compute_accel_bytes: GIB / 2, // every device reserves scratch
             compute_host_bytes: GIB,      // host-side scheduler buffer
+            model_host_bytes: 0,
         };
         let fits = shard_fits(&plan, &capacities, &mass, 1.0, Some(&o)).expect("judgeable");
         assert!(
@@ -1787,6 +1852,7 @@ mod tests {
             context_total_bytes: 4 * GIB,
             compute_accel_bytes: GIB / 4,
             compute_host_bytes: 0,
+            model_host_bytes: 0,
         };
         let fits =
             shard_fits(&plan, &[10 * GIB, 10 * GIB], &mass, 1.0, Some(&o)).expect("judgeable");

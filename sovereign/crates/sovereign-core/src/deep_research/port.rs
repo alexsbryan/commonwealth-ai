@@ -24,6 +24,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use corpus_engine::index::CorpusIndex;
+use corpus_engine::Corpus;
 use sovereign_contracts::types::{CompletionRequest, CompletionResponse, Speed};
 
 use super::acquisition::web_hit_relevance;
@@ -51,7 +52,7 @@ pub fn indexes_dir() -> PathBuf {
 /// (the same validity gate the engine's `installed_indexes` uses).
 fn corpus_searchable(dir: &std::path::Path) -> bool {
     std::fs::metadata(dir.join("chunks.lance").join("_versions")).is_ok()
-        || std::fs::metadata(dir.join("_corpus_meta.json")).is_ok()
+        || std::fs::metadata(Corpus::meta_in(dir)).is_ok()
 }
 
 /// The chunk count from `_corpus_meta.json` when present; 0 when the
@@ -62,7 +63,7 @@ fn corpus_searchable(dir: &std::path::Path) -> bool {
 /// survey listed apollo11-evidence with chunks_count 0 because the
 /// read looked for the schema-v2 `chunk_count` key.
 fn corpus_chunk_count(dir: &std::path::Path) -> i64 {
-    std::fs::read_to_string(dir.join("_corpus_meta.json"))
+    std::fs::read_to_string(Corpus::meta_in(dir))
         .ok()
         .and_then(|meta| serde_json::from_str::<serde_json::Value>(&meta).ok())
         .and_then(|v| {
@@ -404,9 +405,46 @@ impl ResearchPort for LiveResearchPort {
                 .await
                 .map_err(|e| format!("fetch {url}: {e}"));
         }
-        sovereign_tools_base::web::extract::fetch_and_extract(&self.client, url)
-            .await
-            .map_err(|e| format!("fetch {url}: {e}"))
+        // The research cap, not the snippet cap (2026-08-24). The shared
+        // extractor defaulted to 4,000 characters — a chat-tool budget —
+        // and this leg took it silently, so `fetch::CHUNK_CONTENT_CAP`
+        // (12,000), the cap deep-research DECLARES for an evidence chunk,
+        // could never bind: a tighter constant three layers away had
+        // already decided. Measured over the 45 pages a logged DRB-I
+        // flight fetched: median page 22,293 chars, 88% over 4,000, and
+        // the cap kept 156,407 of 1,409,433 available characters (11%).
+        // We had already paid the fetch for all of it.
+        //
+        // Truncation is now VISIBLE. The trait returns a bare String, so
+        // the fact rides the marker the evidence layer already knows
+        // (`fetch::TRUNCATION_MARKER`, which `cap_content` appends for
+        // the same reason) and the dropped count rides the log. A cap
+        // that silently eats 89% of the evidence is the shape of bug
+        // this subsystem keeps rediscovering; it does not get to be
+        // silent again.
+        let out = sovereign_tools_base::web::extract::fetch_and_extract_capped(
+            &self.client,
+            url,
+            crate::deep_research::fetch::CHUNK_CONTENT_CAP,
+        )
+        .await
+        .map_err(|e| format!("fetch {url}: {e}"))?;
+        if out.truncated {
+            tracing::debug!(
+                target: "deep_research",
+                url = %url,
+                kept = out.text.chars().count(),
+                page_chars = out.full_chars,
+                dropped = out.dropped_chars(),
+                "fetch truncated at the evidence chunk cap"
+            );
+            return Ok(format!(
+                "{}{}",
+                out.text,
+                crate::deep_research::fetch::TRUNCATION_MARKER
+            ));
+        }
+        Ok(out.text)
     }
 
     async fn terminal_poll(&self) -> Result<(), String> {
@@ -437,9 +475,11 @@ impl ResearchPort for LiveResearchPort {
         allowed_urls: &[String],
     ) -> Result<String, String> {
         let speed = slot_for(leg);
+        let (draft_temp, draft_top_p) = draft_sampling(0.4);
         tracing::debug!(
             target: "deep_research",
             ?leg, ?speed, prompt_chars = prompt.len(),
+            temperature = ?draft_temp, pinned = sampling_pinned(),
             "deep-research: drafting leg dispatched"
         );
         let resp = complete_with_shed_retry(
@@ -449,7 +489,8 @@ impl ResearchPort for LiveResearchPort {
                 system_message: system_message.map(|s| s.to_string()),
                 preferred_speed: speed,
                 max_tokens: None,
-                temperature: Some(0.4),
+                temperature: draft_temp,
+                top_p: draft_top_p,
                 structured_output: None,
                 think_budget: None,
                 url_allowlist: Some(allowed_urls.to_vec()),
@@ -458,7 +499,25 @@ impl ResearchPort for LiveResearchPort {
             "draft",
         )
         .await
-        .map_err(|e| format!("draft ask: {e}"))?;
+        .map_err(|e| {
+            let text = e.to_string();
+            if !looks_prompt_overflow(&text) {
+                return format!("draft ask: {text}");
+            }
+            // The raw message names a token count and a window and NOTHING
+            // that can be acted on. Name the slot this leg runs on and the
+            // key that sizes it, because that is the repair.
+            tracing::error!(
+                target: "deep_research",
+                ?leg, ?speed, prompt_chars = prompt.len(), error = %text,
+                "deep-research: the prompt does not fit this slot's context \
+                 window — a CONFIGURATION failure, not load"
+            );
+            format!(
+                "draft ask: {text}\n  {}",
+                prompt_overflow_hint(speed, leg, prompt.len())
+            )
+        })?;
         Ok(resp.text)
     }
 
@@ -479,6 +538,178 @@ impl ResearchPort for LiveResearchPort {
         Ok(out)
     }
 
+    async fn gap_queries(&self, question: &str, gaps: &[String]) -> Result<Vec<String>, String> {
+        if gaps.is_empty() {
+            return Ok(Vec::new());
+        }
+        // ONE CALL PER GAP, not one call per round. The batched form was
+        // measured first and lost its count on exactly the rounds that
+        // need this most: replaying the logged t7a flight's gap lists
+        // through a batched prompt, 11 of 15 rounds returned the right
+        // number of lines and 4 did not — and the misses were the LONG
+        // lists (13, 19 and 21 gaps), including both rounds of task 90,
+        // the worst-yielding task in the flight. Asking a 4B to emit
+        // exactly 21 lines in order is asking it to count; asking it to
+        // rewrite one sentence is the narrow role it is good at. Per-gap
+        // also makes the fallback granular — one unusable rewrite costs
+        // that gap its reformulation instead of discarding twenty good
+        // ones alongside it.
+        //
+        // `buffered`, NOT `buffer_unordered`: the caller matches these
+        // back to gaps BY INDEX, so order is the contract (the same
+        // reason `audit_pass` uses it). AUDIT_CONCURRENCY tracks the
+        // daemon's `max_concurrent_turns`; past it the REST path sheds.
+        use futures::StreamExt as _;
+        // Owned, so the per-gap futures borrow nothing from the caller's
+        // slice (a borrowing closure here is not general enough over the
+        // lifetimes the stream needs).
+        // The gap text is DRAFT prose, so it carries the draft's citation
+        // apparatus — `[Source: ev-1]` spans and bare `ev-N` ids. Left in,
+        // they ride into the rewrite and out the other side ("ev-2
+        // liability allocation accidents"), which is the same leak
+        // `template_query` strips on the deterministic path. Strip once,
+        // here, before the model ever sees them — reusing the existing
+        // decider (`containment::strip_citation_spans`) rather than
+        // minting a second one (§19, §10.6).
+        let owned: Vec<String> = gaps
+            .iter()
+            .map(|g| {
+                let cleaned = crate::deep_research::containment::strip_citation_spans(g);
+                cleaned
+                    .split_whitespace()
+                    .filter(|w| {
+                        let core = w.trim_matches(|c: char| !c.is_alphanumeric() && c != '-');
+                        !(core.starts_with("ev-")
+                            && core[3..].chars().all(|c| c.is_ascii_digit())
+                            && core.len() > 3)
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .collect();
+        let results: Vec<Result<String, String>> =
+            futures::stream::iter(owned.into_iter().map(|gap| {
+                let question = question.to_string();
+                async move {
+                    let prompt = format!(
+                        "A research report made this statement and could not support it:\n\n\
+                     {gap}\n\n\
+                     Write ONE web search query that would find evidence for it.\n\n\
+                     Rules:\n\
+                     - Name the subject in full. Your query is read with no other \
+                     context, so replace every pronoun and every phrase like \"this \
+                     system\" or \"the protocol\" with the thing it refers to.\n\
+                     - Ask for one thing.\n\
+                     - Keep any specific figure, date or proper name the statement \
+                     carries.\n\
+                     - Write what you would type into a search box, not a sentence \
+                     from a report.\n\
+                     - Output the query and nothing else.\n\n\
+                     Research question, for context only: {question}"
+                    );
+                    let (rewrite_temp, rewrite_top_p) = draft_sampling(0.3);
+                    complete_with_shed_retry(
+                        &*self.provider,
+                        &CompletionRequest {
+                            prompt,
+                            system_message: None,
+                            preferred_speed: Speed::Fast,
+                            max_tokens: None,
+                            temperature: rewrite_temp,
+                            top_p: rewrite_top_p,
+                            // Constrained to a one-field object, and thinking
+                            // off. Measured: the 4B prefixed its answer with
+                            // its own reasoning ("The user wants me to write a
+                            // web search query...", "Thinking Process:") on 4
+                            // of 46 rewrites, and a preamble blocklist is
+                            // whack-a-mole — a new opener defeats it (§0).
+                            // Under a schema the preamble cannot be emitted at
+                            // all: valid JSON has nowhere to put it (§7.6 —
+                            // never ask a model to guarantee what code can
+                            // enforce).
+                            structured_output: Some(serde_json::json!({
+                                "type": "object",
+                                "properties": { "query": { "type": "string" } },
+                                "required": ["query"]
+                            })),
+                            think_budget: Some(0),
+                            enable_thinking: Some(false),
+                            url_allowlist: None,
+                            ..Default::default()
+                        },
+                        "gap-queries",
+                    )
+                    .await
+                    .map(|r| {
+                        // The Fast slot is a 4B and it leaks its reasoning
+                        // preamble ("The user wants me to write a web search
+                        // query...", "Thinking Process:") ahead of the answer
+                        // — the documented small-model shape this workspace
+                        // has hit before. Reuse the runtime's stripper rather
+                        // than pattern-matching preambles here.
+                        // The schema's object first; the line form is the
+                        // fallback for a provider that could not honour it
+                        // (recorded by falling through to the gap's own text
+                        // downstream, never silently).
+                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(r.text.trim()) {
+                            if let Some(q) = v.get("query").and_then(|q| q.as_str()) {
+                                if !q.trim().is_empty() {
+                                    return q.trim().trim_matches('"').to_string();
+                                }
+                            }
+                        }
+                        let text = crate::title::strip_thinking_response(&r.text);
+                        text.lines()
+                            .map(|l| {
+                                l.trim()
+                                    .trim_start_matches(['-', '*', ' '])
+                                    .trim_start_matches(|c: char| {
+                                        c.is_ascii_digit() || c == '.' || c == ')'
+                                    })
+                                    .trim()
+                                    .trim_matches('"')
+                                    .to_string()
+                            })
+                            .find(|l| !l.is_empty())
+                            .unwrap_or_default()
+                    })
+                    .map_err(|e| format!("gap-queries ask: {e}"))
+                }
+            }))
+            .buffered(crate::deep_research::AUDIT_CONCURRENCY)
+            .collect()
+            .await;
+
+        // A gap whose rewrite failed or came back empty keeps its OWN
+        // text at that index; the caller's `query_refusal` gate then
+        // decides whether that is dispatchable. Never a silent
+        // substitution — `formed_by` on the fetch list carries which
+        // shape produced each query.
+        let mut out = Vec::with_capacity(gaps.len());
+        let mut failed = 0usize;
+        for (i, r) in results.into_iter().enumerate() {
+            match r {
+                Ok(q) if !q.trim().is_empty() => out.push(q),
+                _ => {
+                    failed += 1;
+                    out.push(gaps[i].clone());
+                }
+            }
+        }
+        if failed == gaps.len() {
+            return Err(format!("all {failed} gap-query rewrites failed"));
+        }
+        if failed > 0 {
+            tracing::warn!(
+                target: "deep_research",
+                gaps = gaps.len(),
+                failed,
+                "gap-queries: some rewrites failed — those gaps keep their own text"
+            );
+        }
+        Ok(out)
+    }
+
     async fn plan_subquestions(&self, question: &str) -> Result<Vec<String>, String> {
         // t1d fix 2 (breadth): the acquisition frontier — a constrained
         // draft asking for the question's decomposition, one sub-
@@ -486,7 +717,9 @@ impl ResearchPort for LiveResearchPort {
         // (Speed::Slow, temperature 0.4) with NO url allowlist: the
         // frontier is a question list, not report content, and must not
         // cite. Lines are parsed deterministically (marker-stripped,
-        // deduped, capped at the shared FRONTIER_MAX).
+        // deduped, capped at the shared FRONTIER_MAX) — and the prompt
+        // now ASKS for that many, because the cap alone never made the
+        // model produce them.
         //
         // t1e (figure-hunting): the instruction asks, generically, what
         // measures and numbers each sub-question implies — an index, a
@@ -498,14 +731,24 @@ impl ResearchPort for LiveResearchPort {
         // its own knowledge. The loop's deterministic fold-in
         // (acquisition::figure_hunt_frontier) then guarantees every
         // sub-question carries a specifier structurally.
+        // The WIDTH is asked for, not left to the model's taste. With no
+        // target named, the 27B returned EIGHT lines on task 69 against a
+        // cap of twelve, and the loop's breadth was decided by that
+        // silence — gap rounds never recovered it (estate::FRONTIER_MAX
+        // carries the measurement). The number comes from the cap itself
+        // so the ask and the parser's ceiling cannot drift apart (§10.6).
+        let want = crate::deep_research::estate::FRONTIER_MAX;
         let prompt = format!(
-            "Decompose the research question into sub-questions that a web search could answer. \
+            "Decompose the research question into {want} sub-questions that a web search could \
+             answer. Cover every distinct facet the question raises, including ones it implies \
+             rather than names. \
              For each sub-question, name the specific measure or statistic it implies — an index, \
              a ratio, a share, a rate, a count, a median, a price, a percentage change — and the \
              entities it involves (cities, years), so a search for the data can retrieve it. If the \
              question implies specific numbers, name them. One sub-question per line, no citations, \
              no numbering, no commentary.\n\nQuestion: {question}"
         );
+        let (plan_temp, plan_top_p) = draft_sampling(0.4);
         let resp = complete_with_shed_retry(
             &*self.provider,
             &CompletionRequest {
@@ -513,7 +756,8 @@ impl ResearchPort for LiveResearchPort {
                 system_message: None,
                 preferred_speed: Speed::Slow,
                 max_tokens: None,
-                temperature: Some(0.4),
+                temperature: plan_temp,
+                top_p: plan_top_p,
                 structured_output: None,
                 think_budget: None,
                 url_allowlist: None,
@@ -692,6 +936,40 @@ fn looks_shed(text: &str) -> bool {
     .any(|tok| t.contains(tok))
 }
 
+/// Is this inference error a prompt that cannot fit the slot's context
+/// window? Such a failure is DETERMINISTIC and must never be retried: the
+/// prompt does not shrink and the window does not grow, so every attempt
+/// fails identically while the "shed" label points diagnosis at load.
+///
+/// Classified by CONTENT, not by status code, deliberately. The local daemon
+/// reports it as 503, but a peer, a proxy, or a future version may report it
+/// as 400 or 413 — and the retry decision must be right in all of those
+/// cases. `looks_shed` stays untouched: it answers "did this arrive in shed
+/// shape?", which is still true here; this answers the different question the
+/// retry loop actually needs.
+fn looks_prompt_overflow(text: &str) -> bool {
+    let t = text.to_lowercase();
+    t.contains("prompt too long") || t.contains("exceeds the context window")
+}
+
+/// What to actually DO about a prompt that does not fit its slot.
+///
+/// The daemon's message names a token count and a window and nothing that can
+/// be acted on; a reader who has not been bitten before will look at load,
+/// because the failure arrives wearing a 503. This names the slot the leg runs
+/// on and the key that sizes it, which is the repair.
+fn prompt_overflow_hint(speed: Speed, leg: DraftLeg, prompt_chars: usize) -> String {
+    let key = match speed {
+        Speed::Fast => "[models].fast_context_size (unset falls back to context_size)",
+        _ => "[models].context_size",
+    };
+    format!(
+        "The {speed:?} slot serves the {leg:?} leg, and this prompt was \
+         {prompt_chars} chars. A window smaller than the leg's evidence budget \
+         fails every time — check {key} in ~/.sovereign/config.toml."
+    )
+}
+
 /// The Retry-After hint from a shed body, in seconds. Tries the
 /// admission shape's `retry_after_secs` key first (a bare `retry_after`
 /// search would match inside `retry_after_secs`), then the busy
@@ -743,7 +1021,18 @@ async fn complete_with_shed_retry(
             }
             Err(e) => {
                 let text = e.to_string();
-                if attempt >= MAX_SHED_RETRIES || !looks_shed(&text) {
+                // A prompt that does not fit the slot's context window is
+                // DETERMINISTIC — the same prompt against the same window
+                // fails identically forever — so it is never a shed, whatever
+                // status code it arrives under. The daemon returns it as a
+                // 503, which `looks_shed` matches on, and the retries then
+                // burn the backoff AND file a CONFIGURATION failure under
+                // LOAD. Measured 2026-08-27: `fast_context_size = 16384` left
+                // the round leg's ~96,000-char budget unservable and every
+                // flight died after three pointless retries whose log line
+                // said "shed", sending the reader to look at contention.
+                if attempt >= MAX_SHED_RETRIES || !looks_shed(&text) || looks_prompt_overflow(&text)
+                {
                     // Honest error, surfaced raw — never a substitution.
                     return Err(text);
                 }
@@ -759,6 +1048,77 @@ async fn complete_with_shed_retry(
                 tokio::time::sleep(std::time::Duration::from_secs(backoff)).await;
             }
         }
+    }
+}
+
+/// Whether this run forces EVERY drafting leg onto the primary (Slow) slot.
+///
+/// On-form: `SOVEREIGN_DR_ALL_LEGS_SLOW=1` (also `true`, case-insensitive);
+/// every other value, including unset, keeps the measured per-leg mapping in
+/// [`slot_for`]. Shares [`pin_requested`] with the sampling pin so there is
+/// ONE answer to "what counts as on" across the measurement switches.
+///
+/// Why it exists: the strategy question "is the gap to AIQ our architecture or
+/// our model?" is only answerable if the big model does the WRITING, and the
+/// writing leg (`Section`) is a Fast-slot leg.
+fn all_legs_slow() -> bool {
+    std::env::var("SOVEREIGN_DR_ALL_LEGS_SLOW")
+        .map(|v| pin_requested(&v))
+        .unwrap_or(false)
+}
+
+/// Whether this run pins the writer's sampling for MEASUREMENT.
+///
+/// Why it exists: the judge is pinned greedy (temperature 0.0, top_p 1.0 —
+/// "one judge instrument, one sampling pin") while the writer drafts at
+/// temperature 0.3-0.4. Measured 2026-08-25 on the task-69 replay bed, THREE
+/// runs at identical configuration scored 42.21 / 41.99 / 48.91 — a 6.92-point
+/// spread with evidence held constant, matching the 7.56-point pipeline spread
+/// measured earlier. Every A/B run against that bed tested 2-3 point levers
+/// with n=2, so none of them could resolve: we pinned the instrument and left
+/// the subject free, then read the subject's variance as our levers.
+///
+/// On-form: `SOVEREIGN_DR_PIN_SAMPLING=1` (also `true`, case-insensitive).
+/// EVERY other value, including unset, keeps production sampling — this is a
+/// measurement harness, not a product change, and it must never alter what a
+/// user gets by accident.
+///
+/// What it does NOT fix: a pinned writer is a slightly DIFFERENT writer than
+/// the sampled one we ship, so a lever measured under the pin still needs
+/// confirming unpinned before it lands. That trade is deliberate — an
+/// underpowered measurement of the real writer resolves nothing at all.
+fn sampling_pinned() -> bool {
+    std::env::var("SOVEREIGN_DR_PIN_SAMPLING")
+        .map(|v| pin_requested(&v))
+        .unwrap_or(false)
+}
+
+/// Pure policy so the on-form is testable without touching process env
+/// (same split as `memory_watch::hard_limit_policy`).
+fn pin_requested(raw: &str) -> bool {
+    let v = raw.trim();
+    v == "1" || v.eq_ignore_ascii_case("true")
+}
+
+/// The sampling a drafting call should carry: `(temperature, top_p)`.
+///
+/// ONE decider for all three drafting call sites (§10.6) — before this,
+/// three literals meant a pin could be applied to two of them and silently
+/// missed on the third, which is exactly the shape of bug that makes a
+/// measurement look controlled when it is not.
+fn draft_sampling(production_temperature: f32) -> (Option<f32>, Option<f32>) {
+    draft_sampling_for(sampling_pinned(), production_temperature)
+}
+
+/// Pure policy — the decision without the env read, so a test can cover
+/// both arms in a parallel suite.
+fn draft_sampling_for(pinned: bool, production_temperature: f32) -> (Option<f32>, Option<f32>) {
+    if pinned {
+        // Greedy, and top_p closed — identical to the judge's pin, so the
+        // writer and the ruler are deterministic under the same switch.
+        (Some(0.0), Some(1.0))
+    } else {
+        (Some(production_temperature), None)
     }
 }
 
@@ -782,13 +1142,39 @@ async fn complete_with_shed_retry(
 /// This is a mapping, not a policy — if a measurement says `Synthesis`
 /// survives the 4B, this is the one line that changes.
 fn slot_for(leg: DraftLeg) -> Speed {
+    // MEASUREMENT ESCAPE HATCH, default off. `Round` and `Section` route to
+    // Fast below — and `Section` is the leg that WRITES THE DELIVERABLE. So a
+    // model-ceiling diagnostic that only repoints the primary slot would leave
+    // the actual writing on the 4B and answer a question nobody asked. This
+    // forces every leg onto the primary slot so "what does our architecture
+    // score when a big model writes it?" is the question actually measured.
+    // It is not a product mode: it costs the 5x Fast-slot speedup on the two
+    // volume legs (measured 13.46s vs 68.95s per call, 2026-08-24).
+    slot_for_with(all_legs_slow(), leg)
+}
+
+/// Pure policy — the routing decision without the env read, so both arms are
+/// testable in a parallel suite.
+fn slot_for_with(forced_slow: bool, leg: DraftLeg) -> Speed {
+    if forced_slow {
+        return Speed::Slow;
+    }
     match leg {
         // One call per run, and it decides the shape of everything after.
         DraftLeg::Plan => Speed::Slow,
         // One call per run, over the drafted report rather than evidence.
         DraftLeg::Synthesis => Speed::Slow,
+        // One call per run, and it decides the deliverable's structure —
+        // the dimension the criteria weigh most heavily.
+        DraftLeg::Outline => Speed::Slow,
         // One call per sub-question — the volume legs.
         DraftLeg::Round | DraftLeg::Section => Speed::Fast,
+        // One call per sub-question, so a volume leg by count — but it is
+        // the leg the WRITER then reads instead of the evidence, and a
+        // fabricated finding here becomes a cited sentence downstream that
+        // the audit cannot locate. Bought on the slow slot deliberately;
+        // the cost is named in the DEFAULTS_LEDGER row.
+        DraftLeg::Research => Speed::Slow,
     }
 }
 
@@ -853,8 +1239,9 @@ pub async fn build_port(
 #[cfg(test)]
 mod tests {
     use super::{
-        complete_with_shed_retry, extract_pdf_bytes, looks_shed, shed_retry_hint_secs,
-        MAX_SHED_RETRIES,
+        complete_with_shed_retry, draft_sampling_for, extract_pdf_bytes, looks_prompt_overflow,
+        looks_shed, pin_requested, prompt_overflow_hint, shed_retry_hint_secs, slot_for_with,
+        DraftLeg, MAX_SHED_RETRIES,
     };
     use crate::traits::InferenceProvider;
     use futures::Stream;
@@ -933,6 +1320,59 @@ mod tests {
     /// retry_after key), the evidenced seed-05 death (no retry key at
     /// all — default backoff), and a transport failure (never a shed).
     #[test]
+    fn forcing_every_leg_slow_overrides_the_per_leg_mapping() {
+        // The mapping is the DEFAULT, and it must stay the default: the two
+        // volume legs live on Fast for a measured 5x, and losing that
+        // silently would make every run slower for no stated reason.
+        assert_eq!(slot_for_with(false, DraftLeg::Section), Speed::Fast);
+        assert_eq!(slot_for_with(false, DraftLeg::Round), Speed::Fast);
+        assert_eq!(slot_for_with(false, DraftLeg::Plan), Speed::Slow);
+        assert_eq!(slot_for_with(false, DraftLeg::Synthesis), Speed::Slow);
+        // Forced: EVERY leg, especially Section — the leg that writes the
+        // deliverable, and the whole point of a model-ceiling diagnostic.
+        for leg in [
+            DraftLeg::Section,
+            DraftLeg::Round,
+            DraftLeg::Plan,
+            DraftLeg::Synthesis,
+            DraftLeg::Outline,
+        ] {
+            assert_eq!(
+                slot_for_with(true, leg),
+                Speed::Slow,
+                "{leg:?} must be forced Slow"
+            );
+        }
+    }
+
+    #[test]
+    fn the_sampling_pin_is_opt_in_and_covers_every_drafting_leg() {
+        // On-form, and nothing else. A measurement switch that turned itself
+        // on from a stray value would silently change what users get.
+        assert!(pin_requested("1"));
+        assert!(pin_requested("true"));
+        assert!(pin_requested("TRUE"));
+        assert!(pin_requested(" 1 "));
+        for off in ["0", "", "  ", "yes", "on", "banana", "2"] {
+            assert!(!pin_requested(off), "{off:?} must NOT arm the pin");
+        }
+
+        // Production sampling is untouched when the pin is off, and the
+        // per-leg default is preserved rather than flattened.
+        assert_eq!(draft_sampling_for(false, 0.4), (Some(0.4), None));
+        assert_eq!(draft_sampling_for(false, 0.3), (Some(0.3), None));
+
+        // Pinned: greedy AND top_p closed, identical to the judge's pin, so
+        // writer and ruler are deterministic under one switch.
+        assert_eq!(draft_sampling_for(true, 0.4), (Some(0.0), Some(1.0)));
+        assert_eq!(
+            draft_sampling_for(true, 0.3),
+            (Some(0.0), Some(1.0)),
+            "the pin must not vary by leg — a per-leg pin is not a pin"
+        );
+    }
+
+    #[test]
     fn shed_classifier_and_hint_parse_the_real_wire_shapes() {
         let seed_05 = "Inference error: Remote API returned 503 Service Unavailable: \
             {\"error\":{\"message\":\"local inference failed: Inference error: MTP inference \
@@ -987,6 +1427,79 @@ mod tests {
             2,
             "one shed + the answering call"
         );
+    }
+
+    /// THE 2026-08-27 DEATH, verbatim. `fast_context_size = 16384` left the
+    /// round leg's ~96,000-char evidence budget unservable. The daemon
+    /// reported it as a 503, `looks_shed` matched, and the client spent three
+    /// backoffs on a prompt that could never fit — while the log line said
+    /// "shed", which points diagnosis at LOAD instead of at config.toml.
+    #[tokio::test]
+    async fn a_prompt_that_cannot_fit_the_window_is_terminal_not_a_shed() {
+        let measured = "Inference error: Remote API request returned 503 Service \
+            Unavailable: {\"error\":{\"message\":\"local inference failed: Inference \
+            error: Prompt too long: 21014 tokens already meets or exceeds the context \
+            window of 16380. Shorten the conversation.\",\"type\":\"backend_error\"}}";
+
+        // It genuinely DOES arrive in shed shape. That is precisely why the
+        // second check has to exist — if this assertion ever flips, the
+        // classifier changed underneath and this test is no longer the guard
+        // it claims to be.
+        assert!(
+            looks_shed(measured),
+            "the daemon really does report it as a 503"
+        );
+        assert!(looks_prompt_overflow(measured));
+
+        let stub = Arc::new(ShedStub {
+            fails: 99, // it would never stop failing, because it cannot
+            error_text: measured.to_string(),
+            attempts: Arc::new(Mutex::new(0)),
+        });
+        let request = CompletionRequest {
+            prompt: "q".to_string(),
+            ..Default::default()
+        };
+        let err = complete_with_shed_retry(&*stub, &request, "draft")
+            .await
+            .unwrap_err();
+        assert!(
+            err.contains("Prompt too long"),
+            "surfaced raw, not substituted: {err}"
+        );
+        assert_eq!(
+            *stub.attempts.lock().unwrap(),
+            1,
+            "ONE attempt — a deterministic failure must never be retried"
+        );
+    }
+
+    /// The correction must not swallow real sheds. A deadline overrun says
+    /// "exceeded" too, and it IS transient — retrying is the whole point.
+    #[test]
+    fn a_deadline_overrun_is_still_a_shed_and_not_a_prompt_overflow() {
+        let deadline = "Inference error: Remote API returned 503 Service Unavailable: \
+            {\"error\":{\"message\":\"local inference failed: Inference error: MTP \
+            inference deadline exceeded after 300s (3560 tokens)\"}}";
+        assert!(looks_shed(deadline));
+        assert!(
+            !looks_prompt_overflow(deadline),
+            "'deadline exceeded' must not be read as a context-window overflow"
+        );
+    }
+
+    /// The hint names the SLOT and the KEY, because the daemon's own message
+    /// names neither and that is what cost a flight.
+    #[test]
+    fn the_overflow_hint_names_the_slot_and_the_config_key() {
+        let fast = prompt_overflow_hint(Speed::Fast, DraftLeg::Round, 98_936);
+        assert!(fast.contains("fast_context_size"), "{fast}");
+        assert!(fast.contains("98936"), "{fast}");
+        // The Slow legs are sized by a DIFFERENT key; naming the wrong one
+        // sends the reader to edit a line that cannot help.
+        let slow = prompt_overflow_hint(Speed::Slow, DraftLeg::Synthesis, 12);
+        assert!(slow.contains("[models].context_size"), "{slow}");
+        assert!(!slow.contains("fast_context_size"), "{slow}");
     }
 
     /// Sheds twice with a 1s hint, then succeeds: three attempts, the

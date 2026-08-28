@@ -604,6 +604,48 @@ impl CorpusIndex {
     }
 
     /// Load specific chunks by their IDs.
+    /// Re-acquire stored chunks by row id, as `ScoredChunk`s stamped by this
+    /// index.
+    ///
+    /// The door for "I have a chunk id and I need the passage back" — the
+    /// atlas-grounding path had been calling [`Self::get_chunks`] and
+    /// assembling a `ScoredChunk` itself, which meant real index content
+    /// entered the pool with no provenance at all (TOPOLOGY §10 rung 9.1,
+    /// hazard 1).
+    ///
+    /// Custody is [`Custody::Unknown`], and that is a statement rather than a
+    /// gap: [`StoredChunk`] carries no metadata column, so custody is not a
+    /// fact this door can read. Unknown REFUSES downstream, which is the
+    /// correct posture — the alternative is a fabricated class (ARCH §18.3).
+    /// `score` is left at 0.0 for the caller to rank.
+    pub async fn acquire_chunks(
+        &self,
+        chunk_ids: &[u64],
+    ) -> Result<Vec<crate::types::ScoredChunk>> {
+        let stored = self.get_chunks(chunk_ids).await?;
+        Ok(stored
+            .into_iter()
+            .map(|s| crate::types::ScoredChunk {
+                content: s.content,
+                title: s.title,
+                url: None,
+                corpus_id: self.corpus_id().to_string(),
+                score: 0.0,
+                metadata: std::collections::HashMap::new(),
+                chunk_id: Some(s.id),
+                source_doc_id: None,
+                vector_distance: None,
+                provenance: crate::index::ChunkProvenance::Acquired(
+                    crate::index::Acquisition::stamped(
+                        self.corpus_id(),
+                        kernel_types::Custody::Unknown,
+                        kernel_types::Grain::Leaf,
+                    ),
+                ),
+            })
+            .collect())
+    }
+
     pub async fn get_chunks(&self, chunk_ids: &[u64]) -> Result<Vec<StoredChunk>> {
         if chunk_ids.is_empty() {
             return Ok(Vec::new());

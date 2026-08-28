@@ -1,0 +1,26 @@
+/home/alexbryan/.bashrc: line 51: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+    fast slot n_ctx=65536 (the writer's real ceiling)
+    bed dr-1787887462 — 52 chunks, 20 sections, 0 notes, baseline 16x4
+=== COMPOSE SWEEP rep1 2026-08-27T20:55:10-07:00 ===
+    arms 16:4   task 69   judge Qwen3.8-27B-UD-Q6_K_XL
+    EXTRA_ENV SOVEREIGN_DR_REPORT_ARCHITECTURE=1
+    HEAD 9588704c2
+--- 16x4 2026-08-27T20:55:10-07:00
+
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1216.61s
+
+error: test failed, to rerun pass `-p sovereign-core --test compose_replay`
+    env crossed: flew ['16x4']
+    merged -> 1 arm(s) in /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-compose/read-arch/dr-1787887462/arms-merged.json
+
+=== SCORING 2 arms — task 69, judge Qwen3.8-27B-UD-Q6_K_XL ===
+    16x4      11336 words  overall 52.3127
+    16x4.rendered  11270 words  overall 52.0402
+
+=== CURVE ===
+    arm        overall    delta    words       min
+    16x4       52.3127    +0.00    11336      20.3
+    16x4.rendered   52.0402    -0.27    11270       n/a
+
+    Deltas are vs the lowest-budget arm that scored.
+    Pre-audit drafts, n=1: a single-run delta is not a result (18.5).

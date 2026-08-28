@@ -16,21 +16,17 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::{
-    Effect, Idempotency, Latency, Permission, Scope, StepOutput, ToolContext, ToolDescriptor,
-    ToolExample,
-};
+use sovereign_core::types::{StepOutput, ToolContext};
 
 use corpus_engine::enrichment::atlas::analysis::{compute_aggregates, flags, FlagKind};
 use corpus_engine::enrichment::atlas::atoms::AtomEnvelope;
 use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, ATLAS_DIRNAME};
 use corpus_engine::enrichment::pipeline::atlas::EntityType;
 use corpus_engine::CorpusEngine;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 const DEFAULT_CORPUS_ID: &str = "sf-assessor-roll";
 const DEFAULT_ENTITY_TYPE: &str = "parcel";
@@ -52,80 +48,21 @@ impl ParcelAnalyticsTool {
     }
 }
 
-#[async_trait]
-impl Tool for ParcelAnalyticsTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "parcel_analytics".to_string(),
-            name: "Parcel Analytics (Land-Value Tax)".to_string(),
-            description: "Compute land-value-tax rates and land-base aggregates \
-                DETERMINISTICALLY from a corpus of parcel atoms (default \
-                `sf-assessor-roll`). Returns pre-cited figures for TWO reforms — \
-                (a) the property-tax SWAP: the revenue-neutral rate for a \
-                land-only tax replacing today's property tax \
-                (property_tax_swap_rate, on land+improvements), and (b) the \
-                business-tax replacement (neutral_rate) — plus land value total, \
-                parcel count, and land-share / underuse flag counts. Every figure \
-                MUST be quoted verbatim: each is summed from source parcels, never \
-                estimated. Use this for any land-value-tax dollar figure, rate, or \
-                count instead of doing the arithmetic yourself."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "corpus_id": {
-                        "type": "string",
-                        "description": "Parcel corpus id (default `sf-assessor-roll`)."
-                    },
-                    "business_tax_target": {
-                        "type": "number",
-                        "description": "Revenue the flat land levy must replace, in dollars (default 1.4e9 — the SF business-tax take)."
-                    },
-                    "current_property_tax_rate": {
-                        "type": "number",
-                        "description": "Effective property-tax rate for the labelled current-tax estimate (default 0.0118)."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![ToolExample {
-                situation: "Compute the revenue-neutral land-value-tax rate and the total \
-                    assessed land value for SF from the parcel roll."
-                    .to_string(),
-                call: json!({
-                    "corpus_id": "sf-assessor-roll",
-                    "business_tax_target": 1_400_000_000
-                }),
-            }],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "corpus_id": {"type": "string"},
-                    "parcel_count": {"type": "number"},
-                    "land_value_total": {"type": "number"},
-                    "improvement_value_total": {"type": "number"},
-                    "business_tax_target": {"type": "number"},
-                    "neutral_rate": {"type": "number", "description": "= business_tax_target / land_value_total, on the LAND base (business-tax replacement)"},
-                    "property_tax_revenue_est": {"type": "number", "description": "= (land + improvement) × property_tax_rate — est. revenue today's property tax raises"},
-                    "property_tax_swap_rate": {"type": "number", "description": "= property_tax_revenue_est / land_value_total — revenue-neutral land-ONLY rate replacing the property tax (the swap)"},
-                    "high_land_share_count": {"type": "number"},
-                    "underused_count": {"type": "number"},
-                    "cited_figures": {"type": "array", "description": "Pre-formatted figures with [corpus: …] citations — quote these verbatim."},
-                    "summary": {"type": "string", "description": "All cited figures as one quotable block."}
-                }
-            })),
-        }
+impl ParcelAnalyticsTool {
+    /// Bind this tool's state to its `parcel_analytics` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("parcel_analytics", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `parcel_analytics`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus_id = params
             .get("corpus_id")
             .and_then(|v| v.as_str())

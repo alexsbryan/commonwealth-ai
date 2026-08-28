@@ -24,6 +24,7 @@
 //! - `GET /health` — [`HealthInfo`] (200 once the model is loaded, 503 while loading)
 
 use serde::{Deserialize, Serialize};
+use sovereign_contracts::oicp::InferenceError;
 use sovereign_contracts::{Error, Result, StreamFrame};
 
 /// One-shot completion.
@@ -130,37 +131,37 @@ impl WireError {
         }
     }
 
-    /// Reconstruct a best-effort typed [`Error`] from the envelope. Unknown
-    /// kinds collapse to [`Error::Inference`] (the fault came from the
-    /// inference child regardless).
+    /// Reconstruct a typed [`Error`] from the envelope.
+    ///
+    /// The exact inverse of [`error_kind`], because both directions are now
+    /// one closed set on [`InferenceError`] instead of two hand-written
+    /// matches. They had DIVERGED: this function had no `"compute_unavailable"`
+    /// arm while the encoder emitted one, so a child that fail-fasted with
+    /// "slot warming, retry after the supervisor respawns" arrived here as a
+    /// generic `Inference` fault and the caller lost the reason to retry.
+    /// `"queue_shed"` had no tag at all and flattened the same way.
+    ///
+    /// The envelope carries a tag and a sentence, so the two STRUCTURED
+    /// variants cannot come back whole: `ComputeUnavailable` arrives with the
+    /// rendered text in `reason` and an empty `slot`, and `QueueShed` cannot
+    /// be rebuilt from prose at all and stays `Inference`. The variant is what
+    /// callers branch on, and that is what this restores.
     pub fn into_error(self) -> Error {
         let WireErrorBody { kind, message } = self.error;
-        match kind.as_str() {
-            "model_not_loaded" => Error::ModelNotLoaded(message),
-            "invalid_input" => Error::InvalidInput(message),
-            "not_implemented" => Error::NotImplemented(message),
-            "routing" => Error::Routing(message),
-            "cancelled" => Error::Cancelled,
-            _ => Error::Inference(message),
-        }
+        InferenceError::from_wire(&kind, message).into()
     }
 }
 
-/// Stable kebab/snake variant tag for a contract [`Error`], used as the
-/// wire `kind`. Kept deliberately small — only the variants a compute
-/// child can plausibly produce get a distinct tag; the rest map to
-/// `"inference"`.
+/// Stable snake_case variant tag for a contract [`Error`], used as the wire
+/// `kind`.
+///
+/// Delegates rather than deciding. The tag vocabulary belongs to the protocol,
+/// so [`InferenceError::kind`] owns it and this is the projection of a runtime
+/// error onto it — one decider, and the widening of a runtime-only variant to
+/// `"inference"` is stated in `From<&Error> for InferenceError` rather than
+/// hidden in a `_` arm here (ARCH §10.6).
 pub fn error_kind(err: &Error) -> &'static str {
-    match err {
-        Error::Inference(_) => "inference",
-        Error::ComputeUnavailable { .. } => "compute_unavailable",
-        Error::ModelNotLoaded(_) => "model_not_loaded",
-        Error::Routing(_) => "routing",
-        Error::InvalidInput(_) => "invalid_input",
-        Error::NotImplemented(_) => "not_implemented",
-        Error::Cancelled => "cancelled",
-        _ => "inference",
-    }
+    InferenceError::from(err).kind()
 }
 
 /// Encode one [`StreamFrame`] as a single NDJSON line (no trailing
@@ -180,6 +181,69 @@ pub fn decode_frame(line: &str) -> Result<StreamFrame> {
 mod tests {
     use super::*;
     use sovereign_contracts::{FinishReason, StreamUsage};
+
+    /// The defect the convergence closed. `error_kind` emitted
+    /// `"compute_unavailable"`; `into_error` had no arm to read it, so the
+    /// child's fail-fast signal reached the parent as a generic `Inference`
+    /// fault and the caller lost the reason to retry after the respawn.
+    /// Both directions are now one closed set on `InferenceError`.
+    #[test]
+    fn compute_unavailable_survives_the_round_trip() {
+        let sent = Error::ComputeUnavailable {
+            slot: "pool-0".into(),
+            reason: "warming".into(),
+        };
+        let back = WireError::from_error(&sent).into_error();
+        assert!(
+            matches!(back, Error::ComputeUnavailable { .. }),
+            "a 503 from a warming child must not arrive as a generic \
+             inference fault: got {back:?}"
+        );
+    }
+
+    /// Every tag the encoder can emit is a tag the decoder can read. Walks the
+    /// contract errors a compute child actually produces, so a new tag on one
+    /// side without the other fails here rather than in production.
+    #[test]
+    fn every_emitted_kind_decodes_to_the_same_kind() {
+        let cases = [
+            Error::Inference("x".into()),
+            Error::ComputeUnavailable {
+                slot: "p".into(),
+                reason: "warming".into(),
+            },
+            Error::ModelNotLoaded("qwen".into()),
+            Error::Routing("no holder".into()),
+            Error::InvalidInput("bad".into()),
+            Error::NotImplemented("rerank".into()),
+            Error::Cancelled,
+        ];
+        for sent in cases {
+            let tag = error_kind(&sent);
+            let back = WireError::from_error(&sent).into_error();
+            assert_eq!(
+                error_kind(&back),
+                tag,
+                "{tag} did not survive its own envelope (got {back:?})"
+            );
+        }
+    }
+
+    /// A runtime-only fault has no protocol twin and is DOCUMENTED to widen to
+    /// `inference` with its Display text intact — named, not silent (§18.3).
+    #[test]
+    fn a_runtime_only_error_widens_to_inference_keeping_its_text() {
+        let sent = Error::Storage("db gone".into());
+        assert_eq!(error_kind(&sent), "inference");
+        let back = WireError::from_error(&sent).into_error();
+        match back {
+            Error::Inference(msg) => {
+                assert!(msg.contains("Storage error"), "prefix lost: {msg}");
+                assert!(msg.contains("db gone"), "detail lost: {msg}");
+            }
+            other => panic!("expected a widened Inference, got {other:?}"),
+        }
+    }
 
     #[test]
     fn embed_mode_defaults_to_document() {

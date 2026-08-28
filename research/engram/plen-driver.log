@@ -1,0 +1,6 @@
+/home/alexbryan/.bashrc: line 51: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+[09:12:44] === prompt-length discriminator start ===
+[09:12:44] pre-run: GTT 4003 MiB, MemAvailable 118514 MiB
+[09:12:44] running sweep: -b 4096 -ub 2048 -p 512,1024,2048,4096,8192,16384 -n 128 -r 3 (no -ngl, see frame dead-end)
+[09:20:29] llama-bench rc=0   peak GTT 86073 MiB   min avail 9338 MiB
+[09:20:29] === sweep done, restoring daemon ===

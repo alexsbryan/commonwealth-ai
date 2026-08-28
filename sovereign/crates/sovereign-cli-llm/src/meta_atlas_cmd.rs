@@ -107,7 +107,8 @@ async fn cmd_align(args: &[String]) -> i32 {
     let mut limit: Option<usize> = None;
     let mut k = 20usize;
     let mut model = "primary".to_string();
-    let mut base = "http://127.0.0.1:9741".to_string();
+    // One decider (§10.6): honours SOVEREIGN_DAEMON_URL, then [daemon] client_port.
+    let mut base = sovereign_core::setup_config::client_daemon_base();
     let mut bank_path = "sovereign/bench/sep/questions.toml".to_string();
     let mut right_corpus = "wikipedia".to_string();
 
@@ -258,13 +259,6 @@ async fn cmd_align(args: &[String]) -> i32 {
     }
 }
 
-fn source_str(s: bridge::EdgeSource) -> &'static str {
-    match s {
-        bridge::EdgeSource::Deterministic => "det",
-        bridge::EdgeSource::Adjudicated => "llm",
-    }
-}
-
 fn render_edge(e: &bridge::BridgeEdge) {
     let sigs = e
         .signals_fired
@@ -275,7 +269,7 @@ fn render_edge(e: &bridge::BridgeEdge) {
     println!(
         "  {:8} {:>3} {:.2}  {}  →  {}",
         e.relation.as_str(),
-        source_str(e.source),
+        e.source.as_str(),
         e.confidence,
         e.left.title,
         e.right.title

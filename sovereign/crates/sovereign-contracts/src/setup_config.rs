@@ -362,7 +362,7 @@ pub struct MemorySection {
 /// (Qwen3-Embedding vs Darwin/Qwen-instruct); the primary can't
 /// substitute, so embed-less configs raise an invariant exception
 /// at the first embed call.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ModelsSection {
     /// The "primary" model — what the UX calls the Main responder.
     /// Internally this is the `thoughtful` profile slot.
@@ -395,10 +395,39 @@ pub struct ModelsSection {
     /// primary's KV cache + weights + fast slot still fit comfortably:
     /// 32768 roughly doubles output budget for atlas Phase 1, where
     /// long structured outputs were truncating against the 16384 cap.
-    /// Applies to all loaded slots (fast / primary / embed / code /
-    /// extras) — per-slot override would need a richer schema.
+    /// The PRIMARY slot's window, and the default for every other slot
+    /// that does not name its own (see `fast_context_size` and the
+    /// `[edit]` section's `context_size`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_size: Option<u32>,
+
+    /// The FAST slot's window. `None` falls back to `context_size`, so
+    /// omitting it is byte-identical to the behaviour before this key
+    /// existed.
+    ///
+    /// # Why this key exists
+    ///
+    /// KV cache scales LINEARLY in `n_ctx`, and until 2026-08-25
+    /// `context_size` was one global applied to every slot — so a 4B fast
+    /// model carried the same 64k cache as a 27B primary, whether or not
+    /// anything ever filled it. Measured on this host, the four live
+    /// contexts held ~17.7 GB of KV + compute between them.
+    ///
+    /// The `[edit]` section already had exactly this key for exactly this
+    /// reason ("inline completion never needs the chat slot's 16k window,
+    /// and a small ctx keeps KV cost tiny"). The mechanism was not missing;
+    /// it had simply never been extended to the slot that costs the most.
+    ///
+    /// # Sizing it is a measurement, not a guess
+    ///
+    /// The fast slot is the OVERFLOW path: `pick_slot` routes any prompt
+    /// too large for FastShort's per-sequence budget here, so its window
+    /// must cover the largest prompt that lands on it, not the typical one.
+    /// Read the `kv budget: slot context built` trace lines (one per
+    /// context, emitted at load) before choosing a value — that is what
+    /// they are for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fast_context_size: Option<u32>,
 
     /// Additional named chat slots loaded eagerly at daemon startup
     /// alongside primary/fast/embed/code. Keys are operator-chosen
@@ -685,6 +714,14 @@ impl ModelsSection {
     /// cold-start and reload paths can't drift.
     pub fn effective_context_size(&self) -> u32 {
         self.context_size.unwrap_or_else(default_context_size)
+    }
+
+    /// Effective n_ctx for the FAST slot — its own value when set,
+    /// otherwise the primary's. Defaulting to the primary is what keeps
+    /// adding this key a no-op for every existing config on disk.
+    pub fn effective_fast_context_size(&self) -> u32 {
+        self.fast_context_size
+            .unwrap_or_else(|| self.effective_context_size())
     }
 
     /// Path the fast-slot loader should use, with primary as the
@@ -1043,7 +1080,11 @@ fn default_wf_max_concurrent() -> usize {
     2
 }
 
-fn default_client_port() -> u16 {
+/// THE default client port. Public so callers that must not honour the
+/// env knob (see [`client_daemon_base`]) can fall back to the same number
+/// the config's own serde default uses, instead of re-compiling a `9741`
+/// of their own beside it (§10.6).
+pub fn default_client_port() -> u16 {
     9741
 }
 fn default_client_bind() -> String {
@@ -1088,8 +1129,14 @@ pub fn internal_daemon_base_for(port: u16) -> String {
     format!("http://127.0.0.1:{port}")
 }
 
-/// Base URL of the daemon's CLIENT listener (`http://localhost:<client_port>`),
-/// honouring `[daemon] client_port` in `~/.svrnmesh/config.toml`.
+/// Base URL of the daemon this CLI should TALK to — the ONE decider for
+/// "where do I send `/v1/chat/completions`, `/mcp/message`, an embed request?".
+///
+/// Precedence, highest first:
+///   1. `SOVEREIGN_DAEMON_URL` — explicit per-invocation override
+///   2. `SVRNMESH_DAEMON_URL`  — the post-rename spelling of the same knob
+///   3. `[daemon] client_port` in `~/.svrnmesh/config.toml`
+///   4. the compiled default (see [`default_client_port`])
 ///
 /// The twin of [`internal_daemon_base`], and it exists for the same reason one
 /// level over: `sovereign-cli-shared::urls` builds these URLs from a port the
@@ -1105,16 +1152,65 @@ pub fn internal_daemon_base_for(port: u16) -> String {
 /// (2026-07-29, `enrich-atlas` step 3, found once the journey's unfalsifiable
 /// steps were made falsifiable).
 ///
+/// WHY THE ENV LEG LANDED HERE (2026-08-25). That 2026-07-29 fix closed the
+/// config half and left the env half open, so the knob and the config were TWO
+/// deciders for one question and neither read the other's input:
+/// `sovereign_cli_shared::urls::daemon_base_url` honoured the env and ignored a
+/// moved `client_port`; this function honoured `client_port` and ignored the
+/// env. `SOVEREIGN_DAEMON_URL` therefore reached ONE daemon-talking call site
+/// (`mcp_client`) out of the ~30 in the tree, and "point this session at a
+/// second daemon" was a per-verb flag hunt whose misses were SILENT — `svrn
+/// enrich` and `svrn backlog score` kept driving the operator's local daemon
+/// whatever the knob said, and answered successfully while doing it. §10.6.
+///
+/// NOT the accessor for MANAGING the daemon process on this host. `daemon
+/// stop/restart/reload`, its readiness probe, and `corpus watch register`
+/// deliberately do NOT honour the env: a URL cannot be SIGTERM'd, and a remote
+/// daemon cannot watch this host's filesystem. Pointing the knob at a rented
+/// pod and running `daemon restart` would otherwise kill the local daemon and
+/// then report READY off the pod's answer — a success-shaped wrong result of
+/// exactly the kind §18.3 forbids. Those callers hold the configured port and
+/// call [`client_daemon_base_for`], naming the choice at the call site.
+///
 /// `localhost` rather than `127.0.0.1` to match `urls::v1_url`, which every
 /// existing client-side caller already uses.
 pub fn client_daemon_base() -> String {
-    let port = SetupConfig::load()
-        .map(|cfg| cfg.daemon.client_port)
-        .unwrap_or_else(|_| default_client_port());
-    client_daemon_base_for(port)
+    match daemon_url_override() {
+        Some(url) => url,
+        None => {
+            let port = SetupConfig::load()
+                .map(|cfg| cfg.daemon.client_port)
+                .unwrap_or_else(|_| default_client_port());
+            client_daemon_base_for(port)
+        }
+    }
 }
 
-/// Pure builder behind [`client_daemon_base`].
+/// The env leg of [`client_daemon_base`], isolated so the precedence is
+/// testable without a config file and so there is ONE answer to "which
+/// spelling of the knob counts, and what counts as set".
+///
+/// `SOVEREIGN_` first, then `SVRNMESH_`, for parity with every other reader of
+/// the pair (the boot bridge maps the legacy prefix forward, so both arrive).
+///
+/// A set-but-blank value is treated as UNSET rather than as an empty base URL:
+/// `SOVEREIGN_DAEMON_URL= svrn enrich` should fall through to the config, not
+/// dispatch at a bare `/v1/chat/completions`. Trailing slashes are trimmed
+/// because every caller appends `/v1/…`, and `http://h:9841//v1/models` is a
+/// different route to a strict router than `http://h:9841/v1/models`.
+pub fn daemon_url_override() -> Option<String> {
+    ["SOVEREIGN_DAEMON_URL", "SVRNMESH_DAEMON_URL"]
+        .iter()
+        .find_map(|key| {
+            let raw = std::env::var(key).ok()?;
+            let trimmed = raw.trim().trim_end_matches('/');
+            (!trimmed.is_empty()).then(|| trimmed.to_string())
+        })
+}
+
+/// Pure builder behind [`client_daemon_base`], and the accessor for callers
+/// that manage the LOCAL daemon process rather than talk to a daemon as a
+/// client — see the env-blindness note on [`client_daemon_base`].
 pub fn client_daemon_base_for(port: u16) -> String {
     format!("http://localhost:{port}")
 }
@@ -1171,6 +1267,37 @@ fn default_data_dir() -> PathBuf {
 }
 
 impl SetupConfig {
+    /// A config for a process that has **no `config.toml`** — no model slots
+    /// configured, every other section at its documented default (`:9741` /
+    /// `:9742`, loopback client bind, `0.0.0.0` internal bind, no bearer
+    /// token). This is the real state of `svrn mesh create` on a machine that
+    /// has not run `svrn setup`, and of any test that does not care about
+    /// models.
+    ///
+    /// Deliberately **not** an `impl Default`: `load().unwrap_or_default()`
+    /// would silently substitute this for a `config.toml` that exists but
+    /// would not parse, which is the substitution ARCH §18.3 forbids. A caller
+    /// has to type the name, and a caller reaching for it after a failed load
+    /// must report the failure first.
+    pub fn unconfigured() -> Self {
+        Self {
+            models: ModelsSection::default(),
+            daemon: DaemonSection::default(),
+            data: DataSection::default(),
+            watched_folders: WatchedFoldersSection::default(),
+            memory: MemorySection::default(),
+            iroh: IrohSection::default(),
+            shared_model: SharedModelSection::default(),
+            discovery: DiscoverySection::default(),
+            compute: ComputeSection::default(),
+            // Added on main while this branch was out. `unconfigured()`'s
+            // contract is "every other section at its documented default",
+            // so the default is the answer here, not a judgement call.
+            search: SearchSection::default(),
+            mcp_servers: Vec::new(),
+        }
+    }
+
     /// The canonical config path: `~/.svrnmesh/config.toml`. Co-located
     /// with `~/.svrnmesh/`'s other user-scoped state (corpora, indexes,
     /// notes db, mesh.json) so operators only have one user directory
@@ -1379,6 +1506,47 @@ mod tests {
         );
     }
 
+    /// THE NO-REGRESSION BAR for per-slot windows (2026-08-25).
+    ///
+    /// Adding `fast_context_size` must be invisible to every config.toml
+    /// already on disk. An omitted key resolves to the primary's window, which
+    /// is exactly what the single global scalar did — so a host that does not
+    /// set it builds byte-identical contexts to the ones it built before the
+    /// key existed. If this ever fails, the change has stopped being additive
+    /// and every existing install's fast slot has silently been resized.
+    #[test]
+    fn an_unset_fast_window_is_the_primary_window() {
+        let mut m = models("/p.gguf", None, "/e.gguf");
+        m.fast_context_size = None;
+
+        m.context_size = None; // and the default path too
+        assert_eq!(m.effective_fast_context_size(), m.effective_context_size());
+
+        for ctx in [4096, 16_384, 65_536] {
+            m.context_size = Some(ctx);
+            assert_eq!(m.effective_fast_context_size(), ctx);
+            assert_eq!(m.effective_fast_context_size(), m.effective_context_size());
+        }
+    }
+
+    /// The lever itself: when set, the fast slot's window is its own and the
+    /// primary's is untouched. Named failing input for the inverse defect —
+    /// wiring `fast_context_size` to BOTH slots would shrink the primary's
+    /// window on any host that set it, which is the more damaging mistake.
+    #[test]
+    fn a_set_fast_window_moves_only_the_fast_slot() {
+        let mut m = models("/p.gguf", None, "/e.gguf");
+        m.context_size = Some(65_536);
+        m.fast_context_size = Some(8_192);
+
+        assert_eq!(m.effective_fast_context_size(), 8_192);
+        assert_eq!(
+            m.effective_context_size(),
+            65_536,
+            "the primary keeps its window — this key sizes the fast slot only"
+        );
+    }
+
     fn models(primary: &str, fast: Option<&str>, embed: &str) -> ModelsSection {
         ModelsSection {
             primary: PathBuf::from(primary),
@@ -1386,6 +1554,7 @@ mod tests {
             embed: PathBuf::from(embed),
             code: None,
             context_size: None,
+            fast_context_size: None,
             extra: BTreeMap::new(),
             max_extras_memory_gb: None,
             primary_pool: None,
@@ -1503,6 +1672,7 @@ embed = "/m/e.gguf"
                 embed: PathBuf::from("/models/embed.gguf"),
                 code: None,
                 context_size: None,
+                fast_context_size: None,
                 extra: BTreeMap::new(),
                 max_extras_memory_gb: None,
                 primary_pool: None,
@@ -1543,6 +1713,7 @@ embed = "/m/e.gguf"
                 embed: PathBuf::from("/m/e.gguf"),
                 code: None,
                 context_size: None,
+                fast_context_size: None,
                 extra: BTreeMap::new(),
                 max_extras_memory_gb: None,
                 primary_pool: None,
@@ -1882,5 +2053,126 @@ reasoning = "~/dev/big.gguf"
             cfg.models.extra.get("reasoning"),
             Some(&home.join("dev/big.gguf"))
         );
+    }
+
+    // ---- the daemon-endpoint decider (§10.6) -------------------------------
+    //
+    // These mutate PROCESS-global env. nextest (the default engine) is
+    // process-per-test and would not need serialising; `--engine cargo` runs
+    // every test in this binary in one process, and a gate that passes only
+    // under one executor is not a gate (§18.1). Hence the lock.
+    static DAEMON_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    const DAEMON_URL_KEYS: [&str; 2] = ["SOVEREIGN_DAEMON_URL", "SVRNMESH_DAEMON_URL"];
+
+    /// Clears BOTH spellings, applies `pairs`, and restores the prior values on
+    /// drop — so a developer running the suite with the knob exported in their
+    /// shell gets the same verdict as CI.
+    struct DaemonEnvGuard {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        prior: Vec<(&'static str, Option<String>)>,
+    }
+
+    impl DaemonEnvGuard {
+        fn set(pairs: &[(&'static str, &str)]) -> Self {
+            let lock = DAEMON_ENV_LOCK
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let prior = DAEMON_URL_KEYS
+                .iter()
+                .map(|k| (*k, std::env::var(k).ok()))
+                .collect();
+            for k in DAEMON_URL_KEYS {
+                std::env::remove_var(k);
+            }
+            for (k, v) in pairs {
+                std::env::set_var(k, v);
+            }
+            Self { _lock: lock, prior }
+        }
+    }
+
+    impl Drop for DaemonEnvGuard {
+        fn drop(&mut self) {
+            for (k, v) in &self.prior {
+                match v {
+                    Some(v) => std::env::set_var(k, v),
+                    None => std::env::remove_var(k),
+                }
+            }
+        }
+    }
+
+    /// RED on the tree before 2026-08-25: `client_daemon_base` read the config
+    /// and nothing else, so the knob reached one call site out of ~30 and
+    /// `svrn enrich` silently drove the operator's daemon instead of the one
+    /// the operator had just pointed it at.
+    #[test]
+    fn client_daemon_base_honours_the_env_knob() {
+        let _g = DaemonEnvGuard::set(&[("SOVEREIGN_DAEMON_URL", "http://127.0.0.1:19741")]);
+        assert_eq!(client_daemon_base(), "http://127.0.0.1:19741");
+    }
+
+    #[test]
+    fn client_daemon_base_accepts_the_svrnmesh_spelling() {
+        let _g = DaemonEnvGuard::set(&[("SVRNMESH_DAEMON_URL", "http://127.0.0.1:19742")]);
+        assert_eq!(client_daemon_base(), "http://127.0.0.1:19742");
+    }
+
+    /// Both set is not a coin flip: SOVEREIGN_ wins, matching every other
+    /// reader of the pair.
+    #[test]
+    fn client_daemon_base_prefers_sovereign_over_svrnmesh() {
+        let _g = DaemonEnvGuard::set(&[
+            ("SOVEREIGN_DAEMON_URL", "http://127.0.0.1:19741"),
+            ("SVRNMESH_DAEMON_URL", "http://127.0.0.1:19742"),
+        ]);
+        assert_eq!(client_daemon_base(), "http://127.0.0.1:19741");
+    }
+
+    /// A blank knob is UNSET, not an empty base URL — otherwise
+    /// `SOVEREIGN_DAEMON_URL= svrn enrich` would POST to `/v1/chat/completions`
+    /// with no host and fail somewhere unrecognisable.
+    #[test]
+    fn client_daemon_base_treats_blank_env_as_unset() {
+        let _g = DaemonEnvGuard::set(&[("SOVEREIGN_DAEMON_URL", "   ")]);
+        assert!(
+            client_daemon_base().starts_with("http://localhost:"),
+            "blank knob must fall through to the configured port, got {}",
+            client_daemon_base()
+        );
+    }
+
+    /// Callers append `/v1/…`; a trailing slash would build a double-slash
+    /// path that a strict router treats as a different route.
+    #[test]
+    fn client_daemon_base_trims_trailing_slash() {
+        let _g = DaemonEnvGuard::set(&[("SOVEREIGN_DAEMON_URL", "http://127.0.0.1:19741/")]);
+        assert_eq!(client_daemon_base(), "http://127.0.0.1:19741");
+        assert_eq!(
+            format!("{}/v1/models", client_daemon_base()),
+            "http://127.0.0.1:19741/v1/models"
+        );
+    }
+
+    /// The unchanged leg: with no knob the configured port still decides, and
+    /// the host spelling stays `localhost` for parity with `urls::v1_url`.
+    #[test]
+    fn client_daemon_base_without_env_is_the_configured_port() {
+        let _g = DaemonEnvGuard::set(&[]);
+        let base = client_daemon_base();
+        assert!(
+            base.starts_with("http://localhost:"),
+            "expected the configured-port form, got {base}"
+        );
+    }
+
+    /// The pure builder is the accessor for daemon-process MANAGEMENT, and it
+    /// must stay env-blind — `daemon restart` pointing at a rented pod would
+    /// otherwise kill the local daemon and report READY off the pod (§18.3).
+    #[test]
+    fn client_daemon_base_for_ignores_the_env_knob() {
+        let _g = DaemonEnvGuard::set(&[("SOVEREIGN_DAEMON_URL", "http://a-rented-pod:9841")]);
+        assert_eq!(client_daemon_base_for(9741), "http://localhost:9741");
     }
 }

@@ -44,15 +44,34 @@ pub use geometry::Quad;
 /// holding `det.onnx`, `rec.onnx`, and `dict.txt`.
 pub const DEFAULT_MODEL_ID: &str = "ppocr-en-v4v5";
 
+/// The operator's model-root override, or `None` when they gave none.
+///
+/// THE reading of `SOVEREIGN_PADDLE_OCR_MODEL_DIR` (ARCH §10.6). Three sites
+/// read it and only this one is consulted by the code that actually runs
+/// OCR — and it was the loosest: it took the value verbatim, so an empty
+/// string resolved the model root to `""` and Paddle looked for
+/// `./ppocr-en-v4v5/det.onnx` relative to the daemon's cwd. The two installers
+/// (`sovereign-cli-daemon::ocr_install`, the desktop's
+/// `resolve_paddle_model_dir`) treat it as one candidate root among several
+/// and skip it unless it holds a complete model set, so they staged models
+/// somewhere sensible while the engine looked in the wrong place and reported
+/// "go fetch these".
+pub fn model_root_override() -> Option<PathBuf> {
+    std::env::var("SOVEREIGN_PADDLE_OCR_MODEL_DIR")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+}
+
 /// Models root, mirroring `gliner_ner::models_root`. Falls back to
-/// `~/.svrnmesh/models/paddle-ocr` when the env var is unset.
+/// `~/.svrnmesh/models/paddle-ocr` when the override is absent.
 pub fn models_root() -> PathBuf {
-    if let Ok(p) = std::env::var("SOVEREIGN_PADDLE_OCR_MODEL_DIR") {
-        return PathBuf::from(p);
-    }
-    sovereign_contracts::rebrand::svrnmesh_root()
-        .join("models")
-        .join("paddle-ocr")
+    model_root_override().unwrap_or_else(|| {
+        sovereign_contracts::rebrand::svrnmesh_root()
+            .join("models")
+            .join("paddle-ocr")
+    })
 }
 
 /// Resolve `(det, rec, dict)` paths for a model id, validating each

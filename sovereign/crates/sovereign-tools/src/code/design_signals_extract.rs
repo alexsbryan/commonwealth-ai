@@ -39,17 +39,17 @@
 
 use std::path::{Path, PathBuf};
 
-use async_trait::async_trait;
 use serde_json::{json, Value};
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
+use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::*;
+use std::sync::Arc;
 
 pub struct DesignSignalsExtractTool {
     /// Optional project root. When set, relative `design_path`
     /// arguments resolve under it; absolute paths are used as-is.
-    /// Mirrors the CheckDocPathsTool convention for consistency.
+    /// The same convention every path-taking tool in this module uses.
     project_root: Option<PathBuf>,
 }
 
@@ -70,96 +70,26 @@ impl Default for DesignSignalsExtractTool {
     }
 }
 
-#[async_trait]
-impl Tool for DesignSignalsExtractTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "design_signals_extract".to_string(),
-            name: "Design Signals Extract".to_string(),
-            description: "Parse a DESIGN.md file and return the structural signals the \
-                 solo-mode fallback and agent-collaborative session both rely \
-                 on: the Anchors block's bullets, structural gaps (TBD \
-                 markers, empty/placeholder sections, open X-vs-Y choices, \
-                 literal question sentences), and keyword-bucket presence \
-                 flags (time / persistence / api / queue / concurrency / \
-                 secrets / consumers). Strictly structural — does NOT \
-                 interpret semantics. Run after each substantive edit to a \
-                 DESIGN.md to see which gaps the user should still resolve."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "design_path": {
-                        "type": "string",
-                        "description": "Path to the DESIGN.md file. Defaults \
-                                        to `DESIGN.md` at the project root \
-                                        (the canonical location). Absolute \
-                                        paths are used as-is."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "The user just edited DESIGN.md — check which \
-                         structural gaps remain before asking another \
-                         question."
-                        .into(),
-                    call: json!({ "design_path": "DESIGN.md" }),
-                },
-                ToolExample {
-                    situation: "Running from a subdirectory; verify the doc at \
-                         the known project root."
-                        .into(),
-                    call: json!({ "design_path": "/absolute/path/to/DESIGN.md" }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "design_path": { "type": "string" },
-                    "anchors":     { "type": "array", "items": { "type": "string" } },
-                    "gap_count":   { "type": "integer" },
-                    "gaps":        { "type": "array", "items": {
-                        "type": "object",
-                        "properties": {
-                            "section": { "type": "string" },
-                            "reason":  { "type": "string" },
-                            "line":    { "type": "integer" },
-                            "snippet": { "type": "string" }
-                        }
-                    } },
-                    "keywords":    { "type": "object" },
-                    "sections":    { "type": "array", "items": {
-                        "type": "object",
-                        "properties": {
-                            "heading": { "type": "string" },
-                            "level":   { "type": "integer" },
-                            "line":    { "type": "integer" }
-                        }
-                    } }
-                }
-            })),
-        }
+impl DesignSignalsExtractTool {
+    /// Bind this tool's state to its `design_signals_extract` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("design_signals_extract", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    fn validate(&self, _params: &Value) -> Result<()> {
-        // All params are optional; the tool defaults to `DESIGN.md`
-        // under the project root. Validation happens at `execute`
-        // time where we can surface a file-not-found message
-        // pointing at exactly what we tried.
-        Ok(())
-    }
-
-    async fn execute(&self, params: &Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `design_signals_extract`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let raw_path = params
             .get("design_path")
             .and_then(|v| v.as_str())
@@ -184,6 +114,14 @@ impl Tool for DesignSignalsExtractTool {
         let signals = corpus_engine_atos::design_signals::extract(&text);
 
         Ok(StepOutput::Json(render_signals_json(&resolved, &signals)))
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+        // All params are optional; the tool defaults to `DESIGN.md`
+        // under the project root. Validation happens at `execute`
+        // time where we can surface a file-not-found message
+        // pointing at exactly what we tried.
+        Ok(())
     }
 }
 
@@ -274,6 +212,7 @@ fn gap_reason_label(reason: &corpus_engine_atos::design_signals::GapReason) -> &
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sovereign_core::traits::Tool;
     use std::fs;
 
     fn write(path: &Path, body: &str) {
@@ -300,7 +239,7 @@ mod tests {
             ..Default::default()
         };
         let out = tool
-            .execute(&json!({ "design_path": "DESIGN.md" }), &ctx)
+            .run(&json!({ "design_path": "DESIGN.md" }), &ctx)
             .await
             .expect("execute");
         let StepOutput::Json(v) = out else {
@@ -340,7 +279,7 @@ mod tests {
             ..Default::default()
         };
         let err = tool
-            .execute(&json!({ "design_path": "MISSING.md" }), &ctx)
+            .run(&json!({ "design_path": "MISSING.md" }), &ctx)
             .await
             .expect_err("should error on missing file");
         let msg = format!("{err:?}");
@@ -366,7 +305,7 @@ mod tests {
             ..Default::default()
         };
         // Omit `design_path` entirely — should default to DESIGN.md.
-        let out = tool.execute(&json!({}), &ctx).await.expect("execute");
+        let out = tool.run(&json!({}), &ctx).await.expect("execute");
         let StepOutput::Json(v) = out else { panic!() };
         assert!(v["design_path"].as_str().unwrap().ends_with("DESIGN.md"));
     }
@@ -388,7 +327,7 @@ mod tests {
             ..Default::default()
         };
         let out = tool
-            .execute(&json!({ "design_path": design.to_string_lossy() }), &ctx)
+            .run(&json!({ "design_path": design.to_string_lossy() }), &ctx)
             .await
             .expect("execute");
         let StepOutput::Json(v) = out else { panic!() };
@@ -397,7 +336,7 @@ mod tests {
 
     #[test]
     fn descriptor_declares_read_effect_and_idempotent() {
-        let tool = DesignSignalsExtractTool::new();
+        let tool = DesignSignalsExtractTool::new().declared();
         let d = tool.descriptor();
         assert_eq!(d.id, "design_signals_extract");
         assert!(matches!(d.effect, Effect::Read));
@@ -410,8 +349,8 @@ mod tests {
     #[test]
     fn validate_accepts_empty_params() {
         let tool = DesignSignalsExtractTool::new();
-        tool.validate(&json!({})).expect("empty params ok");
-        tool.validate(&json!({ "design_path": "foo.md" }))
+        tool.validate_extra(&json!({})).expect("empty params ok");
+        tool.validate_extra(&json!({ "design_path": "foo.md" }))
             .expect("path param ok");
     }
 }

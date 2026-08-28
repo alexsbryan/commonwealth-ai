@@ -496,6 +496,8 @@ pub fn build_flow(
                 from: cargo_name(&e.from_crate)?,
                 to: cargo_name(&e.to_crate)?,
                 kind: arch_layers::DepKind::Normal,
+                // Observed reference — see arch_report.rs on why never true.
+                optional: false,
             })
         })
         .collect();
@@ -632,6 +634,9 @@ mod tests {
             callee_qualified: callee_q.to_string(),
             file_path: file.to_string(),
             line: 1,
+            start_col: -1,
+            end_line: -1,
+            end_col: -1,
             ref_kind: "direct".to_string(), // hardcoded by the exporter
         }
     }

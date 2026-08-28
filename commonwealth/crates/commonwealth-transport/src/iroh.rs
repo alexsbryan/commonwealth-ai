@@ -80,6 +80,24 @@ pub const RPC_ALPN: &[u8] = b"cwth/rpc/0";
 /// route by protocol instead of by port.
 pub const CLIENT_ALPN: &[u8] = b"cwth/client/0";
 
+/// ALPN for GUEST client traffic — someone holding a `sovereign://guest/…`
+/// bearer who is NOT a mesh member.
+///
+/// Distinct from [`CLIENT_ALPN`] because the two want opposite trust. A
+/// connection on `CLIENT_ALPN` is forwarded to the daemon's own client
+/// listener, which admits loopback before it reads a bearer — that is
+/// correct for the mesh peers and the paired phone that ride it (peer
+/// federated inference carries no `Authorization` header at all), and it is
+/// exactly wrong for a guest, whose whole credential is the bearer. Routing
+/// guests to the same listener would hand every dial-string holder the full
+/// client API.
+///
+/// So a guest gets its own protocol, forwarded to a SECOND bind of the client
+/// router whose auth layer does not trust loopback
+/// (`commonwealth_api::client_auth::ClientAuthPolicy`). A guest connection
+/// cannot reach the trusted listener, and a peer's inference is untouched.
+pub const GUEST_ALPN: &[u8] = b"cwth/guest/0";
+
 // Re-exported so feature consumers (sovereign-server, the mobile
 // core, the sovereign-mesh spike test) build endpoints without
 // declaring their own iroh dependency — keeps the version pin in
@@ -805,8 +823,16 @@ impl IrohAcceptor {
     /// single local listener, regardless of negotiated ALPN. Right for
     /// a single-ALPN endpoint (Track M: `sovereign-server` binds only
     /// `cwth/client/0` → its HTTP listener).
+    ///
+    /// Admits any dialer. Correct where the local listener authenticates
+    /// for itself (`sovereign-server` requires a bearer of every caller);
+    /// NOT correct where it trusts loopback — see
+    /// [`spawn_admitting`](Self::spawn_admitting).
     pub fn spawn(endpoint: iroh::Endpoint, forward_to: SocketAddr) -> Self {
-        Self::run(endpoint, move |_alpn| Some(forward_to))
+        Self::run(
+            endpoint,
+            move |_alpn, _dialer| async move { Some(forward_to) },
+        )
     }
 
     /// Spawn the accept loop routing each connection to a local
@@ -816,16 +842,51 @@ impl IrohAcceptor {
     /// a port (the class chose the ALPN). A connection whose ALPN is
     /// not in `routes` is closed with a loud log, never misrouted.
     pub fn spawn_routed(endpoint: iroh::Endpoint, routes: HashMap<Vec<u8>, SocketAddr>) -> Self {
-        Self::run(endpoint, move |alpn| routes.get(alpn).copied())
+        Self::run(endpoint, move |alpn, _dialer| {
+            let target = routes.get(&alpn).copied();
+            async move { target }
+        })
     }
 
-    /// Shared accept loop. `resolve` maps a connection's negotiated
-    /// ALPN to the local TCP target its bi-streams forward to; `None`
-    /// closes the connection. Each accepted connection's ALPN is read
-    /// once, then every bi-stream on it is pumped to that target.
-    fn run<F>(endpoint: iroh::Endpoint, resolve: F) -> Self
+    /// Spawn the accept loop routing each connection by its negotiated ALPN
+    /// **and by who dialed it**.
+    ///
+    /// # Why the dialer has to be part of the routing decision
+    ///
+    /// An iroh endpoint accepts anyone. The dial string that reaches it is
+    /// public by design — it rides in every mesh invite's `dial=` and is
+    /// gossiped as `MemberRecord.node_pubkey` — so "holds the dial string"
+    /// is not a credential and must never be treated as one. But the
+    /// acceptor forwards by `TcpStream::connect`ing a loopback listener,
+    /// and a listener that trusts loopback (correctly, for the local user)
+    /// cannot tell that hop from a real local caller. Route on ALPN alone
+    /// and every dial-string holder inherits whatever that listener grants
+    /// its own machine.
+    ///
+    /// What the connection DOES carry is the dialer's Ed25519 public key,
+    /// verified by the QUIC handshake — the same key a mesh gossips as
+    /// `node_pubkey`. `resolve` receives it, so a caller can send members
+    /// and strangers to different listeners (or send a stranger nowhere)
+    /// on evidence rather than on transport.
+    ///
+    /// `resolve` returning `None` closes the connection. It is async so the
+    /// decision can consult live state — membership changes between dials.
+    pub fn spawn_admitting<F, Fut>(endpoint: iroh::Endpoint, resolve: F) -> Self
     where
-        F: Fn(&[u8]) -> Option<SocketAddr> + Send + Sync + 'static,
+        F: Fn(Vec<u8>, NodePubkey) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Option<SocketAddr>> + Send + 'static,
+    {
+        Self::run(endpoint, resolve)
+    }
+
+    /// Shared accept loop. `resolve` maps a connection's negotiated ALPN
+    /// and its verified dialer key to the local TCP target its bi-streams
+    /// forward to; `None` closes the connection. Both are read once per
+    /// connection, then every bi-stream on it is pumped to that target.
+    fn run<F, Fut>(endpoint: iroh::Endpoint, resolve: F) -> Self
+    where
+        F: Fn(Vec<u8>, NodePubkey) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Option<SocketAddr>> + Send + 'static,
     {
         let resolve = Arc::new(resolve);
         let task = tokio::spawn(async move {
@@ -843,14 +904,17 @@ impl IrohAcceptor {
                             return;
                         }
                     };
-                    // A fully-accepted connection has a negotiated
-                    // ALPN; route this connection's streams by it.
+                    // A fully-accepted connection has a negotiated ALPN and
+                    // a verified dialer key (from the peer's TLS
+                    // certificate). Route this connection's streams by both.
                     let alpn = conn.alpn().to_vec();
-                    let Some(forward_to) = resolve(&alpn) else {
+                    let dialer = NodePubkey(*conn.remote_id().as_bytes());
+                    let Some(forward_to) = resolve(alpn.clone(), dialer).await else {
                         tracing::warn!(
                             target: "transport",
                             alpn = %String::from_utf8_lossy(&alpn),
-                            "iroh acceptor: no local forward for negotiated ALPN — closing connection"
+                            dialer = %hex::encode(dialer.0),
+                            "iroh acceptor: no local forward for this (ALPN, dialer) — closing connection"
                         );
                         return;
                     };
@@ -1047,6 +1111,76 @@ mod tests {
             b"CLIENT",
             "cwth/client/0 must route to the client listener"
         );
+    }
+
+    /// The guest split, on the wire. A guest and a peer dial the SAME key and
+    /// must land on DIFFERENT local listeners, because the two listeners
+    /// disagree about whether a loopback forward hop is a credential. Routing
+    /// them together is the bug this ALPN exists to make impossible: a peer's
+    /// federated inference carries no `Authorization` at all, so the listener
+    /// it needs is exactly the one a guest must never reach.
+    #[tokio::test]
+    async fn a_guest_and_a_peer_dialing_one_key_land_on_different_listeners() {
+        let client_addr = spawn_marker_listener(b"CLIENT").await;
+        let guest_addr = spawn_marker_listener(b"GUEST").await;
+
+        let server_ep =
+            hermetic_endpoint(15, vec![CLIENT_ALPN.to_vec(), GUEST_ALPN.to_vec()]).await;
+        let mut routes = HashMap::new();
+        routes.insert(CLIENT_ALPN.to_vec(), client_addr);
+        routes.insert(GUEST_ALPN.to_vec(), guest_addr);
+        let _acceptor = IrohAcceptor::spawn_routed(server_ep.clone(), routes);
+
+        let mut target = EndpointAddr::new(server_ep.id());
+        for s in loopback_sockets(&server_ep) {
+            target = target.with_ip_addr(s);
+        }
+
+        assert_eq!(
+            read_marker_over(25, &target, CLIENT_ALPN).await,
+            b"CLIENT",
+            "a peer stays on the trusting client listener"
+        );
+        assert_eq!(
+            read_marker_over(26, &target, GUEST_ALPN).await,
+            b"GUEST",
+            "a guest lands on the bearer-only listener"
+        );
+    }
+
+    /// A daemon with no guest listener does not advertise the ALPN, so the
+    /// dial is refused rather than falling through to the trusting listener.
+    /// The failure this pins is silent widening, not a broken dial.
+    #[tokio::test]
+    async fn an_unrouted_guest_alpn_is_dropped_rather_than_falling_back_to_the_client_listener() {
+        let client_addr = spawn_marker_listener(b"CLIENT").await;
+        let server_ep =
+            hermetic_endpoint(16, vec![CLIENT_ALPN.to_vec(), GUEST_ALPN.to_vec()]).await;
+        let mut routes = HashMap::new();
+        routes.insert(CLIENT_ALPN.to_vec(), client_addr);
+        let _acceptor = IrohAcceptor::spawn_routed(server_ep.clone(), routes);
+
+        let mut target = EndpointAddr::new(server_ep.id());
+        for s in loopback_sockets(&server_ep) {
+            target = target.with_ip_addr(s);
+        }
+        let got = read_marker_over(27, &target, GUEST_ALPN).await;
+        assert!(
+            got.is_empty(),
+            "an unrouted guest dial must be dropped, never served by the client              listener — got {got:?}"
+        );
+    }
+
+    /// Three protocols, three distinct byte strings. A collision would route
+    /// one class to another's listener with no error anywhere.
+    #[test]
+    fn the_alpns_are_distinct() {
+        let all = [ALPN, CLIENT_ALPN, GUEST_ALPN, RPC_ALPN];
+        for (i, a) in all.iter().enumerate() {
+            for b in all.iter().skip(i + 1) {
+                assert_ne!(a, b, "ALPNs must be distinct");
+            }
+        }
     }
 
     /// A connection negotiating an ALPN with no route is closed, not

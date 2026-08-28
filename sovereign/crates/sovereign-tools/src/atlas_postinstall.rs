@@ -1036,7 +1036,8 @@ fn tail_log(path: &Path, max_lines: usize) -> String {
 /// Read `<workspace>/runs/_phase1_checkpoint.jsonl` and return
 /// `(distinct_chapters_processed, total_chapters)`. The chapters
 /// manifest lives at `<indexes_dir>/<workspace_id>/chapters.json`
-/// (per `enrich_cmd::paths::chapters_manifest_path`), so the caller
+/// (per `sovereign_enrichment_catalog::paths::chapters_manifest_path`),
+/// so the caller
 /// passes both paths. `None` when the chapters manifest is missing
 /// or unparseable.
 pub fn checkpoint_progress(

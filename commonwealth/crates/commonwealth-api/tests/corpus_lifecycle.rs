@@ -32,7 +32,7 @@ use commonwealth_api::server::internal_router;
 use commonwealth_api::state::AppState;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
-use corpus_engine::{CorpusEngine, IngestProgress};
+use corpus_engine::{Corpus, CorpusEngine, IngestProgress};
 use tempfile::TempDir;
 use tower::ServiceExt;
 
@@ -199,9 +199,12 @@ fn test_state(tmp: &TempDir, embed_fn: corpus_engine::types::EmbedFn) -> AppStat
         .with_self_node_id("node-test");
 
     let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(1),
         name: "Test Mesh".into(),
-        join_key_hash: [0u8; 32],
+        invite_key_hash: [0u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members: HashMap::new(),
         peers: vec![],
@@ -514,17 +517,16 @@ async fn install_cancel_reinstall_lifecycle() {
 
     // Wait for the partition → canonical promotion to complete.
     wait_until_filesystem(
-        || canonical_dir.join("_corpus_meta.json").exists() && !partition_dir.exists(),
+        || Corpus::meta_in(&canonical_dir).exists() && !partition_dir.exists(),
         Duration::from_secs(30),
         "solo finalise promoted partition to canonical",
     )
     .await;
 
     // _corpus_meta.json should carry the post-finalise shape.
-    let meta: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(canonical_dir.join("_corpus_meta.json")).unwrap(),
-    )
-    .unwrap();
+    let meta: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(Corpus::meta_in(&canonical_dir)).unwrap())
+            .unwrap();
     assert_eq!(
         meta["ingestion_in_progress"],
         serde_json::Value::Bool(false),
@@ -612,7 +614,7 @@ async fn install_pause_resume_lifecycle() {
         "pause must NOT wipe the partition dir — that's the regression we're guarding"
     );
     assert!(
-        partition_dir.join("_corpus_meta.json").exists(),
+        Corpus::meta_in(&partition_dir).exists(),
         "pause must preserve _corpus_meta.json so resume works"
     );
     assert!(
@@ -651,16 +653,15 @@ async fn install_pause_resume_lifecycle() {
     assert_eq!(status, StatusCode::OK, "resume install returned non-OK");
 
     wait_until_filesystem(
-        || canonical_dir.join("_corpus_meta.json").exists() && !partition_dir.exists(),
+        || Corpus::meta_in(&canonical_dir).exists() && !partition_dir.exists(),
         Duration::from_secs(30),
         "resumed ingest finalised to canonical",
     )
     .await;
 
-    let meta: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(canonical_dir.join("_corpus_meta.json")).unwrap(),
-    )
-    .unwrap();
+    let meta: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(Corpus::meta_in(&canonical_dir)).unwrap())
+            .unwrap();
     assert_eq!(
         meta["ingestion_in_progress"],
         serde_json::Value::Bool(false),
@@ -688,7 +689,7 @@ async fn status_sampler_publishes_estimated_fraction_on_resume() {
     let canonical = index_dir.join(corpus_id);
     std::fs::create_dir_all(&canonical).unwrap();
     std::fs::write(
-        canonical.join("_corpus_meta.json"),
+        Corpus::meta_in(&canonical),
         serde_json::json!({
             "corpus_id": corpus_id,
             "ingestion_in_progress": true,
@@ -733,9 +734,12 @@ async fn status_sampler_publishes_estimated_fraction_on_resume() {
     .with_embedding_model("mock-8d")
     .with_self_node_id("node-test");
     let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(1),
         name: "Test Mesh".into(),
-        join_key_hash: [0u8; 32],
+        invite_key_hash: [0u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members: HashMap::new(),
         peers: vec![],

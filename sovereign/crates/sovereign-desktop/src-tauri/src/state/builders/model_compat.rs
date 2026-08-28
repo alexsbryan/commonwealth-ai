@@ -46,9 +46,7 @@ pub struct ModelNoticePayload {
 /// (`recommended_gpu_layers == 0`, e.g. an Intel Mac where `detect_gpu()` is
 /// false).
 fn computes_on_cpu() -> bool {
-    let force_cpu = std::env::var("SOVEREIGN_FORCE_CPU_CHAT")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
+    let force_cpu = sovereign_inference::cpu_compat::force_cpu_chat();
     force_cpu || HardwareProfile::detect().recommended_gpu_layers == 0
 }
 

@@ -232,7 +232,15 @@ async fn run_and_frame(
     want_stream: bool,
     generate_mode: bool,
 ) -> Response {
-    let inner = routes_inference::chat_completions(State(state), headers, Json(oai)).await;
+    let inner = routes_inference::chat_completions(
+        State(state),
+        headers,
+        // `/api/chat` is not a path any `Scope` names, so no guest can reach
+        // this shim — the caller here is always loopback or full-token.
+        None,
+        Json(oai),
+    )
+    .await;
     let (status, raw) = match body_bytes(inner).await {
         Ok(pair) => pair,
         Err(resp) => return resp,
@@ -310,7 +318,7 @@ pub(crate) async fn version() -> Response {
 /// `GET /api/tags` — list installed/advertised models. Reuses the
 /// liveness-filtered `/v1/models` output.
 pub(crate) async fn tags(State(state): State<AppState>) -> Response {
-    let resp = routes_inference::list_models(State(state))
+    let resp = routes_inference::list_models(State(state), None)
         .await
         .into_response();
     let (status, raw) = match body_bytes(resp).await {
@@ -404,7 +412,7 @@ pub(crate) async fn show(
     }
     // Confirm the model is known (so a typo 404s rather than silently
     // returning a stub for a non-existent model).
-    let resp = routes_inference::list_models(State(state))
+    let resp = routes_inference::list_models(State(state), None)
         .await
         .into_response();
     if let Ok((status, raw)) = body_bytes(resp).await {

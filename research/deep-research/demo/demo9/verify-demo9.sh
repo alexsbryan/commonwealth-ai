@@ -12,11 +12,44 @@ FAIL=0
 note() { printf '%-42s' "strip $1"; shift; }
 
 # 1. The frozen subset hashes are unchanged (freeze discipline).
+#
+# Three verdicts, not two (ARCH §18.1), for two reasons this strip used to
+# collapse into a bare FAIL:
+#
+#   - vendor/fixture-validated.jsonl is entry 20 of the manifest but is
+#     gitignored on size (69.7 MB) and re-fetched from the pinned upstream
+#     commit, so a clean clone legitimately lacks it. Reporting that as FAIL
+#     makes an unfetched optional artifact indistinguishable from a TAMPERED
+#     freeze — the one signal this strip exists to give.
+#   - `sha256sum` is GNU-only; on macOS it is absent unless coreutils is
+#     installed, and `2>&1` swallowed the "command not found" into a FAIL.
+#     A strip that cannot run is reported, never silently miscounted — this
+#     script's own header says so.
 note "1 frozen hashes"
-if ( cd "$DRB" && sha256sum -c SHA256SUMS > /dev/null 2>&1 ); then
-  echo PASS
+SUMCHECK=""
+if command -v sha256sum > /dev/null 2>&1; then
+  SUMCHECK="sha256sum -c"
+elif command -v shasum > /dev/null 2>&1; then
+  SUMCHECK="shasum -a 256 -c"
+fi
+FIXTURE="vendor/fixture-validated.jsonl"
+if [ -z "$SUMCHECK" ]; then
+  echo "CANNOT-RUN (no sha256sum/shasum on PATH)"; FAIL=1
+elif [ -f "$DRB/$FIXTURE" ]; then
+  if ( cd "$DRB" && $SUMCHECK SHA256SUMS > /dev/null 2>&1 ); then
+    echo "PASS (20/20)"
+  else
+    echo FAIL; FAIL=1
+  fi
 else
-  echo FAIL; FAIL=1
+  PARTIAL="$(mktemp)"
+  grep -v "  ${FIXTURE}\$" "$DRB/SHA256SUMS" > "$PARTIAL"
+  if ( cd "$DRB" && $SUMCHECK "$PARTIAL" > /dev/null 2>&1 ); then
+    echo "PASS (19/20 — ${FIXTURE} not fetched; see drb/README.md Provenance)"
+  else
+    echo FAIL; FAIL=1
+  fi
+  rm -f "$PARTIAL"
 fi
 
 # 2. The frozen subset is exactly the pre-registered 10 tasks.

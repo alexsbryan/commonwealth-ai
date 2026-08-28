@@ -1,0 +1,13 @@
+  judge 464s (attempt 1)
+WARNING:root:ID: 69 - 1 criteria without exact matches: {'instruction_following:Provision and Detail of Explanation on A3A vs. MCP Connections'}
+{
+ "id": 69,
+ "overall_score": 0.45765328628142926,
+ "comprehensiveness": 0.45588235294117646,
+ "insight": 0.45220030349013657,
+ "instruction_following": 0.4803493449781659,
+ "readability": 0.442962962962963,
+ "target_total": 7.78125,
+ "reference_total": 9.22125
+}
+OVERALL x100 = 45.7653

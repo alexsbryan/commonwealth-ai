@@ -23,7 +23,7 @@ use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
 use crate::enrich_cmd::paths;
-use crate::eval_cmd::runner::{self, AtlasLoadFilter};
+use crate::eval_cmd::runner::{self, AtlasContextFilter};
 use sovereign_core::atlas_context::build_persistent_ann_seed_table;
 
 pub async fn run(args: &[String]) -> i32 {
@@ -36,7 +36,7 @@ pub async fn run(args: &[String]) -> i32 {
     };
     // Parse the filter-override flags out of `rest` (each is flag + value),
     // leaving plain positional tokens as corpus ids. The atlas-context filter
-    // already supports these knobs (`AtlasLoadFilter`); we just surface them so
+    // already supports these knobs (`AtlasContextFilter`); we just surface them so
     // a CODE atlas — `structural` depth, short/empty summaries — can be indexed.
     // Without them the default prose profile (`extracted` depth, min 200 chars)
     // excludes every code atom and the backfill resolves 0 entries.
@@ -134,21 +134,24 @@ pub async fn run(args: &[String]) -> i32 {
     // default — backfilling at the eval default would index atoms the production
     // seed path never sees (and key the embed cache the manager can't read).
     // Single source of truth, so the table can never drift from grounding.
-    let prod = sovereign_tools::atlas_context_manager::AtlasContextFilter::default();
+    let prod = AtlasContextFilter::default();
     let (inc_claims, inc_tensions, inc_configs) = include_override.unwrap_or((
         prod.include_claims,
         prod.include_tensions,
         prod.include_configurations,
     ));
-    let filter = AtlasLoadFilter {
+    // Overrides on top of `prod`, rather than a field-by-field rebuild of it:
+    // whatever the operator did not override stays whatever grounding uses,
+    // including fields added later.
+    let filter = AtlasContextFilter {
         min_description_chars: min_chars_override.unwrap_or(prod.min_description_chars),
         depth_allowlist: depth_override
             .clone()
             .unwrap_or_else(|| prod.depth_allowlist.clone()),
-        max_entries: prod.max_entries,
         include_claims: inc_claims,
         include_tensions: inc_tensions,
         include_configurations: inc_configs,
+        ..prod.clone()
     };
     let overridden =
         depth_override.is_some() || min_chars_override.is_some() || include_override.is_some();

@@ -135,7 +135,13 @@ pub(crate) fn reconstruct_abstract(inverted_index: &serde_json::Value) -> Option
 }
 
 /// Strip HTML tags and decode common entities.
-pub(crate) fn strip_html(html: &str) -> String {
+///
+/// `pub` since 2026-08-20: `sovereign-tools` carried a hand-copy of this
+/// function for its crawl / StackExchange / SEC-EDGAR parsers, and the copies
+/// DRIFTED — the fork never got the closing-tag clause below, so it discarded
+/// every character after the first `</script>` in a document. One
+/// implementation, named once (`ARCH_PRINCIPLES` §10.6).
+pub fn strip_html(html: &str) -> String {
     let mut result = String::with_capacity(html.len());
     let mut in_tag = false;
     let mut in_script = false;

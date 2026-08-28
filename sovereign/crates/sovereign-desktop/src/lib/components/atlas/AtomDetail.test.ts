@@ -30,7 +30,12 @@ function detailWithDuplicateNeighbour(): AtomDetailData {
     // neighbour through several edge types, so atom_id is NOT unique.
     atom_id: "entity-dup",
     atom_type: "Entity" as const,
-    display_name: "Repeated Neighbour",
+    // The wire field is `canonical_name` — both producers
+    // (`sovereign_mesh::RelatedAtom`, `RelatedAtomDto`) emit that and
+    // neither has ever emitted `display_name`. This fixture said
+    // `display_name` until 2026-08-21, which is why the assertion below
+    // stayed green while the real panel rendered an empty name.
+    canonical_name: "Repeated Neighbour",
     edge_type,
     role: "target",
     confidence: 0.9,

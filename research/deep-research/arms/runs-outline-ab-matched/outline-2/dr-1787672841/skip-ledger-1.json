@@ -1,0 +1,39 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787672841",
+  "charter_hash": "72aec8cf6ec28082",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.0314980149269104,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q19",
+      "snippet": "orts are open, and only trusted entities can access assets in the protocol’s environment. Avoid exposing significant endpoints to the public unless absolutely necessary, and in those cases, enforce strong authentication, TLS encryption, and zero trust network segmentation.\n2. Enforce context validation and sanitization\nTreat external context data as sensitive input. Ensure all context payloads are validated, stripped of unnecessary or unsafe content, and never written directly by untrusted or user-controlled processes. This prevents potential injection, information leakage, or model manipula"
+    },
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.030365770682692528,
+      "rank": 22,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q18",
+      "snippet": " If we don’t get serious about defining boundaries and enforcing them now, we’ll be dealing with some very avoidable incidents later.\nSo what is MCP, really?\nThe Model Context Protocol (MCP) is a specification for exposing structured, real-world context like files, shell output, database state, or user activity, to AI models through a standardized JSON endpoint. Instead of manually embedding this information into prompts, MCP allows tools to expose it automatically, giving models a consistent way to understand and act within their environment.\nThis opens the door to all kinds of practical "
+    },
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.02654711715877056,
+      "rank": 98,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q9",
+      "snippet": "t promising developments in this direction is the Model Context Protocol (MCP) introduced by Anthropic. But Anthropic isn’t alone other platforms like Google’s A2A protocol and Gemini, OpenAI and Copilot are also building toward similar context-awareness mechanisms.\nIn this blog, well explore:\nWhat MCP, A2A, and other agent context protocols are and why they matter How similar ideas are being approached by each major player The risks of using agent context protocols How to best protect ourselves as we’re moving towards the future What Does it Really Mean to Bring Memory to AI?\nWhen we ta"
+    }
+  ]
+}

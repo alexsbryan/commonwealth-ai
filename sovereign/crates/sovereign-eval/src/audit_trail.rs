@@ -19,7 +19,7 @@
 //! checking whether the run-2 query terms could plausibly have matched
 //! the run-1 note (FTS5-style overlap on content + symbols).
 
-use crate::manifest::{Manifest, NoteRow};
+use crate::manifest::{Manifest, ManifestNote};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -49,7 +49,7 @@ pub struct MatchedNote {
 }
 
 pub fn analyze(run1: &Manifest, run2: &Manifest) -> AuditReport {
-    let substantive: Vec<&NoteRow> = run1
+    let substantive: Vec<&ManifestNote> = run1
         .notes
         .decisions
         .iter()
@@ -128,7 +128,7 @@ fn extract_notes_queries(run2: &Manifest) -> Vec<String> {
     out
 }
 
-fn note_terms(n: &NoteRow) -> Vec<String> {
+fn note_terms(n: &ManifestNote) -> Vec<String> {
     let mut terms: Vec<String> = n
         .content
         .split_whitespace()
@@ -232,8 +232,8 @@ mod tests {
         }
     }
 
-    fn note(id: &str, kind: &str, content: &str) -> NoteRow {
-        NoteRow {
+    fn note(id: &str, kind: &str, content: &str) -> ManifestNote {
+        ManifestNote {
             id: id.into(),
             kind: kind.into(),
             content: content.into(),

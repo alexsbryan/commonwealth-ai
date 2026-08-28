@@ -37,7 +37,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use sovereign_cli_shared::cli_contract::{
-    Contract, Disposition, Evidence, Feature, Journey, Need, StepBinding, Visibility,
+    AssertionStrength, Contract, Disposition, Feature, Journey, Need, StepBinding, Visibility,
 };
 
 /// The stranded ledger is a debt register. It may SHRINK as verbs are
@@ -774,7 +774,7 @@ fn live_read_steps_assert_output() {
         .iter()
         .flat_map(|j| {
             j.live_steps()
-                .filter(|(_, s)| !s.mutates && s.evidence() != Evidence::Output)
+                .filter(|(_, s)| !s.mutates && s.evidence() != AssertionStrength::Output)
                 .map(move |(i, s)| format!("{}[{}] {}", j.id, i, s.run))
                 .collect::<Vec<_>>()
         })

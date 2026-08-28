@@ -13,15 +13,15 @@
 
 use std::path::PathBuf;
 
-use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use super::capability_posture::resolve_corpus_dir;
+use sovereign_core::tool_manifest::DeclaredTool;
+use std::sync::Arc;
 
 /// One finding from the reconcile artifact (permissive subset — extra fields
 /// ignored so the writer can evolve without breaking this reader).
@@ -84,91 +84,21 @@ impl Default for CapabilityFindingsTool {
     }
 }
 
-#[async_trait]
-impl Tool for CapabilityFindingsTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "capability_findings".to_string(),
-            name: "Capability Findings".to_string(),
-            description: "Query the capability-reconciliation findings without re-running the \
-                 pipeline. Sibling to `capability_posture` (freshness gate) and \
-                 `drift_findings`. Filter by `kind` (`drifted` — docs contradict the \
-                 code; `undocumented` — code does it, no doc describes it; \
-                 `corroborated` — docs and code agree; `any`) and/or a `query` \
-                 substring matched against the capability label + evidence. Returns \
-                 matches sorted drifted → undocumented → corroborated. Reads \
-                 `~/.svrnmesh/capabilities/<corpus>/capability_findings.json`; returns \
-                 `never_run` if no artifact exists — check `capability_posture` for \
-                 freshness before acting on results."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "kind": {
-                        "type": "string",
-                        "enum": ["drifted", "undocumented", "corroborated", "any"],
-                        "description": "Filter by finding kind. Default `any`."
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": "Optional substring matched against the capability label + evidence."
-                    },
-                    "corpus": {
-                        "type": "string",
-                        "description": "Corpus id (subdir under ~/.svrnmesh/capabilities). Defaults to the only corpus when unambiguous."
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Max findings to return (default 30), sorted drifted→undocumented→corroborated."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "List the capabilities the architecture docs don't describe.".into(),
-                    call: json!({ "kind": "undocumented" }),
-                },
-                ToolExample {
-                    situation: "Does the reconcile say anything about corpus_search?".into(),
-                    call: json!({ "query": "corpus_search", "kind": "any" }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "status": { "type": "string", "enum": ["ok", "never_run", "no_matches"] },
-                    "corpus_id": { "type": "string" },
-                    "report_path": { "type": ["string", "null"] },
-                    "match_count": { "type": "integer" },
-                    "findings": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "kind": { "type": "string" },
-                                "label": { "type": "string" },
-                                "entries": { "type": "integer" },
-                                "core_fns": { "type": "integer" },
-                                "evidence": { "type": "string" },
-                                "docs": { "type": ["string", "null"] }
-                            }
-                        }
-                    }
-                }
-            })),
-        }
+impl CapabilityFindingsTool {
+    /// Bind this tool's state to its `capability_findings` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("capability_findings", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `capability_findings`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let caps_dir = match resolve_corpus_dir(&self.root, params) {
             Ok(d) => d,
             Err(e) => {
@@ -307,7 +237,7 @@ mod tests {
 
         // kind=undocumented → the two undocumented findings, drifted-first order.
         let out = tool
-            .execute(&json!({"corpus":"c","kind":"undocumented"}), &ctx)
+            .run(&json!({"corpus":"c","kind":"undocumented"}), &ctx)
             .await
             .unwrap();
         let v = match out {
@@ -321,7 +251,7 @@ mod tests {
 
         // query narrows to a single capability across kinds.
         let out = tool
-            .execute(&json!({"corpus":"c","query":"vector_mean"}), &ctx)
+            .run(&json!({"corpus":"c","query":"vector_mean"}), &ctx)
             .await
             .unwrap();
         let v = match out {
@@ -338,7 +268,7 @@ mod tests {
         std::fs::create_dir_all(root.path().join("c")).unwrap();
         let ctx = test_ctx();
         let tool = CapabilityFindingsTool::new().with_root(root.path().to_path_buf());
-        let out = tool.execute(&json!({"corpus":"c"}), &ctx).await.unwrap();
+        let out = tool.run(&json!({"corpus":"c"}), &ctx).await.unwrap();
         let v = match out {
             StepOutput::Json(v) => v,
             _ => panic!("json"),

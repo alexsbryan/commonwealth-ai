@@ -325,84 +325,28 @@ pub fn policy_for_mode_only(register: SkillRegister, active_mode: Option<&str>) 
     }
 }
 
-/// Intent → allowed tool ids. Generous on first pass per the plan's
-/// risk note ("start with generous allowlists, tighten iteratively").
-/// The lists are the union of the retired-skill `required ∪ optional`
-/// declarations mapped to the intent that best matches each skill's
-/// work shape.
+/// Intent → allowed tool ids.
+///
+/// One line of policy: the per-intent tool set is the `tools` column of
+/// [`Intent::row`], and this turns it into a runtime [`ToolFilter`]. The lists
+/// themselves — and the reasoning for each — live on the rows in
+/// `types/routing.rs`, so a new intent that forgets to declare its tool access
+/// does not compile.
 fn tool_filter_for_intent(intent: &Intent) -> ToolFilter {
-    match intent {
-        // Synthesis-oriented intents — the unified front door plus
-        // the legacy SearchTool (kept for web supplementation) and
-        // the epistemic-graph tools. Document is included because
-        // research and analysis often pulls user documents in.
-        Intent::KnowledgeQuery | Intent::ComparisonQuery | Intent::DeepQuery => {
-            ToolFilter::allow([
-                "knowledge_lookup",
-                "search",
-                "knowledge",
-                "claim_search",
-                "epistemic_landscape",
-                "document",
-                "wikipedia_fetch",
-                "web_fetch",
-            ])
-        }
-        // Codebase / project-internal vocabulary questions (Metalingual) and
-        // first-class "how does this code work" questions (CodeQuery). Code
-        // intelligence tools + the unified front door for cross-cutting
-        // questions that live in notes / project docs.
-        Intent::MetalingualQuery | Intent::CodeQuery => ToolFilter::allow([
-            "knowledge_lookup",
-            "symbol_lookup",
-            "code_search",
-            "recent_changes",
-            "find_callers",
-            "find_callees",
-            "blast_radius",
-        ]),
-        // Multi-step planning. Full read catalog plus write tools
-        // (the executor's approval gates govern write safety, not
-        // the catalog filter).
-        Intent::ComplexTask => ToolFilter::allow([
-            "knowledge_lookup",
-            "search",
-            "knowledge",
-            "claim_search",
-            "epistemic_landscape",
-            "document",
-            "document_operation",
-            "wikipedia_fetch",
-            "web_fetch",
-            "symbol_lookup",
-            "code_search",
-            "recent_changes",
-            "find_callers",
-            "find_callees",
-            "blast_radius",
-            "shell",
-            "file",
-            "file_write",
-            "note",
-            "run_tests",
-        ]),
-        // Single-tool dispatch — only that tool is allowed. The
-        // router already picked the tool; the catalog filter just
-        // enforces that the planner doesn't substitute another.
-        Intent::SimpleAction { tool } => ToolFilter::allow(std::iter::once(tool.clone())),
-        // Emotive / commitment / imperative / creative — these shouldn't reach
-        // for tools at all. Empty allowlist makes that structural.
-        Intent::ExpressiveQuery
-        | Intent::ConationQuery
-        | Intent::CommissiveQuery
-        | Intent::GenerativeQuery => ToolFilter::none(),
-        // Continuation resumes a prior task — its policy comes from
-        // the prior task's plan, not from this dispatch. Unrestricted
-        // here lets the continuation handler decide.
-        Intent::Continuation { .. } => ToolFilter::Unrestricted,
-        // Simple chit-chat / smalltalk — model uses pretrained
-        // knowledge, no tool needed.
-        Intent::SimpleQuery => ToolFilter::none(),
+    match intent.row().tools {
+        crate::types::ToolAccess::Full => ToolFilter::Unrestricted,
+        crate::types::ToolAccess::Only(ids) => ToolFilter::allow(ids.iter().copied()),
+        // The one payload-driven row: the allowlist is the tool the router
+        // already picked, which is per-INSTANCE and so cannot be a table
+        // literal. `PayloadTool` is only reachable from `SimpleAction`, and
+        // `intent_table_payload_tool_is_simple_action_only` holds that.
+        crate::types::ToolAccess::PayloadTool => match intent {
+            Intent::SimpleAction { tool } => ToolFilter::allow(std::iter::once(tool.clone())),
+            other => {
+                debug_assert!(false, "ToolAccess::PayloadTool on {}", other.name());
+                ToolFilter::none()
+            }
+        },
     }
 }
 

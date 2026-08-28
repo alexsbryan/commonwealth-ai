@@ -7,7 +7,7 @@ use commonwealth_core::contributions::LedgerEventKind;
 use commonwealth_core::ids::{HandoffId, NodeId};
 use commonwealth_core::knowledge::{IngestionHandoff, KnowledgeShardAssignment, PartitionStatus};
 use commonwealth_state::{ContributionEmitter, MeshStore};
-use corpus_engine::{ChunkRange, CorpusEngine, IndexInfo, ShardInfo};
+use corpus_engine::{ChunkRange, Corpus, CorpusEngine, IndexInfo, ShardInfo};
 
 pub struct ShardManager {
     engine: Arc<CorpusEngine>,
@@ -369,7 +369,7 @@ impl ShardManager {
             let original_path = self.engine.index_dir().join(&handoff.corpus_id);
             if partition_path.exists() {
                 shard_dirs.push(partition_path);
-            } else if original_path.join("_corpus_meta.json").exists() {
+            } else if Corpus::meta_in(&original_path).exists() {
                 tracing::info!(
                     corpus = %handoff.corpus_id,
                     "coordinate_merge: using original index path as local shard"

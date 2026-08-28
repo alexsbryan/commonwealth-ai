@@ -287,9 +287,9 @@ fn peak_rss_mb() -> Option<u64> {
 /// every discovery cycle (the second half of the worker-resilience fix; the
 /// first half is the supervisor restart in `sovereign-inference`).
 fn rpc_worker_port() -> Option<u16> {
-    let bind = std::env::var("SOVEREIGN_RPC_SERVE").ok()?;
-    let port: u16 = bind.trim().rsplit(':').next()?.parse().ok()?;
-    rpc_worker_listening(&bind).then_some(port)
+    let serve = sovereign_core::launch::RpcServe::from_env();
+    let port = serve.port()?;
+    rpc_worker_listening(serve.bind()?).then_some(port)
 }
 
 /// True when a TCP connection to the configured RPC bind address succeeds — i.e.

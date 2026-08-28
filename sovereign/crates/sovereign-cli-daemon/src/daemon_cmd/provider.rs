@@ -29,7 +29,7 @@ pub(super) struct LlamaCppFactory {
     /// raw provider — without this, reload would drop the wrapper
     /// and `/v1/chat/completions` would silently start substituting
     /// for peer-only model names again.
-    pub(super) daemon: Arc<sovereign_mesh::EmbeddedDaemon>,
+    pub(super) daemon: Arc<sovereign_mesh::DeferredDaemon>,
 }
 
 #[async_trait]
@@ -48,7 +48,10 @@ impl ProviderFactory for LlamaCppFactory {
             Some(&cfg.models.primary),
             Some(&cfg.models.embed),
             cfg.models.code.as_deref(),
-            cfg.models.effective_context_size(),
+            // Per-slot windows (2026-08-25). `from_models` honours
+            // `[models].fast_context_size` and falls back to the primary's
+            // window when it is unset, so an existing config.toml is unchanged.
+            sovereign_inference::embedded::SlotWindows::from_models(&cfg.models),
             None,
             ModelFamily::Unknown,
             ModelFamily::Unknown,
@@ -87,13 +90,23 @@ impl ProviderFactory for LlamaCppFactory {
         // gossip would see a counter that snaps to zero on reload
         // and stays there until new traffic flows. See
         // `sovereign/docs/MESH_LOAD_AWARENESS.md`.
-        let app_state_opt = self.daemon.app_state().await;
+        // The factory is only reachable through `POST /v1/admin/reload`, which
+        // is served BY the daemon — so by the time this runs the handle is
+        // always bound. `None` here would mean a reload that arrived before
+        // the daemon existed, which the HTTP surface cannot produce.
+        let daemon = self
+            .daemon
+            .get()
+            .ok_or_else(|| "reload arrived before the daemon was commissioned".to_string())?;
+        let peer_source: Arc<dyn sovereign_mesh::peer_inference::PeerEndpointSource> =
+            Arc::clone(&self.daemon) as Arc<_>;
+        let app_state_opt = daemon.app_state().await;
         let mesh_provider = if let Some(state) = app_state_opt.as_ref() {
             match state.in_flight_publisher() {
                 Some(publisher) => Arc::new(
-                    sovereign_mesh::peer_inference::MeshInferenceProvider::with_in_flight_publisher(
+                    sovereign_mesh::peer_inference::MeshInferenceProvider::with_peer_source_and_publisher(
                         raw,
-                        Arc::clone(&self.daemon),
+                        Arc::clone(&peer_source),
                         publisher,
                     ),
                 ),
@@ -101,16 +114,20 @@ impl ProviderFactory for LlamaCppFactory {
                 // task hasn't run; reload still installs the new
                 // MIP, and the spawned task will install its
                 // publisher when it next polls.
-                None => Arc::new(sovereign_mesh::peer_inference::MeshInferenceProvider::new(
-                    raw,
-                    Arc::clone(&self.daemon),
-                )),
+                None => Arc::new(
+                    sovereign_mesh::peer_inference::MeshInferenceProvider::with_peer_source(
+                        raw,
+                        Arc::clone(&peer_source),
+                    ),
+                ),
             }
         } else {
-            Arc::new(sovereign_mesh::peer_inference::MeshInferenceProvider::new(
-                raw,
-                Arc::clone(&self.daemon),
-            ))
+            Arc::new(
+                sovereign_mesh::peer_inference::MeshInferenceProvider::with_peer_source(
+                    raw,
+                    Arc::clone(&peer_source),
+                ),
+            )
         };
         // Push current slot aliases into the freshly-built mesh
         // provider so a reload preserves the deferred-resolution
@@ -130,11 +147,8 @@ impl ProviderFactory for LlamaCppFactory {
         // Route this node's primary turns into the mesh-hosted shared model, if
         // one is configured (SOVEREIGN_SHARED_MODEL_ID, from [shared_model]
         // model_id). Survives reload — the env is set once at daemon entry.
-        if let Some(id) = std::env::var("SOVEREIGN_SHARED_MODEL_ID")
-            .ok()
-            .filter(|s| !s.trim().is_empty())
-        {
-            mesh_provider.set_shared_model_id(Some(id));
+        if let Some(id) = sovereign_contracts::launch::SharedModelFleet::from_env().model_id() {
+            mesh_provider.set_shared_model_id(Some(id.to_string()));
         }
         let routed: Arc<dyn InferenceProvider> = mesh_provider;
         Ok(routed)

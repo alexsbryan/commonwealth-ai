@@ -11,7 +11,10 @@ use crate::types::{Idempotency, StepOutput, ToolContext, ToolDescriptor};
 /// Owns every registered `Tool`: lookup for dispatch, descriptor listing for
 /// prompts, per-tool call counters, and the optional Tier-4 result cache.
 pub struct ToolRegistry {
-    tools: Vec<Box<dyn Tool>>,
+    /// `Arc`, not `Box`, so a registered tool can be handed to another tool.
+    /// That is what lets a manifest declaring `delegate = "<id>"` become a
+    /// working tool with no Rust behind it (see [`Self::install_declared`]).
+    tools: Vec<Arc<dyn Tool>>,
     call_counts: Mutex<HashMap<String, u64>>,
     /// Tier 4 — optional per-conversation result cache. When
     /// wired, `call_cached` consults it before dispatching to
@@ -19,6 +22,31 @@ pub struct ToolRegistry {
     /// Constructor leaves it `None`; daemons set it via
     /// [`Self::with_cache`].
     cache: Option<Arc<ToolResultCache>>,
+    /// Which user-facing tool families this host may register.
+    ///
+    /// `None` is UNGATED and is the default, so a host that has no per-user
+    /// tool switches — the daemon, the hub server — behaves exactly as it did
+    /// before this field existed. A surface with a settings panel wires the
+    /// user's set with [`Self::with_permitted`].
+    permitted: Option<crate::tool_bundle::ToolPermissions>,
+}
+
+/// What [`ToolRegistry::register_reporting`] did, so the caller's
+/// [`BundleReport`](crate::tool_bundle::BundleReport) can say so.
+///
+/// A bare id would make a withheld tool indistinguishable from a registered
+/// one in the report, which is the substitution ARCH §18.3 forbids.
+#[derive(Debug, Clone)]
+pub enum Registration {
+    /// Registered and callable.
+    Registered(String),
+    /// Not registered: the user has this family switched off.
+    Gated {
+        /// The tool id that would have been registered.
+        id: String,
+        /// The family whose switch withheld it.
+        family: crate::tool_bundle::ToolFamily,
+    },
 }
 
 impl ToolRegistry {
@@ -28,7 +56,19 @@ impl ToolRegistry {
             tools: Vec::new(),
             call_counts: Mutex::new(HashMap::new()),
             cache: None,
+            permitted: None,
         }
+    }
+
+    /// Gate registration on the user's permitted families.
+    ///
+    /// Only [`Self::register_reporting`] consults this — the bundle path,
+    /// which has a report to carry the withholding. [`Self::register`] stays
+    /// the ungated primitive on purpose: dropping a tool with no way to say so
+    /// is the silent substitution this gate exists to avoid.
+    pub fn with_permitted(mut self, permitted: crate::tool_bundle::ToolPermissions) -> Self {
+        self.permitted = Some(permitted);
+        self
     }
 
     /// Wire a shared `ToolResultCache` (Tier 4). Callers that
@@ -43,7 +83,95 @@ impl ToolRegistry {
 
     /// Add a tool. No dedupe — on duplicate ids the first registered wins at `get`.
     pub fn register(&mut self, tool: Box<dyn Tool>) {
+        self.tools.push(Arc::from(tool));
+    }
+
+    /// Add an already-shared tool.
+    pub fn register_arc(&mut self, tool: Arc<dyn Tool>) {
         self.tools.push(tool);
+    }
+
+    /// Register and hand back the id that was registered.
+    ///
+    /// For [`crate::tool_bundle::ToolBundle`] implementors, which must report
+    /// what they contributed. Reading the id off the descriptor keeps the
+    /// report from becoming a second, drifting copy of the id list
+    /// (ARCH §10.6 — one decider, one name).
+    pub fn register_reporting(&mut self, tool: Box<dyn Tool>) -> Registration {
+        let id = tool.descriptor().id;
+        let family = tool.family();
+        if let (Some(p), Some(f)) = (self.permitted.as_ref(), family) {
+            if !p.permits(Some(f)) {
+                return Registration::Gated { id, family: f };
+            }
+        }
+        self.register(tool);
+        Registration::Registered(id)
+    }
+
+    /// Register every manifest in the catalog that declares a `delegate` — the
+    /// tools that are pure data, with no Rust of their own.
+    ///
+    /// Call once, AFTER the tools they delegate to are registered. Returns the
+    /// ids installed.
+    ///
+    /// Two cases are deliberately skipped rather than failed, and both are
+    /// logged by id (ARCH §18.3 — absence is reported, never silently
+    /// defaulted):
+    ///
+    /// - The delegate target is not registered on THIS host. Hosts legitimately
+    ///   carry different subsets of the tool surface, so a missing target means
+    ///   "not available here", not "broken".
+    /// - An id is already registered by a coded tool. Code wins; a manifest
+    ///   never shadows a real implementation.
+    pub fn install_declared(&mut self) -> Vec<String> {
+        let mut installed = Vec::new();
+        for manifest in crate::tool_manifest::catalog().values() {
+            let Some(target_id) = manifest.delegate.as_deref() else {
+                continue;
+            };
+            if self.get(&manifest.id).is_ok() {
+                tracing::warn!(
+                    tool_id = %manifest.id,
+                    "declared tool skipped: a coded tool already owns this id"
+                );
+                continue;
+            }
+            let Some(target) = self.get_arc(target_id) else {
+                tracing::warn!(
+                    tool_id = %manifest.id,
+                    delegate = target_id,
+                    "declared tool skipped: its delegate target is not registered on this host"
+                );
+                continue;
+            };
+            let handler =
+                crate::tool_manifest::delegating_handler(target, manifest.defaults.clone());
+            match crate::tool_manifest::DeclaredTool::new(&manifest.id, handler) {
+                Ok(tool) => {
+                    self.tools.push(Arc::new(tool));
+                    installed.push(manifest.id.clone());
+                }
+                Err(e) => {
+                    tracing::warn!(tool_id = %manifest.id, error = %e, "declared tool skipped")
+                }
+            }
+        }
+        tracing::debug!(installed = installed.len(), "declared tools installed");
+        installed
+    }
+
+    /// Shared handle to a registered tool, for callers that need to hold it
+    /// beyond the borrow — notably a declared tool delegating to it.
+    pub fn get_arc(&self, tool_id: &str) -> Option<Arc<dyn Tool>> {
+        let lower = tool_id.to_lowercase();
+        self.tools
+            .iter()
+            .find(|t| {
+                let id = t.descriptor().id;
+                id == tool_id || id.to_lowercase() == lower
+            })
+            .map(Arc::clone)
     }
 
     /// Look up by id: exact match first, then case-insensitive (models sometimes
@@ -204,64 +332,66 @@ impl Default for ToolRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{AuthorityClaim, Effect, Idempotency, Latency, Permission, Scope};
-    use async_trait::async_trait;
+    use crate::tool_manifest::DeclaredTool;
+    use crate::types::AuthorityClaim;
+
+    /// The fake store's DECLARED half, as a host-local family rather than a
+    /// row in the shipped catalog — a fake store must never appear in the real
+    /// tool surface. [`crate::tool_manifest::parse_family`] exists for exactly
+    /// this: a declaration that is not checked in.
+    const FAKE_STORE_FAMILY: &str = r#"
+[[tool]]
+id = "fake_store"
+name = "Fake Store"
+description = "test"
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+"#;
 
     /// A fake authoritative store: claims any question containing both
     /// "acme" and "revenue" for its declared corpus.
-    struct FakeStoreTool {
-        corpus: &'static str,
-    }
-
-    #[async_trait]
-    impl Tool for FakeStoreTool {
-        fn descriptor(&self) -> ToolDescriptor {
-            ToolDescriptor {
-                id: "fake_store".into(),
-                name: "Fake Store".into(),
-                description: "test".into(),
-                parameters: serde_json::json!({}),
-                examples: vec![],
-                effect: Effect::Read,
-                idempotency: Idempotency::Idempotent,
-                latency: Latency::Fast,
-                scope: Scope::Persistent,
-                output_schema: None,
-            }
-        }
-        fn required_permissions(&self) -> Vec<Permission> {
-            vec![]
-        }
-        async fn execute(&self, _p: &serde_json::Value, _c: &ToolContext) -> Result<StepOutput> {
+    ///
+    /// A row plus two closures, with no `impl Tool for` of its own — so these
+    /// tests now drive authority claims through the SAME `DeclaredTool`
+    /// adapter every real tool routes through, rather than a bespoke impl that
+    /// could diverge from it.
+    fn fake_store(corpus: &'static str) -> DeclaredTool {
+        let manifest = crate::tool_manifest::parse_family(FAKE_STORE_FAMILY)
+            .expect("the fake-store family parses")
+            .remove(0);
+        crate::tool_manifest::declared_from(manifest, |_p, _c| async {
             Ok(StepOutput::Text("ok".into()))
-        }
-        fn claims(&self, question: &str) -> Vec<AuthorityClaim> {
+        })
+        .with_claims(Arc::new(move |question: &str| {
             let q = question.to_lowercase();
             if q.contains("acme") && q.contains("revenue") {
                 vec![AuthorityClaim {
                     tool_id: "fake_store".into(),
-                    corpus_id: self.corpus.into(),
+                    corpus_id: corpus.into(),
                     matched: "entity 'acme' + concept term 'revenue'".into(),
                 }]
             } else {
                 Vec::new()
             }
-        }
-        fn authority_domains(&self) -> Vec<AuthorityClaim> {
+        }))
+        .with_authority_domains(Arc::new(move || {
             vec![AuthorityClaim {
                 tool_id: "fake_store".into(),
-                corpus_id: self.corpus.into(),
+                corpus_id: corpus.into(),
                 matched: "declared authoritative".into(),
             }]
-        }
+        }))
     }
 
     #[test]
     fn authority_claims_default_is_empty_and_claims_are_sorted() {
         let mut reg = ToolRegistry::new();
         // Register in REVERSE corpus order to prove the tie rule sorts.
-        reg.register(Box::new(FakeStoreTool { corpus: "corpus-b" }));
-        reg.register(Box::new(FakeStoreTool { corpus: "corpus-a" }));
+        reg.register(Box::new(fake_store("corpus-b")));
+        reg.register(Box::new(fake_store("corpus-a")));
 
         // The failing input, by name: a question with no entity match
         // claims nothing — generic finance wording never routes on
@@ -290,8 +420,8 @@ mod tests {
         assert!(ToolRegistry::new().authority_domains().is_empty());
 
         let mut reg = ToolRegistry::new();
-        reg.register(Box::new(FakeStoreTool { corpus: "corpus-b" }));
-        reg.register(Box::new(FakeStoreTool { corpus: "corpus-a" }));
+        reg.register(Box::new(fake_store("corpus-b")));
+        reg.register(Box::new(fake_store("corpus-a")));
 
         // The failing input for question-level arming, by name: this
         // question claims NOTHING at question granularity …

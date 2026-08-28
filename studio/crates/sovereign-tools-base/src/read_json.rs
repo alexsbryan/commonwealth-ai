@@ -79,18 +79,6 @@ impl Tool for ReadJsonTool {
 mod tests {
     use super::*;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     /// Surfaces an array field as a collection (for a downstream `for_each`), the
     /// whole document when no `field`, and fails loud on a missing file/field.
     #[tokio::test]
@@ -107,7 +95,7 @@ mod tests {
         let out = ReadJsonTool
             .execute(
                 &serde_json::json!({ "path": p.to_string_lossy(), "field": "questions_by_chapter" }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -121,7 +109,10 @@ mod tests {
 
         // No field → the whole document.
         let whole = ReadJsonTool
-            .execute(&serde_json::json!({ "path": p.to_string_lossy() }), &ctx())
+            .execute(
+                &serde_json::json!({ "path": p.to_string_lossy() }),
+                &ToolContext::default(),
+            )
             .await
             .unwrap();
         assert!(matches!(
@@ -133,12 +124,15 @@ mod tests {
         assert!(ReadJsonTool
             .execute(
                 &serde_json::json!({ "path": p.to_string_lossy(), "field": "nope" }),
-                &ctx()
+                &ToolContext::default()
             )
             .await
             .is_err());
         assert!(ReadJsonTool
-            .execute(&serde_json::json!({ "path": "/no/such/file.json" }), &ctx())
+            .execute(
+                &serde_json::json!({ "path": "/no/such/file.json" }),
+                &ToolContext::default()
+            )
             .await
             .is_err());
     }

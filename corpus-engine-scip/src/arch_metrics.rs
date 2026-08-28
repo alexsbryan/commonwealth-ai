@@ -32,6 +32,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use serde::Serialize;
 
 use crate::capability_map::{pkg_and_desc, short};
+use crate::converge::{type_defs, SourceScope};
 use crate::scip_graph::{ScipRefRecord, ScipSymbolRecord};
 
 // ── Inputs ────────────────────────────────────────────────────────────────────
@@ -66,6 +67,10 @@ pub struct ArchOptions {
     pub top_files: usize,
     /// Cycles reported (largest first).
     pub max_cycles: usize,
+    /// Scope for the per-crate type-visibility census ([`TypeSpread`]).
+    /// `None` skips it and leaves [`CrateMetrics::types`] `None` — absence
+    /// reported, never a zero standing in for "not measured" (§18.3).
+    pub type_scope: Option<SourceScope>,
 }
 
 impl Default for ArchOptions {
@@ -74,6 +79,7 @@ impl Default for ArchOptions {
             top_symbols_per_edge: 10,
             top_files: 50,
             max_cycles: 20,
+            type_scope: Some(SourceScope::default()),
         }
     }
 }
@@ -98,6 +104,48 @@ pub struct CrateMetrics {
     /// Same shape over Cargo-declared edges, when a declared graph was given.
     pub declared_fan_in: Option<usize>,
     pub declared_fan_out: Option<usize>,
+    /// Per-crate type visibility (§10.2). `None` when `ArchOptions::type_scope`
+    /// was `None` — the census did not run, which is not the same as zero.
+    pub types: Option<TypeSpread>,
+}
+
+/// How a crate's own types are reached — `NOUN_CONVERGENCE.md` §10.2's
+/// number, which that section flagged as hand-measured and named this module
+/// as the owner of.
+///
+/// The three buckets partition `total` exactly, so a reader can check the
+/// arithmetic rather than trust it. A type is placed by the WIDEST reference
+/// it has:
+///
+/// - `private` — no reference from any file but the one declaring it. §10.2's
+///   headline defect: measured there at 46% of all first-party types.
+/// - `crate_local` — reached from another file, all inside its own crate.
+/// - `exported` — reached from a file in another crate. The only bucket that
+///   means "something else could reuse this".
+///
+/// Reference-derived, not visibility-derived: a `pub` type nobody imports
+/// counts as `private` here, because the question §10.2 asks is whether
+/// anything actually reaches it, not what the keyword permits. SCIP misses
+/// macro-expanded references, so `private` is a ceiling and `exported` a
+/// floor.
+#[derive(Debug, Clone, Copy, Default, Serialize, PartialEq, Eq)]
+pub struct TypeSpread {
+    pub total: usize,
+    pub private: usize,
+    pub crate_local: usize,
+    pub exported: usize,
+}
+
+impl TypeSpread {
+    /// Share of the crate's types reached from no other file, in 0.0..=1.0.
+    pub fn private_share(&self) -> Option<f64> {
+        (self.total > 0).then(|| self.private as f64 / self.total as f64)
+    }
+
+    /// Share reached from another crate, in 0.0..=1.0.
+    pub fn exported_share(&self) -> Option<f64> {
+        (self.total > 0).then(|| self.exported as f64 / self.total as f64)
+    }
 }
 
 /// One observed crate→crate coupling edge, with the symbols that carry it —
@@ -259,6 +307,16 @@ pub fn compute(
         }
     }
 
+    // ── Type visibility, per crate (§10.2) ───────────────────────────────────
+    // Definitions come from `converge::type_defs`, deliberately: the census,
+    // the role tier and this share are then all counting the same population,
+    // and a spread here can be compared with a census row there without
+    // anyone reconciling two definitions of "a type" (§10.6).
+    let spreads: Option<BTreeMap<String, TypeSpread>> = opts
+        .type_scope
+        .as_ref()
+        .map(|scope| type_spreads(symbols, refs, scope));
+
     // ── Crate metrics ────────────────────────────────────────────────────────
     let mut in_crates: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
     let mut out_crates: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
@@ -300,6 +358,13 @@ pub fn compute(
                 instability,
                 declared_fan_in: dfi,
                 declared_fan_out: dfo,
+                // A crate present in the graph but with no in-scope type
+                // definitions gets an all-zero spread, not `None`: the census
+                // ran and found nothing, which is a different fact from the
+                // census not having run.
+                types: spreads
+                    .as_ref()
+                    .map(|m| m.get(name.as_str()).copied().unwrap_or_default()),
             }
         })
         .collect();
@@ -538,6 +603,64 @@ fn tarjan_sccs(adj: &BTreeMap<String, BTreeSet<String>>) -> Vec<Vec<String>> {
     sccs
 }
 
+/// Per-crate [`TypeSpread`] — how far each crate's own types are actually
+/// reached.
+///
+/// A type is bucketed by the WIDEST reference to it, so the three buckets
+/// partition the population exactly. `defining file` is the file the type is
+/// declared in; a reference from that same file is not evidence anyone else
+/// can use the type, which is precisely §10.2's point.
+pub fn type_spreads(
+    symbols: &[ScipSymbolRecord],
+    refs: &[ScipRefRecord],
+    scope: &SourceScope,
+) -> BTreeMap<String, TypeSpread> {
+    let defs = type_defs(symbols, scope);
+    // qualified name → (owning crate, defining file)
+    let mut owner: HashMap<&str, (&str, &str)> = HashMap::new();
+    for d in &defs {
+        owner.insert(&d.qualified, (&d.krate, &d.file));
+    }
+
+    // qualified name → widest reach seen. 0 = own file only, 1 = another file
+    // in the same crate, 2 = another crate.
+    let mut widest: HashMap<&str, u8> = HashMap::new();
+    for r in refs {
+        if !scope.admits(&r.file_path) {
+            continue;
+        }
+        // Take the key BY REFERENCE from `owner` so `widest` borrows from
+        // `defs` and not from the ref record, which does not outlive the loop.
+        let Some((&qn, &(krate, file))) = owner.get_key_value(r.callee_qualified.as_str()) else {
+            continue;
+        };
+        let Some((caller_pkg, _)) = pkg_and_desc(&r.caller_qualified) else {
+            continue;
+        };
+        let grade = if caller_pkg != krate {
+            2
+        } else if r.file_path != file {
+            1
+        } else {
+            0
+        };
+        let slot = widest.entry(qn).or_insert(0);
+        *slot = (*slot).max(grade);
+    }
+
+    let mut out: BTreeMap<String, TypeSpread> = BTreeMap::new();
+    for d in &defs {
+        let e = out.entry(d.krate.clone()).or_default();
+        e.total += 1;
+        match widest.get(d.qualified.as_str()).copied().unwrap_or(0) {
+            2 => e.exported += 1,
+            1 => e.crate_local += 1,
+            _ => e.private += 1,
+        }
+    }
+    out
+}
+
 // ── Render ────────────────────────────────────────────────────────────────────
 
 /// One rendering shared by the CLI verb and the MCP tool (the
@@ -576,6 +699,63 @@ pub fn render_markdown(corpus_id: &str, m: &ArchMetrics) -> String {
             out,
             "| {} | {} | {} | {} | {} | {} | {} |",
             c.name, c.fan_in, c.fan_out, inst, c.in_refs, c.out_refs, decl
+        );
+    }
+
+    // §10.2's table. Sorted by private share descending — the crates whose
+    // types nothing else can reach are the ones the section is about.
+    if m.crates.iter().any(|c| c.types.is_some()) {
+        let _ = writeln!(out, "\n## Type visibility (observed reach)\n");
+        let _ = writeln!(
+            out,
+            "_A type is bucketed by the widest reference to it. `private` = reached from no \
+             file but its own — nothing else can reuse it. Reference-derived, so a `pub` type \
+             nobody imports is `private` here._\n"
+        );
+        let _ = writeln!(out, "| crate | types | private | crate-local | exported |");
+        let _ = writeln!(out, "|---|---|---|---|---|");
+        let mut rows: Vec<&CrateMetrics> = m.crates.iter().filter(|c| c.types.is_some()).collect();
+        rows.sort_by(|a, b| {
+            let (ta, tb) = (a.types.unwrap_or_default(), b.types.unwrap_or_default());
+            tb.total.cmp(&ta.total).then(a.name.cmp(&b.name))
+        });
+        let share = |n: usize, d: usize| -> String {
+            if d == 0 {
+                "—".to_string()
+            } else {
+                format!("{} ({:.0}%)", n, n as f64 * 100.0 / d as f64)
+            }
+        };
+        for c in rows
+            .iter()
+            .filter(|c| c.types.unwrap_or_default().total > 0)
+        {
+            let t = c.types.unwrap_or_default();
+            let _ = writeln!(
+                out,
+                "| {} | {} | {} | {} | {} |",
+                c.name,
+                t.total,
+                share(t.private, t.total),
+                share(t.crate_local, t.total),
+                share(t.exported, t.total)
+            );
+        }
+        let tot: TypeSpread = rows.iter().fold(TypeSpread::default(), |mut a, c| {
+            let t = c.types.unwrap_or_default();
+            a.total += t.total;
+            a.private += t.private;
+            a.crate_local += t.crate_local;
+            a.exported += t.exported;
+            a
+        });
+        let _ = writeln!(
+            out,
+            "| **all** | **{}** | **{}** | **{}** | **{}** |",
+            tot.total,
+            share(tot.private, tot.total),
+            share(tot.crate_local, tot.total),
+            share(tot.exported, tot.total)
         );
     }
 
@@ -685,6 +865,9 @@ mod tests {
             callee_qualified: callee.to_string(),
             file_path: String::new(),
             line: 1,
+            start_col: -1,
+            end_line: -1,
+            end_col: -1,
             ref_kind: "call".into(),
         }
     }
@@ -692,6 +875,78 @@ mod tests {
     // SCIP-shaped qualified names: "<scheme> <manager> <package> <version> <descriptor>"
     fn qn(pkg: &str, desc: &str) -> String {
         format!("rust-analyzer cargo {pkg} 0.1.0 {desc}")
+    }
+
+    /// §10.2's three buckets, each reached by a different-width reference.
+    #[test]
+    fn type_spread_buckets_by_widest_reference() {
+        let priv_t = qn("crate_a", "a/OnlyHere#");
+        let local_t = qn("crate_a", "a/AcrossFiles#");
+        let exp_t = qn("crate_a", "a/Shared#");
+        let symbols = vec![
+            sym(&priv_t, "crate-a/src/a.rs"),
+            sym(&local_t, "crate-a/src/a.rs"),
+            sym(&exp_t, "crate-a/src/a.rs"),
+        ];
+        let caller_same_file = qn("crate_a", "a/f().");
+        let caller_other_file = qn("crate_a", "a/g().");
+        let caller_other_crate = qn("crate_b", "b/h().");
+
+        let mut refs = vec![
+            r(&caller_same_file, &priv_t),
+            r(&caller_other_file, &local_t),
+            r(&caller_other_crate, &exp_t),
+        ];
+        refs[0].file_path = "crate-a/src/a.rs".into(); // the defining file
+        refs[1].file_path = "crate-a/src/b.rs".into(); // sibling file, same crate
+        refs[2].file_path = "crate-b/src/b.rs".into(); // another crate
+
+        let sp = type_spreads(&symbols, &refs, &SourceScope::default());
+        let a = sp.get("crate_a").expect("crate_a has types");
+        assert_eq!(a.total, 3);
+        assert_eq!(a.private, 1, "a same-file reference is not reuse");
+        assert_eq!(a.crate_local, 1);
+        assert_eq!(a.exported, 1);
+        // The buckets partition the population — a reader can check the sum.
+        assert_eq!(a.private + a.crate_local + a.exported, a.total);
+        assert_eq!(a.private_share(), Some(1.0 / 3.0));
+    }
+
+    /// A type nothing references at all is private, not missing.
+    #[test]
+    fn an_unreferenced_type_is_private() {
+        let t = qn("crate_a", "a/Orphan#");
+        let sp = type_spreads(&[sym(&t, "crate-a/src/a.rs")], &[], &SourceScope::default());
+        let a = sp.get("crate_a").unwrap();
+        assert_eq!((a.total, a.private, a.exported), (1, 1, 0));
+    }
+
+    /// §18.3: `type_scope: None` means the census did not run, and that must
+    /// not read as a crate whose types are all private.
+    #[test]
+    fn skipping_the_census_reports_absence_not_zero() {
+        let t = qn("crate_a", "a/Thing#");
+        let symbols = vec![sym(&t, "crate-a/src/a.rs")];
+        let refs = vec![r(&qn("crate_b", "b/h()."), &t)];
+
+        let opts = ArchOptions {
+            type_scope: None,
+            ..Default::default()
+        };
+        let m = compute(&symbols, &refs, None, &opts);
+        assert!(
+            m.crates.iter().all(|c| c.types.is_none()),
+            "absence is reported, never defaulted to zero"
+        );
+
+        let m2 = compute(&symbols, &refs, None, &ArchOptions::default());
+        let a = m2
+            .crates
+            .iter()
+            .find(|c| c.name == "crate_a")
+            .and_then(|c| c.types)
+            .expect("default options run the census");
+        assert_eq!(a.total, 1);
     }
 
     #[test]

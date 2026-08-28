@@ -48,9 +48,12 @@ pub use pipeline::{Pipeline, PipelineRegistry};
 
 // Event-sourced governance oplog + active-set fold (Governance Atlas).
 pub use governance::{
-    derive_active, first_unattended_act, ActiveSet, GovernanceOp, GovernanceOpKind,
-    GovernanceOplog, OpId, RuleStatus, TensionStatus,
+    derive_active, first_unattended_act, ActiveSet, GovernanceOpKind, RuleStatus, TensionStatus,
 };
+// `OpId` is not governance's — it is the shared journal's, and every tenant of
+// `crate::oplog` mints one. Re-exported here so the governance surface reads
+// whole, but the definition has exactly one home.
+pub use crate::oplog::OpId;
 // Governance read-model — the atlas-graph + oplog join (Governance Atlas).
 pub use governance_view::{
     build_view, GovernanceIssue, GovernanceView, RuleAtom, RuleTension, RuleView,

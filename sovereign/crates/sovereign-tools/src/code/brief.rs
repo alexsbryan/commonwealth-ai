@@ -52,7 +52,7 @@ use corpus_engine_archaeology::archaeology_eval::{
 };
 #[cfg(feature = "dev-tools")]
 use corpus_engine_archaeology::git_archaeology::{batch_harvest_all_commits, CommitRecord};
-use corpus_engine_notes::{NodeRoster, NoteRow, NoteStore};
+use corpus_engine_notes::{NodeRoster, Note, NoteStore};
 use serde::Deserialize;
 
 use crate::knowledge_view::tokens::estimate_tokens;
@@ -479,21 +479,12 @@ async fn render_notes(
     working_set: &[PathBuf],
     remaining: usize,
 ) -> Result<String, BriefError> {
-    use corpus_engine_notes::{NoteScope, ScopeFilter};
+    use corpus_engine_notes::ScopeFilter;
     // `reflection` joins decision + invariant so session-end captures
     // (written by `sovereign code reflect`) surface in the next
     // session's brief automatically — closing the feedback loop.
     let kinds: Vec<String> = vec!["decision".into(), "invariant".into(), "reflection".into()];
-    let scope_filter = match feature_id {
-        Some(f) => ScopeFilter {
-            scopes: vec![NoteScope::Global, NoteScope::Feature],
-            feature_id: Some(f.to_string()),
-        },
-        None => ScopeFilter {
-            scopes: vec![NoteScope::Global],
-            feature_id: None,
-        },
-    };
+    let scope_filter = ScopeFilter::for_feature(feature_id);
     let rows = notes
         .read_notes_scoped(None, &[], &[], &kinds, 30, false, &scope_filter)
         .await
@@ -509,7 +500,7 @@ async fn render_notes(
         .iter()
         .map(|p| p.to_string_lossy().to_string())
         .collect();
-    let mut kept: Vec<&NoteRow> = Vec::new();
+    let mut kept: Vec<&Note> = Vec::new();
     for row in &rows {
         if row.files.is_empty() || row.files.iter().any(|f| ws_set.contains(f)) {
             kept.push(row);
@@ -687,26 +678,10 @@ fn render_recent_activity(
 // ── Helpers ───────────────────────────────────────────────────
 
 fn atom_label(atom: &AtomEnvelope) -> (&'static str, String) {
-    match atom {
-        AtomEnvelope::Entity(e) => ("entity", e.canonical_name.clone()),
-        AtomEnvelope::Event(e) => ("event", truncate_to_chars(&e.description, 60)),
-        AtomEnvelope::State(s) => ("state", s.label.clone()),
-        AtomEnvelope::Relation(r) => ("relation", r.label.clone()),
-        AtomEnvelope::Claim(c) => ("claim", truncate_to_chars(&c.content, 60)),
-        AtomEnvelope::Question(q) => ("question", truncate_to_chars(&q.content, 60)),
-        AtomEnvelope::Configuration(c) => ("configuration", c.label.clone()),
-        AtomEnvelope::ArgumentReconstruction(a) => ("argument", a.name.clone()),
-        AtomEnvelope::Position(p) => ("position", p.canonical_name.clone()),
-        AtomEnvelope::Opposition(o) => ("opposition", o.canonical_label.clone()),
-        AtomEnvelope::Asset(a) => (
-            "asset",
-            if a.original_filename.is_empty() {
-                format!("asset:{}", &a.sha256[..12.min(a.sha256.len())])
-            } else {
-                a.original_filename.clone()
-            },
-        ),
-    }
+    // Was an eleventh copy of the kind-label + display-name fan-out. The Asset
+    // arm previously read `asset:<sha12>`; it now matches every other surface
+    // (`<kind> asset <sha12>`), which is the point of having one decider.
+    (atom.atom_type().label(), atom.display_name(Some(60)))
 }
 
 fn truncate_to_chars(s: &str, max: usize) -> String {
@@ -1017,6 +992,15 @@ mod tests {
     }
 
     #[tokio::test]
+    // Gated to match the section it asserts on. `render_recent_activity` is
+    // `#[cfg(feature = "dev-tools")]`; without it the function returns an empty
+    // string, so this test could never pass under the crate's DEFAULT features
+    // — `./scripts/sovereign-test.sh --package sovereign-tools` failed on
+    // `brief.contains("Recent activity")` every time, while the full-workspace
+    // sweep (which turns `dev-tools` on via `sovereign-cli-dev`) stayed green
+    // and hid it. An ungated test on a gated section is a check with no
+    // configuration in which it is meaningful (§18.1).
+    #[cfg(feature = "dev-tools")]
     async fn recent_activity_shows_branch_commits_and_skips_old_ones() {
         let tmp = tempfile::tempdir().unwrap();
         let repo = tmp.path();

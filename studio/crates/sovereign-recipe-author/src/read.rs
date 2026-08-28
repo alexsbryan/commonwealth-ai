@@ -113,18 +113,6 @@ impl Tool for RecipeReadTool {
 mod tests {
     use super::*;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: ConversationId::new(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     fn make_root(home: &std::path::Path) -> PathBuf {
         let recipes = home.join(".sovereign/recipes");
         std::fs::create_dir_all(&recipes).unwrap();
@@ -141,7 +129,10 @@ mod tests {
 
         let tool = RecipeReadTool::with_recipes_dir(root);
         let out = tool
-            .execute(&serde_json::json!({"path": "demo"}), &ctx())
+            .execute(
+                &serde_json::json!({"path": "demo"}),
+                &ToolContext::default(),
+            )
             .await
             .unwrap();
         match out {
@@ -159,7 +150,10 @@ mod tests {
         let root = make_root(home.path());
         let tool = RecipeReadTool::with_recipes_dir(root);
         let out = tool
-            .execute(&serde_json::json!({"path": "nope"}), &ctx())
+            .execute(
+                &serde_json::json!({"path": "nope"}),
+                &ToolContext::default(),
+            )
             .await
             .unwrap();
         match out {
@@ -177,7 +171,10 @@ mod tests {
         let root = make_root(home.path());
         let tool = RecipeReadTool::with_recipes_dir(root);
         let err = tool
-            .execute(&serde_json::json!({"path": "../etc/passwd"}), &ctx())
+            .execute(
+                &serde_json::json!({"path": "../etc/passwd"}),
+                &ToolContext::default(),
+            )
             .await
             .unwrap_err();
         assert!(format!("{err}").contains(".."));

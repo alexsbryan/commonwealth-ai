@@ -2785,7 +2785,17 @@ pub(crate) async fn apply_distiller(
         stable_prefix_len: None,
     };
 
-    let response = chat_completions(State(state.clone()), headers.clone(), Json(chat_req)).await;
+    let response = chat_completions(
+        State(state.clone()),
+        headers.clone(),
+        // Not a guest request. This is the daemon calling its OWN pipeline for
+        // its own post-processing, with a request it built itself — the model
+        // is the node's choice, not the caller's, so there is no guest scope
+        // to honour and nothing a guest could steer.
+        None,
+        Json(chat_req),
+    )
+    .await;
     let status = response.status();
     let body = match axum::body::to_bytes(response.into_body(), usize::MAX).await {
         Ok(b) => b,
@@ -3295,7 +3305,17 @@ async fn summarise_block(
         lark_grammar: None,
         stable_prefix_len: None,
     };
-    let response = chat_completions(State(state.clone()), headers.clone(), Json(chat_req)).await;
+    let response = chat_completions(
+        State(state.clone()),
+        headers.clone(),
+        // Not a guest request. This is the daemon calling its OWN pipeline for
+        // its own post-processing, with a request it built itself — the model
+        // is the node's choice, not the caller's, so there is no guest scope
+        // to honour and nothing a guest could steer.
+        None,
+        Json(chat_req),
+    )
+    .await;
     let status = response.status();
     let body = match axum::body::to_bytes(response.into_body(), usize::MAX).await {
         Ok(b) => b,

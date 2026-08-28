@@ -13,20 +13,20 @@
 //! paragraph-level chunks for embedding-based clustering.
 //!
 //! The pure detector half (`SectionDetector`, `DetectedSection`,
-//! `ChapterRegexDetector`, `TocAnchoredDetector`) lives in
-//! `sovereign_contracts::recipe::sections` so the workflow `SectionTool`
-//! and this bespoke ingest path share one segmentation implementation.
-//! It is re-exported below at the historical path, so existing callers
-//! (`corpus_engine::chunkers::sectioned::*`) are unaffected. Only the
-//! `SectionedChunker` — which pairs a detector with this crate's
-//! `ParagraphChunker` — stays here.
+//! `ChapterRegexDetector`, `TocAnchoredDetector`) lives in the
+//! `corpus-engine-sections` leaf so the workflow `SectionTool` and this
+//! bespoke ingest path share one segmentation implementation, each
+//! reaching DOWN to it. It is re-exported below at the historical path,
+//! so existing callers (`corpus_engine::chunkers::sectioned::*`) are
+//! unaffected. Only the `SectionedChunker` — which pairs a detector with
+//! this crate's `ParagraphChunker` — stays here.
 
 use std::collections::HashMap;
 
 use super::paragraph::ParagraphChunker;
 use super::{floor_char_boundary, Chunker};
 
-pub use sovereign_contracts::recipe::sections::{
+pub use corpus_engine_sections::{
     ChapterRegexDetector, DetectedSection, SectionDetector, TocAnchoredDetector,
 };
 

@@ -27,11 +27,16 @@ use crate::state::{BootstrapPhase, DesktopConfig, ResolvedModelSlots};
 ///   peer when one is online), or the raw provider unchanged in Attach
 ///   mode (`mesh = None`, the CLI daemon already owns peer routing).
 ///
+/// `mesh` is a [`DeferredDaemon`](sovereign_mesh::DeferredDaemon), not the
+/// daemon: this runs at the TOP of bootstrap and the daemon is commissioned at
+/// the bottom, once the engine and routers it needs exist. Until then the
+/// handle reports no peers, exactly as a constructed-but-stopped daemon did.
+///
 /// Both share the same underlying weights — the wrapper is a thin router
 /// over an Arc clone, no double-load.
 pub(crate) async fn load_inference(
     inference_slot: &RwLock<Option<Arc<dyn InferenceProvider>>>,
-    mesh: Option<&Arc<sovereign_mesh::EmbeddedDaemon>>,
+    mesh: Option<&Arc<sovereign_mesh::DeferredDaemon>>,
     // Model-slot PATHS + context come from `SetupConfig` via
     // `ResolvedModelSlots` (single source of truth, possibly CPU-compat-
     // mutated). `config` still supplies the family hints + idle timeout,
@@ -75,7 +80,7 @@ pub(crate) async fn load_inference(
 
             // Canonical chat-slot ctx lives in `~/.svrnmesh/config.toml`'s
             // `[models].context_size` — already resolved into `slots`.
-            let effective_ctx = slots.context_size;
+            let windows = slots.windows;
 
             // If the GPU probe below forces a CPU fallback AND the configured
             // chat model is a recurrent arch that crashes ggml's CPU prefill,
@@ -94,13 +99,11 @@ pub(crate) async fn load_inference(
             // for THIS process and continue — the in-process load below then
             // configures the chat slot with `n_gpu_layers=0`. Skipped when the
             // var is already set or when no GPU is configured anyway.
-            let env_force_cpu = std::env::var("SOVEREIGN_FORCE_CPU_CHAT")
-                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                .unwrap_or(false);
+            let env_force_cpu = sovereign_inference::cpu_compat::force_cpu_chat();
             if !env_force_cpu {
                 let smoke_gpu_layers =
                     sovereign_inference::hardware::HardwareProfile::detect().recommended_gpu_layers;
-                let smoke_ctx = effective_ctx.min(2048);
+                let smoke_ctx = windows.fast.min(2048);
                 if smoke_gpu_layers > 0
                     && crate::smoketest::cached_ok(&slots.fast, smoke_gpu_layers, smoke_ctx)
                 {
@@ -230,7 +233,7 @@ pub(crate) async fn load_inference(
                     primary_path,
                     embed_opt,
                     slots.code.as_deref(),
-                    effective_ctx,
+                    windows,
                     None,
                     ModelFamily::Unknown,        // fast slot
                     ModelFamily::Unknown,        // primary slot (lazy-loaded)
@@ -257,10 +260,16 @@ pub(crate) async fn load_inference(
     // None`) hands the raw provider through — the CLI daemon already owns
     // peer routing, so wrapping against a None daemon would be a no-op.
     let inference: Arc<dyn InferenceProvider> = match mesh {
-        Some(mesh) => Arc::new(sovereign_mesh::peer_inference::MeshInferenceProvider::new(
-            Arc::clone(&raw_inference),
-            Arc::clone(mesh),
-        )),
+        Some(mesh) => {
+            let source: Arc<dyn sovereign_mesh::peer_inference::PeerEndpointSource> =
+                Arc::clone(mesh) as Arc<_>;
+            Arc::new(
+                sovereign_mesh::peer_inference::MeshInferenceProvider::with_peer_source(
+                    Arc::clone(&raw_inference),
+                    source,
+                ),
+            )
+        }
         None => Arc::clone(&raw_inference),
     };
     Ok((raw_inference, inference))
@@ -293,7 +302,7 @@ fn build_attach_provider(slots: &ResolvedModelSlots) -> Result<Arc<dyn Inference
     let setup = sovereign_core::setup_config::SetupConfig::load()
         .map_err(|e| format!("Attach mode: load SetupConfig for daemon routing: {e}"))?;
     let v1 = format!("http://127.0.0.1:{}/v1", setup.daemon.client_port);
-    let ctx = slots.context_size;
+    let ctx = slots.windows.primary;
 
     let stem = |p: &std::path::Path| p.file_stem().and_then(|s| s.to_str()).map(str::to_string);
     let chat_id = slots
@@ -355,7 +364,7 @@ mod tests {
             primary: None,
             embed: std::path::PathBuf::new(),
             code: None,
-            context_size: 16_384,
+            windows: sovereign_inference::embedded::SlotWindows::uniform(16_384),
         };
 
         let (raw, inference) = load_inference(&slot, None, &slots, &config, |_| {})

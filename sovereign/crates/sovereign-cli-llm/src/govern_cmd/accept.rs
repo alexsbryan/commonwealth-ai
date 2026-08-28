@@ -6,7 +6,8 @@
 //! tension stops surfacing as open, while the history of *why* it was
 //! accepted is preserved on the op. Both rules stay in current law.
 
-use corpus_engine::enrichment::{GovernanceOp, GovernanceOpKind, GovernanceOplog};
+use corpus_engine::enrichment::GovernanceOpKind;
+use corpus_engine::oplog::{Op, Oplog};
 
 use super::{atlas_dir, load_view, now_unix};
 
@@ -67,8 +68,8 @@ pub fn cmd_accept(args: &[String]) -> i32 {
         return 1;
     };
 
-    let oplog = GovernanceOplog::new(atlas_dir(&corpus_id));
-    let op = GovernanceOp::new(
+    let oplog = Oplog::<GovernanceOpKind>::new(atlas_dir(&corpus_id));
+    let op = Op::new(
         GovernanceOpKind::AcceptTension {
             tension: tension.id.clone(),
             rationale: rationale.clone(),

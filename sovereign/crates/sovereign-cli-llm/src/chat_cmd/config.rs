@@ -12,6 +12,8 @@ use sovereign_core::setup_config::SetupConfig;
 
 use sovereign_cli_shared::urls::DEFAULT_CLIENT_PORT;
 
+use crate::guest_link::{self, GuestLink};
+
 /// Shared config resolved once per subcommand invocation. Subcommands
 /// pass this to `bootstrap::build_runtime` and consult it for output-
 /// format decisions (JSON vs text, reasoning visibility, etc.).
@@ -49,6 +51,19 @@ pub struct ChatGlobals {
     /// classifier, gap check, planner, etc.) keep their own
     /// hardcoded caps regardless of this override.
     pub max_tokens: Option<usize>,
+    /// `Authorization: Bearer` for every outbound call to `daemon_base`.
+    ///
+    /// `None` for the ordinary case — a loopback caller is admitted by the
+    /// daemon before any bearer is read. `Some` only when a guest link is in
+    /// effect (`svrn mesh use`), where `daemon_base` points at somebody else's
+    /// machine and this is the credential that says the window is still open.
+    pub bearer: Option<String>,
+    /// True iff `--daemon` was passed explicitly. A guest link must never
+    /// override an endpoint the operator named on the command line — an
+    /// explicit `--daemon` is the more specific instruction, and silently
+    /// redirecting it would be the §18.3 substitution in the surface built to
+    /// prevent it.
+    pub daemon_explicit: bool,
     /// Standing answering instructions for this session, threaded into
     /// `InferenceConfig::custom_instructions` (the general persona layer —
     /// the outermost system-prompt block). `None` for ordinary chat. A
@@ -87,6 +102,8 @@ impl ChatGlobals {
             chat_model: None,
             embed_model: None,
             data_dir_explicit: false,
+            bearer: None,
+            daemon_explicit: false,
             temperature: None,
             max_tokens: None,
             custom_instructions: None,
@@ -110,6 +127,7 @@ pub fn parse_globals(args: &[String]) -> Result<(ChatGlobals, Vec<String>), Stri
                     .get(i + 1)
                     .ok_or_else(|| "--daemon needs a value".to_string())?;
                 globals.daemon_base = v.trim_end_matches('/').trim_end_matches("/v1").to_string();
+                globals.daemon_explicit = true;
                 i += 2;
             }
             "--data-dir" => {
@@ -170,9 +188,155 @@ pub fn parse_globals(args: &[String]) -> Result<(ChatGlobals, Vec<String>), Stri
     Ok((globals, rest))
 }
 
+/// Point `globals` at a guest link, if one is in effect and the operator did
+/// not name an endpoint themselves.
+///
+/// `base` is where the link actually resolves to — the lender's URL for a
+/// direct link, a loopback tunnel port for a dialled one. It is passed in
+/// rather than read off the link because turning a link into an address is
+/// `guest_link::open_route`'s job and only its job: a second reader that took
+/// `link.url` would send the bearer in plaintext to a mesh that closed its
+/// plaintext ingress on purpose.
+///
+/// Separated from [`parse_globals`] so the parser stays a pure function of
+/// argv: a test that read the operator's real `~/.svrnmesh/guest.json` would
+/// pass or fail depending on whose machine it ran on.
+///
+/// Returns true iff the link took effect. The stderr banner is not optional —
+/// a guest must always be able to see that their question left their machine,
+/// and when the window shuts.
+pub fn apply_guest_link(globals: &mut ChatGlobals, link: Option<GuestLink>, base: String) -> bool {
+    let Some(link) = link else {
+        return false;
+    };
+    if globals.daemon_explicit {
+        eprintln!(
+            "(a guest link for {} is stored, but --daemon was given explicitly — using that)",
+            link.url
+        );
+        return false;
+    }
+    let remaining = link
+        .remaining_secs(guest_link::now_secs())
+        .unwrap_or_default();
+    // The banner names the LENDER, never the loopback bridge port: the guest
+    // needs to know whose machine is answering, and `127.0.0.1:41000` would
+    // say the opposite of the truth.
+    eprintln!(
+        "Guest link: routing to {}{} for the next {}m ({}).",
+        link.url,
+        if link.dial.is_some() {
+            " over the mesh tunnel"
+        } else {
+            ""
+        },
+        remaining / 60,
+        link.summary.as_deref().unwrap_or("scope not stated")
+    );
+    globals.daemon_base = base;
+    globals.bearer = Some(link.token);
+    true
+}
+
+/// [`parse_globals`] plus the guest-link consult, for the two verbs that
+/// actually send completions somewhere: `svrn chat ask` and the interactive
+/// `svrn chat` session.
+///
+/// Deliberately NOT folded into `parse_globals` itself. That parser is shared
+/// with local-maintenance verbs (`atlas backfill-ann`, `atlas migrate-all`)
+/// which operate on THIS machine's corpora; silently pointing those at a
+/// lender's node would be a different command than the one that was typed.
+///
+/// Async because a link that names an iroh endpoint has to have its tunnel
+/// opened before there is an address to point at, and that tunnel must be live
+/// for the rest of the process.
+pub async fn parse_globals_for_chat(args: &[String]) -> Result<(ChatGlobals, Vec<String>), String> {
+    let (mut globals, rest) = parse_globals(args)?;
+    let Some(link) = guest_link::load_live(guest_link::now_secs()) else {
+        return Ok((globals, rest));
+    };
+    // An explicit `--daemon` wins, and must do so WITHOUT opening a tunnel:
+    // dialing a lender we are then not going to talk to would cost the guest a
+    // relay round-trip for nothing, and would log a route that never carried a
+    // request.
+    if globals.daemon_explicit {
+        apply_guest_link(&mut globals, Some(link), String::new());
+        return Ok((globals, rest));
+    }
+    // A stored link that cannot be reached is an ERROR, not a silent fallback
+    // to the local daemon: answering a guest's question with a different
+    // machine's model and not saying so is the §18.3 substitution this whole
+    // surface refuses.
+    let base = guest_link::open_route(&link).await?;
+    apply_guest_link(&mut globals, Some(link), base);
+    Ok((globals, rest))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn a_link(url: &str) -> GuestLink {
+        GuestLink {
+            token: "tok".into(),
+            url: url.into(),
+            dial: None,
+            expires_at: guest_link::now_secs() + 3_600,
+            summary: Some("models: big-27b".into()),
+        }
+    }
+
+    #[test]
+    fn a_guest_link_redirects_the_daemon_and_carries_a_bearer() {
+        let (mut g, _) = parse_globals(&svec(&["ask", "hi"])).unwrap();
+        assert!(apply_guest_link(
+            &mut g,
+            Some(a_link("http://box:9741")),
+            "http://box:9741".into()
+        ));
+        assert_eq!(g.daemon_base, "http://box:9741");
+        assert_eq!(g.bearer.as_deref(), Some("tok"));
+    }
+
+    /// A dialled link routes to the TUNNEL, not to the address the link names
+    /// — that address is closed on an encrypted mesh, and sending the bearer
+    /// there would be plaintext against a mesh that asked for encryption.
+    #[test]
+    fn a_dialled_link_routes_to_the_tunnel_and_not_to_the_links_url() {
+        let (mut g, _) = parse_globals(&svec(&["ask", "hi"])).unwrap();
+        let mut link = a_link("http://box:9741");
+        link.dial = Some("beef@https://relay.example".into());
+        assert!(apply_guest_link(
+            &mut g,
+            Some(link),
+            "http://127.0.0.1:41007".into()
+        ));
+        assert_eq!(g.daemon_base, "http://127.0.0.1:41007");
+        assert_eq!(g.bearer.as_deref(), Some("tok"));
+    }
+
+    /// An endpoint the operator typed is the more specific instruction. This
+    /// is the arm that keeps `--daemon` from being silently overridden.
+    #[test]
+    fn an_explicit_daemon_flag_beats_a_stored_guest_link() {
+        let (mut g, _) = parse_globals(&svec(&["--daemon", "http://mine:9741", "ask"])).unwrap();
+        assert!(!apply_guest_link(
+            &mut g,
+            Some(a_link("http://box:9741")),
+            "http://box:9741".into()
+        ));
+        assert_eq!(g.daemon_base, "http://mine:9741");
+        assert!(g.bearer.is_none());
+    }
+
+    #[test]
+    fn no_link_leaves_the_local_daemon_and_no_bearer() {
+        let (mut g, _) = parse_globals(&svec(&["ask"])).unwrap();
+        let before = g.daemon_base.clone();
+        assert!(!apply_guest_link(&mut g, None, String::new()));
+        assert_eq!(g.daemon_base, before);
+        assert!(g.bearer.is_none());
+    }
 
     fn svec(items: &[&str]) -> Vec<String> {
         items.iter().map(|s| s.to_string()).collect()

@@ -1,0 +1,147 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Enrichment + workflow primitives (`sovereign-cli-llm`).
+#
+# The DECLARED half of each tool. Adding a tool here plus a handler is the
+# whole change; there is no `impl Tool for` block to write.
+
+[[tool]]
+id = "atlas_chapters"
+name = "atlas_chapters"
+description = "Split the corpus's source into ChapterInputs (via the configured chapter_regex), as a collection for a for_each extract. Reuses the bespoke corpus-state rebuild \u2014 same chapters as `enrich`."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "session"
+permissions = []
+
+
+[[tool]]
+id = "atlas_cluster"
+name = "atlas_cluster"
+description = "Literary-atlas Phase 2: cluster Phase-1 section sketches into typed facet clusters (HDBSCAN per facet over sketch embeddings). Reads cache/questions.json, writes cache/atlas-clusters.json. Needs the daemon."
+effect = "write"
+idempotency = "idempotent"
+latency = "slow"
+scope = "persistent"
+permissions = []
+
+
+[[tool]]
+id = "atlas_cluster_excerpts"
+name = "atlas_cluster_excerpts"
+description = "Render a cluster's refs into per-facet SketchExcerpts (+ a joined query_text for exemplar scoring), reusing the bespoke render_excerpts over the Phase-1 section map. Returns {excerpts, query_text}."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "session"
+permissions = []
+
+
+[[tool]]
+id = "atlas_clusters"
+name = "atlas_clusters"
+description = "The corpus's cached Phase-2 atlas clusters (AtlasCluster[]), as a collection for a for_each name pass. Same clusters the bespoke name phase reads. Errors if cluster hasn't run."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "session"
+permissions = []
+
+
+[[tool]]
+id = "atlas_resolve"
+name = "atlas_resolve"
+description = "Literary-atlas Phase 3a/3b: resolve Phase-1 section sketches into canonical atoms + edges + trajectories (entity merge by description cosine, typed-atom resolution). Reads cache/questions.json, writes atlas/atoms.json + edges.json + trajectories.json. Needs the daemon."
+effect = "write"
+idempotency = "idempotent"
+latency = "slow"
+scope = "persistent"
+permissions = []
+
+
+[[tool]]
+id = "atlas_seed"
+name = "atlas_seed"
+description = "The corpus's cached Stage-1a seed (canonical entities), read exactly as the bespoke runner does. Thread into `pipeline_compose` (questions) so a workflow Phase 1 sees the same seed as `enrich`. Null if no seed."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "session"
+permissions = []
+
+
+[[tool]]
+id = "atlas_summary"
+name = "atlas_summary"
+description = "Summarise the resolved atlas (atoms + edges) for the Phase-8 configure prompt \u2014 the same AtlasSummary the bespoke configuration cmd builds. Errors if the atlas isn't resolved yet."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "session"
+permissions = []
+
+
+[[tool]]
+id = "atlas_write_configurations"
+name = "atlas_write_configurations"
+description = "Finalize Phase-8 configurations: validate the parse items against the atlas + merge Configuration atoms into configurations.json + atoms.json (the bespoke configure write). Returns the configuration count."
+effect = "write"
+idempotency = "idempotent"
+latency = "fast"
+scope = "session"
+permissions = []
+
+
+[[tool]]
+id = "chunk"
+name = "chunk"
+description = "split a file into the corpus chunker's chunks"
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "session"
+permissions = []
+
+
+[[tool]]
+id = "exemplar_select"
+name = "exemplar_select"
+description = "Few-shot exemplar selection (extract/name): embed `query`, pick the top-`k` exemplars from the corpus's phase bank via ExemplarBank::select_top_k. Returns the selected exemplars as JSON."
+effect = "read"
+idempotency = "idempotent"
+latency = "slow"
+scope = "session"
+permissions = []
+
+
+[[tool]]
+id = "pipeline_assemble"
+name = "pipeline_assemble"
+description = "Wrap a phase's parsed atoms into its canonical output struct (the domain's own assembler \u2014 stamps written_at, assigns phase ids). One tool, phase-as-data; replaces per-phase JSON envelopes."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "session"
+permissions = []
+
+
+[[tool]]
+id = "pipeline_compose"
+name = "pipeline_compose"
+description = "Build a phase's prompt via a pipeline's compose_<phase> method. `input` is the phase's typed input as JSON (seed/questions \u2192 a chapter; configure \u2192 an atlas summary). Returns {system, user, schema} for a model: step."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "session"
+permissions = []
+
+
+[[tool]]
+id = "pipeline_parse"
+name = "pipeline_parse"
+description = "Parse a model response through a pipeline's parse_<phase> method (seed|questions|name|tensions|configure). Returns the parsed atoms as JSON. `pipeline` selects the pipeline (e.g. literary_atlas); `name` also needs a `facet`."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "session"
+permissions = []

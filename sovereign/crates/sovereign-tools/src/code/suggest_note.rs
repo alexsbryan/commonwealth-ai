@@ -36,14 +36,14 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::{ApprovalChannel, Tool};
+use sovereign_core::traits::ApprovalChannel;
 use sovereign_core::types::*;
 
 use corpus_engine_notes::{NoteScope, NoteStore};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Kinds the suggest_note tool may emit. Strict subset of the
 /// NoteStore's v5 kind set — the relational + strategic kinds only.
@@ -64,126 +64,61 @@ impl SuggestNoteTool {
     }
 }
 
-#[async_trait]
-impl Tool for SuggestNoteTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "suggest_note".to_string(),
-            name: "Suggest Note".to_string(),
-            description: "Surface a commitment, follow-up, or goal you detected in the user's \
-                          message — pending user confirmation. \
-                          \
-                          Use when the user said: \
-                          • 'I'll send X by Friday' (commitment) \
-                          • 'check back with Y in two weeks' (follow-up) \
-                          • 'we want under 5% churn by Q3' (goal) \
-                          \
-                          Do NOT use for: things you decide, things the assistant \
-                          plans to do, or topics the user merely thinks about. \
-                          \
-                          The note is NOT written until the user approves it via \
-                          the approval channel. On rejection the tool returns \
-                          {dismissed:true} and the suggestion is dropped."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "kind": {
-                        "type": "string",
-                        "enum": SUGGEST_NOTE_KINDS,
-                        "description": "commitment = relational speech act ('I'll do X'). \
-                                        follow_up = temporal marker ('check back in 2 weeks'). \
-                                        goal = declared desired outcome ('under 5% churn by Q3')."
-                    },
-                    "content": {
-                        "type": "string",
-                        "description": "One sentence in the user's voice. Concise enough to \
-                                        be the digest entry. Do NOT include the user's name \
-                                        — it's already known."
-                    },
-                    "related_entity": {
-                        "type": "string",
-                        "description": "Person/Organization name for commitment + follow_up; \
-                                        Initiative name for goal. Match the canonical name \
-                                        used in conversation. Optional but strongly preferred — \
-                                        without it the digest can't surface the note alongside \
-                                        the right entity."
-                    }
+impl SuggestNoteTool {
+    /// Bind this tool's state to its `suggest_note` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        let mut manifest = sovereign_core::tool_manifest::require("suggest_note").clone();
+        manifest.parameters = Self::parameter_schema();
+        sovereign_core::tool_manifest::declared_from(manifest, move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
+    }
+
+    /// The `kind` enum is `SUGGEST_NOTE_KINDS` — the same const `validate`
+    /// checks against. Generated rather than copied into the row so the
+    /// declaration and the check can never disagree (ARCH principle 8).
+    fn parameter_schema() -> serde_json::Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "type": "string",
+                    "enum": SUGGEST_NOTE_KINDS,
+                    "description": "commitment = relational speech act ('I'll do X'). \
+                                    follow_up = temporal marker ('check back in 2 weeks'). \
+                                    goal = declared desired outcome ('under 5% churn by Q3')."
                 },
-                "required": ["kind", "content"]
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "The user just said: 'I'll send revised pricing to Sarah by Friday.'".into(),
-                    call: json!({
-                        "kind": "commitment",
-                        "content": "Send revised pricing to Sarah Chen by Friday",
-                        "related_entity": "Sarah Chen"
-                    }),
+                "content": {
+                    "type": "string",
+                    "description": "One sentence in the user's voice. Concise enough to \
+                                    be the digest entry. Do NOT include the user's name \
+                                    — it's already known."
                 },
-                ToolExample {
-                    situation: "Mid-conversation the user said: 'let's circle back with Meridian in mid-March.'".into(),
-                    call: json!({
-                        "kind": "follow_up",
-                        "content": "Circle back with Meridian in mid-March",
-                        "related_entity": "Meridian"
-                    }),
-                },
-                ToolExample {
-                    situation: "The user staked a target: 'we need to get churn under 5% by end of Q3.'".into(),
-                    call: json!({
-                        "kind": "goal",
-                        "content": "Reduce churn to under 5% by end of Q3",
-                        "related_entity": "churn reduction"
-                    }),
-                },
-            ],
-            // Behavioural properties: identical to write_note —
-            // suggest_note becomes a write_note on approval, so the
-            // executor's retry / approval / planner gates should
-            // reason about it the same way.
-            effect: Effect::Write,
-            idempotency: Idempotency::NonIdempotent,
-            latency: Latency::Instant,
-            scope: Scope::Persistent,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "id":              { "type": ["string", "null"] },
-                    "kind":            { "type": "string" },
-                    "related_entity":  { "type": ["string", "null"] },
-                    "dismissed":       { "type": "boolean" }
+                "related_entity": {
+                    "type": "string",
+                    "description": "Person/Organization name for commitment + follow_up; \
+                                    Initiative name for goal. Match the canonical name \
+                                    used in conversation. Optional but strongly preferred — \
+                                    without it the digest can't surface the note alongside \
+                                    the right entity."
                 }
-            })),
-        }
+            },
+            "required": ["kind", "content"]
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        let kind = params
-            .get("kind")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::InvalidInput("suggest_note requires 'kind'".into()))?;
-        if !SUGGEST_NOTE_KINDS.contains(&kind) {
-            return Err(Error::InvalidInput(format!(
-                "suggest_note kind '{kind}' must be one of {}",
-                SUGGEST_NOTE_KINDS.join(", ")
-            )));
-        }
-        params
-            .get("content")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| {
-                Error::InvalidInput("suggest_note requires non-empty 'content'".into())
-            })?;
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `suggest_note`.
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let kind = params
             .get("kind")
             .and_then(|v| v.as_str())
@@ -288,11 +223,33 @@ impl Tool for SuggestNoteTool {
             "dismissed": false,
         })))
     }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+        let kind = params
+            .get("kind")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::InvalidInput("suggest_note requires 'kind'".into()))?;
+        if !SUGGEST_NOTE_KINDS.contains(&kind) {
+            return Err(Error::InvalidInput(format!(
+                "suggest_note kind '{kind}' must be one of {}",
+                SUGGEST_NOTE_KINDS.join(", ")
+            )));
+        }
+        params
+            .get("content")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| {
+                Error::InvalidInput("suggest_note requires non-empty 'content'".into())
+            })?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
     use sovereign_core::error::Result as CoreResult;
     use sovereign_core::traits::ApprovalChannel;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -359,7 +316,7 @@ mod tests {
         let store = make_store().await;
         let approval = StubApproval::new(true);
         let tool = SuggestNoteTool::new(store, approval);
-        let r = tool.validate(&json!({"kind": "decision", "content": "x"}));
+        let r = tool.validate_extra(&json!({"kind": "decision", "content": "x"}));
         assert!(r.is_err(), "decision is not a valid suggest_note kind");
     }
 
@@ -368,7 +325,7 @@ mod tests {
         let store = make_store().await;
         let approval = StubApproval::new(true);
         let tool = SuggestNoteTool::new(store, approval);
-        let r = tool.validate(&json!({"kind": "commitment", "content": ""}));
+        let r = tool.validate_extra(&json!({"kind": "commitment", "content": ""}));
         assert!(r.is_err());
     }
 
@@ -378,7 +335,7 @@ mod tests {
         let approval = StubApproval::new(true);
         let tool = SuggestNoteTool::new(store, approval);
         for kind in SUGGEST_NOTE_KINDS {
-            let r = tool.validate(&json!({"kind": kind, "content": "x"}));
+            let r = tool.validate_extra(&json!({"kind": kind, "content": "x"}));
             assert!(r.is_ok(), "kind {kind} should validate");
         }
     }
@@ -390,7 +347,7 @@ mod tests {
         let tool = SuggestNoteTool::new(store.clone(), approval.clone());
 
         let result = tool
-            .execute(
+            .run(
                 &json!({
                     "kind": "commitment",
                     "content": "Send revised pricing to Sarah Chen by Friday",
@@ -431,7 +388,7 @@ mod tests {
         let tool = SuggestNoteTool::new(store.clone(), approval.clone());
 
         let result = tool
-            .execute(
+            .run(
                 &json!({
                     "kind": "goal",
                     "content": "Under 5% churn by Q3",
@@ -461,7 +418,7 @@ mod tests {
         let approval = StubApproval::new(true);
         let tool = SuggestNoteTool::new(store, approval.clone());
 
-        tool.execute(
+        tool.run(
             &json!({
                 "kind": "follow_up",
                 "content": "Check back with Meridian in two weeks",
@@ -494,7 +451,7 @@ mod tests {
         let approval = StubApproval::new(true);
         let tool = SuggestNoteTool::new(store.clone(), approval);
 
-        tool.execute(
+        tool.run(
             &json!({
                 "kind": "commitment",
                 "content": "Reply to Friday's all-hands recap",
@@ -532,7 +489,7 @@ mod tests {
         let approval = Arc::new(FailingApproval);
         let tool = SuggestNoteTool::new(store, approval);
         let err = tool
-            .execute(&json!({"kind": "goal", "content": "x"}), &ctx())
+            .run(&json!({"kind": "goal", "content": "x"}), &ctx())
             .await
             .unwrap_err();
         match err {

@@ -645,3 +645,46 @@ code        = 4
 instruction = 4
 math        = 4
 creative    = 4
+
+# Qwen3.8-Flash-Next, UD-Q4_K_XL (~103.7 GiB, 4 split parts). 176B total /
+# ~6B active: a 125B transformer plus a 51.2B n-gram engram. Single-node —
+# it fits the Strix Halo's 128 GB unified memory and does NOT need the mesh,
+# which is what separates it from the `cluster` rows above.
+#
+# Like those rows this is NOT a hardware profile. `flash_next` is not a
+# `ProfileName` variant, so hardware detection never selects it; it is not in
+# `build_primary_catalog`'s tier walk, and that function's curated-alternatives
+# append is keyed to the literal `alt_gemma_12b`, so this row reaches neither
+# the recommendation nor the Settings picker. It exists so that a BYOM load —
+# operator points `[models].primary` at part 1 — resolves a real identity
+# through `attribution_for_file` instead of an unrecognised stem.
+#
+# HARD REQUIREMENT: the `qwen4exp` arch. A build whose bundled llama.cpp
+# predates it cannot load this model at all — cli-v0.5.0 cannot.
+#
+# `family = "Unknown"` is the truthful value, not a placeholder. There is no
+# Qwen4/qwen4exp `ModelFamily`, so this runs on the GGUF-embedded chat template
+# with generic sampling — and that is what runs regardless: the daemon passes a
+# hardcoded `ModelFamily::Unknown` as `primary_family` (daemon_cmd/build/
+# inference.rs), so this field never reaches the primary slot. It is read for
+# attribution only. `thinking = true` because the GGUF's own template carries
+# `enable_thinking` and `<think>`/`</think>`.
+#
+# Measured on RuggedFox (128 GB Strix Halo, Vulkan): 22.4 tok/s standalone at
+# n_ctx 4096; KV 33.0 MiB per 1k tokens, linear (see note 4e5937bf).
+#
+# NO `capabilities` BLOCK, DELIBERATELY. Capabilities are an OICP claim about
+# answer quality that feeds mesh routing (`oicp_select`), and nothing has
+# measured this model's yet. Empty caps are the honest state and cost only the
+# `info_for_file` caps lookup, which skips unannotated rows by design;
+# `attribution_for_file` reads this row regardless, which is the half BYOM
+# needs. Fill it in when a bench has earned the numbers.
+[profiles.flash_next.thoughtful]
+repo      = "unsloth/Qwen3.8-Flash-Next-GGUF"
+file      = "UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf"
+family    = "Unknown"
+quant     = "UD-Q4_K_XL"
+size_gb   = 103.7
+thinking  = true
+hf_url    = "https://huggingface.co/unsloth/Qwen3.8-Flash-Next-GGUF"
+base_name = "Qwen3.8-Flash-Next"

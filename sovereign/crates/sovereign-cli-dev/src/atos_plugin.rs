@@ -94,6 +94,10 @@ pub fn parse_installed_version(file_contents: &str) -> Option<String> {
 /// Outcome of an install attempt. The CLI surface uses this to
 /// report `Installed` / `UpToDate` / `Replaced` distinctly —
 /// silent overwrites hide version bumps that teams should see.
+///
+/// NOT `sovereign_contracts::traits::InstallOutcome`, which reports a
+/// CORPUS install as `{corpus_id, status}`; this is a plugin-FILE write
+/// verdict.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InstallOutcome {
     /// No prior file existed; we wrote a fresh copy.

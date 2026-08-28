@@ -3,6 +3,7 @@
 //!
 //! Variant display strings (the `#[error(...)]` attributes) are the user-facing
 //! message — surfaces render them verbatim, so keep them self-explanatory.
+use crate::oicp::InferenceError;
 use thiserror::Error;
 
 /// Unified error for every fallible contract operation.
@@ -146,5 +147,91 @@ pub type Result<T> = std::result::Result<T, Error>;
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
         Error::Serialization(e.to_string())
+    }
+}
+
+/// Lift a protocol failure into the runtime's error taxonomy.
+///
+/// Total and lossless: every [`InferenceError`] variant has an exact twin
+/// here, so nothing is invented and nothing is dropped.
+impl From<InferenceError> for Error {
+    fn from(e: InferenceError) -> Self {
+        match e {
+            InferenceError::Inference { message } => Error::Inference(message),
+            InferenceError::ComputeUnavailable { slot, reason } => {
+                Error::ComputeUnavailable { slot, reason }
+            }
+            InferenceError::ModelNotLoaded { model } => Error::ModelNotLoaded(model),
+            InferenceError::Routing { message } => Error::Routing(message),
+            InferenceError::QueueShed {
+                position,
+                predicted_wait_ms,
+                retry_after_secs,
+            } => Error::QueueShed {
+                position,
+                predicted_wait_ms,
+                retry_after_secs,
+            },
+            InferenceError::InvalidInput { message } => Error::InvalidInput(message),
+            InferenceError::NotImplemented { message } => Error::NotImplemented(message),
+            InferenceError::Cancelled => Error::Cancelled,
+        }
+    }
+}
+
+/// Narrow a runtime failure to what the inference wire can actually carry.
+///
+/// The other direction, and deliberately NOT symmetric — read this before
+/// using it. Lifting is exact; narrowing cannot be, because `Planning`,
+/// `Execution`, `Storage`, `Tool` and the rest have no protocol meaning. The
+/// eight with twins map variant-for-variant; everything else widens to
+/// [`InferenceError::Inference`] carrying the full `Display` text, which keeps
+/// the original variant's prefix ("Storage error: ...") — so the detail
+/// survives even though the ability to `match` on it across the seam does not.
+///
+/// This is not new policy. `sovereign-compute`'s wire encoder has always done
+/// exactly this with its `_ => "inference"` arm. What changes is that the
+/// decision now has ONE site and says so out loud, rather than being an
+/// unnamed default at the bottom of a `match` (ARCH §10.6; §18.3's rule that a
+/// substitution is named, never silent).
+///
+/// Takes a reference because the wire encoder only ever borrows the error it
+/// is reporting on; the payloads are `String`s and are cloned.
+impl From<&Error> for InferenceError {
+    fn from(e: &Error) -> Self {
+        match e {
+            Error::Inference(message) => InferenceError::Inference {
+                message: message.clone(),
+            },
+            Error::ComputeUnavailable { slot, reason } => InferenceError::ComputeUnavailable {
+                slot: slot.clone(),
+                reason: reason.clone(),
+            },
+            Error::ModelNotLoaded(model) => InferenceError::ModelNotLoaded {
+                model: model.clone(),
+            },
+            Error::Routing(message) => InferenceError::Routing {
+                message: message.clone(),
+            },
+            Error::QueueShed {
+                position,
+                predicted_wait_ms,
+                retry_after_secs,
+            } => InferenceError::QueueShed {
+                position: *position,
+                predicted_wait_ms: *predicted_wait_ms,
+                retry_after_secs: *retry_after_secs,
+            },
+            Error::InvalidInput(message) => InferenceError::InvalidInput {
+                message: message.clone(),
+            },
+            Error::NotImplemented(message) => InferenceError::NotImplemented {
+                message: message.clone(),
+            },
+            Error::Cancelled => InferenceError::Cancelled,
+            other => InferenceError::Inference {
+                message: other.to_string(),
+            },
+        }
     }
 }

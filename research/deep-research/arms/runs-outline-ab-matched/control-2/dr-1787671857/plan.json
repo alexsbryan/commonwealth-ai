@@ -1,0 +1,37 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787671857",
+  "charter_hash": "5b6fa3455a06ac02",
+  "rounds_planned": 2,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of major tech companies that co-founded the Linux Foundation's Agent2Agent (A2A) initiative in April 2025",
+      "List of specific enterprise software vendors and AI platforms named as initial adopters or partners for Google’s A2A protocol at its launch event",
+      "Count of distinct communication protocols supported by Model Context Protocol (MCP) versus Agent2Agent (A2a) regarding agent-to-agent interaction capabilities",
+      "Percentage change in developer adoption rates between MCP and A2A within six months of their respective public releases, measured by GitHub repository stars or npm downloads",
+      "Median latency difference in milliseconds when executing a multi-step task using A2A compared to a single-agent loop utilizing MCP across standard benchmark datasets",
+      "Share of total API calls routed through A2A that involve cross-vendor agent collaboration versus intra-ecosystem interactions in early production deployments",
+      "Number of security vulnerabilities identified in the initial open-source implementations of both MCP and A2A protocols during independent third-party audits",
+      "Ratio of synchronous request-response patterns to asynchronous event-driven messages supported natively by the A2A specification version 1.0",
+      "Count of specific use cases documented in Google’s official A2A whitepaper where traditional REST APIs failed due to lack of semantic context understanding",
+      "Percentage increase in token consumption costs when using LLM-mediated communication via MCP compared to direct structured message passing via A2A for equivalent complex tasks",
+      "List of specific data formats (JSON-RPC, HTTP+JSON, etc.) mandated by the MCP specification versus those permitted under the A2A protocol standard",
+      "Median time-to-integration measured in developer hours required to connect a new third-party agent into an existing system using A2A versus building custom integrations with MCP",
+      "Number of distinct identity and authentication mechanisms supported out-of-the-box by the A2A framework compared to the minimal security layer provided in early MCP implementations",
+      "Share of enterprise IT budgets allocated specifically for \"agent interoperability\" middleware solutions compatible with A2A standards as reported in 2025 Gartner surveys",
+      "Count of major cloud providers (AWS, Azure, GCP) that have announced native support or managed services for both MCP and A2A endpoints within their AI infrastructure stacks",
+      "Percentage reduction in error rates during multi-agent handoffs when using standardized A2A task delegation messages compared to ad-hoc prompt chaining via MCP tools",
+      "List of specific limitations explicitly cited by Anthropic regarding Model Context Protocol's scope concerning direct agent-to-agent dialogue versus tool usage only (2)",
+      "Number of open-source libraries available on PyPI and npm that implement the full Agent2Agent protocol specification as of Q3 2025",
+      "Median size in bytes of a standard \"task\" object transmitted over A2A channels versus a typical \"tool call\" payload defined in the MCP schema",
+      "Count of distinct industry verticals (finance, healthcare, logistics) where pilot programs for A2A-based autonomous workflows have been publicly announced"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2"
+    ]
+  }
+}

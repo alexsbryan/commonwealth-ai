@@ -19,7 +19,7 @@ use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomType, Re
 use corpus_engine::enrichment::atlas::edges::{Edge, EdgeType};
 use corpus_engine::enrichment::atlas::read_atlas_edges;
 
-use super::atom_browse::{cached_atoms, AtomBrowseError, AtomFilter, PageCursor};
+use super::atom_browse::{cached_atoms, AtomFilter, AtomQueryError, PageCursor};
 use super::reader::FileAtlasReader;
 
 /// Light node input — just the fields the shaping needs, decoupled from the
@@ -186,7 +186,7 @@ impl FileAtlasReader {
         &self,
         corpus_id: &str,
         max_nodes: usize,
-    ) -> Result<AtlasSubgraph, AtomBrowseError> {
+    ) -> Result<AtlasSubgraph, AtomQueryError> {
         // All atoms as summaries (one big page — atoms.json is already cached).
         let page = self
             .list_atoms(
@@ -200,15 +200,15 @@ impl FileAtlasReader {
             .await?;
         let atlas_dir = self
             .atlas_dir(corpus_id)
-            .ok_or_else(|| AtomBrowseError::UnknownCorpus(corpus_id.to_string()))?;
+            .ok_or_else(|| AtomQueryError::UnknownCorpus(corpus_id.to_string()))?;
         let (edges_file, envelopes) = tokio::task::spawn_blocking(move || -> std::io::Result<_> {
             let edges = read_atlas_edges(&atlas_dir)?;
             let atoms = cached_atoms(&atlas_dir)?;
             Ok((edges, atoms))
         })
         .await
-        .map_err(|e| AtomBrowseError::Task(e.to_string()))?
-        .map_err(AtomBrowseError::ReadAtoms)?;
+        .map_err(|e| AtomQueryError::Task(e.to_string()))?
+        .map_err(AtomQueryError::ReadAtoms)?;
 
         let nodes_in: Vec<NodeIn> = page
             .items

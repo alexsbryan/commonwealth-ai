@@ -13,8 +13,9 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::code_index_cmd::{default_data_dir, tempfile_dir};
 use crate::project_registry::{daemon_post, derive_corpus_id};
+use sovereign_cli_shared::code_index::tempfile_dir;
+use sovereign_cli_shared::dirs::default_data_dir;
 use sovereign_cli_shared::repo::find_repo_root;
 
 /// Read `.sovereign/project.json`, the record `project init` leaves behind.

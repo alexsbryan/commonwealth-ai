@@ -7,6 +7,10 @@ license.workspace = true
 [dependencies]
 sovereign-core = { workspace = true }
 sovereign-contracts = { workspace = true }
+# The enrichment store the CLI and the daemon also read — `enrich_commands`
+# lists it rather than re-deriving the layout and the schema (rung
+# nc-16-shared-capability).
+sovereign-enrichment-catalog = { workspace = true }
 sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter"] }
@@ -19,6 +23,10 @@ sovereign-workflow = { workspace = true }
 # desktop runtime registers so a Workflow-kind project's chat can compose a
 # workflow. Same agent loop as recipe authoring; only the tools + skill differ.
 sovereign-workflow-host = { workspace = true }
+# THE shared commissioning recipe. The desktop composes its tool bundles and
+# hands its host inputs over rather than building a router, a registry and a
+# lane of its own (TOPOLOGY §10 phase 7).
+sovereign-runtime-recipe = { workspace = true }
 # Explorer graph ops (atlas/investigation projections) — the meshapp Tauri
 # commands are thin wrappers over this shared lib.
 sovereign-meshapp = { workspace = true }

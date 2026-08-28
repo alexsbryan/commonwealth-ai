@@ -27,17 +27,16 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_scip::scip_graph::{BlastEntry, ScipGraph, StalenessCaution};
 
 use super::index_health::IndexHealthChecker;
 use super::is_valid_symbol_name;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub type ScipGraphHandleRef = Arc<ArcSwap<ScipGraph>>;
 
@@ -127,95 +126,26 @@ impl BlastRadiusTool {
     }
 }
 
-#[async_trait]
-impl Tool for BlastRadiusTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "blast".to_string(),
-            name: "Blast Radius".to_string(),
-            description: "Compute the transitive impact of changing a symbol: \
-                          all callers at every depth level up to max_depth. \
-                          Use before modifying a function signature, removing a method, \
-                          or changing a trait definition. Separates production callers \
-                          from test callers and groups by module. Backed by the SCIP \
-                          call graph — compiler-resolved, not grep. \
-                          IMPORTANT: Before using on a large refactor, call \
-                          read_notes(kinds=[\"reflection\"], query=\"blast_radius\") \
-                          to check for known limitations recorded by previous sessions \
-                          (e.g. macro-generated call sites not traversed by SCIP)."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "symbol": {
-                        "type": "string",
-                        "description": "Symbol name to analyse (function, method, struct, trait)"
-                    },
-                    "max_depth": {
-                        "type": "integer",
-                        "default": 3,
-                        "description": "BFS depth (1=direct callers, 2=callers of callers, …). Capped at 5."
-                    },
-                    "max_symbols": {
-                        "type": "integer",
-                        "default": 100,
-                        "description": "Maximum total callers to return. Capped at 200."
-                    }
-                },
-                "required": ["symbol"]
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You're about to modify a trait or widely-used function. Call this BEFORE touching any code — it tells you exactly how many things will break and whether a refactor is a 2-file change or a 20-file change.".into(),
-                    call: serde_json::json!({ "symbol": "InferenceProvider", "max_depth": 2 }),
-                },
-                ToolExample {
-                    situation: "You want to check if a function is safe to change. A total of 0 callers means it's safe; high counts mean you need a migration strategy.".into(),
-                    call: serde_json::json!({ "symbol": "execute_step_inner" }),
-                },
-                ToolExample {
-                    situation: "You're auditing a type for hidden macro usages (derive, register_tool!, etc.) that the call graph wouldn't capture. The macro_hints field in the response covers these.".into(),
-                    call: serde_json::json!({ "symbol": "ToolRegistry", "max_depth": 1 }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "symbol":         { "type": "string" },
-                    "depth_reached":  { "type": "integer" },
-                    "total_callers":  { "type": "integer" },
-                    "levels":         { "type": "array", "items": { "type": "object" } },
-                    "macro_hints":    { "type": "array", "items": { "type": "string" } },
-                    "concurrent":     { "type": "array", "items": { "type": "object" },
-                                        "description": "Live work-atlas claims on this symbol (present-but-possibly-empty)." },
-                    "health":         { "type": "string", "enum": ["ok", "stale", "missing"] }
-                }
-            })),
-        }
+impl BlastRadiusTool {
+    /// Bind this tool's state to its `blast` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("blast", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        let symbol = params
-            .get("symbol")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::InvalidInput("blast_radius requires 'symbol'".to_string()))?;
-        if !is_valid_symbol_name(symbol) {
-            return Err(Error::InvalidInput(format!(
-                "invalid symbol name '{symbol}'"
-            )));
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `blast`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let symbol = params
             .get("symbol")
             .and_then(|v| v.as_str())
@@ -316,6 +246,19 @@ impl Tool for BlastRadiusTool {
             obj["index_health"] = serde_json::to_value(&health).unwrap_or_default();
         }
         Ok(StepOutput::Json(obj))
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+        let symbol = params
+            .get("symbol")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::InvalidInput("blast_radius requires 'symbol'".to_string()))?;
+        if !is_valid_symbol_name(symbol) {
+            return Err(Error::InvalidInput(format!(
+                "invalid symbol name '{symbol}'"
+            )));
+        }
+        Ok(())
     }
 }
 

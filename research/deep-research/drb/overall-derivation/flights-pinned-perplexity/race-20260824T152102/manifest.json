@@ -1,0 +1,45 @@
+{
+  "order": "deep-research-t7a",
+  "created_at": "20260824T152102",
+  "resumed_from": null,
+  "retry": null,
+  "judge": {
+    "pin": "Qwen3.8-27B-UD-Q6_K_XL",
+    "sampling": {
+      "temperature": 0.0,
+      "top_p": 1.0,
+      "amendment": "greedy \u2014 N6, 2026-08-23",
+      "covers": {
+        "ab": "every task"
+      },
+      "note": "a manifest with NO sampling block was flown before this amendment, at the daemon default temperature 0.7. A pinned reading is never compared against an unpinned one."
+    },
+    "caveat": "different model from the official judges (gemini-2.5-pro / GPT-5.5 era)"
+  },
+  "arms": {
+    "ab": {
+      "tasks": 10,
+      "scored": 10,
+      "source": "fresh"
+    }
+  },
+  "cleaning": "article_1 uncleaned in both arms (named caveat \u2014 the report IS the deliverable; the official cleaned targets are not shipped)",
+  "inputs": {
+    "clone_pin": "469cce54ea7f6a63c163d3d9fec879cf289ec484",
+    "subset_articles_sha": "b1ce57831916bd0e487b8816d3ef6b3fe3c3cb1ce73e26cdce4d6e9da4f3b0e7"
+  },
+  "landed_arm": "local",
+  "skipped": null,
+  "landed_dirs": {
+    "56": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo12/runs/local/drb-56/dr-1787002572",
+    "58": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo12/runs/local/drb-58/dr-1787002873",
+    "59": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo12/runs/local/drb-59/dr-1787003198",
+    "62": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo12/runs/local/drb-62/dr-1787003824",
+    "65": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo12/runs/local/drb-65/dr-1787004151",
+    "69": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo12/runs/local/drb-69/dr-1787004973",
+    "78": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo12/runs/local/drb-78/dr-1787005212",
+    "83": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo12/runs/local/drb-83/dr-1787011943",
+    "90": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo12/runs/local/drb-90/dr-1787012323",
+    "95": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo12/runs/local/drb-95/dr-1787015608"
+  }
+}

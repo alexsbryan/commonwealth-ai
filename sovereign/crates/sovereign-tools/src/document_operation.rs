@@ -12,11 +12,9 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
-
 use sovereign_core::error::{Error, Result};
 use sovereign_core::slot_policy::Workload;
-use sovereign_core::traits::{InferenceProvider, StateStore, Tool};
+use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::*;
 // ToolExample is part of types::* but explicit for clarity.
 
@@ -32,6 +30,7 @@ const REDUCE_BATCH_SIZE: usize = 8;
 const MAX_REDUCE_DEPTH: usize = 5;
 
 use sovereign_core::time::unix_now as now;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 // ─── Progress reporting ──────────────────────────────────────
 
@@ -130,12 +129,9 @@ impl DocumentOperationTool {
                     // SLOT_POLICY §3 Housekeep: document-op map phase —
                     // advisory extraction feeding the reduce, not durable
                     // truth. Housekeep's Some(0) think budget matches verbatim.
-                    let mut req = CompletionRequest::for_workload(
-                        Workload::Housekeep,
-                        format!(
+                    let mut req = Workload::Housekeep.request(format!(
                             "{map_prompt}\n\nPassage:\n{passage}\n\nExtract relevant info. If nothing relevant, respond: null",
-                        ),
-                    )
+                        ))
                     .with_output_budget(384);
                     req.temperature = Some(0.0);
                     req
@@ -284,7 +280,8 @@ impl DocumentOperationTool {
         // SLOT_POLICY §3 Housekeep: intermediate reduce pass — advisory
         // fan-in of extracted fragments, not the user-facing synthesis
         // (that is reduce_final). Housekeep's Some(0) think budget matches.
-        let mut request = CompletionRequest::for_workload(Workload::Housekeep, prompt)
+        let mut request = Workload::Housekeep
+            .request(prompt)
             // POLICY-DEBT(SLOT_POLICY §4.5 Housekeep): 1024 > 512 forfeits the
             // batched FastShort claim; the merge pass genuinely needs the room.
             .with_output_budget(1024);
@@ -307,7 +304,8 @@ impl DocumentOperationTool {
         // SLOT_POLICY §3 Synthesize: final reduce — the user-facing
         // synthesis; quality matters more than speed. Synthesize leaves
         // think_budget None (thinking allowed for the final synthesis).
-        let mut request = CompletionRequest::for_workload(Workload::Synthesize, prompt)
+        let mut request = Workload::Synthesize
+            .request(prompt)
             .with_system(
                 "You are producing the final synthesis of a document analysis. \
                  Be thorough, well-organized, and cite specific details.",
@@ -320,87 +318,27 @@ impl DocumentOperationTool {
     }
 }
 
-#[async_trait]
-impl Tool for DocumentOperationTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "document_operation".to_string(),
-            name: "Document Operation".to_string(),
-            description: "Run a user-defined map-reduce operation across a document. \
-                          The map_prompt and reduce_prompt are written by the planner \
-                          based on the user's operation description. \
-                          For the two common cases — summarize and analyze — prefer \
-                          the simpler `document` tool, which fixes the operation and \
-                          is easier for smaller models to invoke correctly."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "source": {
-                        "type": "string",
-                        "description": "The source path of the ingested document"
-                    },
-                    "operation": {
-                        "type": "string",
-                        "description": "The user's operation request in natural language"
-                    },
-                    "map_prompt": {
-                        "type": "string",
-                        "description": "Prompt applied to each chunk batch to extract relevant information"
-                    },
-                    "reduce_prompt": {
-                        "type": "string",
-                        "description": "Prompt applied to merge extracted fragments into a final result"
-                    },
-                    "conversation_id": {
-                        "type": "string",
-                        "description": "Conversation ID for session persistence"
-                    },
-                    "batch_size": {
-                        "type": "integer",
-                        "description": "Chunks per map batch (default: 4)"
-                    }
-                },
-                "required": ["source", "operation", "map_prompt", "reduce_prompt"]
-            }),
-            examples: vec![ToolExample {
-                situation: "User wants to extract character arcs from a novel".to_string(),
-                call: serde_json::json!({
-                    "source": "manuscript.pdf",
-                    "operation": "extract character arcs",
-                    "map_prompt": "From this section, extract: character names, key actions they take, and how they change.",
-                    "reduce_prompt": "Synthesize all character information into a comprehensive character map with arcs."
-                }),
-            }],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Slow,
-            scope: Scope::Session,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Reduce-phase output text — shape follows whatever the \
-                                caller-supplied `reduce_prompt` asked the model to \
-                                produce."
-            })),
-        }
+impl DocumentOperationTool {
+    /// Bind this tool's state to its `document_operation` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("document_operation", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
+        .with_family(sovereign_contracts::tool_bundle::ToolFamily::Document)
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        for field in &["source", "operation", "map_prompt", "reduce_prompt"] {
-            if params.get(*field).and_then(|v| v.as_str()).is_none() {
-                return Err(Error::InvalidInput(format!(
-                    "document_operation requires '{field}'"
-                )));
-            }
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `document_operation`.
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let source = params["source"].as_str().unwrap();
         let operation = params["operation"].as_str().unwrap();
         let map_prompt = params["map_prompt"].as_str().unwrap();
@@ -496,6 +434,17 @@ impl Tool for DocumentOperationTool {
         )
         .await
     }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+        for field in &["source", "operation", "map_prompt", "reduce_prompt"] {
+            if params.get(*field).and_then(|v| v.as_str()).is_none() {
+                return Err(Error::InvalidInput(format!(
+                    "document_operation requires '{field}'"
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 impl DocumentOperationTool {
@@ -539,7 +488,8 @@ impl DocumentOperationTool {
 
             // SLOT_POLICY §3 Synthesize: small-document single-pass
             // synthesis composed for the user (no reduce needed).
-            let mut request = CompletionRequest::for_workload(Workload::Synthesize, prompt)
+            let mut request = Workload::Synthesize
+                .request(prompt)
                 .with_system(&format!(
                     "You are processing the document \"{source}\". \
                      Follow the extraction instructions precisely."

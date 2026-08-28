@@ -24,6 +24,34 @@ pub fn hash_join_key(key: &str) -> [u8; 32] {
     *blake3::hash(key.as_bytes()).as_bytes()
 }
 
+/// Mint a fresh mesh secret for a brand-new mesh — the gossip-auth credential
+/// that never rotates. 32 random bytes; unlike the invite key this is never
+/// shown to a human, so there is no readability constraint on it.
+pub fn generate_mesh_secret() -> [u8; 32] {
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes).expect("failed to generate random bytes");
+    bytes
+}
+
+/// Derive the mesh secret for a mesh that predates the credential split.
+///
+/// **This must stay deterministic.** Every node upgrades on its own schedule
+/// and there is no coordination round available: if each minted a random
+/// secret, the mesh would partition into one-node fragments the moment the
+/// second node upgraded — precisely the failure the split exists to remove.
+/// Deriving from `(mesh_id, invite_key_hash)` means every node computes the
+/// same 32 bytes independently, from state it already holds on disk, with no
+/// message exchanged.
+///
+/// Domain-separated via `derive_key` so this value can never collide with a
+/// join-key hash even though both are BLAKE3 over mesh-scoped bytes.
+pub fn derive_legacy_mesh_secret(mesh_id: &MeshId, invite_key_hash: &[u8; 32]) -> [u8; 32] {
+    let mut hasher = blake3::Hasher::new_derive_key("cwth-mesh-secret-v1");
+    hasher.update(mesh_id.as_bytes());
+    hasher.update(invite_key_hash);
+    *hasher.finalize().as_bytes()
+}
+
 /// Verify a join key against a stored hash.
 pub fn verify_join_key(key: &str, expected_hash: &[u8; 32]) -> bool {
     // blake3::Hash equality is constant-time (prevents timing attacks);
@@ -86,7 +114,7 @@ pub fn init_mesh_with_identity(
     require_encryption: bool,
 ) -> (Mesh, String) {
     let join_key = generate_join_key();
-    let join_key_hash = hash_join_key(&join_key);
+    let invite_key_hash = hash_join_key(&join_key);
     let mesh_id = MeshId::generate();
     let now = now_secs();
 
@@ -136,7 +164,17 @@ pub fn init_mesh_with_identity(
     let mesh = Mesh {
         id: mesh_id,
         name: name.to_string(),
-        join_key_hash,
+        // A brand-new mesh mints a random secret. Only a mesh migrated from a
+        // pre-split `mesh.json` derives one (see `derive_legacy_mesh_secret`),
+        // and only because those nodes have no way to agree on a random value.
+        mesh_secret: generate_mesh_secret(),
+        invite_key_hash,
+        // A brand-new mesh has never rotated. Only `rotate_invite_key` moves
+        // this, and every peer that learns the mesh learns version 0 with it.
+        invite_version: 0,
+        // Armed by the caller when the mesh is encrypted; `create_mesh_with`
+        // owns that policy, not this constructor.
+        invite_expires_at: None,
         require_encryption,
         members,
         peers: vec![],
@@ -224,7 +262,7 @@ pub fn accept_join_with_identity(
     node_pubkey: Option<commonwealth_core::ids::NodePubkey>,
 ) -> Result<NodeId> {
     // Verify join key.
-    if !verify_join_key(join_key, &mesh.join_key_hash) {
+    if !verify_join_key(join_key, &mesh.invite_key_hash) {
         return Err(Error::InvalidJoinKey("join key does not match".into()));
     }
 
@@ -383,7 +421,7 @@ mod tests {
     }
 
     #[test]
-    fn join_key_hash_and_verify() {
+    fn invite_key_hash_and_verify() {
         let key = generate_join_key();
         let hash = hash_join_key(&key);
         assert!(verify_join_key(&key, &hash));

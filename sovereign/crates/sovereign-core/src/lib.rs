@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pub mod atlas_context;
+// The atlas traversal surface is corpus-engine's — it imports nothing from
+// sovereign — and moved there in noun-convergence rung 6. Re-exported at its
+// historical path so every `sovereign_core::atlas_context::*` import stands.
+pub use corpus_engine::enrichment::atlas::context as atlas_context;
 pub mod context;
 pub mod conv_briefing;
 pub mod conv_entity_graph;
@@ -52,10 +55,10 @@ pub mod tool_loop;
 // The daemon↔package contract lives in `sovereign-contracts`; re-export every
 // item at its historical `sovereign_core::{error, traits, registry, types,
 // observer, health, skills, intent_policy, mcp_config, setup_config, rebrand,
-// tool_result_cache}` path so every existing importer is unaffected.
+// tool_manifest, tool_result_cache}` path so every existing importer is unaffected.
 pub use sovereign_contracts::{
-    error, health, intent_policy, mcp_config, observer, rebrand, registry, setup_config, skills,
-    slot_policy, tool_result_cache, traits, types,
+    error, health, intent_policy, launch, mcp_config, observer, rebrand, registry, setup_config,
+    skills, slot_policy, tool_manifest, tool_result_cache, traits, types,
 };
 
 // Re-export commonly used items at the crate root.
@@ -72,7 +75,7 @@ pub use model_family::{
     RerankQuirks, ThinkingControl,
 };
 pub use registry::ToolRegistry;
-pub use runtime::Runtime;
+pub use runtime::{Runtime, RuntimeParts};
 pub use skills::SkillRegistry;
 pub use traits::*;
 pub use types::*;

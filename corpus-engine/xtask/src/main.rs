@@ -6,9 +6,11 @@
 //!   cargo xtask arch-gate [--update-baseline|--tighten]   ARCH §3.1 size ratchet + §1 doc-contract
 //!   cargo xtask docs-gate                          Every repo path the narrative docs cite must resolve
 //!   cargo xtask boundary-gate                      The studio package depends only on itself + shared leaves
+//!   cargo xtask concept-gate [--update-baseline|--tighten]  One noun, one owner — no NEW duplicated type name
 //!   cargo xtask layer-gate [--update-baseline|--tighten]  Cargo-declared deps obey quality/ARCH_LAYERS.toml + fan-in ratchet
 //!   cargo xtask lock-gate  [--update-baseline|--tighten]  No NEW duplicate crate versions in Cargo.lock
 //!   cargo xtask env-gate   [--update-baseline|--tighten|--update-doc]  Observed env vars obey quality/env-flags.toml
+//!   cargo xtask target-arch [--update-doc|--measure]  quality/TARGET_ARCHITECTURE.md renders from CONCEPTS.toml + ARCH_LAYERS.toml + the graph
 //!
 //! Ratchet contract (uniform across gates): baselines live in
 //! `quality/baselines/`, are machine-written only (`--update-baseline`
@@ -20,13 +22,16 @@ mod api_gate;
 mod arch_gate;
 mod boundary_gate;
 mod common;
+mod concept_gate;
 mod docs_gate;
 mod env_gate;
 mod layer_gate;
+mod layout_gate;
 mod lint_gate;
 mod lock_gate;
 mod manifests;
 mod quality_cmd;
+mod target_arch;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -37,11 +42,14 @@ fn main() {
         "arch-gate" => arch_gate::run(&args[1..]),
         "docs-gate" => docs_gate::run(),
         "boundary-gate" => boundary_gate::run(),
+        "concept-gate" => concept_gate::run(&args[1..]),
         "api-gate" => api_gate::run(&args[1..]),
         "env-gate" => env_gate::run(&args[1..]),
         "layer-gate" => layer_gate::run(&args[1..]),
+        "layout-gate" => layout_gate::run(&args[1..]),
         "lint-gate" => lint_gate::run(&args[1..]),
         "lock-gate" => lock_gate::run(&args[1..]),
+        "target-arch" => target_arch::run(&args[1..]),
         "help" | "--help" | "-h" => {
             print_usage();
             0
@@ -71,6 +79,9 @@ fn print_usage() {
         "  boundary-gate                  Enforce the studio-package dependency boundary (studio/BOUNDARY.md)"
     );
     eprintln!(
+        "  concept-gate [--update-baseline|--tighten]  One noun, one owner — no NEW name defined as a type in 2+ crates"
+    );
+    eprintln!(
         "  layer-gate [--update-baseline|--tighten]  Enforce quality/ARCH_LAYERS.toml + the fan-in ratchet"
     );
     eprintln!(
@@ -80,9 +91,15 @@ fn print_usage() {
         "  env-gate [--update-baseline|--tighten|--update-doc]  Observed env vars obey quality/env-flags.toml; renders docs/ENV_FLAGS.md"
     );
     eprintln!(
+        "  layout-gate [--update-baseline|--tighten]  Ratchet hand-spelled corpus-engine layout (reach `Corpus`)"
+    );
+    eprintln!(
         "  lint-gate --from <clippy.json> [--update-baseline|--tighten]  Per-crate/lint warning-count ratchet"
     );
     eprintln!(
         "  api-gate [--update-baseline]   Diff hub-crate public APIs vs committed snapshots (pinned nightly)"
+    );
+    eprintln!(
+        "  target-arch [--update-doc|--measure]  Render quality/TARGET_ARCHITECTURE.md's register, layer map, graph evidence and boundary table"
     );
 }

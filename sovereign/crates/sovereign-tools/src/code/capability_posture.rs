@@ -14,15 +14,15 @@
 
 use std::path::{Path, PathBuf};
 
-use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::json;
 
 use sovereign_core::error::Result;
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use super::drift_posture::{compute_posture, PostureStatus, DEFAULT_NARRATIVES};
+use sovereign_core::tool_manifest::DeclaredTool;
+use std::sync::Arc;
 
 /// Headline tallies pulled from the reconcile's JSON artifact — a permissive
 /// subset of its `FindingSet` (extra fields ignored so the writer can evolve).
@@ -131,70 +131,21 @@ impl Default for CapabilityPostureTool {
     }
 }
 
-#[async_trait]
-impl Tool for CapabilityPostureTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "capability_posture".to_string(),
-            name: "Capability Posture".to_string(),
-            description:
-                "Return the freshness state of the capability-reconciliation artifact \
-                 (`sovereign enrich capability-reconcile` output) without re-running the \
-                 LLM pipeline. Sibling to `drift_posture`: cheap, idempotent, no model \
-                 calls. Use to decide whether the corroborated/undocumented/drifted \
-                 findings you're about to cite are current against the architecture docs \
-                 (SYSTEM_OVERVIEW.md + ARCH_PRINCIPLES.md by default). Status: `fresh` \
-                 (every narrative hash matches the recorded fingerprint), `stale` (a \
-                 narrative was edited since the last reconcile — re-run it), `partial` \
-                 (fingerprint missing a requested narrative), `never_run` (no artifact \
-                 yet). When present, the response carries the \
-                 corroborated/undocumented/drifted counts."
-                    .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "corpus": {
-                        "type": "string",
-                        "description": "Corpus id (subdir under ~/.svrnmesh/capabilities). Defaults to the only corpus when unambiguous."
-                    },
-                    "narrative": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Override the narrative-doc set. Defaults to sovereign/SYSTEM_OVERVIEW.md + sovereign/ARCH_PRINCIPLES.md relative to the workspace root."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![ToolExample {
-                situation: "Decide whether to cite the capability findings or warn they're stale against the docs.".into(),
-                call: json!({}),
-            }],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "status": { "type": "string", "enum": ["fresh","stale","partial","never_run"] },
-                    "corpus_id": { "type": "string" },
-                    "last_run_at_unix": { "type": ["integer","null"] },
-                    "age_seconds": { "type": ["integer","null"] },
-                    "corroborated": { "type": ["integer","null"] },
-                    "undocumented": { "type": ["integer","null"] },
-                    "drifted": { "type": ["integer","null"] },
-                    "stale_paths": { "type": "array", "items": { "type": "string" } },
-                    "output_path": { "type": ["string","null"] }
-                }
-            })),
-        }
+impl CapabilityPostureTool {
+    /// Bind this tool's state to its `capability_posture` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("capability_posture", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `capability_posture`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let caps_dir = match resolve_corpus_dir(&self.root, params) {
             Ok(d) => d,
             Err(e) => {
@@ -266,7 +217,7 @@ mod tests {
         let tool = CapabilityPostureTool::new().with_root(root.path().to_path_buf());
 
         // No fingerprint/findings yet → never_run with zero counts.
-        let out = tool.execute(&json!({"corpus": "c"}), &ctx).await.unwrap();
+        let out = tool.run(&json!({"corpus": "c"}), &ctx).await.unwrap();
         let v = match out {
             StepOutput::Json(v) => v,
             _ => panic!("expected json"),
@@ -280,7 +231,7 @@ mod tests {
             json!({"corpus_id":"c","corroborated":114,"undocumented":112,"drifted":0,"findings":[]}).to_string(),
         )
         .unwrap();
-        let out = tool.execute(&json!({"corpus": "c"}), &ctx).await.unwrap();
+        let out = tool.run(&json!({"corpus": "c"}), &ctx).await.unwrap();
         let v = match out {
             StepOutput::Json(v) => v,
             _ => panic!("expected json"),

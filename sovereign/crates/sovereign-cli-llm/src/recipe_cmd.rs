@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 use corpus_engine::harness::{capture, FrozenSample, HarnessRunner};
 use corpus_engine::{CorpusEngine, EmbedFn, Recipe, RecipeRegistry, TestOptions};
-use sovereign_eval::authoring_harness::{render_report, run_deterministic, Declaration};
+use sovereign_authoring_harness::{render::render_report, run_deterministic, Declaration};
 
 // ── Public entry points ─────────────────────────────────────────────────────
 

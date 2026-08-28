@@ -892,28 +892,14 @@ fn atom_brief(atom: &AtomEnvelope) -> (&'static str, String, String) {
 }
 
 fn atom_evidence_section_ids(atom: &AtomEnvelope) -> Vec<String> {
-    match atom {
-        AtomEnvelope::Entity(e) => vec![e.first_appearance.chunk_id.clone()],
-        AtomEnvelope::Event(e) => {
-            let mut out = vec![e.section_position.section_id.clone()];
-            out.extend(e.evidence.iter().map(|c| c.chunk_id.clone()));
-            out
-        }
-        AtomEnvelope::State(s) => s.evidence.iter().map(|c| c.chunk_id.clone()).collect(),
-        AtomEnvelope::Relation(r) => r.evidence.iter().map(|c| c.chunk_id.clone()).collect(),
-        AtomEnvelope::Claim(c) => c.evidence.iter().map(|cr| cr.chunk_id.clone()).collect(),
-        AtomEnvelope::Question(q) => q.raised_at.iter().map(|c| c.chunk_id.clone()).collect(),
-        AtomEnvelope::Configuration(c) => c.evidence.iter().map(|cr| cr.chunk_id.clone()).collect(),
-        AtomEnvelope::ArgumentReconstruction(a) => {
-            let mut out = vec![a.section_position.section_id.clone()];
-            out.extend(a.evidence.iter().map(|c| c.chunk_id.clone()));
-            out
-        }
-        AtomEnvelope::Position(_) | AtomEnvelope::Opposition(_) => {
-            unreachable!("typed atoms wired in Gap B Stage 4")
-        }
-        AtomEnvelope::Asset(_) => Vec::new(),
-    }
+    // Was a twelfth hand-written fan-out, and the THIRD copy carrying
+    // `unreachable!("typed atoms wired in Gap B Stage 4")` for Position and
+    // Opposition — two kinds `atlas::writer` has been writing to atoms.json
+    // since Gap B landed. `evidence_anchors()` is the one owner.
+    atom.evidence_anchors()
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect()
 }
 
 // ─── Summary + output ────────────────────────────────────────

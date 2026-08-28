@@ -2,15 +2,14 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use async_trait::async_trait;
-
 use corpus_engine::recipe::CatalogConfig;
 use corpus_engine::types::CorpusKind;
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::{InferenceProvider, StateStore, Tool};
+use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::*;
 
 use crate::catalog::{partition_hits_by_kind, CatalogHit, CatalogResolutionContext};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Search over ingested documents using vector similarity or text search.
 pub struct KnowledgeTool {
@@ -35,50 +34,26 @@ impl KnowledgeTool {
     }
 }
 
-#[async_trait]
-impl Tool for KnowledgeTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "knowledge".to_string(),
-            name: "Knowledge".to_string(),
-            description: "Search your ingested documents for relevant information".to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query"
-                    }
-                },
-                "required": ["query"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Prose synthesis over local knowledge corpora, with \
-                                inline citations to source chunks."
-            })),
-        }
+impl KnowledgeTool {
+    /// Bind this tool's state to its `knowledge` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("knowledge", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![] // No special permissions needed to search own documents.
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        if params.get("query").and_then(|v| v.as_str()).is_none() {
-            return Err(Error::InvalidInput(
-                "Knowledge tool requires a 'query' string parameter".to_string(),
-            ));
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `knowledge`.
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -205,6 +180,15 @@ impl Tool for KnowledgeTool {
         }
 
         Ok(StepOutput::Text(sections.join("\n\n")))
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+        if params.get("query").and_then(|v| v.as_str()).is_none() {
+            return Err(Error::InvalidInput(
+                "Knowledge tool requires a 'query' string parameter".to_string(),
+            ));
+        }
+        Ok(())
     }
 }
 

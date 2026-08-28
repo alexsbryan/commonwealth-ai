@@ -677,6 +677,7 @@ mod tests {
             context_total_bytes: 86,
             compute_accel_bytes: 7,
             compute_host_bytes: 11,
+            model_host_bytes: 0,
         };
         // Half the blocks: half the weights (40), half the KV (43), both
         // compute terms — and NO share/8, NO flat GiB.

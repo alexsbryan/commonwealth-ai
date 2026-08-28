@@ -233,9 +233,9 @@ impl Runtime {
                 // loop. Tools present → must serve on the primary slot
                 // (Fast has no tools template); Passthrough shadow =
                 // Speed::Slow, unchanged.
-                let mut request =
-                    CompletionRequest::for_workload(Workload::Passthrough, transcript.clone())
-                        .with_system(&system_prompt);
+                let mut request = Workload::Passthrough
+                    .request(transcript.clone())
+                    .with_system(&system_prompt);
                 request.max_tokens = Some(ITERATION_MAX_TOKENS);
                 request.temperature = Some(0.0);
                 request.think_budget = Some(0);

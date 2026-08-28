@@ -194,6 +194,9 @@ mod tests {
             callee_qualified: callee_q.to_string(),
             file_path: "x.rs".to_string(),
             line,
+            start_col: -1,
+            end_line: -1,
+            end_col: -1,
             ref_kind: kind.to_string(),
         }
     }

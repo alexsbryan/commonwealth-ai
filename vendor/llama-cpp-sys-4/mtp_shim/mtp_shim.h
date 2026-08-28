@@ -77,14 +77,6 @@ struct mtp_session * mtp_session_new(
 
 void mtp_session_free(struct mtp_session * s);
 
-// True when any speculative backend needs post-norm embeddings on the target
-// context (`llama_set_embeddings`). MTP returns false.
-bool mtp_session_need_embd(const struct mtp_session * s);
-
-// True when any speculative backend needs pre-norm hidden states on the target
-// context (`llama_set_embeddings_pre_norm`). MTP returns true.
-bool mtp_session_need_embd_pre_norm(const struct mtp_session * s);
-
 // Optional: call once per fresh generation. `prompt` is the prompt-token array
 // already decoded into the target context (used by ngram-style speculators;
 // MTP currently uses it only for sanity assertions).

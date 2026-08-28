@@ -15,26 +15,31 @@ are in place, and where each routing decision is made.
 
 ---
 
-## 1. There are two daemon shapes
+## 1. There is one daemon shape
 
-This is the single largest source of confusion. The same HTTP route
-(`POST /v1/chat/completions`) takes a different path through the
-codebase depending on which daemon binary is running.
+**This section used to be the single largest source of confusion, and
+it is now the shortest.** Until 2026-08-24 there were two daemon
+binaries and `POST /v1/chat/completions` took a different path through
+the codebase depending on which one was running. The standalone
+`commonwealth` binary is deleted (daemon-convergence; it was vestigial
+— no `join` subcommand and no `model pull`, so an inference plan could
+never arrive, and the headless cloud-peer case it claimed to serve is
+actually `sovereign-cli daemon run --worker-mode`).
 
-| Shape | Binary | Wired in | `state.local_inference` | How chat completes |
-|---|---|---|---|---|
-| **Standalone** | `commonwealth daemon …` | `commonwealth-daemon/src/main.rs` | `None` | Orchestrator spawns separate `llama-server` processes; handler forwards over TCP via `forward_to_llama_server` |
-| **Embedded**   | `sovereign desktop` / `sovereign daemon` | `sovereign-mesh/src/daemon.rs::start_daemon` | `Some(SovereignInferenceAdapter)` | In-process. Adapter wraps `MeshInferenceProvider` which wraps the local `EmbeddedLlamaCpp`; peer routing happens inside the adapter, not at the HTTP handler |
+Every daemon is now embedded: `sovereign-mesh::EmbeddedDaemon` is the
+host, wired in `sovereign-mesh/src/daemon.rs::start_daemon`, and
+`state.local_inference` is set unconditionally to
+`Some(SovereignInferenceAdapter)`. Chat completes in-process — the
+adapter wraps `MeshInferenceProvider`, which wraps the local
+`EmbeddedLlamaCpp`, and peer routing happens inside the adapter rather
+than at the HTTP handler. There is no `forward_to_llama_server` path
+on any shipped configuration.
 
-The desktop and CLI daemons are **always** embedded. `local_inference`
-is set unconditionally when `sovereign-mesh::EmbeddedDaemon` is the
-host. Standalone Commonwealth nodes (intended for headless mesh
-peers without a Sovereign runtime) are the only callers that leave
-`local_inference == None`.
-
-If you don't know which shape you're looking at, check `state.rs:196`
-— `local_inference: Option<Arc<dyn LocalInferenceService>>`. That's
-the discriminator.
+`local_inference: Option<Arc<dyn LocalInferenceService>>` is still an
+`Option` in the type, but it no longer has a producer of `None` —
+`commonwealth-daemon/src/main.rs:828` was the sole one. Collapsing that
+field to a non-`Option` is the follow-up; until it lands, treat a
+`None` there as unreachable rather than as a shape to handle.
 
 ---
 
@@ -185,11 +190,11 @@ On any transport error, the next address is tried.
 
 **Wiring requirement:** the daemon's serving provider must be
 wrapped in `MeshInferenceProvider`. The CLI daemon does this in
-`sovereign-cli/src/daemon_cmd.rs::run_daemon` (cold start) and
+`sovereign-cli-daemon/src/daemon_cmd/mod.rs::run_daemon` (cold start) and
 `LlamaCppFactory::build_provider` (hot reload). The desktop does
-it in `sovereign-desktop/src-tauri/src/state.rs:649`. A bare
-`Arc<EmbeddedLlamaCpp>` handed to `set_inference_provider` would
-re-introduce the silent-substitution bug — `EmbeddedLlamaCpp` has
+it in `state/builders/inference.rs`. A bare
+`Arc<EmbeddedLlamaCpp>` placed in `ServingCore::inference_provider`
+would re-introduce the silent-substitution bug — `EmbeddedLlamaCpp` has
 no peer awareness, so an unmatched `model_id` would fall through
 to its `pick_slot` default and answer with the local primary.
 
@@ -324,7 +329,7 @@ curl -s --max-time 5 http://<peer-ip>:9741/v1/embeddings \
 | Sent `model: X` (peer-only), got `503 model_not_loaded` saying "no node in this mesh advertises model 'X'" | The id you sent isn't in any node's `/oicp/v1/capabilities`. Check spelling and quant suffix — `gemma-4-E4B-it-Q4_K_M` ≠ `gemma-4-E4B-it-Q5_K_M`. (§4) |
 | Sent `model: X` (peer-only), got `503 model_not_loaded` saying "advertised by a peer, but … its mesh hop budget is spent" | Different cause, and `/v1/models` **will** list the model — don't go looking there. The request's OICP envelope arrived with `forward_budget: 0`, meaning some node already forwarded it once, and a second forward could bounce between nodes holding stale manifests. Either raise `forward_budget`, or send to a node that holds the model. (Before 2026-08-06 this case reported the absence message above and sent you to a dead end — M6-B finding B1.) |
 | Sent `model: X` (peer-only), got a 503 saying "peer routing is disabled by SOVEREIGN_DISABLE_PEER_INFERENCE" | Exactly what it says: this node refuses to look outward, so a peer may well hold the model. Unset the variable, or load the model locally. |
-| Sent `model: X` to the local daemon and got the local primary instead | The daemon's serving provider isn't wrapped in `MeshInferenceProvider`. Cold start → check `daemon_cmd.rs::run_daemon`; hot reload → check `LlamaCppFactory::build_provider`. A bare `Arc<EmbeddedLlamaCpp>` handed to `set_inference_provider` re-introduces the silent-substitution bug. (§3) |
+| Sent `model: X` to the local daemon and got the local primary instead | The daemon's serving provider isn't wrapped in `MeshInferenceProvider`. Cold start → check `daemon_cmd.rs::run_daemon`; hot reload → check `LlamaCppFactory::build_provider`. A bare `Arc<EmbeddedLlamaCpp>` placed in `DaemonServices`' `ServingCore::inference_provider` re-introduces the silent-substitution bug. (§3) |
 | Sent `model: X` (peer-only), got a 503 `routing` error after a delay | Routing reached the peer, peer's chat slot is wedged or never loaded. Check the peer's `/v1/embeddings` (should be ~50ms) — if that works but chat hangs, the chat slot itself is the problem, not the network |
 | Added an OICP envelope (no `model`), still local | Either `preferred_speed != Slow` (Gate C) or local wins on score-then-size (§3) |
 | Set `latency_class: fast`, expected fast slot, got slow | `pick_slot_for_oicp` returns Fast only when a Fast slot is *loaded*; falls back to Slow when not |

@@ -129,7 +129,7 @@ echo "probe-a: netns sealed (loopback only). booting dev daemon on :$CPORT …"
 echo "probe-a: SOVEREIGN_INFERENCE_TIMEOUT_SECS=$DEADLINE_SECS (shortened so the"
 echo "         stalled-consumer release lands inside the probe window)"
 ((${#DAEMON_ENV[@]})) && echo "probe-a: extra daemon env: ${DAEMON_ENV[*]}"
-env SOVEREIGN_ALLOW_MULTIPLE_DAEMONS=1 SOVEREIGN_INFERENCE_TIMEOUT_SECS="$DEADLINE_SECS" \
+env SOVEREIGN_INFERENCE_TIMEOUT_SECS="$DEADLINE_SECS" \
   "${DAEMON_ENV[@]}" \
   "$CLI" daemon run --config "$WORK/node0/config.toml" > "$WORK/node0/daemon.log" 2>&1 &
 DPID=$!

@@ -118,9 +118,12 @@ async fn gossip_round_publishes_live_hosted_corpora() {
     let mut members = HashMap::new();
     members.insert(self_id, self_record);
     let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(42),
         name: "Test".into(),
-        join_key_hash: [1u8; 32],
+        invite_key_hash: [1u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members,
         peers: vec![],

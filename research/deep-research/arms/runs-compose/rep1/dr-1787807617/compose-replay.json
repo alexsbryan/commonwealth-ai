@@ -1,0 +1,24 @@
+{
+  "input": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/bed-compose/compose-input.json",
+  "run_id": "dr-1787807617",
+  "question": "Please provide a detailed explanation of the differences and connections between Google's recently released A2A protocol and the MCP protocol. Furthermore, elaborate on the innovative aspects of the A2A protocol and the specific problems it is designed to address.",
+  "window_chunks": 62,
+  "sections": 20,
+  "notes": 0,
+  "baseline": [
+    8,
+    3
+  ],
+  "arms": [
+    {
+      "arm": "60x8",
+      "section_passages": 60,
+      "per_source_cap": 8,
+      "ms": 972001,
+      "words": 10064,
+      "chars": 74962,
+      "out": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-compose/rep1/dr-1787807617/arm-60x8.md",
+      "error": null
+    }
+  ]
+}

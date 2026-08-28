@@ -28,12 +28,52 @@ sovereign-store = { workspace = true }
 # (sovereign-tools) must compute the carried-item advisory identically, and
 # sovereign-cli cannot see sovereign-tools in a gated build.
 sovereign-contracts = { workspace = true }
+# The neutral kernel — `posture` renders every row as a `Judgement`, so the
+# verdict vocabulary, the age format and the staleness band are one decider
+# rather than seven (noun-convergence rung nc-10-judgement). Layer 0, so this
+# edge points DOWN; it is not routed through sovereign-contracts because
+# kernel-types is a membrane meant to be named directly (ARCH §8.3 is about
+# re-exported types, not about the membrane itself).
+kernel-types = { workspace = true }
 sovereign-agent-bench = { workspace = true, optional = true }
-# `awareness_cmd` (the `awareness` feature only) needs the heavy
-# `knowledge_view` surface from sovereign-tools. Default + `dev-tools`
-# builds skip this; only `--features awareness` pulls it in.
-sovereign-tools = { workspace = true, optional = true }
 sovereign-cli-shared = { workspace = true }
+# Flag surfaces are declared as structs (`#[derive(clap::Parser)]`), not
+# hand-rolled `while i < args.len()` loops: the dispatcher's own `--help` /
+# `--version` globals and `notes retrieval-audit`. Rendering goes through
+# `sovereign_cli_shared::flag_surface::parse`, which owns the one prefix rule.
+# ~11 transitive crates on top of the 871 this binary already links.
+clap = { workspace = true }
+# The LLM sibling, LINKED rather than exec'd — the `awareness` feature only.
+# `awareness_cmd` used to live in THIS crate while importing
+# `crate::enrich_cmd::inference_client`, which lives over there; that import
+# stopped resolving when the 2026-05-22 slice-5 split moved `enrich_cmd` out,
+# and `--features awareness` has failed with two `E0433` ever since (nc-26,
+# 2026-08-21). The module moved to the crate it was reaching into, and the
+# dispatcher calls `sovereign_cli_llm::awareness_cmd::run_awareness` in its own
+# process — no exec hop, which is what nc-19 bought and this must not spend.
+#
+# Optional, and pulled ONLY by `awareness` — never by `default` or
+# `dev-tools`. That matters: unlike `sovereign-cli-dev`, this crate has no thin
+# `default-features = false` surface, so linking it means llama.cpp, the
+# grammars and arrow. The end-user dispatcher gains nothing, which is the whole
+# point of `awareness` being opt-in.
+#
+# Path dep rather than a `[workspace.dependencies]` entry: this is the crate's
+# first consumer, and the edge is easier to read where it is paid — same
+# reasoning as `sovereign-cli-dev` above.
+sovereign-cli-llm = { path = "../sovereign-cli-llm", optional = true }
+# The workbench, LINKED rather than exec'd. `sovereign-cli-dev` grew a `[lib]`
+# target on 2026-08-21; with `default-features = false` it is two workspace
+# crates wide (`corpus-engine-scip` + `sovereign-cli-shared`, both already
+# here), so `svrn code converge` runs in THIS process instead of exec'ing a
+# 414 MB sibling that may be stale. `workbench` — sovereign-mesh/llama.cpp,
+# sovereign-tools/arrow+parquet, corpus-engine's grammars — stays off; the
+# remaining `code` subcommands still exec. Optional + pulled by `dev-tools`
+# only, so the shipped end-user dispatcher gains nothing.
+#
+# Path dep rather than a `[workspace.dependencies]` entry: this is the crate's
+# first consumer, and the edge is easier to read where it is paid.
+sovereign-cli-dev = { path = "../sovereign-cli-dev", default-features = false, optional = true }
 corpus-engine = { workspace = true }
 corpus-engine-archaeology = { workspace = true, optional = true }
 corpus-engine-scip = { workspace = true, optional = true }
@@ -42,10 +82,6 @@ corpus-engine-scip = { workspace = true, optional = true }
 # re-exports it while linking llama.cpp unconditionally.
 oicp-client = { workspace = true, optional = true }
 corpus-engine-notes = { workspace = true }
-# Only the opt-in `awareness` diagnostic CLI reads the ATOS FeatureStore
-# (corpus_engine_atos). Optional + pulled by the `awareness` feature so the
-# default `sovereign` dispatcher carries zero ATOS.
-corpus-engine-atos = { workspace = true, optional = true }
 async-trait = { workspace = true }
 futures = { workspace = true }
 serde_json = { workspace = true }
@@ -64,8 +100,10 @@ which = "7"
 sha2 = { workspace = true }
 chrono = { workspace = true }
 regex = { workspace = true }
-# Used by `awareness_cmd` (gated behind the `awareness` feature) for
-# direct SQLite reads. Production CLI paths go through StateStore.
+# `memory_cmd` reads the conversation db directly for one query. Production
+# CLI paths go through StateStore. (`awareness_cmd` was the other reader until
+# 2026-08-21; it moved to sovereign-cli-llm and took its own copy of this dep
+# with it, so this stays non-optional for memory_cmd alone.)
 rusqlite = { version = "0.35", features = ["bundled"] }
 # `libc` is used by `serve_cmd` for `kill -TERM` via /bin/kill and by
 # `stop_cmd` for `process_alive`. Unix-only.
@@ -105,6 +143,9 @@ default = [
 dev-tools = [
     "dep:corpus-engine-archaeology",
     "dep:sovereign-agent-bench",
+    # The linked workbench surface — `InProcessCodeVerb`. Thin by construction
+    # (`default-features = false`); see the dep comment above.
+    "dep:sovereign-cli-dev",
     "deep-research",
 ]
 # The thin local-only research loop (T1): gated corpus + web search,
@@ -127,6 +168,9 @@ code-intel = [
     "dep:oicp-client",
     "dep:corpus-engine-scip",
     "corpus-engine/treesitter",
+    # The verb itself. One implementation, shared with the workbench, which
+    # served a byte-drifting copy of it until 2026-08-20.
+    "sovereign-cli-shared/code-index",
     # `project init` (2026-08-07) reads the project model — `observation` to
     # derive what the repo IS, `project_toml` to persist it. Both live in
     # sovereign-cli-shared because the workbench still reads what init writes.
@@ -135,10 +179,23 @@ code-intel = [
     # non-optional dep of this crate, so enabling this costs no new link.
     "sovereign-cli-shared/mcp-client",
 ]
-# `awareness` builds the heavy `sovereign awareness` knowledge-view
-# diagnostic CLI, which pulls `sovereign-tools`. Opt-in and independent
-# of `dev-tools` so the common developer build stays light.
-awareness = ["dep:sovereign-tools", "dep:corpus-engine-atos"]
+# `awareness` builds the heavy `svrn awareness` knowledge-view diagnostic CLI.
+# Opt-in and independent of `dev-tools` so the common developer build stays
+# light — linking the LLM sibling means llama.cpp and the grammars.
+#
+# This is now a PASS-THROUGH, not a definition. The subcommands live in
+# `sovereign-cli-llm` since 2026-08-21 (nc-26) because they need its
+# `enrich_cmd::inference_client`, so the real feature — and every heavy
+# dependency it turns on — is declared there. Two crates cannot both own one
+# feature's dependency list without drifting; that split-brain is exactly how
+# `awareness` came to have two disagreeing gates and stopped compiling for
+# three months (ARCH §10.6 — one decider, one name).
+#
+# The gate that watches this: `scripts/sovereign-lint.sh` now names
+# `sovereign-cli/awareness` in its workspace feature list. Nothing built the
+# feature before, which is the only reason a two-`E0433` break survived from
+# 2026-05-22 to 2026-08-21.
+awareness = ["dep:sovereign-cli-llm", "sovereign-cli-llm/awareness"]
 
 [lints]
 workspace = true

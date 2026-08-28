@@ -173,10 +173,53 @@ RETRIEVAL_CORPORA=(sep wikipedia)
 ENRICHMENT_CORPORA=(literary/bk-book-1)
 [[ -n "${CI_BENCH_OBSIDIAN:-}" ]] && ENRICHMENT_CORPORA=(obsidian "${ENRICHMENT_CORPORA[@]}")
 ROUTING_FILTER="routing"
-# Per-lane wall-clock cap needs a `timeout` binary. macOS lacks it by default
-# (`brew install coreutils` → `gtimeout`). If neither exists, lanes run uncapped
-# and only the inter-lane budget guard bounds the run.
+# Per-lane wall-clock cap. `timeout(1)` is used where the host has it; macOS
+# lacks it by default (`brew install coreutils` → `gtimeout`), so `run_capped`
+# below falls back to a shell watchdog that enforces the SAME cap.
+#
+# It used to fall back to running the lane UNCAPPED while still PRINTING the
+# cap in the RUN banner — a substitution the run never named (ARCH §18.3).
+# Measured 2026-08-26 on a macOS peer with neither binary: `synth:sep` (SOFT)
+# ran 2729s against a printed 400s cap, took the run 529s past its 3600s
+# budget, and turned 22 trailing lanes — chaos-gate, mechanism-gate, both gym
+# gates, agent-coding-gate — into SKIP(budget) → HARD_FAIL. That is precisely
+# the failure `HARD_RESERVE_SECS` is documented to prevent, by a guard that
+# was computed and then discarded.
 TIMEOUT_BIN="$(command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null || true)"
+
+# Run "$@" with a hard wall-clock cap in seconds ($1). Returns 124 on timeout,
+# matching `timeout(1)`, which is what the lane-status switch already reads.
+run_capped() {
+  local cap="$1"; shift
+  if [[ -n "$TIMEOUT_BIN" ]]; then
+    "$TIMEOUT_BIN" "${cap}s" "$@"
+    return $?
+  fi
+  # Shell watchdog. Kills the lane AND its descendants — a bench lane spawns
+  # `eval run` children, and TERMing only the parent leaves the model call
+  # holding the daemon slot the next lane needs.
+  "$@" &
+  local pid=$!
+  local waited=0
+  while kill -0 "$pid" 2>/dev/null; do
+    if (( waited >= cap )); then
+      pkill -TERM -P "$pid" 2>/dev/null
+      kill -TERM "$pid" 2>/dev/null
+      local grace=0
+      while kill -0 "$pid" 2>/dev/null && (( grace < 10 )); do
+        sleep 1; grace=$(( grace + 1 ))
+      done
+      pkill -KILL -P "$pid" 2>/dev/null
+      kill -KILL "$pid" 2>/dev/null
+      wait "$pid" 2>/dev/null
+      return 124
+    fi
+    sleep 1
+    waited=$(( waited + 1 ))
+  done
+  wait "$pid"
+  return $?
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -247,14 +290,9 @@ run_lane() {
   echo "         \$ $*"
   local t0; t0=$(date +%s)
   local out; out="$REPORT_DIR/lane-$(printf '%s' "$name" | tr '/: ' '___').out"
-  # Per-lane cap if a timeout binary exists; else run uncapped (the inter-lane
-  # budget guard + lane-internal bounds keep the run finite). Tee output so we
-  # can distinguish a real regression from a setup gap.
-  if [[ -n "$TIMEOUT_BIN" ]]; then
-    "$TIMEOUT_BIN" "${lane_cap}s" "$@" 2>&1 | tee "$out"
-  else
-    "$@" 2>&1 | tee "$out"
-  fi
+  # The printed cap is the APPLIED cap on every host — see `run_capped`. Tee
+  # output so we can distinguish a real regression from a setup gap.
+  run_capped "$lane_cap" "$@" 2>&1 | tee "$out"
   local rc=${PIPESTATUS[0]}
   local secs=$(( $(date +%s) - t0 ))
   local status
@@ -278,7 +316,50 @@ run_lane() {
     status="SKIP(no-data)"
   elif [[ -n "$regressed" ]]; then
     if (( regressed == 0 )); then
-      if grep -qE "[1-9][0-9]* (stale|first-run)" "$out" 2>/dev/null; then
+      # "0 regressed" is NOT the same claim as "nothing regressed". A lane that
+      # adjudicated NOTHING also prints zero, and until 2026-08-26 that was
+      # stamped PASS. Two real lanes did it in one run (Flash-Next bench,
+      # research/engram/bench-flashnext.log):
+      #   synth:wikipedia   0 green · 0 improved · 0 regressed · … · 5 stale
+      #                     with "0 regressed (unmeasured — every question errored)"
+      #   enrichment:...    same all-zero tally, corpus not installed locally
+      # Both posted PASS(warn:setup) — a green built on five errored questions
+      # and an absent corpus. The BINARY is right (bench_cmd/all.rs:1153 prints
+      # the "unmeasured" parenthetical, and `an_all_errored_run_is_unmeasured_
+      # not_regressed` tests it); only this parser was wrong, because
+      # `grep -oE "[0-9]+ regressed"` cannot tell 0-of-0 from 0-of-30.
+      #
+      # So: prove the lane adjudicated something before calling it a pass.
+      # green/improved/regressed are the three outcomes that mean a real
+      # baseline comparison happened; first-run/no-baseline/stale all mean
+      # "could not compare" and must not, alone, carry a PASS. Verified against
+      # this run's seven tallies — the five genuine passes each have
+      # green+improved ≥ 3, both false passes have all three at zero.
+      local tally adjudicated n_green n_improved n_regressed
+      tally=$(grep -oE "[0-9]+ green · [0-9]+ improved · [0-9]+ regressed" "$out" 2>/dev/null | tail -1)
+      if [[ -n "$tally" ]]; then
+        # Parse by LABEL, not by column. The separator is " · " and awk splits
+        # the middle dot into its own field, so $1/$3/$5 read "3 + · + improved"
+        # — an arithmetic error that would have made every lane could-not-judge
+        # and failed every HARD gate. Keyed on the word, column drift is moot.
+        n_green=$(grep -oE "[0-9]+ green" <<<"$tally" | grep -oE "^[0-9]+")
+        n_improved=$(grep -oE "[0-9]+ improved" <<<"$tally" | grep -oE "^[0-9]+")
+        n_regressed=$(grep -oE "[0-9]+ regressed" <<<"$tally" | grep -oE "^[0-9]+")
+        adjudicated=$(( ${n_green:-0} + ${n_improved:-0} + ${n_regressed:-0} ))
+      else
+        # No tally line at all (lane types that don't print one) — fall back to
+        # the explicit all-errored marker rather than inventing a verdict.
+        adjudicated=1
+      fi
+      if grep -qF "unmeasured — every question errored" "$out" 2>/dev/null; then
+        adjudicated=0
+      fi
+      if (( adjudicated == 0 )); then
+        # Same verdict, same name as the rc==4 arm above: could-not-judge.
+        # One concept, one status string — and a HARD lane still fails on it
+        # via the PASS* test below, which is the point.
+        status="SKIP(no-data)"
+      elif grep -qE "[1-9][0-9]* (stale|first-run)" "$out" 2>/dev/null; then
         status="PASS(warn:setup)"  # 0 regressed, but a bench was stale/first-run
       else
         status="PASS"

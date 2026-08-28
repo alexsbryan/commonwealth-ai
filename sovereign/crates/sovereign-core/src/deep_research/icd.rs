@@ -18,35 +18,21 @@ use std::collections::HashMap;
 pub const ICD_VERSION: u32 = 1;
 
 /// The four gate verdicts (§18.1) — never defaulted.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Verdict {
-    Passed,
-    Failed,
-    CouldNotJudge,
-    NeverRan,
-}
-
-impl Verdict {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Verdict::Passed => "passed",
-            Verdict::Failed => "failed",
-            Verdict::CouldNotJudge => "could-not-judge",
-            Verdict::NeverRan => "never-ran",
-        }
-    }
-
-    pub fn parse_wire(s: &str) -> Option<Verdict> {
-        match s {
-            "passed" => Some(Verdict::Passed),
-            "failed" => Some(Verdict::Failed),
-            "could-not-judge" => Some(Verdict::CouldNotJudge),
-            "never-ran" => Some(Verdict::NeverRan),
-            _ => None,
-        }
-    }
-}
+///
+/// CONVERGED 2026-08-20 onto [`kernel_types::Verdict`] (noun-convergence rung
+/// nc-10-judgement). The definition here was byte-for-byte the kernel's —
+/// same four variants, same kebab-case wire form, same `as_str` and
+/// `parse_wire` — so this was one of ten `Verdict` definitions that genuinely
+/// WAS the same concept rather than a namesake. It is now a re-export, which
+/// is a statement and not a shim: the ICD's verdict IS the kernel's verdict,
+/// there is one definition rather than two, and the artifacts on disk are
+/// unchanged.
+///
+/// The other nine are adjudicated in the rung's landing verdict; most are
+/// correctly distinct (`facts_check::Verdict` carries a receipt,
+/// `mesh_measurements::Verdict` is valid/invalid-with-problems,
+/// `flywheel::verify::Verdict` is a probe row).
+pub use kernel_types::Verdict;
 
 /// The gate action family from the custody reds: a claim resting on
 /// unknown-provenance evidence must take a `refused_*` action (R-3).
@@ -506,6 +492,27 @@ pub struct FetchList {
     pub queries: Vec<FormedQuery>,
     pub search_hits: Vec<SearchHit>,
     pub triage: TriageOutcome,
+    /// Queries the loop FORMED and then declined to dispatch (the
+    /// acquisition tune of 2026-08-24). A formed query that is not a
+    /// query — the empty string, a bare `###` — must not spend a search,
+    /// and must not simply vanish either: the artifact records what was
+    /// withheld and why (§18.3, absence is reported never defaulted).
+    /// `#[serde(default)]` so every flight recorded before this field
+    /// existed still deserializes.
+    #[serde(default)]
+    pub refused_queries: Vec<RefusedQuery>,
+}
+
+/// A query the loop formed and refused to dispatch, with the reason the
+/// one decider gave (`acquisition::query_refusal`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RefusedQuery {
+    pub text: String,
+    pub reason: String,
+    /// The gap it came from, when it came from one.
+    #[serde(default)]
+    pub from_gap_id: Option<String>,
+    pub formed_by: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -648,6 +655,57 @@ pub struct BudgetEntry {
 
 // ---------------------------------------------------------------------------
 // §8 evidence-window-<round>.json — R6, custody-stamped
+// ---------------------------------------------------------------------------
+
+/// `compose-input.json` — EXACTLY what the writer stage is handed.
+///
+/// # Why this artifact exists
+///
+/// The writing is ~12 minutes of a ~96-minute flight; the audit is ~71 and
+/// acquisition ~10 (measured on the task-69 wide cell, 2026-08-26). Tuning
+/// the writer through whole flights therefore pays 8x its own cost per
+/// answer, which is what `arms/bed-binder/bed.json` + `tests/binder_replay.rs`
+/// already solved for the AUDIT stage. This is the same move for the WRITER:
+/// freeze the stage's inputs so `compose_report` can be replayed against
+/// identical evidence in minutes, through the production function rather than
+/// a fork of it.
+///
+/// # Why the per-round windows could not serve
+///
+/// `evidence-window-<round>.json` is dumped INSIDE the round loop and
+/// `compose_report` runs after it, so neither dump is what the writer saw:
+/// on the 2026-08-26 wide cell compose witnessed `window_chunks=61` where the
+/// dumps summed to 57. Worse, `ev-N` is PER-ROUND POSITIONAL — round 2
+/// restarts at `ev-1` — so the dumps cannot even be unioned by id. Trying to
+/// reconstruct the merged window from them produced a false "the writer
+/// fabricates citation handles" finding on 2026-08-26 (retracted same day).
+/// This records the merged window ONCE, at the boundary, so no consumer has
+/// to reconstruct anything.
+///
+/// Holding the window twice on disk is deliberate: the run tree is local and
+/// gitignored, and a replayable writer is worth ~1.3 MB per run.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComposeInput {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    /// The question as the writer receives it.
+    pub question: String,
+    /// The MERGED window `compose_report` ranks against — not a round dump.
+    pub window: EvidenceWindow,
+    /// The section list: the planned outline, or the search frontier when the
+    /// outline was refused (the fallback is named in the run log, and which
+    /// one this is matters to anyone replaying).
+    pub sections: Vec<String>,
+    /// Distilled findings per sub-question. Empty when the notes leg is off.
+    pub notes: Vec<ResearchNote>,
+    /// The budget in force for the run that produced this input, so a replay
+    /// can state its baseline instead of assuming the shipped default.
+    pub section_passages: usize,
+    pub per_source_cap: usize,
+}
+
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1121,4 +1179,73 @@ mod tests {
             .as_str()
             .starts_with("refused"));
     }
+}
+
+// ── Research notes (drb1-r4) ────────────────────────────────────────────
+//
+// The writer's input, distilled per sub-question. AIQ's DRB-II InfoRecall
+// lead (49.23 — above o3, Gemini-3-Pro and Grok) is attributed by our own
+// teardown (`research/deep-research/aiq-teardown.md` §1.3) to giving the
+// writer structured `ResearchNotes` — findings with source ids and an
+// evidence judgment — rather than raw retrieved passages. Ours composed
+// each section from the top-8 passages by cosine; a passage is text the
+// writer must still mine, and eight of them is what fits, not what is
+// known.
+//
+// The citation contract is UNCHANGED and is the reason this shape has
+// `evidence_ids` rather than quoted text: every finding names the window
+// chunks it rests on, the writer cites those same `ev-N` handles, and the
+// audit locates spans exactly as it does today. A finding whose ids do not
+// resolve against the window is REFUSED and recorded, never dropped and
+// never re-numbered (§18.3 — absence is reported, not defaulted).
+
+/// One distilled claim from one sub-question's evidence.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Finding {
+    /// The claim, in the worker's words — one factual statement.
+    pub claim: String,
+    /// The window chunk ids it rests on (`ev-N`). Non-empty and every id
+    /// resolves: the parser refuses anything else.
+    pub evidence_ids: Vec<String>,
+    /// The worker's own 0-100 usefulness judgment for answering the
+    /// sub-question. Advisory — it ranks findings, it never gates a
+    /// citation (the corroboration floor and the audit still do that).
+    pub usefulness: u8,
+}
+
+/// A finding the parser would not admit, kept WITH its reason so a note
+/// that distilled badly is visible rather than merely short.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RefusedFinding {
+    pub claim: String,
+    pub reason: String,
+    /// Ids the worker cited that the window does not hold. Populated for
+    /// the unresolved-id refusal; empty for the others.
+    #[serde(default)]
+    pub unknown_ids: Vec<String>,
+}
+
+/// One sub-question's research note — the worker's whole output.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResearchNote {
+    pub sub_question: String,
+    pub findings: Vec<Finding>,
+    /// Refused findings, with reasons. A note with zero findings and a
+    /// non-empty refusal list is a DISTILLATION FAILURE, not an empty
+    /// evidence window — the two must stay tellable apart.
+    #[serde(default)]
+    pub refused: Vec<RefusedFinding>,
+    /// How many window chunks this worker was shown.
+    pub passages_seen: usize,
+}
+
+/// The per-round research-note artifact (`research-notes-<round>.json`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResearchNotes {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    pub round: u32,
+    pub notes: Vec<ResearchNote>,
 }

@@ -45,10 +45,9 @@
 
 #![allow(dead_code)]
 
+use crate::project_cmd::charter_amend::hash_charter;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-
-use crate::found::{hash_charter, stdin_read_line};
 
 // ─── Section parsing ─────────────────────────────────────────────────────────
 
@@ -167,6 +166,9 @@ pub struct AdversarialQuestion {
     pub why: String,
 }
 
+/// The amend-pass twin of `found::CatalogEntry` — same role, different
+/// question set and key shape (`section_id` + `question_id`), so the two
+/// tables stay apart.
 struct CatalogEntry {
     section_id: &'static str,
     question_id: &'static str,
@@ -318,7 +320,7 @@ impl AmendmentInterlocutor for StdinAmendmentInterlocutor {
         let _ = writeln!(stderr, "      Why: {}", q.why);
         let _ = write!(stderr, "  > ");
         let _ = stderr.flush();
-        stdin_read_line()
+        sovereign_cli_shared::prompts::prompt_string("").unwrap_or_default()
     }
 
     fn confirm_amendment(&mut self, preview: &str) -> bool {
@@ -332,7 +334,14 @@ impl AmendmentInterlocutor for StdinAmendmentInterlocutor {
         let _ = writeln!(stderr);
         let _ = write!(stderr, "  [A]pprove amendment, or [C]ancel? ");
         let _ = stderr.flush();
-        matches!(stdin_read_line().to_lowercase().chars().next(), Some('a'))
+        matches!(
+            sovereign_cli_shared::prompts::prompt_string("")
+                .unwrap_or_default()
+                .to_lowercase()
+                .chars()
+                .next(),
+            Some('a')
+        )
     }
 
     fn confirm_drift(&mut self, diff_hint: &str) -> bool {
@@ -353,7 +362,14 @@ impl AmendmentInterlocutor for StdinAmendmentInterlocutor {
             "  Fold these existing edits into this amendment? [y/N] "
         );
         let _ = stderr.flush();
-        matches!(stdin_read_line().to_lowercase().chars().next(), Some('y'))
+        matches!(
+            sovereign_cli_shared::prompts::prompt_string("")
+                .unwrap_or_default()
+                .to_lowercase()
+                .chars()
+                .next(),
+            Some('y')
+        )
     }
 }
 

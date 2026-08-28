@@ -19,8 +19,9 @@ use serde::{Deserialize, Serialize};
 
 use corpus_engine::enrichment::atlas::{AtomEnvelope, AtomId, ChunkRef};
 use corpus_engine::enrichment::investigation::graph::{
-    read_outputs as read_investigation_graph, Entity as InvEntity, Evidence as InvEvidence,
-    PatternFinding, PatternKind, Relationship as InvRelationship, INVESTIGATION_DIRNAME,
+    read_outputs as read_investigation_graph, Entity as InvEntity,
+    ExtractionExcerpt as InvEvidence, PatternFinding, PatternKind, Relationship as InvRelationship,
+    INVESTIGATION_DIRNAME,
 };
 use corpus_engine::index::CorpusIndex;
 

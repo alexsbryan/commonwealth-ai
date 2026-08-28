@@ -281,7 +281,16 @@ async fn audit_one(
         };
 
         // Changed — the composed gate (judge + containment witness).
-        let audit = assess_claim(provider, claim, &chunks, containment, posture, tau).await;
+        let audit = assess_claim(
+            provider,
+            claim,
+            &chunks,
+            containment,
+            posture,
+            tau,
+            &sovereign_core::deep_research::audit::SpanCache::default(),
+        )
+        .await;
         if audit.verdict == sovereign_core::deep_research::icd::Verdict::CouldNotJudge {
             changed_cnjt += 1;
         }

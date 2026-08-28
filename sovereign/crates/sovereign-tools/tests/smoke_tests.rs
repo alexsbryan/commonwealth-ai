@@ -154,7 +154,7 @@ fn build_runtime(store: Arc<SqliteStateStore>) -> Runtime {
     let tools = Arc::new(ToolRegistry::new());
     let approval: Arc<dyn sovereign_core::traits::ApprovalChannel> = Arc::new(AutoApprovalChannel);
 
-    Runtime::new(
+    Runtime::new(sovereign_core::RuntimeParts::new(
         inference,
         router,
         Box::new(planner),
@@ -163,7 +163,8 @@ fn build_runtime(store: Arc<SqliteStateStore>) -> Runtime {
         skills,
         approval,
         InferenceConfig::default(),
-    )
+        sovereign_core::runtime::lane::LaneSources::none(),
+    ))
 }
 
 fn extract_provenance(response: &Response) -> ResponseProvenance {

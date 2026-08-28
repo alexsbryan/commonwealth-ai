@@ -246,95 +246,11 @@ pub struct InstallOutcome {
 
 // ─── 1. Inference ──────────────────────────────────────────────
 
-/// Where a slot's weights physically live — the glassbox answer to
-/// "is this model distributed across the mesh, and how is it split?".
-/// Populated for the primary (the only distributable slot); `None` for
-/// slots loaded purely locally, or before the placement is known. This
-/// exists so an operator NEVER has to infer distribution from `free`
-/// deltas or decode-latency signatures — the daemon states it outright.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct SlotPlacement {
-    /// `local` | `distributed` | `stream-split` | `forming`.
-    pub mode: String,
-    /// Total transformer blocks (layers) the plan apportions. `0` when
-    /// unknown (a local load computes no block plan).
-    pub total_blocks: u32,
-    /// Blocks resident on THIS node's local GPU.
-    pub local_blocks: u32,
-    /// Per remote RPC worker (anchor) lending memory: endpoint + the
-    /// block count pinned onto it. Empty for a local load.
-    pub workers: Vec<WorkerPlacement>,
-}
-
-/// One remote worker's share of a distributed slot.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct WorkerPlacement {
-    /// Raw-TCP rpc-server endpoint, `host:port`.
-    pub endpoint: String,
-    /// Transformer blocks pinned onto this worker.
-    pub blocks: u32,
-    /// Whether this worker holds the output head (`output.weight`).
-    pub holds_output: bool,
-}
-
-/// A single inference slot's *actual* in-memory residency, as reported
-/// by the engine that owns the weights — the `ollama ps` analog.
-///
-/// This is the ground truth for "what is loaded right now", distinct
-/// from what is *configured* (`SetupConfig.models.*`) and from what is
-/// *advertised* on `/v1/models` (config-derived). Only the embedded
-/// engine can answer it; every other provider inherits the empty
-/// default of [`InferenceProvider::resident_slots`].
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct ResidentSlot {
-    /// Role stem: `fast` | `primary` | `embed` | `code` | `rerank` |
-    /// `extra:<name>` | `pool:<i>`. Stable across the config workstream
-    /// so a UI can join residency to the configured slot by role.
-    pub role: String,
-    /// The model id (gguf file stem) currently occupying the slot.
-    pub model_id: String,
-    /// `true` when the weights are resident in memory this instant.
-    /// A lazy slot (primary/code) reports `false` while idle-unloaded.
-    pub resident: bool,
-    /// Resident byte footprint when the engine knows it, else `None`.
-    pub size_bytes: Option<u64>,
-    /// `true` when the slot is mid load/unload (its lock was contended
-    /// at read time) — residency is momentarily indeterminate. Never
-    /// forces a load to resolve it.
-    pub transitioning: bool,
-    /// Physical placement of the weights (distributed vs local + the
-    /// per-device split). `None` for non-distributable slots. The
-    /// glassbox answer that must never require guessing.
-    #[serde(default)]
-    pub placement: Option<SlotPlacement>,
-}
-
-/// One supervised compute-child's live status (DISTRIBUTED_PILOT_READINESS.md
-/// P1). Surfaced by [`InferenceProvider::compute_children`] and rendered on
-/// `/status` so an operator watching a silent local-only fallback sees the
-/// child lifecycle, not just a slower model.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct ComputeChildStatus {
-    /// Replica name (`<pool>-<i>`).
-    pub name: String,
-    /// `"generate"` | `"embed"`.
-    pub role: String,
-    /// The addressable pool id this replica belongs to.
-    pub model_id: String,
-    /// Lifecycle: `starting` | `warming` | `serving` | `degraded` |
-    /// `restarting` | `failed`.
-    pub lifecycle: String,
-    /// Current ephemeral port, when serving/warming.
-    #[serde(default)]
-    pub port: Option<u16>,
-    /// Restart count.
-    pub restarts: u32,
-    /// Reason for the most recent lifecycle transition.
-    pub last_transition_reason: String,
-    /// Reason for the most recent exit/crash, if any.
-    #[serde(default)]
-    pub last_exit: Option<String>,
-}
+// Slot residency and placement are what a HOST reports about itself, so they
+// are protocol vocabulary and live in `oicp-types` (layer 0). Re-exported here
+// at their historical paths — `InferenceProvider::resident_slots` and
+// `compute_children` still return them (noun-convergence rung 2b).
+pub use crate::oicp::{ComputeChildStatus, ResidentSlot, SlotPlacement, WorkerPlacement};
 
 /// The inference backend contract: completions (one-shot, streaming, batch),
 /// embeddings, optional rerank, plus slot/model introspection. Implemented by
@@ -750,6 +666,76 @@ pub trait InferenceProvider: Send + Sync {
     fn compute_children(&self) -> Vec<ComputeChildStatus> {
         Vec::new()
     }
+
+    /// The manifests of every peer this provider would actually consult
+    /// when resolving a model NAME, paired with each peer's display name.
+    ///
+    /// This exists so a listing surface can be built from the same source
+    /// name resolution reads. `/v1/models` was built from the gossiped
+    /// `inference` KV store instead, which accumulates every model any peer
+    /// ever wrote and is filtered only by "was the last writer online" — so
+    /// it listed ids that `locate_named_model` answers `NotAdvertised` for,
+    /// and the refusal told the operator to "check `/v1/models`", the list
+    /// that was wrong. Two registries behind one question (ARCH §10.6).
+    ///
+    /// Implementors MUST apply the same peer filter their name resolution
+    /// applies — same reachability, same quarantine, same manifest cache.
+    /// A peer this omits must be a peer that cannot serve a named request,
+    /// or the listing regains the ability to lie in the other direction.
+    ///
+    /// Default empty: only a mesh-aware forwarder has peers. A provider
+    /// that owns its weights answers for itself through
+    /// [`Self::resident_slots`] and its own manifest.
+    async fn peer_manifests(&self) -> Vec<(String, crate::oicp::ProviderManifest)> {
+        Vec::new()
+    }
+}
+
+/// Adapt a typed [`StreamFrame`] stream down to the legacy
+/// `Result<String>` surface — the exact inverse of
+/// [`InferenceProvider::complete_stream_with_finish`]'s default, and
+/// the ONE implementation of that direction (ARCH §10.6, §7.5).
+///
+/// It lives here rather than at a call site because it had been
+/// hand-written three times and the copies had DRIFTED on the question
+/// that matters: **which frame carries a mid-stream failure.** There
+/// are two terminal error shapes on this surface and a provider emits
+/// only one of them —
+///
+/// - `StreamFrame::Error(msg)` is the WIRE shape. Only the compute
+///   child client (`sovereign-compute/src/client.rs`) and the mesh
+///   `inference_adapter` produce it.
+/// - `Finish { reason: FinishReason::Error(msg), .. }` is the
+///   IN-PROCESS shape. `EmbeddedLlamaCpp` and this trait's own default
+///   `complete_stream_with_finish` produce only this one, never the
+///   other.
+///
+/// Adapters written against the wire shape alone therefore compile,
+/// pass, and silently truncate every embedded-engine stream that fails
+/// mid-generation: the terminal frame matches `Finish { .. }`, gets
+/// dropped, and the consumer sees a clean end of stream instead of an
+/// error. That is what `sovereign-core`'s presenter path did until
+/// this function replaced its inline copy. **Handle both, or an error
+/// becomes a short answer.**
+///
+/// Non-error `Finish` frames close the stream and yield nothing —
+/// end-of-stream on the legacy surface has no representation other
+/// than the stream ending.
+pub fn frames_to_text_stream(
+    frames: Pin<Box<dyn Stream<Item = StreamFrame> + Send>>,
+) -> Pin<Box<dyn Stream<Item = Result<String>> + Send>> {
+    use futures::StreamExt;
+    Box::pin(frames.filter_map(|frame| async move {
+        match frame {
+            StreamFrame::Token(text) => Some(Ok(text)),
+            StreamFrame::Error(msg) => Some(Err(Error::Inference(msg))),
+            StreamFrame::Finish {
+                reason: FinishReason::Error(msg),
+                ..
+            } => Some(Err(Error::Inference(msg))),
+            StreamFrame::Finish { .. } => None,
+        }
+    }))
 }
 
 // ─── 2. Routing ────────────────────────────────────────────────
@@ -759,6 +745,24 @@ pub trait InferenceProvider: Send + Sync {
 /// the classification is `decide_policy`'s job.
 #[async_trait]
 pub trait Router: Send + Sync {
+    /// Which classifiers this router had LIVE — the decider set behind every
+    /// verdict it returns.
+    ///
+    /// `None` means "this router does not report its liveness", which is a
+    /// DIFFERENT fact from "no classifier was live" and must stay different
+    /// (ARCH §18.3). The default is `None` so a stub or a passthrough router
+    /// is not mistaken for a degraded production one.
+    ///
+    /// The reason this is on the trait rather than passed per turn: classifier
+    /// liveness is fixed at bootstrap, not per request. It became worth
+    /// recording on 2026-08-26, when a dead embed slot left all four `None`,
+    /// turns kept answering, and the harness scored the degradation as a
+    /// quality regression (note `f4972e1b`). See
+    /// [`RouterStamp::routed_by_none`](crate::types::RouterStamp::routed_by_none).
+    fn stamp(&self) -> Option<crate::types::RouterStamp> {
+        None
+    }
+
     /// Classify `message` into intent candidates with confidences. Must not mutate state or enact anything.
     async fn classify(
         &self,
@@ -849,6 +853,21 @@ pub trait Tool: Send + Sync {
 
     /// Run the tool. `params` should already have passed `validate`; `ctx` carries conversation-scoped context.
     async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput>;
+
+    /// Which user-facing switch governs this tool, if any.
+    ///
+    /// `None` — the default and the common case — means NO switch governs it:
+    /// the tool is part of what the host always carries, and
+    /// [`ToolPermissions`](crate::tool_bundle::ToolPermissions) always permits
+    /// it. `Some(family)` means a surface with a settings panel may withhold
+    /// it, and `ToolRegistry::register_reporting` is where that is enforced.
+    ///
+    /// Deliberately NOT the same as "permitted but absent": a tool declaring
+    /// no family and a tool whose family is off are different facts, and
+    /// collapsing them would make every ungoverned tool look switched off.
+    fn family(&self) -> Option<crate::tool_bundle::ToolFamily> {
+        None
+    }
 
     /// Cheap pre-execution parameter check. Default accepts everything; override to reject malformed params before any side effect.
     fn validate(&self, params: &serde_json::Value) -> Result<()> {
@@ -1036,19 +1055,30 @@ pub trait ConversationStore: Send + Sync {
     /// Create an empty conversation row if one doesn't already exist
     /// (INSERT OR IGNORE semantics). Needed by surfaces that must set
     /// per-conversation state — `skill_id`, `enabled_corpora` — *before*
-    /// the first message is processed (the desktop "new chat" flow, and
-    /// the eval harness's per-corpus isolation mode). A no-op default
-    /// keeps test doubles / in-memory stores compiling; real backends
-    /// override.
-    #[allow(unused_variables)]
+    /// the first message is processed: the desktop "new chat" flow, the
+    /// daemon's `POST /v1/conversations`, and the eval harness's
+    /// per-corpus isolation mode.
+    ///
+    /// **Required, deliberately — this had a no-op `Ok(())` default until
+    /// 2026-08-25 and it told two lies.** `InMemoryStateStore` reported
+    /// success for a write it never performed, so every seed-then-turn
+    /// path was untestable against it (this is what
+    /// `sovereign-mesh/tests/turn_surface.rs` found on its first run). And
+    /// `PostgresStateStore` — the multi-tenant hub's backend, production
+    /// code, not a double — inherited the same no-op, so a hub
+    /// conversation seeded with `skill_id = "recipe-author"` silently lost
+    /// the tag and fell through to the standard turn chain instead of the
+    /// agent loop, with the store reporting success both times.
+    ///
+    /// An absence dressed as a result is ARCH §18.3. A store that cannot
+    /// hold a conversation row says so with an `Err`; it does not return
+    /// `Ok` and mean no.
     async fn insert_empty_conversation(
         &self,
         id: &str,
         created_at: i64,
         surface_skill_id: Option<&str>,
-    ) -> Result<()> {
-        Ok(())
-    }
+    ) -> Result<()>;
 }
 
 /// Whole-task snapshot persistence. Contrast `StepExecutionStore`, the per-attempt ledger (ARCH §5.3).
@@ -1422,6 +1452,15 @@ pub struct MeshScoredChunk {
     pub chunk_id: Option<u64>,
     /// Stable id of the chunk's parent document on the producing peer, when known.
     pub source_doc_id: Option<String>,
+    /// The custody class the SERVING index recorded, parsed once at the mesh
+    /// client boundary. `None` = the peer recorded none, or predates the wire
+    /// field — which the acquisition door joins into a refusal rather than a
+    /// permissive default (ARCH §18.3).
+    pub custody: Option<kernel_types::Custody>,
+    /// Source text or prose about it, per the serving index. `None` = an
+    /// un-upgraded peer, which the door reads as `Summary` — the refusing
+    /// value for grain, since `Leaf` is the one that may be quoted.
+    pub grain: Option<kernel_types::Grain>,
 }
 
 /// Why a corpus the turn would have searched could not serve it.

@@ -9,13 +9,12 @@
 
 use std::path::PathBuf;
 
-use async_trait::async_trait;
-
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_scip::{build_capability_map, MapOptions, ProviderKind, ScipGraph};
+use sovereign_core::tool_manifest::DeclaredTool;
+use std::sync::Arc;
 
 pub struct CapabilityMapTool {
     /// The `~/.svrnmesh/indexes` directory (or `$SOVEREIGN_DATA_DIR/indexes`).
@@ -60,81 +59,26 @@ impl CapabilityMapTool {
     }
 }
 
-#[async_trait]
-impl Tool for CapabilityMapTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "capability_map".to_string(),
-            name: "Capability Map".to_string(),
-            description: "Derive a map of what a codebase DOES — its capabilities — from \
-                the SCIP call graph. A capability is a cluster of entry points (CLI verbs, \
-                HTTP routes, tools, handlers) that share a reachable call spine. Returns a \
-                markdown inventory: multi-entry capabilities with their core functions and \
-                the shared services they lean on, plus a standalone-by-module histogram. \
-                Organized by what the system does, not by file. Deterministic, no model. \
-                Pass corpus_id to pick a code corpus; omit it when only one is indexed."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "corpus_id": {
-                        "type": "string",
-                        "description": "Code corpus id (an indexed repo). Optional when exactly one code corpus is indexed."
-                    },
-                    "provider": {
-                        "type": "string",
-                        "enum": ["heuristic", "fallback"],
-                        "description": "Entry-point detection: framework-aware heuristic (default) or the universal in-degree/dispatcher fallback.",
-                        "default": "heuristic"
-                    },
-                    "jaccard": {
-                        "type": "number",
-                        "description": "Reach-set overlap threshold for clustering entry points into capabilities. Default 0.5.",
-                        "default": 0.5
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![ToolExample {
-                situation: "You want a high-level map of what this codebase does, organized by \
-                    capability rather than by file — the entry points and the call spines behind \
-                    them. Do NOT read files one by one to reconstruct this; the call graph already \
-                    knows."
-                    .into(),
-                call: serde_json::json!({ "corpus_id": "commonwealth-ai" }),
-            }],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Slow,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Markdown capability inventory derived from the SCIP call graph."
-            })),
-        }
+impl CapabilityMapTool {
+    /// Bind this tool's state to its `capability_map` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("capability_map", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        if let Some(c) = params.get("corpus_id").and_then(|v| v.as_str()) {
-            // corpus_id becomes a path component — keep it to a safe charset.
-            if c.is_empty()
-                || !c
-                    .chars()
-                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
-            {
-                return Err(Error::InvalidInput(format!(
-                    "invalid corpus_id '{c}': alphanumeric plus '-' and '_' only"
-                )));
-            }
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `capability_map`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         // Resolve the corpus: explicit, or the sole indexed code corpus.
         let corpus_id = match params.get("corpus_id").and_then(|v| v.as_str()) {
             Some(c) => c.to_string(),
@@ -202,6 +146,22 @@ impl Tool for CapabilityMapTool {
             corpus_engine_scip::capability_map::render_markdown(&corpus_id, &map),
         ))
     }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+        if let Some(c) = params.get("corpus_id").and_then(|v| v.as_str()) {
+            // corpus_id becomes a path component — keep it to a safe charset.
+            if c.is_empty()
+                || !c
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+            {
+                return Err(Error::InvalidInput(format!(
+                    "invalid corpus_id '{c}': alphanumeric plus '-' and '_' only"
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -214,7 +174,7 @@ mod tests {
     // MCP yet not callable. Guard the contract.
     #[test]
     fn descriptor_id_matches_mcp_surface() {
-        let tool = CapabilityMapTool::with_indexes_dir(PathBuf::from("/nonexistent"));
+        let tool = CapabilityMapTool::with_indexes_dir(PathBuf::from("/nonexistent")).declared();
         assert_eq!(tool.descriptor().id, "capability_map");
         assert!(crate::mcp_surface::MCP_TOOLS_ALWAYS.contains(&tool.descriptor().id.as_str()));
     }
@@ -223,11 +183,11 @@ mod tests {
     fn corpus_id_validation_rejects_path_traversal() {
         let tool = CapabilityMapTool::with_indexes_dir(PathBuf::from("/nonexistent"));
         assert!(tool
-            .validate(&serde_json::json!({"corpus_id": "../etc"}))
+            .validate_extra(&serde_json::json!({"corpus_id": "../etc"}))
             .is_err());
         assert!(tool
-            .validate(&serde_json::json!({"corpus_id": "commonwealth-ai"}))
+            .validate_extra(&serde_json::json!({"corpus_id": "commonwealth-ai"}))
             .is_ok());
-        assert!(tool.validate(&serde_json::json!({})).is_ok());
+        assert!(tool.validate_extra(&serde_json::json!({})).is_ok());
     }
 }

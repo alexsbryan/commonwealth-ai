@@ -46,6 +46,17 @@ Three zones, from most to least trusted:
   (`commonwealth/crates/commonwealth-api/src/routes_internal/mesh_admin.rs`
   with the check in
   `commonwealth/crates/commonwealth-transport/src/identity.rs`).
+- **Guests.** A holder of an ephemeral guest grant
+  (`commonwealth/crates/commonwealth-knowledge/src/guest_grant.rs`,
+  2026-08-27) is strictly weaker than a member and strictly weaker than a
+  `client_token` holder. They present a short-lived, revocable bearer,
+  may call only the exact paths their `Scope` set names (today
+  `/v1/models` + `/v1/chat/completions`) and only the models it lists.
+  They never enter `Mesh.members`, never receive `mesh_secret`, and never
+  learn the invite key — so "a guest cannot invite people" is structural:
+  `Scope` has no variant that could express it. The grant lives only in
+  the issuing node's memory and is never gossiped, so revocation is
+  immediate rather than eventually-consistent.
 - **Everything else.** Nothing here is designed to face the public
   internet. The fail-closed defaults below exist so that crossing this
   line requires a deliberate operator decision, never an accident.
@@ -54,7 +65,7 @@ Three zones, from most to least trusted:
 
 | Surface | Default bind | Auth | Encryption |
 |---|---|---|---|
-| Client API `:9741` — embedded daemon (`/v1/*` OpenAI, `/api/*` Ollama shim, apps, knowledge) | `127.0.0.1` (`sovereign/crates/sovereign-mesh/src/daemon.rs`) | Loopback exempt; any non-loopback caller needs `Authorization: Bearer <client_token>`; **fail-closed** (403) when no token is configured (`client_auth.rs`). Exempt read-only paths: `/status`, `/oicp/v1/capabilities`. | Plain HTTP on the perimeter; on an encrypted mesh the listener is forced loopback and iroh QUIC/TLS is the sole ingress |
+| Client API `:9741` — embedded daemon (`/v1/*` OpenAI, `/api/*` Ollama shim, apps, knowledge) | `127.0.0.1` (`sovereign/crates/sovereign-mesh/src/daemon.rs`) | Loopback exempt; any non-loopback caller needs `Authorization: Bearer <token>`, matched full-token-first then guest-grant (`client_auth.rs`); **fail-closed** (403) when no token is configured. Exempt read-only paths: `/status`, `/oicp/v1/capabilities`. | Plain HTTP on the perimeter; on an encrypted mesh the listener is forced loopback and iroh QUIC/TLS is the sole ingress |
 | Client API `:9741` — standalone `commonwealth` binary | `0.0.0.0` (hardcoded; `commonwealth/crates/commonwealth-daemon/src/main.rs`) | Same `client_auth` bearer layer as above | Same |
 | MCP `/mcp` (rides `:9741`) | — | Loopback-only middleware, no token by design (`sovereign/crates/sovereign-mesh/src/mcp_router.rs`); permissive CORS is safe *because* of the loopback gate | — |
 | Internal mesh API `:9742` (gossip, join, scheduling, corpus collaboration) | `0.0.0.0` in trusted-network mode; `127.0.0.1` in encrypted mode | **None blanket** — perimeter-trusted; join itself is key+proof gated; admin routes are per-handler loopback-only | **Encrypted-QUIC-first**; in trusted-network mode it falls back to cleartext HTTP on your perimeter, and encrypted mode (below) makes iroh QUIC/TLS the sole path |

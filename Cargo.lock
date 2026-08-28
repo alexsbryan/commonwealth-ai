@@ -1928,7 +1928,9 @@ dependencies = [
  "hex",
  "http-body 1.0.1",
  "http-body-util",
+ "kernel-types",
  "libc",
+ "oicp-types",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -1967,36 +1969,17 @@ dependencies = [
 name = "commonwealth-core"
 version = "0.5.0"
 dependencies = [
+ "blake3",
  "ed25519-dalek 2.2.0",
  "getrandom 0.3.4",
  "hex",
+ "kernel-types",
  "oicp-types",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
  "toml 0.8.2",
  "tracing",
-]
-
-[[package]]
-name = "commonwealth-daemon"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "clap",
- "commonwealth-api",
- "commonwealth-app",
- "commonwealth-core",
- "commonwealth-discovery",
- "commonwealth-state",
- "corpus-engine",
- "hostname",
- "reqwest 0.12.28",
- "serde_json",
- "tokio",
- "toml 0.8.2",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -2035,7 +2018,6 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-util",
- "toml 0.8.2",
  "tracing",
 ]
 
@@ -2337,6 +2319,7 @@ dependencies = [
  "chrono",
  "corpus-engine-notes",
  "corpus-engine-scip",
+ "corpus-engine-sections",
  "corpus-engine-yield",
  "csv",
  "flate2",
@@ -2344,6 +2327,7 @@ dependencies = [
  "glob",
  "hdbscan",
  "jsonpath-rust",
+ "kernel-types",
  "lance",
  "lance-index",
  "lance-table",
@@ -2384,6 +2368,7 @@ dependencies = [
  "tree-sitter-python",
  "tree-sitter-rust",
  "tree-sitter-typescript",
+ "trybuild",
  "unicode-normalization",
  "uuid",
  "walkdir",
@@ -2461,6 +2446,14 @@ dependencies = [
  "tokio",
  "tracing",
  "which",
+]
+
+[[package]]
+name = "corpus-engine-sections"
+version = "0.5.0"
+dependencies = [
+ "regex",
+ "tracing",
 ]
 
 [[package]]
@@ -6622,6 +6615,18 @@ checksum = "0f0a0e9f770b65bac9aad00f97a67ab5c5319effed07f6da385da3c2115e47ba"
 dependencies = [
  "num-traits",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "kernel-types"
+version = "0.5.0"
+dependencies = [
+ "blake3",
+ "getrandom 0.3.4",
+ "hex",
+ "serde",
+ "serde_json",
+ "trybuild",
 ]
 
 [[package]]
@@ -12053,15 +12058,16 @@ dependencies = [
  "arc-swap",
  "async-trait",
  "chrono",
+ "clap",
  "corpus-engine",
  "corpus-engine-archaeology",
- "corpus-engine-atos",
  "corpus-engine-notes",
  "corpus-engine-scip",
  "dirs 5.0.1",
  "futures",
  "hex",
  "hostname",
+ "kernel-types",
  "libc",
  "oicp-client",
  "regex",
@@ -12071,11 +12077,12 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sovereign-agent-bench",
+ "sovereign-cli-dev",
+ "sovereign-cli-llm",
  "sovereign-cli-shared",
  "sovereign-contracts",
  "sovereign-core",
  "sovereign-store",
- "sovereign-tools",
  "tempfile",
  "tokio",
  "toml 0.8.2",
@@ -12116,6 +12123,7 @@ dependencies = [
  "sovereign-gliner",
  "sovereign-inference",
  "sovereign-mesh",
+ "sovereign-runtime-recipe",
  "sovereign-store",
  "sovereign-tools",
  "sovereign-work-atlas",
@@ -12152,8 +12160,8 @@ dependencies = [
  "dirs 5.0.1",
  "futures",
  "hostname",
+ "kernel-types",
  "libc",
- "oicp-client",
  "regex",
  "reqwest 0.12.28",
  "rusqlite",
@@ -12186,9 +12194,11 @@ dependencies = [
  "axum",
  "bytes",
  "chrono",
+ "clap",
  "commonwealth-core",
  "commonwealth-state",
  "corpus-engine",
+ "corpus-engine-atos",
  "corpus-engine-notes",
  "dirs 5.0.1",
  "ed25519-dalek 2.2.0",
@@ -12200,20 +12210,25 @@ dependencies = [
  "rand 0.9.4",
  "regex",
  "reqwest 0.12.28",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sovereign-authoring-harness",
  "sovereign-cli-shared",
  "sovereign-contracts",
  "sovereign-core",
+ "sovereign-enrichment-catalog",
  "sovereign-eval",
  "sovereign-gliner",
  "sovereign-inference",
  "sovereign-mesh",
  "sovereign-meshapp",
  "sovereign-pipeline",
+ "sovereign-runtime-recipe",
  "sovereign-store",
  "sovereign-tools",
+ "sovereign-turn-client",
  "sovereign-work-atlas",
  "sovereign-workflow",
  "sovereign-workflow-host",
@@ -12233,12 +12248,17 @@ dependencies = [
 name = "sovereign-cli-shared"
 version = "0.5.0"
 dependencies = [
+ "clap",
+ "corpus-engine",
  "corpus-engine-scip",
  "dirs 5.0.1",
+ "kernel-types",
+ "oicp-client",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
  "sovereign-contracts",
+ "sovereign-core",
  "sovereign-time",
  "tempfile",
  "tokio",
@@ -12276,6 +12296,8 @@ dependencies = [
  "chrono",
  "dirs 5.0.1",
  "futures",
+ "kernel-types",
+ "libc",
  "oicp-types",
  "regex",
  "serde",
@@ -12292,6 +12314,7 @@ dependencies = [
 name = "sovereign-core"
 version = "0.5.0"
 dependencies = [
+ "arc-swap",
  "async-trait",
  "chrono",
  "corpus-engine",
@@ -12300,6 +12323,7 @@ dependencies = [
  "dashmap",
  "dirs 5.0.1",
  "futures",
+ "kernel-types",
  "oicp-client",
  "oicp-types",
  "pdf-extract",
@@ -12318,6 +12342,7 @@ dependencies = [
  "tokio-util",
  "toml 0.8.2",
  "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 
@@ -12348,10 +12373,12 @@ dependencies = [
  "sovereign-compute",
  "sovereign-contracts",
  "sovereign-core",
+ "sovereign-enrichment-catalog",
  "sovereign-gliner",
  "sovereign-inference",
  "sovereign-mesh",
  "sovereign-meshapp",
+ "sovereign-runtime-recipe",
  "sovereign-store",
  "sovereign-tools",
  "sovereign-workflow",
@@ -12373,6 +12400,19 @@ dependencies = [
  "uuid",
  "walkdir",
  "zip 8.6.0",
+]
+
+[[package]]
+name = "sovereign-enrichment-catalog"
+version = "0.5.0"
+dependencies = [
+ "corpus-engine",
+ "serde",
+ "serde_json",
+ "sovereign-contracts",
+ "sovereign-core",
+ "tempfile",
+ "tracing",
 ]
 
 [[package]]
@@ -12443,6 +12483,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sovereign-contracts",
  "sovereign-core",
  "sysinfo 0.34.2",
  "tempfile",
@@ -12501,6 +12542,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
+ "tokio-tungstenite",
  "tokio-util",
  "toml 0.8.2",
  "tower",
@@ -12564,6 +12606,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "sovereign-runtime-recipe"
+version = "0.5.0"
+dependencies = [
+ "corpus-engine",
+ "corpus-engine-notes",
+ "sovereign-contracts",
+ "sovereign-core",
+ "sovereign-gliner",
+ "sovereign-inference",
+ "sovereign-tools",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "sovereign-server"
 version = "0.5.0"
 dependencies = [
@@ -12588,6 +12645,7 @@ dependencies = [
  "sovereign-core",
  "sovereign-gliner",
  "sovereign-inference",
+ "sovereign-runtime-recipe",
  "sovereign-store",
  "sovereign-tools",
  "sovereign-workflow-host",
@@ -12695,6 +12753,7 @@ dependencies = [
  "sovereign-atos",
  "sovereign-contracts",
  "sovereign-core",
+ "sovereign-enrichment-catalog",
  "sovereign-recipe-author",
  "sovereign-store",
  "sovereign-tools-base",
@@ -12716,6 +12775,7 @@ name = "sovereign-tools-base"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "corpus-engine-sections",
  "csv",
  "dirs 5.0.1",
  "futures",
@@ -12728,6 +12788,19 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "toml 0.8.2",
+ "tracing",
+]
+
+[[package]]
+name = "sovereign-turn-client"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "reqwest 0.12.28",
+ "serde_json",
+ "sovereign-contracts",
+ "tokio",
+ "tokio-tungstenite",
  "tracing",
 ]
 
@@ -13370,6 +13443,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 
 [[package]]
+name = "target-triple"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3a6bfce3d99adfa72d24750a61f782f3036a81e7f86d8841ee1326deaebd171"
+
+[[package]]
 name = "tauri"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13747,6 +13826,15 @@ checksum = "c4790fc369d5a530f4b544b094e31388b9b3a37c0f4652ade4505945f5660d24"
 dependencies = [
  "new_debug_unreachable",
  "utf-8",
+]
+
+[[package]]
+name = "termcolor"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
+dependencies = [
+ "winapi-util",
 ]
 
 [[package]]
@@ -14452,6 +14540,21 @@ name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
+
+[[package]]
+name = "trybuild"
+version = "1.0.120"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e605bf6b39357663d8ba4e984f8be8da8df6bb32e81031d6889024ea8fd68e4"
+dependencies = [
+ "glob",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "target-triple",
+ "termcolor",
+ "toml 1.1.2+spec-1.1.0",
+]
 
 [[package]]
 name = "ttf-parser"

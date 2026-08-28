@@ -23,18 +23,25 @@ use std::process::Stdio;
 use corpus_engine_notes::NoteScope;
 use sovereign_atos::{AtosOrchestrator, RunMode};
 
-use super::args::{get_flag, split_args};
+use super::args::parse_args;
 use super::stores::open_orchestrator;
 
 // ─── start-milestone ─────────────────────────────────────────────────────────
 
 pub(crate) async fn cmd_start_milestone(args: &[String]) -> i32 {
-    let (positional, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("atos: {e}");
+            return 2;
+        }
+    };
+    let positional = flags.positionals();
     let Some(id) = positional.first().cloned() else {
         eprintln!("start-milestone: missing <id>");
         return 2;
     };
-    let brief_path = match get_flag(&flags, "--brief") {
+    let brief_path = match flags.value("brief").map(|s| s.to_string()) {
         Some(p) => p,
         None => {
             eprintln!("start-milestone: --brief <path> is required");
@@ -48,22 +55,22 @@ pub(crate) async fn cmd_start_milestone(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let driver_flag = get_flag(&flags, "--driver");
-    let no_driver = flags.iter().any(|(k, _)| k == "no-driver");
+    let driver_flag = flags.value("driver").map(|s| s.to_string());
+    let no_driver = flags.has("no-driver");
     // `--reuse-last-milestone` is set by `run-ab` so both A/B drivers
     // attach to the same milestone ordinal. Without this, each driver
     // spawn would increment the ordinal and `atos diff` would only
     // show one driver column.
-    let reuse_last = flags.iter().any(|(k, _)| k == "reuse-last-milestone");
+    let reuse_last = flags.has("reuse-last-milestone");
     // `--milestone-id <uuid>` lets `cmd_next` target a specific
     // charter-provisioned milestone without scanning or appending.
     // Takes precedence over --reuse-last-milestone.
-    let milestone_id_override = get_flag(&flags, "--milestone-id");
+    let milestone_id_override = flags.value("milestone-id").map(|s| s.to_string());
     // `--red-team` opens the run in `mode=redteam` so reports and
     // teardown can exclude these runs from normal-progress gating.
     // Driver env gains `ATOS_MODE=redteam` so the opencode plugin
     // (M2.6) can restrict tool surface.
-    let red_team = flags.iter().any(|(k, _)| k == "red-team");
+    let red_team = flags.has("red-team");
     let run_mode = if red_team {
         RunMode::Redteam
     } else {
@@ -182,13 +189,22 @@ pub(crate) async fn cmd_start_milestone(args: &[String]) -> i32 {
 // ─── end-milestone ───────────────────────────────────────────────────────────
 
 pub(crate) async fn cmd_end_milestone(args: &[String]) -> i32 {
-    let (positional, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("atos: {e}");
+            return 2;
+        }
+    };
+    let positional = flags.positionals();
     let Some(id) = positional.first().cloned() else {
         eprintln!("end-milestone: missing <id>");
         return 2;
     };
-    let ordinal_override: Option<i64> =
-        get_flag(&flags, "--ordinal").and_then(|s| s.parse::<i64>().ok());
+    let ordinal_override: Option<i64> = flags
+        .value("ordinal")
+        .map(|s| s.to_string())
+        .and_then(|s| s.parse::<i64>().ok());
 
     let orc = match open_orchestrator() {
         Ok(o) => o,
@@ -452,9 +468,16 @@ fn spawn_auto_redteam(feature_id: &str, milestone_id: &str, ordinal: i64) {
 /// point. Finds the next unfinished milestone, prints a summary, asks
 /// for driver confirmation, and spawns.
 pub(crate) async fn cmd_next(args: &[String]) -> i32 {
-    let (positional, flags) = split_args(args);
-    let auto_yes = flags.iter().any(|(k, _)| k == "yes" || k == "y");
-    let driver_flag = get_flag(&flags, "--driver");
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("atos: {e}");
+            return 2;
+        }
+    };
+    let positional = flags.positionals();
+    let auto_yes = flags.has("yes") || flags.has("y");
+    let driver_flag = flags.value("driver").map(|s| s.to_string());
 
     let feature_id = match positional.first().cloned() {
         Some(id) => id,

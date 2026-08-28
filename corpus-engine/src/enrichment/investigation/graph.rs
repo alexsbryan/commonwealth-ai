@@ -76,7 +76,7 @@ pub struct Relationship {
     /// Verbatim excerpt the LLM produced as evidence for the
     /// extraction. Carries the source chunk id so the audit step
     /// can cite back to the source.
-    pub evidence: Evidence,
+    pub evidence: ExtractionExcerpt,
     /// LLM-self-reported confidence (0.0..=1.0). Free-form for
     /// now; the test harness asserts shape only.
     #[serde(default = "default_confidence")]
@@ -88,7 +88,15 @@ fn default_confidence() -> f32 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Evidence {
+/// Renamed apart from `Evidence` 2026-08-20 (noun-convergence rung
+/// nc-4-evidence). Evidence-SHAPED but not the published retrieval noun,
+/// for two reasons that are worth keeping: it is produced by EXTRACTION
+/// rather than by retrieval, and it round-trips through `relationships.json`
+/// on disk — so it must stay `Deserialize`, which is itself a constructor
+/// and cannot hold `corpus_engine::Evidence`'s only-one-door invariant.
+/// By the campaign's own decomposition this is a citation into a chunk,
+/// and `Citation` is a noun sovereign publishes at a later rung.
+pub struct ExtractionExcerpt {
     pub chunk_id: String,
     /// Verbatim excerpt the LLM identified as evidence. May be
     /// trimmed to fit prompt budgets but should be present so the
@@ -212,7 +220,7 @@ mod tests {
             to_entity_id: "e-msft".into(),
             relationship_type: "revenue".into(),
             attributes: Default::default(),
-            evidence: Evidence {
+            evidence: ExtractionExcerpt {
                 chunk_id: "chunk-42".into(),
                 excerpt: "Microsoft committed to a multi-year cloud GPU contract.".into(),
             },

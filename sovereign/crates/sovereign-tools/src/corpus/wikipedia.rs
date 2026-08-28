@@ -13,6 +13,13 @@ use sovereign_core::types::DocumentChunk;
 
 use super::{chunk_and_wrap, CorpusParser};
 
+// The one `strip_mediawiki` (§10.6). This module carried a byte-for-byte
+// hand-copy — plus its own copy of the private `skip_nested` helper and its own
+// copy of the three unit tests — until 2026-08-20. Its sibling `strip_html`
+// fork had already drifted into a live truncation bug; this one had not yet,
+// which is the argument for converging it before it does.
+use corpus_engine::extractors::xml::strip_mediawiki;
+
 pub struct WikimediaDumpParser {
     corpus_id: String,
 }
@@ -184,159 +191,6 @@ impl WikiDumpIterator {
     }
 }
 
-// ─── MediaWiki Markup Stripping ───────────────────────────────
-
-fn strip_mediawiki(text: &str) -> String {
-    let mut result = String::with_capacity(text.len());
-    let mut chars = text.chars().peekable();
-
-    while let Some(ch) = chars.next() {
-        match ch {
-            // Templates: {{...}} — remove entirely (may be nested).
-            '{' if chars.peek() == Some(&'{') => {
-                chars.next();
-                skip_nested(&mut chars, '{', '}');
-            }
-            // Tables: {|...|} — remove entirely.
-            '{' if chars.peek() == Some(&'|') => {
-                chars.next();
-                let mut depth = 1;
-                while let Some(c) = chars.next() {
-                    if c == '{' && chars.peek() == Some(&'|') {
-                        chars.next();
-                        depth += 1;
-                    } else if c == '|' && chars.peek() == Some(&'}') {
-                        chars.next();
-                        depth -= 1;
-                        if depth == 0 {
-                            break;
-                        }
-                    }
-                }
-            }
-            // Wikilinks: [[target|display]] -> display, or [[target]] -> target.
-            '[' if chars.peek() == Some(&'[') => {
-                chars.next();
-                let mut link_text = String::new();
-                let mut depth = 1;
-                while let Some(c) = chars.next() {
-                    if c == '[' && chars.peek() == Some(&'[') {
-                        chars.next();
-                        depth += 1;
-                        link_text.push_str("[[");
-                    } else if c == ']' && chars.peek() == Some(&']') {
-                        chars.next();
-                        depth -= 1;
-                        if depth == 0 {
-                            break;
-                        }
-                        link_text.push_str("]]");
-                    } else {
-                        link_text.push(c);
-                    }
-                }
-                // Use display text (after |), or the full link text.
-                let display = link_text
-                    .rsplit_once('|')
-                    .map(|(_, d)| d)
-                    .unwrap_or(&link_text);
-                // Skip file/image links.
-                if !link_text.starts_with("File:")
-                    && !link_text.starts_with("Image:")
-                    && !link_text.starts_with("Category:")
-                {
-                    result.push_str(display);
-                }
-            }
-            // External links: [url text] -> text.
-            '[' => {
-                let mut link = String::new();
-                for c in chars.by_ref() {
-                    if c == ']' {
-                        break;
-                    }
-                    link.push(c);
-                }
-                // Display text is everything after the first space.
-                if let Some(pos) = link.find(' ') {
-                    result.push_str(&link[pos + 1..]);
-                }
-            }
-            // Bold/italic: '''text''' or ''text''.
-            '\'' if chars.peek() == Some(&'\'') => {
-                // Skip consecutive apostrophes.
-                while chars.peek() == Some(&'\'') {
-                    chars.next();
-                }
-            }
-            // HTML-like tags: <ref>...</ref>, <nowiki>, etc.
-            '<' => {
-                let mut tag = String::new();
-                let mut is_closing = false;
-                for c in chars.by_ref() {
-                    if c == '>' {
-                        break;
-                    }
-                    tag.push(c);
-                }
-                if tag.starts_with('/') {
-                    is_closing = true;
-                    tag = tag[1..].to_string();
-                }
-                let tag_name = tag.split_whitespace().next().unwrap_or("").to_lowercase();
-                // For ref, nowiki, gallery, etc. — skip content until closing tag.
-                if !is_closing
-                    && !tag.ends_with('/')
-                    && matches!(
-                        tag_name.as_str(),
-                        "ref"
-                            | "nowiki"
-                            | "gallery"
-                            | "math"
-                            | "source"
-                            | "syntaxhighlight"
-                            | "code"
-                    )
-                {
-                    let close = format!("</{tag_name}>");
-                    let mut buf = String::new();
-                    for c in chars.by_ref() {
-                        buf.push(c);
-                        if buf.ends_with(&close) {
-                            break;
-                        }
-                    }
-                }
-            }
-            // Section headers: == Title == -> preserved as text.
-            '=' if result.ends_with('\n') || result.is_empty() => {
-                // Already handled by split_sections; just pass through.
-                result.push(ch);
-            }
-            _ => result.push(ch),
-        }
-    }
-
-    result
-}
-
-/// Skip nested pairs, e.g., {{ ... {{ ... }} ... }}.
-fn skip_nested(chars: &mut std::iter::Peekable<std::str::Chars<'_>>, open: char, close: char) {
-    let mut depth = 1;
-    while let Some(c) = chars.next() {
-        if c == open && chars.peek() == Some(&open) {
-            chars.next();
-            depth += 1;
-        } else if c == close && chars.peek() == Some(&close) {
-            chars.next();
-            depth -= 1;
-            if depth == 0 {
-                return;
-            }
-        }
-    }
-}
-
 /// Split article text by section headers (== ... ==).
 /// Returns Vec of (section_name, section_text).
 /// The lead section has an empty name.
@@ -478,33 +332,6 @@ Python emphasizes code readability.
         assert!(chunks.len() >= 2);
         let all_content: String = chunks.iter().map(|c| c.content.clone()).collect();
         assert!(all_content.contains("Wikipedia: Rust (programming language)"));
-    }
-
-    #[test]
-    fn strip_mediawiki_templates() {
-        let text = "Before {{Infobox|name=Test}} after.";
-        let result = strip_mediawiki(text);
-        assert!(result.contains("Before"));
-        assert!(result.contains("after."));
-        assert!(!result.contains("Infobox"));
-    }
-
-    #[test]
-    fn strip_mediawiki_wikilinks() {
-        let text = "A [[programming language]] and [[Rust (lang)|Rust]].";
-        let result = strip_mediawiki(text);
-        assert!(result.contains("programming language"));
-        assert!(result.contains("Rust"));
-        assert!(!result.contains("[["));
-    }
-
-    #[test]
-    fn strip_mediawiki_bold_italic() {
-        let text = "'''Bold''' and ''italic'' text.";
-        let result = strip_mediawiki(text);
-        assert!(result.contains("Bold"));
-        assert!(result.contains("italic"));
-        assert!(!result.contains("'''"));
     }
 
     #[test]
