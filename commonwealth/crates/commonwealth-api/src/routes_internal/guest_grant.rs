@@ -4,24 +4,39 @@
 //! These are the operator's side of an ephemeral mesh link. `svrn mesh grant`
 //! drives them; the guest never touches this module.
 //!
-//! # Why these live on `:9741` and not `:9742`
+//! # Why these live on the OPERATOR surface, and nowhere else
 //!
-//! `:9742` is perimeter-trusted: its routes carry no auth gate at all (see the
-//! frontdoor comment at the bottom of `server::internal_router`). A mint route
-//! there would let **any mesh peer forge guest credentials for outsiders** —
-//! which is strictly worse than the membership it was supposed to be narrower
-//! than.
+//! Mounted only on [`ClientSurface::Operator`] — `:9741`, the bind an operator
+//! reaches by actually being on this machine. Three principals are ruled out,
+//! each structurally:
 //!
-//! On `:9741` the `client_auth` layer already means loopback-or-full-token, and
-//! a guest cannot reach these routes because **no [`Scope`] names them**. So
-//! grants cannot mint grants, structurally, without a check anywhere.
+//! - **`:9742`** is perimeter-trusted: its routes carry no auth gate at all
+//!   (see the frontdoor comment at the bottom of `server::internal_router`).
+//!   A mint route there would let any mesh peer forge guest credentials for
+//!   outsiders — strictly worse than the membership it was meant to narrow.
+//! - **A guest** cannot reach them because no [`Scope`] names these paths. So
+//!   grants cannot mint grants.
+//! - **A mesh peer** cannot reach them because the peer bind of the client
+//!   router does not SERVE them — it 404s.
 //!
-//! This is the same correction `/internal/inference/warmup` already got — it
-//! sat on `internal_router` until 2026-07-27, "reachable by any mesh PEER, i.e.
-//! an unauthenticated 'make that node load 18.5 GB off disk' lever". Same
-//! mistake, so: same port, same reasoning, decided once.
+//! That last one was wrong until 2026-08-28, and the way it was wrong is worth
+//! keeping. This doc used to argue that `:9741` was safe because "the
+//! `client_auth` layer already means loopback-or-full-token". It does not, for
+//! a caller the iroh acceptor forwards: the acceptor `TcpStream::connect`s
+//! `127.0.0.1`, so a MEMBER dialling `CLIENT_ALPN` arrived wearing a loopback
+//! address it did not earn and was admitted before any credential was read.
+//! Note `3d2f1ae0`. A loopback guard on these handlers would have read as a fix
+//! and gated nothing — which is why the fix is a third listener serving a
+//! smaller router, not a predicate. See [`ClientSurface`].
+//!
+//! `/internal/inference/warmup` got the first half of this correction on
+//! 2026-07-27 (off `:9742`, an unauthenticated "make that node load 18.5 GB off
+//! disk" lever) and the second half here, in the same move: same surface, same
+//! reasoning, decided once.
 //!
 //! [`Scope`]: commonwealth_knowledge::Scope
+//! [`ClientSurface`]: crate::server::ClientSurface
+//! [`ClientSurface::Operator`]: crate::server::ClientSurface::Operator
 
 use axum::extract::State;
 use axum::http::StatusCode;

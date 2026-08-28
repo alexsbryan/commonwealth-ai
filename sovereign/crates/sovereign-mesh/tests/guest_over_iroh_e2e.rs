@@ -18,8 +18,7 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
-use commonwealth_api::client_auth::ClientAuthPolicy;
-use commonwealth_api::server::client_router_with;
+use commonwealth_api::server::{client_router_for, ClientSurface};
 use commonwealth_core::ids::NodeId;
 use commonwealth_transport::iroh::{
     format_dial_string, EndpointBuilder, IrohAcceptor, SecretKey, GUEST_ALPN,
@@ -51,12 +50,12 @@ fn dialable_sockets(endpoint: &commonwealth_transport::iroh::Endpoint) -> Vec<So
 
 /// A lender: the guest bind of the client router, plus an acceptor routing
 /// `GUEST_ALPN` to it. Returns the dial string a guest link would carry.
-async fn spawn_lender(policy: ClientAuthPolicy) -> (String, IrohAcceptor) {
+async fn spawn_lender(surface: ClientSurface) -> (String, IrohAcceptor) {
     // `require_encryption: true` is the shape that motivates the whole path —
     // such a mesh binds its client API loopback-only, so iroh is the only way
     // a guest gets in.
     let state = client_app_state(NodeId::from_u128(0xA11CE), Some(TOKEN), true);
-    let guest_addr = spawn_router(client_router_with(state, policy)).await;
+    let guest_addr = spawn_router(client_router_for(state, surface)).await;
 
     let endpoint = EndpointBuilder::empty()
         .crypto_provider(commonwealth_transport::iroh::ring_crypto_provider())
@@ -82,12 +81,12 @@ async fn spawn_lender(policy: ClientAuthPolicy) -> (String, IrohAcceptor) {
 /// THE test. A tunnelled request arrives from `127.0.0.1` — the acceptor's own
 /// forward hop — and must still be made to prove who it is.
 ///
-/// Watched failing: run this against `ClientAuthPolicy::default()` (the twin
+/// Watched failing: run this against `ClientSurface::Operator` (the twin
 /// below) and the same request is admitted with no credential at all, which is
 /// every holder of a public dial string reaching the whole client API.
 #[tokio::test]
 async fn a_tunnelled_request_with_no_credential_is_refused() {
-    let (dial, _acceptor) = spawn_lender(ClientAuthPolicy::UNTRUSTED_LOOPBACK).await;
+    let (dial, _acceptor) = spawn_lender(ClientSurface::Guest).await;
     let tunnel = GuestTunnel::open(&dial, Vec::new(), Some("none"))
         .await
         .expect("the guest tunnel opens");
@@ -106,11 +105,12 @@ async fn a_tunnelled_request_with_no_credential_is_refused() {
 }
 
 /// The twin, and the reason the one above is not merely "something is broken":
-/// the DEFAULT policy admits that identical request. The policy is what
-/// separates the two listeners, not the tunnel and not the route.
+/// the OPERATOR surface admits that identical request. Which listener the
+/// acceptor forwards to is what separates the two — not the tunnel, not the
+/// route.
 #[tokio::test]
-async fn the_same_tunnelled_request_is_admitted_under_the_default_policy() {
-    let (dial, _acceptor) = spawn_lender(ClientAuthPolicy::default()).await;
+async fn the_same_tunnelled_request_is_admitted_on_the_operator_surface() {
+    let (dial, _acceptor) = spawn_lender(ClientSurface::Operator).await;
     let tunnel = GuestTunnel::open(&dial, Vec::new(), Some("none"))
         .await
         .expect("the guest tunnel opens");
@@ -133,7 +133,7 @@ async fn the_same_tunnelled_request_is_admitted_under_the_default_policy() {
 /// be useless.
 #[tokio::test]
 async fn a_credential_presented_over_the_tunnel_is_read_and_admitted() {
-    let (dial, _acceptor) = spawn_lender(ClientAuthPolicy::UNTRUSTED_LOOPBACK).await;
+    let (dial, _acceptor) = spawn_lender(ClientSurface::Guest).await;
     let tunnel = GuestTunnel::open(&dial, Vec::new(), Some("none"))
         .await
         .expect("the guest tunnel opens");
@@ -153,7 +153,7 @@ async fn a_credential_presented_over_the_tunnel_is_read_and_admitted() {
 /// caller by definition has not yet proven anything.
 #[tokio::test]
 async fn the_exempt_health_surface_is_reachable_through_the_tunnel() {
-    let (dial, _acceptor) = spawn_lender(ClientAuthPolicy::UNTRUSTED_LOOPBACK).await;
+    let (dial, _acceptor) = spawn_lender(ClientSurface::Guest).await;
     let tunnel = GuestTunnel::open(&dial, Vec::new(), Some("none"))
         .await
         .expect("the guest tunnel opens");

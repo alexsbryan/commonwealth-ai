@@ -3836,7 +3836,7 @@ prove is the dialer's Ed25519 key, so the acceptor routes on `(ALPN, dialer)`:
 
 | ALPN | member | stranger |
 |---|---|---|
-| `cwth/client/0` | the daemon's client listener (no bearer — peer federated inference carries none, and its key is the credential) | the bearer-checking listener, i.e. what a LAN caller meets; `AUTH_EXEMPT_PATHS` still open. Closed outright if that listener did not bind |
+| `cwth/client/0` | the PEER listener (no bearer — peer federated inference carries none, and its key is the credential), which serves the client router **minus `/internal/*`**. Closed outright if that listener did not bind | the bearer-checking listener, i.e. what a LAN caller meets; `AUTH_EXEMPT_PATHS` still open. Closed outright if that listener did not bind |
 | `cwth/rpc/0` | the local ggml rpc-server | REFUSED — it authenticates nothing, so there is no safe downgrade |
 | `cwth/guest/0` | — | admitted; the listener behind it reads the bearer |
 | `cwth/http/0` | internal router | internal router, DELIBERATELY: a joiner is not a member yet and `/internal/join` is how it becomes one. `gossip_authorized` and the join key guard the sensitive routes; the rest are a known open edge, and closing it needs a join-only listener for non-members |
@@ -3844,19 +3844,45 @@ prove is the dialer's Ed25519 key, so the acceptor routes on `(ALPN, dialer)`:
 Watched failing: `iroh_dialer_admission_e2e::routing_on_alpn_alone_is_the_hole_this_closes`
 wires the old ALPN-only routing and gets a 200 for a stranger presenting nothing.
 
+**Which listener serves a route is the guard; "is the caller loopback" is not**
+(`ClientSurface`, `commonwealth-api/src/server.rs`, 2026-08-28). Narrowing
+`cwth/client/0` from "any dial-string holder" to "any member" was a reduction,
+not a fix: the acceptor forwards by connecting `127.0.0.1`, so on every listener
+it feeds, a loopback peer address proves nothing. A member therefore landed on
+the operator's own `:9741` bind and could `POST /internal/guest/grant` — mint a
+credential for an outsider on someone else's node — with nothing presented.
+`client_auth`'s "loopback-or-full-token" was a false premise for that caller,
+and a loopback guard on those handlers would have read as a fix and gated
+nothing.
+
+`ClientSurface` is now the one decider for both axes, and the daemon binds the
+client router three times:
+
+| Surface | Reached by | Trusts a loopback peer | Serves `/internal/*` |
+|---|---|---|---|
+| `Operator` | a real local caller on `:9741` | yes | yes |
+| `Peer` | a MEMBER dialling `cwth/client/0` | yes | **no** |
+| `Guest` | `cwth/guest/0`, and a downgraded stranger | no | no |
+
+No address in `AcceptorRoutes` points at the operator listener at all, so the
+acceptor cannot reach that surface however it is called. Watched failing:
+`iroh_dialer_admission_e2e::routing_a_member_at_the_operator_listener_is_the_hole_this_closes`
+wires the member arm the old way and gets a 200 on `/internal/guest/grant/list`.
+
 **A guest reaches an encrypted mesh over its own ALPN, not the peers'.**
 An encrypted mesh binds the client API loopback-only, so the link a guest
 holds names an iroh dial string (`dial=`) instead of an address, and `svrn
 mesh use` / `svrn chat` tunnel to it. The acceptor routes that traffic on
-`cwth/guest/0` to a SECOND bind of the client router carrying
-`ClientAuthPolicy::UNTRUSTED_LOOPBACK` — because the acceptor forwards by
+`cwth/guest/0` to the `ClientSurface::Guest` bind of the client router, which
+carries `ClientAuthPolicy::UNTRUSTED_LOOPBACK` — because the acceptor forwards by
 connecting `127.0.0.1`, and the default policy admits a loopback peer
 before reading a bearer, which would hand every holder of the node's
-public dial string the whole client API. Peers keep `cwth/client/0` and
-the trusting listener: their federated inference carries no
-`Authorization` header at all, so routing them together would have broken
-one to fix the other. The guest listener serves the bare client router —
-no MCP, no mounted host surfaces. There is no plaintext fallback: a link
+public dial string the whole client API. Peers keep `cwth/client/0` and a
+listener that admits without a bearer: their federated inference carries
+no `Authorization` header at all, so routing them together would have
+broken one to fix the other. That is the `Peer` bind, not the operator's
+own — see the `ClientSurface` table above. Neither the guest nor the peer
+listener serves `/internal/*`, MCP, or any mounted host surface. There is no plaintext fallback: a link
 carrying `dial=` is tunnelled or it is refused (§18.3).
 
 | Path                          | Notes                                                  |
@@ -3870,7 +3896,7 @@ carrying `dial=` is tunnelled or it is refused (§18.3).
 | `GET  /status`                | Node / mesh / inference / knowledge summary            |
 | `GET  /oicp/v1/capabilities`  | Provider manifest + federation info                    |
 | `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | **Ollama-native compatibility shim** (`routes_ollama.rs`). Pure translation over the OpenAI handlers above — lets Ollama-native clients (Open WebUI's Ollama mode, IDE plugins) connect. `chat`/`generate` are non-streaming-backed in v1: the inner handler runs `stream:false` and the complete answer is framed as Ollama NDJSON (one content frame + terminal). No CORS layer + the same auth posture as `/v1/*` (documented in-module); incremental streaming is a tracked follow-up. |
-| `/internal/guest/grant`, `…/revoke`, `…/list` | Mint / kill / list ephemeral guest grants. On the CLIENT router, deliberately: `:9742` has no auth gate, so a mint route there would let any mesh peer forge guest credentials. Unreachable by a guest because no `Scope` names it. |
+| `/internal/guest/grant`, `…/revoke`, `…/list` | Mint / kill / list ephemeral guest grants. On the `ClientSurface::Operator` bind ONLY: `:9742` has no auth gate, so a mint route there would let any mesh peer forge guest credentials — and the peer/guest binds of the client router 404 it for the same reason. Unreachable by a guest because no `Scope` names it either. |
 | `/v1/mesh/*` `/v1/admin/*` `/mcp/*` | **Loopback-only** (router middleware + per-handler `enforce_localhost`) |
 
 **Internal API — :9742, plaintext (perimeter-trust)**

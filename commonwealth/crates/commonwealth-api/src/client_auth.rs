@@ -201,61 +201,76 @@ pub async fn client_auth_layer(
         return next.run(request).await;
     }
 
-    // Remote, gated path → require the configured token.
-    let Some(expected) = state.client_token() else {
-        // Bound somewhere a remote could reach us, but no token was
-        // ever configured. Refuse — never admit an unauthenticated
-        // remote caller just because the operator forgot a secret.
+    // Remote, gated path. TWO credentials can admit here — the daemon-wide
+    // token and an ephemeral guest grant — and they are INDEPENDENT. The
+    // daemon token is checked first so a guest token can never widen into
+    // full access by matching an earlier arm; that ordering is the whole
+    // constraint, and it is the only one.
+    //
+    // Until 2026-08-28 this read "no daemon token configured → 403" BEFORE
+    // ever looking at a grant, which made a live guest grant unusable on any
+    // daemon that had no client token — including the daemon that minted it.
+    // Observed on the wire: FOX minted a link, MAC presented it through the
+    // guest tunnel, and FOX answered `remote access not configured` (live
+    // bar 3.2, 2026-08-28). A valid credential refused because an unrelated
+    // one is absent is the substitution this codebase refuses (§18.3).
+    let configured = state.client_token();
+    let presented = bearer_token(&request);
+
+    if let (Some(expected), Some(p)) = (configured.as_ref(), presented) {
+        if constant_time_eq(p.as_bytes(), expected.as_bytes()) {
+            return next.run(request).await;
+        }
+    }
+
+    // A guest grant — a bearer that is NOT membership and NOT the daemon
+    // token.
+    //
+    // This arm never inspects a `Scope` variant: it asks the grant whether
+    // it permits this path and inserts the grant for the handler. That is
+    // what keeps a newly-added scope from having to touch this file at all
+    // — see `commonwealth_knowledge::guest_grant`.
+    if let Some(p) = presented {
+        let now = commonwealth_core::clock::unix_now_millis();
+        return match state.inner.guest_grants.live(p, now) {
+            Some(grant) if grant.permits_path(request.uri().path()) => {
+                let mut request = request;
+                request.extensions_mut().insert(Guest(Arc::new(grant)));
+                next.run(request).await
+            }
+            Some(grant) => {
+                // Out of scope, not unauthenticated. Say which — a bare 403
+                // sends the operator hunting for a credential problem that
+                // isn't there.
+                tracing::info!(
+                    peer = %peer,
+                    path = %request.uri().path(),
+                    scopes = %grant.summary(),
+                    "client_auth: guest grant does not cover this path"
+                );
+                guest_out_of_scope(&grant, request.uri().path())
+            }
+            None => unauthorized("bearer mismatch"),
+        };
+    }
+
+    // No credential at all. If the operator never configured a token, say so
+    // rather than emitting a generic 401 — this daemon is reachable from
+    // somewhere remote and cannot serve anyone who is not holding a grant.
+    if configured.is_none() {
         tracing::warn!(
             peer = %peer,
             path = %request.uri().path(),
-            "client_auth: remote caller but no client token configured — \
-             refusing (bind 127.0.0.1, or set a token to serve remotely)"
+            "client_auth: remote caller with no credential and no client token \
+             configured — refusing (bind 127.0.0.1, or set a token to serve remotely)"
         );
         return (
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({ "error": "remote access not configured" })),
         )
             .into_response();
-    };
-
-    match bearer_token(&request) {
-        Some(presented) if constant_time_eq(presented.as_bytes(), expected.as_bytes()) => {
-            next.run(request).await
-        }
-        // A guest grant — a bearer that is NOT membership and NOT the daemon
-        // token. Ordered strictly after the full-token arm so a guest token can
-        // never widen into full access by matching first.
-        //
-        // This arm never inspects a `Scope` variant: it asks the grant whether
-        // it permits this path and inserts the grant for the handler. That is
-        // what keeps a newly-added scope from having to touch this file at all
-        // — see `commonwealth_knowledge::guest_grant`.
-        Some(presented) => {
-            let now = commonwealth_core::clock::unix_now_millis();
-            match state.inner.guest_grants.live(presented, now) {
-                Some(grant) if grant.permits_path(request.uri().path()) => {
-                    let mut request = request;
-                    request.extensions_mut().insert(Guest(Arc::new(grant)));
-                    next.run(request).await
-                }
-                Some(grant) => {
-                    // Out of scope, not unauthenticated. Say which — a bare 403
-                    // sends the operator hunting for a credential problem that
-                    // isn't there.
-                    tracing::info!(
-                        peer = %peer,
-                        path = %request.uri().path(),
-                        scopes = %grant.summary(),
-                        "client_auth: guest grant does not cover this path"
-                    );
-                    guest_out_of_scope(&grant, request.uri().path())
-                }
-                None => unauthorized("bearer mismatch"),
-            }
-        }
-        None => unauthorized("missing bearer"),
     }
+    unauthorized("missing bearer")
 }
 
 /// The authenticated guest behind a request, attached by [`client_auth_layer`]

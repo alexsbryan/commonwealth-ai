@@ -76,10 +76,59 @@ SCOPE LIMIT, stated: 2.1 exercises **FOX's** acceptor, because MAC dialled out.
 It says nothing yet about MAC's member check admitting FOX. That needs traffic
 in the other direction.
 
-## Phases 3, 4, 5 — NOT RUN
+## Phase 3 — guest link over iroh. 3.2 FAILED. 3.3-3.7 COULD NOT JUDGE.
 
-Guest link over iroh, park/switch, and rotation all need the peer to run
-commands or to have its status read. Nothing is claimed for them.
+FOX minted the link (its 3.1) and sent it at 08:32 local. MAC is the guest.
+
+**3.2 FAILED.** `svrn mesh use '<link>'`:
+
+    The issuing node did not accept this link: remote access not configured
+
+Not a transport failure, and not FOX's configuration. Three observations on
+the SAME tunnel, same ALPN (`cwth/guest/0`), same listener, minutes apart:
+
+| probe | credential | result |
+|---|---|---|
+| FOX plain `http://100.115.12.21:9741/status` | — | `000` (unreachable — correct, encrypted mesh binds loopback) |
+| `dial_probe --alpn guest --path /status` | none, fresh random stranger key | **HTTP 200**, body names `node-44ae76142b0c3c72`, mesh Meshsonics, `Qwen3.5-4B-UD-MTP-Q6_K_XL` resident |
+| `dial_probe --alpn guest --path /v1/models --bearer <grant>` | the valid grant | **HTTP 403** `{"error":"remote access not configured"}` |
+
+The tunnel, relay, guest ALPN and guest listener are all live — the exempt
+path answers 200 to a caller holding nothing. The credentialed path refuses
+the grant. That pair isolates the failure to the auth layer alone.
+
+**Cause, cited.** `commonwealth-api/src/client_auth.rs::client_auth_layer`
+read `let Some(expected) = state.client_token() else { 403 "remote access not
+configured" }` BEFORE the guest-grant arm, which sat inside the `match` that
+followed. `"remote access not configured"` has exactly one production
+emitter, so FOX has no daemon client token — and a live grant was therefore
+unreachable on the very daemon that minted it. `svrn mesh grant` minted a
+link its own node refuses. Same class as note `68bfc154`.
+
+**3.3 — same branch, second path.** `svrn chat ask` through the stored link
+(`--no-verify`): `POST /v1/conversations: 403 Forbidden {"error":"remote
+access not configured"}`. The CLI correctly reported routing "over the mesh
+tunnel" to FOX first, so link storage and routing are not implicated.
+
+**3.4, 3.5, 3.6, 3.7 — COULD NOT JUDGE, not failed.** Every one of them is
+downstream of the arm that refuses: the scope check (`permits_path`), the
+`model_not_granted` refusal and the revoke-takes-effect bar can only be read
+once a grant is admitted at all. Nothing is claimed for them.
+
+Fixed on MAC in the same session (`client_auth.rs`): the daemon token and the
+grant are independent credentials, daemon token still checked first so a
+guest token cannot widen into full access by matching an earlier arm, and the
+no-credential-at-all case still 403s `remote access not configured`. Watched
+failing: `a_guest_grant_is_honoured_on_a_daemon_with_no_client_token` and
+`no_token_and_no_grant_still_refuses_a_credential_less_remote_caller`.
+
+Phase 3 must be RE-RUN against a build carrying that fix. This record is the
+first observation; the re-run is a second one, not a replacement.
+
+## Phases 4, 5 — NOT RUN
+
+Park/switch and rotation need the peer to run commands or to have its status
+read. Nothing is claimed for them.
 
 ## Build repair (prerequisite, not a mesh result)
 

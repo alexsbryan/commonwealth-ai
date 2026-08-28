@@ -253,11 +253,18 @@ pub struct MeshIrohAccess {
 pub struct AcceptorRoutes {
     /// The mesh-internal router (`:9742`), loopback-bound.
     pub internal: SocketAddr,
-    /// The daemon's own client router (`:9741`), which admits loopback.
-    pub client: SocketAddr,
-    /// The second bind of the client router, which does NOT admit loopback.
-    /// `None` when it failed to bind — a stranger is then closed, not
-    /// promoted.
+    /// The PEER bind of the client router: admits loopback (a member
+    /// presents no bearer), but does not serve `/internal/*`. `None` when
+    /// it failed to bind — a member is then closed, not promoted to the
+    /// operator's own listener.
+    ///
+    /// There is deliberately no route to that listener from here. The
+    /// acceptor cannot reach the operator surface at all, which is what
+    /// "loopback-or-full-token" was always supposed to mean.
+    pub peer: Option<SocketAddr>,
+    /// The bind of the client router that does NOT admit loopback, and
+    /// serves no `/internal/*`. `None` when it failed to bind — a stranger
+    /// is then closed, not promoted.
     pub guest: Option<SocketAddr>,
     /// A local ggml rpc-server, when this node serves one.
     pub rpc: Option<SocketAddr>,
@@ -272,17 +279,22 @@ impl AcceptorRoutes {
     /// `MemberRecord.node_pubkey`. What the QUIC handshake proves is the
     /// dialer's key, and that is what this consults.
     ///
-    /// - `CLIENT_ALPN` — a MEMBER reaches the daemon's own client listener,
-    ///   which admits it without a bearer. That is not a shortcut: peer
-    ///   federated inference carries no `Authorization` header at all, and
-    ///   membership-by-key is the credential it presents instead. A stranger
-    ///   is NOT refused — it is routed to the bearer-checking guest listener,
-    ///   the same posture it would get calling a LAN-bound daemon. So
-    ///   `/status` and `/oicp/v1/capabilities` stay reachable (a node must be
-    ///   able to read those before it could hold anything), and everything
-    ///   else demands a daemon token or a live guest grant. When that listener
-    ///   did not bind, a stranger gets `None` — closed, never the trusting
-    ///   listener.
+    /// - `CLIENT_ALPN` — a MEMBER reaches the PEER listener, which admits it
+    ///   without a bearer. That is not a shortcut: peer federated inference
+    ///   carries no `Authorization` header at all, and membership-by-key is
+    ///   the credential it presents instead. What a member does NOT reach is
+    ///   the operator's own `:9741` listener: that one serves `/internal/*`
+    ///   — guest-grant minting, an 18.5 GB warmup — and its only guard is
+    ///   "the caller is loopback", which this acceptor's forward hop
+    ///   satisfies for free. So the peer bind serves a strictly smaller
+    ///   router (`ClientSurface::Peer`), and no address in this struct
+    ///   points at the operator listener at all. A stranger is NOT refused —
+    ///   it is routed to the bearer-checking guest listener, the same
+    ///   posture it would get calling a LAN-bound daemon. So `/status` and
+    ///   `/oicp/v1/capabilities` stay reachable (a node must be able to read
+    ///   those before it could hold anything), and everything else demands a
+    ///   daemon token or a live guest grant. When the listener a dialer is
+    ///   owed did not bind, it gets `None` — closed, never promoted.
     /// - `RPC_ALPN` — MEMBERS ONLY, with no fallback. It forwards to a raw
     ///   ggml rpc-server that speaks tensor operations and authenticates
     ///   nothing; there is no listener to downgrade a stranger to.
@@ -310,7 +322,18 @@ impl AcceptorRoutes {
         }
         if alpn == CLIENT_ALPN {
             if is_member(dialer).await {
-                return Some(self.client);
+                if self.peer.is_none() {
+                    // Fail closed, loudly. The operator listener is not a
+                    // fallback: it serves `/internal/*` to anything that
+                    // reaches it from loopback, which this hop always does.
+                    tracing::warn!(
+                        target: "transport",
+                        dialer = %hex::encode(dialer.0),
+                        "iroh(mesh): CLOSED a CLIENT_ALPN dial from a member — the peer \
+                         listener did not bind, and the operator listener is not a fallback"
+                    );
+                }
+                return self.peer;
             }
             // Glassbox: this is the branch that used to be an unconditional
             // forward, so it must be visible when it fires (§9.1).
@@ -342,15 +365,18 @@ impl MeshIrohAccess {
     /// to the daemon's two loopback listeners. Returns `None` when
     /// `enabled` is false or on any bind failure (always logged).
     ///
-    /// `internal_port` / `client_port` are this daemon's resolved
-    /// ports; the acceptor forwards to `127.0.0.1:<port>` (the
-    /// listeners bind `0.0.0.0`, which includes loopback). Forwarding
-    /// is lazy per stream, so binding this before the listeners are up
-    /// is safe — an early dial just fails and the client retries.
+    /// `internal_port` is this daemon's resolved internal port; the
+    /// acceptor forwards to `127.0.0.1:<port>` (the listener binds
+    /// `0.0.0.0`, which includes loopback). `peer_addr` and `guest_addr`
+    /// are the daemon's two ephemeral loopback binds of the client
+    /// router — the operator's own `:9741` listener is deliberately NOT
+    /// passed in, because nothing here may forward to it. Forwarding is
+    /// lazy per stream, so binding this before the listeners are up is
+    /// safe — an early dial just fails and the client retries.
     pub async fn start(
         data_dir: &Path,
         internal_port: u16,
-        client_port: u16,
+        peer_addr: Option<SocketAddr>,
         guest_addr: Option<SocketAddr>,
         member_check: MemberCheck,
         enabled: bool,
@@ -406,7 +432,6 @@ impl MeshIrohAccess {
         };
 
         let internal_addr: SocketAddr = ([127, 0, 0, 1], internal_port).into();
-        let client_addr: SocketAddr = ([127, 0, 0, 1], client_port).into();
         if let Some(rpc_addr) = rpc_forward {
             tracing::info!(
                 target: "transport",
@@ -421,9 +446,22 @@ impl MeshIrohAccess {
                 "iroh(mesh): accepting GUEST_ALPN → bearer-only client listener"
             );
         }
+        match peer_addr {
+            Some(peer) => tracing::info!(
+                target: "transport",
+                peer_forward = %peer,
+                "iroh(mesh): accepting CLIENT_ALPN from members → peer listener \
+                 (client router minus /internal/*)"
+            ),
+            None => tracing::warn!(
+                target: "transport",
+                "iroh(mesh): no peer listener bound — CLIENT_ALPN dials from MEMBERS \
+                 will be closed (federated inference from peers is off)"
+            ),
+        }
         let routes = AcceptorRoutes {
             internal: internal_addr,
-            client: client_addr,
+            peer: peer_addr,
             guest: guest_addr,
             rpc: rpc_forward,
         };
@@ -435,10 +473,10 @@ impl MeshIrohAccess {
         tracing::info!(
             endpoint_id = %endpoint.id(),
             internal_forward = %internal_addr,
-            client_forward = %client_addr,
+            peer_forward = ?peer_addr,
             dial = %Self::dial_for(&endpoint).unwrap_or_else(|| "<no relay yet>".to_string()),
             "iroh(mesh): dial-by-key access enabled \
-             (ALPN cwth/http/0 -> internal, cwth/client/0 -> client)"
+             (ALPN cwth/http/0 -> internal, cwth/client/0 -> peer)"
         );
         Some(MeshIrohAccess {
             endpoint,
@@ -721,7 +759,7 @@ mod tests {
     fn routes() -> AcceptorRoutes {
         AcceptorRoutes {
             internal: addr(9742),
-            client: addr(9741),
+            peer: Some(addr(41001)),
             guest: Some(addr(41000)),
             rpc: Some(addr(50052)),
         }
@@ -742,12 +780,38 @@ mod tests {
 
     /// And the arm that must keep working: a member presents no bearer at
     /// all on federated inference, and its key is the credential.
+    ///
+    /// It reaches the PEER listener, never the operator's own. Both admit a
+    /// loopback caller, so the auth layer cannot tell them apart — the
+    /// difference is that the peer bind does not SERVE `/internal/*`.
     #[tokio::test]
-    async fn a_member_on_the_client_alpn_reaches_the_daemons_own_listener() {
+    async fn a_member_on_the_client_alpn_reaches_the_peer_listener_not_the_operators() {
         let r = routes();
         assert_eq!(
             r.forward_for(CLIENT_ALPN, MEMBER, &only_the_member()).await,
-            Some(r.client),
+            r.peer,
+        );
+    }
+
+    /// Fail CLOSED on the other side too. With no peer listener there is
+    /// nothing a member may safely reach: the operator's `:9741` bind admits
+    /// this acceptor's forward hop as a local caller and serves guest-grant
+    /// minting to it, so it is not a fallback.
+    #[tokio::test]
+    async fn a_member_is_closed_rather_than_promoted_when_the_peer_listener_is_absent() {
+        let r = AcceptorRoutes {
+            peer: None,
+            ..routes()
+        };
+        assert_eq!(
+            r.forward_for(CLIENT_ALPN, MEMBER, &only_the_member()).await,
+            None,
+        );
+        // The stranger arm is unaffected — it was never routed to `peer`.
+        assert_eq!(
+            r.forward_for(CLIENT_ALPN, STRANGER, &only_the_member())
+                .await,
+            r.guest,
         );
     }
 
@@ -767,7 +831,7 @@ mod tests {
         // The member arm is unaffected — this is not "refuse everything".
         assert_eq!(
             r.forward_for(CLIENT_ALPN, MEMBER, &only_the_member()).await,
-            Some(r.client),
+            r.peer,
         );
     }
 

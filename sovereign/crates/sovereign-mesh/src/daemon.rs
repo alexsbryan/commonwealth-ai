@@ -2888,6 +2888,43 @@ impl EmbeddedDaemon {
             }
         };
 
+        // The PEER listener: the third bind of the client router, and the
+        // only one the acceptor forwards a MEMBER to. It admits a loopback
+        // caller exactly as `:9741` does — a peer's federated inference
+        // carries no `Authorization` header at all, and its key is the
+        // credential the QUIC handshake already proved — but it serves
+        // `ClientSurface::Peer`, which mounts no `/internal/*`.
+        //
+        // Why a separate bind rather than a guard on those routes: the
+        // acceptor forwards by `TcpStream::connect("127.0.0.1")`, so on any
+        // listener it feeds, "is the caller loopback" cannot distinguish a
+        // real local caller from the forward hop. A loopback guard there
+        // would read as a fix and gate nothing. Until 2026-08-28 a member
+        // landed on `:9741` and could POST `/internal/guest/grant` — mint a
+        // credential for an outsider on someone else's node — with nothing
+        // presented. See note `3d2f1ae0`.
+        //
+        // A bind failure costs federated inference FROM peers over iroh and
+        // nothing else; `forward_for` then closes a member's dial rather
+        // than promoting it to the operator listener.
+        let (peer_listener, peer_addr) = match tokio::net::TcpListener::bind(("127.0.0.1", 0u16))
+            .await
+        {
+            Ok(l) => match l.local_addr() {
+                Ok(a) => (Some(l), Some(a)),
+                Err(e) => {
+                    warn!("peer listener bound but has no local address ({e}) — peer inference over iroh disabled");
+                    (None, None)
+                }
+            },
+            Err(e) => {
+                warn!(
+                    "peer listener could not bind loopback ({e}) — peer inference over iroh disabled"
+                );
+                (None, None)
+            }
+        };
+
         // Spawn the API servers in the background. The JoinHandle is stored
         // in `DaemonState::Running` (not discarded) so `stop_inner` can await
         // teardown — dropping the old `:9741`/`:9742` listeners — before an
@@ -2922,9 +2959,13 @@ impl EmbeddedDaemon {
             }
             let internal_router =
                 commonwealth_api::server::internal_router(app_state_clone.clone());
-            let guest_router = commonwealth_api::server::client_router_with(
+            let peer_router = commonwealth_api::server::client_router_for(
+                app_state_clone.clone(),
+                commonwealth_api::server::ClientSurface::Peer,
+            );
+            let guest_router = commonwealth_api::server::client_router_for(
                 app_state_clone,
-                commonwealth_api::client_auth::ClientAuthPolicy::UNTRUSTED_LOOPBACK,
+                commonwealth_api::server::ClientSurface::Guest,
             );
 
             // Phase 3 takeover: a `sovereign init` invocation may have
@@ -2991,6 +3032,9 @@ impl EmbeddedDaemon {
             // cannot identify the caller at all and fails closed with a 500 on
             // every guest request.
             let guest_service = guest_router.into_make_service_with_connect_info::<SocketAddr>();
+            // Same reason again: without `ConnectInfo` the auth layer cannot
+            // identify the caller and fails closed with a 500.
+            let peer_service = peer_router.into_make_service_with_connect_info::<SocketAddr>();
             // A daemon whose guest listener failed to bind still serves
             // everything else; `pending()` just never resolves that arm.
             let guest_serve = async move {
@@ -3001,10 +3045,19 @@ impl EmbeddedDaemon {
                     None => std::future::pending::<()>().await,
                 }
             };
+            let peer_serve = async move {
+                match peer_listener {
+                    Some(l) => {
+                        let _ = axum::serve(l, peer_service).await;
+                    }
+                    None => std::future::pending::<()>().await,
+                }
+            };
             tokio::select! {
                 _ = axum::serve(client_listener, client_service) => {}
                 _ = axum::serve(internal_listener, internal_router) => {}
                 _ = guest_serve => {}
+                _ = peer_serve => {}
                 _ = shutdown_rx => {
                     info!("Commonwealth daemon shutting down");
                 }
@@ -3317,7 +3370,7 @@ impl EmbeddedDaemon {
         let iroh_access = crate::iroh_access::MeshIrohAccess::start(
             &self.data_dir,
             internal_port,
-            client_port,
+            peer_addr,
             guest_addr,
             member_check.clone(),
             iroh_enabled,
@@ -3409,7 +3462,7 @@ impl EmbeddedDaemon {
                     let new = crate::iroh_access::MeshIrohAccess::start(
                         &data_dir,
                         internal_port,
-                        client_port,
+                        peer_addr,
                         guest_addr,
                         member_check.clone(),
                         iroh_enabled,

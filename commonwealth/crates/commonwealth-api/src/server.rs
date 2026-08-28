@@ -44,23 +44,69 @@ const REQUEST_BODY_READ_TIMEOUT: std::time::Duration = std::time::Duration::from
 /// Build the client-facing API router (port 9741) for the daemon's own
 /// listener, which trusts a loopback caller.
 pub fn client_router(state: AppState) -> Router {
-    client_router_with(state, crate::client_auth::ClientAuthPolicy::default())
+    client_router_for(state, ClientSurface::Operator)
 }
 
-/// [`client_router`] with an explicit auth posture.
+/// Who reaches a bind of the client router — the closed set of principal
+/// classes, and the ONE thing that decides both the auth posture and the
+/// route set (§2.1, §10.6).
 ///
-/// The daemon binds this router more than once. `:9741` gets the default
-/// posture; the loopback-only listener the iroh acceptor forwards
-/// `GUEST_ALPN` to gets [`ClientAuthPolicy::UNTRUSTED_LOOPBACK`], because
-/// every request reaching it arrives from the acceptor's own forward hop and
-/// so wears a loopback address it did not earn. See
-/// `crate::client_auth` module docs.
+/// The daemon binds this router three times, and the binds differ in two
+/// ways that used to be tracked separately (and so drifted apart):
 ///
-/// [`ClientAuthPolicy::UNTRUSTED_LOOPBACK`]: crate::client_auth::ClientAuthPolicy::UNTRUSTED_LOOPBACK
-pub fn client_router_with(
-    state: AppState,
-    auth_policy: crate::client_auth::ClientAuthPolicy,
-) -> Router {
+/// | Surface | Reached by | Trusts a loopback peer | Serves `/internal/*` |
+/// |---|---|---|---|
+/// | `Operator` | a real local caller on `:9741` | yes | yes |
+/// | `Peer` | a MEMBER dialling `CLIENT_ALPN` | yes | **no** |
+/// | `Guest` | `GUEST_ALPN`, and a downgraded stranger | no | no |
+///
+/// **`Peer` exists because "is the caller loopback" is meaningless on a
+/// listener the iroh acceptor feeds.** The acceptor forwards by
+/// `TcpStream::connect("127.0.0.1")`, so every tunnelled request wears a
+/// loopback address it did not earn. `Guest` answers that for a stranger by
+/// refusing to trust the address; it could not answer it for a member,
+/// because peer federated inference carries no `Authorization` header at all
+/// and membership-by-key IS its credential. So a member landed on the
+/// `Operator` bind and reached `/internal/guest/grant` — a "forge a
+/// credential for an outsider" lever — with nothing presented. A loopback
+/// guard on those routes would have read as a fix and changed nothing.
+///
+/// The fix is structural rather than a predicate: the principal class picks
+/// the listener, and the listener does not SERVE what that principal must
+/// never reach. See `routes_internal::guest_grant` module docs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClientSurface {
+    /// The daemon's own `:9741` listener.
+    Operator,
+    /// The loopback bind the iroh acceptor forwards `CLIENT_ALPN` to, once
+    /// the dialer's key has been checked against live membership.
+    Peer,
+    /// The loopback bind the acceptor forwards `GUEST_ALPN` to, and where a
+    /// non-member on `CLIENT_ALPN` is downgraded.
+    Guest,
+}
+
+impl ClientSurface {
+    /// Whether a loopback peer address is evidence of a local caller.
+    /// True only where the caller reached us by actually being on this
+    /// machine, or by proving a member key at the QUIC handshake.
+    pub fn auth_policy(self) -> crate::client_auth::ClientAuthPolicy {
+        match self {
+            Self::Operator | Self::Peer => crate::client_auth::ClientAuthPolicy::default(),
+            Self::Guest => crate::client_auth::ClientAuthPolicy::UNTRUSTED_LOOPBACK,
+        }
+    }
+
+    /// Whether the operator-only `/internal/*` routes are mounted at all.
+    /// Only the surface an operator's own tools talk to.
+    pub fn serves_operator_routes(self) -> bool {
+        matches!(self, Self::Operator)
+    }
+}
+
+/// [`client_router`] for a named principal class. See [`ClientSurface`].
+pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
+    let auth_policy = surface.auth_policy();
     // Per-route admission gate applied to peer-reachable inference
     // endpoints. Local requests (no `X-Node-Id`) pass through; peer
     // requests are checked against pause / foreground-yield / ceiling
@@ -80,6 +126,45 @@ pub fn client_router_with(
     // decode permit. See `MESH_SCALE_100_USERS_1000_CORPORA.md` §9.3.
     let fair_share = || {
         axum::middleware::from_fn_with_state(state.clone(), crate::admission::client_fairness_layer)
+    };
+
+    // Eagerly load the primary chat slot so the first turn after an idle
+    // unload doesn't pay the 10-90s lazy-load tax; and the guest-grant
+    // lifecycle. Both live on the client port rather than
+    // `internal_router` (`:9742`) because every legitimate caller is
+    // LOCAL — the desktop's window-focus warm, and the attach-mode
+    // provider in `oicp-client`, which derives this URL from its `/v1`
+    // endpoint. On `:9742` the warm POST simply 404'd and was swallowed
+    // as a best-effort no-op, so Attach mode never warmed its model
+    // while looking fully wired.
+    //
+    // Their cost if a peer could pull them is an 18.5 GB disk load and a
+    // forged credential for an outsider, so which LISTENER carries them
+    // is the whole guard: `ClientSurface::Operator` and nothing else.
+    // Until 2026-08-28 the guard was the `client_auth` layer below, and
+    // that was a false premise — a member reaching this router through
+    // the iroh acceptor is admitted by the loopback arm before any
+    // credential is read.
+    let operator_routes: Router<AppState> = if surface.serves_operator_routes() {
+        Router::new()
+            .route(
+                "/internal/inference/warmup",
+                post(routes_internal::inference_warmup),
+            )
+            .route(
+                "/internal/guest/grant",
+                post(routes_internal::guest_grant_issue),
+            )
+            .route(
+                "/internal/guest/grant/revoke",
+                post(routes_internal::guest_grant_revoke),
+            )
+            .route(
+                "/internal/guest/grant/list",
+                get(routes_internal::guest_grant_list),
+            )
+    } else {
+        Router::new()
     };
 
     Router::new()
@@ -135,42 +220,13 @@ pub fn client_router_with(
         )
         // Status endpoint.
         .route("/status", get(routes_status::status))
-        // Eagerly load the primary chat slot so the first turn after an
-        // idle unload doesn't pay the 10-90s lazy-load tax.
-        //
-        // Mounted HERE, on the client port, deliberately — it was on
-        // `internal_router` until 2026-07-27 and that was wrong twice
-        // over. Every caller is local (the desktop's window-focus and
-        // chat-mount warm, and the attach-mode provider in
-        // `oicp-client`, which derives this URL from its `/v1`
-        // endpoint), so on `:9742` the route was unreachable by the
-        // only clients that wanted it — the POST 404'd and the warm
-        // silently never happened. It was simultaneously reachable by
-        // any mesh PEER, i.e. an unauthenticated "make that node load
-        // 18.5 GB off disk" lever. The `client_auth` layer below is the
-        // loopback guard this handler's doc always claimed it had.
-        .route(
-            "/internal/inference/warmup",
-            post(routes_internal::inference_warmup),
-        )
-        // Guest-grant lifecycle. Mounted HERE for the same reason warmup is,
-        // one route up: on `internal_router` these would be reachable by any
-        // mesh PEER with no auth gate, i.e. a "forge a credential for an
-        // outsider" lever. Behind `client_auth` they are loopback-or-full-token
-        // — and a guest cannot reach them because no `Scope` names these paths,
-        // so grants cannot mint grants without a check anywhere.
-        .route(
-            "/internal/guest/grant",
-            post(routes_internal::guest_grant_issue),
-        )
-        .route(
-            "/internal/guest/grant/revoke",
-            post(routes_internal::guest_grant_revoke),
-        )
-        .route(
-            "/internal/guest/grant/list",
-            get(routes_internal::guest_grant_list),
-        )
+        // The operator-only surface, mounted on the `Operator` bind and
+        // NOWHERE else. Empty on `Peer` and `Guest`, so those listeners
+        // 404 these paths rather than gating them — the distinction
+        // matters, because the gate they would otherwise carry
+        // ("is the caller loopback") is inert on a listener the iroh
+        // acceptor feeds. See [`ClientSurface`].
+        .merge(operator_routes)
         // OICP capability manifest.
         .route("/oicp/v1/capabilities", get(routes_oicp::capabilities))
         // OICP v0.4 §5 ingest extension: install a corpus by recipe id,
@@ -428,10 +484,11 @@ pub fn internal_router(state: AppState) -> Router {
             get(routes_internal::models_inventory),
         )
         // NOTE: `/internal/inference/warmup` is NOT here — it is
-        // mounted on `client_router` (`:9741`). See the rationale at
-        // that route; in short, its callers are local and its cost is
-        // an 18.5 GB disk load, so it belongs behind the client port's
-        // loopback guard rather than on the peer-reachable port.
+        // mounted on `client_router` (`:9741`), and only on its
+        // `ClientSurface::Operator` bind. See the rationale at that
+        // route; in short, its callers are local and its cost is an
+        // 18.5 GB disk load, so it belongs on the one listener no mesh
+        // principal is ever forwarded to.
         //
         // Contribution controls (W2). Read by the Settings panel and
         // the tray status chip; mutated by the pause/ceiling controls.
@@ -919,6 +976,55 @@ mod tests {
             StatusCode::NOT_FOUND,
             "an 18.5 GB disk load must not be a lever any mesh peer can pull"
         );
+    }
+
+    /// The other half of that sentence, and the one that was false until
+    /// 2026-08-28. Keeping warmup off `:9742` was never enough: a MEMBER
+    /// dialling `CLIENT_ALPN` is forwarded to a bind of THIS router, and
+    /// arrives wearing the acceptor's loopback address, so `client_auth`
+    /// admits it before reading anything. The peer bind serves a router
+    /// where the route does not exist.
+    #[tokio::test]
+    async fn the_peer_and_guest_surfaces_do_not_serve_the_operator_only_routes() {
+        for (surface, name) in [
+            (ClientSurface::Peer, "peer"),
+            (ClientSurface::Guest, "guest"),
+        ] {
+            for path in [
+                "/internal/inference/warmup",
+                "/internal/guest/grant",
+                "/internal/guest/grant/revoke",
+            ] {
+                let response = client_router_for(test_app_state(), surface)
+                    .oneshot(
+                        Request::post(path)
+                            .header("content-type", "application/json")
+                            .body(Body::from("{}"))
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    response.status(),
+                    StatusCode::NOT_FOUND,
+                    "{name} surface must not serve {path}"
+                );
+            }
+
+            let response = client_router_for(test_app_state(), surface)
+                .oneshot(
+                    Request::get("/internal/guest/grant/list")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::NOT_FOUND,
+                "{name} surface must not serve the grant list"
+            );
+        }
     }
 
     #[tokio::test]

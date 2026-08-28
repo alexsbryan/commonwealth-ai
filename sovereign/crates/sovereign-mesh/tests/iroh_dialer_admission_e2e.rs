@@ -23,8 +23,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use commonwealth_api::client_auth::ClientAuthPolicy;
-use commonwealth_api::server::{client_router, client_router_with};
+use commonwealth_api::server::{client_router, client_router_for, ClientSurface};
 use commonwealth_core::ids::{NodeId, NodePubkey};
 use commonwealth_transport::iroh::{
     Endpoint, EndpointAddr, EndpointBuilder, HttpBridge, IrohAcceptor, SecretKey, CLIENT_ALPN,
@@ -88,22 +87,20 @@ async fn dialer_endpoint(seed: u8) -> Endpoint {
         .expect("dialer endpoint binds")
 }
 
-/// A lender wired the way `MeshIrohAccess::start` wires one: both client
-/// listeners bound, and the acceptor routing through the real decider.
+/// A lender wired the way `MeshIrohAccess::start` wires one: the peer and
+/// guest binds of the client router up, and the acceptor routing through the
+/// real decider.
+///
+/// The operator's own `:9741` listener is deliberately absent — the whole
+/// point of the peer bind is that nothing here forwards to it.
 ///
 /// `with_guest` false simulates the guest listener failing to bind — the
 /// fail-closed case.
 async fn lender(with_guest: bool) -> (Endpoint, IrohAcceptor) {
     let state = client_app_state(NodeId::from_u128(0xA11CE), Some(TOKEN), true);
-    let client = spawn_router(client_router(state.clone())).await;
+    let peer = Some(spawn_router(client_router_for(state.clone(), ClientSurface::Peer)).await);
     let guest = if with_guest {
-        Some(
-            spawn_router(client_router_with(
-                state,
-                ClientAuthPolicy::UNTRUSTED_LOOPBACK,
-            ))
-            .await,
-        )
+        Some(spawn_router(client_router_for(state, ClientSurface::Guest)).await)
     } else {
         None
     };
@@ -114,7 +111,7 @@ async fn lender(with_guest: bool) -> (Endpoint, IrohAcceptor) {
         // rather than as a pass.
         internal: "127.0.0.1:1".parse().unwrap(),
         rpc: Some("127.0.0.1:2".parse().unwrap()),
-        client,
+        peer,
         guest,
     };
     let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec(), RPC_ALPN.to_vec()]).await;
@@ -264,5 +261,85 @@ async fn a_stranger_cannot_open_the_tensor_rpc_path_at_all() {
         outcome.is_err(),
         "the rpc path has no credential of its own, so the dial must die: {:?}",
         outcome.map(|r| r.status())
+    );
+}
+
+// ── the operator-only surface ───────────────────────────────────────
+//
+// `forward_for` narrowed CLIENT_ALPN from "anyone holding the public dial
+// string" to "any member". That is a real reduction and it is not the whole
+// bar: `routes_internal/guest_grant.rs` argues these routes are safe on
+// `:9741` because `client_auth` there means "loopback-or-full-token". On a
+// listener the iroh acceptor feeds, the loopback half of that is free — the
+// acceptor forwards by `TcpStream::connect("127.0.0.1")` — so a member
+// reached guest-grant minting on someone else's node with nothing presented.
+//
+// The fix is which router the listener SERVES, not a guard on the routes.
+
+/// THE second fix. A member is admitted (no bearer, as federated inference
+/// requires) and still cannot see the operator's own surface at all.
+#[tokio::test]
+async fn a_member_cannot_reach_the_operator_only_routes() {
+    let (lender, _acceptor) = lender(true).await;
+
+    let resp = get_as(
+        &lender,
+        MEMBER_SEED,
+        CLIENT_ALPN,
+        "/internal/guest/grant/list",
+        None,
+    )
+    .await
+    .expect("the connection is served, just not this route");
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::NOT_FOUND,
+        "a peer must not be able to mint a credential for an outsider on this node"
+    );
+
+    // …and this is not a dead listener: the same dialer, same tunnel, one
+    // route over, is served.
+    let resp = get_as(&lender, MEMBER_SEED, CLIENT_ALPN, "/v1/models", None)
+        .await
+        .expect("request reaches the lender");
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
+}
+
+/// The twin, watched failing. Wire the member arm the way it was wired until
+/// 2026-08-28 — at the operator's own listener — and the identical request
+/// from the identical dialer is served. Nothing about the tunnel, the key
+/// check, or the route changed between the two; only the router behind the
+/// listener did.
+#[tokio::test]
+async fn routing_a_member_at_the_operator_listener_is_the_hole_this_closes() {
+    let state = client_app_state(NodeId::from_u128(0xA11CE), Some(TOKEN), true);
+    let routes = AcceptorRoutes {
+        internal: "127.0.0.1:1".parse().unwrap(),
+        rpc: Some("127.0.0.1:2".parse().unwrap()),
+        // The pre-fix wiring: CLIENT_ALPN from a member landed on the full
+        // client router, `/internal/*` and all.
+        peer: Some(spawn_router(client_router(state.clone())).await),
+        guest: Some(spawn_router(client_router_for(state, ClientSurface::Guest)).await),
+    };
+    let endpoint = lender_endpoint(vec![CLIENT_ALPN.to_vec(), RPC_ALPN.to_vec()]).await;
+    let check = only_the_member();
+    let _acceptor = IrohAcceptor::spawn_admitting(endpoint.clone(), move |alpn, dialer| {
+        let check = check.clone();
+        async move { routes.forward_for(&alpn, dialer, &check).await }
+    });
+
+    let resp = get_as(
+        &endpoint,
+        MEMBER_SEED,
+        CLIENT_ALPN,
+        "/internal/guest/grant/list",
+        None,
+    )
+    .await
+    .expect("request reaches the lender");
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::OK,
+        "this is what the fix removes: a peer minting guest credentials on your node"
     );
 }

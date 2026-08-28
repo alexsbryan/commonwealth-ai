@@ -549,9 +549,9 @@ async fn get_via_guest_listener(
         req.extensions_mut()
             .insert(ConnectInfo(p.parse::<SocketAddr>().unwrap()));
     }
-    commonwealth_api::server::client_router_with(
+    commonwealth_api::server::client_router_for(
         state,
-        commonwealth_api::client_auth::ClientAuthPolicy::UNTRUSTED_LOOPBACK,
+        commonwealth_api::server::ClientSurface::Guest,
     )
     .oneshot(req)
     .await
@@ -607,6 +607,57 @@ async fn a_guest_bearer_is_admitted_on_the_guest_listener_from_the_tunnel_hop() 
         !is_auth_rejection(status),
         "the bearer is the credential, and the tunnel hop must not get in its way (got {status})"
     );
+}
+
+/// THE live-bar failure, as a test. A daemon with NO client token configured
+/// must still honour a grant IT MINTED.
+///
+/// Observed on the wire 2026-08-28 (pre-registered bar 3.2): FOX minted a
+/// guest link, MAC presented it through the guest tunnel, and FOX answered
+/// 403 `remote access not configured` — the branch that fires when
+/// `client_token()` is `None`. That branch used to return BEFORE the grant
+/// was ever looked at, so the two credentials were not independent: absence
+/// of the daemon-wide one refused the narrow one. A daemon that refuses the
+/// credential it just issued is the §18.3 substitution, and no amount of
+/// configuring the operator's token makes the logic right.
+///
+/// Watched failing: with the pre-2026-08-28 ordering restored, this returns
+/// 403 `remote access not configured` instead of admitting.
+#[tokio::test]
+async fn a_guest_grant_is_honoured_on_a_daemon_with_no_client_token() {
+    let state = state_with_token(None);
+    let now = commonwealth_core::clock::unix_now_millis();
+    state.inner.guest_grants.issue(
+        GUEST_TOKEN,
+        vec![Scope::Models(vec![GRANTED_MODEL.into()])],
+        Some("no-daemon-token".into()),
+        3_600,
+        now,
+    );
+
+    let status =
+        get_via_guest_listener(state, "/v1/models", Some(LOOPBACK), Some(GUEST_TOKEN)).await;
+    assert!(
+        !is_auth_rejection(status),
+        "a grant is its own credential — the daemon-wide token being absent must not \
+         refuse it (got {status})"
+    );
+}
+
+/// And the fail-closed half that the arm above must not have widened: with no
+/// daemon token and no grant, a remote caller presenting NOTHING is still
+/// refused, and still told why.
+#[tokio::test]
+async fn no_token_and_no_grant_still_refuses_a_credential_less_remote_caller() {
+    let (status, body) = get_with_body(
+        state_with_token(None),
+        "/v1/models",
+        Some("203.0.113.7:44100"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "remote access not configured");
 }
 
 /// Scope still binds on this listener. Losing the loopback shortcut must not
