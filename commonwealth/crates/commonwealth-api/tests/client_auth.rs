@@ -518,3 +518,132 @@ fn permits_path_is_exact_and_grants_no_children() {
     assert!(!grant.permits_path("/v1/model"));
     assert!(!grant.permits_path(""));
 }
+
+// ── the GUEST listener: loopback is not a credential ───────────────
+//
+// The iroh acceptor forwards a tunnelled connection by
+// `TcpStream::connect`ing `127.0.0.1`, so every request that arrives on the
+// guest listener wears a loopback peer address it did not earn. On the
+// default policy that address is admitted BEFORE any bearer is read, which
+// would hand every holder of the node's public dial string the whole client
+// API — and would make a guest grant's scope decorative, since the guest is
+// admitted before its token is examined.
+//
+// `ClientAuthPolicy::UNTRUSTED_LOOPBACK` is the fix, and these are the tests
+// that fail without it.
+
+/// Oneshot through the GUEST bind of the router — the one the iroh acceptor
+/// feeds. Same injection harness; the only difference is the policy.
+async fn get_via_guest_listener(
+    state: AppState,
+    path: &str,
+    peer: Option<&str>,
+    bearer: Option<&str>,
+) -> StatusCode {
+    let mut builder = Request::get(path);
+    if let Some(b) = bearer {
+        builder = builder.header(axum::http::header::AUTHORIZATION, format!("Bearer {b}"));
+    }
+    let mut req = builder.body(Body::empty()).unwrap();
+    if let Some(p) = peer {
+        req.extensions_mut()
+            .insert(ConnectInfo(p.parse::<SocketAddr>().unwrap()));
+    }
+    commonwealth_api::server::client_router_with(
+        state,
+        commonwealth_api::client_auth::ClientAuthPolicy::UNTRUSTED_LOOPBACK,
+    )
+    .oneshot(req)
+    .await
+    .unwrap()
+    .status()
+}
+
+/// THE finding. A tunnelled caller presenting nothing looks exactly like the
+/// local user to the default policy; on the guest listener it must not.
+#[tokio::test]
+async fn the_guest_listener_refuses_a_loopback_caller_with_no_credential() {
+    let status =
+        get_via_guest_listener(state_with_token(Some(TOKEN)), "/v1/models", Some(LOOPBACK), None)
+            .await;
+    assert!(
+        is_auth_rejection(status),
+        "a request forwarded by the iroh acceptor arrives from 127.0.0.1 and has \
+         earned nothing by it (got {status})"
+    );
+}
+
+/// And the same listener on the same request through the DEFAULT policy still
+/// admits — otherwise this pair proves only that something is broken, not that
+/// the policy is what separates the two listeners.
+#[tokio::test]
+async fn the_ordinary_listener_still_admits_that_same_loopback_caller() {
+    let status = get_status(state_with_token(Some(TOKEN)), "/v1/models", Some(LOOPBACK), None).await;
+    assert!(
+        !is_auth_rejection(status),
+        "the daemon's own listener must keep admitting the local user (got {status})"
+    );
+}
+
+/// A guest reaching the guest listener over the tunnel is admitted on its
+/// BEARER, from the same loopback address the test above refuses. This is the
+/// arm that makes the feature work rather than merely fail closed.
+#[tokio::test]
+async fn a_guest_bearer_is_admitted_on_the_guest_listener_from_the_tunnel_hop() {
+    let state = state_with_guest(vec![Scope::Models(vec![GRANTED_MODEL.into()])]);
+    let status =
+        get_via_guest_listener(state, "/v1/models", Some(LOOPBACK), Some(GUEST_TOKEN)).await;
+    assert!(
+        !is_auth_rejection(status),
+        "the bearer is the credential, and the tunnel hop must not get in its way (got {status})"
+    );
+}
+
+/// Scope still binds on this listener. Losing the loopback shortcut must not
+/// quietly widen what a guest reaches — the ordering of the arms is unchanged,
+/// so a guest token gets exactly the paths its grant names.
+#[tokio::test]
+async fn a_guest_bearer_is_still_scoped_on_the_guest_listener() {
+    let state = state_with_guest(vec![Scope::Models(vec![GRANTED_MODEL.into()])]);
+    let status = get_via_guest_listener(
+        state,
+        "/v1/knowledge/search",
+        Some(LOOPBACK),
+        Some(GUEST_TOKEN),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "no scope names /v1/knowledge/search"
+    );
+}
+
+/// The health/federation surface stays open — it is what a guest's `mesh use`
+/// probes, and it carries nothing.
+#[tokio::test]
+async fn the_exempt_paths_stay_open_on_the_guest_listener() {
+    let status =
+        get_via_guest_listener(state_with_token(Some(TOKEN)), "/status", Some(LOOPBACK), None).await;
+    assert!(
+        !is_auth_rejection(status),
+        "/status is in AUTH_EXEMPT_PATHS on every listener (got {status})"
+    );
+}
+
+/// A daemon token still works there. The guest listener is the client router
+/// with one arm removed, not a different surface.
+#[tokio::test]
+async fn the_daemon_token_still_works_on_the_guest_listener() {
+    let status = get_via_guest_listener(
+        state_with_token(Some(TOKEN)),
+        "/v1/models",
+        Some(LAN_PEER),
+        Some(TOKEN),
+    )
+    .await;
+    assert!(
+        !is_auth_rejection(status),
+        "the full-token arm is untouched by the policy (got {status})"
+    );
+}

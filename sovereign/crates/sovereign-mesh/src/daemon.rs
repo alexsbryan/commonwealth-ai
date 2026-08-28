@@ -2852,6 +2852,39 @@ impl EmbeddedDaemon {
             "daemon: client router assembled"
         );
 
+        // The GUEST listener: a second bind of the client router, loopback-only
+        // and on an ephemeral port, whose auth layer does NOT treat a loopback
+        // peer as a local caller. The iroh acceptor forwards `GUEST_ALPN`
+        // here, so a `sovereign://guest/…` bearer is actually read instead of
+        // being skipped by the loopback arm — see
+        // `commonwealth_api::client_auth`.
+        //
+        // Bound HERE, before the serve task is spawned, because
+        // `MeshIrohAccess::start` below needs the resolved port and the serve
+        // task runs concurrently. A bind failure is not fatal: it costs guest
+        // access over iroh and nothing else, so it is logged and the ALPN goes
+        // unadvertised (a guest dial is then refused at the handshake rather
+        // than silently landing on the trusting listener).
+        //
+        // It deliberately serves the BARE client router: no MCP, no mounted
+        // host surfaces. A guest's scope reaches `/v1/models` and
+        // `/v1/chat/completions`; mounting less than `permits_path` allows is
+        // free defence in depth.
+        let (guest_listener, guest_addr) =
+            match tokio::net::TcpListener::bind(("127.0.0.1", 0u16)).await {
+                Ok(l) => match l.local_addr() {
+                    Ok(a) => (Some(l), Some(a)),
+                    Err(e) => {
+                        warn!("guest listener bound but has no local address ({e}) — guest links over iroh disabled");
+                        (None, None)
+                    }
+                },
+                Err(e) => {
+                    warn!("guest listener could not bind loopback ({e}) — guest links over iroh disabled");
+                    (None, None)
+                }
+            };
+
         // Spawn the API servers in the background. The JoinHandle is stored
         // in `DaemonState::Running` (not discarded) so `stop_inner` can await
         // teardown — dropping the old `:9741`/`:9742` listeners — before an
@@ -2884,7 +2917,11 @@ impl EmbeddedDaemon {
             for router in mounted {
                 client_router = client_router.merge(router);
             }
-            let internal_router = commonwealth_api::server::internal_router(app_state_clone);
+            let internal_router = commonwealth_api::server::internal_router(app_state_clone.clone());
+            let guest_router = commonwealth_api::server::client_router_with(
+                app_state_clone,
+                commonwealth_api::client_auth::ClientAuthPolicy::UNTRUSTED_LOOPBACK,
+            );
 
             // Phase 3 takeover: a `sovereign init` invocation may have
             // spawned a standalone `sovereign serve` process holding `:9741`.
@@ -2945,9 +2982,25 @@ impl EmbeddedDaemon {
             // on this listener. Regression test:
             // `admin_http::tests::loopback_guard_works_under_production_listener_shape`.
             let client_service = client_router.into_make_service_with_connect_info::<SocketAddr>();
+            // `ConnectInfo` matters here for the same reason it does on the
+            // client listener, and one reason more: without it the guest layer
+            // cannot identify the caller at all and fails closed with a 500 on
+            // every guest request.
+            let guest_service = guest_router.into_make_service_with_connect_info::<SocketAddr>();
+            // A daemon whose guest listener failed to bind still serves
+            // everything else; `pending()` just never resolves that arm.
+            let guest_serve = async move {
+                match guest_listener {
+                    Some(l) => {
+                        let _ = axum::serve(l, guest_service).await;
+                    }
+                    None => std::future::pending::<()>().await,
+                }
+            };
             tokio::select! {
                 _ = axum::serve(client_listener, client_service) => {}
                 _ = axum::serve(internal_listener, internal_router) => {}
+                _ = guest_serve => {}
                 _ = shutdown_rx => {
                     info!("Commonwealth daemon shutting down");
                 }
@@ -3241,10 +3294,28 @@ impl EmbeddedDaemon {
             persist::client_exposed(&self.data_dir),
             require_encryption,
         );
+        // Who the acceptor will treat as a member. Reads the LIVE mesh on every
+        // dial rather than a snapshot: a node that left must lose reachability
+        // with its membership, and one that just joined must gain it without a
+        // restart. `removed_at` tombstones are excluded here and nowhere else.
+        let member_check: crate::iroh_access::MemberCheck = {
+            let app_state = app_state.clone();
+            Arc::new(move |dialer: commonwealth_core::ids::NodePubkey| {
+                let app_state = app_state.clone();
+                Box::pin(async move {
+                    let mesh = app_state.inner.mesh.read().await;
+                    mesh.members.values().any(|m| {
+                        m.removed_at.is_none() && m.node_pubkey == Some(dialer)
+                    })
+                })
+            })
+        };
         let iroh_access = crate::iroh_access::MeshIrohAccess::start(
             &self.data_dir,
             internal_port,
             client_port,
+            guest_addr,
+            member_check.clone(),
             iroh_enabled,
             &iroh_relay_cfg,
         )
@@ -3321,6 +3392,7 @@ impl EmbeddedDaemon {
             let ip_tx = ip_transport.clone();
             let routed = iroh_routed_classes.clone();
             let required = iroh_required_classes.clone();
+            let member_check = member_check.clone();
             let rebuild: crate::iroh_watchdog::RebuildFn = Arc::new(move || {
                 let state = state.clone();
                 let data_dir = data_dir.clone();
@@ -3328,11 +3400,14 @@ impl EmbeddedDaemon {
                 let ip_tx = ip_tx.clone();
                 let routed = routed.clone();
                 let required = required.clone();
+                let member_check = member_check.clone();
                 Box::pin(async move {
                     let new = crate::iroh_access::MeshIrohAccess::start(
                         &data_dir,
                         internal_port,
                         client_port,
+                        guest_addr,
+                        member_check.clone(),
                         iroh_enabled,
                         &relay_cfg,
                     )

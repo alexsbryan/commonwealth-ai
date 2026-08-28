@@ -37,6 +37,23 @@
 //! remote callers: the federation/health surface a peer must read
 //! *before* it could possibly hold a token. Everything that does work
 //! or returns user data is gated.
+//!
+//! ## Loopback is a property of the LISTENER, not of the layer
+//!
+//! "Admit loopback" is right for the daemon's own client listener and
+//! wrong for the one the iroh acceptor forwards GUEST traffic to: that
+//! acceptor `TcpStream::connect`s `127.0.0.1`, so every tunnelled request
+//! arrives wearing a loopback peer address it did not earn. A guest whose
+//! entire credential is a bearer would be admitted before the bearer was
+//! read.
+//!
+//! [`ClientAuthPolicy`] is therefore per-listener state, not a global. The
+//! default (`trust_loopback: true`) is the listener an operator's own tools
+//! talk to; the daemon binds the router a SECOND time with
+//! `trust_loopback: false` and routes
+//! [`commonwealth_transport::iroh::GUEST_ALPN`] there. Mesh peers keep
+//! `CLIENT_ALPN` → the trusting listener, which is what lets their federated
+//! inference (which carries no `Authorization` at all) keep working.
 
 use commonwealth_core::ct::constant_time_eq;
 use commonwealth_knowledge::GuestGrant;
@@ -55,6 +72,53 @@ use crate::state::AppState;
 /// taking a direct `commonwealth-transport` dependency — the token's
 /// load/persist lives next to `node_key` in that crate.
 pub use commonwealth_transport::identity::load_or_create_client_token;
+
+/// Per-listener auth posture. See the module docs: the daemon binds the
+/// client router more than once, and the binds differ only in whether a
+/// loopback peer address is evidence of a local caller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClientAuthPolicy {
+    /// Admit a loopback peer without reading a credential.
+    ///
+    /// True for a listener a caller reaches by actually being on this
+    /// machine. FALSE for one fed by the iroh acceptor, where the loopback
+    /// address is the acceptor's own forward hop and says nothing about who
+    /// dialled.
+    pub trust_loopback: bool,
+}
+
+impl Default for ClientAuthPolicy {
+    /// The historical posture, and the right one for the daemon's own
+    /// listener: the local user, the desktop app and in-process callers
+    /// never present a token.
+    fn default() -> Self {
+        Self {
+            trust_loopback: true,
+        }
+    }
+}
+
+impl ClientAuthPolicy {
+    /// The posture for a listener whose callers all arrive through a tunnel:
+    /// nothing is local, so nothing is free.
+    pub const UNTRUSTED_LOOPBACK: Self = Self {
+        trust_loopback: false,
+    };
+}
+
+/// Middleware state for [`client_auth_layer`]: the daemon's state plus the
+/// posture of the listener this copy of the layer guards.
+#[derive(Clone)]
+pub struct ClientAuthState {
+    pub state: AppState,
+    pub policy: ClientAuthPolicy,
+}
+
+impl ClientAuthState {
+    pub fn new(state: AppState, policy: ClientAuthPolicy) -> Self {
+        Self { state, policy }
+    }
+}
 
 /// Exact request paths that remain reachable without a token, even
 /// from a non-loopback caller. Both are read-only and advertise-by-
@@ -95,10 +159,11 @@ fn unauthorized(reason: &'static str) -> Response {
 /// the client router so it runs before load-shedding admission and
 /// before any handler work.
 pub async fn client_auth_layer(
-    State(state): State<AppState>,
+    State(auth): State<ClientAuthState>,
     request: Request,
     next: Next,
 ) -> Response {
+    let ClientAuthState { state, policy } = auth;
     let peer = request
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
@@ -124,8 +189,10 @@ pub async fn client_auth_layer(
         }
     };
 
-    // Loopback is always local — admit without a token.
-    if peer.ip().is_loopback() {
+    // Loopback is local — admit without a token, on a listener where that
+    // inference holds. It does not hold on the guest listener: see the module
+    // docs, and `ClientAuthPolicy`.
+    if peer.ip().is_loopback() && policy.trust_loopback {
         return next.run(request).await;
     }
 

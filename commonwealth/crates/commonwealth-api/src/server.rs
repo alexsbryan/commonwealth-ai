@@ -41,8 +41,26 @@ pub const MAX_REQUEST_BODY_BYTES: usize = 8 * 1024 * 1024;
 /// 8 MB body uploads well within this on any real link.
 const REQUEST_BODY_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
-/// Build the client-facing API router (port 9741).
+/// Build the client-facing API router (port 9741) for the daemon's own
+/// listener, which trusts a loopback caller.
 pub fn client_router(state: AppState) -> Router {
+    client_router_with(state, crate::client_auth::ClientAuthPolicy::default())
+}
+
+/// [`client_router`] with an explicit auth posture.
+///
+/// The daemon binds this router more than once. `:9741` gets the default
+/// posture; the loopback-only listener the iroh acceptor forwards
+/// `GUEST_ALPN` to gets [`ClientAuthPolicy::UNTRUSTED_LOOPBACK`], because
+/// every request reaching it arrives from the acceptor's own forward hop and
+/// so wears a loopback address it did not earn. See
+/// `crate::client_auth` module docs.
+///
+/// [`ClientAuthPolicy::UNTRUSTED_LOOPBACK`]: crate::client_auth::ClientAuthPolicy::UNTRUSTED_LOOPBACK
+pub fn client_router_with(
+    state: AppState,
+    auth_policy: crate::client_auth::ClientAuthPolicy,
+) -> Router {
     // Per-route admission gate applied to peer-reachable inference
     // endpoints. Local requests (no `X-Node-Id`) pass through; peer
     // requests are checked against pause / foreground-yield / ceiling
@@ -203,7 +221,7 @@ pub fn client_router(state: AppState) -> Router {
         // `AUTH_EXEMPT_PATHS` (federation/health) pass through. See
         // `crate::client_auth`.
         .layer(axum::middleware::from_fn_with_state(
-            state.clone(),
+            crate::client_auth::ClientAuthState::new(state.clone(), auth_policy),
             crate::client_auth::client_auth_layer,
         ))
         // Outermost frontdoor: bound request-body size + slow-dribble time

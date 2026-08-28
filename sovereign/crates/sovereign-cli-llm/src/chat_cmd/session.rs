@@ -54,7 +54,7 @@ pub async fn cmd_session(args: &[String]) -> i32 {
         return 0;
     }
 
-    let (globals, rest) = match parse_globals(args) {
+    let (globals, rest) = match parse_globals(args).await {
         Ok(v) => v,
         Err(e) => {
             eprintln!("error: {e}");

@@ -40,6 +40,7 @@ pub mod deep_link;
 pub mod dst;
 pub mod fim_adapter;
 pub mod gossip;
+pub mod guest_tunnel;
 pub mod http_response;
 pub mod inference_adapter;
 /// Dial-by-key mesh access over iroh (Track W, W1). Server half: binds

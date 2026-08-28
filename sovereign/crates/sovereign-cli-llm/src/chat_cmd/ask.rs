@@ -79,7 +79,7 @@ pub async fn cmd_ask(args: &[String]) -> i32 {
         return if args.is_empty() { 2 } else { 0 };
     }
 
-    let (globals, rest) = match parse_globals(args) {
+    let (globals, rest) = match parse_globals(args).await {
         Ok(v) => v,
         Err(e) => {
             eprintln!("error: {e}");

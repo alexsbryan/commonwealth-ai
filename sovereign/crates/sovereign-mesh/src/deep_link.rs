@@ -63,7 +63,29 @@ pub enum DeepLink {
         /// The bearer. Opaque here — this crate never interprets it.
         token: String,
         /// Base URL of the issuing node's client API, no trailing `/v1`.
+        ///
+        /// Where the bearer goes **when `dial` is absent**. When `dial` is
+        /// present this is provenance and display only — it names the machine
+        /// that lent you something, and is never dialled. See [`Self::Guest`]'s
+        /// `dial` field for why there is exactly one path, not a preference
+        /// order.
         url: String,
+        /// The lender's iroh dial string (`<hex-id>@<relay>[,<addr>…]`), when
+        /// the plaintext client API is not the way in.
+        ///
+        /// An ENCRYPTED mesh forces its client listener loopback-only, so the
+        /// address in `url` answers nothing — the sole ingress is the iroh
+        /// acceptor. `mesh use` dials this, on `GUEST_ALPN`, and tunnels to
+        /// the lender's bearer-checking guest listener.
+        ///
+        /// **Present means authoritative.** There is no fallback to `url`: a
+        /// tunnel that fails is reported, never quietly downgraded to
+        /// plaintext against a mesh that asked for encryption (§18.3). Old
+        /// builds ignore the unknown param and fail on the unreachable `url`,
+        /// which is the honest outcome for them.
+        ///
+        /// Additive, and the same shape a join link's `dial=` already uses.
+        dial: Option<String>,
         /// Unix-seconds the grant lapses. Display + a local pre-flight so
         /// `mesh use` can refuse a dead link without a round-trip; the ISSUING
         /// NODE is the authority and rejects an expired token regardless.
@@ -143,9 +165,17 @@ pub fn parse_deep_link(url: &str) -> Option<DeepLink> {
                 return None;
             }
             let expires_at = params.get("exp").and_then(|s| s.parse::<u64>().ok())?;
+            // `dial=` only — never `iroh=`. A guest link has no plaintext /
+            // encrypted split to resolve: guest traffic rides `GUEST_ALPN` or
+            // it rides HTTP, and the presence of this param is exactly which.
+            let dial = params
+                .get("dial")
+                .map(|d| d.trim().to_string())
+                .filter(|d| !d.is_empty());
             Some(DeepLink::Guest {
                 token,
                 url,
+                dial,
                 expires_at,
                 summary: params.get("s").map(|s| s.replace('+', " ")),
             })
@@ -158,12 +188,21 @@ pub fn parse_deep_link(url: &str) -> Option<DeepLink> {
 ///
 /// Carries the bearer, where to send it, and when it dies — and one human
 /// string. Not the scope: see [`DeepLink::Guest::summary`].
-pub fn build_guest_link(token: &str, url: &str, expires_at: u64, summary: Option<&str>) -> String {
+pub fn build_guest_link(
+    token: &str,
+    url: &str,
+    dial: Option<&str>,
+    expires_at: u64,
+    summary: Option<&str>,
+) -> String {
     let mut link = format!("sovereign://guest/{token}");
     let mut params = vec![
         format!("url={}", percent_encode(url.trim_end_matches('/'))),
         format!("exp={expires_at}"),
     ];
+    if let Some(d) = dial {
+        params.push(format!("dial={}", percent_encode(d)));
+    }
     if let Some(s) = summary {
         params.push(format!("s={}", percent_encode(s).replace(' ', "+")));
     }
@@ -869,12 +908,14 @@ mod tests {
         let url = build_guest_link(
             "deadbeef",
             "http://192.168.1.10:9741",
+            None,
             1_787_900_000,
             Some("big-model, small-model"),
         );
         let DeepLink::Guest {
             token,
             url: base,
+            dial,
             expires_at,
             summary,
         } = parse_deep_link(&url).unwrap()
@@ -883,15 +924,50 @@ mod tests {
         };
         assert_eq!(token, "deadbeef");
         assert_eq!(base, "http://192.168.1.10:9741");
+        assert!(dial.is_none(), "no dial was minted, so none comes back");
         assert_eq!(expires_at, 1_787_900_000);
         assert_eq!(summary.as_deref(), Some("big-model, small-model"));
+    }
+
+    /// The encrypted-mesh shape. The dial string's `@ , :` survive the
+    /// percent-encoding round trip — a mangled one produces a link that dials
+    /// nothing, and the failure lands on the guest's machine.
+    #[test]
+    fn a_guest_link_round_trips_the_dial_string_verbatim() {
+        let dial = "3b1f0a@https://relay.example:443/,192.168.1.10:41234";
+        let url = build_guest_link("tok", "http://192.168.1.10:9741", Some(dial), 42, None);
+        let DeepLink::Guest {
+            dial: parsed,
+            url: base,
+            ..
+        } = parse_deep_link(&url).unwrap()
+        else {
+            panic!("expected a guest link")
+        };
+        assert_eq!(parsed.as_deref(), Some(dial));
+        // `url` still rides along as provenance — nothing dials it while a
+        // dial string is present, but the guest is told whose machine this is.
+        assert_eq!(base, "http://192.168.1.10:9741");
+    }
+
+    /// An empty `dial=` is absent, not "dial the empty string". The latter
+    /// would take the iroh path and then fail to parse an endpoint, which
+    /// reports the wrong cause.
+    #[test]
+    fn an_empty_dial_param_is_absent_rather_than_a_target() {
+        let DeepLink::Guest { dial, .. } =
+            parse_deep_link("sovereign://guest/tok?url=http://h:9741&exp=9&dial=").unwrap()
+        else {
+            panic!("expected a guest link")
+        };
+        assert!(dial.is_none());
     }
 
     /// The link carries WHERE and WHEN, never WHAT. The issuing node's store
     /// is the sole authority on scope — see `DeepLink::Guest::summary`.
     #[test]
     fn guest_link_carries_no_machine_readable_scope() {
-        let url = build_guest_link("tok", "http://h:9741", 1, Some("big-model"));
+        let url = build_guest_link("tok", "http://h:9741", None, 1, Some("big-model"));
         // The only place a model name appears is inside the opaque display
         // string. Nothing parses it, so nothing can act on it.
         assert!(!url.contains("m="), "no per-model param: {url}");
@@ -915,7 +991,7 @@ mod tests {
     /// a guest link must never walk into the membership flow.
     #[test]
     fn a_guest_link_is_not_joinable() {
-        let url = build_guest_link("tok", "http://h:9741", 1, None);
+        let url = build_guest_link("tok", "http://h:9741", None, 1, None);
         let link = parse_deep_link(&url).unwrap();
         assert!(
             join_confirmation_from_link(&link).is_none(),

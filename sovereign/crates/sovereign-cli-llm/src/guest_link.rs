@@ -13,6 +13,17 @@
 //! what should decide where the request goes. Persisting once and expiring on
 //! its own is what makes "for two hours" true without anyone remembering it.
 //!
+//! # Where the bearer actually goes
+//!
+//! Two shapes, and [`open_route`] is the only thing that turns one into a URL.
+//! A link minted against a plaintext client API carries `url` and nothing
+//! else. A link minted on an ENCRYPTED mesh carries `dial` as well, because
+//! that mesh forces its client API loopback-only and the sole ingress is the
+//! iroh acceptor — `url` then names the lender without being reachable. When
+//! `dial` is present it IS the path: [`open_route`] tunnels, and a tunnel
+//! that fails is reported rather than downgraded to the plaintext address a
+//! mesh asking for encryption never meant to serve (§18.3).
+//!
 //! # Expiry is reported, never assumed away
 //!
 //! [`load_live`] returns `None` for an expired link **and says so on stderr**.
@@ -50,7 +61,16 @@ pub struct GuestLink {
     /// The bearer, presented verbatim as `Authorization: Bearer <token>`.
     pub token: String,
     /// Base URL of the issuing node's client API — no trailing `/v1`.
+    ///
+    /// Where the bearer goes when [`Self::dial`] is absent; otherwise
+    /// provenance and display only. Never read directly to build a request —
+    /// [`open_route`] is the one decider.
     pub url: String,
+    /// The lender's iroh dial string, when the plaintext API is not the way
+    /// in. `#[serde(default)]` so a `guest.json` written before this field
+    /// existed still reads as "no tunnel" rather than as a corrupt file.
+    #[serde(default)]
+    pub dial: Option<String>,
     /// Unix SECONDS at which the grant lapses (the link's `exp=` param).
     pub expires_at: u64,
     /// Display only. What the minting node said this buys. Never consulted for
@@ -154,6 +174,52 @@ pub fn load_live_in(root: &Path, now_secs: u64) -> Option<GuestLink> {
     None
 }
 
+/// The base URL every request under `link` must be sent to — opening a mesh
+/// tunnel first when the link names an iroh endpoint.
+///
+/// **The one decider.** Nothing else turns a [`GuestLink`] into an address:
+/// a second reader that took `link.url` when a `dial` was present would send
+/// a bearer in plaintext to a mesh that closed its plaintext ingress on
+/// purpose.
+///
+/// The tunnel is parked in a process-lifetime slot rather than returned,
+/// because dropping it shuts the local port and every caller here holds the
+/// URL for as long as the process runs. Repeat calls reuse the one tunnel —
+/// a second dial would bind a second endpoint for the same lender.
+pub async fn open_route(link: &GuestLink) -> Result<String, String> {
+    let Some(dial) = link.dial.as_deref() else {
+        return Ok(link.url.clone());
+    };
+    if let Some(open) = TUNNEL.get() {
+        return Ok(open.base_url().to_string());
+    }
+    // The guest's OWN iroh posture, not the lender's: a node that severed n0
+    // discovery must not be put back on it by accepting a lend.
+    let (relay_urls, discovery) = sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| (c.iroh.relay_urls.clone(), c.iroh.discovery.clone()))
+        .unwrap_or_default();
+    let tunnel = sovereign_mesh::guest_tunnel::GuestTunnel::open(
+        dial,
+        relay_urls,
+        discovery.as_deref(),
+    )
+    .await
+    .map_err(|e| {
+        format!(
+            "could not reach {} over the mesh tunnel: {e}\n\
+             The link names an iroh endpoint, which means the lending node's \
+             plaintext API is closed (an encrypted mesh). There is no plaintext \
+             fallback — ask for a fresh link, or ask them to check `svrn mesh status`.",
+            link.url
+        )
+    })?;
+    Ok(TUNNEL.get_or_init(|| tunnel).base_url().to_string())
+}
+
+/// The one live tunnel this process holds. See [`open_route`].
+static TUNNEL: std::sync::OnceLock<sovereign_mesh::guest_tunnel::GuestTunnel> =
+    std::sync::OnceLock::new();
+
 pub fn forget() -> io::Result<bool> {
     forget_in(&sovereign_root())
 }
@@ -177,6 +243,7 @@ mod tests {
         GuestLink {
             token: "deadbeef".into(),
             url: "http://box:9741".into(),
+            dial: None,
             expires_at: exp,
             summary: Some("models: big-27b".into()),
         }
@@ -216,6 +283,29 @@ mod tests {
         assert!(forget_in(dir.path()).unwrap());
         assert!(!forget_in(dir.path()).unwrap());
         assert!(load_in(dir.path()).is_none());
+    }
+
+    /// A `guest.json` written before `dial` existed must still read — the
+    /// field is additive, and a guest who accepted a link an hour ago should
+    /// not have to accept it again.
+    #[test]
+    fn a_file_without_the_dial_field_reads_as_no_tunnel() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            path_in(dir.path()),
+            r#"{"token":"t","url":"http://box:9741","expires_at":9000}"#,
+        )
+        .unwrap();
+        let link = load_in(dir.path()).expect("the older shape is still a link");
+        assert!(link.dial.is_none());
+        assert_eq!(link.url, "http://box:9741");
+    }
+
+    /// A link with no dial routes to its own `url` — the plaintext case, and
+    /// the arm that must not need a network to resolve.
+    #[tokio::test]
+    async fn a_link_without_a_dial_routes_straight_to_its_url() {
+        assert_eq!(open_route(&link(9_000)).await.unwrap(), "http://box:9741");
     }
 
     /// A corrupt file must not read as "no link" without saying so, and must

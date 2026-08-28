@@ -147,6 +147,37 @@ pub async fn spawn_router(router: Router) -> SocketAddr {
     addr
 }
 
+/// An `AppState` with one member (self) and a client token installed.
+///
+/// Shared by the tests that drive the REAL `commonwealth_api` client router
+/// over a transport — they differ only in the mesh's encryption posture, and a
+/// second copy of this would drift from the first.
+pub fn client_app_state(
+    self_id: NodeId,
+    token: Option<&str>,
+    require_encryption: bool,
+) -> commonwealth_api::state::AppState {
+    let mut members = HashMap::new();
+    members.insert(
+        self_id,
+        member(self_id, "self", "127.0.0.1:9742".parse().unwrap()),
+    );
+    let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
+        id: MeshId::from_u128(1),
+        name: "transport test".into(),
+        invite_key_hash: [0u8; 32],
+        invite_version: 0,
+        require_encryption,
+        members,
+        peers: vec![],
+    };
+    let state = commonwealth_api::state::AppState::new(self_id, mesh);
+    state.install_client_token(token.map(std::sync::Arc::<str>::from));
+    state
+}
+
 // ── Configurable InferenceProvider stub ─────────────────────────
 
 /// A builder-style `InferenceProvider` used across integration tests.

@@ -3124,9 +3124,11 @@ instance hangs off commonwealth-api's `AppState`
 - **Track W1 (server half) + W2 (dial info in trust ring) + W3
   mechanism are implemented** (2026-06-18): when `[iroh] enabled`,
   `EmbeddedDaemon::start_daemon` binds one iroh endpoint from the
-  daemon's gossiped `node_key` and `spawn_routed`s it across both
-  ALPNs — `cwth/http/0` → internal router, `cwth/client/0` → client
-  router — so a peer/phone reaches this daemon by key with no VPN
+  daemon's gossiped `node_key` and accepts across the ALPNs —
+  `cwth/http/0` → internal router, `cwth/client/0` → client router,
+  and (2026-08-27) `cwth/guest/0` → a SECOND bind of the client router
+  whose auth layer does not trust loopback — so a peer/phone
+  reaches this daemon by key with no VPN
   (`sovereign-mesh/src/iroh_access.rs`, `MeshIrohAccess`; additive,
   fail-soft, held in `DaemonState::Running`). W2: `MemberRecord` carries
   `relay_url` + `iroh_direct_addrs` (serde-defaulted, MUTABLE
@@ -3822,6 +3824,40 @@ A guest is not a mesh member — no `mesh_secret`, no gossip, no invite key
 `svrn chat`. The auth layer never matches on a `Scope` variant: it asks
 `GuestGrant::permits_path` and inserts the grant, so a future scope is a
 variant plus its `paths()` arm and touches neither auth nor the wire.
+
+**Holding the dial string is not a credential** (`AcceptorRoutes::forward_for`,
+`sovereign-mesh/src/iroh_access.rs`, 2026-08-27). An iroh endpoint accepts
+anyone, and the dial string that reaches it is public — it rides in every
+invite's `dial=` and is gossiped as `node_pubkey`. The acceptor forwards by
+`TcpStream::connect`ing a loopback listener, so until this landed, routing on
+ALPN alone handed every dial-string holder whatever the client listener grants
+its own machine: the full client API, no bearer. What the QUIC handshake *does*
+prove is the dialer's Ed25519 key, so the acceptor routes on `(ALPN, dialer)`:
+
+| ALPN | member | stranger |
+|---|---|---|
+| `cwth/client/0` | the daemon's client listener (no bearer — peer federated inference carries none, and its key is the credential) | the bearer-checking listener, i.e. what a LAN caller meets; `AUTH_EXEMPT_PATHS` still open. Closed outright if that listener did not bind |
+| `cwth/rpc/0` | the local ggml rpc-server | REFUSED — it authenticates nothing, so there is no safe downgrade |
+| `cwth/guest/0` | — | admitted; the listener behind it reads the bearer |
+| `cwth/http/0` | internal router | internal router, DELIBERATELY: a joiner is not a member yet and `/internal/join` is how it becomes one. `gossip_authorized` and the join key guard the sensitive routes; the rest are a known open edge, and closing it needs a join-only listener for non-members |
+
+Watched failing: `iroh_dialer_admission_e2e::routing_on_alpn_alone_is_the_hole_this_closes`
+wires the old ALPN-only routing and gets a 200 for a stranger presenting nothing.
+
+**A guest reaches an encrypted mesh over its own ALPN, not the peers'.**
+An encrypted mesh binds the client API loopback-only, so the link a guest
+holds names an iroh dial string (`dial=`) instead of an address, and `svrn
+mesh use` / `svrn chat` tunnel to it. The acceptor routes that traffic on
+`cwth/guest/0` to a SECOND bind of the client router carrying
+`ClientAuthPolicy::UNTRUSTED_LOOPBACK` — because the acceptor forwards by
+connecting `127.0.0.1`, and the default policy admits a loopback peer
+before reading a bearer, which would hand every holder of the node's
+public dial string the whole client API. Peers keep `cwth/client/0` and
+the trusting listener: their federated inference carries no
+`Authorization` header at all, so routing them together would have broken
+one to fix the other. The guest listener serves the bare client router —
+no MCP, no mounted host surfaces. There is no plaintext fallback: a link
+carrying `dial=` is tunnelled or it is refused (§18.3).
 
 | Path                          | Notes                                                  |
 |-------------------------------|--------------------------------------------------------|

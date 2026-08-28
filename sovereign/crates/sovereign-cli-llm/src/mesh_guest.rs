@@ -17,11 +17,21 @@
 //! A link that cannot work should fail while the operator is still looking at
 //! the terminal, not on the guest's first request an hour later:
 //!
-//! - **A loopback-bound daemon** publishes an address no guest can reach. We
+//! - **A daemon nothing can reach** publishes an address no guest can use. We
 //!   refuse rather than print a link that is inert by construction.
 //! - **A model name nothing advertises** produces a grant that 403s on first
 //!   use with a message about scope, which sends the guest hunting in the wrong
 //!   place. The mint route validates against `dispatchable_ids` for us.
+//!
+//! # Two ways in, and the link names exactly one
+//!
+//! On a plaintext mesh a guest reaches the client API directly, and the link
+//! carries `url`. On an ENCRYPTED mesh that API is loopback-only — the mesh
+//! policy forces it there, whatever `client_bind` says — and the only ingress
+//! is the iroh acceptor, so the link carries `dial` and the guest tunnels on
+//! `GUEST_ALPN`. [`resolve_guest_path`] decides which, by asking the daemon
+//! rather than reading config, and the link never carries a preference order
+//! for the guest to resolve.
 
 use sovereign_cli_shared::help::{Help, HelpSection};
 use sovereign_mesh::deep_link::{build_guest_link, parse_deep_link, DeepLink};
@@ -151,6 +161,104 @@ fn guest_base_url(explicit: Option<&str>, client_port: u16) -> Result<String, St
     Ok(format!("http://{}", picked.url_fragment))
 }
 
+/// The one way in a guest link will name.
+///
+/// Two variants, never a preference order on the wire: whichever the mint
+/// resolves is what the guest uses, and a guest that cannot take that path is
+/// told so rather than silently trying the other one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum GuestPath {
+    /// The lender's client API answers on `base_url` — plaintext, direct.
+    Direct { base_url: String },
+    /// The client API is closed to the network (an encrypted mesh) and the
+    /// lender is reached by dialing its iroh endpoint. `base_url` rides along
+    /// as provenance — it names whose machine this is — and is never dialled.
+    Tunnel { dial: String, base_url: String },
+}
+
+/// This node's own iroh dial string, or `None` when the endpoint is off or has
+/// no reachable address yet.
+///
+/// Read from the daemon's `/v1/mesh/status`, not assembled here: the daemon
+/// holds the live endpoint and already publishes exactly this string for
+/// invites. A second assembler would be a second answer to "how is this node
+/// dialled" (§10.6), and it would be the stale one.
+async fn node_dial_string(port: u16) -> Option<String> {
+    let client = http_client(5).ok()?;
+    let resp = client
+        .get(format!("http://127.0.0.1:{port}/v1/mesh/status"))
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let body: serde_json::Value = resp.json().await.ok()?;
+    body.get("self_reachability")?
+        .get("dial")?
+        .as_str()
+        .map(str::to_string)
+        .filter(|d| !d.is_empty())
+}
+
+/// Decide the path this link will name — by asking, never by inferring.
+///
+/// Reading `[daemon] client_bind` is NOT sufficient and this is not
+/// hypothetical; it was measured on 2026-08-27. On an ENCRYPTED mesh
+/// `start_daemon` forces the client listener back to loopback whatever the
+/// config says (`sovereign-mesh/src/daemon.rs`, "encrypted mesh: forcing
+/// client API to loopback-only"). A host with `client_bind = "0.0.0.0"` in
+/// config and an encrypted mesh on disk would therefore have passed a
+/// config-only check and bound `127.0.0.1` anyway.
+///
+/// So: probe the address before publishing it, and when nothing answers, ask
+/// whether the daemon is dialable by key instead of refusing. `/status` is in
+/// `AUTH_EXEMPT_PATHS`, so the probe needs no credential, and one probe covers
+/// every cause — encrypted-mesh forcing, a daemon not restarted since the
+/// config changed, a firewall, a wrong advertised interface — rather than
+/// enumerating the ones we thought of.
+async fn resolve_guest_path(url_override: Option<&str>, port: u16) -> Result<GuestPath, String> {
+    // Why the direct arm could not be taken, kept so the refusal at the bottom
+    // can name the real cause instead of the last one.
+    let mut direct_refusal: Option<String> = None;
+    // The lender's published address, once resolved — reused as provenance on
+    // the tunnel path rather than re-derived.
+    let mut published: Option<String> = None;
+
+    let bind = client_bind();
+    if url_override.is_some() || !bind_is_loopback(&bind) {
+        match guest_base_url(url_override, port) {
+            Ok(base) => match probe_reachable(&base).await {
+                Ok(()) => return Ok(GuestPath::Direct { base_url: base }),
+                Err(e) => {
+                    direct_refusal = Some(format!("{base} did not answer: {e}"));
+                    published = Some(base);
+                }
+            },
+            Err(e) => direct_refusal = Some(e),
+        }
+    } else {
+        direct_refusal = Some(format!(
+            "this daemon binds {bind} — loopback only, so no guest can reach it directly"
+        ));
+    }
+
+    if let Some(dial) = node_dial_string(port).await {
+        // No probe here, and deliberately: dialing our own endpoint from this
+        // process would prove nothing about a guest's ability to reach it, and
+        // a self-dial that succeeded on loopback would be the instrument
+        // reporting on itself (§18.4). The daemon publishes this string only
+        // once it holds a reachable address.
+        let base_url = published.unwrap_or_else(|| {
+            guest_base_url(url_override, port).unwrap_or_else(|_| format!("http://127.0.0.1:{port}"))
+        });
+        return Ok(GuestPath::Tunnel { dial, base_url });
+    }
+
+    Err(direct_refusal
+        .unwrap_or_else(|| "this node published no address a guest could use".to_string()))
+}
+
 fn http_client(timeout_secs: u64) -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(timeout_secs))
@@ -208,8 +316,11 @@ pub(crate) const HELP_MESH_GRANT: Help = Help {
             "A guest is not a member: they never receive the mesh secret, never gossip, and\n\
              cannot mint invites or further grants. They may call exactly /v1/models and\n\
              /v1/chat/completions, and only for the models named here.\n\n\
-             The daemon must be bound non-loopback for a guest to reach it — set\n\
-             `[daemon] client_bind = \"0.0.0.0\"` in ~/.svrnmesh/config.toml.",
+             On a PLAINTEXT mesh the daemon must be bound non-loopback for a guest to reach\n\
+             it — set `[daemon] client_bind = \"0.0.0.0\"` in ~/.svrnmesh/config.toml. On an\n\
+             ENCRYPTED mesh that API is closed by policy and the link carries this node's\n\
+             iroh dial string instead; the guest tunnels in. Either way the mint checks\n\
+             reachability before printing a link.",
         ),
     ],
 };
@@ -316,57 +427,30 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
         return 2;
     }
 
-    // The inert-link check, first arm: the config says loopback. Cheap, and it
-    // produces the precise repair, so it runs before any network work.
-    let bind = client_bind();
-    if bind_is_loopback(&bind) && url_override.is_none() {
-        eprintln!("This daemon binds {bind} — loopback only, so no guest can reach it.");
-        eprintln!();
-        eprintln!("Set `[daemon] client_bind = \"0.0.0.0\"` in ~/.svrnmesh/config.toml and");
-        eprintln!("restart the daemon, or pass --url <base> if something else fronts it.");
-        return 1;
-    }
-
-    let base_url = match guest_base_url(url_override.as_deref(), port) {
-        Ok(u) => u,
-        Err(e) => {
-            eprintln!("{e}");
+    // Which way in — asked, not inferred. See `resolve_guest_path`.
+    let path = match resolve_guest_path(url_override.as_deref(), port).await {
+        Ok(p) => p,
+        Err(why) => {
+            eprintln!("No guest could reach this node, so any link would be inert.");
+            eprintln!("  {why}");
+            eprintln!();
+            eprintln!("Two ways to fix it, and they are different:");
+            eprintln!("  - PLAINTEXT: set `[daemon] client_bind = \"0.0.0.0\"` in");
+            eprintln!("    ~/.svrnmesh/config.toml and restart the daemon (or pass --url <base>");
+            eprintln!("    if something else fronts it). Does NOT work on an encrypted mesh —");
+            eprintln!("    the mesh policy forces that API loopback-only whatever the config says.");
+            eprintln!("  - ENCRYPTED: the guest tunnels in over iroh instead, but this daemon");
+            eprintln!("    published no dial string. Check `svrn mesh status` — a node with no");
+            eprintln!("    reachable relay or direct address cannot be dialled either.");
+            eprintln!();
+            eprintln!("Nothing was minted.");
             return 1;
         }
     };
-
-    // Second arm, and the one that actually decides: can anything reach the URL
-    // this link is about to carry?
-    //
-    // Reading `[daemon] client_bind` is NOT sufficient and this is not
-    // hypothetical — it was measured on 2026-08-27. On an ENCRYPTED mesh
-    // `start_daemon` forces the client listener back to loopback whatever the
-    // config says (`sovereign-mesh/src/daemon.rs`, "encrypted mesh: forcing
-    // client API to loopback-only"), because remote access is the
-    // key-authenticated iroh acceptor and a guest holds no mesh key. A host
-    // with `client_bind = "0.0.0.0"` in config and an encrypted mesh on disk
-    // therefore passes the arm above and binds `127.0.0.1` anyway — and would
-    // mint a link naming an address nothing is listening on.
-    //
-    // So ask the address instead of inferring it. `/status` is in
-    // `AUTH_EXEMPT_PATHS`, so this needs no credential, and one probe covers
-    // every cause — encrypted-mesh forcing, a loopback bind behind an explicit
-    // --url, a firewall, a wrong advertised interface — rather than
-    // enumerating the ones we thought of.
-    if let Err(e) = probe_reachable(&base_url).await {
-        eprintln!("{base_url} is not reachable, so a link naming it would be inert.");
-        eprintln!("  {e}");
-        eprintln!();
-        eprintln!("Most likely one of:");
-        eprintln!("  - this mesh has require_encryption = true, which forces the client API");
-        eprintln!("    loopback-only no matter what `client_bind` says (remote peers reach it");
-        eprintln!("    over the iroh acceptor, which a guest cannot use);");
-        eprintln!("  - the daemon has not been restarted since `client_bind` changed;");
-        eprintln!("  - a firewall, or the wrong interface — pass --url <base> to name it.");
-        eprintln!();
-        eprintln!("Nothing was minted.");
-        return 1;
-    }
+    let (base_url, dial) = match &path {
+        GuestPath::Direct { base_url } => (base_url.clone(), None),
+        GuestPath::Tunnel { base_url, dial } => (base_url.clone(), Some(dial.clone())),
+    };
 
     let client = match http_client(15) {
         Ok(c) => c,
@@ -417,6 +501,7 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     let link = build_guest_link(
         token,
         &base_url,
+        dial.as_deref(),
         expires_at_secs,
         (!summary.is_empty()).then_some(summary),
     );
@@ -426,7 +511,17 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
     println!("Guest link minted.");
     println!();
     println!("  Grants:   {summary}");
-    println!("  Reach at: {base_url}");
+    match &path {
+        GuestPath::Direct { base_url } => println!("  Reach at: {base_url}"),
+        // Say WHY the tunnel, not just that there is one: an operator who
+        // expected a plain address needs to know the mesh's own policy chose
+        // this, and that nothing was silently downgraded.
+        GuestPath::Tunnel { dial, .. } => {
+            println!("  Reach at: over the mesh tunnel (this mesh encrypts, so its");
+            println!("            plaintext API is closed to the network)");
+            println!("  Dial:     {dial}");
+        }
+    }
     println!(
         "  Expires:  in {} (unix {expires_at_secs})",
         human_duration(expires_at_secs.saturating_sub(now))
@@ -579,7 +674,11 @@ pub(crate) const HELP_MESH_USE: Help = Help {
              membership. The link expires on its own, and the issuing node can revoke it at\n\
              any moment.\n\n\
              While a link is in effect, `svrn chat` sends its completions to the issuing\n\
-             node instead of your local daemon and says so on stderr.",
+             node instead of your local daemon and says so on stderr.\n\n\
+             A link minted on an ENCRYPTED mesh carries a dial string instead of a plain\n\
+             address, because that mesh closes its plaintext API. Your requests then ride a\n\
+             QUIC tunnel to the lending node. There is no plaintext fallback: if the tunnel\n\
+             cannot open you are told, never quietly re-routed.",
         ),
     ],
 };
@@ -633,7 +732,7 @@ pub(crate) async fn cmd_use(args: &[String]) -> i32 {
         return match guest_link::load() {
             Some(l) => {
                 println!();
-                println!("  Host:     {}", l.url);
+                println!("  Host:     {}", describe(&l));
                 println!(
                     "  Grants:   {}",
                     l.summary.as_deref().unwrap_or("(not stated)")
@@ -668,11 +767,13 @@ pub(crate) async fn cmd_use(args: &[String]) -> i32 {
         Some(DeepLink::Guest {
             token,
             url,
+            dial,
             expires_at,
             summary,
         }) => GuestLink {
             token,
             url,
+            dial,
             expires_at,
             summary,
         },
@@ -703,7 +804,7 @@ pub(crate) async fn cmd_use(args: &[String]) -> i32 {
         match verify_link(&stored).await {
             Ok(models) => {
                 println!();
-                println!("Verified against {} — models in scope:", stored.url);
+                println!("Verified against {} — models in scope:", describe(&stored));
                 for m in &models {
                     println!("  {m}");
                 }
@@ -732,7 +833,7 @@ pub(crate) async fn cmd_use(args: &[String]) -> i32 {
     println!();
     println!(
         "  svrn chat ask \"hello\"      # now served by {}",
-        stored.url
+        describe(&stored)
     );
     println!("  svrn mesh use --forget     # go back to your own daemon");
     println!();
@@ -759,20 +860,36 @@ async fn probe_reachable(base_url: &str) -> Result<(), String> {
     }
 }
 
-/// GET `<url>/v1/models` with the bearer. Returns the ids the grant exposes.
+/// How a guest should read where their questions go. The URL for a direct
+/// link; the lender's address plus "over the mesh tunnel" for a dialled one,
+/// because printing a bare loopback bridge port would name this machine for
+/// work that happens on someone else's.
+fn describe(link: &GuestLink) -> String {
+    match &link.dial {
+        None => link.url.clone(),
+        Some(_) => format!("{} (over the mesh tunnel)", link.url),
+    }
+}
+
+/// GET `<base>/v1/models` with the bearer. Returns the ids the grant exposes.
 ///
 /// `/v1/models` is in `Scope::Models`'s own path set, so this needs no
 /// privilege the link did not already carry — and the host filters the listing
 /// to the granted ids, which is exactly what we want to print back.
+///
+/// Goes through `guest_link::open_route`, so a dialled link is verified over
+/// the tunnel it will actually use rather than against an address it will
+/// never touch — the check has to exercise the path, or it is not the check.
 async fn verify_link(link: &GuestLink) -> Result<Vec<String>, String> {
     let client = http_client(10)?;
-    let url = format!("{}/v1/models", link.url);
+    let base = guest_link::open_route(link).await?;
+    let url = format!("{base}/v1/models");
     let resp = client
         .get(&url)
         .bearer_auth(&link.token)
         .send()
         .await
-        .map_err(|e| format!("{url} is unreachable: {e}"))?;
+        .map_err(|e| format!("{} is unreachable: {e}", describe(link)))?;
     if !resp.status().is_success() {
         return Err(error_text(resp).await);
     }
@@ -877,6 +994,27 @@ mod tests {
             "--url is still the most specific instruction"
         );
         std::env::remove_var("SOVEREIGN_ADVERTISE_ADDR");
+    }
+
+    /// What a guest is told, and what they must never be told. The tunnel's
+    /// local port is this machine's; naming it would say the work happens
+    /// here, which is the opposite of the truth.
+    #[test]
+    fn a_dialled_link_is_described_by_the_lender_never_by_the_local_bridge() {
+        let mut link = GuestLink {
+            token: "tok".into(),
+            url: "http://box:9741".into(),
+            dial: None,
+            expires_at: 9_000,
+            summary: None,
+        };
+        assert_eq!(describe(&link), "http://box:9741");
+        link.dial = Some("beef@https://relay.example".into());
+        assert_eq!(describe(&link), "http://box:9741 (over the mesh tunnel)");
+        assert!(
+            !describe(&link).contains("127.0.0.1"),
+            "the guest is told whose machine answers, not which local port carries it"
+        );
     }
 
     #[test]
