@@ -393,7 +393,10 @@ across several machines; these keep them consistent.)
   this" / "commit X" mean *prepare* the change: finalize code, run
   checks, hand back the commit message as plain text to copy-paste.
   `git add` is fine; running `git commit` is the maintainer's call.
-  Branch first if on `main`.
+  When the ask comes, commit to the CURRENT branch — do not branch
+  first. Branching is the maintainer's call too, and they will say so
+  (operator direction 2026-08-28, replacing a standing "branch first if
+  on `main`" rule that made every commit a two-step negotiation).
 - **Debug builds for dev, not release.** `cargo build` → `target/debug/`
   for all behavioral work including CI benches (the llama.cpp kernels are
   native C++ either way). Release is ~5× slower to compile — reserve it
