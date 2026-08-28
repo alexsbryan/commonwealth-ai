@@ -1,0 +1,7 @@
+# arch-gate baseline — files and total lines in ARCH §3.1's 800-1200 approach band, frozen so a split cannot refill.
+# MACHINE-WRITTEN. Regenerate (snapshot current state — defend the diff in review):
+#   cargo run -p xtask -- arch-gate --update-baseline
+# Bank improvements only (never adds, never raises — safe to run anytime):
+#   cargo run -p xtask -- arch-gate --tighten
+162	files
+157647	lines

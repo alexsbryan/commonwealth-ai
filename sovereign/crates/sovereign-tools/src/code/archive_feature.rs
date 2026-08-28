@@ -45,11 +45,7 @@ impl ArchiveFeatureTool {
     }
 
     /// The executable half of `archive_feature`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let id = params.get("id").and_then(|v| v.as_str()).unwrap_or("");
         let reason = params.get("reason").and_then(|v| v.as_str()).unwrap_or("");
 
@@ -76,7 +72,6 @@ impl ArchiveFeatureTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         for key in ["id", "reason"] {
             params
                 .get(key)

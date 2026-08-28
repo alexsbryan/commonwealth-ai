@@ -37,6 +37,7 @@ pub fn mesh_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         .route("/v1/mesh/create", post(mesh_create))
         .route("/v1/mesh/join", post(mesh_join))
         .route("/v1/mesh/rotate", post(mesh_rotate))
+        .route("/v1/mesh/switch", post(mesh_switch))
         .route("/v1/mesh/leave", post(mesh_leave))
         .route("/v1/mesh/relay-candidates", get(mesh_relay_candidates))
         .route(
@@ -114,6 +115,10 @@ pub struct RotateResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StatusResponse {
     pub running: bool,
+    /// Every mesh this node is a member of — the active one and the parked
+    /// ones. Empty on a daemon with persistence disabled.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub meshes: Vec<KnownMeshDto>,
     pub mesh_name: Option<String>,
     pub members_online: usize,
     pub members_total: usize,
@@ -173,11 +178,15 @@ pub struct StatusResponse {
     /// Serde default keeps older consumers wire-compatible.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub iroh_transport: Vec<crate::daemon::IrohPeerPath>,
-    /// This founder's OWN iroh reachability (Track W): relay-homed?,
+    /// This NODE's OWN iroh reachability (Track W): relay-homed?,
     /// discoverable?, plus the self-heal watchdog's recovery history. `None`
     /// when iroh isn't running. Answers "am I actually dialable right now?".
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub founder_reachability: Option<crate::daemon::FounderReachability>,
+    ///
+    /// Renamed from `founder_reachability`: it reads THIS node's iroh endpoint
+    /// and watchdog status, never the founder's. Alias kept for one release
+    /// because attach mode lets the desktop and daemon run different versions.
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "founder_reachability")]
+    pub self_reachability: Option<crate::daemon::SelfReachability>,
     /// Live per-device memory as the LOADER sees it, in its plan order (eligible
     /// RPC workers first, this host's GPU last). Empty when this node would not
     /// distribute (no eligible RPC worker), and on any daemon predating the field.
@@ -401,6 +410,7 @@ async fn mesh_status(
             Json(
                 serde_json::to_value(StatusResponse {
                     running,
+                    meshes: known_mesh_dtos(&daemon),
                     mesh_name: None,
                     members_online: 0,
                     members_total: 0,
@@ -416,7 +426,7 @@ async fn mesh_status(
                     fanout_inflight_current,
                     active_corpus_ingests,
                     iroh_transport: vec![],     // no mesh → no peers
-                    founder_reachability: None, // no mesh → no founder endpoint
+                    self_reachability: None, // no mesh → no founder endpoint
                     // Reported even without a mesh: a solo daemon can still have
                     // RPC workers pinned by env, and the memory it would gate on
                     // is worth seeing either way.
@@ -433,7 +443,7 @@ async fn mesh_status(
     // H2: per-peer iroh path (empty when iroh isn't running).
     let iroh_transport = daemon.iroh_transport_snapshot().await;
     // Track W: this founder's own reachability (relay-home + discovery health).
-    let founder_reachability = daemon.founder_reachability().await;
+    let self_reachability = daemon.self_reachability().await;
 
     // Map MemberStatus to its serde-renamed variant. `MeshMember`
     // already owns its `node_id` as a String (set by `mesh_state`), so
@@ -470,6 +480,7 @@ async fn mesh_status(
         Json(
             serde_json::to_value(StatusResponse {
                 running,
+                meshes: known_mesh_dtos(&daemon),
                 mesh_name: Some(s.status.name),
                 members_online: s.status.members_online,
                 members_total: s.status.members_total,
@@ -485,7 +496,7 @@ async fn mesh_status(
                 fanout_inflight_current,
                 active_corpus_ingests,
                 iroh_transport,
-                founder_reachability,
+                self_reachability,
                 device_memory,
                 device_memory_observed_unix,
                 rpc_block_split_pin,
@@ -865,38 +876,115 @@ async fn mesh_join(
     }
 }
 
-/// `POST /v1/mesh/rotate` — regenerate the join key for an existing
-/// mesh. Delegates to `persist::rotate_join_key`; the daemon's
-/// in-memory hash is refreshed on next restart (the handler surfaces
-/// this in the response so the caller can decide whether to also hit
-/// `/v1/admin/reload`).
-async fn mesh_rotate(
+/// Render the known-mesh list for `/v1/mesh/status`.
+fn known_mesh_dtos(daemon: &Arc<EmbeddedDaemon>) -> Vec<KnownMeshDto> {
+    let active = crate::persist::active_mesh_id(daemon.data_dir());
+    daemon
+        .known_meshes()
+        .into_iter()
+        .map(|m| KnownMeshDto {
+            is_active: active.as_ref() == Some(&m.mesh_id),
+            mesh_id: m.mesh_id.to_hex(),
+            members_total: m.members.len(),
+            last_seen_unix: m.members.iter().map(|r| r.last_seen).max().unwrap_or(0),
+            name: m.name,
+        })
+        .collect()
+}
+
+/// One membership in the known-mesh list.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnownMeshDto {
+    /// Hex `MeshId` — the stable handle `POST /v1/mesh/switch` takes.
+    pub mesh_id: String,
+    pub name: String,
+    pub members_total: usize,
+    /// Exactly one entry is `true` whenever the daemon is in a mesh.
+    pub is_active: bool,
+    /// Newest `last_seen` across the roster — "when was this mesh last live
+    /// for us", which is what a parked row wants to show.
+    pub last_seen_unix: u64,
+}
+
+/// Body for [`mesh_switch`].
+#[derive(Debug, Deserialize)]
+pub struct SwitchRequest {
+    /// Mesh name, full hex id, or an unambiguous id prefix (≥8 chars).
+    pub mesh: String,
+}
+
+/// `POST /v1/mesh/switch` — set the active mesh down and bring another up.
+///
+/// **ACK-then-detach, like `mesh_leave`.** This handler is served BY the
+/// listener that the switch drops, so doing the work inline cancels its own
+/// response mid-flight — the historical "connection reset / :9741 down
+/// forever" bug. Answer `202` first, switch 300ms later.
+async fn mesh_switch(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Json(req): Json<SwitchRequest>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
         return r;
     }
-    // Pull data_dir via a new accessor — rotate_join_key works on disk
-    // state, independent of the running daemon.
-    let data_dir = daemon.data_dir().to_path_buf();
-    match crate::persist::rotate_join_key(&data_dir) {
-        Ok(Some(rotated)) => {
-            // Refresh the daemon's in-memory plaintext too so the next
-            // /v1/mesh/status poll reflects the new link without a
-            // restart. (The in-memory hash on the running daemon is
-            // still stale until restart — same long-standing wart;
-            // members already in the mesh remain connected, only new
-            // joins use the new key.)
-            daemon.set_join_key(rotated.join_key.clone()).await;
-            // Rotation exists to SHARE the new key — arm a fresh
-            // invite TTL for an encrypted mesh (create-time was the
-            // only arming site before, so a rotated encrypted invite
-            // carried a stale/absent expiry), and mark the daemon
-            // client-exposed so a soloist rotating-to-share hands out
-            // an invite for a daemon that will actually serve peers
-            // (bind + token apply on next start, same as create).
-            daemon.rearm_join_key_expiry().await;
+    // Resolve BEFORE detaching so a bad name is a 404 the caller can read,
+    // rather than a 202 followed by silence.
+    let known = daemon.known_meshes();
+    if crate::persist::resolve_known(&known, &req.mesh).is_none() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": format!("not a member of any mesh matching '{}'", req.mesh)
+            })),
+        )
+            .into_response();
+    }
+
+    let target = req.mesh.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        match daemon.switch_mesh(&target).await {
+            Ok(name) => tracing::info!(mesh = %name, "mesh: switch complete"),
+            Err(e) => tracing::error!(error = %e, target, "mesh: switch failed"),
+        }
+    });
+    (
+        StatusCode::ACCEPTED,
+        Json(serde_json::json!({ "switching_to": req.mesh })),
+    )
+        .into_response()
+}
+
+/// Query for [`mesh_rotate`].
+#[derive(Debug, Default, Deserialize)]
+pub struct RotateQuery {
+    /// Rotate even though a peer on a pre-split build is online and will be
+    /// partitioned by it. Off by default — see `MeshError::RotateWouldPartition`.
+    #[serde(default)]
+    pub force: bool,
+}
+
+/// `POST /v1/mesh/rotate` — mint a new invite key for the active mesh.
+///
+/// Delegates wholly to [`EmbeddedDaemon::rotate_invite`], which is the single
+/// implementation of what rotation means (ARCH §10.6). This handler used to
+/// carry a third of that logic itself — disk write here, plaintext cache there,
+/// TTL re-arm in a third place, and the live `Mesh` updated nowhere — which is
+/// how a rotation could report success and then be reverted by the next gossip
+/// round. There is nothing left here but transport.
+async fn mesh_rotate(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    axum::extract::Query(q): axum::extract::Query<RotateQuery>,
+) -> impl IntoResponse {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    match daemon.rotate_invite(q.force).await {
+        Ok(rotated) => {
+            // Rotation exists to SHARE the new key, so a soloist rotating in
+            // order to invite someone gets the client API exposed too (bind +
+            // token apply on next start, same as create).
             daemon.expose_client_api();
             (
                 StatusCode::OK,
@@ -910,9 +998,14 @@ async fn mesh_rotate(
             )
                 .into_response()
         }
-        Ok(None) => (
+        Err(crate::daemon::MeshError::NotRunning) => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({ "error": "no mesh to rotate" })),
+        )
+            .into_response(),
+        Err(e @ crate::daemon::MeshError::RotateWouldPartition { .. }) => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({ "error": e.to_string() })),
         )
             .into_response(),
         Err(e) => (
@@ -1245,7 +1338,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rotate_after_create_changes_join_key_hash() {
+    async fn rotate_after_create_changes_invite_key_hash() {
         let (_daemon, base, _tmp) = spawn_test_router().await;
         let client = reqwest::Client::new();
 
@@ -1370,6 +1463,118 @@ mod tests {
             .unwrap();
         assert_eq!(status["join_key"].as_str().unwrap(), new_key);
         assert!(status["join_link"].as_str().unwrap().contains(&new_key));
+    }
+
+    /// Read the hash the RUNNING daemon actually gates on, not the plaintext
+    /// it handed back.
+    async fn live_invite_key_hash(daemon: &Arc<EmbeddedDaemon>) -> [u8; 32] {
+        let app = daemon
+            .app_state()
+            .await
+            .expect("daemon is running after create");
+        let mesh = app.inner.mesh.read().await;
+        mesh.invite_key_hash
+    }
+
+    /// Create a mesh over the router and return its plaintext join key.
+    async fn create_mesh_over_http(client: &reqwest::Client, base: &str) -> String {
+        let create: serde_json::Value = client
+            .post(format!("{base}/v1/mesh/create"))
+            .json(&serde_json::json!({ "name": "m" }))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        create["join_key"].as_str().unwrap().to_string()
+    }
+
+    /// ARCH §18.1 — assert on something the subject cannot author.
+    ///
+    /// The three rotate tests above all read `join_key`: the plaintext the
+    /// handler itself just returned. That is a verbatim echo of the value
+    /// under test, so they pass cleanly on the exact failure they exist to
+    /// catch. The state that actually gates admission is
+    /// `AppState.inner.mesh.invite_key_hash`, and nothing reads it.
+    ///
+    /// `mesh_rotate` writes the new hash to disk (`persist::rotate_join_key`)
+    /// and refreshes the cached plaintext (`daemon.set_join_key`), but never
+    /// writes the live `Mesh`. So the running daemon keeps admitting the OLD
+    /// key on `/internal/join` and keeps gossiping the OLD hash.
+    #[tokio::test]
+    async fn rotate_changes_the_live_in_memory_hash_not_only_the_disk_one() {
+        let (daemon, base, _tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+
+        let original_key = create_mesh_over_http(&client, &base).await;
+        let hash_before = live_invite_key_hash(&daemon).await;
+        assert_eq!(
+            hash_before,
+            commonwealth_discovery::membership::hash_join_key(&original_key),
+            "precondition: the live mesh gates on the key create just minted"
+        );
+
+        let rotate: serde_json::Value = client
+            .post(format!("{base}/v1/mesh/rotate"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let new_key = rotate["join_key"].as_str().unwrap().to_string();
+        assert_ne!(original_key, new_key, "precondition: rotation minted a key");
+
+        let hash_after = live_invite_key_hash(&daemon).await;
+        assert_eq!(
+            hash_after,
+            commonwealth_discovery::membership::hash_join_key(&new_key),
+            "the running daemon still gates on the OLD hash — rotation touched \
+             disk and the cached plaintext but not the live Mesh, so \
+             /internal/join keeps admitting the old key and gossip keeps \
+             advertising the old hash"
+        );
+    }
+
+    /// The clobber, named by its mechanism rather than raced against a timer.
+    ///
+    /// The gossip loop re-persists the live in-memory mesh over `mesh.json`
+    /// every round (`gossip.rs`'s `persist::save` call). So if rotation leaves
+    /// disk and memory disagreeing, the next round silently resolves the
+    /// disagreement toward memory and the rotation is reverted — while
+    /// `join_key.secret` keeps the NEW plaintext. The operator is then holding
+    /// an invite that hashes to nothing the mesh accepts.
+    ///
+    /// Asserting agreement is strictly stronger than sleeping for a round:
+    /// if the two never disagree, no round can revert anything.
+    #[tokio::test]
+    async fn rotate_leaves_disk_and_memory_agreeing_so_a_gossip_round_cannot_revert_it() {
+        let (daemon, base, tmp) = spawn_test_router().await;
+        let client = reqwest::Client::new();
+
+        create_mesh_over_http(&client, &base).await;
+        let _: serde_json::Value = client
+            .post(format!("{base}/v1/mesh/rotate"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        let in_memory = live_invite_key_hash(&daemon).await;
+        let on_disk = crate::persist::load(tmp.path())
+            .expect("mesh.json readable")
+            .expect("a mesh is persisted after create")
+            .invite_key_hash;
+
+        assert_eq!(
+            in_memory, on_disk,
+            "rotation left the live mesh and mesh.json disagreeing; the next \
+             gossip round re-persists memory over disk and silently reverts \
+             the rotation"
+        );
     }
 
     #[tokio::test]

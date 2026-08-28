@@ -50,10 +50,7 @@ impl StdoutTurnSink {
     /// report tool that prints a half-answer and exits 0 has told the
     /// operator the run succeeded (ARCH §18.3).
     pub fn failure(&self) -> Option<String> {
-        self.error
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        self.error.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 }
 

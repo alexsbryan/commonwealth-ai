@@ -32,7 +32,7 @@ use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::slot_policy::Workload;
-use sovereign_core::traits::{InferenceProvider};
+use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::*;
 
 use corpus_engine_notes::{Note, NoteScope, NoteStore, ScopeFilter};
@@ -71,11 +71,7 @@ impl ReadNoteDigestTool {
     }
 
     /// The executable half of `read_note_digest`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let feature_id = params
             .get("feature_id")
             .and_then(|v| v.as_str())

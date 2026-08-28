@@ -28,8 +28,8 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::types::*;
 
 use super::atos_utils::{detect_hollow_files, run_verify_cmd};
-use std::sync::Arc;
 use sovereign_core::tool_manifest::DeclaredTool;
+use std::sync::Arc;
 
 const TOOL_ID: &str = "atos_verify";
 
@@ -61,11 +61,7 @@ impl AtosVerifyTool {
     }
 
     /// The executable half of `atos_verify`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let workdir = require_str(params, "workdir")?;
         let verify_cmd = require_str(params, "verify_cmd")?;
         let files_touched = parse_string_array(params, "files_touched");

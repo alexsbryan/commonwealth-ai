@@ -42,9 +42,9 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Value};
 
 use sovereign_core::error::{Error, Result};
+use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::*;
 use std::sync::Arc;
-use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct DesignSignalsExtractTool {
     /// Optional project root. When set, relative `design_path`
@@ -89,11 +89,7 @@ impl DesignSignalsExtractTool {
     }
 
     /// The executable half of `design_signals_extract`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let raw_path = params
             .get("design_path")
             .and_then(|v| v.as_str())
@@ -121,7 +117,6 @@ impl DesignSignalsExtractTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         // All params are optional; the tool defaults to `DESIGN.md`
         // under the project root. Validation happens at `execute`
         // time where we can surface a file-not-found message

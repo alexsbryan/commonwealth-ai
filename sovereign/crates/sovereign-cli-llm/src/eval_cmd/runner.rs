@@ -2203,19 +2203,18 @@ async fn run_question_synth(
     // call against the same host that just failed to build a single classifier,
     // and a judgement produced there is no more a measurement than the answer it
     // would be judging. The row is excluded below either way.
-    let (judge_fact_score, judge_evidence): (Option<ScoreSnapshot>, _) = if judge
-        && degraded.is_none()
-    {
-        let (score, details) = crate::eval_cmd::score::score_facts_judge(
-            &q.expected_facts,
-            &visible,
-            session.inference.as_ref(),
-        )
-        .await;
-        (Some(score.into()), details)
-    } else {
-        (None, Vec::new())
-    };
+    let (judge_fact_score, judge_evidence): (Option<ScoreSnapshot>, _) =
+        if judge && degraded.is_none() {
+            let (score, details) = crate::eval_cmd::score::score_facts_judge(
+                &q.expected_facts,
+                &visible,
+                session.inference.as_ref(),
+            )
+            .await;
+            (Some(score.into()), details)
+        } else {
+            (None, Vec::new())
+        };
 
     let synth = SynthSnapshot {
         answer: visible,
@@ -2341,7 +2340,6 @@ fn empty_synth_result(q: &Question, err: String, stream_wall_ms: u64) -> EvalRes
     row.with_error(err)
 }
 
-
 #[cfg(test)]
 mod degraded_router_tests {
     use super::*;
@@ -2372,9 +2370,7 @@ mod degraded_router_tests {
 
     #[test]
     fn a_turn_routed_by_no_classifier_is_not_a_measurement() {
-        let degraded = as_metadata(Some(RouterStamp::from_liveness(
-            false, false, false, false,
-        )));
+        let degraded = as_metadata(Some(RouterStamp::from_liveness(false, false, false, false)));
         let why = degraded_router(Some(&degraded))
             .expect("all four classifiers dead is the degraded host");
         assert!(

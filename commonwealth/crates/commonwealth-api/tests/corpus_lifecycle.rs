@@ -199,9 +199,12 @@ fn test_state(tmp: &TempDir, embed_fn: corpus_engine::types::EmbedFn) -> AppStat
         .with_self_node_id("node-test");
 
     let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(1),
         name: "Test Mesh".into(),
-        join_key_hash: [0u8; 32],
+        invite_key_hash: [0u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members: HashMap::new(),
         peers: vec![],
@@ -731,9 +734,12 @@ async fn status_sampler_publishes_estimated_fraction_on_resume() {
     .with_embedding_model("mock-8d")
     .with_self_node_id("node-test");
     let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(1),
         name: "Test Mesh".into(),
-        join_key_hash: [0u8; 32],
+        invite_key_hash: [0u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members: HashMap::new(),
         peers: vec![],

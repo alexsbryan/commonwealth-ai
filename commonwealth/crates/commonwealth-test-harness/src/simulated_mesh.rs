@@ -22,9 +22,12 @@ impl SimulatedMesh {
     /// Create a new empty mesh.
     pub fn new(name: &str) -> Self {
         let mesh = Mesh {
+            mesh_secret: [0u8; 32],
+            invite_expires_at: None,
             id: MeshId::from_u128(1),
             name: name.into(),
-            join_key_hash: [0u8; 32],
+            invite_key_hash: [0u8; 32],
+            invite_version: 0,
             require_encryption: false,
             members: HashMap::new(),
             peers: vec![],

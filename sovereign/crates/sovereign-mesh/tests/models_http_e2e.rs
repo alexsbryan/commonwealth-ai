@@ -18,6 +18,18 @@
 //! the wire path drops them" — different layer, different failure
 //! modes (origin filtering, alias synthesis, mesh-liveness join).
 //!
+//! **Scope narrowed 2026-08-27: this exercises the ORCHESTRATOR path.**
+//! `build_state` installs no `local_inference`, so `list_models` falls
+//! through to `store_rows` — the store scan these assertions were written
+//! against. A node WITH local inference (every Sovereign mesh node) no
+//! longer reads the store at all: it lists from the OICP manifests, which
+//! is the same source `locate_named_model` resolves against. The store's
+//! origin-liveness filter tested here answers "is the entry's last writer
+//! reachable", which is not "can anything serve this" — that gap is why
+//! `/v1/models` advertised ids chat completions refused. The manifest
+//! path's own gate lives in
+//! `commonwealth_api::routes_inference::list_models_tests`.
+//!
 //! Two assertions:
 //!
 //! 1. **Locally-loaded model surfaces in `/v1/models`.** Insert a
@@ -76,9 +88,12 @@ fn build_state(self_id: NodeId) -> AppState {
         member(self_id, "self", "127.0.0.1:9742".parse().unwrap()),
     );
     let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(1),
         name: "models-http test".into(),
-        join_key_hash: [0u8; 32],
+        invite_key_hash: [0u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members,
         peers: vec![],

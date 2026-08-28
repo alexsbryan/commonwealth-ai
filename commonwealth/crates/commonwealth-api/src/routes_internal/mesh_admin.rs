@@ -575,7 +575,7 @@ pub async fn storage_budget_set(
 //
 // The founder (or any existing member) receives a POST from a
 // would-be joiner carrying the raw `join_key`. We BLAKE3-hash it and
-// compare against `mesh.join_key_hash`; on match we append the new
+// compare against `mesh.invite_key_hash`; on match we append the new
 // member and return the full mesh snapshot so the joiner can adopt
 // it locally. On mismatch we return 401 — the joiner treats this as
 // "wrong mesh, try the next mDNS candidate" and moves on.
@@ -586,7 +586,7 @@ pub async fn storage_budget_set(
 //     trust model as "I shared this link in a trusted chat".
 //   - mesh_id in mDNS TXT is public (not secret); knowing it does
 //     not grant membership. Only the raw key does, and it's hashed
-//     at rest via `Mesh::join_key_hash`.
+//     at rest via `Mesh::invite_key_hash`.
 //   - Timing-attack-resistant equality lives in `membership::verify_join_key`.
 
 #[derive(Debug, Deserialize)]
@@ -627,7 +627,26 @@ pub struct JoinRequest {
 pub struct MeshWire {
     pub id: commonwealth_core::ids::MeshId,
     pub name: String,
-    pub join_key_hash: [u8; 32],
+    /// Gossip-auth credential. `#[serde(default)]` so a pre-split peer's
+    /// payload (which has no such field) deserializes to the zeroed "not set"
+    /// value that `Mesh::gossip_authorized` recognises.
+    #[serde(default)]
+    pub mesh_secret: [u8; 32],
+    /// Serialized under its historical name — a joiner or peer on a pre-split
+    /// build reads this snapshot by that key, so renaming the Rust field must
+    /// not rename the wire field.
+    #[serde(rename = "join_key_hash")]
+    pub invite_key_hash: [u8; 32],
+    /// Invite TTL, carried so a joiner inherits it atomically with membership
+    /// and every member can enforce the same expiry.
+    #[serde(default)]
+    pub invite_expires_at: Option<u64>,
+    /// Monotonic invite counter. Must ride the wire or a rotation cannot
+    /// propagate: `Mesh::merge_invite_from` adopts a peer's invite only when
+    /// this is strictly newer, so a mirror that drops it pins every peer at
+    /// version 0 and silently restores the node-local rotate.
+    #[serde(default)]
+    pub invite_version: u64,
     /// Mesh-wide encryption policy carried in the join snapshot so a
     /// joiner inherits it atomically with membership. `#[serde(default)]`
     /// keeps wire bytes identical for pre-policy peers.
@@ -642,7 +661,10 @@ impl From<&Mesh> for MeshWire {
         Self {
             id: m.id,
             name: m.name.clone(),
-            join_key_hash: m.join_key_hash,
+            mesh_secret: m.mesh_secret,
+            invite_key_hash: m.invite_key_hash,
+            invite_version: m.invite_version,
+            invite_expires_at: m.invite_expires_at,
             require_encryption: m.require_encryption,
             members: m.members.values().cloned().collect(),
             peers: m.peers.clone(),
@@ -663,7 +685,10 @@ impl MeshWire {
         Mesh {
             id: self.id,
             name: self.name,
-            join_key_hash: self.join_key_hash,
+            mesh_secret: self.mesh_secret,
+            invite_key_hash: self.invite_key_hash,
+            invite_version: self.invite_version,
+            invite_expires_at: self.invite_expires_at,
             require_encryption: self.require_encryption,
             members,
             peers: self.peers,
@@ -727,33 +752,36 @@ pub async fn join(
         }
     }
 
-    // Encrypted-mesh invites are short-lived: reject a join once the
-    // founder-stamped TTL has passed. Plaintext meshes set no expiry, so
-    // this is a no-op for them. The founder is the authority — the joiner
-    // cannot forge the expiry (it lives in the founder's AppState, never
-    // on the wire).
-    if let Some(expires_at) = state.join_key_expiry() {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        if now >= expires_at {
-            tracing::warn!(
-                joining_name = %req.joining_node_name,
-                expires_at,
-                now,
-                "handshake_rejected: invite link has expired"
-            );
-            return Err((
-                StatusCode::UNAUTHORIZED,
-                Json(JoinRejection {
-                    reason: "invite link has expired".into(),
-                }),
-            ));
-        }
-    }
-
     let mut mesh = state.inner.mesh.write().await;
+
+    // Encrypted-mesh invites are short-lived: reject a join once the TTL has
+    // passed. Plaintext meshes set no expiry, so this is a no-op for them.
+    //
+    // The expiry is read from the MESH, not from this node's `AppState`. It
+    // used to live in per-node RAM, which meant it was armed only on the node
+    // that personally minted the invite and was lost entirely on restart — so
+    // a joiner aimed at any other member, or at the same member after a
+    // bounce, bypassed the TTL completely. Any member can admit (there is no
+    // founder check here and never was), so the expiry has to travel with the
+    // mesh for the check to mean anything.
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    if mesh.invite_expired_at(now) {
+        tracing::warn!(
+            joining_name = %req.joining_node_name,
+            expires_at = ?mesh.invite_expires_at,
+            now,
+            "handshake_rejected: invite link has expired"
+        );
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(JoinRejection {
+                reason: "invite link has expired".into(),
+            }),
+        ));
+    }
 
     match membership::accept_join_with_identity(
         &mut mesh,

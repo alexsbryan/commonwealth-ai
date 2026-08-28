@@ -176,9 +176,12 @@ fn make_state(node_id: NodeId, peer: MemberRecord, engine: Option<Arc<CorpusEngi
     members.insert(node_id, self_record);
     members.insert(peer.node_id, peer);
     let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: mesh_id,
         name: "Test".into(),
-        join_key_hash: hash,
+        invite_key_hash: hash,
+        invite_version: 0,
         require_encryption: false,
         members,
         peers: vec![],

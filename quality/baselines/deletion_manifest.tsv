@@ -1,0 +1,8 @@
+# deletion campaign manifest — FROZEN at pre-registration.
+# Regenerate ONLY with an operator-approved scope change:
+#   scripts/deletion-manifest.py --freeze
+# lane	lines	files
+p1-bench-baselines	384759	161
+p1-dr-flights	272421	2118
+p0-root-junk	113934	147
+p2-code-certain	9739	34

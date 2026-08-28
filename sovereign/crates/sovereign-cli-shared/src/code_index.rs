@@ -36,7 +36,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn};
+use corpus_engine::{Corpus, CorpusEngine, CorpusSpec, EmbedFn, CORPUS_META_FILENAME};
 use oicp_client::RemoteApiProvider;
 use sovereign_core::traits::InferenceProvider;
 
@@ -484,7 +484,7 @@ vector = true
 /// deleted all of it.
 const INGEST_ARTIFACTS: &[&str] = &[
     // The corpus descriptor the ingest writes on finalise.
-    "_corpus_meta.json",
+    CORPUS_META_FILENAME,
     // The table `create_empty_table` collides on. Removing the directory takes
     // its `_indices` / FTS / vector build scratch with it.
     "chunks.lance",
@@ -576,7 +576,13 @@ pub(crate) fn clear_partitions_for(
     root: &std::path::Path,
     corpus_id: &str,
 ) -> std::io::Result<Preserved> {
-    let prefix = format!("{corpus_id}-partition-");
+    // An empty or whitespace-only id names no corpus, so it sweeps nothing —
+    // refused rather than normalised into a prefix that would match every
+    // partition under `root` (ARCH §18.3).
+    let Some(corpus) = Corpus::named(root, corpus_id) else {
+        return Ok(Preserved::default());
+    };
+    let prefix = corpus.partition_prefix();
     let entries = match std::fs::read_dir(root) {
         Ok(e) => e,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Preserved::default()),
@@ -679,7 +685,7 @@ mod clearing_tests {
     fn populated_corpus(dir: &Path) {
         fs::create_dir_all(dir).unwrap();
         // The ingest's own.
-        fs::write(dir.join("_corpus_meta.json"), "{}").unwrap();
+        fs::write(Corpus::meta_in(dir), "{}").unwrap();
         fs::create_dir_all(dir.join("chunks.lance/data")).unwrap();
         fs::write(dir.join("chunks.lance/data/0.lance"), "x").unwrap();
         // Everybody else's.
@@ -729,7 +735,7 @@ mod clearing_tests {
 
         let kept = clear_ingest_artifacts(&dir).unwrap();
 
-        for gone in ["_corpus_meta.json", "chunks.lance"] {
+        for gone in [CORPUS_META_FILENAME, "chunks.lance"] {
             assert!(!dir.join(gone).exists(), "{gone} must be cleared");
         }
         let expected = [
@@ -764,7 +770,7 @@ mod clearing_tests {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path().join("wikipedia");
         fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join("_corpus_meta.json"), "{}").unwrap();
+        fs::write(Corpus::meta_in(&dir), "{}").unwrap();
         fs::create_dir_all(dir.join("chunks.lance")).unwrap();
         for f in ["wikipedia_graph.db", "wikipedia_graph.db-wal"] {
             fs::write(dir.join(f), "x").unwrap();
@@ -787,7 +793,7 @@ mod clearing_tests {
 
         let bare = tmp.path().join("bare");
         fs::create_dir_all(bare.join("chunks.lance")).unwrap();
-        fs::write(bare.join("_corpus_meta.json"), "{}").unwrap();
+        fs::write(Corpus::meta_in(&bare), "{}").unwrap();
         let kept = clear_ingest_artifacts(&bare).unwrap();
         assert!(kept.names.is_empty());
         assert!(
@@ -850,7 +856,7 @@ mod clearing_tests {
         let root = tmp.path();
         let part = root.join("c-partition-peer");
         fs::create_dir_all(part.join("chunks.lance")).unwrap();
-        fs::write(part.join("_corpus_meta.json"), "{}").unwrap();
+        fs::write(Corpus::meta_in(&part), "{}").unwrap();
 
         let kept = clear_partitions_for(root, "c").unwrap();
 

@@ -48,11 +48,7 @@ impl RetireNoteTool {
     }
 
     /// The executable half of `retire_note`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let id = params
             .get("id")
             .and_then(|v| v.as_str())
@@ -105,7 +101,6 @@ impl RetireNoteTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         params
             .get("id")
             .and_then(|v| v.as_str())
@@ -217,7 +212,11 @@ mod tests {
         let store = Arc::new(NoteStore::open(&tmp.path().join("notes.db")).unwrap());
         let tool = RetireNoteTool::new(store);
         assert!(tool.validate_extra(&json!({"id": "x"})).is_err());
-        assert!(tool.validate_extra(&json!({"id": "x", "reason": ""})).is_err());
-        assert!(tool.validate_extra(&json!({"id": "x", "reason": "ok"})).is_ok());
+        assert!(tool
+            .validate_extra(&json!({"id": "x", "reason": ""}))
+            .is_err());
+        assert!(tool
+            .validate_extra(&json!({"id": "x", "reason": "ok"}))
+            .is_ok());
     }
 }

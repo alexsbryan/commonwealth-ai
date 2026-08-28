@@ -92,11 +92,7 @@ impl SpecTool {
     }
 
     /// The executable half of `spec`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let cwd = ctx
             .working_directory
             .as_deref()

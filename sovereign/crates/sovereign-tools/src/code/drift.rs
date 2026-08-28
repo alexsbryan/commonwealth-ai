@@ -42,8 +42,8 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::types::*;
 
 use sovereign_atos::approval::{current_spec_hash, detect_drift, find_approval};
-use std::sync::Arc;
 use sovereign_core::tool_manifest::DeclaredTool;
+use std::sync::Arc;
 
 pub struct DriftTool;
 
@@ -73,11 +73,7 @@ impl DriftTool {
     }
 
     /// The executable half of `drift`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let cwd = ctx
             .working_directory
             .as_deref()

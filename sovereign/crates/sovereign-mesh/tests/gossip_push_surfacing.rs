@@ -143,9 +143,12 @@ async fn spawn_rejecting_peer() -> SocketAddr {
 fn state_with_peer(self_id: NodeId, peer_id: NodeId, peer_addr: SocketAddr) -> AppState {
     let now = commonwealth_core::clock::unix_now_secs();
     let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(4242),
         name: "push-surfacing".into(),
-        join_key_hash: [7u8; 32],
+        invite_key_hash: [7u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members: {
             let mut m = HashMap::new();

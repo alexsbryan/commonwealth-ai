@@ -8,7 +8,6 @@
 
 use std::sync::Arc;
 
-
 use sovereign_core::error::{Error, Result};
 use sovereign_core::types::{StepOutput, ToolContext};
 
@@ -49,11 +48,7 @@ impl ClaimSearchTool {
     }
 
     /// The executable half of `claim_search`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -147,7 +142,6 @@ impl ClaimSearchTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         if params.get("query").and_then(|v| v.as_str()).is_none() {
             return Err(Error::InvalidInput(
                 "claim_search requires a 'query' string parameter".to_string(),
@@ -243,11 +237,7 @@ impl EpistemicLandscapeTool {
     }
 
     /// The executable half of `epistemic_landscape`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let topic = params
             .get("topic")
             .and_then(|v| v.as_str())
@@ -342,7 +332,6 @@ impl EpistemicLandscapeTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         if params.get("topic").and_then(|v| v.as_str()).is_none() {
             return Err(Error::InvalidInput(
                 "epistemic_landscape requires a 'topic' string parameter".to_string(),

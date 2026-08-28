@@ -515,7 +515,12 @@ pub(crate) fn diagnose_argv(mgr: Manager, name: &str, uid: u32) -> Vec<String> {
 /// is allowed to fail: launchd's `bootout` is a no-op when the job is already
 /// unloaded, and systemd's `reset-failed` is a no-op when the unit is not in a
 /// failed state. Callers run them in order and judge only the last.
-pub(crate) fn reregister_argv(mgr: Manager, name: &str, uid: u32, unit_path: &str) -> Vec<Vec<String>> {
+pub(crate) fn reregister_argv(
+    mgr: Manager,
+    name: &str,
+    uid: u32,
+    unit_path: &str,
+) -> Vec<Vec<String>> {
     match mgr {
         // `daemon-reload` picks up an edited unit file; `reset-failed` clears
         // a start-limit lockout, which is systemd's version of "the manager

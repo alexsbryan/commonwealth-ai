@@ -81,6 +81,45 @@ sovereign-recipes/alignment/
 # the control arm reads 0/12 at exit 0).
 sovereign/bench/conversation-private/
 
+# ── Bench run OUTPUTS (kept local; banks + gold + fixtures stay tracked) ──
+# The house convention, stated twice above ("runs are local, headline numbers
+# are committed in README"), applied uniformly. 159 files / 123 MB untracked
+# 2026-08-27 for the open-source launch. What a bench needs to be REPRODUCIBLE
+# by someone else -- the case bank, the gold labels, the frozen query set, the
+# judge exemplars -- stays tracked (27 files / 14 MB). What a run EMITTED does
+# not: transcripts, verdicts, judge_output, raw_results, scored sidecars.
+# These are regenerable by re-running the bench, so they are exhaust, not source.
+sovereign/bench/*/results/*.jsonl
+sovereign/bench/sd/results_*.jsonl
+sovereign/bench/calibration/loop/*.jsonl
+sovereign/bench/calibration/ab/*.jsonl
+sovereign/bench/calibration/h1-port/*.jsonl
+# ...except h1_scores.jsonl, which sovereign-core `include_str!`s at COMPILE
+# time (admission.rs, the frozen honesty-recall operating-point test). It is a
+# build input, not run exhaust — untracking it stops the workspace compiling.
+!sovereign/bench/calibration/h1-port/h1_scores.jsonl
+sovereign/bench/calibration/resolver-precision/*.jsonl
+sovereign/bench/calibration/step3/*.jsonl
+# ...except the failure corpus, which is a BANK the step3 arms read, not output.
+# Negation targets the file because the directory above is not excluded -- a
+# directory exclusion would make this line dead (same trap as models/ below).
+!sovereign/bench/calibration/step3/failure_corpus.jsonl
+research/deep-research/drb/overall-derivation/flights*/**/*.jsonl
+research/deep-research/drb/overall-derivation/inputs/perplexity-*.jsonl
+
+# The DRB reproduction fixture: 69.7 MB, and re-downloadable from the pinned
+# upstream commit named in research/deep-research/drb/README.md "Provenance".
+# Untracked on SIZE, not licence -- upstream is Apache-2.0, so redistribution
+# is permitted (see the vendored LICENSE + NOTICE alongside it).
+research/deep-research/drb/vendor/fixture-validated.jsonl
+
+# Vault-derived faithfulness seeds. These are the same category as
+# sovereign/bench/obsidian/ above -- claims distilled from the author's
+# private Obsidian vault (corpus obsidian-vault-959ee8a8f330) -- but they
+# live under bench/faithfulness/, which that rule never covered, so 1,156
+# claim rows stayed tracked. Closed 2026-08-27.
+sovereign/bench/faithfulness/obsidian_*.jsonl
+
 # ── macOS noise ───────────────────────────────────────────────────────────
 .DS_Store
 **/.DS_Store

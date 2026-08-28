@@ -22,7 +22,7 @@ use tower::ServiceExt;
 /// the AppState + the raw join_key so tests can mix them.
 fn mesh_with_known_key() -> (AppState, String) {
     let join_key = membership::generate_join_key();
-    let join_key_hash = membership::hash_join_key(&join_key);
+    let invite_key_hash = membership::hash_join_key(&join_key);
     let founder_id = NodeId::generate();
     let founder_addr: SocketAddr = "192.168.1.10:9742".parse().unwrap();
 
@@ -70,9 +70,12 @@ fn mesh_with_known_key() -> (AppState, String) {
     members.insert(founder_id, founder);
 
     let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::generate(),
         name: "Test Mesh".into(),
-        join_key_hash,
+        invite_key_hash,
+        invite_version: 0,
         require_encryption: false,
         members,
         peers: vec![],
@@ -176,7 +179,9 @@ async fn join_with_expired_invite_is_rejected() {
     // TTL passes, the founder rejects the join even with the correct key —
     // a leaked link is useless after it expires.
     let (state, join_key) = mesh_with_known_key();
-    state.set_join_key_expiry(Some(1)); // unix-second 1 == far in the past
+    // The expiry lives on the MESH now, not on this node's AppState: any member
+    // can admit, so an expiry only one node knows about is not a gate.
+    state.inner.mesh.write().await.invite_expires_at = Some(1); // far in the past
     let app = internal_router(state.clone());
 
     let response = app
@@ -208,7 +213,7 @@ async fn join_with_unexpired_invite_is_accepted() {
     // A TTL in the future admits normally — the check only fences off
     // expired links, not live ones.
     let (state, join_key) = mesh_with_known_key();
-    state.set_join_key_expiry(Some(u64::MAX));
+    state.inner.mesh.write().await.invite_expires_at = Some(u64::MAX);
     let app = internal_router(state.clone());
 
     let response = app

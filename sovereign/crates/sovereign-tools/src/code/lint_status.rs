@@ -25,7 +25,9 @@ use sovereign_core::types::*;
 use corpus_engine_watchers::WatcherHeartbeat;
 use corpus_engine_watchers::{LintResult, LintResultStore, LintRunSummary};
 
-use super::watcher_health::{apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs};
+use super::watcher_health::{
+    apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs,
+};
 use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct LintStatusTool {
@@ -104,11 +106,7 @@ impl LintStatusTool {
     }
 
     /// The executable half of `lint_status`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let legacy_active = read_legacy(&self.watcher_active);
         let configured = self.watched_scope.is_some();
 
@@ -307,7 +305,6 @@ impl LintStatusTool {
     }
 
     async fn signal_now(&self) -> Option<String> {
-
         let summary = self.store.latest_run().await.ok().flatten()?;
         if summary.passed() {
             return None;

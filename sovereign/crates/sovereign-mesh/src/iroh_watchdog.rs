@@ -43,7 +43,7 @@ use tokio::time::Instant;
 use tracing::{info, warn};
 
 /// Live reachability snapshot the watchdog writes each cycle and the status API
-/// reads (`/v1/mesh/status.founder_reachability`). Survives endpoint rebuilds —
+/// reads (`/v1/mesh/status.self_reachability`). Survives endpoint rebuilds —
 /// the watchdog owns the shared `Arc`, so counts/last-recovery persist across a
 /// rebuilt endpoint.
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
@@ -161,7 +161,7 @@ impl WatchdogConfig {
 
 /// Abort-on-drop handle (same pattern as `GossipHandle`); tying it to
 /// `DaemonState::Running` means leaving/stopping the mesh also stops the
-/// watchdog. Carries the shared status so `founder_reachability()` can read it.
+/// watchdog. Carries the shared status so `self_reachability()` can read it.
 pub struct WatchdogHandle {
     _task: tokio::task::JoinHandle<()>,
     status: Arc<RwLock<ReachabilityStatus>>,

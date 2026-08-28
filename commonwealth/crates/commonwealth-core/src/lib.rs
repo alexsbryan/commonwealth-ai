@@ -4,6 +4,7 @@ pub mod capabilities;
 pub mod clock;
 pub mod config;
 pub mod contributions;
+pub mod ct;
 pub mod dial_sig;
 pub mod error;
 pub mod fair_sched;

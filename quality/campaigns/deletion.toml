@@ -1,0 +1,135 @@
+# Flight rules — read raw. Verdicts come from the instruments below, never
+# from prose. Every instrument shells to scripts/deletion-manifest.py, which
+# is THE decider (ARCH §10.6) of which files this campaign deletes. An agent
+# that wants a different file set changes that script in a reviewed diff; it
+# does not choose at the keyboard.
+#
+# Prose, phases, traps and the diversion register: quality/DELETION.md
+id        = "deletion"
+objective = "Delete the committed non-source mass and the file-granular dead code, without losing one behaviour, and leave a ratchet that holds it"
+spec      = "quality/DELETION.md"
+declared  = "2026-08-27"
+status    = "active"
+
+# ── The premise correction this campaign was founded on ─────────────────────
+# The order was "delete 100k lines of code; there is that much fat and
+# redundancy". Measured 2026-08-27 by three independent read-only surveys:
+# there is NOT. Duplication ceiling ~14.4k net (two unrelated algorithms
+# agreeing within 2% on cluster count); dead code ~9.8k with NINE hunted
+# classes at literal zero; Rust test dedup ~8k; vestigial crates 1,320.
+# Code ceiling ~40k, not 100k. What IS there is 780,853 lines of committed
+# machine output. This campaign deletes that, plus the file-granular code.
+# Do not re-litigate the premise; re-run the surveys if you doubt it.
+
+[[bar]]
+id           = "positive-control"
+one_line     = "The manifest moves by exactly the size of one deleted file — the instrument can see deletion at all"
+derives_from = "quality/HOT_PATH_REUSE.md:102 — nc-redundant was 79% blind to deletion for its entire life and burned nine waves before anyone checked"
+status       = "open"
+target       = 1.0
+direction    = "higher_is_better"
+kill         = "if the delta does not equal the file's own line count, STOP — the instrument is broken and every number below is unearned. Fix the instrument before deleting anything."
+# THIS BAR GATES ENTRY TO EVERY OTHER BAR. Run it first, on a scratch commit.
+instrument   = '''python3 - <<'PY'
+import json, subprocess, os, sys
+def total():
+    d = json.loads(subprocess.run(
+        ["python3", "scripts/deletion-manifest.py", "--all"],
+        capture_output=True, text=True).stdout)
+    return sum(v["lines"] for v in d.values())
+files = subprocess.run(
+    ["python3", "scripts/deletion-manifest.py", "--lane", "p0-root-junk", "--files"],
+    capture_output=True, text=True).stdout.split()
+if not files:
+    sys.exit(3)  # lane already empty — absent, named
+victim = files[0]
+n = open(victim, "rb").read().count(b"\n")
+before = total()
+os.rename(victim, victim + ".pc-tmp")
+after = total()
+os.rename(victim + ".pc-tmp", victim)
+moved = before - after
+print(json.dumps({"value": 1.0 if moved == n else 0.0,
+                  "victim": victim, "expected": n, "moved": moved}))
+PY'''
+
+[[bar]]
+id           = "p0-root-junk"
+one_line     = "Committed process output — root score reports, stray .log captures, the stray root baselines/ dir, and files committed both raw and gzipped"
+derives_from = "quality/DELETION.md §P0; root score-report-*.json arrived in commit 8bdefaa6 'stash dr work'"
+status       = "open"
+target       = 0
+floor        = 113934
+floor_basis  = "quality/baselines/deletion_manifest.tsv, frozen 2026-08-27"
+direction    = "lower_is_better"
+kill         = "a file in this lane that turns out to have a reader is a MANIFEST BUG, not a reason to hand-skip it — add the spare to deletion-manifest.py with the reader cited, re-freeze, and say so"
+instrument   = "python3 scripts/deletion-manifest.py --lane p0-root-junk"
+
+[[bar]]
+id           = "p1-bench-baselines"
+one_line     = "Baseline snapshots the reader cannot address — flat files with no <id>/ dir, and dated snapshots that are not a latest.json target"
+derives_from = "sovereign-cli-llm/src/bench_cmd/baselines.rs:39 builds every path as bench_root/<group>/baselines/<id>/ and :44 opens latest.json inside it"
+status       = "open"
+target       = 0
+floor        = 384759
+floor_basis  = "quality/baselines/deletion_manifest.tsv, frozen 2026-08-27"
+direction    = "lower_is_better"
+kill         = "if `svrn bench gate` changes ANY verdict across this deletion, stop and restore — the lane's whole claim is that these files are unreachable"
+instrument   = "python3 scripts/deletion-manifest.py --lane p1-bench-baselines"
+
+[[bar]]
+id           = "p1-dr-flights"
+one_line     = "Runtime bookkeeping inside committed flight trees — gap lists, checkpoints, budget/skip ledgers, resume state, console capture"
+derives_from = "research/deep-research/arms/.gitignore: 'Flight trees are EVIDENCE, not source... the run trees stay local.' Three trees obey it; sixteen were committed anyway 2026-08-17..08-21"
+status       = "open"
+target       = 0
+floor        = 272421
+floor_basis  = "quality/baselines/deletion_manifest.tsv, frozen 2026-08-27"
+direction    = "lower_is_better"
+kill         = "every bar in quality/campaigns/drb1-race.toml must print a byte-identical value before and after. One differing value kills the lane."
+# charter.json (each run's PRE-REGISTRATION), report.md (the finding),
+# plan.json and survey-*.json are DELIBERATELY NOT in this lane. That is the
+# conservative variant, chosen on 2026-08-27; the aggressive one adds ~22k
+# lines and deletes pre-registrations, which this workspace does not do.
+instrument   = "python3 scripts/deletion-manifest.py --lane p1-dr-flights"
+
+[[bar]]
+id           = "p2-code-certain"
+one_line     = "Dead code at FILE granularity — postgres.rs plus 33 individually-cleared examples with no runner"
+derives_from = "quality/DELETION.md §P2. postgres.rs known broken since quality/CLEANUP.md's 2026-07-12 record"
+status       = "open"
+target       = 0
+floor        = 9739
+floor_basis  = "quality/baselines/deletion_manifest.tsv, frozen 2026-08-27"
+direction    = "lower_is_better"
+kill         = "if `cargo clippy --workspace --all-targets` produces ONE new dead_code warning above quality/baselines/clippy_counts.tsv after the examples go, an example was load-bearing for compile coverage — restore it and record which"
+instrument   = "python3 scripts/deletion-manifest.py --lane p2-code-certain"
+
+[[bar]]
+id           = "no-behaviour-lost"
+one_line     = "Both definition-of-done gates stay green across every phase"
+derives_from = "AGENTS.md §Definition of done"
+status       = "open"
+target       = 0
+direction    = "lower_is_better"
+kill         = "a red gate is not 'flaky' and is not 'unrelated'. Bisect the phase's own diff before touching anything else."
+# Gate on the EXIT CODE, not the summary line. Zero-test runs exit 4,
+# unattributable runs exit 5; both are failures, not passes (ARCH §18.1).
+instrument   = '''bash -c '
+./scripts/sovereign-lint.sh --human --full >/dev/null 2>&1; l=$?
+./scripts/sovereign-test.sh --human       >/dev/null 2>&1; t=$?
+python3 -c "import json,sys; print(json.dumps({\"value\": $l + $t, \"lint\": $l, \"test\": $t}))"
+' '''
+
+[[bar]]
+id           = "ratchet-holds"
+one_line     = "No lane ever grows — the campaign cannot lose ground while it runs"
+derives_from = "August 2026 added +155,452 net first-party Rust; 100,000 lines is 19.6 days of accretion"
+status       = "open"
+target       = 0
+direction    = "lower_is_better"
+kill         = "a lane that grew means new committed output landed during the campaign. Find the commit, not a workaround."
+instrument   = '''bash -c '
+python3 scripts/deletion-manifest.py --verify >/dev/null 2>&1
+python3 -c "import json; print(json.dumps({\"value\": $?}))"
+' '''

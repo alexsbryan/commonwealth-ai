@@ -24,14 +24,18 @@ document is the contract; `cargo run -p xtask -- boundary-gate` enforces it in C
 | Crate | Allowed internal deps |
 |---|---|
 | `oicp-types` | *(none)* — the wire vocabulary, a pure leaf. |
-| `sovereign-contracts` | `oicp-types` only. |
+| `kernel-types` | *(none)* — identity + provenance. Empty by contract: a kernel that may name a product crate is not a kernel. |
+| `corpus-engine-sections` | *(none)* — the section detectors. Third-party budget is `regex` + `tracing`, which is why it may cross at all. |
+| `sovereign-contracts` | `oicp-types`, `kernel-types`. |
 | `oicp-client` | `sovereign-contracts`, `oicp-types`. |
 
 ## The rules
 
 1. **A package crate may depend only on other package crates + the shared leaves.**
    No `sovereign-core`, `sovereign-tools`, `sovereign-inference`, `corpus-engine`,
-   `sovereign-mesh`, … The corpus/atlas-backed tools that a workflow sometimes
+   `sovereign-mesh`, … Note `corpus-engine-sections` is a shared leaf and
+   `corpus-engine` is not: the rule is about the CLOSURE, and the leaf's is
+   `regex` + `tracing` while the engine's drags LanceDB, Tantivy and rusqlite. The corpus/atlas-backed tools that a workflow sometimes
    needs (`extract`, `corpus_store`, `corpus_search`, `atlas_gaps`,
    `atlas_tensions`) stay monolith-side and are injected at call sites via the
    runner's `extra_tools` slot — they are not package dependencies.

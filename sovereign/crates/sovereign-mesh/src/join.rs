@@ -75,7 +75,17 @@ struct JoinRequestWire {
 struct MeshWire {
     id: commonwealth_core::ids::MeshId,
     name: String,
-    join_key_hash: [u8; 32],
+    /// Zeroed when the founder runs a pre-split build; the joiner then
+    /// authorizes on `invite_key_hash` via the compat arm in
+    /// `Mesh::gossip_authorized` until that founder upgrades.
+    #[serde(default)]
+    mesh_secret: [u8; 32],
+    #[serde(rename = "join_key_hash")]
+    invite_key_hash: [u8; 32],
+    #[serde(default)]
+    invite_version: u64,
+    #[serde(default)]
+    invite_expires_at: Option<u64>,
     #[serde(default)]
     require_encryption: bool,
     members: Vec<commonwealth_core::mesh::MemberRecord>,
@@ -93,7 +103,10 @@ impl MeshWire {
         Mesh {
             id: self.id,
             name: self.name,
-            join_key_hash: self.join_key_hash,
+            mesh_secret: self.mesh_secret,
+            invite_key_hash: self.invite_key_hash,
+            invite_version: self.invite_version,
+            invite_expires_at: self.invite_expires_at,
             require_encryption: self.require_encryption,
             members,
             peers: self.peers,

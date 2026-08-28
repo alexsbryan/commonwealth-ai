@@ -241,11 +241,7 @@ impl BriefingTool {
     }
 
     /// The executable half of `briefing`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let Some(repo_root) = self.workspace_root.clone() else {
             return Err(Error::InvalidInput(
                 "briefing: daemon has no workspace configured — set \

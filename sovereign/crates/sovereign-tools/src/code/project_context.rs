@@ -60,11 +60,7 @@ impl ProjectContextTool {
     }
 
     /// The executable half of `project_context`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -170,7 +166,6 @@ impl ProjectContextTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         params
             .get("query")
             .and_then(|v| v.as_str())

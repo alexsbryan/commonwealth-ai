@@ -220,11 +220,23 @@ pub fn load_or_create_client_token(data_dir: &Path) -> std::io::Result<String> {
     }
 }
 
-fn save_client_token(data_dir: &Path) -> std::io::Result<String> {
+/// Mint a fresh bearer token: 256 bits of OS entropy, hex-encoded.
+///
+/// THE definition of what a bearer this daemon accepts looks like, shared by
+/// the persisted client token below and by ephemeral guest grants
+/// (`commonwealth_knowledge::guest_grant`). Both land in the same
+/// `Authorization: Bearer` header and are compared by the same
+/// `client_auth_layer`, so two generators would be two answers to one
+/// question (ARCH §10.6) — and the weaker one would set the real strength.
+pub fn generate_bearer_token() -> std::io::Result<String> {
     let mut raw = [0u8; 32];
     getrandom::fill(&mut raw)
-        .map_err(|e| std::io::Error::other(format!("client-token entropy failed: {e}")))?;
-    let token = hex::encode(raw);
+        .map_err(|e| std::io::Error::other(format!("bearer-token entropy failed: {e}")))?;
+    Ok(hex::encode(raw))
+}
+
+fn save_client_token(data_dir: &Path) -> std::io::Result<String> {
+    let token = generate_bearer_token()?;
 
     fs::create_dir_all(data_dir)?;
     let target = client_token_path(data_dir);

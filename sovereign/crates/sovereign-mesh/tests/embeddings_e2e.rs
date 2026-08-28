@@ -49,9 +49,12 @@ fn build_app_state(with_embed: bool) -> AppState {
         member(self_id, "self", "127.0.0.1:9742".parse().unwrap()),
     );
     let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: commonwealth_core::ids::MeshId::from_u128(7),
         name: "embeddings-test".into(),
-        join_key_hash: [3u8; 32],
+        invite_key_hash: [3u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members,
         peers: vec![],

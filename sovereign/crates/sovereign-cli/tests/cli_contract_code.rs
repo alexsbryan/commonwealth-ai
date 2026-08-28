@@ -179,6 +179,20 @@ fn direction1_default_build_gates_dev_and_dispatches_public() {
             }
             // Awareness commands are hidden (not canonical); nothing to do.
             Feature::Awareness => {}
+            // Code-intel verbs are gated exactly like dev-tools in the shipped
+            // build. (Arm added because `Feature::CodeIntel` was introduced
+            // without updating this match — pre-existing break on `main`,
+            // unrelated to the mesh work this branch carries.)
+            Feature::CodeIntel => {
+                let intercepted = !out.status.success() && text.contains("dev-tools");
+                if !intercepted {
+                    fails.push(format!(
+                        "`svrn {}` is not gated in the default build \
+                         (expected exit 2 + a `--features dev-tools` pointer)",
+                        cmd.path
+                    ));
+                }
+            }
             // Public + default-feature internal commands must dispatch.
             Feature::Default => {
                 if looks_like_miss(&text) {

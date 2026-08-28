@@ -223,7 +223,8 @@ async fn document_tool_summarize_small() {
 
     let tool = DocumentTool::new(store, inference);
     let result = tool
-        .declared().execute(
+        .declared()
+        .execute(
             &serde_json::json!({"source": "doc.txt", "operation": "summarize"}),
             &ToolContext {
                 conversation_id: "c1".to_string(),
@@ -271,7 +272,8 @@ async fn document_tool_summarize_large() {
 
     let tool = DocumentTool::new(store, inference);
     let result = tool
-        .declared().execute(
+        .declared()
+        .execute(
             &serde_json::json!({"source": "big.txt", "operation": "summarize"}),
             &ToolContext {
                 conversation_id: "c1".to_string(),
@@ -304,7 +306,8 @@ async fn document_tool_source_not_found() {
 
     let tool = DocumentTool::new(store, inference);
     let result = tool
-        .declared().execute(
+        .declared()
+        .execute(
             &serde_json::json!({"source": "nonexistent.txt", "operation": "summarize"}),
             &ToolContext {
                 conversation_id: "c1".to_string(),

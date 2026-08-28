@@ -52,9 +52,12 @@ fn build_state(self_id: NodeId) -> AppState {
         member(self_id, "self", "127.0.0.1:9742".parse().unwrap()),
     );
     let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(1),
         name: "preference-test".into(),
-        join_key_hash: [9u8; 32],
+        invite_key_hash: [9u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members,
         peers: vec![],

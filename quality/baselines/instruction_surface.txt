@@ -1,0 +1,7 @@
+# arch-gate baseline — instruction-surface bytes (the compass every session loads), frozen so it can only shrink.
+# MACHINE-WRITTEN. Regenerate (snapshot current state — defend the diff in review):
+#   cargo run -p xtask -- arch-gate --update-baseline
+# Bank improvements only (never adds, never raises — safe to run anytime):
+#   cargo run -p xtask -- arch-gate --tighten
+1768	.claude/CLAUDE.md
+40374	AGENTS.md

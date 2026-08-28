@@ -68,11 +68,7 @@ impl WikipediaFetchTool {
     }
 
     /// The executable half of `wikipedia_fetch`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let title = params
             .get("title")
             .and_then(|v| v.as_str())

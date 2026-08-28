@@ -34,8 +34,8 @@ use sovereign_core::types::*;
 
 use corpus_engine_scip::arch_metrics::{self, normalize_crate_name, ArchOptions, DeclaredDeps};
 use corpus_engine_scip::ScipGraph;
-use std::sync::Arc;
 use sovereign_core::tool_manifest::DeclaredTool;
+use std::sync::Arc;
 
 /// Feature axes whose `cfg(feature = "…")` spread is worth watching — the
 /// flags that reshape the dependency graph (see CLAUDE.md's build-thrash
@@ -489,7 +489,9 @@ fn temporal_section(
     refs: &[corpus_engine_scip::ScipRefRecord],
     member_dirs: &BTreeMap<String, String>,
 ) -> Option<TemporalSection> {
-    use corpus_engine_archaeology::git_archaeology::{batch_harvest_all_commits, compute_co_evolution};
+    use corpus_engine_archaeology::git_archaeology::{
+        batch_harvest_all_commits, compute_co_evolution,
+    };
 
     let history = batch_harvest_all_commits(root).ok()?;
     let cutoff = std::time::SystemTime::now()
@@ -653,11 +655,7 @@ impl ArchReportTool {
     }
 
     /// The executable half of `arch_report`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus_id = match params.get("corpus_id").and_then(|v| v.as_str()) {
             Some(c) => c.to_string(),
             None => {
@@ -704,7 +702,6 @@ impl ArchReportTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         if let Some(c) = params.get("corpus_id").and_then(|v| v.as_str()) {
             if c.is_empty()
                 || !c

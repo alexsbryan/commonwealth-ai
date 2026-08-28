@@ -34,6 +34,7 @@ commonwealth-ai/
 ├── corpus-engine-atos/        # ATOS feature store + plan items + design signals (carved out) — opt-in behind `--features atos`
 ├── corpus-engine-archaeology/ # Git archaeology + rough-edges + atom-provenance (carved out)
 ├── corpus-engine-yield/       # YieldHook cooperative-yield contract (Tier-0 leaf shared by the data plane + watchers)
+├── corpus-engine-sections/    # Section detectors — corpus-engine's segmentation vocabulary as a regex-only leaf
 ├── corpus-engine-watchers/    # Lint/test/project-index watchers + result stores (carved out of corpus-engine)
 ├── sovereign-recipes/         # Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build)
 ├── sovereign/                 # Local AI assistant (CLI / desktop / server)
@@ -61,6 +62,7 @@ weights (created by `svrn setup`, gitignored).
 | `corpus-engine-atos` | ATOS feature store + plan items + DESIGN.md design signals (carved out). **ATOS is an opt-in experiment** behind the `atos` Cargo feature — the recipe-author workspace uses `sovereign-store::RecipeProjectStore` instead, and default product builds (server/desktop/daemon/cli) carry zero ATOS | `rusqlite` |
 | `corpus-engine-archaeology` | Git history mining + rough-edge surfacing + atom-provenance eval (carved out) | — |
 | `corpus-engine-yield` | `YieldHook` cooperative foreground-yield contract — a Tier-0 leaf (one trait, zero deps) shared by the data plane and the watchers so the daemon's `Arc<dyn YieldHook>` has one trait identity on both. Also carries the seam's **liveness bound**: `MAX_FOREGROUND_DEFERRAL` (300 s) + `DeferralBudget`, because `should_yield()` is a level predicate that any request cadence shorter than the yield window pins true forever — see "Foreground yield is bounded" below | — |
+| `corpus-engine-sections` | Section detectors (`SectionDetector`, `DetectedSection`, `ChapterRegexDetector`, `TocAnchoredDetector`) — corpus-engine's own segmentation vocabulary, carved into a `regex`-only leaf so the studio `SectionTool` shares the ONE implementation by reaching DOWN, instead of corpus-engine reaching UP into `sovereign-contracts` (noun-convergence rung 2) | `regex` |
 | `corpus-engine-watchers` | Lint/test/project-index watchers + their SQLite result stores + coordinator (carved out of corpus-engine, R4 Step 1 — cuts the watcher-edit rebuild set 22→12 crates, measured). Compiles unconditionally; the SCIP `CodeWatcher` stays in corpus-engine | `corpus-engine-notes`, `corpus-engine-yield`, `rusqlite`, `notify` |
 | `sovereign-recipes`  | Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build) | —                                       |
 | `sovereign`          | Local agent runtime                           | `corpus-engine`, `corpus-engine-scip`, `oicp-types`, `kernel-types` |
@@ -537,7 +539,7 @@ See `sovereign-recipes/sf-assessor-roll/`.
 The SEC filings corpora reuse that same guarantee contract
 (`FINANCIAL_CORPORA.md` §6): the read-only `sec_facts` tool
 (`sovereign-tools/src/sec_facts.rs`, pure lookup/derivation lib in
-`enrichment/atlas/analysis/sec_facts.rs`) answers from the typed
+`enrichment/atlas/analysis/sec_facts/`) answers from the typed
 `sec_facts.json` sidecar written by the one decider
 (`sovereign-tools/src/sec_facts_render.rs`) with `cited_figures` + `derivation` +
 `reproduce`, computes ratios and year-over-year changes in Rust, and
@@ -660,7 +662,7 @@ unchanged. Glassbox target: `authority_guard`.
 
 Which corpora the tool is authoritative FOR has exactly one
 implementation: `discover_authoritative_stores` /
-`authoritative_store` in `enrichment/atlas/analysis/sec_facts.rs`, keyed
+`authoritative_store` in `enrichment/atlas/analysis/sec_facts/`, keyed
 on the recipe's `[authority] tool` declaration plus sidecar presence and
 never on the corpus id's spelling (a name prefix is an address, not an
 essence — ARCH §7.5). The tool's claim index and the desktop coverage
@@ -3765,17 +3767,31 @@ through a bearer-token layer (`client_auth`, `[daemon] client_token`,
 with exempt paths for federation/health) — added with the SaaS
 hardening, 2026-07.
 
+A non-loopback caller can now present one of **two** bearers, matched in
+that order. `client_token` is the daemon-wide one and unlocks everything.
+An **ephemeral guest grant** (`commonwealth-knowledge::guest_grant`,
+2026-08-27) is the narrow one: short-lived, revocable, and bound to a
+closed `Scope` enum whose `paths()` is the only route allowlist there is.
+A guest is not a mesh member — no `mesh_secret`, no gossip, no invite key
+— and cannot mint further grants, because no `Scope` variant names
+`/internal/*`. `svrn mesh grant` mints one and prints a
+`sovereign://guest/…` link; `svrn mesh use` accepts it and repoints
+`svrn chat`. The auth layer never matches on a `Scope` variant: it asks
+`GuestGrant::permits_path` and inserts the grant, so a future scope is a
+variant plus its `paths()` arm and touches neither auth nor the wire.
+
 | Path                          | Notes                                                  |
 |-------------------------------|--------------------------------------------------------|
 | `POST /v1/chat/completions`   | OpenAI-compatible. Routing differs by daemon shape (embedded vs standalone) — see `commonwealth/docs/routing-field-guide.md`. `LocalOnly` privacy → 400. |
 | `POST /v1/responses`          | OpenAI Responses-API adapter (codex 0.130+). Wire-format translator over chat-completions. See [`docs/inference.md`](./docs/inference.md). |
-| `GET  /v1/models`             | Loaded models w/ capabilities + performance estimates  |
+| `GET  /v1/models`             | **Names this daemon can dispatch by name**, one row per name. Built from the local OICP manifest + every reachable peer's — the same source `locate_named_model` resolves against, so a listed id resolves and an omitted one does not. Carries `residency` (`resident`/`cold` — cold is a lazy slot, not an outage) and `advertised_by` (which nodes hold it). Falls back to the gossiped `inference_store` scan ONLY on the orchestrator daemon, which has no manifest; that path can say "the entry's last writer is reachable" and nothing stronger. Before 2026-08-27 the store scan was the ONLY path, and it advertised ids chat completions refused. |
 | `POST /v1/embeddings`         | Embedding endpoint (what `embed_http::http_embed_fn` peers call) |
 | `POST /v1/knowledge/search`   | Determines target corpora, fans out, merges, reranks   |
 | `/v1/apps*`, `/app/{app_id}/{*path}` | Mesh-app install/status + reverse proxy (`commonwealth-app`) |
 | `GET  /status`                | Node / mesh / inference / knowledge summary            |
 | `GET  /oicp/v1/capabilities`  | Provider manifest + federation info                    |
 | `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | **Ollama-native compatibility shim** (`routes_ollama.rs`). Pure translation over the OpenAI handlers above — lets Ollama-native clients (Open WebUI's Ollama mode, IDE plugins) connect. `chat`/`generate` are non-streaming-backed in v1: the inner handler runs `stream:false` and the complete answer is framed as Ollama NDJSON (one content frame + terminal). No CORS layer + the same auth posture as `/v1/*` (documented in-module); incremental streaming is a tracked follow-up. |
+| `/internal/guest/grant`, `…/revoke`, `…/list` | Mint / kill / list ephemeral guest grants. On the CLIENT router, deliberately: `:9742` has no auth gate, so a mint route there would let any mesh peer forge guest credentials. Unreachable by a guest because no `Scope` names it. |
 | `/v1/mesh/*` `/v1/admin/*` `/mcp/*` | **Loopback-only** (router middleware + per-handler `enforce_localhost`) |
 
 **Internal API — :9742, plaintext (perimeter-trust)**
@@ -4757,9 +4773,87 @@ corpora / recipes / logs trees, `workspace`, `daemon.pid`,
 `worker_owner_key.bin`, and the `active_notes_db` pointer.
 
 **Platform data dir** — `~/.local/share/svrnmesh` (legacy `sovereign` name
-still common on migrated hosts; resolve via `rebrand::mesh_data_dir`):
-`mesh.json`, `node_id`, `join_key.secret` — the mesh identity, deliberately
-platform-native so the desktop app and CLI share it.
+still common on migrated hosts; resolve via `rebrand::mesh_data_dir`) — the
+mesh identity, deliberately platform-native so the desktop app and CLI share it:
+
+- `node_id`, `node_key` — this machine's identity. Mesh-independent by
+  design: both survive `leave` and every switch, so a node is the same node
+  in every mesh it belongs to.
+- `active` — hex `MeshId` of the mesh currently live. Absent = no mesh.
+- `meshes/<mesh-id-hex>/` — one directory per membership, holding that mesh's
+  `mesh.json` and its own invite key. A node can belong
+  to many meshes and is active in exactly one; the parked ones keep their full
+  roster and their `mesh_secret`, which is why switching back to one is a
+  *resume* (no handshake, no invite redeemed) rather than a join.
+- `client-exposed` stays at the ROOT, not per-mesh: "this node serves remote
+  callers" is a property of the machine, and `expose_client_api` runs before
+  any mesh exists. The per-mesh half of the bind decision is
+  `mesh.require_encryption`, re-read by `start_daemon` on every resume/switch.
+- `mesh.json` + `join_key.secret` at the root are the **legacy single-mesh
+  layout**. `persist::migrate_legacy_layout` moves them into `meshes/<id>/` on
+  first boot and derives that mesh's `mesh_secret`; it is idempotent.
+- **Writing a mesh does not make it active.** `persist::save` writes into
+  `meshes/<mesh.id>/` and touches nothing else; `persist::save_and_activate` is
+  the two-step, used by the only two callers that ESTABLISH a membership
+  (`create_mesh`, `join_mesh`), and `switch_mesh` moves the pointer itself.
+  Saving used to re-point `active` at its subject, which made every caller an
+  implicit switcher — including the gossip loop's per-round re-persist and the
+  mesh-mutation hook, so a round still in flight for the mesh just PARKED could
+  silently undo a switch. The order is file-then-pointer, so `active` never
+  names a directory with no `mesh.json` in it.
+- `leave` clears the pointer (`persist::clear_active`) and removes the departed
+  mesh's directory. It used to leave `active` naming a mesh whose `mesh.json` it
+  had just deleted, which read as healthy at boot while making that mesh
+  permanently unforgettable — `forget` refuses the ACTIVE one.
+
+`Mesh` carries two credentials, and the split is load-bearing:
+`mesh_secret` authorizes gossip (`Mesh::gossip_authorized`) and never rotates;
+`invite_key_hash` admits joiners (`membership::accept_join_with_identity`) and
+rotates freely. They were one field until 2026-08-26, which is why rotating an
+invite used to partition the rotator — re-keying admission re-keyed gossip.
+`invite_expires_at` moved onto the mesh at the same time, from per-node RAM
+where it died on restart and was never armed on any member that had not
+personally minted the invite.
+
+`mesh_secret` does not ride the wire between upgraded peers. A gossip round
+carries `from` + `mesh_proof` — a keyed-BLAKE3 proof (`Mesh::mesh_proof`) bound
+to the SENDER and to a 30s window (`PROOF_WINDOW_SECS`), so a captured proof is
+neither transferable nor durable. `Mesh::gossip_authorized_with` tries the proof
+first and reports which predicate won as a `GossipAuthArm`: `Proof`, `RawSecret`
+(both sides sent matching secrets — the pre-proof path), `Legacy` (`invite_key_hash`,
+the compat arm), or `Refused`. An OFFERED proof that fails is a hard refusal, never
+a fall-through — otherwise stripping it buys the weaker predicate. A node with no
+secret offers no proof at all (`mesh_proof` returns `None`), or two un-migrated
+nodes would hard-refuse each other. The raw secret goes out only to peers not yet
+confirmed post-split, and comes BACK only on the `RawSecret` arm.
+
+Rotation is refused while the fleet is mixed. `rotate_invite` answers `409
+RotateWouldPartition { pre_split, unconfirmed }` — two populations, because the
+remedies differ: a `pre_split` peer authorizes on `invite_key_hash` and needs
+UPGRADING; an `unconfirmed` peer has simply not been merged from since this
+daemon started and needs one gossip ROUND. Collapsing them told operators their
+fleet was un-migrated when it was not.
+
+The confirmation is local observation, never a peer's claim.
+`MergeReport::peer_pre_split` derives from the `GossipAuthArm`, not from the
+payload: an upgraded peer withholds its `mesh_secret` deliberately, so a zeroed
+field stopped being evidence of an old build — reading it as one made two
+upgraded nodes report each other pre-split, blocking rotation on both sides.
+`AppState::peer_split_generation` is the three-valued read (`Some(true)` /
+`Some(false)` / `None`); `peer_confirmed_post_split` folds `None` into unsafe and
+stays the SAFETY read. Because that map is in-memory, `rotate_invite` runs ONE
+gossip round before it is willing to refuse — it never reports a verdict from an
+instrument it has not run. `--force` overrides.
+
+Mesh HTTP surface (`mesh_http.rs`, loopback-only): `GET /v1/mesh/status`,
+`POST /v1/mesh/{create,join,rotate,switch,leave}`,
+`GET /v1/mesh/relay-candidates`, `POST`/`GET /v1/mesh/measurements`.
+`switch` answers `202` and detaches, like `leave` — it is served by the
+listener it drops.
+
+CLI: `svrn mesh {create,join,list,switch,forget,rotate,status,transport,
+balance,leave,logs,fetch-model,warm-cache,plan,bench,check-invariants,
+soak-gate}`.
 
 ---
 
@@ -4896,7 +4990,7 @@ now) and the row is dropped — or trimmed to the still-open residual.
 | `auto_ingest.rs` split | `sovereign-mesh/src/auto_ingest.rs` (~1200 lines) | Auto-collaborate orchestration — `Planning → Handoff → Active → Complete` state machine. Splitting before the cloud-peer flavour settles would re-merge. |
 | `sqlite/conv_tiered.rs` residual (was the `sqlite.rs` split) | `sovereign-store/src/sqlite/conv_tiered.rs` (~1,100 lines) | The 2026-07-12 split landed `sqlite.rs` (4,097 lines) as a 582-line parent + 14 per-concern modules; the largest child holds the ConvTieredReader + skeleton/RAPTOR/motif methods. Next growth splits the chunk-entity methods out. |
 | `scoring.rs` residual (was the `oicp-types` lib split) | `oicp-types/src/scoring.rs` (~1,260 lines) | The residual of the 2026-07-11 quality-program R2 split (lib.rs 3,005 → 68 + 9 family modules): the §6/§7 reference-scoring implementation — 15 tuning constants, the scorer chain, `NodeObservations` — coheres as one auditable algorithm today. Next seam if it grows: node-observation/locality signals vs the scorer itself. |
-| `document_asset.rs` split | `sovereign-tools/src/document_asset.rs` (~3617 lines) | DocumentAssetManager — tiered (T1/T2/T3) ingest orchestration + skeleton/RAPTOR persistence. Splits along the tier boundary once the tiered surface stops evolving. |
+| ~~`document_asset.rs` split~~ **DONE 2026-08-27** | `sovereign-tools/src/document_asset/` (9 files, largest 828) | DocumentAssetManager — split along the three phases its own module doc declares: `manager` (ingest) + `routing` + `execution`, with `skeleton` / `artifacts` / `motifs` / `atoms` / `self_reference` carved off the free functions. Routing and execution are separate `impl DocumentAssetManager` blocks — inherent impls may span modules within a crate, so a phase gets a file without the type moving. NOT the tier boundary this row predicted: the tiers are interleaved through `run_ingest`, and the phases are what the file was actually organised by. |
 | `found.rs` split | `sovereign-cli-dev/src/found.rs` (~2750 lines) | `svrn project found` four-stage founding conversation. Splits one-file-per-stage when the founding flow stabilises. |
 | `MemberRecord.client_port` wire field | `commonwealth-core/src/mesh.rs` + `commonwealth-discovery/src/membership.rs` + `sovereign-mesh/src/daemon.rs::peer_inference_endpoints` + `sovereign-mesh/src/auto_ingest.rs` | Local-side port plumbing landed; **peer-uniformity assumption** remains: `peer_inference_endpoints` rewrites every peer URL with this daemon's client_port, and `auto_ingest` pins port `9742`. Mixed-port mesh deployments need a `client_port` field on `MemberRecord` and a matching slot in the join handshake. Until then, operators who set a non-default `client_port` should configure every peer the same. |
 | Atlas inspector Phase 2 — curation overlay | `sovereign-tools/src/atlas_view/` | Phase 1 ships read-only inspection. Phase 2 adds an `atlas/overlay.sqlite` keyed by `StableAtomKey` (content-hash) so user edits and approval state survive re-extraction. Forward-compat fields (`curation_status`, `overlay_supports`) already on every DTO. |

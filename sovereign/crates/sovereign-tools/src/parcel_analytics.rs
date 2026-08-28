@@ -62,11 +62,7 @@ impl ParcelAnalyticsTool {
     }
 
     /// The executable half of `parcel_analytics`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus_id = params
             .get("corpus_id")
             .and_then(|v| v.as_str())

@@ -209,6 +209,26 @@ path = "mesh rotate"
 binary = "llm"
 visibility = "public"
 classification = "daemon"
+flags = [{ name = "--force" }]
+[[command]]
+# Reads `<root>/meshes/` straight off disk, so it answers even when the daemon
+# will not start — which is exactly when an operator needs to know what this
+# node is a member of.
+path = "mesh list"
+binary = "llm"
+visibility = "public"
+classification = "offline"
+flags = [{ name = "--json" }]
+[[command]]
+path = "mesh switch"
+binary = "llm"
+visibility = "public"
+classification = "daemon"
+[[command]]
+path = "mesh forget"
+binary = "llm"
+visibility = "public"
+classification = "offline"
 [[command]]
 path = "mesh status"
 binary = "llm"
@@ -1949,6 +1969,30 @@ run = "mesh leave"
 mutates = true
 note = "prove the mutation reverses: the node re-solos"
 
+[[journey]]
+id = "mesh-membership"
+title = "See which meshes this node belongs to, and move between them"
+persona = "operator"
+experience = "mesh-federation"
+tier = 2
+visibility = "public"
+doc = "docs/TWO_NODE_QUICKSTART.md"
+# Runs LIVE, unlike the other two mesh journeys: reading the membership list
+# needs no second machine and no daemon, so there is no reason to park these
+# steps in the never-run bucket.
+[[journey.step]]
+run = "mesh list --json"
+[journey.step.expect]
+exit = 0
+# A JSON array either way — populated on a node in a mesh, `[]` on a clean
+# install. Asserting the shape rather than `stdout_non_empty`, which any
+# command satisfies once a banner is on the stream (see note f496d39e).
+stdout_contains = "["
+[[journey.step]]
+run = "mesh list"
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
 [[journey]]
 id = "mesh-bigger-model"
 title = "Run a model larger than one machine across the mesh"
