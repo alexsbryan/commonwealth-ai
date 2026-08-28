@@ -14,6 +14,11 @@ Pre-registered bars (set before this ran, see the spec):
 Ground truth is the author's own commit and is INDEPENDENT of the graph:
 a call site is "one the author edited" iff the commit changed that line
 AND the line names the symbol. Nothing in that test consults `refs`.
+
+`derive_episodes` is the ONE derivation of that population. M1a's
+classifier (classify_overoffer.py) imports it rather than re-deriving,
+so the two cannot drift apart — the episode counts printed here and the
+population classified there are the same objects.
 """
 from __future__ import annotations
 
@@ -66,58 +71,60 @@ def changed_new_lines(commit: str) -> dict[str, set[int]]:
     return per
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--window", type=int, default=8000)
-    ap.add_argument("--db", default=DB)
-    ap.add_argument("-v", "--verbose", action="store_true")
-    # Same-file call sites are just as valid a target: the rule lane cannot
-    # induce a same-file signature fanout either, because the declaration
-    # edit and the call-site edits are still different text. Excluding them
-    # measures a narrower thing than the lane would actually do, so the
-    # faithful default counts them. --cross-file-only reproduces the first
-    # run for comparison.
-    ap.add_argument("--cross-file-only", action="store_true")
-    args = ap.parse_args()
-    con = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True)
+class Corpus:
+    """The git/source accessors the derivation needs, memoised once.
 
-    last = last_touching(args.window)
-    # ONE subprocess per commit, not per file: everything that differs
-    # between the commit and HEAD, so "aligned" is a set lookup. Doing it
-    # per file shelled out thousands of times and did not finish.
-    _moved: dict[str, set[str]] = {}
-    _diff: dict[str, dict[str, set[int]]] = {}
+    One accessor per path (ARCH §10.6): the classifier reuses these
+    rather than opening its own, so "is this file aligned?" has a single
+    answer in both scripts.
+    """
 
-    def aligned(path: str, commit: str) -> bool:
+    def __init__(self) -> None:
+        self._moved: dict[str, set[str]] = {}
+        self._diff: dict[str, dict[str, set[int]]] = {}
+        self._src: dict[str, list[str]] = {}
+
+    def aligned(self, path: str, commit: str) -> bool:
         """Is this file byte-identical between that commit and HEAD? Only
         then do the graph's HEAD line numbers describe the commit's."""
-        if commit not in _moved:
+        if commit not in self._moved:
+            # ONE subprocess per commit, not per file: everything that
+            # differs between the commit and HEAD, so "aligned" is a set
+            # lookup. Doing it per file shelled out thousands of times
+            # and did not finish.
             out = git("diff", "--name-only", "--no-renames", commit, "HEAD")
-            _moved[commit] = {l.strip() for l in out.split("\n") if l.strip()}
-        return path not in _moved[commit] and Path(path).exists()
+            self._moved[commit] = {l.strip() for l in out.split("\n") if l.strip()}
+        return path not in self._moved[commit] and Path(path).exists()
 
-    def touched_of(commit: str) -> dict[str, set[int]]:
-        if commit not in _diff:
-            _diff[commit] = changed_new_lines(commit)
-        return _diff[commit]
+    def touched(self, commit: str) -> dict[str, set[int]]:
+        if commit not in self._diff:
+            self._diff[commit] = changed_new_lines(commit)
+        return self._diff[commit]
 
-    episodes = []
-    counters = collections.Counter()
-    _src: dict[str, list[str]] = {}
+    def lines(self, p: str) -> list[str]:
+        if p not in self._src:
+            self._src[p] = Path(p).read_text(encoding="utf-8", errors="replace").split("\n")
+        return self._src[p]
 
-    def lines_of(p: str) -> list[str]:
-        if p not in _src:
-            _src[p] = Path(p).read_text(encoding="utf-8", errors="replace").split("\n")
-        return _src[p]
+
+def derive_episodes(con: sqlite3.Connection, window: int, cross_file_only: bool):
+    """The M0 population. Returns (episodes, counters, corpus).
+
+    Each episode carries the SITE SETS, not just their sizes, so a caller
+    can classify them. M0 itself only needs the cardinalities.
+    """
+    corpus = Corpus()
+    last = last_touching(window)
+    counters: collections.Counter = collections.Counter()
 
     # PASS 1 — find the signature edits. `symbols` is indexed on file_path
     # so these lookups are cheap.
     triggers = []
     seen_trigger: set[tuple[str, str]] = set()
     for path, commit in sorted(last.items()):
-        if not path.endswith(".rs") or not aligned(path, commit):
+        if not path.endswith(".rs") or not corpus.aligned(path, commit):
             continue
-        touched = touched_of(commit)
+        touched = corpus.touched(commit)
         if path not in touched:
             continue
         counters["files_scanned"] += 1
@@ -136,8 +143,9 @@ def main() -> None:
             # ...and the line must actually DECLARE it. Span proximity alone
             # counts body edits near the top of any short function, which
             # inflated this 15176-fold on the first run.
-            if not any(re.search(rf"\bfn\s+{re.escape(name)}\b", lines_of(path)[l])
-                       for l in range(ls, min(ls + SIG_SPAN, len(lines_of(path))))):
+            src = corpus.lines(path)
+            if not any(re.search(rf"\bfn\s+{re.escape(name)}\b", src[l])
+                       for l in range(ls, min(ls + SIG_SPAN, len(src)))):
                 continue
             counters["signature_edits"] += 1
             key = (commit, qual)
@@ -146,9 +154,6 @@ def main() -> None:
             seen_trigger.add(key)
             triggers.append((path, commit, line, name, qual, ls, le))
 
-    # PASS 2 — ONE scan of `refs` for every callee at once. There is NO
-    # index on callee_qualified (only on the empty callee_symbol column),
-    # so a per-symbol query is a full scan of 1.36M rows each time.
     # A textual truth cannot tell `Foo::new(` from `Bar::new(`. Where the
     # repo defines the same NAME on more than one symbol, the heuristic
     # would count another type's call sites as this author's and depress
@@ -164,6 +169,10 @@ def main() -> None:
         else:
             kept.append(t)
     triggers = kept
+
+    # PASS 2 — ONE scan of `refs` for every callee at once. There is NO
+    # index on callee_qualified (only on the empty callee_symbol column),
+    # so a per-symbol query is a full scan of 1.36M rows each time.
     wanted = {t[4] for t in triggers}
     calls: dict[str, list[tuple[str, int]]] = collections.defaultdict(list)
     if wanted:
@@ -172,24 +181,25 @@ def main() -> None:
                 calls[q].append((f, l))
     counters["callees_resolved"] = len(calls)
 
+    episodes = []
     for path, commit, line, name, qual, ls, le in triggers:
         pred = {(f, l) for f, l in calls.get(qual, [])
                 if not (f == path and ls <= l <= le)}
         # Comparable only where the call-site file is ALSO byte-identical to
         # its state in this commit; elsewhere HEAD lines are not the
         # commit's lines. Dropped sites are counted, never guessed.
-        comparable = {(f, l) for f, l in pred if aligned(f, commit)}
+        comparable = {(f, l) for f, l in pred if corpus.aligned(f, commit)}
         counters["pred_sites_dropped_unaligned"] += len(pred) - len(comparable)
 
         # AUTHOR TRUTH, graph-independent: a line this commit changed that
         # names the symbol with a call paren.
         author = set()
-        for f, lines in touched_of(commit).items():
-            if not f.endswith(".rs") or not aligned(f, commit):
+        for f, lines in corpus.touched(commit).items():
+            if not f.endswith(".rs") or not corpus.aligned(f, commit):
                 continue
-            if f == path and args.cross_file_only:
+            if f == path and cross_file_only:
                 continue
-            fsrc = lines_of(f)
+            fsrc = corpus.lines(f)
             for l in lines:
                 if f == path and ls <= l < ls + SIG_SPAN:
                     continue      # the declaration edit is the TRIGGER, not a target
@@ -202,13 +212,35 @@ def main() -> None:
         if not author:
             counters["no_call_site_edits"] += 1
             continue
+        episodes.append({"symbol": name, "qualified": qual, "commit": commit,
+                         "decl_path": path, "decl_start": ls, "decl_end": le,
+                         "author_sites": author, "pred_sites": comparable})
+    return episodes, counters, corpus
 
-        hit = author & comparable
-        episodes.append({"symbol": name, "author": len(author),
-                         "pred": len(comparable), "hit": len(hit)})
-        if args.verbose:
-            print(f"  {name:28s} author={len(author):>2} pred={len(comparable):>3} "
-                  f"hit={len(hit):>2}  {path.split('/')[-1]}:{line+1}")
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--window", type=int, default=8000)
+    ap.add_argument("--db", default=DB)
+    ap.add_argument("-v", "--verbose", action="store_true")
+    # Same-file call sites are just as valid a target: the rule lane cannot
+    # induce a same-file signature fanout either, because the declaration
+    # edit and the call-site edits are still different text. Excluding them
+    # measures a narrower thing than the lane would actually do, so the
+    # faithful default counts them. --cross-file-only reproduces the first
+    # run for comparison.
+    ap.add_argument("--cross-file-only", action="store_true")
+    args = ap.parse_args()
+    con = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True)
+
+    episodes, counters, _ = derive_episodes(con, args.window, args.cross_file_only)
+
+    if args.verbose:
+        for e in episodes:
+            hit = e["author_sites"] & e["pred_sites"]
+            print(f"  {e['symbol']:28s} author={len(e['author_sites']):>2} "
+                  f"pred={len(e['pred_sites']):>3} hit={len(hit):>2}  "
+                  f"{e['decl_path'].split('/')[-1]}")
 
     print(f"\nM0 — symbol lane probe (signature_fanout, rust, index-aligned)")
     print(f"  files scanned                  {counters['files_scanned']}")
@@ -220,9 +252,9 @@ def main() -> None:
     print(f"  predicted sites dropped as unaligned: {counters['pred_sites_dropped_unaligned']}")
     if not episodes:
         raise SystemExit("\n  no episodes — nothing to measure, and no rate is published.")
-    A = sum(e["author"] for e in episodes)
-    P = sum(e["pred"] for e in episodes)
-    H = sum(e["hit"] for e in episodes)
+    A = sum(len(e["author_sites"]) for e in episodes)
+    P = sum(len(e["pred_sites"]) for e in episodes)
+    H = sum(len(e["author_sites"] & e["pred_sites"]) for e in episodes)
     print(f"\n  author-edited call sites       {A}")
     print(f"  sites the graph named          {P}")
     print(f"  overlap                        {H}")

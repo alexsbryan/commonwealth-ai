@@ -1,0 +1,75 @@
+
+M1a — over-offer classification (cross-file, rust, index-aligned)
+  episodes 251 · predicted 1156 · author-edited 694 · overlap 593 · OVER-OFFERED 563
+
+  INSTRUMENT CHECK — call sites parsed 1051/1156; arity matches the NEW declaration 1015/1051 = 96.6%
+
+  BY SIGNATURE-CHANGE KIND (episode-level)
+    bucket                        TP    FP  precision
+    new_function                 280   312      47.3%
+    signature_unchanged          235   204      53.5%
+    return_or_generics_only       61    16      79.2%
+    arity_changed                  6    16      27.3%
+    param_type_changed            11     8      57.9%
+    param_renamed_only             0     7       0.0%
+
+  BY WHETHER THE OCCURRENCE IS A CALL
+    bucket                        TP    FP  precision
+    call                         593   458      56.4%
+    not-a-call                     0   105       0.0%
+
+  BY TEST/BENCH/EXAMPLE PATH
+    bucket                        TP    FP  precision
+    product path                 541   542      50.0%
+    test-ish path                 52    21      71.2%
+
+  BY #[cfg(test)] / #[cfg(feature)] ENCLOSURE
+    bucket                        TP    FP  precision
+    always-built                 429   281      60.4%
+    cfg-gated                    164   282      36.8%
+
+  BY CRATE DISTANCE
+    bucket                        TP    FP  precision
+    same crate                   394   476      45.3%
+    other crate                  199    87      69.6%
+
+  BY WHERE THE PRE-COMMIT DECLARATION WAS FOUND
+    bucket                        TP    FP  precision
+    absent                       280   312      47.3%
+    moved                        244   145      62.7%
+    same_path                     69   106      39.4%
+
+  CLUSTERING — 24 commits supply all 1156 sites
+    27c0fe031   525 sites  prec  49.3%  cum 45.4%  Noun convergence (#47)
+    32ba1548a   266 sites  prec  75.2%  cum 68.4%  Mesh multi membership (#51)
+    286cfb086    62 sites  prec  95.2%  cum 73.8%  Topology final three (#49)
+    f998b01cf    58 sites  prec   1.7%  cum 78.8%  fix(release): make Intel-mac cross-builds an
+    5dde3e6e6    45 sites  prec  40.0%  cum 82.7%  Flash next serving (#52)
+    -> effective n for a CI is the COMMIT, not the site.
+    cluster-bootstrap 95% CI   precision 51.3% [27.2, 65.8]   recall 85.4% [53.6, 94.6]
+    !! the 60% precision bar lies INSIDE the interval — M0's verdict on this slice is COULD-NOT-JUDGE, not pass or fail
+    !! the 80% recall bar lies INSIDE the interval — M0's verdict on this slice is COULD-NOT-JUDGE, not pass or fail
+
+  THE TARGET SHAPE — an existing function whose parameter list changed
+    episodes 10 (bar >= 25)  ·  commits 4  ·  sites 41 of 1156 = 3.5%
+    author-edited 20 · overlap 17
+    YIELD BAR NOT MET. The spec pre-registered 'trigger yield >= 25
+    episodes, else report the CI and rank nothing'. M0 read that bar
+    against episodes of every kind. On the shape the hypothesis names,
+    the yield is 10. No rate is published for this slice.
+
+  CANDIDATE FILTERS — pre-registered ruler (precision >= 60% AND recall >= 80% to advance to M1b)
+    filter (keep only ...)              junk-  good    prec  recall  verdict
+                                           rm  lost
+    calls (drop non-call occurrences)     105     0   56.4%   85.4%  
+    product paths (drop test-ish)          21    52   50.0%   78.0%  
+    always-built (drop cfg-gated)         282   164   60.4%   61.8%  
+    other-crate sites                     476   394   69.6%   28.7%  
+    same-crate sites                       87   199   45.3%   56.8%  
+    episodes whose arity changed          547   587   27.3%    0.9%  
+    episodes with a real sig change       516   515   62.4%   11.2%  
+    call AND real sig change              526   515   67.8%   11.2%  
+    call AND arity changed                549   587   30.0%    0.9%  
+    call AND real sig AND product path    531   521   69.2%   10.4%  
+
+  per-site rows -> /tmp/claude-1000/-home-alexbryan-dev-commonwealth-ai/51107dc3-f79a-408d-926d-0373b8de97ed/scratchpad/m1a_sites.tsv

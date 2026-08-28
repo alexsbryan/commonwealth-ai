@@ -101,7 +101,196 @@ If recall clears and precision does not, the finding is "the graph
 names the sites but over-offers" and the next question is a filter on
 *which* callers, not more induction.
 
-## M1 — the edit content (only if M0 clears)
+## M1 — the site filter (the blocking question after M0)
+
+M0 renumbered this plan. Deriving edit content was M1; it is now M2,
+because there is no point deriving content for sites that should not be
+offered. **M1 is a filter on WHICH callers**, which is the branch M0
+pre-registered for exactly this outcome.
+
+The population is fixed by M0 and is not re-derived: on the cross-file
+slice the graph named **1,156** sites, the author edited **694**, the
+overlap is **593**. So **563 sites are over-offered** and 101 are
+missed. M1a diagnoses those 563; M1b builds a filter only if M1a names
+one worth building.
+
+### M1a — pre-registered measure (written before the classification ran)
+
+For every candidate filter `F` — a predicate over a predicted site or
+over its episode — report four numbers on the cross-file population,
+against the same ruler M0 used:
+
+| quantity | definition |
+|---|---|
+| junk removed | over-offered sites `F` drops (of 563) |
+| good lost | author-edited sites `F` drops (of 593) |
+| precision after | kept-TP / kept-total |
+| recall after | kept-TP / **694** — the denominator does not move |
+
+`F` is a **candidate for M1b** iff it lifts cross-file precision to
+**≥ 60%** (M0's bar) while holding recall **≥ 80%** (M0's bar). A filter
+that clears precision by destroying recall is reported and not
+recommended. If no single-axis filter clears both, the bounds and the
+best joint filter are reported and nothing is ranked.
+
+### The four hypotheses, and what each implies
+
+Named before measurement so that a null result is legible:
+
+1. **Arity.** A signature that gained a parameter leaves old-arity calls
+   needing work and new-arity calls not. If this dominates, the filter is
+   nearly free and nearly exact.
+2. **Test / bench / example paths and `#[cfg(test)]` blocks** — plausibly
+   updated in a separate commit, or not at all.
+3. **Crate distance** from the edited declaration.
+4. **Additive-compatible changes**, where only some callers ever needed
+   updating. If this dominates, **51.3% is not an over-offer** — it is
+   the truth set being narrower than reality, and the right response is
+   to fix the ruler, not to filter.
+5. **The site is not a call at all.** Added before the classification ran
+   and after reading the table's schema, not after seeing an outcome:
+   `refs` is an OCCURRENCE table, not a call table — `ref_kind` is
+   uniformly `'direct'` across all 1,356,363 rows, and sampled rows are
+   `use` statements. A function mentioned in an import, passed as a
+   value, or named in a trait bound is a site the graph offers and a
+   signature change never obliges the author to touch. M0's author-truth
+   requires `NAME\s*\(` on the line, so every true positive is
+   call-shaped by construction while a predicted site need not be. The
+   `start_col`/`end_col` columns test this directly and cheaply: read the
+   character that follows the occurrence.
+
+### The instrument check that runs first (ARCH §18.4)
+
+Every file in this bank is byte-identical to HEAD, and HEAD compiles.
+So every predicted call site is already consistent with the **new**
+signature. Two consequences, and the first is a test of the instrument
+rather than of the graph:
+
+- If a large share of over-offered sites parse as **old** arity, the
+  arity extractor is wrong and no arity number may be published.
+- If they parse as **new** arity, they genuinely did not need editing,
+  which supports hypothesis 4 over hypothesis 1 and makes the
+  **episode-level** question — *did this signature change break callers
+  at all?* — the one worth filtering on.
+
+# M1a RESULT (2026-08-28) — the population was not the shape, and M0's cross-file verdicts do not survive their own ruler
+
+Run: `python3 gym/next-edit/aligned/classify_overoffer.py [--all-sites]`
+from the repo root. Transcripts and the 1,156-row per-site table are
+committed beside it (`m1a_crossfile.txt`, `m1a_allsites.txt`,
+`m1a_sites.tsv`). The classifier **imports** `derive_episodes` from the
+M0 probe rather than re-deriving the population, so the two cannot
+disagree about what was measured; the probe was refactored to expose it
+and reproduces both M0 headlines to the decimal.
+
+## 1. The 563 over-offers are mostly not signature fanout
+
+| episode kind | episodes | sites |
+|---|---|---|
+| function did not exist at `commit^` | 109 | 592 |
+| declaration text **unchanged** (the file moved) | 101 | 439 |
+| return type / generics only | 11 | 77 |
+| **parameter list changed** | **10** | **41** |
+| parameter renamed only | 1 | 7 |
+
+**1,031 of 1,156 cross-file sites (89.2%) come from episodes where no
+pre-existing function's signature changed.** M0's trigger is "the commit
+touched a line inside the declaration span", which a brand-new function
+and a bulk file move both satisfy for every function they contain. The
+23 commits in the population include squash-merged PRs — `Noun
+convergence (#47)` alone supplies 45% of the sites — and a squash merge
+moves files wholesale.
+
+Hypothesis 4 is therefore answered, but not as posed: the over-offer is
+not additive-compatible change with an incomplete truth set. It is a
+trigger that fires on a different event.
+
+## 2. The verdicts do not survive a cluster-aware ruler
+
+`last_touching()` keeps, per file, the commit that touched it LAST, and
+alignment then requires that file to be untouched since — so the
+population is whatever recent commits touched the most files, and
+episodes within a commit share an author, an intent, and a bulk-move
+status. Resampling **commits** rather than sites:
+
+| slice | precision | recall |
+|---|---|---|
+| all sites | 86.6% **[79.4, 91.1]** | 94.4% **[85.9, 97.7]** |
+| cross-file | 51.3% **[27.2, 65.8]** | 85.4% **[53.6, 94.6]** |
+
+The all-sites headline holds: both intervals clear their bars. **The
+cross-file headline does not.** The 60% precision bar and the 80% recall
+bar both lie *inside* their intervals, so M0's cross-file "precision
+FAIL / recall PASS" is a **could-not-judge** on both counts (ARCH §18.1),
+not the split verdict recorded. That correction is owed to the M0
+commit message and note, which quote the point estimates as verdicts.
+
+## 3. On the shape the hypothesis actually names
+
+Restricting to episodes where an existing function's **parameter list**
+changed — the only shape that obliges a call site to change:
+
+| slice | episodes | commits | precision | recall |
+|---|---|---|---|---|
+| all sites | 34 (bar ≥ 25) | 13 | 69.7% [34.4, 91.5] — **could-not-judge** | 95.8% [87.0, 100.0] — **PASS** |
+| cross-file | **10** | 4 | yield bar not met — no rate published | — |
+
+**The core hypothesis holds on recall and only on recall.** A graph built
+from the last save names the sites the author then edits: 95.8%, interval
+entirely above the bar. Precision cannot be judged at 13 clusters.
+
+M0 met its ≥ 25-episode yield bar by counting episodes of every kind; on
+the shape the hypothesis names, the cross-file yield is 10.
+
+## 4. Candidate filters — none clears the pre-registered ruler
+
+Best of ten, on the cross-file population:
+
+| filter | junk removed | good lost | precision | recall |
+|---|---|---|---|---|
+| drop non-call occurrences | 105 | **0** | 56.4% | 85.4% |
+| drop `cfg`-gated sites | 282 | 164 | 60.4% | 61.8% |
+| call **and** a real signature change | 526 | 515 | 67.8% | 11.2% |
+
+Hypothesis 5 is confirmed and is free: all 105 non-call sites are `use`
+imports and `pub use` re-export lists, and **none** is a true positive.
+It is also not enough. Everything that reaches 60% precision does so by
+discarding most of the recall — the case the pre-registration said to
+report and not recommend. **No filter is recommended, and M1b as
+chartered should not be built:** a filter cannot fix a population whose
+96.5% majority is a different event.
+
+## 5. Two instrument bugs found in M1a itself
+
+Recorded because the first M1a run was, like M0's, confident and
+well-formed and wrong:
+
+- `git show commit^:decl_path` is empty for a file the commit **moved**,
+  which reads as "new function". On a 40-episode sample, **20 of 40** so
+  classified existed in the parent tree under another path. Resolution is
+  now by symbol across the tree, not by path.
+- No clustering was accounted for anywhere. It is the difference between
+  a 51.3% FAIL and a could-not-judge.
+
+## 6. What replaces M1b
+
+Not a filter. The blocking question is **bank construction**: 13
+independent commits cannot settle precision, and the byte-identical
+alignment constraint caps the reachable pool — only 78 commits can
+contribute at all, and 731 predicted sites are already dropped as
+unaligned. Priced options, in order:
+
+1. **Widen the harvest** by mapping call-site lines through the
+   intervening diffs instead of requiring byte-identity. Recovers the 731
+   dropped sites and admits commits that are not a file's last touch.
+   Offline, no new index.
+2. **Ship on recall.** Recall is the verdict that passes, on every slice
+   and on the target shape. A navigation affordance — "N call sites
+   reference this" with nothing proposed and nothing to accept wrongly —
+   has a recall bar, not a precision bar. This is `NEXT_EDIT.md`'s own
+   fallback and it needs neither the filter nor the content derivation.
+
+## M2 — the edit content (only if M1 clears)
 
 The sites are half the problem; what to write at each is the other. The
 proposal: derive it from the developer's own declaration diff (the
@@ -116,7 +305,7 @@ the honest product is a *navigation* affordance ("3 call sites need
 updating") rather than an edit proposal — which is still useful and
 much safer.
 
-## M2 — the lane, default OFF (only if M1 clears)
+## M3 — the lane, default OFF (only if M2 clears)
 
 Shape follows `next_edit_syntax.rs` exactly, and that precedent is the
 reason this is cheap:

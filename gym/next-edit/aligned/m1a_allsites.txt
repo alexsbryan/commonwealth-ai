@@ -1,0 +1,70 @@
+
+M1a — over-offer classification (cross-file, rust, index-aligned)
+  episodes 925 · predicted 2999 · author-edited 2752 · overlap 2597 · OVER-OFFERED 402
+
+  INSTRUMENT CHECK — call sites parsed 2867/2999; arity matches the NEW declaration 2763/2867 = 96.4%
+
+  BY SIGNATURE-CHANGE KIND (episode-level)
+    bucket                        TP    FP  precision
+    new_function                1613    78      95.4%
+    signature_unchanged          808   255      76.0%
+    return_or_generics_only       84    22      79.2%
+    arity_changed                 60    35      63.2%
+    param_type_changed            32     5      86.5%
+    param_renamed_only             0     7       0.0%
+
+  BY WHETHER THE OCCURRENCE IS A CALL
+    bucket                        TP    FP  precision
+    call                        2597   272      90.5%
+    not-a-call                     0   130       0.0%
+
+  BY TEST/BENCH/EXAMPLE PATH
+    bucket                        TP    FP  precision
+    product path                2391   318      88.3%
+    test-ish path                206    84      71.0%
+
+  BY #[cfg(test)] / #[cfg(feature)] ENCLOSURE
+    bucket                        TP    FP  precision
+    always-built                1376   304      81.9%
+    cfg-gated                   1221    98      92.6%
+
+  BY CRATE DISTANCE
+    bucket                        TP    FP  precision
+    same crate                  2398   277      89.6%
+    other crate                  199   125      61.4%
+
+  BY WHERE THE PRE-COMMIT DECLARATION WAS FOUND
+    bucket                        TP    FP  precision
+    absent                      1613    78      95.4%
+    moved                        805   167      82.8%
+    same_path                    179   157      53.3%
+
+  CLUSTERING — 78 commits supply all 2999 sites
+    27c0fe031  1266 sites  prec  86.7%  cum 42.2%  Noun convergence (#47)
+    32ba1548a   419 sites  prec  95.0%  cum 56.2%  Mesh multi membership (#51)
+    5dde3e6e6   135 sites  prec  86.7%  cum 60.7%  Flash next serving (#52)
+    f998b01cf   110 sites  prec  73.6%  cum 64.4%  fix(release): make Intel-mac cross-builds an
+    8843f0dbe   101 sites  prec  99.0%  cum 67.7%  Oicp v0.4 studio extraction (#16)
+    -> effective n for a CI is the COMMIT, not the site.
+    cluster-bootstrap 95% CI   precision 86.6% [79.4, 91.1]   recall 94.4% [85.9, 97.7]
+
+  THE TARGET SHAPE — an existing function whose parameter list changed
+    episodes 34 (bar >= 25)  ·  commits 13  ·  sites 132 of 2999 = 4.4%
+    author-edited 96 · overlap 92
+    precision 69.7% [34.4, 91.5]   recall 95.8% [87.0, 100.0]   (same ruler: 13 clusters)
+      precision  bar 60%  ->  COULD-NOT-JUDGE
+      recall     bar 80%  ->  PASS
+
+  CANDIDATE FILTERS — pre-registered ruler (precision >= 60% AND recall >= 80% to advance to M1b)
+    filter (keep only ...)              junk-  good    prec  recall  verdict
+                                           rm  lost
+    calls (drop non-call occurrences)     130     0   90.5%   94.4%  CANDIDATE
+    product paths (drop test-ish)          84   206   88.3%   86.9%  CANDIDATE
+    always-built (drop cfg-gated)          98  1221   81.9%   50.0%  
+    other-crate sites                     277  2398   61.4%    7.2%  
+    same-crate sites                      125   199   89.6%   87.1%  CANDIDATE
+    episodes whose arity changed          367  2537   63.2%    2.2%  
+    episodes with a real sig change       333  2421   71.8%    6.4%  
+    call AND real sig change              345  2421   75.5%    6.4%  
+    call AND arity changed                369  2537   64.5%    2.2%  
+    call AND real sig AND product path    378  2439   86.8%    5.7%  
