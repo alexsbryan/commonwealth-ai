@@ -393,13 +393,54 @@ fn config_mismatch(a: &RunConfig, b: &RunConfig) -> Option<&'static str> {
 /// real parallelism, re-measure this table before raising it.
 pub(crate) const AUDIT_CONCURRENCY: usize = 1;
 
-/// drb1-t5: the composed-report deliverable. DEFAULT OFF — a shipped
-/// default-off switch carries its `sovereign/DEFAULTS_LEDGER.md` row and
-/// its `quality/env-flags.toml` entry.
+/// Pure policy for an ON-BY-DEFAULT switch: unset means on, `0`/`false`
+/// (any case, surrounding whitespace ignored) means off, anything else means
+/// on.
+///
+/// ONE decider for all three report-shape switches (§10.6). Each carried its
+/// own copy of the same three lines, and a default written three times is a
+/// default that can drift in one of them — which matters more now that all
+/// three ship ON and a silent revert in one would be invisible.
+///
+/// Separated from the env READ so it is unit-testable in a parallel suite,
+/// the same split `synthesize::target_words_policy` uses and for the same
+/// reason: a test that sets a process env var races every other test.
+fn opt_out_policy(raw: Option<&str>) -> bool {
+    match raw {
+        Some(v) => {
+            let v = v.trim();
+            !(v == "0" || v.eq_ignore_ascii_case("false"))
+        }
+        None => true,
+    }
+}
+
+/// drb1-t5: the composed-report deliverable. **DEFAULT ON since 2026-08-27**;
+/// `SOVEREIGN_DR_COMPOSED_REPORT=0` restores the claim-ledger render. Row and
+/// reversal condition in `sovereign/DEFAULTS_LEDGER.md`.
+///
+/// WHY IT MOVED. Operator direction: ship the deliverable to end users in the
+/// desktop app. This is the gate every other report-shape switch sits behind
+/// (`report_outline_enabled`, `report_architecture_enabled`,
+/// `research_notes_enabled`, `report_section_evidence_enabled` all require
+/// it), so with it off a user reached NONE of the work those flags represent
+/// — they received the claim-ledger render while every measurement taken
+/// since drb1 was of the composed path.
+///
+/// **WHAT IS NOT MEASURED, stated because it is the largest unknown in this
+/// flip:** the composed report has never been scored head-to-head against the
+/// claim-ledger render it replaces. Everything measured is WITHIN the composed
+/// path (evidence budget, outline, architecture, section context, length);
+/// nothing crosses this gate. The flip is an argument from where the work went,
+/// not from a measured comparison, and the reversal condition is written to
+/// match.
+///
+/// Safe in the same way the outline is: a `compose_report` that errors falls
+/// back to the claim-ledger render and NAMES the fallback in the trace
+/// (§18.3), so this changes which path is normal, not whether a failure is
+/// visible.
 fn composed_report_enabled() -> bool {
-    std::env::var("SOVEREIGN_DR_COMPOSED_REPORT")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
+    opt_out_policy(std::env::var("SOVEREIGN_DR_COMPOSED_REPORT").ok().as_deref())
 }
 
 /// drb1-r4: hand the writer distilled FINDINGS instead of retrieved
@@ -429,9 +470,7 @@ fn composed_report_enabled() -> bool {
 /// (§18.3) — the fallback is the reason this is safe to default, not a reason
 /// to leave it off.
 fn report_outline_enabled() -> bool {
-    std::env::var("SOVEREIGN_DR_REPORT_OUTLINE")
-        .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
-        .unwrap_or(true)
+    opt_out_policy(std::env::var("SOVEREIGN_DR_REPORT_OUTLINE").ok().as_deref())
 }
 
 fn research_notes_enabled() -> bool {
@@ -495,10 +534,14 @@ fn report_section_evidence_enabled() -> bool {
         .unwrap_or(false)
 }
 
+/// **DEFAULT ON since 2026-08-27**; `SOVEREIGN_DR_REPORT_ARCHITECTURE=0`
+/// restores the pipeline-shaped deliverable. Pre-registered and measured on
+/// bed dr-1787887462: readability 8.00 -> 9.05 weighted (bar was +0.30), and
+/// +1.08 overall on the RENDERED artifact production actually ships (50.96 ->
+/// 52.04). It cost 0.25 of instruction-following, which is the whole price.
+/// Row and reversal condition in `sovereign/DEFAULTS_LEDGER.md`.
 fn report_architecture_enabled() -> bool {
-    std::env::var("SOVEREIGN_DR_REPORT_ARCHITECTURE")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
+    opt_out_policy(std::env::var("SOVEREIGN_DR_REPORT_ARCHITECTURE").ok().as_deref())
 }
 
 /// Whether each section's writer is shown the report's outline and its own
@@ -1715,6 +1758,13 @@ impl Controller {
             .filter_map(|n| n.parse::<usize>().ok())
             .max()
             .unwrap_or(0)
+    }
+
+    /// Test handle for the module-level `opt_out_policy` — the tests live in
+    /// the `Controller` block with the rest of the deliverable's invariants.
+    #[cfg(test)]
+    pub(crate) fn opt_out_policy_for_test(raw: Option<&str>) -> bool {
+        opt_out_policy(raw)
     }
 
     pub(crate) fn duplicate_window_ids(chunks: &[WindowChunk]) -> Vec<(String, usize)> {
@@ -3019,6 +3069,37 @@ mod tests {
     }
 
     #[test]
+    /// THE SHIPPED DEFAULT, pinned. All three report-shape switches ship ON as
+    /// of 2026-08-27 and the desktop app sets none of them — it calls
+    /// `launch::prepare` and inherits process env — so an accidental revert to
+    /// `unwrap_or(false)` would silently return every end user to the
+    /// claim-ledger render with nothing failing. That is precisely the
+    /// remembered-not-structural failure §7 names, and this is the structure.
+    ///
+    /// Watch-it-fail: flip `opt_out_policy`'s `None` arm to `false`.
+    #[test]
+    fn the_report_shape_switches_ship_on() {
+        assert!(
+            Controller::opt_out_policy_for_test(None),
+            "unset must mean ON — a user who sets nothing gets the composed report"
+        );
+        // Off is deliberate and narrow: only an explicit 0/false turns it off.
+        for off in ["0", "false", "FALSE", "False", " 0 ", "  false  "] {
+            assert!(
+                !Controller::opt_out_policy_for_test(Some(off)),
+                "{off:?} must opt out"
+            );
+        }
+        // Anything else is ON rather than a silent off — a typo must not
+        // quietly downgrade the deliverable (§18.3).
+        for on in ["1", "true", "yes", "", "banana", "00", "off"] {
+            assert!(
+                Controller::opt_out_policy_for_test(Some(on)),
+                "{on:?} is not an opt-out and must leave the switch ON"
+            );
+        }
+    }
+
     fn a_repeated_evidence_handle_is_reported_not_silently_resolved() {
         // The failure this catches is silent BY CONSTRUCTION: `number_citations`
         // resolves a handle with `.find(|c| c.id == id)`, so a repeated id binds

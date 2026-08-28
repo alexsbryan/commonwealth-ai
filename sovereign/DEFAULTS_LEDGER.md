@@ -2245,8 +2245,32 @@ effect may be made until a pre-registered arm exists.
 
 ## `SOVEREIGN_DR_REPORT_ARCHITECTURE` — the deliverable is a report (drb1-r8)
 
-**Landed 2026-08-26, DEFAULT OFF.** Campaign `drb1-race`. Requires
-`SOVEREIGN_DR_COMPOSED_REPORT=1`. Composes with `SOVEREIGN_DR_REPORT_OUTLINE`:
+**Landed 2026-08-26 default OFF. DEFAULT FLIPPED ON 2026-08-27.** Campaign
+`drb1-race`. Set `SOVEREIGN_DR_REPORT_ARCHITECTURE=0` to restore the
+pipeline-shaped deliverable. Requires `SOVEREIGN_DR_COMPOSED_REPORT=1` — which
+is now also the default.
+
+**The measurement it flipped on**, pre-registered before the data
+(`pre-registration.md`, "The readability arm"), bed `dr-1787887462`, n=1 on a
+replay validated as deterministic (`rep1` and `repdet` scored the same arm
+51.3347 twice):
+
+| | control | arch |
+|---|---|---|
+| readability (weighted) | 8.00 | **9.05** (bar was +0.30) |
+| overall, raw draft | 49.73 | 52.31 |
+| overall, RENDERED — what ships | 50.96 | **52.04** |
+
+It cost 0.25 of instruction-following; that is the whole price, and the other
+three dimensions rose. The rendered figure is the honest one: production always
+renders, and the raw-draft delta (+2.58) overstates it.
+
+**Reversal condition:** readability parity or worse against the same-bed
+control on a re-mint, or a rise in the "title refused / summary failed"
+fallbacks it logs — both of which it already names in the trace rather than
+substituting silently.
+
+Requires `SOVEREIGN_DR_COMPOSED_REPORT=1`. Composes with `SOVEREIGN_DR_REPORT_OUTLINE`:
 that flag decides WHICH sections exist, this one decides what surrounds them.
 
 **What it turns on.** Three things, together, because they are one property —
@@ -2590,8 +2614,36 @@ arm, not a win. **Not yet measured — no arm has been flown.**
 
 ## `SOVEREIGN_DR_COMPOSED_REPORT` — the composed deep-research deliverable (drb1-t5)
 
-**Shipped 2026-08-22, DEFAULT OFF.** Campaign `drb1-race`, order `drb1-t5`,
-pre-registered in `research/deep-research/adversarial/pre-registration.md`.
+**Shipped 2026-08-22 default OFF. DEFAULT FLIPPED ON 2026-08-27** — operator
+direction: ship the deliverable to end users in the desktop app. Campaign
+`drb1-race`, order `drb1-t5`, pre-registered in
+`research/deep-research/adversarial/pre-registration.md`. Set
+`SOVEREIGN_DR_COMPOSED_REPORT=0` to restore the claim-ledger render.
+
+**Why the default moved.** This is the gate every other report-shape switch
+sits behind — `SOVEREIGN_DR_REPORT_OUTLINE`, `..._ARCHITECTURE`,
+`..._RESEARCH_NOTES`, `..._REPORT_SECTION_EVIDENCE` all require it. With it off
+a user reached NONE of them: the desktop app (`src-tauri/
+deep_research_commands.rs`) calls `launch::prepare` with no DR flags and
+inherits process env, so every end user received the claim-ledger render while
+every measurement taken since drb1 was of the composed path. The desktop reads
+`report.md` either way, so this changes that file's CONTENT, not the UI
+contract.
+
+**THE LARGEST UNKNOWN, named rather than buried: the composed report has never
+been scored against the claim-ledger render it replaces.** Everything measured
+is WITHIN the composed path — evidence budget, outline, architecture, section
+context, length. Nothing crosses this gate. This flip is an argument from where
+the work went, not from a measured comparison. **Reversal condition:** a
+head-to-head on the same bed showing the claim-ledger render ahead, or reports
+of `compose_report` falling back on a material share of flights (the fallback
+is logged, so this is checkable — "composed report unavailable — falling back
+to the claim-ledger render").
+
+**Safe to default for the same reason the outline is.** A `compose_report`
+that errors falls back to the claim-ledger render and NAMES the fallback in
+the trace (§18.3). The flip changes which path is normal, not whether a
+failure is visible.
 
 **What it turns on.** The deliverable is composed — one section per planned
 sub-question, retrieved per section over the whole merged evidence window by

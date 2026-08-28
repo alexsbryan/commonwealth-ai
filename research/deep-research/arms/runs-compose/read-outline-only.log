@@ -6,3 +6,11 @@
     EXTRA_ENV SOVEREIGN_DR_REPORT_ARCHITECTURE=1 SOVEREIGN_DR_TARGET_WORDS=9000 COMPOSE_SECTIONS=/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/bed-compose/outline-ethos.json
     HEAD 9588704c2
 --- 16x4 2026-08-27T22:29:06-07:00
+
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 800.22s
+
+error: test failed, to rerun pass `-p sovereign-core --test compose_replay`
+    env crossed: flew ['16x4']
+    merged -> 1 arm(s) in /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-compose/read-outline-only/dr-1787887462/arms-merged.json
+
+=== SCORING 2 arms — task 69, judge Qwen3.8-27B-UD-Q6_K_XL ===

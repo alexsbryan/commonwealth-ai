@@ -302,9 +302,27 @@ pub(crate) const ROUND_EVIDENCE_TOKENS: usize = 24_000;
 /// shape and drops its primitives, and the deliverable reads — in the judge's
 /// words — "somewhat high-level regarding internal primitives", missing MCP's
 /// Tools / Resources / Prompts / Sampling and A2A's Task / Message / Part /
-/// Artifact. Those are the substance of the question that was asked. The
-/// reference class spends roughly a thousand words on such a section.
-pub(crate) const SECTION_WORDS_TARGET: usize = 900;
+/// Artifact. Those are the substance of the question that was asked.
+///
+/// **SET AT A MEASURED POINT, WITH ONE POINT MEASURED — say so rather than
+/// imply a curve.** Two arms on bed dr-1787887462, same planned outline, same
+/// evidence, scored by `lab/substance_coverage.py` (deterministic, no judge):
+///
+///   ~1,125 w/section  9,872 words  65 terms named  6.6 per 1k   <- this
+///     ~460 w/section  3,991 words  34 terms named  8.5 per 1k
+///
+/// and for contrast the 20-section SEARCH-FRONTIER report it replaces:
+///   ~450 w/section   11,270 words  62 terms named  5.5 per 1k
+///
+/// So the planned outline at this length names MORE of the evidence's
+/// vocabulary than the frontier report did, in 1,400 fewer words. The 460
+/// arm is not padded — it is denser per word — it simply ran out of room and
+/// dropped `AgentCard`, `DataPart`, `tasks/send`, `contextId` and 35 others.
+///
+/// 1,100 is the measured working point rounded down. 457 is a measured
+/// FAILURE. Everything between is untested, and so is everything above — do
+/// not read this constant as an optimum.
+pub(crate) const SECTION_WORDS_TARGET: usize = 1_100;
 
 /// Evidence chars behind one report word — a CEILING on ambition, not the
 /// driver of it.
@@ -324,12 +342,16 @@ pub(crate) const SECTION_WORDS_TARGET: usize = 900;
 /// So the budget is "as long as the subject needs, never longer than the
 /// evidence supports".
 ///
-/// The value is a ~4:1 synthesis compression: 22,859 chars is about 4,150
-/// source words, and 22 chars per report word puts a fully-fed section at
-/// ~1,039 — just above [`SECTION_WORDS_TARGET`], so the ceiling binds only
-/// when a section is genuinely underfed. Below about two-thirds fill it
-/// starts to bite, and below a quarter [`SECTION_WORDS_MIN`] takes over.
-pub(crate) const EVIDENCE_CHARS_PER_REPORT_WORD: usize = 22;
+/// The value is a ~3.6:1 synthesis compression: 22,859 chars is about 4,150
+/// source words, and 20 chars per report word puts a fully-fed section at
+/// ~1,143 — just ABOVE [`SECTION_WORDS_TARGET`], which is the property that
+/// matters. It must clear the target, or the ceiling silently clamps every
+/// section and the target is never the thing that decides. (At 22 it did
+/// exactly that: a fully-fed section resolved to 1,039 against a 1,100
+/// target, so the constant nobody was looking at would have set the length.)
+/// Below about half fill the ceiling starts to bite, and below a quarter
+/// [`SECTION_WORDS_MIN`] takes over.
+pub(crate) const EVIDENCE_CHARS_PER_REPORT_WORD: usize = 20;
 
 /// An explicit total, or `None` to derive the length from the evidence.
 ///
