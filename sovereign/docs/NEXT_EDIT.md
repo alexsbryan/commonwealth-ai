@@ -512,7 +512,18 @@ temperature, region size, and timeout are constants in
    run-3 verdict. Known scope edge, deliberate: casing-variant
    renames are detected but declined (§4) — the model proved
    destructive there and the shape is deterministic anyway.
-4. **Deferred**: the casing-variant **rule sub-lane** (fire the
+4. **PROPOSED — the symbol lane** ([`specs/NEXT_EDIT_SYMBOL_LANE.md`](./specs/NEXT_EDIT_SYMBOL_LANE.md),
+   2026-08-28): a THIRD induction source for the shapes neither lane can
+   reach. `signature_fanout`, `delete_propagation` and `import_addition`
+   are 270 of the golden set's 711 positives and score **2.6%** combined,
+   because the rule lane's trigger is textual repetition and a signature
+   change never repeats itself. The SCIP graph answers it instead —
+   `callers(fn)` names the sites on the FIRST edit — and this is the one
+   shape where a last-save index is not stale, since the function
+   existed before its signature was touched. M0 is a probe against
+   `gym/next-edit/aligned/`, writes no daemon code, and is allowed to
+   kill the idea.
+5. **Deferred**: the casing-variant **rule sub-lane** (fire the
    detected variant find/replace through the rule engine —
    byte-precise, no model; re-activate the bank's `deferred_casing`
    cases when it lands), cross-file edits, JetBrains port, optional
