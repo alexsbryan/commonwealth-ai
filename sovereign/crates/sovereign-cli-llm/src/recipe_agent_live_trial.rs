@@ -219,7 +219,8 @@ fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
     let mut script: Option<PathBuf> = None;
     let mut feature_id: Option<String> = None;
     let mut title: Option<String> = None;
-    let mut daemon_base = "http://localhost:9741".to_string();
+    // One decider (§10.6): honours SOVEREIGN_DAEMON_URL, then [daemon] client_port.
+    let mut daemon_base = sovereign_core::setup_config::client_daemon_base();
     let mut skills_dir: Option<PathBuf> = None;
     let mut sample_size: u64 = 50;
     let mut chat_model: Option<String> = None;

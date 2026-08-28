@@ -1,0 +1,109 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787671857",
+  "charter_hash": "5b6fa3455a06ac02",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.03053613007068634,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q13",
+      "snippet": "latform.\nGet a Demo\nChat with Us\nSee Orca Security in Action\nGain visibility, achieve compliance, and prioritize risks with the Orca Cloud Security Platform.\nChat with an Orca Expert\nNo Slack account required.\nPlatform\nBy Solution\nReduce Cloud Risk Secure AI Code Securely Protect Workloads Detect Respond By Capability\nCNAPP CSPM CWPP CIEM Container Kubernetes Security Multi-Cloud Compliance API Security CDR Vulnerability Management AI AppGen Security Application Security AI Security DSPM By Industry\nFinancial Services Technology Government Media & Entertainment Healthcare Retail Technology\nKey"
+    },
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.026709401980042458,
+      "rank": 97,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q7",
+      "snippet": "t promising developments in this direction is the Model Context Protocol (MCP) introduced by Anthropic. But Anthropic isn’t alone other platforms like Google’s A2A protocol and Gemini, OpenAI and Copilot are also building toward similar context-awareness mechanisms.\nIn this blog, well explore:\nWhat MCP, A2A, and other agent context protocols are and why they matter How similar ideas are being approached by each major player The risks of using agent context protocols How to best protect ourselves as we’re moving towards the future What Does it Really Mean to Bring Memory to AI?\nWhen we ta"
+    },
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.026491228491067886,
+      "rank": 109,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q16",
+      "snippet": "ls callable functions the LLM can invoke based on context. For example, a model might be able to draft an email or trigger a deployment. If an attacker can compromise the model or manipulate the tool definitions, they may escalate to remote code execution by tricking the LLM into calling a function with malicious parameters. This is especially dangerous in environments where the model has high levels of autonomy.\n8. Poorly Designed Authentication Procedures\nInitially, MCP lacked a standard for authentication. Later updates embedded OAuth 2.1 flows like token issuance and validation directly in"
+    },
+    {
+      "url": "https://www.linuxfoundation.org/press/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year",
+      "title": "https://www.linuxfoundation.org/press/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year",
+      "score": 0.02475845441222191,
+      "rank": 155,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q6",
+      "snippet": "ctices and addressing the needs of contributors, users, and solution providers to create sustainable models for open collaboration. For more information, please visit us at linuxfoundation.org.\nFor a list of trademarks of The Linux Foundation, please see its trademark usage page: linuxfoundation.org/trademark-usage. Linux is a registered trademark of Linus Torvalds.\nStay Connected with the Linux Foundation\nABOUT THE LINUX FOUNDATION\nThe Linux Foundation provides a neutral, trusted hub for developers to code, manage, and scale open technology projects.\nAbout the LF Leadership Careers Corporate "
+    },
+    {
+      "url": "https://www.merge.dev/blog/mcp-vs-a2a",
+      "title": "https://www.merge.dev/blog/mcp-vs-a2a",
+      "score": 0.02470238134264946,
+      "rank": 157,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q17",
+      "snippet": "ode class=\"blog_inline-code\">DataPart</code> for structured JSON data\nArtifacts: This simply refers to the remote agent’s outputs\nThe A2A protocol can support countless internal and customer-facing scenarios.\nFor example, say you’re trying to build a fully autonomous lead routing workflow. Here’s how the A2A protocol can support this:\n1. Once a lead comes in, your marketing team’s AI agent (the client agent in this case) can enrich the lead with external data sources and then determine the lead’s level of fit based on predefined criteria.\n2. If the lead is deemed high fit, the AI age"
+    },
+    {
+      "url": "https://medium.com/@plawanrath/case-study-building-a-multi-agent-research-assistant-with-a2a-protocol-0df1d6eb71c3",
+      "title": "https://medium.com/@plawanrath/case-study-building-a-multi-agent-research-assistant-with-a2a-protocol-0df1d6eb71c3",
+      "score": 0.024540800601243973,
+      "rank": 162,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q13",
+      "snippet": "nto chunks and uses an iterative summarization approach to condense it gradually. This handles the token overflow problem by chunking and “recursively summarizing” until the content fits within a prompt window. If the PDF download or parsing fails (which happens e.g. due to format issues or network errors), the Summarizer falls back to alternative strategies: it will try to fetch an official abstract from an API (arXiv or Semantic Scholar) in parallel with asking an LLM to generate a summary from just the title. Whichever returns first (the abstract or the LLM’s guess) is used as surroga"
+    },
+    {
+      "url": "https://redis.io/blog/mcp-vs-a2a-which-protocol-do-you-need",
+      "title": "https://redis.io/blog/mcp-vs-a2a-which-protocol-do-you-need",
+      "score": 0.023856578394770622,
+      "rank": 175,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q7",
+      "snippet": "ailTelcoAll industries\nCompare\nRedis vs. ElastiCacheRedis vs. MemcachedRedis vs. MemorystoreRedis vs. Redis Open Source\nCompany\nMission & valuesCareersNews\nConnect\nCommunityEvents & Webinars\nPartners\nAmazon Web ServicesGoogle CloudAzureAll partners\nSupport\nProfessional ServicesSupportRedis for Agents Documentation\nEnglishEspañolFrançaisDeutsch한국어ItalianoPortuguês\nTrust\nPrivacy\nTerms of use\nLegal notices\nCookie preferences"
+    },
+    {
+      "url": "https://www.linuxfoundation.org/press/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year",
+      "title": "https://www.linuxfoundation.org/press/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year",
+      "score": 0.023625310510396957,
+      "rank": 176,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q8",
+      "snippet": " of supporting organizations has grown from more than 50 to over 150 — including AWS, Cisco, Google, IBM, Microsoft, Salesforce, SAP, and ServiceNow. The core repository has surpassed 22,000 GitHub stars, and the SDK ecosystem has expanded from a single Python implementation to five production-ready languages, including JavaScript, Java, Go, and .NET.\nAt the standards level, A2A is complementary to the Model Context Protocol (MCP), another Linux Foundation project. A2A defines how agents communicate and coordinate with each other across organizational boundaries, while MCP defines how agents"
+    },
+    {
+      "url": "https://github.com/a2aproject/A2A",
+      "title": "https://github.com/a2aproject/A2A",
+      "score": 0.023140717297792435,
+      "rank": 180,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q4",
+      "snippet": "llaboration: Allow specialized agents to work together on tasks that a single agent cannot handle alone. Promote Open Standards: Foster a community-driven approach to agent communication, encouraging innovation and broad adoption. Preserve Opacity: Allow agents to collaborate without needing to share internal memory, proprietary logic, or specific tool implementations, enhancing security and protecting intellectual property. Key Features\nStandardized Communication: JSON-RPC 2.0 over HTTP(S). Agent Discovery: Via \"Agent Cards\" detailing capabilities and connection info. Flexible Interaction: Su"
+    },
+    {
+      "url": "https://github.com/a2aproject/A2A",
+      "title": "https://github.com/a2aproject/A2A",
+      "score": 0.021395880728960037,
+      "rank": 190,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q5",
+      "snippet": " policy\nActivity\nCustom properties\nStars\n25.5k stars\nWatchers\n234 watching\nForks\n2.6k forks\nReport repository\nReleases\nUsed by\nContributors\nLanguages\nFooter\n&copy; 2026 GitHub, Inc. Footer navigation\nTerms Privacy Security Status Community Docs Contact Manage cookies Do not share my personal information You can’t perform that action at this time."
+    }
+  ]
+}

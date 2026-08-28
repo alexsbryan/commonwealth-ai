@@ -965,7 +965,36 @@ async fn run_worker(ctx: WorkerCtx) {
                     // Never arm the gate while an export is already running:
                     // the spawn would only coalesce, and edits landing during
                     // a rebuild are picked up by its follow-up passes.
-                    let due = !rebuild_in_flight.load(Ordering::Acquire)
+                    // ASK WHAT CHANGED, NOT JUST WHEN. The export is a
+                    // whole-workspace rust-analyzer pass costing ~11 GiB and
+                    // minutes; arming it on a cooldown alone meant editing a
+                    // .py/.sh/.json/.md file scheduled a RUST export that
+                    // could not produce a symbol the graph did not already
+                    // have. On 2026-08-26 exactly that fired at 09:56 — from
+                    // python and shell edits — beside a 47 GiB judge daemon,
+                    // on a host whose measured wall is ~55 GiB. Skipping is
+                    // safe: the live graph is untouched and the tree-sitter
+                    // overlay above already refreshed symbol defs.
+                    let changed_exts: HashSet<String> = files
+                        .iter()
+                        .filter_map(|p| p.extension().and_then(|e| e.to_str()))
+                        .map(|e| e.to_ascii_lowercase())
+                        .collect();
+                    let learns =
+                        corpus_engine_scip::scip_export::changed_extensions_have_exporter(
+                            &changed_exts,
+                        );
+                    if !learns {
+                        tracing::debug!(
+                            corpus_id = %rebuild_ctx.entry.corpus_id,
+                            extensions = ?changed_exts,
+                            "full rust-analyzer export NOT armed — no changed file \
+                             belongs to an installed SCIP exporter; the overlay \
+                             already carries this change set"
+                        );
+                    }
+                    let due = learns
+                        && !rebuild_in_flight.load(Ordering::Acquire)
                         && full_export_due(last_finished(), FULL_REBUILD_COOLDOWN);
                     if due {
                         // Don't launch yet — arm the quiescence gate so the

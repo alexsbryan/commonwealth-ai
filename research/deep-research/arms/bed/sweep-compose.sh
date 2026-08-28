@@ -27,6 +27,16 @@
 # follows in a real flight can still EDIT the report (surgical span repair).
 # Every `arm-*.md` here is therefore a PRE-AUDIT DRAFT, and the winning budget
 # owes a full end-to-end cell before it is called a result (§18.5).
+#
+# INVOKING THIS FROM THE HOST: PUT `env` INSIDE THE PREFIX, NOT OUTSIDE.
+#     WRONG   ARMS=16:4 OUT=... toolbox run -c sovereign-vulkan ./sweep-compose.sh
+#     RIGHT   toolbox run -c sovereign-vulkan env ARMS=16:4 OUT=... ./sweep-compose.sh
+# `toolbox run` does not forward the caller's environment (the same trap
+# documented below for EXTRA_ENV — it applies to THIS script's own knobs too,
+# and hits first). The wrong form is silent: ARMS falls back to the full
+# five-arm curve and OUT to rep$REP, so a run asking for one arm flies five
+# into a directory it did not name. Measured 2026-08-27, caught only because
+# the banner echoes the resolved arms — READ THE BANNER before walking away.
 set -u
 
 REPO=/home/alexbryan/dev/commonwealth-ai

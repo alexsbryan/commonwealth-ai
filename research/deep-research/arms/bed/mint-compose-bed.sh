@@ -18,10 +18,14 @@
 # group and the whole group is signalled. (Same defect the engram harness hit
 # 2026-08-27: it signalled EVAL_PID and the multi-GiB child survived.)
 #
-# WHY NOT REBUILD THE BED FROM evidence-window-<n>.json. Those dumps are
-# per-ROUND and `ev-N` restarts each round; on the 2026-08-26 wide cell
-# compose saw 61 chunks where the dumps summed to 57. That reconstruction is
-# what produced the retracted finding 80a442dc.
+# WHY NOT REBUILD THE BED FROM evidence-window-<n>.json. On the 2026-08-26
+# wide cell compose saw 61 chunks where the dumps summed to 57 — the merged
+# window the writer composes from is strictly larger than what is persisted,
+# so any reconstruction is a guess. That is what produced the retracted
+# finding 80a442dc. (Until 2026-08-27 `ev-N` also RESTARTED each round, so
+# the reconstruction collapsed round 2 onto round 1 on top of being short.
+# The counter is run-scoped now; the reason above is the one that remains,
+# and it is sufficient.)
 #
 # A run whose artifact never appears is NEVER-RAN, not an empty bed (§18.3).
 set -u

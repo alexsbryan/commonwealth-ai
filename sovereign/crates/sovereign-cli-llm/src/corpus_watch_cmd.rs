@@ -35,13 +35,23 @@ use sovereign_mesh::corpus_watch_http::{
 use sovereign_tools::local_corpus::config::{SyncMode, WatchedFolderConfig};
 use sovereign_tools::local_corpus::watched::status::WatchedFolderStatus;
 
-const DEFAULT_CLIENT_PORT: u16 = 9741;
-
+/// The daemon on THIS host — deliberately NOT env-overridable.
+///
+/// `corpus watch` registers folders on this machine's filesystem, so a remote
+/// daemon cannot serve it: honouring `SOVEREIGN_DAEMON_URL` here would point
+/// registration at a host that cannot see the folder and then report success
+/// off its answer (§18.3). It therefore holds the configured port and calls
+/// [`client_daemon_base_for`], naming the choice, rather than the
+/// env-honouring `client_daemon_base`.
+///
+/// Two drifts this removes: a duplicate compiled `9741` beside the config's
+/// own default, and `127.0.0.1` where every other caller uses `localhost` —
+/// not the same address under IPv6-first resolution.
 fn daemon_base_url() -> String {
     let port = SetupConfig::load()
         .map(|c| c.daemon.client_port)
-        .unwrap_or(DEFAULT_CLIENT_PORT);
-    format!("http://127.0.0.1:{port}")
+        .unwrap_or_else(|_| sovereign_contracts::setup_config::default_client_port());
+    sovereign_contracts::setup_config::client_daemon_base_for(port)
 }
 
 /// Default HTTP timeout for the lightweight metadata routes

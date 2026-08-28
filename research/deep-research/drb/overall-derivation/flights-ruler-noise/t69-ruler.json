@@ -1,0 +1,140 @@
+{
+  "task": 69,
+  "article": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/drb/overall-derivation/flights-pinned-ours/t69-pinfix.report.md",
+  "article_sha256": "cdb5da4d1a4662bb13cb50c88eb01498d8d06d66de865ad896f20639a48e9f1b",
+  "article_bytes": 34502,
+  "reps_requested": 5,
+  "contended": [],
+  "temperature": 0.0,
+  "top_p": 1.0,
+  "draws": [
+    {
+      "id": 69,
+      "overall_score": 0.4379058563006852,
+      "comprehensiveness": 0.42354740061162083,
+      "insight": 0.42546583850931674,
+      "instruction_following": 0.46301775147928986,
+      "readability": 0.46,
+      "target_total": 7.316749999999999,
+      "reference_total": 9.39175,
+      "_draw": 1,
+      "_secs": 388.5,
+      "_daemon_rss_gb": 38.687347412109375
+    },
+    {
+      "id": 69,
+      "overall_score": 0.4379058563006852,
+      "comprehensiveness": 0.42354740061162083,
+      "insight": 0.42546583850931674,
+      "instruction_following": 0.46301775147928986,
+      "readability": 0.46,
+      "target_total": 7.316749999999999,
+      "reference_total": 9.39175,
+      "_draw": 2,
+      "_secs": 388.3,
+      "_daemon_rss_gb": 39.190147399902344
+    },
+    {
+      "id": 69,
+      "overall_score": 0.4379058563006852,
+      "comprehensiveness": 0.42354740061162083,
+      "insight": 0.42546583850931674,
+      "instruction_following": 0.46301775147928986,
+      "readability": 0.46,
+      "target_total": 7.316749999999999,
+      "reference_total": 9.39175,
+      "_draw": 3,
+      "_secs": 388.1,
+      "_daemon_rss_gb": 38.85298538208008
+    },
+    {
+      "id": 69,
+      "overall_score": 0.4379058563006852,
+      "comprehensiveness": 0.42354740061162083,
+      "insight": 0.42546583850931674,
+      "instruction_following": 0.46301775147928986,
+      "readability": 0.46,
+      "target_total": 7.316749999999999,
+      "reference_total": 9.39175,
+      "_draw": 4,
+      "_secs": 387.9,
+      "_daemon_rss_gb": 39.14729309082031
+    },
+    {
+      "id": 69,
+      "overall_score": 0.4379058563006852,
+      "comprehensiveness": 0.42354740061162083,
+      "insight": 0.42546583850931674,
+      "instruction_following": 0.46301775147928986,
+      "readability": 0.46,
+      "target_total": 7.316749999999999,
+      "reference_total": 9.39175,
+      "_draw": 5,
+      "_secs": 388.1,
+      "_daemon_rss_gb": 38.365867614746094
+    }
+  ],
+  "missing": [],
+  "overall": {
+    "n": 5,
+    "mean": 43.79058563006852,
+    "spread": 0.0,
+    "sd": 0.0,
+    "min": 43.79058563006852,
+    "max": 43.79058563006852,
+    "values": [
+      43.79058563006852,
+      43.79058563006852,
+      43.79058563006852,
+      43.79058563006852,
+      43.79058563006852
+    ]
+  },
+  "dims": {
+    "comprehensiveness": {
+      "mean": 42.35474006116208,
+      "spread": 0.0,
+      "values": [
+        42.35474006116208,
+        42.35474006116208,
+        42.35474006116208,
+        42.35474006116208,
+        42.35474006116208
+      ]
+    },
+    "insight": {
+      "mean": 42.546583850931675,
+      "spread": 0.0,
+      "values": [
+        42.546583850931675,
+        42.546583850931675,
+        42.546583850931675,
+        42.546583850931675,
+        42.546583850931675
+      ]
+    },
+    "instruction_following": {
+      "mean": 46.301775147928986,
+      "spread": 0.0,
+      "values": [
+        46.301775147928986,
+        46.301775147928986,
+        46.301775147928986,
+        46.301775147928986,
+        46.301775147928986
+      ]
+    },
+    "readability": {
+      "mean": 46.0,
+      "spread": 0.0,
+      "values": [
+        46.0,
+        46.0,
+        46.0,
+        46.0,
+        46.0
+      ]
+    }
+  },
+  "verdict": "pipeline-owns-it"
+}

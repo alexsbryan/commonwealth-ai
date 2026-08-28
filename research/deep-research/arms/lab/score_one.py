@@ -13,27 +13,18 @@ instead of ten.
 """
 import hashlib, json, sys, os, argparse, pathlib, time, urllib.request
 
-BASE = 'http://127.0.0.1:9741/v1'
+# The clone's driver imports `utils.api` transitively, and that module freezes
+# LLM_BACKEND / base_url / api_key / socket timeout at IMPORT time — so all of
+# it must be decided ABOVE that import. Both facts were learned here the hard
+# way (a first judge call that left the host carrying a real key; a task-83 run
+# cut off client-side at 600s and recorded NEVER-RAN), and both fixes lived in
+# THIS file only, while score_race.py had neither. They are instrument state,
+# so they now live in judge_instrument beside the sampling pin — one decider
+# for how a judge call is made (§10.6).
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
+from judge_instrument import configure_judge_client                # noqa: E402
 
-# The clone's driver imports `utils.api` transitively, and that module
-# freezes LLM_BACKEND / base_url / api_key at IMPORT time. Setting these
-# inside judge() was too late: the constants had already resolved to the
-# vendored default (openrouter), and the first judge call went to an
-# EXTERNAL provider carrying a real key. It 400'd on the local model id
-# rather than silently scoring with a different judge — but a valid id
-# would have bought a substituted instrument at real cost. Forced here,
-# before any clone import, and guarded again at call time.
-os.environ['LLM_BACKEND'] = 'openai'
-os.environ['OPENAI_BASE_URL'] = BASE
-os.environ.setdefault('OPENAI_API_KEY', 'local')
-# The vendored client freezes its socket timeout at import (utils/api.py:82,
-# `LLM_HTTP_TIMEOUT`, default 600s) and `judge()`'s own `timeout=` argument
-# never reached it. Task 83 is the largest prompt in the subset — a ~40k-token
-# reference plus our article — and at this host's prefill rate it needs ~8min
-# before the first token. It timed out CLIENT-side at 600s and was recorded
-# NEVER-RAN, which reads as a model refusal and is not one. A judge call is
-# allowed to be slow; it is not allowed to be silently cut off.
-os.environ.setdefault('LLM_HTTP_TIMEOUT', '3600')
+BASE = configure_judge_client()
 
 CLONE = '/home/alexbryan/dev/deep_research_bench'
 sys.path.insert(0, CLONE)

@@ -79,6 +79,10 @@ tempfile = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
+# The binder-replay harness installs a subscriber so the production `t5 binder`
+# stage timings are readable from the test run; without one they are discarded
+# and the harness can only report a total.
+tracing-subscriber = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true }
 

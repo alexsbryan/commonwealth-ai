@@ -8,3 +8,6 @@
 runs-acquisition-ab/
 runs-web-composite/
 runs-outline-ab/
+bed-binder/bed.json
+bed-binder/binder-replay.json
+runs-aiq-bar/

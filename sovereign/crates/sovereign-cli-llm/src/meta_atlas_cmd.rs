@@ -107,7 +107,8 @@ async fn cmd_align(args: &[String]) -> i32 {
     let mut limit: Option<usize> = None;
     let mut k = 20usize;
     let mut model = "primary".to_string();
-    let mut base = "http://127.0.0.1:9741".to_string();
+    // One decider (§10.6): honours SOVEREIGN_DAEMON_URL, then [daemon] client_port.
+    let mut base = sovereign_core::setup_config::client_daemon_base();
     let mut bank_path = "sovereign/bench/sep/questions.toml".to_string();
     let mut right_corpus = "wikipedia".to_string();
 

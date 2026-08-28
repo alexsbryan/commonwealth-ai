@@ -410,13 +410,28 @@ fn composed_report_enabled() -> bool {
 /// `sovereign/DEFAULTS_LEDGER.md` row and `quality/env-flags.toml` entry
 /// carry the cost and the reversal condition.
 /// drb1-r5: plan the report's OUTLINE instead of writing one section per
-/// search query. Default OFF. Requires SOVEREIGN_DR_COMPOSED_REPORT=1 —
-/// there is no outline without a composed deliverable to structure. Row and
-/// reversal condition in `sovereign/DEFAULTS_LEDGER.md`.
+/// search query. **Default ON since 2026-08-27**; set
+/// `SOVEREIGN_DR_REPORT_OUTLINE=0` to restore the frontier. Requires
+/// SOVEREIGN_DR_COMPOSED_REPORT=1 — there is no outline without a composed
+/// deliverable to structure. Row and reversal condition in
+/// `sovereign/DEFAULTS_LEDGER.md`.
+///
+/// WHY IT IS NOW THE DEFAULT, and it is not a score argument. The frontier is
+/// a list of retrieval targets: the planner prompt asks it for "the specific
+/// measure or statistic it implies — an index, a ratio, a share, a rate, a
+/// count". Those are good queries. As section headings a reader receives,
+/// they are indefensible — the shipped task-69 deliverable carried
+/// `## Median Session Establishment Time` and `## Schema Mismatch Failures in
+/// Third-Party Tool Integration` as top-level sections, which is our search
+/// plan printed as prose. No judge is needed to call that wrong.
+///
+/// A refused or unusable outline still falls back to the frontier and SAYS SO
+/// (§18.3) — the fallback is the reason this is safe to default, not a reason
+/// to leave it off.
 fn report_outline_enabled() -> bool {
     std::env::var("SOVEREIGN_DR_REPORT_OUTLINE")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
+        .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
+        .unwrap_or(true)
 }
 
 fn research_notes_enabled() -> bool {
@@ -1130,6 +1145,14 @@ struct Controller {
     failed_sources: Vec<FailedSource>,
     artifacts: Vec<String>,
     aborted_at_round: Option<u32>,
+    /// The run's evidence-handle counter — the high-water mark of `ev-N`
+    /// ids minted so far. RUN-scoped, not round-scoped: `fetch_round`
+    /// used to number from 0 every round, so round 2's `ev-1` collided
+    /// with round 1's and `number_citations` bound both to round 1's URL
+    /// (§7.5 — a window id must be unique in the scope it is RESOLVED
+    /// against, which is the merged window). `fetch_round` is the only
+    /// writer; this field only carries it between rounds.
+    next_evidence_id: usize,
     /// Order deep-research-t3a: the round count a resume restored from
     /// (`None` on a fresh run). `drive()` skips the launch head
     /// (charter/plan/align — the checkpoint verified them) and the
@@ -1230,6 +1253,7 @@ impl Controller {
             figure_specifiers: Vec::new(),
             artifacts: Vec::new(),
             aborted_at_round: None,
+            next_evidence_id: 0,
             resumed_after_round: None,
             draft_retried: false,
         };
@@ -1362,6 +1386,14 @@ impl Controller {
             figure_specifiers: cp.figure_specifiers.clone(),
             artifacts: cp.artifacts.clone(),
             aborted_at_round: cp.aborted_at_round,
+            // The counter is RECOVERED from the restored windows rather
+            // than carried as its own checkpoint field. The windows are
+            // already durable and are the authority on which handles
+            // were issued, so there is one representation, not two that
+            // can disagree (§10.6) — and a checkpoint written BEFORE
+            // this fix resumes into the correct id space instead of
+            // serde-defaulting to 0 and re-colliding on the next round.
+            next_evidence_id: Self::evidence_id_high_water(&cp.windows),
             resumed_after_round: Some(cp.written_after_round),
             draft_retried: false,
         };
@@ -1665,6 +1697,26 @@ impl Controller {
     /// each round (`let mut index = 0usize`, fetch.rs:301), so round 2's `ev-1`
     /// collides with round 1's. Measured on bed dr-1787807617: 7 ids covering 24
     /// of 62 chunks.
+    /// The highest `ev-N` handle already minted across the accumulated
+    /// windows — the counter's durable form, read on resume.
+    ///
+    /// A MAX, not a count: a count assumes every minted chunk is still
+    /// present, and the moment anything filters a window that assumption
+    /// silently hands out an id that is already in use. The max is one
+    /// past the last handle issued whatever happened to the chunks in
+    /// between, which is the only property the counter actually needs.
+    /// Non-`ev-` ids (`estate-N`) live in a different handle space and
+    /// do not participate.
+    pub(crate) fn evidence_id_high_water(windows: &[EvidenceWindow]) -> usize {
+        windows
+            .iter()
+            .flat_map(|w| w.chunks.iter())
+            .filter_map(|c| c.id.strip_prefix("ev-"))
+            .filter_map(|n| n.parse::<usize>().ok())
+            .max()
+            .unwrap_or(0)
+    }
+
     pub(crate) fn duplicate_window_ids(chunks: &[WindowChunk]) -> Vec<(String, usize)> {
         let mut counts: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
         for c in chunks {
@@ -2394,6 +2446,7 @@ impl Controller {
             &fetch_list,
             &triaged.candidates,
             &already_fetched,
+            &mut self.next_evidence_id,
             now_unix(),
             &fetch_policy,
         )
@@ -2913,6 +2966,56 @@ mod tests {
             ingested_into: None,
             tags: Vec::new(),
         }
+    }
+
+    fn ew(round: u32, chunks: Vec<WindowChunk>) -> EvidenceWindow {
+        EvidenceWindow {
+            icd: "evidence_window".to_string(),
+            version: icd::ICD_VERSION,
+            run_id: "r".to_string(),
+            charter_hash: "h".to_string(),
+            round,
+            chunks,
+            fetch_failures: Vec::new(),
+            dedup_refused: Vec::new(),
+            content_refused: Vec::new(),
+            derived_custody: "public-web".to_string(),
+        }
+    }
+
+    #[test]
+    fn a_resumed_run_continues_the_evidence_handle_space() {
+        // The resume path recovers the counter from the restored windows.
+        // Get this wrong and the fix undoes itself on exactly the runs that
+        // are hardest to inspect: round 3 restarts at ev-1, collides with
+        // round 1, and the report mis-attributes with no error.
+        let windows = vec![
+            ew(1, vec![wc("estate-1", "estate:c:1"), wc("estate-2", "estate:c:2")]),
+            ew(1, vec![wc("ev-1", "https://a.example/1"), wc("ev-2", "https://b.example/2")]),
+            ew(2, vec![wc("ev-3", "https://c.example/3")]),
+        ];
+        assert_eq!(
+            Controller::evidence_id_high_water(&windows),
+            3,
+            "the next handle is ev-4 — estate ids are a different space and do not count"
+        );
+
+        // A MAX, not a count: a window that lost chunks must not hand back
+        // an id that is already in use.
+        let sparse = vec![ew(1, vec![wc("ev-7", "https://a.example/7")])];
+        assert_eq!(
+            Controller::evidence_id_high_water(&sparse),
+            7,
+            "the high-water mark survives chunks disappearing between rounds"
+        );
+
+        // A fresh run, and a run whose only evidence is the estate.
+        assert_eq!(Controller::evidence_id_high_water(&[]), 0);
+        assert_eq!(
+            Controller::evidence_id_high_water(&[ew(1, vec![wc("estate-4", "estate:c:4")])]),
+            0,
+            "an estate-only run has issued no ev- handle"
+        );
     }
 
     #[test]

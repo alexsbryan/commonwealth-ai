@@ -21,9 +21,14 @@ pub const DEFAULT_CLIENT_PORT: u16 = 9741;
 /// the canonical port is the answer. One accessor per path (§10.6):
 /// daemon-first MCP calls resolve their target here.
 pub fn daemon_base_url() -> String {
-    std::env::var("SOVEREIGN_DAEMON_URL")
-        .or_else(|_| std::env::var("SVRNMESH_DAEMON_URL"))
-        .unwrap_or_else(|_| format!("http://localhost:{DEFAULT_CLIENT_PORT}"))
+    // Delegates rather than deciding (§10.6). This used to read the env here
+    // and fall back to the COMPILED port above, which made it blind to an
+    // operator's `[daemon] client_port` — every other reader followed the
+    // config and this one silently went to 9741. It also accepted a
+    // set-but-blank `SOVEREIGN_DAEMON_URL=` as an empty base URL and left
+    // trailing slashes on, so `http://h:9841//v1/models` reached a strict
+    // router as a different route. `client_daemon_base` answers all three.
+    sovereign_contracts::setup_config::client_daemon_base()
 }
 
 /// `http://localhost:<port>/v1` — the OpenAI-compatible API root.

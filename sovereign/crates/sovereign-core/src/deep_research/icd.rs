@@ -657,6 +657,57 @@ pub struct BudgetEntry {
 // §8 evidence-window-<round>.json — R6, custody-stamped
 // ---------------------------------------------------------------------------
 
+/// `compose-input.json` — EXACTLY what the writer stage is handed.
+///
+/// # Why this artifact exists
+///
+/// The writing is ~12 minutes of a ~96-minute flight; the audit is ~71 and
+/// acquisition ~10 (measured on the task-69 wide cell, 2026-08-26). Tuning
+/// the writer through whole flights therefore pays 8x its own cost per
+/// answer, which is what `arms/bed-binder/bed.json` + `tests/binder_replay.rs`
+/// already solved for the AUDIT stage. This is the same move for the WRITER:
+/// freeze the stage's inputs so `compose_report` can be replayed against
+/// identical evidence in minutes, through the production function rather than
+/// a fork of it.
+///
+/// # Why the per-round windows could not serve
+///
+/// `evidence-window-<round>.json` is dumped INSIDE the round loop and
+/// `compose_report` runs after it, so neither dump is what the writer saw:
+/// on the 2026-08-26 wide cell compose witnessed `window_chunks=61` where the
+/// dumps summed to 57. Worse, `ev-N` is PER-ROUND POSITIONAL — round 2
+/// restarts at `ev-1` — so the dumps cannot even be unioned by id. Trying to
+/// reconstruct the merged window from them produced a false "the writer
+/// fabricates citation handles" finding on 2026-08-26 (retracted same day).
+/// This records the merged window ONCE, at the boundary, so no consumer has
+/// to reconstruct anything.
+///
+/// Holding the window twice on disk is deliberate: the run tree is local and
+/// gitignored, and a replayable writer is worth ~1.3 MB per run.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComposeInput {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    /// The question as the writer receives it.
+    pub question: String,
+    /// The MERGED window `compose_report` ranks against — not a round dump.
+    pub window: EvidenceWindow,
+    /// The section list: the planned outline, or the search frontier when the
+    /// outline was refused (the fallback is named in the run log, and which
+    /// one this is matters to anyone replaying).
+    pub sections: Vec<String>,
+    /// Distilled findings per sub-question. Empty when the notes leg is off.
+    pub notes: Vec<ResearchNote>,
+    /// The budget in force for the run that produced this input, so a replay
+    /// can state its baseline instead of assuming the shipped default.
+    pub section_passages: usize,
+    pub per_source_cap: usize,
+}
+
+// ---------------------------------------------------------------------------
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvidenceWindow {
     pub icd: String,

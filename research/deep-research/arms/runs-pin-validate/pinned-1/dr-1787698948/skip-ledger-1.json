@@ -1,0 +1,119 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787698948",
+  "charter_hash": "a30d4578d8ed08da",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.030886195600032806,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q16",
+      "snippet": "ompelling but they come with real risks if youre not careful. These concepts are a very exciting and helpful innovation, but it also introduces a few risks security people should be aware of.\n1. Data Leakage\nThe more context you give an LLM, the more useful the LLM becomes but this also enhances the risk we expose ourselves to, in a scenario where the model or its surrounding environment is ever compromised. The more data we give out, the more potential data a determined attacker can get their hands on.\nThis is especially true in agent-based environments where context is dynamically shared bet"
+    },
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.030414745211601257,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q10",
+      "snippet": "ube or Google Flights: Gemini has the capability to use Extensions (or plugins) to interact with third-party services like YouTube, Google Flights, and others.\nGemini’s App Actions allow structured interactions within Android apps, mimicking MCP/A2A function calling: Android App Actions enable more direct and structured ways for users (and potentially AI models) to interact with specific functionalities within Android applications. OpenAI’s Agent Context features\nThough OpenAI have yet to fully integrate with the new MCP protocol or introduce their own version of it, they did started rolli"
+    },
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.0292735043913126,
+      "rank": 25,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q18",
+      "snippet": "ilding toward similar context-awareness mechanisms.\nIn this blog, well explore:\nWhat MCP, A2A, and other agent context protocols are and why they matter How similar ideas are being approached by each major player The risks of using agent context protocols How to best protect ourselves as we’re moving towards the future What Does it Really Mean to Bring Memory to AI?\nWhen we talk about bringing memory to AI, we’re not referring to long-term recall or a better chat history. We’re talking about a shift from isolated language models to embedded agents that operate with real context. Technolo"
+    },
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.026709401980042458,
+      "rank": 97,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q7",
+      "snippet": "t promising developments in this direction is the Model Context Protocol (MCP) introduced by Anthropic. But Anthropic isn’t alone other platforms like Google’s A2A protocol and Gemini, OpenAI and Copilot are also building toward similar context-awareness mechanisms.\nIn this blog, well explore:\nWhat MCP, A2A, and other agent context protocols are and why they matter How similar ideas are being approached by each major player The risks of using agent context protocols How to best protect ourselves as we’re moving towards the future What Does it Really Mean to Bring Memory to AI?\nWhen we ta"
+    },
+    {
+      "url": "https://boomi.com/blog/what-is-mcp-acp-a2a",
+      "title": "https://boomi.com/blog/what-is-mcp-acp-a2a",
+      "score": 0.023796193301677704,
+      "rank": 163,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q6",
+      "snippet": "omi Enterprise Platform added native MCP support in 2025, providing connections without custom development work. The strong ecosystem means ready-made connections exist for common business tools like Microsoft Office, Google Workspace, and popular CRM platforms. MCP works best for companies that need AI agents to access existing business systems and external tools. Organizations with complex tool landscapes benefit most from the standardized connection approach.\nAgent Communication Protocol (ACP) Explained\nACP uses a local-first approach that keeps data processing within company boundaries whi"
+    },
+    {
+      "url": "https://blog.dreamfactory.com/stateful-vs-stateless-web-app-design",
+      "title": "https://blog.dreamfactory.com/stateful-vs-stateless-web-app-design",
+      "score": 0.023735955357551575,
+      "rank": 164,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q20",
+      "snippet": "-protected REST API in minutes, with no code written. The platform has been doing exactly this for over a decade. Authentication (Microsoft Entra ID, OAuth 2.0, OpenID Connect, SAML 2.0, LDAP, Active Directory, API keys), role-based access control (per table, endpoint, and HTTP verb), rate limiting (per user, role, or service), audit logging (every call captured with calling user, timestamp, and payload), and OpenAPI documentation are built in. Server-side scripting in PHP, Python, or Node.js handles custom business logic.\nThe AI Data Gateway is the newer chapter — a built-in MCP server that"
+    },
+    {
+      "url": "https://redis.io/blog/mcp-vs-a2a-which-protocol-do-you-need",
+      "title": "https://redis.io/blog/mcp-vs-a2a-which-protocol-do-you-need",
+      "score": 0.023625310510396957,
+      "rank": 166,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q7",
+      "snippet": "ailTelcoAll industries\nCompare\nRedis vs. ElastiCacheRedis vs. MemcachedRedis vs. MemorystoreRedis vs. Redis Open Source\nCompany\nMission & valuesCareersNews\nConnect\nCommunityEvents & Webinars\nPartners\nAmazon Web ServicesGoogle CloudAzureAll partners\nSupport\nProfessional ServicesSupportRedis for Agents Documentation\nEnglishEspañolFrançaisDeutsch한국어ItalianoPortuguês\nTrust\nPrivacy\nTerms of use\nLegal notices\nCookie preferences"
+    },
+    {
+      "url": "https://github.com/a2aproject/a2a",
+      "title": "https://github.com/a2aproject/a2a",
+      "score": 0.02301587350666523,
+      "rank": 175,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q4",
+      "snippet": "ents: Create A2A clients from scratch or using integrations to connect to A2A-compliant agents. Orchestrate workflows: Build sequential and hierarchical workflows of A2A-compliant agents. Multi-agent systems: Build a healthcare multi-agent system using different frameworks and see how A2A enables collaboration. A2A and MCP: Learn how A2A complements MCP by enabling agents to collaborate with each other. Why A2A?\nAs AI agents become more prevalent, their ability to interoperate is crucial for building complex, multi-functional applications. A2A aims to:\nBreak Down Silos: Connect agents across d"
+    },
+    {
+      "url": "https://redis.io/blog/mcp-vs-a2a-which-protocol-do-you-need",
+      "title": "https://redis.io/blog/mcp-vs-a2a-which-protocol-do-you-need",
+      "score": 0.022871995344758034,
+      "rank": 178,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q6",
+      "snippet": "ailTelcoAll industries\nCompare\nRedis vs. ElastiCacheRedis vs. MemcachedRedis vs. MemorystoreRedis vs. Redis Open Source\nCompany\nMission & valuesCareersNews\nConnect\nCommunityEvents & Webinars\nPartners\nAmazon Web ServicesGoogle CloudAzureAll partners\nSupport\nProfessional ServicesSupportRedis for Agents Documentation\nEnglishEspañolFrançaisDeutsch한국어ItalianoPortuguês\nTrust\nPrivacy\nTerms of use\nLegal notices\nCookie preferences"
+    },
+    {
+      "url": "https://blog.dreamfactory.com/stateless-vs-stateful-apis-key-differences",
+      "title": "https://blog.dreamfactory.com/stateless-vs-stateful-apis-key-differences",
+      "score": 0.022862309589982033,
+      "rank": 179,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q20",
+      "snippet": "sistent multi-step operations.\nProcessing Aspect Implementation Details Impact Session Management Persistent connection tracking Reduces redundant data transfer State Storage Server-side session data Increases memory usage Request Handling Context-aware processing Speeds up response times Resource Usage Active connection maintenance Raises server load These design choices come with both advantages and trade-offs.\nBenefits and Limitations\nStateful APIs are ideal for applications requiring persistent sessions and complex workflows. Benefits include smoother continuous interactions, easier client"
+    },
+    {
+      "url": "https://github.com/a2aproject/a2a",
+      "title": "https://github.com/a2aproject/a2a",
+      "score": 0.02277432754635811,
+      "rank": 181,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q12",
+      "snippet": " audio/video mid-conversation). Client Methods & Transport: Explore extending support to client-initiated methods (beyond task management). Improvements to streaming reliability and push notification mechanisms. About\nThe A2A Protocol is an open source project under the Linux Foundation, contributed by Google. It is licensed under the Apache License 2.0 and is open to contributions from the community.\nAbout\nAgent2Agent (A2A) is an open protocol enabling communication and interoperability between opaque agentic applications.\na2a-protocol.org/\nTopics\na2aa2a-mcpa2a-protocola2a-serveragentsgenerat"
+    }
+  ]
+}

@@ -1,0 +1,303 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787599534",
+  "charter_hash": "e2dbefc333d63e91",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 5,
+      "fetched": 30,
+      "search_calls": 10
+    },
+    {
+      "round": 2,
+      "gaps_before": 5,
+      "gaps_after": 14,
+      "fetched": 2,
+      "search_calls": 10
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "estate:dr-estate-demo13-warm:136",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:106",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:120",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:112",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:104",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:138",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:124",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:113",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:110",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:116",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:122",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:115",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:103",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:101",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:126",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:127",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:102",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:105",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:107",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:118",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:130",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:145",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:141",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:108",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:137",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:140",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:37",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:117",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:214",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:66",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:125",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      },
+      {
+        "url": "estate:dr-estate-demo13-warm:123",
+        "custody": "personal",
+        "ingested_into": "dr-estate-dr-1787599534"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:corpus": 20,
+      "web-fetch:pages": 32
+    },
+    "remaining": {
+      "web-fetch:pages": 68,
+      "web-search:corpus": 0
+    }
+  },
+  "not_covered": [
+    "Instead, all available data points to a major public announcement occurring on April 9, 2025, which serves as the primary release event for the standard [Source: ev-3].",
+    "The evidence indicates that Google leveraged internal expertise in scaling agentic systems to design A2A specifically to address fragmentation caused by diverse frameworks, APIs, and vendor-specific tools [Source: ev-1].",
+    "By launching with support from over 50 technology partners—including Atlassian, Salesforce, PayPal, Intuit, and major consulting firms like McKinsey and Deloitte—Google effectively established an open standard capable of enabling interoperability between agents built by different vendors [Source: ev-11].",
+    "The protocol's release strategy emphasizes building on existing standards rather than creating new ones. [Source: ev-15]",
+    "The April 9 announcement details that A2A is constructed atop HTTP, Server-Sent Events (SSE), JSON-RPC, and OpenAPI authentication schemes, designed for seamless integration with current IT stacks [Source: ev-15].",
+    "This architectural choice implies that the \"specification\" delivered in mid-2025 was not merely a theoretical framework but an actionable engineering standard ready for immediate deployment across diverse cloud environments. [Source: ev-15]",
+    "The Agent-to-Agent (A2A) protocol specification establishes a rigorous architectural foundation centered on two primary components: the **Agent Card** and the **Task**, designed to resolve fragmentation in multi-agent systems. [Source: ev-15]",
+    "The Agent Card functions as a standardized identity manifest, enabling agents built from disparate frameworks—such as LangGraph, Crew AI, or Semantic Kernel—to recognize one another without vendor lock-in [ev-10]. [Source: ev-15]",
+    "This interoperability is critical because current agent ecosystems suffer from severe silos; A2A allows an autonomous entity to authenticate via robust security practices like least privilege access while negotiating capabilities with any partner supporting the standard, regardless of whether that partner uses OpenAI SDKs or proprietary tools [ev-5][ev-15]. [Source: ev-15]",
+    "Central to this architecture is the **A2A Task**, defined not merely as a command but as a complete lifecycle unit of work. [Source: ev-15]",
+    "Unlike ad-hoc interactions, a Task possesses distinct states—submitted, in-progress, and completed—that provide a clean mechanism for tracking job progression across system boundaries [ev-10]. [Source: ev-15]",
+    "This structured approach addresses the \"fragmentation\" issue by allowing agents from different vendors to collaborate on complex workflows without needing deep integration into each other's internal logic. [Source: ev-15]",
+    "The protocol supports long-running tasks and leverages existing standards like HTTP, SSE, and JSON-RPC, ensuring compatibility with enterprise IT stacks while maintaining security parity with OpenAPI authentication schemes at launch [ev-2][ev-3]. [Source: ev-15]",
+    "While A2A defines how agents communicate with one another via Task exchanges, it operates alongside the Model Context Protocol (MCP), which handles agent-to-tool connectivity. [Source: ev-15]",
+    "Although both protocols are open standards backed by major players—Google for A2A and Anthropic for MCP—they solve distinct problems within the agentic stack [estate-1]. [Source: ev-15]",
+    "A2A facilitates true multi-agent scenarios where autonomy is multiplied across organizational boundaries, supported by over 50 technology partners including Atlassian, Salesforce, and McKinsey as of April 9, 2025 [ev-11][ev-3]. [Source: ev-15]",
+    "Conversely, MCP remains focused on providing context to single agents through external data sources. [Source: ev-15]",
+    "Together, they form a complementary backbone: A2A enables lateral collaboration between intelligent entities, while MCP ensures vertical integration with databases and APIs [ev-2]. [Source: ev-15]",
+    "While specific percentage shares of active deployments are not quantified in the provided evidence, the consensus across multiple sources establishes that these protocols address orthogonal challenges: MCP resolves vertical integration by standardizing LLM connections to external tools and databases, whereas A2A solves horizontal fragmentation by enabling interoperability between autonomous agents regardless of underlying frameworks [Source: ev-1], [Source: estate-2].",
+    "The critical distinction lies in their scope within complex workflows. [Source: estate-1]",
+    "Conversely, A2A facilitates capability discovery, task management, and UX negotiation among agents, allowing them to collaborate securely across entire enterprise application estates without exposing implementation details via mechanisms like Agent Cards [Source: ev-2], [Source: ev-13].",
+    "Meanwhile, Anthropic continues to champion MCP as a foundational standard for tool connectivity. [Source: estate-1]",
+    "The strategic implication is that organizations are moving beyond isolated chatbots toward agentic systems requiring both robust external interfaces (MCP) and seamless peer coordination (A2A). [Source: estate-1]",
+    "The evidence supports the view that these protocols do not compete but rather form the backbone of scalable, intelligent ecosystems where one protocol manages data ingestion while the other orchestrates decision-making logic between specialized agents [Source: ev-2], [Source: estate-1].",
+    "Consequently, early adopters like Knowi demonstrate an architecture leveraging this dual approach to manage queries, dashboards, and complex data connections simultaneously. [Source: estate-1]",
+    "Without specific Q3 2025 market share figures differentiating current usage rates between the two standards in enterprise environments, it remains premature to declare a definitive leader based solely on adoption volume; however, the functional necessity of both is now widely recognized as essential for solving modern AI integration challenges. [Source: estate-1]",
+    "MCP functions as a universal standard for connecting AI assistants to external data sources and tools, operating similarly to REST APIs where systems exchange standardized requests [ev-28]. [Source: estate-1]",
+    "In contrast, A2A is designed specifically for interoperability between agents from different frameworks such as LangGraph or Crew AI, focusing on passing units of work rather than raw tool invocation [ev-10]. [Source: estate-1]",
+    "While both protocols require robust authentication practices like least privilege access to ensure security [ev-5], they address separate layers of the agentic stack: MCP handles agent-to-tool connectivity, whereas A2A manages agent-to-agent communication [ev-2]. [Source: estate-1]",
+    "The evidence indicates that MCP's messaging model prioritizes a flexible interface for diverse data repositories and business tools, though specific counts of distinct message types are not enumerated in the provided text. [Source: estate-1]",
+    "Conversely, A2A imposes a stricter lifecycle structure defined by explicit task states to track job progression between agents. [Source: estate-1]",
+    "| Feature | Model Context Protocol (MCP) | Agent-to-Agent (A2A Protocol) |\n| :--- | :--- | :--- |\n| **Primary Function** | Connects LLMs to data sources/tools | Enables agent-to-agent collaboration |\n| **Core Analogy** | Standardized REST APIs for systems talking to one another | Single unit of work passed between agents [ev-10] |\n| **Defined States** | Not explicitly enumerated in evidence; implies fluid request/response cycles | Explicit lifecycle: submitted, in-progress, completed [ev-10], plus a fourth state |\n| **Target Audience** | Developers connecting assistants to real-world data silos | Technical leaders evaluating framework interoperability (e.g., Semantic Kernel) [ev-5] |\n\nThe strength of this distinction is reinforced by the consensus that these protocols are not competitive but rather complementary components of scalable agentic systems [ev-2]. [Source: ev-15]",
+    "This finding implies that organizations seeking transparency into multi-agent workflows should prioritize A2A's defined lifecycle states, whereas those requiring deep integration with disparate business tools may find MCP's open-source architecture more suitable despite its lack of enumerated state definitions in the available evidence. [Source: ev-15]",
+    "MCP (Model Context Protocol) serves as the vertical integration layer, standardizing how LLMs connect with external tools, databases, and APIs [ev-13]. [Source: ev-15]",
+    "In contrast, A2A (Agent-to-Agent) facilitates horizontal collaboration by enabling autonomous agents across different frameworks—such as LangGraph, Crew AI, and Semantic Kernel—to communicate and collaborate on tasks [ev-2], [ev-10]. [Source: ev-15]",
+    "The evidence indicates that most successful enterprise AI deployments require both protocols working in tandem to address scalability challenges effectively [estate-2]. [Source: ev-15]",
+    "By solving the N×M problem of connecting multiple LLMs with multiple systems, MCP reduces overhead at the tool interface level, whereas A2A addresses capability discovery and UX negotiation across agent ecosystems [ev-13], [ev-9]. [Source: ev-15]",
+    "Without empirical latency figures, it remains speculative whether one protocol introduces higher delay than the other; however, the structural design implies that cross-agent communication involves more complex state tracking and lifecycle management compared to localized tool invocation. [Source: ev-15]",
+    "Google's announcement of A2A as a new era for interoperable agents highlights its role in unifying diverse frameworks without exposing implementation details through \"Agent Cards\" [ev-3], [estate-1]. [Source: ev-15]",
+    "While early-stage adoption is described as \"month zero,\" with future improvements expected in UIs and tooling [ev-10], the protocols are positioned not as competitors but as complementary components essential for scalable agentic systems. [Source: ev-15]",
+    "The distinction between A2A and MCP lies not merely in technical syntax but in their fundamental problem domains, with both protocols designed to operate synergistically rather than competitively. [Source: ev-15]",
+    "Google explicitly states that while they solve different problems, these open standards are intended to work together to address fragmentation in AI agent deployment [Source: estate-1 (estate:dr-estate-demo13-warm:104)].",
+    "Specifically, A2A is engineered to enable interoperability among agents built by different vendors or frameworks, allowing them to connect directly regardless of underlying technology stacks like Langchain or proprietary systems [Source: ev-1].",
+    "In contrast, MCP functions as the foundational layer connecting those autonomous agents to real-world tools and data sources, effectively solving the \"messy\" integration challenges between software agents and external APIs [Source: estate-1 (estate:dr-estate-demo13-warn:112)].",
+    "The primary innovation driving A2A's development stems from Google Cloud's internal expertise in scaling large-scale multi-agent systems for enterprise customers. [Source: ev-15]",
+    "The protocol addresses critical limitations where current agent architectures restrict functionality by limiting an agent to a single \"tool,\" thereby hindering true autonomy across diverse platforms [Source: ev-15].",
+    "By standardizing how agents communicate with one another, A2A empowers businesses to manage fleets of AI agents across varied cloud environments without vendor lock-in [Source: estate-1 (estate:dr-estate-demo13:warm:124)].",
+    "This approach aims to increase productivity and lower long-term costs by enabling complex workflows where multiple specialized agents collaborate seamlessly, moving beyond isolated task execution to coordinated system-level intelligence [Source: ev-11].",
+    "The reliance on established standards like JSON-RPC ensures that this new layer of agent-to-agent communication integrates smoothly into existing IT infrastructures, mitigating the friction typically associated with adopting novel protocol layers. [Source: ev-15]",
+    "While the Model Context Protocol (MCP) addresses foundational connectivity, Google's newly announced Agent2Agent (A2A) protocol specifically targets the complexities of orchestrating autonomous workflows across diverse frameworks like LangGraph and Crew AI [ev-10]. [Source: ev-15]",
+    "The evidence suggests that as LLMs penetrate enterprise workflows, the demand for seamless scaling necessitates protocols that handle complex task lifecycles explicitly. [Source: ev-15]",
+    "A2A introduces a standardized unit of work with defined states—submitted, in-progress, completed—that bridges agents regardless of their underlying vendor or framework [ev-15][ev-10]. [Source: ev-15]",
+    "This capability is vital because current solutions often struggle to manage long-running tasks without limiting an agent to a mere \"tool\" interaction [ev-15], whereas A2A enables true multi-agent scenarios by leveraging existing standards such as HTTP, SSE, and JSON-RPC [ev-15]. [Source: ev-15]",
+    "The primary distinction lies in scope: MCP focuses on providing context and tools, while A2A governs the handoff of entire task units between autonomous entities. [Source: ev-15]",
+    "Google emphasizes that these protocols are not competitive but designed to work together, both requiring standard security practices like robust authentication and least privilege access [ev-5][ev-3]. [Source: ev-15]",
+    "By supporting enterprise-grade auth with parity to OpenAPI schemes at launch, A2A ensures compatibility within strict IT stacks [ev-15]. [Source: ev-15]",
+    "The strength of this approach is evidenced by its immediate industry traction; the protocol launched with support from over 50 technology partners including Salesforce, SAP, and ServiceNow, alongside major consulting firms like McKinsey and Deloitte [ev-11]. [Source: ev-15]",
+    "This broad coalition indicates a market-wide recognition that interoperability will multiply productivity gains while lowering long-term costs compared to siloed agent development. [Source: ev-15]",
+    "The innovative aspect of A2A is its ability to decouple agents from specific tooling constraints, allowing businesses to combine providers without rewriting core logic. [Source: ev-15]",
+    "Google's internal expertise in scaling agentic systems drove this design to address challenges identified during large-scale customer deployments [ev-8]. [Source: ev-15]",
+    "By standardizing the lifecycle management of tasks, A2A provides a clean mechanism for tracking jobs across diverse cloud environments, effectively solving the fragmentation issue where agents built by different vendors cannot communicate autonomously [ev-10][ev-9]. [Source: ev-15]",
+    "This shift represents \"month zero\" for scalable interoperability, promising that future UIs and frameworks will build upon these foundational standards rather than reinventing connectivity mechanisms [ev-10]. [Source: ev-15]",
+    "Google engineers explicitly identified severe fragmentation as the primary obstacle to scalable multi-agent systems, noting that connecting agents to real-world tools is currently \"messy and unreliable\" due to reliance on disparate frameworks [Source: ev-1].",
+    "This vendor lock-in prevents true autonomy; without a universal language, an agent built by one company cannot securely or easily interact with another's capabilities. [Source: ev-15]",
+    "Google addressed this through the Agent-to-Agent (A2A) protocol, launched in April 9, 2025, which functions as a standardized interface akin to English for AI agents [Source: ev-12].",
+    "Unlike previous attempts limited to specific tool interactions, A2A was designed from the outset to enable collaboration across unstructured modalities even when memory or context does not align perfectly between parties [Source: ev-1].",
+    "The evidence highlights that while Model Context Protocol (MCP) connects agents to data and tools, A2A solves the distinct problem of agent-to-agent interoperability; they are complementary rather than redundant standards [Source: ev-4].",
+    "Google's internal deployment challenges revealed that existing solutions failed to provide a \"standardized method for managing their agents across diverse platforms\" at scale [Source: estate-1].",
+    "Consequently, A2A introduces four critical mechanisms: Agent Cards (JSON-based digital business cards), A2A Servers (execution engines), Clients (user-facing apps or other agents), and support for long-running tasks via HTTP, SSE, and JSON-RPC [Source: ev-15].",
+    "These features directly mitigate the reliability issues cited in early deployments by ensuring secure-by-default authentication with parity to OpenAPI schemes. [Source: ev-15]",
+    "| Mechanism | Function | Addresses Specific Problem |\n| :--- | :--- | :--- |\n| **Agent Card** | Digital identity in JSON format | Solves discovery and trust across vendors |\n| **Server/Client Split** | Separates execution from interaction | Enables flexible integration into existing IT stacks |\n| **Long-running Task Support** | Flexible task management over time | Overcomes limitations of synchronous tool calls only |\n\nThe strength of this evidence lies in Google's dual role as both a critic of current fragmentation [Source: ev-1] and the architect of the solution, supported by contributions from 50+ technology partners including Atlassian, Salesforce, and Workday [Source: ev-11].",
+    "This ecosystem ensures that A2A is not merely theoretical but grounded in real-world enterprise needs where businesses require agents to combine seamlessly across different cloud environments. [Source: estate-1]",
+    "The protocol effectively transforms agent collaboration from an ad-hoc engineering challenge into a standardized capability. [Source: estate-1]",
+    "The evidence establishes that A2A and MCP are not competing standards but complementary layers of a unified agentic stack, with their relationship defined by strict functional orthogonality. [Source: estate-1]",
+    "This conclusion rests on strong architectural evidence: MCP resolves the \"N×M problem\" of vertical integration between LLMs and tools [Source: ev-13], while A2A addresses horizontal fragmentation among autonomous agents [Source: ev-1].",
+    "The distinction is further cemented by their differing message taxonomies; MCP utilizes flexible request-response models for data access [Source: ev-28], whereas A2A imposes a rigid state machine (submitted, in-progress, completed) to manage complex task lifecycles across vendor boundaries [Source: ev-10].",
+    "Consequently, any enterprise strategy treating them as mutually exclusive alternatives misunderstands their synergistic design intent. [Source: estate-1]",
+    "The report highlights that current agent integration is \"messy and unreliable\" due to vendor lock-in [Source: ev-1], yet it does not provide case studies demonstrating A2A’s successful resolution of these issues in production environments beyond Google’s internal context.",
+    "The Google Agent-to-Agent (A2A) protocol was announced in April 2025 and is supported by over 50 tech giants including Atlassian, Salesforce, and PayPal [Source: ev-estate-1].",
+    "The A2A protocol allows AI agents from different frameworks to communicate and collaborate on tasks while addressing the issue of fragmentation caused by various tools and APIs used today [Source: ev-estate-1].",
+    "While both protocols aim to reduce complexity and streamline operations in artificial intelligence systems, they serve distinct purposes where A2A handles agent-to-agent interoperability across diverse platforms and cloud environments [Source: ev-estate-2].",
+    "Although these two open standards are often perceived as competing solutions, the evidence indicates that many organizations derive maximum value by utilizing them together rather than relying on just one protocol [Source: ev-estate-1].",
+    "The distinction between these protocols was highlighted during AI Launch Week events held in April 2026 to explain their roles in scalable agentic systems [Source: ev-estate-2].",
+    "Based on the evidence provided, here is a detailed explanation of the differences and connections between Google's Agent-to-Agent (A2A) protocol and the Model Context Protocol (MCP), along with an elaboration on A2A's innovative aspects. [Source: ev-estate-4]",
+    "*   **Relationship:**\n    *   Although often perceived as competing solutions, A2A and MCP are complementary rather than mutually exclusive. [Source: ev-estate-4]",
+    "*   **Agent Cards:** A central innovation of A2A is the \"Agent Card,\" which functions like an agent's digital business card in JSON format. [Source: ev-9]",
+    "It describes what an agent can do and how others should interact with it without exposing underlying implementation details [Source: ev-13].",
+    "When a task arrives, clients read this card, package the request, send it to the server, and receive results via standardized lifecycle states (submitted, in-progress, completed) [Source: ev-10].",
+    "Without a standard like A2A, connecting these diverse agents requires messy and unreliable custom integrations [Source: ev-estate-1][Source: ev-3].",
+    "They lack the ability to understand complex prompts effectively when isolated from other capable entities [Source: estate-9].",
+    "A2A increases autonomy by enabling agents to pass \"Task\" units of work between each other seamlessly [Source: ev-10].",
+    "Their combined use addresses the full spectrum of integration challenges required for advanced agentic AI. [Source: ev-8]"
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787599534",
+    "acquired_at_unix": 1787599534,
+    "released_at_unix": 1787602303
+  }
+}

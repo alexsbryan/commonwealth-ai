@@ -1,0 +1,129 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787774168",
+  "charter_hash": "5c22be9e6ada3d8b",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.030414745211601257,
+      "rank": 13,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q10",
+      "snippet": "arning Glossary Comparisons Connect\nEvents & Webinars Support\nDocumentation User Center Report 2026 State of AI Security\nResearch Pod Meet our team that discovers and analyzes cloud risks.\nDiscovered Vulnerabilities Critical cloud vulnerabilities discovered by the Orca Research Pod.\nOpen Source Projects Cloud security tools for developers and security teams.\n“Orca Watch” Series Blog series that highlights new trends and risks seen by the Orca Platform.\nTechnical Deep Dives In-depth, technical articles on cloud security and recommended best practices.\nReport 2026 State of AI Security\nCustom"
+    },
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.029726775363087654,
+      "rank": 26,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q4",
+      "snippet": "n greater in A2A-style environments, where agents are expected to discover and communicate with one another over open protocols. A single misconfigured endpoint in this setup can inadvertently expose internal context to unauthorized peers or attackers posing as trusted agents. Without strict access controls and proper scoping, even a small configuration mistake can grant visibility into project directories, user metadata, or system internals turning a simple oversight into a critical entry point.\n3. Supply Chain Attack Risk\nMany MCP-like use cases involve usage of plugins, extensions or extern"
+    },
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.0292735043913126,
+      "rank": 34,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q13",
+      "snippet": "ilding toward similar context-awareness mechanisms.\nIn this blog, well explore:\nWhat MCP, A2A, and other agent context protocols are and why they matter How similar ideas are being approached by each major player The risks of using agent context protocols How to best protect ourselves as we’re moving towards the future What Does it Really Mean to Bring Memory to AI?\nWhen we talk about bringing memory to AI, we’re not referring to long-term recall or a better chat history. We’re talking about a shift from isolated language models to embedded agents that operate with real context. Technolo"
+    },
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.026709401980042458,
+      "rank": 88,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q8",
+      "snippet": "t promising developments in this direction is the Model Context Protocol (MCP) introduced by Anthropic. But Anthropic isn’t alone other platforms like Google’s A2A protocol and Gemini, OpenAI and Copilot are also building toward similar context-awareness mechanisms.\nIn this blog, well explore:\nWhat MCP, A2A, and other agent context protocols are and why they matter How similar ideas are being approached by each major player The risks of using agent context protocols How to best protect ourselves as we’re moving towards the future What Does it Really Mean to Bring Memory to AI?\nWhen we ta"
+    },
+    {
+      "url": "https://redis.io/blog/mcp-vs-a2a-which-protocol-do-you-need",
+      "title": "https://redis.io/blog/mcp-vs-a2a-which-protocol-do-you-need",
+      "score": 0.023625310510396957,
+      "rank": 171,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q8",
+      "snippet": "ailTelcoAll industries\nCompare\nRedis vs. ElastiCacheRedis vs. MemcachedRedis vs. MemorystoreRedis vs. Redis Open Source\nCompany\nMission & valuesCareersNews\nConnect\nCommunityEvents & Webinars\nPartners\nAmazon Web ServicesGoogle CloudAzureAll partners\nSupport\nProfessional ServicesSupportRedis for Agents Documentation\nEnglishEspañolFrançaisDeutsch한국어ItalianoPortuguês\nTrust\nPrivacy\nTerms of use\nLegal notices\nCookie preferences"
+    },
+    {
+      "url": "https://www.mindstudio.ai/blog/what-is-a2a-agent-to-agent-protocol",
+      "title": "https://www.mindstudio.ai/blog/what-is-a2a-agent-to-agent-protocol",
+      "score": 0.02302459441125393,
+      "rank": 179,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q11",
+      "snippet": " worth understanding how platforms like it relate to protocols like A2A.\nWhen you build an agent in MindStudio, you’re defining what it knows, what it can do, and when it runs. The platform handles connections to 1,000+ business tools — Salesforce, HubSpot, Slack, Google Workspace, and more — so your agents can actually act on data, not just process it.\nOne relevant capability here is MindStudio’s support for agentic MCP servers — which means agents you build in MindStudio can be exposed to other AI systems as callable services. This is exactly the kind of infrastructure that becomes"
+    },
+    {
+      "url": "https://www.mindstudio.ai/blog/what-is-a2a-agent-to-agent-protocol",
+      "title": "https://www.mindstudio.ai/blog/what-is-a2a-agent-to-agent-protocol",
+      "score": 0.02302459441125393,
+      "rank": 180,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q12",
+      "snippet": " worth understanding how platforms like it relate to protocols like A2A.\nWhen you build an agent in MindStudio, you’re defining what it knows, what it can do, and when it runs. The platform handles connections to 1,000+ business tools — Salesforce, HubSpot, Slack, Google Workspace, and more — so your agents can actually act on data, not just process it.\nOne relevant capability here is MindStudio’s support for agentic MCP servers — which means agents you build in MindStudio can be exposed to other AI systems as callable services. This is exactly the kind of infrastructure that becomes"
+    },
+    {
+      "url": "https://a2acn.com/en/docs/topics/streaming-and-async",
+      "title": "https://a2acn.com/en/docs/topics/streaming-and-async",
+      "score": 0.022893773391842842,
+      "rank": 182,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q9",
+      "snippet": "nfigure a webhook endpoint and let the server notify the client.\nKey points:\nServer capability must declare capabilities.pushNotifications: true.\nConfigure notification delivery when sending the task request (or via dedicated push config operations).\nUse tasks/get after receiving a notification to fetch the latest full task state.\nIn v1-oriented implementations, authentication details should be carried by declared schemes rather than ad-hoc static secrets.\nSecurity checklist Validate webhook destinations to avoid SSRF and abuse.\nRequire strong server-to-webhook authentication (OAuth, HMAC, mTL"
+    },
+    {
+      "url": "https://blog.dreamfactory.com/stateless-vs-stateful-apis-key-differences",
+      "title": "https://blog.dreamfactory.com/stateless-vs-stateful-apis-key-differences",
+      "score": 0.022862309589982033,
+      "rank": 183,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q15",
+      "snippet": "sistent multi-step operations.\nProcessing Aspect Implementation Details Impact Session Management Persistent connection tracking Reduces redundant data transfer State Storage Server-side session data Increases memory usage Request Handling Context-aware processing Speeds up response times Resource Usage Active connection maintenance Raises server load These design choices come with both advantages and trade-offs.\nBenefits and Limitations\nStateful APIs are ideal for applications requiring persistent sessions and complex workflows. Benefits include smoother continuous interactions, easier client"
+    },
+    {
+      "url": "https://boomi.com/blog/what-is-mcp-acp-a2a",
+      "title": "https://boomi.com/blog/what-is-mcp-acp-a2a",
+      "score": 0.02214920148253441,
+      "rank": 185,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q6",
+      "snippet": "omi Enterprise Platform added native MCP support in 2025, providing connections without custom development work. The strong ecosystem means ready-made connections exist for common business tools like Microsoft Office, Google Workspace, and popular CRM platforms. MCP works best for companies that need AI agents to access existing business systems and external tools. Organizations with complex tool landscapes benefit most from the standardized connection approach.\nAgent Communication Protocol (ACP) Explained\nACP uses a local-first approach that keeps data processing within company boundaries whi"
+    },
+    {
+      "url": "https://redis.io/blog/mcp-vs-a2a-which-protocol-do-you-need",
+      "title": "https://redis.io/blog/mcp-vs-a2a-which-protocol-do-you-need",
+      "score": 0.021863799542188644,
+      "rank": 187,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q9",
+      "snippet": "ication modelClient-server; agent calls a passive toolPeer-to-peer; agent delegates to another agentInteraction patternRequest-response per the spec (servers may hold state)Stateful, multi-turn, long-running tasksDiscoveryExplicitly configured endpointsAgent Cards at a well-known URLCore primitivesTools, resources, promptsTasks, messages, artifacts, Agent Cards\nThe split looks like an auto repair shop: a customers agent talks to the shop manager agent over A2A, the manager runs a multi-turn diagnostic conversation with a mechanic agent over A2A, and the mechanic invokes its diagnostic tools ov"
+    },
+    {
+      "url": "https://redis.io/blog/mcp-vs-a2a-which-protocol-do-you-need",
+      "title": "https://redis.io/blog/mcp-vs-a2a-which-protocol-do-you-need",
+      "score": 0.02129828929901123,
+      "rank": 189,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q6",
+      "snippet": "ailTelcoAll industries\nCompare\nRedis vs. ElastiCacheRedis vs. MemcachedRedis vs. MemorystoreRedis vs. Redis Open Source\nCompany\nMission & valuesCareersNews\nConnect\nCommunityEvents & Webinars\nPartners\nAmazon Web ServicesGoogle CloudAzureAll partners\nSupport\nProfessional ServicesSupportRedis for Agents Documentation\nEnglishEspañolFrançaisDeutsch한국어ItalianoPortuguês\nTrust\nPrivacy\nTerms of use\nLegal notices\nCookie preferences"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "arm": "control-4b",
+  "task": 69,
+  "values": [
+    41.34869933262527
+  ],
+  "n": 1,
+  "mean": 41.34869933262527,
+  "sd": NaN,
+  "se": NaN,
+  "missing": [],
+  "control_mean": 43.73,
+  "control_sd": 2.97,
+  "control_n": 15,
+  "delta": -2.381300667374724,
+  "pooled_2se": 6.134805620392549,
+  "aiq_t69_our_ruler": 54.81,
+  "routing_witnessed": "yes"
+}

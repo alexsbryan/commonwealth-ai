@@ -49,7 +49,8 @@ const HELP: Help = Help {
         HelpSection::Notes(
             "Reads case narratives from <bench-dir>/fixtures/cases.jsonl and gold \
              from <bench-dir>/gold_labels.jsonl. Classifies via the daemon at \
-             --base-url (default http://127.0.0.1:9741), constraining the label \
+             --base-url (defaults to SOVEREIGN_DAEMON_URL, else the configured \
+             client_port), constraining the label \
              set to the era-possible categories per case date. baseline = raw \
              narrative; tuned = narrative + extracted features. The synthetic \
              fixture states the disposition in prose; --no-strip-disposition-tail \
@@ -59,7 +60,14 @@ const HELP: Help = Help {
 };
 
 const BENCH_ID: &str = "uap-disposition";
-const DEFAULT_BASE_URL: &str = "http://127.0.0.1:9741";
+/// The daemon this CLI talks to, resolved through the ONE decider — env
+/// (`SOVEREIGN_DAEMON_URL`), then `[daemon] client_port`, then the compiled
+/// default. Was a compiled literal, so the flag below was the only way to
+/// move it and a session pointed at a second daemon silently missed this
+/// verb (§10.6).
+fn default_base_url() -> String {
+    sovereign_core::setup_config::client_daemon_base()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Policy {
@@ -178,7 +186,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
         unseal_holdout,
         bench_dir: bench_dir.unwrap_or_else(default_bench_dir),
         out,
-        base_url: base_url.unwrap_or_else(|| DEFAULT_BASE_URL.to_string()),
+        base_url: base_url.unwrap_or_else(default_base_url),
         strip_disposition_tail,
         max_tokens: 64,
     })
@@ -727,7 +735,7 @@ mod tests {
         assert_eq!(p.split, Split::Train);
         assert_eq!(p.policy, Policy::Baseline);
         assert!(p.strip_disposition_tail);
-        assert_eq!(p.base_url, DEFAULT_BASE_URL);
+        assert_eq!(p.base_url, default_base_url());
     }
 
     #[test]

@@ -1,0 +1,119 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787717901",
+  "charter_hash": "cd802ac2afac94af",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.02967032976448536,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q3",
+      "snippet": " the blast radius\nPowered By\nOrca SideScanning™ Agentless scanning across every cloud workload\nOrca Sensor Runtime observability & protection\nOrca AI The reasoning engine for AI agents\nUnified Data Model Risk correlation to inform action\nRisk Prioritization Dynamic scoring & attack path analysis\nPlatform Overview\nCNAPP Secure cloud native applications with a purpose-built platform\nCSPM Identify and remediate misconfigurations across clouds\nCIEM Secure cloud identities, users, and entitlements\nContainer & Kubernetes Security Scalable containers, images, and Kubernetes applications\nVulnerabili"
+    },
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.026144906878471375,
+      "rank": 100,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q8",
+      "snippet": "sers say about us\nWhy Orca Learn all about our purpose-built cloud security platform\nPartners Overview\nPartners MSPs Integration Directory Become a Partner Cloud Service Providers\nAmazon Web Services Google Cloud Microsoft Azure Alibaba Cloud Oracle Cloud Tencent Cloud Integrations\nChainguard Jira ServiceNow Snowflake Splunk Zscaler DISTRIBUTION\nTD SYNNEX QBS Software Company About Us Contact Us Careers Newsroom Media Kit Why Orca Learn how Orca is Leading the Market\nLog In USA Europe Australia US-Gov Get Demo\nView more results Blog Home Research Research Pod Bringing Memory to AI: A Look at A"
+    },
+    {
+      "url": "https://www.mindstudio.ai/blog/what-is-a2a-agent-to-agent-protocol",
+      "title": "https://www.mindstudio.ai/blog/what-is-a2a-agent-to-agent-protocol",
+      "score": 0.023306231945753098,
+      "rank": 168,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q12",
+      "snippet": "to it. It’s closer to how a web browser fetches a robots.txt or sitemap.xml — simple, stateless, and built on existing conventions.\nTasks\nWork moves between agents via tasks. A task is a discrete unit of work: a natural language instruction, a structured request, or anything in between.\nEvery task goes through a defined lifecycle with the following states:\nSubmitted — The task has been received Working — The agent is processing it Input-required — The agent needs more information before it can continue Completed — The task finished successfully Failed — The task encountered an er"
+    },
+    {
+      "url": "https://blog.dreamfactory.com/stateful-vs-stateless-web-app-design",
+      "title": "https://blog.dreamfactory.com/stateful-vs-stateless-web-app-design",
+      "score": 0.023128341883420944,
+      "rank": 172,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q18",
+      "snippet": " Directory, API keys), role-based access control (per table, endpoint, and HTTP verb), rate limiting (per user, role, or service), audit logging (every call captured with calling user, timestamp, and payload), and OpenAPI documentation are built in. Server-side scripting in PHP, Python, or Node.js handles custom business logic.\nThe AI Data Gateway is the newer chapter — a built-in MCP server that exposes the same auto-generated REST API to AI agents (Claude Desktop, Claude Code, ChatGPT, Cursor, Windsurf). The company's framing: \"turn your database into an auditable, governed API layer for A"
+    },
+    {
+      "url": "https://glama.ai/blog/2024-11-25-model-context-protocol-quickstart",
+      "title": "https://glama.ai/blog/2024-11-25-model-context-protocol-quickstart",
+      "score": 0.02307489514350891,
+      "rank": 174,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q16",
+      "snippet": "The setup process for MCP servers in the Claude Desktop app is currently manual.\nYou have to give Claude Desktop permission to use MCP every time you re-open the app. See this workaround.\nMCP is only supported locally (servers must run on your own machine).\nMost instructions are for macOS. However, here is someone who successfully used MCP on Windows.\nEarly Thoughts\nI think it is a welcome initiative by Anthropic. However, will need some time to see whether it gains traction.\nMeanwhile, my money is on the Computer Use becoming the standard for AI-powered automation, including everything that M"
+    },
+    {
+      "url": "https://www.mindstudio.ai/blog/what-is-a2a-agent-to-agent-protocol",
+      "title": "https://www.mindstudio.ai/blog/what-is-a2a-agent-to-agent-protocol",
+      "score": 0.02302459441125393,
+      "rank": 175,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q13",
+      "snippet": " worth understanding how platforms like it relate to protocols like A2A.\nWhen you build an agent in MindStudio, you’re defining what it knows, what it can do, and when it runs. The platform handles connections to 1,000+ business tools — Salesforce, HubSpot, Slack, Google Workspace, and more — so your agents can actually act on data, not just process it.\nOne relevant capability here is MindStudio’s support for agentic MCP servers — which means agents you build in MindStudio can be exposed to other AI systems as callable services. This is exactly the kind of infrastructure that becomes"
+    },
+    {
+      "url": "https://www.mindstudio.ai/blog/what-is-a2a-agent-to-agent-protocol",
+      "title": "https://www.mindstudio.ai/blog/what-is-a2a-agent-to-agent-protocol",
+      "score": 0.02283341810107231,
+      "rank": 178,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q7",
+      "snippet": " worth understanding how platforms like it relate to protocols like A2A.\nWhen you build an agent in MindStudio, you’re defining what it knows, what it can do, and when it runs. The platform handles connections to 1,000+ business tools — Salesforce, HubSpot, Slack, Google Workspace, and more — so your agents can actually act on data, not just process it.\nOne relevant capability here is MindStudio’s support for agentic MCP servers — which means agents you build in MindStudio can be exposed to other AI systems as callable services. This is exactly the kind of infrastructure that becomes"
+    },
+    {
+      "url": "https://redis.io/blog/mcp-vs-a2a-which-protocol-do-you-need",
+      "title": "https://redis.io/blog/mcp-vs-a2a-which-protocol-do-you-need",
+      "score": 0.022753717377781868,
+      "rank": 180,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q9",
+      "snippet": "and observability: during an incident, an agent pulls logs and metrics from systems like Grafana and Datadog in one place, instead of an engineer tabbing between dashboards at 2 a.m.\nKnowledge-worker copilots: a chat assistant reaches into systems of record like Salesforce and meeting notes to prep for a call.\nSelf-serve analytics: non-technical teams query an internal data warehouse in plain language instead of filing a ticket to the data team.\nThose uses are appealing, but governance is the gating question, and MCP provides little of it on its own. Enterprises split into two camps: those bui"
+    },
+    {
+      "url": "https://redis.io/blog/mcp-vs-a2a-which-protocol-do-you-need",
+      "title": "https://redis.io/blog/mcp-vs-a2a-which-protocol-do-you-need",
+      "score": 0.022132549434900284,
+      "rank": 184,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q8",
+      "snippet": "managed, fully flexible\nRedis SoftwareOn-prem\nRedis open source frameworkRedis 8.8\nPricingLet’s talk numbers\nRedis on AWSBuy with cloud commits\nAzure Managed RedisMicrosoft-supported Redis\nRedis on Google CloudRedis from the marketplace\nsaw a 40% increase in revenue generation through their new Redis powered online experience. See how\nuses Redis for 100+ vector search queries per second. See how\nachieved 37% faster API response times while having a 15% lower memory footprint with Redis. See how\nsaw over a billon API request per month with Redis. See how\nTools\nRedis InsightUI to visualize, qu"
+    },
+    {
+      "url": "https://github.com/a2aproject/A2A",
+      "title": "https://github.com/a2aproject/A2A",
+      "score": 0.02191092073917389,
+      "rank": 185,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q5",
+      "snippet": "ecialized agents to work together on tasks that a single agent cannot handle alone. Promote Open Standards: Foster a community-driven approach to agent communication, encouraging innovation and broad adoption. Preserve Opacity: Allow agents to collaborate without needing to share internal memory, proprietary logic, or specific tool implementations, enhancing security and protecting intellectual property. Key Features\nStandardized Communication: JSON-RPC 2.0 over HTTP(S). Agent Discovery: Via \"Agent Cards\" detailing capabilities and connection info. Flexible Interaction: Supports synchronous re"
+    },
+    {
+      "url": "https://github.com/a2aproject/a2a",
+      "title": "https://github.com/a2aproject/a2a",
+      "score": 0.020842378959059715,
+      "rank": 190,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q9",
+      "snippet": " Besen.\nWhat you'll learn:\nMake agents A2A-compliant: Expose agents built with frameworks like Google ADK, LangGraph, or BeeAI as A2A servers. Connect agents: Create A2A clients from scratch or using integrations to connect to A2A-compliant agents. Orchestrate workflows: Build sequential and hierarchical workflows of A2A-compliant agents. Multi-agent systems: Build a healthcare multi-agent system using different frameworks and see how A2A enables collaboration. A2A and MCP: Learn how A2A complements MCP by enabling agents to collaborate with each other. Why A2A?\nAs AI agents become more preval"
+    }
+  ]
+}

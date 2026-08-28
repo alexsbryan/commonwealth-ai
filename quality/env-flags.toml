@@ -1269,7 +1269,7 @@ purpose = "MEASUREMENT HARNESS, not product behaviour: pins the deep-research wr
 [[flag]]
 name = "SOVEREIGN_DR_TARGET_WORDS"
 cluster = "deep-research"
-default = "9000"
+default = "unset — the length DERIVES from the evidence each section receives (synthesize::section_word_budget). Setting a positive integer pins a total and divides it by the section count, which is the pre-2026-08-27 behaviour, kept because a length A/B needs both arms at one length under one binary."
 status = "experiment"
 purpose = "drb1-r6: overrides the composed deliverable's TARGET TOTAL word count, from which the per-section budget is derived (TARGET_REPORT_WORDS / sections, clamped 300-1400). On-form: a positive integer; unset, empty, unparseable or 0 all keep the 9000 default — a bad value is never a silent zero, which would collapse every section to SECTION_WORDS_MIN and silently ship a stub. Why it exists: the matched-length outline A/B (2026-08-25) landed 11,375-11,837 words against a 9,000 ask — the writer overshoots by ~26% — and the shorter pre-fix control at 9,219 words scored 47.52 against that arm's 42.10, with every shorter run beating every longer one. Testing whether shorter is genuinely better requires BOTH lengths under ONE binary in one session; editing the const between arms reintroduces the cross-binary, cross-day confound that is exactly what makes the current 5.42-point separation a lead rather than a result. UNRESOLVED CONFOUND this flag is meant to help separate: the judge reads our article AND the ~9,000-word reference in a single prompt (~30k tokens for an 11.8k-word article), so a length effect may belong to the JUDGE's attention over a longer prompt rather than to the writer — validate the instrument before crediting the result (ARCH_PRINCIPLES §18.4). Read in exactly one place (synthesize::target_report_words). Reversal condition + evidence: sovereign/DEFAULTS_LEDGER.md."
 
@@ -1304,8 +1304,8 @@ purpose = "MEASUREMENT MODE for SOVEREIGN_DR_AUDIT_BATCH_LOCATE, not product beh
 [[flag]]
 name = "SOVEREIGN_DR_REPORT_OUTLINE"
 cluster = "deep-research"
-default = "off"
-status = "experiment"
+default = "ON (set =0 to restore the search frontier)"
+status = "shipped"
 purpose = "drb1-r5: the composed report's sections come from a PLANNED OUTLINE rather than from the acquisition frontier. On-form: SOVEREIGN_DR_REPORT_OUTLINE=1 (also true, case-insensitive); every other value, including unset, keeps one-section-per-sub-question. Requires SOVEREIGN_DR_COMPOSED_REPORT=1 — there is no outline without a composed deliverable to structure. Why it exists: compose_report wrote one section per planned sub-question, and those come from the planner prompt that deliberately asks for the measure or statistic each implies, so the task-69 web arm shipped sections titled `Count of distinct error handling states defined in the A2A message schema`. Three of that arm's four largest weighted losses were structural with 98 sources in hand — the judge wrote `Article 2 dedicates Section III to MCP ... Article 1 lacks a comprehensive standalone explanation` (5.0 vs 9.0), `Article 2 has a dedicated Section VI (Interplay and Relationship)` (6.0 vs 9.5), `Article 2 explicitly maps problems to solutions in Section IX` (6.5 vs 9.5) — and a fourth said the granularity costs insight, the worst of our four dimensions. The outline is planned over the evidence actually gathered so it cannot promise sections nothing supports; the prompt describes a shape and never an answer. An unusable outline (fewer than 2 briefed sections) REFUSES and the loop falls back to the frontier with the fallback named in the trace, never silently. Cost: one extra Slow-slot draft call per run. Read in exactly one place (deep_research::report_outline_enabled). Reversal condition + evidence: sovereign/DEFAULTS_LEDGER.md."
 
 [[flag]]

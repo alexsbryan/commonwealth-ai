@@ -26,9 +26,20 @@ fn client_port() -> u16 {
         .unwrap_or_else(|_| DaemonSection::default().client_port)
 }
 
-/// `http://127.0.0.1:<configured port>` — base URL for local daemon calls.
+/// The daemon process THIS host manages — deliberately NOT
+/// `setup_config::client_daemon_base`, which honours `SOVEREIGN_DAEMON_URL`.
+///
+/// Every verb in this file mixes an HTTP call with local process control: the
+/// pidfile, the service manager, a SIGTERM. If the knob were honoured here,
+/// `svrn daemon restart` with the session pointed at a rented pod would
+/// SIGTERM the LOCAL daemon and then poll the POD for readiness — which
+/// answers at once, so the command would print READY over a daemon it had
+/// just killed. A success-shaped wrong result, which is the one failure this
+/// workspace treats as characteristic (§18.3).
+///
+/// The port still comes from the config, which is the 2026-07-28 fix above.
 fn daemon_base_url() -> String {
-    format!("http://127.0.0.1:{}", client_port())
+    crate::setup_config::client_daemon_base_for(client_port())
 }
 
 /// `svrn daemon restart` — hard-restart the registered service.

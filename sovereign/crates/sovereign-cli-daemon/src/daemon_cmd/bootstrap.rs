@@ -605,6 +605,7 @@ pub(super) fn spawn_rpc_worker_discovery(
                             let overheads = sovereign_inference::embedded::projected_overheads(
                                 &gate_model_path,
                                 gate_child_ctx,
+                                false,
                             );
                             discovery_policy::memory_headroom_verdict(
                                 discovery_policy::host_share_need_bytes(

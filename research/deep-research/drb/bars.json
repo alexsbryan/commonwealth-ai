@@ -1,0 +1,72 @@
+{
+  "_": "The DRB-I bars, in ONE place. Before 2026-08-26 the task-69 bar lived as a literal inside a python heredoc in arms/bed/run-ceiling.sh AND as prose in adversarial/pre-registration.md, so retiring it in one did not retire it in the other. A bar that two files disagree about is not a bar (ARCH 10.6). Every value here carries how it was obtained; an absent value is reported as absent by the runner, never defaulted (ARCH 18.3).",
+  "ruler": {
+    "judge": "Qwen3.8-27B-UD-Q6_K_XL",
+    "sampling": "greedy, temperature 0.0 top_p 1.0 (amendment N6)",
+    "reference_total_against_our_articles": {
+      "mean": 9.337,
+      "sd": 0.179,
+      "note": "measured with OUR/Perplexity-class articles as the target"
+    },
+    "there_is_no_fixed_ceiling": "overall = T/(T+R) and R LOOKED like a constant of the instrument (sd 0.15-0.18 across 30 draws), which implies a ~51.7 maximum. That is FALSE and was falsified by measurement on 2026-08-26: AIQ's own task-56 article scores 57.22 on this ruler with R=7.072 — the same judge scored the same reference 9.163 on the same task when the target was Perplexity's article. R is a property of the COMPARISON, not of the ruler; a pairwise judge anchors the reference against the target in front of it. R's apparent stability was restricted range, because every draw behind it was one of our own weak articles. corr(T,R) = -0.60 within the task-69 draws was the signal, read as noise.",
+    "reproduce": "overall-derivation/ruler_ceiling.py"
+  },
+  "retired": {
+    "subset_10_task": 57.55,
+    "task_69": 54.81,
+    "why_retired": "Both were AIQ's gemini-side score plus a +1.08 offset measured on Perplexity's articles at ~43 — a RATIO translation anchored at one score level, extrapolated ~14 points upward. The extrapolation risk was named in the pre-registration when the bars were minted and nothing has bounded it. They are superseded, not disproved: the replacement is the like-for-like measurement in aiq_on_our_ruler, which needs no offset at all. NOTE: an earlier retirement argument in this file claimed the bars sat above a ~51.7 ruler ceiling. That argument was WRONG (see ruler.there_is_no_fixed_ceiling) and is not the reason.",
+    "do_not_reinstate": "Not without a measurement that survives ruler_ceiling.py."
+  },
+  "aiq_on_our_ruler": {
+    "status": "MEASURED — all 10 tasks, zero re-judge",
+    "how": "overall-derivation/score_race.py --arm ab --peer aiq --arm-label ab-aiq — AIQ's OWN published articles (space data/raw_data/nvidia-aiq-nemotron-gpt52-updated.jsonl, subset sha256 3aed2e68ba505e89...) through OUR pinned judge. Same judge, same reference, same prompt, same slot: no offset, no extrapolation, no judge-identity caveat.",
+    "task_69": 53.8638,
+    "subset_10_task": 55.111,
+    "task_69_measured": {
+      "value": 53.8638,
+      "judged": "2026-08-26, flights-aiq-bar/race-20260826T092917/ab-aiq/judge_output.jsonl",
+      "why_it_is_the_bar": "Task 69 is the task our like-for-like control (45.63, n=2) is measured on, so this is the ONLY number in this file that supports a same-task comparison. Gap to control: 53.8638 - 45.63 = 8.23 points.",
+      "vs_retired_estimate": "The retired task_69 bar was 54.81, an offset translation. Measured is 53.86 — within 1.0 point. The estimate was roughly right and is still retired: it is superseded by direct measurement, not disproved (a translation that lands near the truth once is still a translation)."
+    },
+    "instrument_caveat": "The official upstream scorer (deep_research_bench/utils/score_calculator.py) gives a criterion whose text it cannot match the DIMENSION MEAN weight rather than dropping it. Two tasks tripped this: t65 (4 criteria) and t69 (1 — the A2A/MCP instruction-following criterion). The substitution is applied to the target AND the reference inside the same judge call, and overall = T/(T+R), so a shared perturbation largely cancels; the residual risk is that a criterion which deserved an unusual weight got the mean. Bounded, named, not corrected — the same scorer runs on our articles and AIQ's, which is the like-for-like condition this bar exists to satisfy.",
+    "per_task": {
+      "56": 57.2153,
+      "58": 53.643,
+      "59": 53.6445,
+      "62": 53.4355,
+      "65": 56.3203,
+      "69": 53.8638,
+      "78": 56.0521,
+      "83": 53.6962,
+      "90": 56.69,
+      "95": 56.5495
+    },
+    "dimensions": {
+      "comprehensiveness": 55.6131,
+      "insight": 56.5687,
+      "instruction_following": 53.9315,
+      "readability": 53.0851
+    },
+    "evidence": "overall-derivation/flights-aiq-bar/race-20260826T092917/ab-aiq/{race_result.txt,judge_output.jsonl,raw_results.jsonl} + manifest.json. Judged 2026-08-26 across four resumed passes (a host OOM crash loop forced a reboot mid-run); every seeded task was REUSED from its persisted sidecar, never re-judged, so all ten scores come from one judge instrument at one sampling pin.",
+    "vs_retired": "Both retired estimates were biased HIGH. subset_10_task 57.55 -> measured 55.1110 (2.44 too high); task_69 54.81 -> measured 53.8638 (0.95 too high). The +1.08 offset translation, anchored on Perplexity articles at ~43 and extrapolated ~14 points upward, overshot in the direction the pre-registration warned it might. They stay retired and are now superseded by measurement, not argument.",
+    "what_to_beat": "TASK 69 IS THE ONLY LIKE-FOR-LIKE COMPARISON WE CAN MAKE TODAY: AIQ 53.8638 vs our control 45.63 (n=2) = a 8.23-point gap. The subset bar 55.1110 is the target for a TEN-TASK flight of ours, which has not been run — do not compare it against a task-69 control."
+  },
+  "control": {
+    "task_69": {
+      "like_for_like": {
+        "name": "control-4b + the bounded-audit cell",
+        "mean": 45.63,
+        "n": 2,
+        "why": "Same estate, same binary, same audit configuration, writer model witnessed on both sides. Every arm from 2026-08-26 compares against THIS."
+      },
+      "historical": {
+        "mean": 43.73,
+        "sd": 2.97,
+        "n": 15,
+        "superseded": "Mixes deliverable lengths 4.6k-11.8k words and mostly ran with the grounding gate failing open (note 39473e42). Kept for the per-draw sd only, which is the number that sets how many cells an arm needs."
+      }
+    },
+    "per_draw_sd": 2.97,
+    "sd_source": "note 403a218a — the judge contributes ZERO of it (5 draws of one unchanged article, spread 0.0000), so n is the only lever on resolution: n=2 resolves ~5.9 points, n=3 ~4.8, n=5 ~2.7."
+  }
+}

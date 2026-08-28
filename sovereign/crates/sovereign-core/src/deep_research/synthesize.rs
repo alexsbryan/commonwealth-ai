@@ -295,32 +295,66 @@ pub(crate) const CHARS_PER_TOKEN: usize = 4;
 /// linearly.
 pub(crate) const ROUND_EVIDENCE_TOKENS: usize = 24_000;
 
-/// **The deliverable's length is a decision, not an accident of section
-/// count.** Measured 2026-08-24 on the outline A/B, and it cost that
-/// experiment its answer: the per-section budget was a fixed "300-380 words"
-/// regardless of how many sections there were, so the 20-section control
-/// wrote 9,084-9,354 words while the 7-section outline arm wrote 3,702-4,053
-/// — and `overall = T/(T+R)` compares head to head against references
-/// running 6,898-13,348 words. Control sat inside that band; the outline arm
-/// sat at roughly half its floor. Structure and length moved together, so
-/// the arm could not test structure.
+/// What one section is asked for when its evidence can carry it.
 ///
-/// The per-section budget is therefore DERIVED: target total / sections, so
-/// a 7-section and a 20-section plan produce comparable deliverables and an
-/// A/B over structure is an A/B over structure.
-pub(crate) const TARGET_REPORT_WORDS: usize = 9_000;
+/// **A SECTION THAT CARRIES A SUBJECT HAS TO DEFINE IT.** Measured
+/// 2026-08-27, and it cost an arm: at 457 words a section states a protocol's
+/// shape and drops its primitives, and the deliverable reads — in the judge's
+/// words — "somewhat high-level regarding internal primitives", missing MCP's
+/// Tools / Resources / Prompts / Sampling and A2A's Task / Message / Part /
+/// Artifact. Those are the substance of the question that was asked. The
+/// reference class spends roughly a thousand words on such a section.
+pub(crate) const SECTION_WORDS_TARGET: usize = 900;
 
-/// The deliverable's target total, with `SOVEREIGN_DR_TARGET_WORDS` as an
-/// A/B override. Why it exists: the first matched-length outline arm landed
-/// 11,375-11,837 words against a 9,000 ask (a ~26% writer overshoot), and
-/// the shorter pre-fix control at 9,219 words scored 47.52 against that
-/// arm's 42.10 — a 5.42-point separation with every shorter run beating
-/// every longer one. Testing that needs BOTH lengths under ONE binary in
-/// one session; a const edit between arms reintroduces exactly the
-/// cross-binary confound being measured. Unset, empty, unparseable or zero
-/// all keep [`TARGET_REPORT_WORDS`] — a bad value is never a silent zero,
-/// which would collapse every section to `SECTION_WORDS_MIN`.
-fn target_report_words() -> usize {
+/// Evidence chars behind one report word — a CEILING on ambition, not the
+/// driver of it.
+///
+/// **THE FIRST CUT OF THIS GOT THE MECHANISM WRONG AND IS WORTH RECORDING.**
+/// It divided the per-section evidence by this constant and used the result
+/// directly, on the claim that "length follows evidence". It does not: every
+/// section is shown `want` passages, so on any window bigger than a few
+/// hundred passages the per-section evidence is CONSTANT (~22,859 chars on
+/// bed dr-1787887462) no matter how much was found. Dividing a constant makes
+/// the total track SECTION COUNT — the exact coupling the retired
+/// `TARGET_REPORT_WORDS` had been introduced to break.
+///
+/// The evidence does bound the length, but as a ceiling: a section the ranker
+/// could only fill halfway cannot honestly carry a full-length treatment, and
+/// asking for one is the padding pressure this whole change exists to remove.
+/// So the budget is "as long as the subject needs, never longer than the
+/// evidence supports".
+///
+/// The value is a ~4:1 synthesis compression: 22,859 chars is about 4,150
+/// source words, and 22 chars per report word puts a fully-fed section at
+/// ~1,039 — just above [`SECTION_WORDS_TARGET`], so the ceiling binds only
+/// when a section is genuinely underfed. Below about two-thirds fill it
+/// starts to bite, and below a quarter [`SECTION_WORDS_MIN`] takes over.
+pub(crate) const EVIDENCE_CHARS_PER_REPORT_WORD: usize = 22;
+
+/// An explicit total, or `None` to derive the length from the evidence.
+///
+/// **WHY THE DEFAULT IS NO LONGER A TOTAL.** Until 2026-08-27 this file
+/// carried `TARGET_REPORT_WORDS = 9_000` and divided it by the section count,
+/// so the deliverable was the same length whatever we found. That number was
+/// not a judgment about what a reader needs: it was picked to sit inside the
+/// RACE references' 6,898-13,348 word band, because an earlier outline A/B
+/// moved structure and length together and could not test structure. The
+/// comparability fix was right and it outlived its experiment — it became the
+/// product's shape. This file's own design note still says what the design
+/// was: "~2,200 words across six to eight sections".
+///
+/// A fixed total against variable evidence is structural pressure to pad, and
+/// padding is where unsupported prose comes from — the one thing this
+/// pipeline exists not to do. So the default derives, and the total is an
+/// OUTPUT of what each section could support.
+///
+/// `SOVEREIGN_DR_TARGET_WORDS` keeps the override, because pinning both arms
+/// of a length A/B to one total is a real need and a const edit between arms
+/// reintroduces the cross-binary confound. Unset, empty, unparseable or zero
+/// all read as "derive" — a bad value is never a silent zero, which would
+/// collapse every section to `SECTION_WORDS_MIN` and still ship something
+/// that looks like a deliverable.
+fn explicit_target_words() -> Option<usize> {
     target_words_policy(std::env::var("SOVEREIGN_DR_TARGET_WORDS").ok().as_deref())
 }
 
@@ -329,10 +363,9 @@ fn target_report_words() -> usize {
 /// env — the same split `memory_watch::hard_limit_policy` uses, and for the
 /// same reason: an env-var read is not testable in a parallel suite, so the
 /// DECISION is separated from the READ.
-fn target_words_policy(raw: Option<&str>) -> usize {
+fn target_words_policy(raw: Option<&str>) -> Option<usize> {
     raw.and_then(|v| v.trim().parse::<usize>().ok())
         .filter(|&n| n > 0)
-        .unwrap_or(TARGET_REPORT_WORDS)
 }
 /// Band for one section. The floor keeps a many-sectioned plan from writing
 /// stubs; the cap keeps a three-section plan from being asked for an essay
@@ -341,8 +374,27 @@ pub(crate) const SECTION_WORDS_MIN: usize = 300;
 pub(crate) const SECTION_WORDS_MAX: usize = 1_400;
 
 /// Words to ask of one section, given how many the plan has.
-pub(crate) fn section_word_budget(sections: usize) -> usize {
-    (target_report_words() / sections.max(1)).clamp(SECTION_WORDS_MIN, SECTION_WORDS_MAX)
+/// How many words to ask this section for. ONE decider (§10.6): the explicit
+/// total and the derived length resolve here and nowhere else.
+///
+/// `evidence_chars` is what THIS section was actually shown — not the window,
+/// not the plan. It is a BOUND: a fully-fed section gets
+/// [`SECTION_WORDS_TARGET`], and only a section the ranker could not fill is
+/// asked for less, which is the honest answer to having found less.
+///
+/// Total length is therefore an OUTPUT, and the evidence reaches it through
+/// the SECTION COUNT: `plan_outline` plans "only sections the evidence can
+/// support", so a thin run yields fewer sections and a shorter report without
+/// any section being padded to hit a total.
+pub(crate) fn section_word_budget(evidence_chars: usize, sections: usize) -> usize {
+    if let Some(total) = explicit_target_words() {
+        return (total / sections.max(1)).clamp(SECTION_WORDS_MIN, SECTION_WORDS_MAX);
+    }
+    // As long as the subject needs — never longer than the evidence carries.
+    let supported = evidence_chars / EVIDENCE_CHARS_PER_REPORT_WORD;
+    SECTION_WORDS_TARGET
+        .min(supported)
+        .clamp(SECTION_WORDS_MIN, SECTION_WORDS_MAX)
 }
 
 /// The outline's own evidence slice — enough to know what the evidence
@@ -1212,14 +1264,17 @@ pub async fn compose_report(
                   report. Write from the evidence given and nothing else.";
     let mut sections: Vec<String> = Vec::new();
 
+    let explicit_total = explicit_target_words();
     tracing::info!(
         target: "deep_research",
-        target_words = target_report_words(),
-        default_words = TARGET_REPORT_WORDS,
         sections = kept.len(),
-        section_words = section_word_budget(kept.len()),
-        "compose_report: deliverable length is a decision — target total and \
-         the per-section budget derived from it"
+        length_policy = if explicit_total.is_some() { "explicit-total" } else { "evidence-derived" },
+        explicit_total_words = explicit_total.unwrap_or(0),
+        chars_per_word = EVIDENCE_CHARS_PER_REPORT_WORD,
+        section_words_min = SECTION_WORDS_MIN,
+        section_words_max = SECTION_WORDS_MAX,
+        "compose_report: deliverable length is a decision — derived per section \
+         from the evidence that section receives, unless a total is pinned"
     );
     // Read the flag ONCE for the whole compose, not per section: a run must
     // not write section 1 under v1 and section 2 under v2 if the environment
@@ -1330,9 +1385,25 @@ pub async fn compose_report(
         } else {
             String::new()
         };
-        // Derived from the plan's own size so length does not ride on structure.
-        let words = section_word_budget(kept.len());
+        // Derived from the evidence THIS section received, so a section that
+        // could only be filled halfway is asked for half the prose rather
+        // than the same prose over thinner ground.
+        let words = section_word_budget(ev.len(), kept.len());
         let (lo, hi) = (words * 9 / 10, words * 11 / 10);
+        // THE CALIBRATION MUST BE OBSERVABLE, not assumed. The constant behind
+        // `section_word_budget` is a compression ratio, and until 2026-08-27
+        // the evidence side of that ratio was only ever REASONED about
+        // (`want` x PASSAGE_CHARS) — never measured on a real section, which
+        // is how it came to be anchored on the wrong geometry. One line at
+        // debug makes the ratio a reading rather than an argument (§9.1).
+        tracing::debug!(
+            target: "deep_research",
+            section = si,
+            evidence_chars = ev.len(),
+            words_asked = words,
+            chars_per_word_effective = ev.len() / words.max(1),
+            "compose_report: section length derived from the evidence it received"
+        );
         let prompt = format!(
             "You are writing ONE section of an analytical research report that answers:\n{question}\n\n\
              {arc}THIS SECTION: {sub}\n\nEVIDENCE:\n{ev}\n{contract}\n\n\
@@ -2411,70 +2482,122 @@ Regulatory approval followed the announcement [Source: ev-1]."#;
 
     /// Retrieval granularity: a whole chunk is too coarse to rank
     /// against one sub-question, so the window is split with overlap.
+    /// THE DEFAULT: length is an OUTPUT of the evidence, not an input.
+    ///
+    /// A section shown half the evidence is asked for half the prose. This is
+    /// the property the old fixed total could not have, and the reason it was
+    /// replaced: a constant length over variable evidence is structural
+    /// pressure to pad, and padding is where unsupported prose comes from.
+    ///
+    /// Watch-it-fail: divide a total by the section count again and the two
+    /// budgets below become equal.
     #[test]
-    fn total_length_does_not_ride_on_section_count() {
-        // The defect this replaces, in one assertion. With a FIXED per-section
-        // budget the 20-section control wrote 9,084-9,354 words and the
-        // 7-section outline arm wrote 3,702-4,053 against references of
-        // 6,898-13,348 — so the outline A/B varied structure and length at
-        // once and could not answer the question it was run to answer.
-        //
-        // Watch-it-fail: return a constant from `section_word_budget` and the
-        // 7-vs-20 totals diverge by more than half.
-        let seven = 7 * section_word_budget(7);
-        let twenty = 20 * section_word_budget(20);
+    fn the_section_length_follows_the_evidence() {
+        // A FULLY-FED section gets the target — the evidence ceiling must not
+        // bind here, or every section is silently short.
+        let fed = 22_859; // measured per-section evidence, bed dr-1787887462
+        assert_eq!(
+            section_word_budget(fed, 8),
+            SECTION_WORDS_TARGET,
+            "a section its evidence can carry is asked for the subject's length, \
+             not for a share of a total"
+        );
+        // An UNDERFED section scales down rather than being asked to pad. This
+        // is the property the whole change exists for.
+        let half = fed / 2;
+        let w_half = section_word_budget(half, 8);
+        assert!(
+            w_half < SECTION_WORDS_TARGET,
+            "half-fed must not buy a full-length treatment: {w_half}"
+        );
+        assert_eq!(
+            w_half,
+            half / EVIDENCE_CHARS_PER_REPORT_WORD,
+            "and it scales with the evidence, not with a clamp"
+        );
+        // The SECTION COUNT is not what decides it — the same evidence asks
+        // for the same length in a 5-section plan and a 20-section one. Total
+        // length reaches the evidence through how many sections `plan_outline`
+        // could support, never by dividing a target.
+        assert_eq!(
+            section_word_budget(fed, 5),
+            section_word_budget(fed, 20),
+            "section count must not move a section's own budget"
+        );
+        // And the floor is where scaling stops, named rather than discovered.
+        let floor_chars = SECTION_WORDS_MIN * EVIDENCE_CHARS_PER_REPORT_WORD;
+        assert_eq!(section_word_budget(floor_chars, 8), SECTION_WORDS_MIN);
+        assert_eq!(section_word_budget(floor_chars / 2, 8), SECTION_WORDS_MIN);
+    }
+
+    /// THE OVERRIDE still pins a total across section counts, because a length
+    /// A/B genuinely needs both arms at one length and a const edit between
+    /// arms reintroduces the cross-binary confound it is trying to measure.
+    ///
+    /// This is the old `total_length_does_not_ride_on_section_count`, kept as
+    /// a property of `SOVEREIGN_DR_TARGET_WORDS` rather than of the default.
+    #[test]
+    fn an_explicit_total_still_does_not_ride_on_section_count() {
+        let per = |sections: usize| {
+            // The policy, not the env read — the env is not testable in a
+            // parallel suite (the same split the reader above documents).
+            let total = target_words_policy(Some("9000")).unwrap();
+            (total / sections.max(1)).clamp(SECTION_WORDS_MIN, SECTION_WORDS_MAX)
+        };
+        let seven = 7 * per(7);
+        let twenty = 20 * per(20);
         let ratio = seven as f32 / twenty as f32;
         assert!(
             (0.75..=1.33).contains(&ratio),
-            "a 7-section and a 20-section plan must target comparable totals: \
+            "a pinned total must reach comparable lengths at 7 and 20 sections: \
              {seven} vs {twenty} words (ratio {ratio:.2})"
         );
     }
 
     #[test]
     fn a_bad_target_override_is_never_a_silent_zero() {
-        // Watch-it-fail: drop the `.filter(|&n| n > 0)` and "0" returns 0,
-        // so section_word_budget clamps EVERY section to SECTION_WORDS_MIN
-        // and the run ships a stub that still looks like a deliverable.
-        assert_eq!(target_words_policy(None), TARGET_REPORT_WORDS, "unset");
-        assert_eq!(target_words_policy(Some("")), TARGET_REPORT_WORDS, "empty");
-        assert_eq!(
-            target_words_policy(Some("   ")),
-            TARGET_REPORT_WORDS,
-            "blank"
-        );
-        assert_eq!(
-            target_words_policy(Some("banana")),
-            TARGET_REPORT_WORDS,
-            "unparseable"
-        );
-        assert_eq!(target_words_policy(Some("0")), TARGET_REPORT_WORDS, "zero");
-        assert_eq!(
-            target_words_policy(Some("-1")),
-            TARGET_REPORT_WORDS,
-            "negative"
-        );
+        // Watch-it-fail: drop the `.filter(|&n| n > 0)` and "0" returns
+        // Some(0), so section_word_budget clamps EVERY section to
+        // SECTION_WORDS_MIN and the run ships a stub that still looks like a
+        // deliverable. Every unusable value falls back to DERIVING the length
+        // — the honest reading of "no total was asked for" (§18.3).
+        assert_eq!(target_words_policy(None), None, "unset");
+        assert_eq!(target_words_policy(Some("")), None, "empty");
+        assert_eq!(target_words_policy(Some("   ")), None, "blank");
+        assert_eq!(target_words_policy(Some("banana")), None, "unparseable");
+        assert_eq!(target_words_policy(Some("0")), None, "zero");
+        assert_eq!(target_words_policy(Some("-1")), None, "negative");
         // An explicit positive value is honoured, whitespace and all.
-        assert_eq!(target_words_policy(Some("7000")), 7_000);
-        assert_eq!(target_words_policy(Some(" 7000 ")), 7_000);
+        assert_eq!(target_words_policy(Some("7000")), Some(7_000));
+        assert_eq!(target_words_policy(Some(" 7000 ")), Some(7_000));
     }
 
     #[test]
     fn the_section_budget_stays_inside_its_band() {
+        // A section handed the whole window is still not asked for an essay:
+        // the TARGET caps it long before SECTION_WORDS_MAX is reached, and
+        // that is deliberate — more evidence behind a subject does not mean
+        // the subject needs more words, it means the writer can choose better
+        // ones.
         assert_eq!(
-            section_word_budget(1),
-            SECTION_WORDS_MAX,
-            "one section is capped"
+            section_word_budget(10_000_000, 8),
+            SECTION_WORDS_TARGET,
+            "abundant evidence buys selection, not length"
         );
+        // And a section with almost nothing still gets a floor rather than a
+        // zero-word ask. The floor is a BACKSTOP, not the normal path: an
+        // outline planned over the evidence should not have planned a section
+        // nothing supports (`plan_outline`, "Plan only sections the evidence
+        // can support").
         assert_eq!(
-            section_word_budget(100),
+            section_word_budget(10, 8),
             SECTION_WORDS_MIN,
-            "many sections keep a floor"
+            "thin evidence keeps a floor"
         );
         assert_eq!(
-            section_word_budget(0),
-            SECTION_WORDS_MAX,
-            "zero must not divide by zero"
+            section_word_budget(0, 0),
+            SECTION_WORDS_MIN,
+            "no evidence is a floor, and zero sections must not divide by zero"
         );
     }
 

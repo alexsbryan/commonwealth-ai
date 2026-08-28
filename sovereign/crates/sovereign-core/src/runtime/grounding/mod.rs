@@ -95,7 +95,7 @@ pub use judge::{claim_extraction_prompt, CLAIM_EXTRACTION_SYSTEM};
 // The FR-6 decorrelation driver (order deep-research-t0b, `tests/fr6_decorrelation.rs`)
 // measures these two strings against the labeled bank as a genuine out-of-crate
 // consumer; visibility per directives 13efc5dc + e39f87b2. Import-block addition only.
-pub use judge::{claim_violation_joint, scan_unsupported_specifics};
+pub use judge::{claim_violation_joint, scan_unsupported_specifics, spans_supporting_claim_batched};
 pub(crate) use pipeline::StreamingVerifier;
 // `ClaimSearcher` is constructed via `Runtime::claim_searcher`; the
 // type re-exports are for call sites that name them.

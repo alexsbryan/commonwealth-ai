@@ -1963,8 +1963,37 @@ capability, so it is never expected to flip on by default.
 
 ## `SOVEREIGN_DR_REPORT_OUTLINE` — the report outline is not the search frontier (drb1-r5)
 
-**Landed 2026-08-24, DEFAULT OFF.** Campaign `drb1-race`. Requires
-`SOVEREIGN_DR_COMPOSED_REPORT=1`.
+**Landed 2026-08-24 default OFF. DEFAULT FLIPPED ON 2026-08-27.** Campaign
+`drb1-race`. Requires `SOVEREIGN_DR_COMPOSED_REPORT=1`. Set
+`SOVEREIGN_DR_REPORT_OUTLINE=0` to restore the frontier.
+
+**Why the default moved, and it is NOT a score argument.** Operator direction,
+2026-08-27: stop optimising against the RACE judge and impose our own ethos on
+the deliverable. The frontier is a list of retrieval targets — the planner
+prompt asks it for "the specific measure or statistic it implies — an index, a
+ratio, a share, a rate, a count". Those are good queries and they are
+indefensible as section headings a reader receives. The shipped task-69
+deliverable carried `## Median Session Establishment Time` and `## Schema
+Mismatch Failures in Third-Party Tool Integration` as TOP-LEVEL sections: our
+search plan printed as prose, 20 of them, 11,270 words. No judge is needed to
+call that wrong, and no judge was consulted for this flip.
+
+**What it is expected to cost.** RACE overall, probably. The judge compares
+head to head against references running 6,898-13,348 words and this makes our
+deliverable materially shorter (see the `TARGET_REPORT_WORDS` retirement in
+`synthesize.rs`, landed the same day — length now derives from the evidence
+each section receives). That trade was made deliberately and with the operator
+naming it: the bench is a tripwire here, not the gate. **Reversal condition:
+not a RACE regression** — set `=0` if readers report the planned outline
+omitting subjects the frontier covered, or if the fallback-to-frontier warning
+fires on a material share of flights (it means the planner is refusing and
+nobody is reading the trace).
+
+**Safe to default because the fallback is named.** A refused or unusable
+outline falls back to the search frontier and logs "outline unavailable —
+sections fall back to the search frontier (named, never silent)" (§18.3,
+`mod.rs`). The flip changes which path is normal, not whether a failure is
+visible.
 
 **What it turns on.** The composed report's sections come from an outline
 planned over the gathered evidence — each distinct subject given standalone

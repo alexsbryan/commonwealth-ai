@@ -148,7 +148,8 @@ async fn run(rest: &[String]) -> i32 {
         .preferred_tier
         .model_stem()
         .to_string();
-    let mut base_url = "http://localhost:9741".to_string();
+    // One decider (§10.6): honours SOVEREIGN_DAEMON_URL, then [daemon] client_port.
+    let mut base_url = sovereign_core::setup_config::client_daemon_base();
     let mut max_claims: usize = 4;
     let mut rate: f64 = 0.12;
     let mut full_threshold: usize = 1500;

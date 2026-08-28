@@ -1,0 +1,37 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787724336",
+  "charter_hash": "f6eb8c2c485cc9f9",
+  "rounds_planned": 2,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of distinct protocol versions released by Google for the A2A specification as of 2024",
+      "Count of major architectural components defined in the Agent2Agent (A2A) protocol documentation published by Linux Foundation or Google",
+      "List of specific technical standards referenced within the Model Context Protocol (MCP) specification document from Anthropic (2)",
+      "Percentage change in adoption rate among enterprise AI developers between Q1 2025 and Q3 2025 comparing MCP vs A2A usage reports",
+      "Median latency difference in milliseconds between agent-to-agent communication using A2A versus tool-calling via MCP in standardized benchmark tests",
+      "Share of total API calls attributed to cross-framework interoperability scenarios supported natively by A2A but requiring custom middleware for MCP",
+      "Number of open-source repositories on GitHub implementing the Agent Card discovery mechanism specified in the A2A protocol",
+      "Count of security vulnerabilities reported in CVE databases specifically targeting the JSON-RPC message structure used in both A2A and MCP protocols",
+      "Ratio of synchronous request-response interactions to asynchronous event-streaming capabilities defined in the initial release notes of Google's A2A specification",
+      "Price premium or discount percentage observed in cloud service pricing tiers that explicitly support native A2A endpoints compared to those supporting only MCP servers",
+      "Median time-to-integration (in developer hours) estimated by enterprise case studies for connecting third-party agents using A2A versus integrating tools via MCP",
+      "Number of distinct data serialization formats supported natively by the A2A payload schema versus the resource/tool schemas in MCP version 0.1 through 1.0",
+      "Share of large language model providers offering built-in SDKs for both A2A and MCP as of December 2024 based on official documentation pages",
+      "Count of specific problem statements listed in Google's whitepaper regarding \"agent silos\" that are explicitly mapped to features introduced in the A2A release",
+      "Percentage increase in network bandwidth consumption when transmitting complex multi-agent task graphs over A2A compared to single-tool invocations over MCP",
+      "Median number of agents involved in a single collaborative workflow session documented in public beta tests of the A2A ecosystem",
+      "List of specific authentication methods (e.g., OAuth 2.0, API Keys) mandated by the security section of the A2A specification versus those recommended in the MCP spec",
+      "Number of distinct use cases categorized as \"cross-vendor interoperability\" in industry analyst reports from Gartner or Forrester published in 2025 regarding agent protocols",
+      "Ratio of stateless interaction patterns to stateful conversation management features present in the core protocol definitions of A2A relative to MCP",
+      "Count of community-contributed extensions or plugins available for the Agent Card format in A2A compared to tool/resource schemas in MCP within six months of release"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2"
+    ]
+  }
+}

@@ -1,0 +1,400 @@
+{
+  "icd": "source_registry",
+  "version": 1,
+  "run_id": "dr-1787678431",
+  "charter_hash": "ab5c346b795a93db",
+  "sources": [
+    {
+      "url": "https://www.digitalapplied.com/blog/google-a2a-protocol-agent-to-agent-communication-guide",
+      "title": "https://www.digitalapplied.com/blog/google-a2a-protocol-agent-to-agent-communication-guide",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://agentstoday.substack.com/p/agents-today-15-ai-agent-interoperability",
+      "title": "https://agentstoday.substack.com/p/agents-today-15-ai-agent-interoperability",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://cloudsecurityalliance.org/blog/2025/04/30/threat-modeling-google-s-a2a-protocol-with-the-maestro-framework",
+      "title": "https://cloudsecurityalliance.org/blog/2025/04/30/threat-modeling-google-s-a2a-protocol-with-the-maestro-framework",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://news.ycombinator.com/item?id=48582679",
+      "title": "https://news.ycombinator.com/item?id=48582679",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://a2aprotocol.ai/blog/impact-analysis-google-donating-a2a-protocol-linux-foundation",
+      "title": "https://a2aprotocol.ai/blog/impact-analysis-google-donating-a2a-protocol-linux-foundation",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://codilime.com/blog/a2a-protocol-explained",
+      "title": "https://codilime.com/blog/a2a-protocol-explained",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://nevermined.ai/blog/model-context-protocol-adoption-statistics",
+      "title": "https://nevermined.ai/blog/model-context-protocol-adoption-statistics",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://www.helpnetsecurity.com/2025/06/24/the-linux-foundation-agent2agent",
+      "title": "https://www.helpnetsecurity.com/2025/06/24/the-linux-foundation-agent2agent",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://tfir.io/ciscos-agntcy-takes-on-ai-agent-fragmentation-under-linux-foundation-umbrella",
+      "title": "https://tfir.io/ciscos-agntcy-takes-on-ai-agent-fragmentation-under-linux-foundation-umbrella",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://huggingface.co/blog/1bo/a2a-protocol-explained",
+      "title": "https://huggingface.co/blog/1bo/a2a-protocol-explained",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://medium.com/@sandibesen/an-unbiased-comparison-of-mcp-acp-and-a2a-protocols-0b45923a20f3",
+      "title": "https://medium.com/@sandibesen/an-unbiased-comparison-of-mcp-acp-and-a2a-protocols-0b45923a20f3",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://www.koyeb.com/blog/a2a-and-mcp-start-of-the-ai-agent-protocol-wars",
+      "title": "https://www.koyeb.com/blog/a2a-and-mcp-start-of-the-ai-agent-protocol-wars",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "title": "https://dev.to/agentsindex/googles-a2a-protocol-how-ai-agents-communicate-across-frameworks-52jj",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Model_Context_Protocol",
+      "title": "https://en.wikipedia.org/wiki/Model_Context_Protocol",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://galileo.ai/blog/google-agent2agent-a2a-protocol-guide",
+      "title": "https://galileo.ai/blog/google-agent2agent-a2a-protocol-guide",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://www.prnewswire.com/news-releases/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year-302737641.html",
+      "title": "https://www.prnewswire.com/news-releases/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year-302737641.html",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+      "title": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://www.ibm.com/think/topics/agent2agent-protocol",
+      "title": "https://www.ibm.com/think/topics/agent2agent-protocol",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://arxiv.org/html/2505.02279v1",
+      "title": "https://arxiv.org/html/2505.02279v1",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://bytebridge.medium.com/from-rest-to-mcp-why-developers-should-embrace-the-model-context-protocol-003e3806874a",
+      "title": "https://bytebridge.medium.com/from-rest-to-mcp-why-developers-should-embrace-the-model-context-protocol-003e3806874a",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://www.anthropic.com/news/model-context-protocol",
+      "title": "https://www.anthropic.com/news/model-context-protocol",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://github.com/a2aproject/A2A/commit/fde2bd8da8dcd4c6c5373de20f6e4e5b878d82f9",
+      "title": "https://github.com/a2aproject/A2A/commit/fde2bd8da8dcd4c6c5373de20f6e4e5b878d82f9",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://atlan.com/know/google-a2a-protocol",
+      "title": "https://atlan.com/know/google-a2a-protocol",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://medium.com/@astropomeai/a-comprehensive-overview-of-the-model-context-protocol-mcp-f65150da0aa0",
+      "title": "https://medium.com/@astropomeai/a-comprehensive-overview-of-the-model-context-protocol-mcp-f65150da0aa0",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://akka.io/blog/mcp-a2a-acp-what-does-it-all-mean",
+      "title": "https://akka.io/blog/mcp-a2a-acp-what-does-it-all-mean",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://www.thefastmode.com/technology-solutions/48034-linux-foundation-s-a2a-protocol-gains-rapid-enterprise-adoption-across-cloud-giants",
+      "title": "https://www.thefastmode.com/technology-solutions/48034-linux-foundation-s-a2a-protocol-gains-rapid-enterprise-adoption-across-cloud-giants",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://cohorte.co/blog/googles-agent2agent-a2a-protocol-a-new-era-of-ai-agent-interoperability",
+      "title": "https://cohorte.co/blog/googles-agent2agent-a2a-protocol-a-new-era-of-ai-agent-interoperability",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://zbrain.ai/understanding-the-a2a-protocol",
+      "title": "https://zbrain.ai/understanding-the-a2a-protocol",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://stellagent.ai/insights/a2a-protocol-google-agent-to-agent",
+      "title": "https://stellagent.ai/insights/a2a-protocol-google-agent-to-agent",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://onereach.ai/blog/guide-choosing-mcp-vs-a2a-protocols",
+      "title": "https://onereach.ai/blog/guide-choosing-mcp-vs-a2a-protocols",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://tyk.io/learning-center/a2a-protocol-architecture-and-technical-specification",
+      "title": "https://tyk.io/learning-center/a2a-protocol-architecture-and-technical-specification",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://alicelabs.ai/en/insights/best-ai-agent-frameworks-2026",
+      "title": "https://alicelabs.ai/en/insights/best-ai-agent-frameworks-2026",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://cloud.google.com/discover/what-is-model-context-protocol",
+      "title": "https://cloud.google.com/discover/what-is-model-context-protocol",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://www.langchain.com/resources/ai-agent-frameworks",
+      "title": "https://www.langchain.com/resources/ai-agent-frameworks",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://tyk.io/learning-center/agent-protocols-a-complete-guide-to-mcp-a2a-and-acp",
+      "title": "https://tyk.io/learning-center/agent-protocols-a-complete-guide-to-mcp-a2a-and-acp",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://www.infoq.com/articles/ai-agent-transport-layer",
+      "title": "https://www.infoq.com/articles/ai-agent-transport-layer",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://arxiv.org/html/2602.14878v1",
+      "title": "https://arxiv.org/html/2602.14878v1",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://www.wwt.com/blog/agent-2-agent-protocol-a2a-a-deep-dive",
+      "title": "https://www.wwt.com/blog/agent-2-agent-protocol-a2a-a-deep-dive",
+      "source_type": "web",
+      "round": 1,
+      "admitted": false
+    },
+    {
+      "url": "https://www.deep-kondah.com/dissecting-the-a2a-protocol-foundations-for-interoperable-multi-agent-systems-mas",
+      "title": "https://www.deep-kondah.com/dissecting-the-a2a-protocol-foundations-for-interoperable-multi-agent-systems-mas",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://auth0.com/blog/mcp-vs-a2a",
+      "title": "https://auth0.com/blog/mcp-vs-a2a",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://www.backslash.security/blog/what-is-mcp-model-context-protocol",
+      "title": "https://www.backslash.security/blog/what-is-mcp-model-context-protocol",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://uvik.net/blog/agentic-ai-frameworks",
+      "title": "https://uvik.net/blog/agentic-ai-frameworks",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://github.com/elkar-ai/elkar-a2a",
+      "title": "https://github.com/elkar-ai/elkar-a2a",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://agent2agent.info/docs/topics/key-concepts",
+      "title": "https://agent2agent.info/docs/topics/key-concepts",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://www.truefoundry.com/blog/mcp-vs-a2a",
+      "title": "https://www.truefoundry.com/blog/mcp-vs-a2a",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://redis.io/blog/mcp-vs-a2a-which-protocol-do-you-need",
+      "title": "https://redis.io/blog/mcp-vs-a2a-which-protocol-do-you-need",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://github.com/NousResearch/hermes-agent/issues/514",
+      "title": "https://github.com/NousResearch/hermes-agent/issues/514",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://www.merge.dev/blog/mcp-vs-a2a",
+      "title": "https://www.merge.dev/blog/mcp-vs-a2a",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://medium.com/@plawanrath/case-study-building-a-multi-agent-research-assistant-with-a2a-protocol-0df1d6eb71c3",
+      "title": "https://medium.com/@plawanrath/case-study-building-a-multi-agent-research-assistant-with-a2a-protocol-0df1d6eb71c3",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://arxiv.org/html/2505.02279v2",
+      "title": "https://arxiv.org/html/2505.02279v2",
+      "source_type": "web",
+      "round": 2,
+      "admitted": true
+    },
+    {
+      "url": "https://www.wwt.com/blog/agent-2-agent-protocol-a2a-a-deep-dive",
+      "title": "https://www.wwt.com/blog/agent-2-agent-protocol-a2a-a-deep-dive",
+      "source_type": "web",
+      "round": 2,
+      "admitted": false
+    },
+    {
+      "url": "https://medium.com/@armankamran/the-future-of-autonomous-conversations-googles-a2a-protocol-mcp-and-the-rise-of-ai-to-ai-8c98ba06d37a",
+      "title": "https://medium.com/@armankamran/the-future-of-autonomous-conversations-googles-a2a-protocol-mcp-and-the-rise-of-ai-to-ai-8c98ba06d37a",
+      "source_type": "web",
+      "round": 2,
+      "admitted": true
+    },
+    {
+      "url": "https://www.linuxfoundation.org/press/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year",
+      "title": "https://www.linuxfoundation.org/press/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year",
+      "source_type": "web",
+      "round": 2,
+      "admitted": true
+    },
+    {
+      "url": "https://www.linuxfoundation.org/press/linux-foundation-launches-the-agent2agent-protocol-project-to-enable-secure-intelligent-communication-between-ai-agents",
+      "title": "https://www.linuxfoundation.org/press/linux-foundation-launches-the-agent2agent-protocol-project-to-enable-secure-intelligent-communication-between-ai-agents",
+      "source_type": "web",
+      "round": 2,
+      "admitted": true
+    },
+    {
+      "url": "https://www.mindstudio.ai/blog/what-is-a2a-agent-to-agent-protocol",
+      "title": "https://www.mindstudio.ai/blog/what-is-a2a-agent-to-agent-protocol",
+      "source_type": "web",
+      "round": 2,
+      "admitted": true
+    },
+    {
+      "url": "https://github.com/a2aproject/a2a",
+      "title": "https://github.com/a2aproject/a2a",
+      "source_type": "web",
+      "round": 2,
+      "admitted": true
+    }
+  ]
+}

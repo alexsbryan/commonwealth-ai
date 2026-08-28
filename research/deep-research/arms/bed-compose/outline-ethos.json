@@ -1,0 +1,10 @@
+[
+  "MCP Protocol Architecture — This section establishes that MCP is an open standard introduced by Anthropic in late 2024 designed to connect AI models with external tools and data sources, solving the problem of building custom integrations for every new tool.",
+  "A2A Protocol Architecture — This section defines A2A as a Google-launched protocol from April 2025 intended to enable seamless communication and collaboration between distinct AI agents, regardless of their underlying frameworks or vendors.",
+  "A2A Advanced Features — This section details specific technical capabilities of A2A, including streaming operations via Server-Sent Events, asynchronous push notifications for long-running tasks, flexible extension mechanisms, and comprehensive task lifecycle management.",
+  "MCP vs. A2A Functional Distinction — This section contrasts the two protocols by clarifying that MCP focuses on agent-to-tool connectivity while A2A addresses agent-to-agent interoperability in multi-agent systems.",
+  "Protocol Interoperability and Ecosystem Integration — This section explains how MCP and A2A are complementary standards within a broader ecosystem that includes other protocols like ACP, allowing agents to work with both external tools and peer agents simultaneously.",
+  "Governance and Industry Adoption — This section outlines the governance shift of A2A to the Linux Foundation for neutral oversight and notes its support from over 100 technology companies, contrasting this with MCP's established traction as an open standard since late 2024.",
+  "Security Challenges and Mitigations — This section identifies specific security vulnerabilities inherent in A2A, such as lack of strong customer authentication and insufficient token scopes, alongside general security considerations across the protocol lifecycle.",
+  "Implications for Enterprise Implementation — This section advises technologists on how to select between or combine these protocols based on whether the primary need is connecting models to data (MCP) or coordinating autonomous agents (A2A)."
+]
