@@ -158,3 +158,69 @@ lane recovered those, that is **+42 cases on 711 positives ≈ +6 points
 of useful-fire** — against the +2.6 points of hunk-precision the
 TypeScript work bought. It is a bound on one shape, not a forecast, and
 M0 exists to find out whether the first half of it is real.
+
+---
+
+# M0 RESULT (2026-08-28) — the hypothesis holds; precision splits
+
+Run: `gym/next-edit/aligned/probe_symbol_lane.py`, rust, index-aligned,
+925 episodes (bar was ≥25).
+
+| | all call sites | cross-file only |
+|---|---|---|
+| site recall | **94.4%** (2597/2752) PASS | **85.4%** (593/694) PASS |
+| site precision | **86.6%** (2597/2999) PASS | **51.3%** (593/1156) FAIL |
+
+**The core hypothesis is confirmed.** A SCIP graph built from the last
+SAVE names the call sites the author then edited, at 94.4% recall. The
+staleness argument that keeps `next_edit_syntax.rs` off the graph does
+not apply to this shape, as predicted — the function existed before its
+signature was touched.
+
+**Precision is the open problem and it is concentrated across files.**
+Same-file the graph is nearly exact; cross-file it names 1,156 sites
+where the author edited 594. More than half of cross-file callers did
+not need the change. The spec pre-registered this branch: *"if recall
+clears and precision does not, the finding is 'the graph names the
+sites but over-offers' and the next question is a filter on WHICH
+callers, not more induction."* That is now the M1 question.
+
+**Read the 51.3% against the incumbent before judging it.** The bar was
+60%, reasoned from "a semantic lane that cannot beat the text engine
+has no argument" — and the shipping rule lane is at **38.6%**
+hunk-precision. Cross-file at 51.3% misses the bar and still beats what
+users have today. Whether that ships is a judgement, not a measurement,
+and it is the operator's.
+
+## What this measurement does NOT cover, stated plainly
+
+- **Rust only.** It is the sole language with a SCIP export here
+  (`scip_meta.languages_with_scip`).
+- **Unambiguous names only.** 1,755 of 4,377 episodes (40%) were
+  EXCLUDED because the repo defines the same name on more than one
+  symbol, and a textual ground truth cannot tell `Foo::new(` from
+  `Bar::new(`. That exclusion is not random: those are exactly the
+  cases where a graph's disambiguation is worth most, so the measured
+  numbers are if anything conservative about the graph's edge — but
+  they are unmeasured, not assumed.
+- **Sites, not content.** Whether the right text can be derived for
+  each site is M1 and is untouched here.
+
+## Two instrument bugs found and fixed before publishing
+
+Recorded because the first run produced a confident, well-formed, wrong
+answer (12.2% recall) and only looked wrong on inspection:
+
+1. **Signature detection by span proximity alone** counted body edits
+   near the top of any short function — 15,096 "signature edits" across
+   2,074 files. Fixed by requiring the line to match `fn <name>`.
+2. **`"name(" in line` as ground truth** matched `Bar::new(` for symbol
+   `Foo::new`, inflating the author set with lines that were not call
+   sites of that symbol and depressing recall for a reason unrelated to
+   the graph. Fixed with a word-boundary match plus the ambiguous-name
+   exclusion above.
+
+Also: `refs` has no index on `callee_qualified` (only on the empty
+`callee_symbol` column), so a per-symbol lookup is a full scan of 1.36M
+rows. The probe does ONE scan for all callees. Anything built on this
+table needs to know that.
