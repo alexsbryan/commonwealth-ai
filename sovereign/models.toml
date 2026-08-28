@@ -488,6 +488,39 @@ base_name = "Mellum2-12B-A2.5B"
 [profiles.fim_q6_k.fim.capabilities]
 code = 4
 
+# ── The dual-lane rung: ONE small model serving BOTH editing lanes ──
+#
+# Sweep-Next-Edit-1.5B is a Qwen2.5-Coder-1.5B derivative, which is why
+# it serves ghost text at all: its vocab carries the atomic
+# `<|fim_prefix|>` family, so `detect_fim_style` returns `qwen_coder`
+# (verified 2026-08-24 against this GGUF on a dedicated slot —
+# `/status.inference.edit` reported `fim_style: "qwen_coder"` and
+# `/v1/completions` returned a correct infill).
+#
+# It is the champion of the next-edit bakeoff
+# (`bench/next-edit-bakeoff/RESULTS_PHASE0.md`): 27/30 useful with zero
+# wrong edits, indistinguishable from Mellum2-12B on that bank, at
+# 1/7 the residency. Being 1.54 GB is what makes the four-slot story
+# affordable — primary + fast + embed + edit, with the chat model left
+# alone, instead of lean mode overwriting `[models].primary`.
+#
+# WHY IT IS THE DEFAULT AT EVERY TIER. The Mellum2 rungs below are
+# bounded by total memory because lean mode made the FIM model the
+# resident model. This one is not: at 1.54 GB a DEDICATED slot fits
+# beside any primary on any tier, so there is nothing for hardware to
+# select between. The Mellum2 rungs stay addressable by `--quant` for
+# anyone who wants that trade.
+[profiles.edit_sweep_1_5b.fim]
+repo      = "sweepai/sweep-next-edit-1.5B"
+file      = "sweep-next-edit-1.5b.q8_0.v2.gguf"
+quant     = "Q8_0"
+size_gb   = 1.54
+thinking  = false
+hf_url    = "https://huggingface.co/sweepai/sweep-next-edit-1.5B"
+base_name = "sweep-next-edit-1.5b"
+[profiles.edit_sweep_1_5b.fim.capabilities]
+code = 4
+
 [profiles.fim_q8_0.fim]
 repo      = "JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-Q8_0"
 file      = "Mellum2-12B-A2.5B-Instruct-Q8_0.gguf"

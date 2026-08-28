@@ -1695,6 +1695,7 @@ impl EmbeddedLlamaCpp {
             };
 
         let format = section.effective_next_edit_format();
+        warn_if_specialist_served_default_dialect(section, format);
 
         if aliases_fast {
             let style = crate::fim::detect_fim_style(&self.fast.model);
@@ -4155,4 +4156,56 @@ mod fast_short_queue_bound_tests {
         assert_eq!(parse("banana"), FAST_SHORT_QUEUE_CAP_DEFAULT);
         assert_eq!(parse("128"), 128);
     }
+}
+
+/// Warn when the configured edit model's FILENAME names a next-edit
+/// specialist whose prompt contract is not the dialect being served,
+/// and the operator never set one.
+///
+/// This does NOT sniff the format — `NextEditFormat`'s own contract
+/// forbids that, and rightly: the dialect is a property of the
+/// fine-tune, so a wrong guess would feed a model a register it was
+/// never trained on. The config stays authoritative and an explicit
+/// setting is never second-guessed.
+///
+/// What it removes is the SILENCE. Serving a specialist through the
+/// `region_instruct` default is a plausible, well-formed, exit-0 wrong
+/// result — the next-edit bakeoff scored Instinct 0/30 exactly that
+/// way and had to publish `could-not-judge` instead of a verdict
+/// (`sovereign/bench/next-edit-bakeoff/RESULTS_PHASE0.md` §"Instinct is
+/// unmeasured, not beaten"). A user swapping in a smaller specialist
+/// hits the same trap with no signal at all.
+fn warn_if_specialist_served_default_dialect(section: &EditSection, format: NextEditFormat) {
+    if section.next_edit_format.is_some() {
+        return; // explicit operator choice — leave it alone
+    }
+    let stem = section
+        .path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let suspected = if stem.contains("sweep") {
+        NextEditFormat::Sweep
+    } else if stem.contains("zeta") {
+        NextEditFormat::Zeta2
+    } else {
+        return;
+    };
+    if suspected == format {
+        return;
+    }
+    tracing::warn!(
+        target: "inference",
+        model = %stem,
+        serving = format.as_str(),
+        suspected = suspected.as_str(),
+        "edit slot: this model's name suggests the `{}` next-edit dialect, but the slot \
+         is serving `{}` (the unset default). Set [models.edit].next_edit_format = \"{}\" \
+         if that is the right contract — a specialist served the wrong dialect returns \
+         well-formed, confident, WRONG edits rather than failing.",
+        suspected.as_str(),
+        format.as_str(),
+        suspected.as_str()
+    );
 }

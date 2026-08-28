@@ -105,7 +105,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             ),
             (
                 "--quant <rung>",
-                "FIM model rung: mxfp4_moe | q4_k_m | q6_k | q8_0 (default: picked from \
+                "FIM model rung: sweep_1_5b | mxfp4_moe | q4_k_m | q6_k | q8_0 (default: picked from \
                  detected hardware). Requires --fim",
             ),
             (
@@ -122,14 +122,21 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
              run `svrn install-service` after the wizard completes. To start the daemon\n\
              once without registering it, run `svrn daemon`.\n\
              \n\
-             --fim runs LEAN MODE: [models].primary and [models.fim].path point at the SAME\n\
-             Mellum2 GGUF, so completions are served from the always-resident fast slot with\n\
-             one copy in RAM. That REPLACES the chat model on this machine — the previous\n\
-             config is backed up to config.toml.pre-fim and the banner prints the restore\n\
-             command. A dedicated FIM slot beside a separate chat primary is not offered\n\
-             because the smallest Mellum2 artifact is 7 GB and the high/very_high tiers have\n\
-             ~3.5 GB free after their primary. --fim prints a plan and asks before it\n\
-             mutates anything; --yes skips the prompt.",
+             --fim writes [models.edit] ONLY. Your [models].primary and [models].fast are\n\
+             left alone, so the machine ends up with four slots: primary, fast, embed and a\n\
+             pinned editing model that serves BOTH editing lanes — ghost text and the\n\
+             next-edit Tab queue. The default rung is 1.54 GB, small enough to sit beside\n\
+             any chat model on any tier.\n\
+             \n\
+             This replaces LEAN MODE, which aliased [models].primary to the editing model so\n\
+             one copy served chat and completions. That existed because the only rung was\n\
+             Mellum2, whose smallest artifact is 7 GB — too much to pin beside a 16-20 GB\n\
+             primary — and it cost the user their chat model. The Mellum2 rungs are still\n\
+             addressable with --quant. The previous config is backed up to\n\
+             config.toml.pre-fim either way.\n\
+             \n\
+             Needs an existing config: run `svrn setup` first to choose a chat model. --fim\n\
+             prints a plan and asks before it mutates anything; --yes skips the prompt.",
         ),
     ],
 };

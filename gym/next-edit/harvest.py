@@ -627,6 +627,44 @@ def authored_cases() -> list[dict]:
     return cases
 
 
+# ---- declines carried across a re-harvest ----------------------------
+
+def carry_declines(out_path: Path, cases: list) -> tuple:
+    """Re-mining rebuilds every case from scratch, which would silently
+    drop the `expect.declined_by` annotations that G5 checks — and the
+    bank would go red on 25 cases with no clue why. Carry them forward
+    by case id, and SAY on stderr when one has no home in the new set
+    rather than dropping it quietly (`next_edit_eval.py` G5, ARCH 18.3).
+
+    An annotation is only ever a claim about the engine, so carrying it
+    is safe: the harness re-derives every one against a live daemon and
+    fails if it no longer holds.
+    """
+    if not out_path.exists():
+        return 0, []
+    prior = {}
+    with out_path.open(encoding="utf-8") as fh:
+        for line in fh:
+            if not line.strip():
+                continue
+            c = json.loads(line)
+            mech = c.get("expect", {}).get("declined_by")
+            if mech:
+                prior[c["id"]] = (mech, c["expect"].get("declined_note"))
+    by_id = {c["id"]: c for c in cases}
+    carried = 0
+    for cid, (mech, note) in prior.items():
+        c = by_id.get(cid)
+        if c is None:
+            continue
+        c["expect"]["declined_by"] = mech
+        if note:
+            c["expect"]["declined_note"] = note
+        carried += 1
+    orphaned = [(cid, mech) for cid, (mech, _) in prior.items() if cid not in by_id]
+    return carried, orphaned
+
+
 # ---- main ------------------------------------------------------------
 
 def main() -> None:
@@ -640,6 +678,7 @@ def main() -> None:
     cases = authored_cases()
     mined, counters = mine(args.max_commits, args.pos, args.neg)
     cases += mined
+    carried, orphaned = carry_declines(args.out, cases)
 
     with args.out.open("w", encoding="utf-8") as fh:
         for c in cases:
@@ -651,6 +690,11 @@ def main() -> None:
         by_kind[c["kind"]] = by_kind.get(c["kind"], 0) + 1
         by_lang[c["language"]] = by_lang.get(c["language"], 0) + 1
     print(f"wrote {len(cases)} cases to {args.out}")
+    if carried or orphaned:
+        print(f"  declines: carried {carried} `declined_by` annotation(s) forward")
+    for cid, mech in orphaned:
+        print(f"  DROPPED declined_by={mech!r} — case no longer mined: {cid}",
+              file=sys.stderr)
     print(f"  kinds: {by_kind}")
     print(f"  langs: {by_lang}")
     print(f"  mining: {counters}")

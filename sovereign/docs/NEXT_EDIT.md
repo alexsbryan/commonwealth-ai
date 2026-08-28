@@ -6,7 +6,10 @@ three surfaces with `text`, `history`, and the model's own output
 treated as hostile; every HIGH/MED finding was fixed with a named
 regression test, and both banks re-ran green with the bars untouched.
 User-facing walkthrough:
-[`docs/NEXT_EDIT_IN_YOUR_EDITOR.md`](../../docs/NEXT_EDIT_IN_YOUR_EDITOR.md). The daemon route (`POST /v1/edit_predictions`), the
+[`docs/NEXT_EDIT_IN_YOUR_EDITOR.md`](../../docs/NEXT_EDIT_IN_YOUR_EDITOR.md).
+**Picking this up cold? Start at
+[`NEXT_EDIT_HANDOVER.md`](./NEXT_EDIT_HANDOVER.md)** — the map, the
+current verdicts, and the ranked backlog, in a tenth of this file. The daemon route (`POST /v1/edit_predictions`), the
 pure induction pipeline, and the extension provider are built and
 tested; both exploration spikes (§5) were retired into the real
 build the same day, after the operator validated accept/jump feel
@@ -442,6 +445,24 @@ with the route.
   run caught the a11 insertion-idempotence bug (§4), proving the
   bank bites. Over-offer is reported, not gated (the queue
   deliberately offers every remaining site).
+- **G5 declines, added 2026-08-28, and the population G1/G2 read
+  narrowed to match.** The syntax oracle (§4a, 2026-08-06) and the
+  `MIN_RULE_CHARS` 4→5 sweep (2026-08-07) both landed after these
+  fixtures were cut, and between them decline 25 of the 120 by
+  design. Scored against the original bar those cases could only
+  ever fail, so G2 sat permanently red and stopped carrying signal —
+  the failure §18.1 names, arrived at from the other direction. Each
+  declined case now carries `expect.declined_by`, and that
+  annotation is a CHECK: G5 re-derives the mechanism every run (the
+  oracle by the no-grammar counterfactual, the threshold by the
+  daemon's own `below_threshold` verdict, the pair route by
+  text-equivalence of the anchored edit) and goes red both when a
+  mechanism stops holding and when an annotated case starts passing.
+  **Verdict 2026-08-28: all five PASS** — 95 scored (G1 authored
+  queue 9/9, G2 57/57, G3 29/29, G4 p95 24 ms), 25 declined and
+  re-verified (14 `syntax_oracle`, 8 `min_rule_chars`, 3
+  `pair_fallback`). All three of G5's failure modes were watched to
+  fail before the verdict was published.
 - **Model-lane generalization bank SHIPPED 2026-07-30**:
   `gym/next-edit/gen/` (60 hand-curated cases across 11 languages —
   no git mining; generalization episodes need intent a harvester
