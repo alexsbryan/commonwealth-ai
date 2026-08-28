@@ -6,7 +6,32 @@
 # LLM_ARCH_QWEN4EXP / model_type qwen4_exp), vendored 2026-08-26 so this
 # workspace can run that model before the PR lands.
 #
-# VERIFICATION STATUS: PASSING (corrected 2026-08-26)
+# VERIFICATION STATUS: PASSING BOTH DIRECTIONS (corrected again 2026-08-28)
+#
+# THE 2026-08-26 "1764 files: 1764 identical, 0 differing" BELOW WAS TRUE AND
+# MEANT LESS THAN IT READ. The script only walked the vendored tree, so it
+# could see an EDIT and never an OMISSION -- its own comment said "a file
+# present upstream but not here is expected and is not reported".
+#
+# This fast-forward moved the Metal shaders to a per-kernel layout
+# (ggml/src/ggml-metal/kernels/*.metal). The vendoring step refreshes files
+# that already exist, so all 20 NEW upstream files were never taken -- and the
+# old single-file ggml-metal.metal was deleted as "stale and inert" on the
+# strength of a grep for .cpp references, which cannot see a CMakeLists that
+# reads kernels/${kind}.metal. Net effect: macOS could not CONFIGURE llama.cpp
+# at all ("file STRINGS file .../kernels/fa.metal cannot be read"), while the
+# verifier reported a clean tree and exit 0. Linux builds GGML_METAL=OFF, so
+# #52 landed green from the Fedora host and broke every Mac in the fleet.
+#
+# Repaired 2026-08-28: the 20 kernels are vendored (tree is now 1784 files,
+# byte-identical to upstream), the verifier gained a REVERSE pass, and the
+# intentional omissions are declared in VENDOR_EXCLUDE beside this file. The
+# reverse pass was watched failing -- remove one kernel and it exits 1.
+#
+#     1784 files: 1784 identical, 0 differing, 0 not in upstream,
+#                 0 missing locally                                  (exit 0)
+#
+# The 2026-08-26 note follows, unedited, for the record.
 #
 # An earlier revision of this note claimed the verify script CANNOT check a PR
 # head, "because a PR head is not reachable from master". That was asserted and

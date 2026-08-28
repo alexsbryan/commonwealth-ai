@@ -1,0 +1,82 @@
+# Upstream paths this workspace deliberately does NOT vendor.
+#
+# WHY THIS FILE EXISTS. `verify-vendored-llama-cpp.sh` used to walk the
+# vendored tree and compare each file to upstream. That direction catches an
+# EDIT and is blind to an OMISSION — "a file present upstream but not here is
+# expected and is not reported" was the rule, and it made every missing file
+# invisible.
+#
+# It let a real one through. The 2026-08-26 fast-forward to 035e22731a moved
+# the Metal shaders to a per-kernel `kernels/*.metal` layout. The vendoring
+# step copies files that already exist, so 20 NEW upstream files were never
+# taken, and the old single-file `ggml-metal.metal` was deleted as "stale and
+# inert" on the strength of a grep for .cpp references — which cannot see a
+# CMakeLists that reads `kernels/${kind}.metal`. The verifier reported
+# "1764 files: 1764 identical, 0 differing" and the macOS build could not
+# configure: `file STRINGS file .../kernels/fa.metal cannot be read`. Linux
+# builds with GGML_METAL=OFF and never noticed, which is why it landed green.
+#
+# So the check now runs BOTH directions, and this file is what makes the
+# reverse direction expressible: everything upstream ships inside a directory
+# we vendor from must either be present or be named here. Anything else is a
+# failure, not a shrug.
+#
+# One glob per line, matched against the upstream-relative path with `case`.
+# `#` comments and blank lines ignored. Keep it as tight as the truth allows:
+# a pattern that is broader than the intent is how the next omission hides.
+
+# --- Repo furniture: not build inputs, not shipped by the published crate.
+.clang-format
+.clang-tidy
+.dockerignore
+.ecrc
+.editorconfig
+.flake8
+.gitignore
+.gitmodules
+.pre-commit-config.yaml
+AGENTS.md
+AUTHORS
+CLAUDE.md
+CMakePresets.json
+CODEOWNERS
+CONTRIBUTING.md
+LICENSE
+Makefile
+README.md
+SECURITY.md
+build-xcframework.sh
+flake.nix
+mypy.ini
+pyproject.toml
+pyrightconfig.json
+requirements.txt
+ty.toml
+ggml/.gitignore
+ggml/src/ggml-openvino/.clang-format
+
+# --- Python conversion tooling: never compiled, never called from this crate.
+convert_hf_to_gguf_update.py
+convert_llama_ggml_to_gguf.py
+convert_lora_to_gguf.py
+
+# --- tools/server: LLAMA_BUILD_SERVER=OFF in build.rs, so tools/CMakeLists.txt
+#     never add_subdirectory's it. Sovereign serves its own HTTP surface.
+tools/server/*
+
+# --- Backends this workspace does not enable. build.rs sets GGML_OPENCL=OFF,
+#     GGML_WEBGPU=OFF and GGML_HIP=OFF; ggml-et is an out-of-tree accelerator.
+#     TURNING ANY OF THESE ON MEANS DELETING ITS LINE HERE FIRST — the missing
+#     sources are exactly what would break the configure, the way Metal did.
+ggml/src/ggml-opencl/kernels/*.cl
+ggml/src/ggml-webgpu/wgsl-shaders/*.tmpl
+ggml/src/ggml-et/et-kernels/src/*
+
+# --- CUDA: built only on hosts that set GGML_CUDA. These three arrived with
+#     the 035e22731a fast-forward and were not taken by it, the same way the
+#     Metal kernels were not. They are listed rather than vendored because no
+#     host in this fleet compiles CUDA today; a CUDA host must vendor them.
+cmake/arm64-windows-msvc-cuda.cmake
+ggml/src/ggml-cuda/mmq-config-pascal-dp4a.cuh
+ggml/src/ggml-cuda/mmq-config-pascal-older.cuh
+ggml/src/ggml-cuda/pool1d.cuh

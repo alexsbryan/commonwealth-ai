@@ -2239,6 +2239,28 @@ fn main() {
 
     if cfg!(feature = "rpc") {
         config.define("GGML_RPC", "ON");
+        // RDMA off, EXPLICITLY, on every platform.
+        //
+        // The 035e22731a fast-forward gave ggml-rpc an RDMA transport that
+        // AUTO-ENABLES: `find_library(rdma)` on Apple, `find_library(ibverbs)`
+        // elsewhere, and `option(GGML_RPC_RDMA ... ON)` the moment either is
+        // found (ggml/src/ggml-rpc/CMakeLists.txt:12-29). That makes the build
+        // depend on what happens to be installed on the host — a Mac with
+        // Apple's librdma links ggml-rpc against it, a Mac without does not,
+        // and neither says so.
+        //
+        // It does not link from here either way: cmake adds the library to
+        // ggml-rpc's own target, but this build script emits the Rust link
+        // line, and it does not know about a dependency upstream discovered on
+        // its own. Observed on this Mac as `ld64.lld: error: undefined symbol:
+        // ibv_reg_mr` (and 7 more) after the fast-forward.
+        //
+        // Nothing in this fleet uses RDMA — the distributed path is the ggml
+        // rpc-server over TCP, reached through the mesh's iroh tunnel. So pin
+        // it OFF rather than leave it to host archaeology. Turning it on means
+        // emitting the link flag here too; the auto-detection alone is not
+        // enough.
+        config.define("GGML_RPC_RDMA", "OFF");
     }
 
     // General
