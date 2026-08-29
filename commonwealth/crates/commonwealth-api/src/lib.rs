@@ -45,6 +45,7 @@ pub mod routes_responses;
 pub mod routes_status;
 pub mod server;
 pub mod state;
+pub mod turn_fidelity;
 pub mod yield_hook;
 
 pub use commonwealth_core::{Error, Result};

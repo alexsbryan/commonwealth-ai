@@ -237,24 +237,35 @@ pub async fn chat_completions(
         // time. Order matters: failure-recovery is most specific (a
         // single recent failure), anti-rep is intermediate (a pattern),
         // read-attractor is the most general (a mode).
-        crate::frontdoor::apply_failure_nudge_chat(&mut request);
-        crate::frontdoor::apply_anti_repetition_chat(&mut request);
-        crate::frontdoor::apply_read_attractor_nudge_chat(&mut request);
-        // URL-allowlist accumulator. Walks the conversation history
-        // for URLs in prior `role: tool` messages (search results,
-        // typically) and threads them into `request.url_allowlist`
-        // so the inference-layer URL constraint
-        // (`sovereign-inference/src/url_constraint.rs`) can prevent
-        // the model from fabricating sibling URLs during synthesis.
-        // Idempotent: a caller-supplied `url_allowlist` wins.
-        crate::frontdoor::apply_url_allowlist_from_tool_results(&mut request);
-        // Evidence-id allowlist accumulator (Tier 2 of tool-framework
-        // expansion). Same shape as the URL accumulator above but
-        // for `ev-Tn-NNNN` citation handles. Threaded onto
-        // `request.evidence_id_allowlist` so the sampler's
-        // `EvidenceIdAllowlistConstraint` can prevent the model from
-        // fabricating sibling ids during synthesis. Idempotent.
-        crate::frontdoor::apply_evidence_id_allowlist_from_tool_results(&mut request);
+        // Opt-OUT, default on: see `turn_fidelity::reshape_enabled`. All
+        // three key on the Codex/opencode contract, so a client with a
+        // different tool vocabulary never trips them — but an operator
+        // running a shared anchor node can still say "serve it
+        // unmodified" with SOVEREIGN_FRONTDOOR_RESHAPE=0.
+        if crate::turn_fidelity::reshape_enabled() {
+            crate::frontdoor::apply_failure_nudge_chat(&mut request);
+            crate::frontdoor::apply_anti_repetition_chat(&mut request);
+            crate::frontdoor::apply_read_attractor_nudge_chat(&mut request);
+        }
+        // Citation-allowlist accumulators — OPT-IN, default off. Both
+        // turn things seen in `role: tool` messages into SAMPLER
+        // CONSTRAINTS, which is right for a retrieval-synthesis turn
+        // and wrong for a general OpenAI client. A caller-supplied
+        // allowlist is untouched either way. Rationale, measurement and
+        // flip condition: `turn_fidelity::auto_allowlist_enabled`.
+        if crate::turn_fidelity::auto_allowlist_enabled() {
+            crate::frontdoor::apply_url_allowlist_from_tool_results(&mut request);
+            crate::frontdoor::apply_evidence_id_allowlist_from_tool_results(&mut request);
+            debug!(
+                urls = request.url_allowlist.as_ref().map(|u| u.len()).unwrap_or(0),
+                evidence_ids = request
+                    .evidence_id_allowlist
+                    .as_ref()
+                    .map(|e| e.len())
+                    .unwrap_or(0),
+                "chat_completions: auto-allowlist synthesis is ON"
+            );
+        }
         let want_stream = request.stream.unwrap_or(false);
         // debug!, not info!: per-request entry breadcrumb. The served
         // request is still summarised once at INFO by `inference.complete:
@@ -1151,6 +1162,14 @@ async fn serve_local_non_stream(
                     info!("promoted in-content tool call into structured tool_calls field");
                 }
 
+                // Both canonicalizers REWRITE arguments the model
+                // already emitted, so they answer to the same opt-out
+                // as the request-side nudges. The promotion above does
+                // not: it recovers a call that would otherwise be lost.
+                if !crate::turn_fidelity::reshape_enabled() {
+                    continue;
+                }
+
                 if let Some(tcs) = choice.message.tool_calls.as_mut() {
                     let heredoc_fixed =
                         crate::frontdoor::canonicalize_chat_response_tool_calls(tcs);
@@ -1787,6 +1806,25 @@ mod shed_rendering_tests {
         assert_ne!(
             json["type"], "backend_error",
             "{lane}: backpressure must not be typed as a backend failure"
+        );
+        // This route is advertised as OpenAI-compatible, so the message
+        // has to arrive where an OpenAI client looks for it. Serialising
+        // `error` as a bare string meant the one thing a shed needs to
+        // say ("busy, come back in 35s") was the one thing a
+        // third-party SDK could not read.
+        let message = json["error"]["message"].as_str().unwrap_or_default();
+        assert!(
+            message.contains("host busy"),
+            "{lane}: the cause belongs at error.message, got {}",
+            json["error"]
+        );
+        assert_eq!(
+            json["error"]["type"], "server_error",
+            "{lane}: OpenAI `type` is the coarse bucket"
+        );
+        assert_eq!(
+            json["error"]["code"], "local_queue_full",
+            "{lane}: OpenAI `code` carries the precise reason, mirroring `reason`"
         );
     }
 

@@ -30,6 +30,47 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### `SOVEREIGN_FRONTDOOR_AUTO_ALLOWLIST` — shipped OFF (2026-08-29)
+
+**What is dark.** The daemon's synthesis of a citation allowlist from the
+conversation. `apply_url_allowlist_from_tool_results` and
+`apply_evidence_id_allowlist_from_tool_results` scan `role: tool` messages for
+URLs and `ev-Tn-NNNN` handles and thread them onto the request, where the
+inference layer builds a byte-trie sampler constraint that masks any token
+extending into an unlisted value. Both ran unconditionally on
+`POST /v1/chat/completions` until this commit; they now require the flag.
+
+**Why it went dark.** It was a silent substitution on the OpenAI-compatible
+ingress (ARCH §18.3). Measured against the live daemon 2026-08-29: a
+conversation whose tool result carried
+`https://doc.rust-lang.org/error_codes/E0433.html` made that the only URL the
+trie could reach, so a request to emit `https://api.stripe.com/v1/charges`
+returned the rust-lang URL — HTTP 200, no warning, wrong bytes. The control
+run, identical but for that one link, emitted the Stripe URL correctly. The
+constraint cannot tell "fabricating a sibling URL" from "writing the URL the
+user asked for", and any coding agent whose tool output mentions a URL (cargo,
+npm, a git remote, curl) trips it.
+
+**What it costs while dark.** Nothing measured. The two lanes that want the
+constraint — `deep_research/port.rs` and `search_gym_cmd/runner.rs` — set
+`url_allowlist` explicitly, and an explicit allowlist has always won over the
+synthesis, so both keep the constraint with the flag off. The synthesis existed
+only to extend it to clients that never asked.
+
+**Flip condition.** Flip ON by default only when the constraint can distinguish
+a fabricated sibling URL from a caller-requested novel one — e.g. it applies to
+synthesis turns only, or admits URLs present in the *user* turn as well as tool
+results. A bench showing fabrication-rate improvement is NOT sufficient on its
+own: the failure this row records is invisible to a fabrication bench, because
+the wrong answer scores as a real URL.
+
+**Settled by.** A pre-registered run on the search-gym fabrication bank that
+also carries a counter-bank of turns legitimately requesting an unseen URL.
+Both numbers, or no flip.
+
+**Review by.** 2026-11-29.
+
+
 ### `Mesh::gossip_authorized` legacy compat arm — shipped ON (2026-08-26)
 
 **What is dark.** Not a capability held back: a *fallback* held open. The

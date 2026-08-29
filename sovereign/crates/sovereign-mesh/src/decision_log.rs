@@ -1186,7 +1186,8 @@ pub const YIELD_REFUSAL_DEFAULT_BACKOFF_SECS: u64 = 5;
 ///
 /// The wire shape is `commonwealth-api`'s `AdmissionRejection`,
 /// serialised by its `IntoResponse`:
-/// `503 {"error":"local user active","reason":"yielded_to_local",
+/// `503 {"error":{"message":"local user active","type":"server_error",
+/// "code":"yielded_to_local"},"reason":"yielded_to_local",
 /// "retry_after_secs":14}`. Parsed out of the error TEXT because that
 /// is what the cascade has: `oicp-client` surfaces the remote body as
 /// an excerpt on a failed hop, and threading a typed rejection back

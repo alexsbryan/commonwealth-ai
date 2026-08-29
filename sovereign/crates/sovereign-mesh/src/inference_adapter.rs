@@ -1250,10 +1250,29 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             "sovereign inference adapter: complete served"
         );
 
+        // Mirror the streaming path's translation
+        // (`translate_stream_frame` -> `translate_finish_reason`) so one
+        // decider serves both entry points (ARCH_PRINCIPLES §10.6).
+        //
+        // `tool_calls` outranks the provider's reason, per the OpenAI
+        // contract: a turn that emitted calls reports `tool_calls` even
+        // though decode itself ended at EOS. Everything else is the
+        // provider's OBSERVED reason — above all `length`, which is how
+        // a client tells a truncated answer from a finished one.
+        //
+        // This branch used to hardcode "stop", which threw away a
+        // reason the engine had already computed
+        // (`finish_reason_from_counts`) and made every `max_tokens`
+        // truncation look like a clean finish. Streaming reported it
+        // correctly the whole time, so the two paths disagreed about
+        // the same turn. `None` still falls back to Stop — some
+        // providers and every stub don't track the distinction.
         let finish_reason = if tool_calls_out.is_some() {
-            "tool_calls".to_string()
+            wire::FinishReason::ToolCalls
         } else {
-            "stop".to_string()
+            resp.finish_reason
+                .map(translate_finish_reason)
+                .unwrap_or(wire::FinishReason::Stop)
         };
         let assistant_msg = ChatMessage {
             role: "assistant".into(),
@@ -1272,7 +1291,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
             choices: vec![ChatChoice {
                 index: 0,
                 message: assistant_msg,
-                finish_reason: Some(finish_reason),
+                finish_reason: Some(finish_reason.as_openai_str().to_string()),
             }],
             usage: Some(Usage {
                 prompt_tokens: resp.prompt_tokens as u32,

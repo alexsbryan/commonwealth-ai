@@ -2323,19 +2323,19 @@ impl AppState {
         use crate::admission::{AdmissionReason, AdmissionRejection, PeerInflightGuard};
 
         if let Some(remaining) = self.seconds_until_unpaused() {
-            return Err(AdmissionRejection {
-                error: "contribution paused".into(),
-                reason: AdmissionReason::Paused,
-                retry_after_secs: remaining.max(1),
-            });
+            return Err(AdmissionRejection::new(
+                "contribution paused",
+                AdmissionReason::Paused,
+                remaining.max(1),
+            ));
         }
         if self.yield_peers_to_foreground() {
             if let Some(remaining) = self.seconds_until_foreground_idle() {
-                return Err(AdmissionRejection {
-                    error: "local user active".into(),
-                    reason: AdmissionReason::YieldedToLocal,
-                    retry_after_secs: remaining.max(1),
-                });
+                return Err(AdmissionRejection::new(
+                    "local user active",
+                    AdmissionReason::YieldedToLocal,
+                    remaining.max(1),
+                ));
             }
         }
 
@@ -2358,11 +2358,11 @@ impl AppState {
             // client to return in the same instant, which re-creates the
             // spike that caused the shed. See
             // `admission::jittered_retry_after_secs`.
-            TryGrant::WouldQueue { .. } | TryGrant::Shed { .. } => Err(AdmissionRejection {
-                error: "peer concurrency ceiling reached".into(),
-                reason: AdmissionReason::CeilingExceeded,
-                retry_after_secs: crate::admission::jittered_retry_after_secs(2),
-            }),
+            TryGrant::WouldQueue { .. } | TryGrant::Shed { .. } => Err(AdmissionRejection::new(
+                "peer concurrency ceiling reached",
+                AdmissionReason::CeilingExceeded,
+                crate::admission::jittered_retry_after_secs(2),
+            )),
         }
     }
 

@@ -73,6 +73,24 @@ pub enum AdmissionReason {
     PrincipalShareExceeded,
 }
 
+impl AdmissionReason {
+    /// The stable machine-readable string for this reason, used as the
+    /// OpenAI `error.code` and as the top-level `reason`. Kept in sync
+    /// with the `rename_all = "snake_case"` serde attribute above by
+    /// the `admission_reason_code_matches_serde` test — two spellings
+    /// of one name is the §10.6 smell, and this is the pair most
+    /// likely to drift.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Paused => "paused",
+            Self::YieldedToLocal => "yielded_to_local",
+            Self::CeilingExceeded => "ceiling_exceeded",
+            Self::LocalQueueFull => "local_queue_full",
+            Self::PrincipalShareExceeded => "principal_share_exceeded",
+        }
+    }
+}
+
 /// How many seconds of spread a shed's `Retry-After` hint carries on
 /// top of its base value.
 ///
@@ -124,15 +142,44 @@ pub fn jittered_retry_after_secs(base: u64) -> u64 {
     jitter_retry_after(base, entropy)
 }
 
-/// 503 body the admission layer returns to a rejected peer.
+/// 503 body the admission layer returns to a rejected caller.
 /// `retry_after_secs` mirrors the `Retry-After` header value.
+///
+/// `error` is the OpenAI error OBJECT, not a bare string: this route is
+/// advertised as OpenAI-compatible, so a shed serialised as a plain
+/// string put the one message that has to survive ("busy, come back in
+/// 30s") out of reach of every SDK on the route. Reuses [`ErrorDetail`]
+/// rather than minting a second error shape (§10.6).
+///
+/// `reason` and `retry_after_secs` stay TOP-LEVEL and unchanged — the
+/// peer load balancer and `deep_research`'s shed classifier key off
+/// them, the latter by substring — so widening `error` is additive.
 #[derive(Debug, Clone, Serialize)]
 pub struct AdmissionRejection {
-    /// Human-readable explanation; the structured fields below are
-    /// what programmatic callers should branch on.
-    pub error: String,
+    /// OpenAI-shaped error object. `code` carries the same value as
+    /// `reason` so a client that only understands the OpenAI envelope
+    /// still gets the precise cause.
+    pub error: crate::openai_types::ErrorDetail,
     pub reason: AdmissionReason,
     pub retry_after_secs: u64,
+}
+
+impl AdmissionRejection {
+    /// Build a rejection from the human-readable cause. The OpenAI
+    /// `type` is the coarse bucket (`server_error`) and `code` is the
+    /// precise reason, which is the split the OpenAI error contract
+    /// asks for.
+    pub fn new(message: impl Into<String>, reason: AdmissionReason, retry_after_secs: u64) -> Self {
+        Self {
+            error: crate::openai_types::ErrorDetail {
+                message: message.into(),
+                error_type: "server_error".to_string(),
+                code: Some(reason.as_str().to_string()),
+            },
+            reason,
+            retry_after_secs,
+        }
+    }
 }
 
 /// The ONE place a shed becomes an HTTP response: 503 + `Retry-After`
@@ -154,13 +201,11 @@ pub fn local_queue_shed_response(
     predicted_wait_ms: u64,
     retry_after_secs: u64,
 ) -> Response {
-    shed_response(AdmissionRejection {
-        error: format!(
-            "host busy: ~{predicted_wait_ms} ms predicted wait at queue position {position}"
-        ),
-        reason: AdmissionReason::LocalQueueFull,
+    shed_response(AdmissionRejection::new(
+        format!("host busy: ~{predicted_wait_ms} ms predicted wait at queue position {position}"),
+        AdmissionReason::LocalQueueFull,
         retry_after_secs,
-    })
+    ))
 }
 
 pub fn shed_response(rejection: AdmissionRejection) -> Response {
@@ -485,14 +530,14 @@ pub async fn client_fairness_layer(
         retry_after_secs,
         "admission.client: 503 — principal is over its equal share"
     );
-    shed_response(AdmissionRejection {
-        error: format!(
+    shed_response(AdmissionRejection::new(
+        format!(
             "over fair share: this caller holds {inflight} of {cap} concurrent turns \
              while {active} principals are active"
         ),
-        reason: AdmissionReason::PrincipalShareExceeded,
+        AdmissionReason::PrincipalShareExceeded,
         retry_after_secs,
-    })
+    ))
 }
 
 /// Axum middleware fn. Apply via
