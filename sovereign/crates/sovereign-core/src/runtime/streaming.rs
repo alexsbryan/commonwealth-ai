@@ -1981,11 +1981,12 @@ impl Runtime {
             // In-topic (ClaimUncovered) abstentions and entity-anchored
             // questions are structurally never rescued.
             let mut rescued_turn = false;
-            if crate::runtime::gk_rescue::gk_rescue_enabled()
-                && gate_abstained
-                && hoisted_probe_verdict == Some(crate::types::GapCoverage::TopicUncovered)
-                && !gate_entity_anchored
-            {
+            if crate::runtime::gk_rescue::rescue_precondition_met(
+                gate_abstained,
+                hoisted_probe_verdict,
+                gate_entity_anchored,
+                &unavailable_corpora,
+            ) {
                 if let Some(rescued) =
                     crate::runtime::gk_rescue::rescue_ood_answer(inference.as_ref(), &gate_question)
                         .await

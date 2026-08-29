@@ -23,8 +23,38 @@
 //! rescue restores the behavior as a pipeline property rather than a
 //! model property — whatever model runs inside (§1).
 
-use crate::traits::InferenceProvider;
-use crate::types::{CompletionRequest, Speed};
+use crate::traits::{CorpusUnavailable, InferenceProvider};
+use crate::types::{CompletionRequest, GapCoverage, Speed};
+
+/// The rescue's precondition — ONE decider for both the buffered
+/// (`knowledge_query`) and streaming call sites, which carried two copies of
+/// the same four-clause guard until 2026-08-28 (ARCH 10.6).
+///
+/// `unavailable` is the clause that copy did not have. `TopicUncovered` means
+/// "the enabled corpora have no region near this question" — but a corpus that
+/// could not be searched contributed no region to that probe, so its silence is
+/// a COULD-NOT-JUDGE, not a confirmed miss (ARCH 18.1). Rescuing there answers
+/// a question the user asked of a specific corpus with parametric text, behind
+/// a decode-committed "Not in your sources — from general knowledge:" prefix
+/// that asserts an answer follows.
+///
+/// Measured 2026-08-28, 60-min chaos soak: 4 turns scoped to
+/// `wikipedia-newsworthy` (26 data fragments, ZERO vector indexes ->
+/// `NoVectorIndex`) shipped that prefix in front of an unavailability notice,
+/// so the user was told a general-knowledge answer was coming and got a
+/// rebuild instruction instead.
+pub(crate) fn rescue_precondition_met(
+    gate_abstained: bool,
+    probe_verdict: Option<GapCoverage>,
+    entity_anchored: bool,
+    unavailable: &[CorpusUnavailable],
+) -> bool {
+    gk_rescue_enabled()
+        && gate_abstained
+        && probe_verdict == Some(GapCoverage::TopicUncovered)
+        && !entity_anchored
+        && unavailable.is_empty()
+}
 
 /// `SOVEREIGN_GK_RESCUE=0|false|off|no` disables the rescue (the
 /// abstention then ships as-is). Default ON.
@@ -117,10 +147,67 @@ pub(crate) async fn rescue_ood_answer(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::traits::UnavailabilityReason;
 
     #[test]
     fn kill_switch_parses() {
         // Default (unset in the test env) is ON.
         assert!(gk_rescue_enabled());
+    }
+
+    fn lost() -> Vec<CorpusUnavailable> {
+        vec![CorpusUnavailable::new(
+            "wikipedia-newsworthy",
+            UnavailabilityReason::NoVectorIndex,
+        )]
+    }
+
+    #[test]
+    fn an_unsearchable_corpus_blocks_the_rescue() {
+        // The 2026-08-28 soak's failing input: the turn abstained, the probe
+        // said TopicUncovered, and the corpus it was scoped to had no vector
+        // index. "Uncovered" was never established — nothing searched it.
+        assert!(!rescue_precondition_met(
+            true,
+            Some(GapCoverage::TopicUncovered),
+            false,
+            &lost(),
+        ));
+    }
+
+    #[test]
+    fn a_genuinely_uncovered_topic_still_rescues() {
+        // The other direction: with every corpus searchable, the rescue is
+        // exactly as before — this change must not turn OOD asks back into
+        // dead ends (EPISTEMIC_STATE.md 1).
+        assert!(rescue_precondition_met(
+            true,
+            Some(GapCoverage::TopicUncovered),
+            false,
+            &[],
+        ));
+    }
+
+    #[test]
+    fn the_original_three_clauses_are_unchanged() {
+        assert!(!rescue_precondition_met(
+            false,
+            Some(GapCoverage::TopicUncovered),
+            false,
+            &[]
+        ));
+        assert!(!rescue_precondition_met(
+            true,
+            Some(GapCoverage::ClaimUncovered),
+            false,
+            &[]
+        ));
+        assert!(!rescue_precondition_met(true, None, false, &[]));
+        assert!(!rescue_precondition_met(
+            true,
+            Some(GapCoverage::TopicUncovered),
+            true,
+            &[]
+        ));
     }
 }

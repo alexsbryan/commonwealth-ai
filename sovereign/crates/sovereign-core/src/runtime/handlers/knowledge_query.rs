@@ -1815,11 +1815,12 @@ impl Runtime {
         // routes survive on the ledger.
         let mut completion_text = completion_text;
         let mut rescued_turn = false;
-        if crate::runtime::gk_rescue::gk_rescue_enabled()
-            && gate_abstained
-            && hoisted_probe_verdict == Some(crate::types::GapCoverage::TopicUncovered)
-            && !plan.gate_entity_anchored
-        {
+        if crate::runtime::gk_rescue::rescue_precondition_met(
+            gate_abstained,
+            hoisted_probe_verdict,
+            plan.gate_entity_anchored,
+            &plan.unavailable_corpora,
+        ) {
             if let Some(rescued) =
                 crate::runtime::gk_rescue::rescue_ood_answer(self.inference.as_ref(), message).await
             {
