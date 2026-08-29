@@ -223,17 +223,38 @@ const cutoff = { n: longReal.length, midSentence: longReal.filter((c) => !isTerm
 //     judge approved. The confirmed-fab count is still reported as the headline.
 const positive = chats.filter((c) => !broke(c)).length;
 const positiveRate = nAttempts ? positive / nAttempts : 0;
-const groundedRate = n ? grounded / n : 0;
-const declineRate = n ? declines / n : 0;
+// COULD-NOT-JUDGE is its own verdict, not a decline and not a failure (ARCH
+// 18.1). answered_novalue means assess_asserted_value extracted no checkable
+// value, so the grounding question was never answered for that turn. Rating it
+// against `n` silently substitutes "we did not measure" for "the app did badly":
+// the 2026-08-28 soak reported grounded 8.3% / decline 91.7% off 24 chats of
+// which 22 were unjudgeable, and 18 of those 22 had cited their evidence.
+// Grounding rates are therefore computed over the JUDGEABLE subset and the
+// coverage is printed next to them, so a thin run cannot masquerade as a bad one.
+const couldNotJudge = answeredNoval;
+const judgeable = n - couldNotJudge;
+const judgeCoverage = n ? judgeable / n : 0;
+const groundedRate = judgeable ? grounded / judgeable : null;
+const declineRate = judgeable ? declines / judgeable : null;
 // Degenerate-improvement guard: a high positiveRate built on a collapsed
 // groundedRate + inflated declineRate is the app abstaining its way to a
 // "good" score — the gaming the user warned against. Flag it, don't hide it.
-const degenerate = declineRate > 0.5 && groundedRate < 0.25;
+// It can only fire on a run that actually MEASURED something: below half
+// coverage the rates are too thin to carry a verdict, and the run reports
+// LOW COVERAGE instead — a could-not-judge about the scorecard itself.
+const MIN_JUDGE_COVERAGE = 0.5;
+const lowCoverage = n > 0 && judgeCoverage < MIN_JUDGE_COVERAGE;
+const degenerate =
+  !lowCoverage && declineRate !== null && groundedRate !== null && declineRate > 0.5 && groundedRate < 0.25;
 
 const card = {
   label: LABEL,
   journal: JOURNAL,
   scoredChats: n,
+  judgeable,
+  couldNotJudge,
+  judgeCoverage,
+  lowCoverage,
   chatAttempts: nAttempts,
   trueStalls: trueStalls.length,
   totalRows: rows.length,
@@ -276,6 +297,13 @@ console.log(`\n  ── verdict distribution ──`);
 for (const [v, c] of Object.entries(verdicts).sort((a, b) => b[1] - a[1]))
   console.log(`    ${v.padEnd(18)} ${String(c).padStart(4)}   ${pct(c)}`);
 
+console.log(
+  `    ${"— of which UNJUDGEABLE".padEnd(18)} ${String(couldNotJudge).padStart(4)}   ${pct(couldNotJudge)}   ← answered_novalue: no checkable value extracted`,
+);
+console.log(
+  `    judgeable for grounding: ${judgeable}/${n} (${(100 * judgeCoverage).toFixed(1)}% coverage)${lowCoverage ? "   ⚠ TOO THIN FOR A GROUNDING VERDICT" : ""}`,
+);
+
 console.log(`\n  ── hallucination disentangled (total ${hallucination}) ──`);
 console.log(`    confirmed fabrication (real bug)      ${String(confirmedFab).padStart(3)}   ← the app-quality target`);
 console.log(`    theme/synthesis strictness (frozen)   ${String(themeStrict).padStart(3)}   ← oracle strict on summaries; userJudge OK`);
@@ -304,8 +332,13 @@ if (withEv.length) {
 
 console.log(`\n  ── composite (anti-gaming: all must move TOGETHER) ──`);
 console.log(`    POSITIVE EXPERIENCE   ${(100 * positiveRate).toFixed(1)}%   (answered ∧ not-broken; of ${nAttempts} attempts incl. ${trueStalls.length} stall)`);
-console.log(`    grounded rate         ${(100 * groundedRate).toFixed(1)}%   (must hold/rise — not collapse into declines)`);
+const rate = (r) => (r === null ? "n/j" : `${(100 * r).toFixed(1)}%`);
+console.log(`    grounded rate         ${rate(groundedRate)}   (of ${judgeable} judgeable — must hold/rise, not collapse into declines)`);
 console.log(`    hallucination rate    ${(100 * (n ? hallucination / n : 0)).toFixed(1)}%   confirmed-only ${(100 * (n ? confirmedFab / n : 0)).toFixed(1)}%`);
-console.log(`    decline rate          ${(100 * declineRate).toFixed(1)}%`);
+console.log(`    decline rate          ${rate(declineRate)}   (of ${judgeable} judgeable)`);
+if (lowCoverage)
+  console.log(
+    `    ⚠ LOW COVERAGE: only ${judgeable}/${n} turns yielded a checkable value, so this run carries NO grounding verdict.\n      Fix the question source before reading the rates above (see chaos.mjs questionSource counts).`,
+  );
 if (degenerate) console.log(`    ⚠ DEGENERATE: high positive built on collapsed grounding + inflated declines — this is GAMING, not improvement.`);
 console.log(`${bar}\n`);

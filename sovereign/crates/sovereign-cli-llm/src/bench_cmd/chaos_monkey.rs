@@ -1333,6 +1333,32 @@ async fn rescore(rest: &[String]) -> i32 {
 /// Input is a JSON object `{"question":..,"answer":..,"chunks":[..]}` read from
 /// `--input <file>` or stdin. Output is one line of JSON on stdout; all
 /// diagnostics go to stderr so stdout stays a clean machine-readable verdict.
+
+/// The bench-aligned verdict ladder — ONE implementation, so the mapping can be
+/// truth-tabled instead of argued about (ARCH 10.6, 7.2).
+///
+/// `grounded` is `assess_asserted_value`'s answer to "is the asserted value
+/// present in the evidence": `Some(true)` grounded, `Some(false)` ungrounded,
+/// and `None` = NoValue, i.e. **no checkable value was extracted at all**.
+/// `None` is a could-not-judge and must never be reported as a decline.
+fn bench_verdict(
+    grounded: Option<bool>,
+    caveat: Option<bool>,
+    answered: Option<bool>,
+) -> &'static str {
+    if grounded == Some(false) && caveat != Some(true) {
+        "hallucination"
+    } else if grounded == Some(true) {
+        "grounded"
+    } else if grounded == Some(false) && caveat == Some(true) {
+        "caveated_ood"
+    } else if answered == Some(false) {
+        "honest_abstention"
+    } else {
+        "answered_novalue"
+    }
+}
+
 async fn score_answer(rest: &[String]) -> i32 {
     let mut input: Option<PathBuf> = None;
     let mut judge_model = "fast".to_string();
@@ -1498,17 +1524,22 @@ async fn score_answer(rest: &[String]) -> i32 {
     // %/seats" turn — explicitly caveated GK — tagged hallucination, then routed
     // to answered_ungrounded instead of a graceful gap). Uncaveated absent value
     // is still the sin.
-    let verdict = if grounded == Some(false) && caveat != Some(true) {
-        "hallucination"
-    } else if grounded == Some(true) {
-        "grounded"
-    } else if caveat == Some(true) {
-        "caveated_ood"
-    } else if answered == Some(false) {
-        "honest_abstention"
-    } else {
-        "answered_novalue"
-    };
+    // The `grounded == Some(false)` guard on caveated_ood is LOAD-BEARING and was
+    // absent until 2026-08-28. caveated_ood means "asserted a specific value that
+    // is ABSENT from the evidence, but flagged it as general knowledge" — that
+    // requires the oracle to have EXTRACTED a value and found it ungrounded, i.e.
+    // Some(false). When assess_asserted_value returns NoValue the grounding
+    // question was never answered at all (`grounded == None`), and the old ladder
+    // fell straight through to caveated_ood on the strength of the caveat alone.
+    // That is a could-not-judge reported as a decline (ARCH 18.1 four verdicts,
+    // 18.3 never silently substitute). Measured cost: the 60-min chaos soak of
+    // 2026-08-28 scored 22 of 24 turns caveated_ood with value=null/grounded=None
+    // — 18 of them had cited the delivered evidence — which read out as
+    // "grounded 8.3%, decline 91.7%" and tripped the DEGENERATE composite on a
+    // run that had measured essentially nothing. NoValue now lands in
+    // answered_novalue, which is the could-not-judge bucket and is excluded from
+    // the decline rate by chaos-scorecard.mjs.
+    let verdict = bench_verdict(grounded, caveat, answered);
 
     let out = serde_json::json!({
         "verdict": verdict,
@@ -2056,5 +2087,74 @@ mod replay_metadata_tests {
         let mut row = row_without_route();
         row["routed_intent"] = serde_json::Value::Null;
         assert!(replay_metadata(&row).get("routed_intent").is_none());
+    }
+}
+
+#[cfg(test)]
+mod bench_verdict_tests {
+    // The verdict ladder, pinned in BOTH directions. A judge change reported
+    // only in the direction it was meant to fix is a §15 smell (ARCH 18.6).
+    use super::bench_verdict;
+
+    #[test]
+    fn novalue_is_could_not_judge_never_a_decline() {
+        // grounded == None means the oracle extracted no checkable value, so
+        // the grounding question was never answered for that turn. With or
+        // without a caveat that is answered_novalue — the could-not-judge
+        // bucket. The pre-2026-08-28 ladder returned "caveated_ood" for the
+        // caveat row, which chaos-scorecard.mjs counts as a DECLINE; that one
+        // row is what made the 60-min soak read "decline 91.7% / grounded 8.3%"
+        // on 24 turns of which 22 were unjudgeable and 18 had cited evidence.
+        assert_eq!(
+            bench_verdict(None, Some(true), Some(true)),
+            "answered_novalue"
+        );
+        assert_eq!(
+            bench_verdict(None, Some(false), Some(true)),
+            "answered_novalue"
+        );
+        assert_eq!(bench_verdict(None, None, Some(true)), "answered_novalue");
+    }
+
+    #[test]
+    fn a_real_abstention_still_outranks_could_not_judge() {
+        // answered == Some(false) is a genuine decline whether or not a value
+        // could be extracted, and must not be swallowed by the novalue bucket.
+        assert_eq!(
+            bench_verdict(None, Some(true), Some(false)),
+            "honest_abstention"
+        );
+        assert_eq!(bench_verdict(None, None, Some(false)), "honest_abstention");
+    }
+
+    #[test]
+    fn the_other_direction_did_not_move() {
+        // Nothing that does not depend on grounded == None changed shape.
+        // caveated_ood keeps its real meaning: a value WAS extracted, found
+        // absent from the evidence, and flagged as general knowledge.
+        assert_eq!(
+            bench_verdict(Some(false), Some(true), Some(true)),
+            "caveated_ood"
+        );
+        // Uncaveated absent value is still the cardinal sin.
+        assert_eq!(
+            bench_verdict(Some(false), None, Some(true)),
+            "hallucination"
+        );
+        assert_eq!(
+            bench_verdict(Some(false), Some(false), Some(true)),
+            "hallucination"
+        );
+        // A grounded value wins over any caveat.
+        assert_eq!(
+            bench_verdict(Some(true), Some(true), Some(true)),
+            "grounded"
+        );
+        assert_eq!(bench_verdict(Some(true), None, Some(true)), "grounded");
+        // Hallucination outranks abstention when a value WAS asserted.
+        assert_eq!(
+            bench_verdict(Some(false), None, Some(false)),
+            "hallucination"
+        );
     }
 }
