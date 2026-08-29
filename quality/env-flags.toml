@@ -785,6 +785,13 @@ shadows = "daemon.client_port"
 purpose = "Daemon base URL for CLI clients — the highest-precedence leg of the ONE decider, sovereign_contracts::setup_config::client_daemon_base (env, then [daemon] client_port, then the compiled default). SVRNMESH_DAEMON_URL is the same knob's post-rename spelling and loses to this one when both are set; a blank value counts as UNSET and falls through to the config rather than dispatching at a bare path; a trailing slash is trimmed because every caller appends /v1/…. Why it is a decider and not just a variable: until 2026-08-25 the env and the config were TWO resolvers with opposite blind spots — the env leg lived in sovereign-cli-shared::urls and could not see a moved client_port, while client_daemon_base saw the config and not the env — so this knob reached ONE daemon-talking call site (mcp_client) out of ~30, and `svrn enrich` / `svrn backlog score` kept driving the operator's local daemon whatever it said, answering successfully while doing it. WHAT IT DELIBERATELY DOES NOT REACH: daemon lifecycle (`daemon stop/restart/reload` and its readiness probe) and `corpus watch register`, which resolve through the env-blind client_daemon_base_for. A URL cannot be SIGTERM'd and a remote daemon cannot watch this host's filesystem, so honouring the knob there would kill the local daemon and then report READY off the remote (ARCH §18.3)."
 
 [[flag]]
+name = "SOVEREIGN_CONCEPT_CORPUS"
+cluster = "infra-paths"
+default = "the repo directory name"
+status = "guard"
+purpose = "Which code corpus `cargo xtask concept-gate` asks for its duplicate-name count. The relayed `converge status --corpus-id` defaults to \"the sole indexed code corpus\", a default that expires the moment a second one is indexed — this host carried three on 2026-08-29 (commonwealth-ai plus two fixtures), so the command refused and the gate reported COULD-NOT-JUDGE while blaming a stale sibling binary. The gate now names the corpus, defaulting to the repo directory name because that is the registration convention here; set this when a repo is indexed under a different id. A guard rather than a knob: it exists so the gate can reach a verdict at all, not to tune anything."
+
+[[flag]]
 name = "SOVEREIGN_BIND"
 cluster = "infra-paths"
 default = "unset"
