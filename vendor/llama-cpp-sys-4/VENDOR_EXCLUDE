@@ -64,13 +64,30 @@ convert_lora_to_gguf.py
 #     never add_subdirectory's it. Sovereign serves its own HTTP surface.
 tools/server/*
 
-# --- Backends this workspace does not enable. build.rs sets GGML_OPENCL=OFF,
-#     GGML_WEBGPU=OFF and GGML_HIP=OFF; ggml-et is an out-of-tree accelerator.
-#     TURNING ANY OF THESE ON MEANS DELETING ITS LINE HERE FIRST — the missing
-#     sources are exactly what would break the configure, the way Metal did.
-ggml/src/ggml-opencl/kernels/*.cl
-ggml/src/ggml-webgpu/wgsl-shaders/*.tmpl
-ggml/src/ggml-et/et-kernels/src/*
+# --- [RETIRED 2026-08-29. These three globs were BROADER THAN THE INTENT, and
+#     that is the exact failure this file's own header warns about.]
+#
+#     They read as "we skip these backends". The tree said otherwise: 168 of
+#     170 ggml-opencl kernels, 49 of 51 webgpu shaders and 56 of 59 et-kernels
+#     were vendored. The directories were never skipped — so what the globs
+#     actually did was retroactively legitimize a handful of files that
+#     arrived in the 035e22731a fast-forward and were never taken. Two OpenCL
+#     kernels (moe_add_id_glu.cl, ssm_scan.cl), two WebGPU shaders and nine
+#     ggml-et build inputs were missing, and the reverse pass reported a clean
+#     tree because a declared omission is by definition not a discrepancy.
+#
+#     An exclusion whose premise is "we do not build that today" expires
+#     silently the moment a host does. It expired twice: Metal on 2026-08-26
+#     (PR #52 landed green from Linux, broke every Mac) and CUDA on
+#     2026-08-28 (the container image is the first host in the fleet that
+#     compiles it). Both were found by a machine that builds that backend,
+#     after landing, never by a gate.
+#
+#     All 13 files are now vendored — 31 KB — and the globs are gone. THE RULE
+#     THIS LEAVES: exclude by whether a file is a BUILD INPUT, never by which
+#     backend the fleet happens to compile this month. A source, shader,
+#     kernel, linker script or .cmake goes in the tree whether or not anything
+#     switches it on.
 
 # --- CUDA: NOW VENDORED (2026-08-28). This block used to exclude four files
 #     with the reason "no host in this fleet compiles CUDA today; a CUDA host
