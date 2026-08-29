@@ -209,10 +209,32 @@ struct Output {
 }
 
 fn invoke(cli: &Path, root: &Path, baseline: &Path, extra: &[&str]) -> Result<Output, String> {
-    let out = Command::new(cli)
-        .args(["code", "converge", "status"])
+    // NAME THE CORPUS. `converge status --corpus-id` defaults to "the sole
+    // indexed code corpus", which is a default that expires the moment anyone
+    // indexes a second one. On 2026-08-29 this host carried three
+    // (commonwealth-ai, semver, tinyorders — two of them fixtures), so the
+    // relayed command refused with "multiple code corpora — pass --corpus-id",
+    // and the gate reported COULD-NOT-JUDGE blaming a stale sibling: it sent
+    // the reader to a four-crate rebuild that could not possibly help, because
+    // the sibling was fine and the QUESTION was ambiguous. That is the second
+    // time this arm's message has named the wrong cause (see the `graph_lag`
+    // note above), and both times the cost was a rebuild.
+    //
+    // The repo directory name is the corpus id by convention here.
+    // SOVEREIGN_CONCEPT_CORPUS overrides for a repo indexed under another name.
+    let corpus = std::env::var("SOVEREIGN_CONCEPT_CORPUS").ok().or_else(|| {
+        root.file_name()
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_string())
+    });
+    let mut cmd = Command::new(cli);
+    cmd.args(["code", "converge", "status"])
         .arg("--baseline")
-        .arg(baseline)
+        .arg(baseline);
+    if let Some(id) = corpus.as_deref() {
+        cmd.arg("--corpus-id").arg(id);
+    }
+    let out = cmd
         .args(extra)
         .current_dir(root)
         .output()
