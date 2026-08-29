@@ -387,15 +387,7 @@ impl Mesh {
     ) -> MergeReport {
         let arm = self.gossip_authorized_with(other, auth);
         if arm == GossipAuthArm::Refused {
-            return MergeReport {
-                added: 0,
-                updated: 0,
-                rejected: true,
-                observed: Vec::new(),
-                peer_pre_split: false,
-                auth_arm: GossipAuthArm::Refused,
-                aliased_refused: 0,
-            };
+            return MergeReport::refused();
         }
 
         // Mesh-wide encryption policy is monotonic: stricter wins. A peer
@@ -425,7 +417,8 @@ impl Mesh {
         // monotonic policy OR-in above.
         let enforce_signed = self.require_encryption;
 
-        let mut report = MergeReport::default();
+        let mut report =
+            MergeReport::for_round(arm, arm != GossipAuthArm::Proof && !other.has_mesh_secret());
         // Captured here and nowhere else: the sender's build generation is a
         // property of THIS ROUND, and it is gone the moment the merge ends.
         //
@@ -436,8 +429,7 @@ impl Mesh {
         // peer now zeroes that field ON PURPOSE once it has confirmed us,
         // and calling that pre-split flips the pair back to sending the
         // credential and blocks rotation on both sides.
-        report.auth_arm = arm;
-        report.peer_pre_split = arm != GossipAuthArm::Proof && !other.has_mesh_secret();
+
         for (id, incoming) in &other.members {
             let outcome = self.merge_one_member(*id, incoming, self_node_id, enforce_signed);
             report.record(*id, &incoming.name, outcome);
@@ -1221,10 +1213,10 @@ pub(crate) mod tests {
         let remote = mesh_with(vec![member(a, "A", 10), member(b, "B", 20)], mesh_id, hash);
 
         let report = local.merge_from(a, &remote);
-        assert_eq!(report.added, 1);
-        assert_eq!(report.updated, 0);
-        assert!(!report.rejected);
-        assert_eq!(report.observed, vec![b], "added member is observed");
+        assert_eq!(report.added(), 1);
+        assert_eq!(report.updated(), 0);
+        assert!(!report.rejected());
+        assert_eq!(report.observed(), vec![b], "added member is observed");
         assert_eq!(local.members.len(), 2);
         assert!(local.members.contains_key(&b));
     }
@@ -1244,9 +1236,9 @@ pub(crate) mod tests {
         let remote = mesh_with(vec![member(b, "B-fresh", 50)], mesh_id, hash);
 
         let report = local.merge_from(a, &remote);
-        assert_eq!(report.added, 0);
-        assert_eq!(report.updated, 1);
-        assert_eq!(report.observed, vec![b], "LWW-updated member is observed");
+        assert_eq!(report.added(), 0);
+        assert_eq!(report.updated(), 1);
+        assert_eq!(report.observed(), vec![b], "LWW-updated member is observed");
         assert_eq!(local.members.get(&b).unwrap().name, "B-fresh");
         assert_eq!(local.members.get(&b).unwrap().last_seen, 50);
     }
@@ -1266,9 +1258,12 @@ pub(crate) mod tests {
         let remote = mesh_with(vec![member(b, "B-stale", 20)], mesh_id, hash);
 
         let report = local.merge_from(a, &remote);
-        assert_eq!(report.added, 0);
-        assert_eq!(report.updated, 0);
-        assert!(report.observed.is_empty(), "no advance => nothing observed");
+        assert_eq!(report.added(), 0);
+        assert_eq!(report.updated(), 0);
+        assert!(
+            report.observed().is_empty(),
+            "no advance => nothing observed"
+        );
         assert_eq!(local.members.get(&b).unwrap().name, "B-fresh");
     }
 
@@ -1291,9 +1286,9 @@ pub(crate) mod tests {
         let remote = mesh_with(vec![member(b, "B-live-stale", 20)], mesh_id, hash);
 
         let report = local.merge_from(a, &remote);
-        assert_eq!(report.updated, 0, "stale live record must not resurrect");
+        assert_eq!(report.updated(), 0, "stale live record must not resurrect");
         assert!(
-            report.observed.is_empty(),
+            report.observed().is_empty(),
             "a non-event must not stamp liveness"
         );
         let merged = local.members.get(&b).unwrap();
@@ -1320,7 +1315,8 @@ pub(crate) mod tests {
 
         let report = local.merge_from(a, &remote);
         assert_eq!(
-            report.updated, 1,
+            report.updated(),
+            1,
             "rejoin (last_seen 100 > removed_at 50) wins"
         );
         let merged = local.members.get(&b).unwrap();
@@ -1352,7 +1348,7 @@ pub(crate) mod tests {
         let remote = mesh_with(vec![member(b, "B", 50)], mesh_id, hash);
 
         let report = local.merge_from(a, &remote);
-        assert_eq!(report.updated, 1);
+        assert_eq!(report.updated(), 1);
         let merged = local.members.get(&b).unwrap();
         assert_eq!(merged.last_seen, 50, "rest of the newer record adopted");
         assert_eq!(
@@ -1432,8 +1428,8 @@ pub(crate) mod tests {
         );
 
         let report = local.merge_from(me, &remote);
-        assert_eq!(report.added, 0);
-        assert_eq!(report.updated, 0);
+        assert_eq!(report.added(), 0);
+        assert_eq!(report.updated(), 0);
         assert_eq!(local.members.get(&me).unwrap().name, "Me-Real");
         assert_eq!(local.members.get(&me).unwrap().last_seen, 10);
         assert_eq!(local.members.get(&me).unwrap().status, NodeStatus::Online);
@@ -1451,8 +1447,8 @@ pub(crate) mod tests {
         );
 
         let report = local.merge_from(me, &remote);
-        assert!(report.rejected);
-        assert_eq!(report.added, 0);
+        assert!(report.rejected());
+        assert_eq!(report.added(), 0);
         assert_eq!(local.members.len(), 1, "no mutation on reject");
     }
 
@@ -1468,7 +1464,7 @@ pub(crate) mod tests {
         );
 
         let report = local.merge_from(me, &remote);
-        assert!(report.rejected);
+        assert!(report.rejected());
         assert_eq!(local.members.len(), 1);
     }
 
@@ -1495,7 +1491,7 @@ pub(crate) mod tests {
 
         let report = local.merge_from(me, &remote);
         assert!(
-            !report.rejected,
+            !report.rejected(),
             "same mesh_secret means same mesh, whatever the invite hash says"
         );
         assert_eq!(local.members.len(), 2);
@@ -1515,7 +1511,7 @@ pub(crate) mod tests {
         );
         remote.mesh_secret = [4u8; 32]; // ...different mesh
 
-        assert!(local.merge_from(me, &remote).rejected);
+        assert!(local.merge_from(me, &remote).rejected());
         assert_eq!(local.members.len(), 1);
     }
 
@@ -1534,10 +1530,10 @@ pub(crate) mod tests {
         ); // mesh_secret defaults to zeroed
 
         let report = local.merge_from(me, &remote);
-        assert!(!report.rejected, "a peer mid-upgrade must not be dropped");
+        assert!(!report.rejected(), "a peer mid-upgrade must not be dropped");
         assert_eq!(local.members.len(), 2);
         assert!(
-            report.peer_pre_split,
+            report.peer_pre_split(),
             "the merge must REPORT that this peer is pre-split — it is the \
              only moment that fact is visible, and rotate_invite depends on it"
         );
@@ -1561,9 +1557,9 @@ pub(crate) mod tests {
         remote.mesh_secret = secret;
 
         let report = local.merge_from(me, &remote);
-        assert!(!report.rejected);
+        assert!(!report.rejected());
         assert!(
-            !report.peer_pre_split,
+            !report.peer_pre_split(),
             "a peer that sent a mesh_secret is post-split; flagging it would \
              block invite rotation on a fully-upgraded fleet forever"
         );
@@ -1581,8 +1577,8 @@ pub(crate) mod tests {
         remote.mesh_secret = [4u8; 32];
 
         let report = local.merge_from(me, &remote);
-        assert!(report.rejected);
-        assert!(!report.peer_pre_split);
+        assert!(report.rejected());
+        assert!(!report.peer_pre_split());
     }
 
     fn proof_mesh(secret: [u8; 32]) -> Mesh {
@@ -1697,7 +1693,7 @@ pub(crate) mod tests {
 
         let report = local.merge_from_authenticated(me, &remote, &auth);
         assert!(
-            !report.rejected,
+            !report.rejected(),
             "a proof of possession must authorize; otherwise the secret can \
              never leave the wire"
         );
@@ -1735,9 +1731,9 @@ pub(crate) mod tests {
         };
 
         let report = local.merge_from_authenticated(me, &remote, &auth);
-        assert_eq!(report.auth_arm, GossipAuthArm::Proof);
+        assert_eq!(report.auth_arm(), GossipAuthArm::Proof);
         assert!(
-            !report.peer_pre_split,
+            !report.peer_pre_split(),
             "a peer that PROVED possession of the current secret is post-split \
              by definition; calling it pre-split blocks rotation on both sides \
              and puts the credential back on the wire"
@@ -1758,9 +1754,9 @@ pub(crate) mod tests {
         remote.mesh_secret = [0u8; 32];
 
         let report = local.merge_from_authenticated(me, &remote, &GossipAuth::none());
-        assert!(!report.rejected, "the compat arm must still admit");
-        assert_eq!(report.auth_arm, GossipAuthArm::Legacy);
-        assert!(report.peer_pre_split);
+        assert!(!report.rejected(), "the compat arm must still admit");
+        assert_eq!(report.auth_arm(), GossipAuthArm::Legacy);
+        assert!(report.peer_pre_split());
     }
 
     /// Two post-split-but-pre-proof nodes: raw secrets match, and that arm is
@@ -1777,8 +1773,8 @@ pub(crate) mod tests {
         remote.mesh_secret = [9u8; 32];
 
         let report = local.merge_from_authenticated(me, &remote, &GossipAuth::none());
-        assert_eq!(report.auth_arm, GossipAuthArm::RawSecret);
-        assert!(!report.peer_pre_split);
+        assert_eq!(report.auth_arm(), GossipAuthArm::RawSecret);
+        assert!(!report.peer_pre_split());
     }
 
     /// Downgrade prevention. An OFFERED proof that does not verify is a
@@ -1806,7 +1802,9 @@ pub(crate) mod tests {
         };
 
         assert!(
-            local.merge_from_authenticated(me, &remote, &auth).rejected,
+            local
+                .merge_from_authenticated(me, &remote, &auth)
+                .rejected(),
             "a failed proof must REFUSE, not downgrade to invite_key_hash"
         );
         assert_eq!(local.members.len(), 1, "a refused merge must not mutate");
@@ -1838,7 +1836,7 @@ pub(crate) mod tests {
             founder.invite_version, 1,
             "rotating must advance the version"
         );
-        assert!(!local.merge_from(me, &founder).rejected);
+        assert!(!local.merge_from(me, &founder).rejected());
         assert_eq!(
             local.invite_key_hash, [9u8; 32],
             "the peer must adopt the rotated invite, or it keeps admitting \
@@ -1872,7 +1870,7 @@ pub(crate) mod tests {
         );
         stale.mesh_secret = secret; // version 0, old hash
 
-        assert!(!local.merge_from(me, &stale).rejected);
+        assert!(!local.merge_from(me, &stale).rejected());
         assert_eq!(
             local.invite_key_hash, [9u8; 32],
             "a version-0 peer must not roll our rotation back"

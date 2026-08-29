@@ -23,6 +23,15 @@
 //! `warn!` blocks before. A new path cannot compile without deciding its
 //! outcome, and a new outcome cannot compile without the fold handling it.
 //!
+//! **The fields are private, and that is the half that makes the rest true.**
+//! An exhaustive fold stops a new OUTCOME going uncounted; it does nothing
+//! about a new merge path that writes `report.added += 1` and skips the fold
+//! entirely. Both doors are now shut by the compiler, and both were watched
+//! shutting: a fifth variant the fold does not handle fails with E0004, and a
+//! direct tally from the round loop fails with E0616. Reads go through
+//! accessors; the only writers are [`MergeReport::record`] and the two
+//! constructors.
+//!
 //! Two properties the merge loop needs, which is why the variants are shaped
 //! this way:
 //!
@@ -45,10 +54,10 @@ use crate::mesh::GossipAuthArm;
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MergeReport {
     /// Members that were absent locally and got added from `other`.
-    pub added: usize,
+    added: usize,
     /// Members that existed locally but were replaced by a newer
     /// record from `other` (higher `last_seen`).
-    pub updated: usize,
+    updated: usize,
     /// Whether the peer we merged FROM is running a pre-split build — its
     /// payload carried no [`Mesh::mesh_secret`], so serde defaulted it to
     /// zero.
@@ -65,21 +74,21 @@ pub struct MergeReport {
     /// Derived from [`Self::auth_arm`], never from the payload alone: an
     /// upgraded peer withholds its `mesh_secret` deliberately, so a zeroed
     /// field is no longer evidence of a pre-split build.
-    pub peer_pre_split: bool,
+    peer_pre_split: bool,
     /// Which predicate authorized this merge. The caller's reply uses it to
     /// decide whether the raw `mesh_secret` still needs to be on the wire —
     /// see `routes_internal::gossip`.
-    pub auth_arm: GossipAuthArm,
+    auth_arm: GossipAuthArm,
     /// True when the merge was refused outright because `other`
     /// described a different mesh (mismatching `id` or
     /// `invite_key_hash`). When set, nothing was mutated.
-    pub rejected: bool,
+    rejected: bool,
     /// Node IDs whose records we just observed advance (added or
     /// LWW-updated) in this merge. The caller stamps these in its local
     /// liveness map (`AppState::observe_peer_contact`) so offline-decay
     /// measures *local observation staleness*, not the peer's own
     /// (possibly clock-skewed) `last_seen`. Empty on a rejected merge.
-    pub observed: Vec<NodeId>,
+    observed: Vec<NodeId>,
     /// Records this merge REFUSED because writing them would have left two
     /// ACTIVE members claiming one endpoint key.
     ///
@@ -88,7 +97,7 @@ pub struct MergeReport {
     /// and `svrn mesh forget-member` retires the ghost. It is counted rather
     /// than folded into `rejected` because the rest of the round is still
     /// good — one poisoned row must not cost us a whole gossip cycle.
-    pub aliased_refused: usize,
+    aliased_refused: usize,
 }
 
 /// What the merge loop decided about ONE member record.
@@ -143,6 +152,66 @@ pub enum SkipReason {
     AuthoritativeForSelf,
     /// The local record is equal or newer, so last-writer-wins keeps ours.
     LocalRecordNotOlder,
+}
+
+impl MergeReport {
+    /// A round refused outright — `other` described a different mesh. Nothing
+    /// was mutated, so every tally is zero by construction rather than by a
+    /// caller remembering to zero it.
+    pub fn refused() -> Self {
+        Self {
+            rejected: true,
+            auth_arm: GossipAuthArm::Refused,
+            ..Self::default()
+        }
+    }
+
+    /// A round that will proceed. The tallies start at zero and ONLY
+    /// [`Self::record`] moves them — that is what the private fields buy.
+    pub(crate) fn for_round(auth_arm: GossipAuthArm, peer_pre_split: bool) -> Self {
+        Self {
+            auth_arm,
+            peer_pre_split,
+            ..Self::default()
+        }
+    }
+
+    /// Members absent locally and admitted from the peer.
+    pub fn added(&self) -> usize {
+        self.added
+    }
+
+    /// Members replaced by a strictly newer record.
+    pub fn updated(&self) -> usize {
+        self.updated
+    }
+
+    /// Records refused because writing them would leave two ACTIVE members
+    /// claiming one endpoint key. Non-zero means the mesh needs an operator.
+    pub fn aliased_refused(&self) -> usize {
+        self.aliased_refused
+    }
+
+    /// Node IDs observed to advance in this round. Empty on a refused merge.
+    pub fn observed(&self) -> &[NodeId] {
+        &self.observed
+    }
+
+    /// True when the merge was refused outright and nothing was mutated.
+    pub fn rejected(&self) -> bool {
+        self.rejected
+    }
+
+    /// Whether the peer we merged FROM runs a pre-split build. Meaningful
+    /// only when [`Self::rejected`] is false.
+    pub fn peer_pre_split(&self) -> bool {
+        self.peer_pre_split
+    }
+
+    /// Which predicate authorized this merge.
+    pub fn auth_arm(&self) -> GossipAuthArm {
+        self.auth_arm
+    }
 }
 
 impl MergeReport {

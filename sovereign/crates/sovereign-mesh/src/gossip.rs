@@ -687,7 +687,7 @@ pub async fn run_one_round(
                     // nothing. That is a partition wearing a green light, and
                     // it is the shape of the bug this whole change exists to
                     // remove. Say it out loud (ARCH §9.1).
-                    if report.rejected {
+                    if report.rejected() {
                         tracing::warn!(
                             peer = %peer_id,
                             peer_addr = %ep.label,
@@ -700,32 +700,32 @@ pub async fn run_one_round(
                         // ONLY in the payload we just merged. Retain it —
                         // `rotate_invite` needs it to refuse rather than
                         // partition this peer, and has no other way to learn it.
-                        app_state.observe_peer_split_generation(peer_id, !report.peer_pre_split);
+                        app_state.observe_peer_split_generation(peer_id, !report.peer_pre_split());
                         tracing::debug!(
                             peer = %peer_id,
-                            pre_split = report.peer_pre_split,
+                            pre_split = report.peer_pre_split(),
                             "gossip: recorded peer credential generation"
                         );
                     }
                     // Stamp local-observation time for every peer whose record
                     // advanced in this merge (incl. transitively-relayed ones),
                     // so offline-decay sees them as freshly-observed.
-                    for observed_id in &report.observed {
+                    for observed_id in report.observed() {
                         app_state.observe_peer_contact(*observed_id, now);
                     }
-                    if report.added > 0 {
+                    if report.added() > 0 {
                         info!(
                             peer = %peer_id,
                             peer_addr = %ep.label,
-                            added = report.added,
-                            updated = report.updated,
+                            added = report.added(),
+                            updated = report.updated(),
                             "gossip: member added from peer's view"
                         );
-                    } else if report.updated > 0 {
+                    } else if report.updated() > 0 {
                         tracing::debug!(
                             peer = %peer_id,
                             peer_addr = %ep.label,
-                            updated = report.updated,
+                            updated = report.updated(),
                             "gossip: merged peer's view (last_seen refresh)"
                         );
                     }

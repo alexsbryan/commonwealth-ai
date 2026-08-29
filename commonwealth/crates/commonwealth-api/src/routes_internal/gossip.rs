@@ -44,7 +44,7 @@ pub async fn gossip(
     let mut mesh = state.inner.mesh.write().await;
     let report = mesh.merge_from_authenticated(self_node_id, &incoming, &auth);
 
-    if report.rejected {
+    if report.rejected() {
         tracing::warn!("gossip: rejected — mesh_id or invite_key_hash mismatch");
         return Err((
             StatusCode::UNAUTHORIZED,
@@ -58,25 +58,25 @@ pub async fn gossip(
     // offline-decay measures staleness against our own clock (not the peer's
     // gossiped `last_seen`). See `AppState::observe_peer_contact`.
     let now_local = state.clock().now_unix_secs();
-    for observed_id in &report.observed {
+    for observed_id in report.observed() {
         state.observe_peer_contact(*observed_id, now_local);
     }
 
-    if report.added > 0 || report.updated > 0 {
+    if report.added() > 0 || report.updated() > 0 {
         // Info only when a NEW member was added. `updated > 0`
         // alone is the routine last_seen refresh that fires every
         // 10s — noisy heartbeat, not an event. Debug-level so
         // operators can still see it with a tighter filter.
-        if report.added > 0 {
+        if report.added() > 0 {
             tracing::info!(
-                added = report.added,
-                updated = report.updated,
+                added = report.added(),
+                updated = report.updated(),
                 members = mesh.members.len(),
                 "gossip: member added via incoming delta"
             );
         } else {
             tracing::debug!(
-                updated = report.updated,
+                updated = report.updated(),
                 members = mesh.members.len(),
                 "gossip: merged incoming delta (last_seen refresh)"
             );
@@ -119,11 +119,11 @@ pub async fn gossip(
     //   request half of P4b stopped sending it and the reply half did not.
     // - `Legacy`: the security rule above. Never, at any point.
     let mut wire = MeshWire::from(&*mesh);
-    if report.auth_arm != GossipAuthArm::RawSecret {
+    if report.auth_arm() != GossipAuthArm::RawSecret {
         wire.mesh_secret = [0u8; 32];
         tracing::debug!(
             mesh = %mesh.name,
-            arm = ?report.auth_arm,
+            arm = ?report.auth_arm(),
             "gossip: redacted mesh_secret from the reply"
         );
     }
@@ -136,8 +136,8 @@ pub async fn gossip(
     // is now confirmable by the rotate guard. That asymmetry is why BeefyMac
     // blocked rotation while online despite nothing being wrong with it.
     if let Some(sender) = req.from {
-        if !report.rejected {
-            state.observe_peer_split_generation(sender, !report.peer_pre_split);
+        if !report.rejected() {
+            state.observe_peer_split_generation(sender, !report.peer_pre_split());
         }
     }
     Ok(Json(GossipResponse {

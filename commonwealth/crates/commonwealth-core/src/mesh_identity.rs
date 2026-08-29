@@ -302,8 +302,12 @@ mod tests {
 
         let report = local.merge_from(me, &remote);
 
-        assert_eq!(report.added, 0, "the aliasing record must not be written");
-        assert_eq!(report.aliased_refused, 1, "and the refusal must be counted");
+        assert_eq!(report.added(), 0, "the aliasing record must not be written");
+        assert_eq!(
+            report.aliased_refused(),
+            1,
+            "and the refusal must be counted"
+        );
         assert!(
             !local.members.contains_key(&newcomer),
             "roster must not carry the clone"
@@ -341,8 +345,8 @@ mod tests {
 
         let report = local.merge_from(me, &remote);
 
-        assert_eq!(report.updated, 0, "the aliasing update must not land");
-        assert_eq!(report.aliased_refused, 1);
+        assert_eq!(report.updated(), 0, "the aliasing update must not land");
+        assert_eq!(report.aliased_refused(), 1);
         assert_eq!(
             local.members[&other].node_pubkey,
             Some(NodePubkey([0x11; 32])),
@@ -376,10 +380,10 @@ mod tests {
 
         let report = local.merge_from(me, &remote);
 
-        assert_eq!(report.added, 1, "a tombstone is not an alias");
-        assert_eq!(report.aliased_refused, 0);
+        assert_eq!(report.added(), 1, "a tombstone is not an alias");
+        assert_eq!(report.aliased_refused(), 0);
         assert!(
-            report.observed.is_empty(),
+            report.observed().is_empty(),
             "admitted, but emphatically not observed alive"
         );
     }
@@ -404,8 +408,8 @@ mod tests {
         );
 
         let report = local.merge_from(me, &remote);
-        assert_eq!(report.added, 1);
-        assert_eq!(report.aliased_refused, 0);
+        assert_eq!(report.added(), 1);
+        assert_eq!(report.aliased_refused(), 0);
     }
 
     /// The guard and the checker must never disagree — that is the whole
@@ -434,7 +438,7 @@ mod tests {
         let remote = mesh_with(attackers, MeshId::from_u128(9), [0u8; 32]);
 
         let report = local.merge_from(me, &remote);
-        assert_eq!(report.aliased_refused, 4);
+        assert_eq!(report.aliased_refused(), 4);
         assert!(
             local.aliased_endpoint_keys().is_empty(),
             "the checker must find nothing the guard let through"
