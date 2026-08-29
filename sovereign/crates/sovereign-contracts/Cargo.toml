@@ -28,7 +28,7 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 # Home-dir + platform config-dir resolution for setup_config's path helpers.
-dirs = "5"
+dirs = "6"
 # `recipe::url_template` placeholder substitution. (It used to also carry
 # `recipe::sections`, corpus-engine's section detectors — those moved DOWN to
 # the `corpus-engine-sections` leaf on 2026-08-20 so the knowledge layer stops
