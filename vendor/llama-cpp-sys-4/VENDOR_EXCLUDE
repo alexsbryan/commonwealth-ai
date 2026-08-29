@@ -72,11 +72,18 @@ ggml/src/ggml-opencl/kernels/*.cl
 ggml/src/ggml-webgpu/wgsl-shaders/*.tmpl
 ggml/src/ggml-et/et-kernels/src/*
 
-# --- CUDA: built only on hosts that set GGML_CUDA. These three arrived with
-#     the 035e22731a fast-forward and were not taken by it, the same way the
-#     Metal kernels were not. They are listed rather than vendored because no
-#     host in this fleet compiles CUDA today; a CUDA host must vendor them.
-cmake/arm64-windows-msvc-cuda.cmake
-ggml/src/ggml-cuda/mmq-config-pascal-dp4a.cuh
-ggml/src/ggml-cuda/mmq-config-pascal-older.cuh
-ggml/src/ggml-cuda/pool1d.cuh
+# --- CUDA: NOW VENDORED (2026-08-28). This block used to exclude four files
+#     with the reason "no host in this fleet compiles CUDA today; a CUDA host
+#     must vendor them". A CUDA host turned up: the container image
+#     (`sovereign/container/Containerfile.cuda`, GGML_CUDA=ON), rebuilt for
+#     the first time since 2026-07-27. It failed exactly as this file's own
+#     Metal post-mortem predicts a missing source will —
+#
+#       mmq.cuh:216: fatal error: mmq-config-pascal-older.cuh:
+#       No such file or directory
+#
+#     — because upstream's `mmq.cuh` includes both pascal configs
+#     UNCONDITIONALLY at lines 216-217, whatever arch you compile for. All
+#     four are vendored at pin 035e22731a and the exclusion is retired, per
+#     the rule three blocks up: turning a backend on means deleting its line
+#     here first.

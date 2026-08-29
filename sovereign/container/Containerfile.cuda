@@ -156,12 +156,28 @@ COPY commonwealth/        ./commonwealth/
 COPY corpus-engine/       ./corpus-engine/
 # corpus-engine decomposition carve-outs — top-level sibling workspace
 # members since mid-2026; cargo refuses the workspace if any is absent.
+#
+# THIS LIST IS REMEMBERED, NOT DERIVED, AND IT HAS DRIFTED TWICE. A member
+# added to the root `[workspace] members` does not fail anything here until
+# someone rebuilds the image, and then it fails at STEP 47 (`cargo fetch`)
+# with "failed to read /workspace/<crate>/Cargo.toml", ~6 minutes in — long
+# after the CUDA layers that make a rebuild expensive. On 2026-08-28 the list
+# was missing BOTH `kernel-types` and `corpus-engine-sections`, which had
+# joined since the last build (image `bb4749ee`, 2026-07-27).
+#
+# Before rebuilding, diff the two:
+#   python3 -c "import re,pathlib;t=pathlib.Path('Cargo.toml').read_text();\
+#   print(sorted({p.split('/')[0] for p in re.findall(chr(34)+'([^'+chr(34)+']+)'+chr(34), \
+#   re.search(r'members\s*=\s*\[(.*?)\]',t,re.S).group(1))}))"
+# against the COPY targets below.
 COPY corpus-engine-scip/        ./corpus-engine-scip/
 COPY corpus-engine-atos/        ./corpus-engine-atos/
 COPY corpus-engine-notes/       ./corpus-engine-notes/
 COPY corpus-engine-archaeology/ ./corpus-engine-archaeology/
 COPY corpus-engine-yield/       ./corpus-engine-yield/
 COPY corpus-engine-watchers/    ./corpus-engine-watchers/
+COPY corpus-engine-sections/    ./corpus-engine-sections/
+COPY kernel-types/        ./kernel-types/
 COPY oicp-types/          ./oicp-types/
 COPY oicp-client/         ./oicp-client/
 COPY studio/crates/       ./studio/crates/
@@ -177,6 +193,13 @@ COPY quality/arch-layers/ ./quality/arch-layers/
 # Lightning Indexer kernel). Provenance and the re-pin procedure are in
 # vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT, and
 # ./scripts/verify-vendored-llama-cpp.sh checks the tree against upstream.
+#
+# Adding a file under llama.cpp/ used to need a `touch` on the top-level
+# CMakeLists.txt as well, to move build.rs's mtime-keyed extraction cache.
+# DO NOT RELY ON THAT — a touch changes no content, so podman reuses this
+# COPY layer verbatim, old mtimes and all, and the key never moves. The
+# extraction is now unconditional at the cargo build step below; see the
+# comment there.
 COPY vendor/              ./vendor/
 # Whole recipes tree (~1.4 MB): corpus-engine/build.rs vendors it into
 # OUT_DIR and sovereign-contracts include_str!s registry.toml + schema/.
@@ -197,7 +220,22 @@ COPY sovereign/.opencode/ ./sovereign/.opencode/
 COPY sovereign/router/    ./sovereign/router/
 # sovereign-cli-llm's bench_cmd include_str!s exactly this one file —
 # do NOT copy all of sovereign/bench (44 MB of gyms/eval banks).
+# Compile-time `include_str!` targets under sovereign/bench/. These are NOT
+# bench data for the image to run — they are baked into sovereign-core at
+# compile time, so a missing one is a BUILD failure, not a missing feature:
+#   error: couldn't read .../bench/calibration/h1-port/h1_admission_calibration.json
+# Each is named individually rather than copying sovereign/bench/ wholesale
+# (17 MB in calibration alone, almost none of it compiled in).
+#
+# TO FIND THE FULL SET after touching sovereign-core, resolve every escaping
+# include and check it against the COPYs here:
+#   grep -rn 'include_str!' --include=*.rs sovereign/crates/sovereign-core | grep '\.\./'
+# The deep relative paths are the hazard — `admission.rs` reaches SIX levels
+# up, so nothing about the call site suggests it depends on bench/.
 COPY sovereign/bench/book-report/bench.toml ./sovereign/bench/book-report/bench.toml
+COPY sovereign/bench/calibration/h1-port/h1_admission_calibration.json ./sovereign/bench/calibration/h1-port/
+COPY sovereign/bench/calibration/h1-port/h1_scores.jsonl ./sovereign/bench/calibration/h1-port/
+COPY sovereign/bench/routing/calibration/axes_v1.toml ./sovereign/bench/routing/calibration/
 
 # Swap the linux llama-cpp-2 backend feature (whichever of "rocm" or
 # "vulkan" is currently checked in — the repo default has flipped over
@@ -253,19 +291,50 @@ WORKDIR /workspace
 # The compiled binary is copied out of the cached target dir into
 # /usr/local/bin so the runtime stage can COPY --from=build from a
 # real image layer (cache mounts don't survive across stages).
+# SEARCHES BOTH ROOTS, AND REFUSES AN EMPTY MATCH (2026-08-28). This looked
+# only under the cargo registry, which was right until `llama-cpp-sys-4`
+# joined the `[patch.crates-io]` set on 2026-08-03 and started resolving to
+# `vendor/` — after which `cargo fetch` never puts it in the registry and the
+# `find` returns nothing. The observed symptom is `sed: no input files`,
+# exit 123, ~6 min into the build.
+#
+# The dangerous version of this bug is the one where it does NOT error. A
+# patch step that silently matches nothing leaves GGML_CUDA_NCCL ON, and the
+# daemon then segfaults the moment llama.cpp enumerates CUDA — a build that
+# exits 0 and produces an image that cannot start (§18.3). Hence the explicit
+# empty check rather than relying on `xargs` to fail.
 RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
     cargo fetch \
- && find /root/.cargo/registry/src -path '*/llama-cpp-sys-4-*/llama.cpp/ggml/CMakeLists.txt' \
+ && CMAKE_LISTS="$(find /root/.cargo/registry/src /workspace/vendor \
+      -path '*/llama-cpp-sys-4*/llama.cpp/ggml/CMakeLists.txt' 2>/dev/null)" \
+ && { [ -n "$CMAKE_LISTS" ] || { \
+      echo "FATAL: no llama-cpp-sys-4 ggml/CMakeLists.txt under the registry OR vendor/;" \
+           "the NCCL patch would no-op and the daemon would segfault on CUDA enumeration"; \
+      exit 1; }; } \
+ && echo "$CMAKE_LISTS" \
     | xargs sed -i 's|option(GGML_CUDA_NCCL\s*"[^"]*"\s*ON)|option(GGML_CUDA_NCCL "" OFF)|' \
- && find /root/.cargo/registry/src -path '*/llama-cpp-sys-4-*/llama.cpp/ggml/CMakeLists.txt' \
-    | xargs grep -n GGML_CUDA_NCCL
+ && echo "$CMAKE_LISTS" | xargs grep -n GGML_CUDA_NCCL
 
+# THE `rm -rf` IS LOAD-BEARING — DO NOT DROP IT AS A TIDY-UP (2026-08-28).
+# /workspace/target is a persistent cache mount, and build.rs extracts
+# llama.cpp into target/release/build/llama-cpp-sys-4-*/out/, re-copying only
+# when `llama_src_version` changes. On a non-git tree that version is the
+# MTIME of llama.cpp/CMakeLists.txt plus a patches hash (build.rs:519-558).
+# Two caches then conspire: adding source files under llama.cpp/ does not move
+# an mtime, and `touch`ing the CMakeLists does not move podman's CONTENT-
+# addressed layer digest either, so the COPY layer is reused WITH THE OLD
+# MTIME and the key never changes. The compile then fails on a file that is
+# demonstrably present in the image — which cost four rebuilds on 2026-08-28.
+# Deleting the extracted copy makes the extraction unconditional and drops the
+# mtime dependence entirely. It is not expensive: /root/.cache/sccache is
+# mounted right above, so the C++/CUDA recompile is served from there.
 RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
     --mount=type=cache,target=/root/.cache/sccache,sharing=locked \
     --mount=type=cache,target=/workspace/target \
-    cargo build --release --bin sovereign-cli --bin sovereign-cli-daemon --bin sovereign-cli-llm \
+    rm -rf /workspace/target/release/build/llama-cpp-sys-4-*/out/llama.cpp \
+ && cargo build --release --bin sovereign-cli --bin sovereign-cli-daemon --bin sovereign-cli-llm \
  && cp /workspace/target/release/sovereign-cli        /usr/local/bin/sovereign-cli \
  && cp /workspace/target/release/sovereign-cli-daemon /usr/local/bin/sovereign-cli-daemon \
  && cp /workspace/target/release/sovereign-cli-llm    /usr/local/bin/sovereign-cli-llm \
@@ -326,6 +395,16 @@ ENV DEBIAN_FRONTEND=noninteractive
 #               (GGML_OPENMP=ON) but the cuda *-runtime image doesn't
 #               ship it, so sovereign-cli fails immediately with
 #               "error while loading shared libraries: libgomp.so.1".
+#   openssh-server + aria2
+#             — the DEV-daemon path (scripts/dev-pod.sh): the pod binds
+#               127.0.0.1:9741 and is reached over an SSH tunnel, and the
+#               ~30 GB loadout is pulled with aria2c. Both used to be
+#               apt-installed by the pod's own onstart script, which put a
+#               network round-trip and an apt mirror on the critical path of
+#               every cold boot — a rented GPU billing by the minute is the
+#               worst place to discover a mirror is down. Baked in here they
+#               cost one layer and no boot time. Worker-mode pods carry them
+#               unused, which is cheaper than a second image.
 #
 # Worker-mode pods no longer install Tailscale or rclone — uploads
 # arrive over the owner's pinned-TLS connection, and the pod never
@@ -335,6 +414,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       --allow-change-held-packages \
       curl ca-certificates unzip \
       libnccl2 libgomp1 \
+      openssh-server aria2 \
  && rm -rf /var/lib/apt/lists/*
 
 # All three CLI binaries: `sovereign-cli` is an exec-dispatcher — the
