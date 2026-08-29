@@ -39,6 +39,10 @@ pub fn mesh_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         .route("/v1/mesh/rotate", post(mesh_rotate))
         .route("/v1/mesh/switch", post(mesh_switch))
         .route("/v1/mesh/leave", post(mesh_leave))
+        .route(
+            "/v1/mesh/forget-member",
+            post(crate::roster_repair::mesh_forget_member),
+        )
         .route("/v1/mesh/relay-candidates", get(mesh_relay_candidates))
         .route(
             "/v1/mesh/measurements",
@@ -341,6 +345,16 @@ pub struct MemberDto {
     /// pod-deployment workflows.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub addresses: Vec<String>,
+    /// The endpoint key this member is dialed on, lowercase hex. See
+    /// [`crate::types::MeshMember::node_pubkey`] — two ACTIVE members sharing
+    /// one is the roster's identity collision, and this is the read surface
+    /// that makes it visible to an operator and to the live invariant check.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node_pubkey: Option<String>,
+    /// `removed_at.is_none()` — not a tombstone. The alias rule is scoped on
+    /// this, not on `status`.
+    #[serde(default = "crate::types::default_true")]
+    pub active: bool,
     /// Stable hash of this member's advertised hardware. Part of the
     /// measurement cache key `svrn mesh plan` builds — a throughput number is
     /// only valid on the hardware it was measured on. `None` for peers on a
@@ -469,6 +483,8 @@ async fn mesh_status(
             vram_gb: m.vram_gb,
             can_anchor: m.can_anchor,
             addresses: m.addresses.clone(),
+            node_pubkey: m.node_pubkey.clone(),
+            active: m.active,
             hw_fingerprint: m.hw_fingerprint,
             backend: m.backend.clone(),
         })

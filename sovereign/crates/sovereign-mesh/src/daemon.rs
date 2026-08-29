@@ -568,7 +568,7 @@ impl EmbeddedDaemon {
         })
     }
 
-    fn persistence_enabled(&self) -> bool {
+    pub(crate) fn persistence_enabled(&self) -> bool {
         !self.data_dir.as_os_str().is_empty()
     }
 
@@ -4614,6 +4614,30 @@ pub enum MeshError {
         pre_split: Vec<String>,
         unconfirmed: Vec<String>,
     },
+
+    /// `forget_member` matched nothing in the roster.
+    #[error("No member matching '{0}' — `svrn mesh status` lists the roster")]
+    UnknownMember(String),
+
+    /// `forget_member` was pointed at this node. Retiring your own row is
+    /// `svrn mesh leave`, which also tears the mesh down locally; doing it
+    /// through this path would tombstone us while we keep gossiping, and the
+    /// authoritative-for-self rule means every peer would ignore it anyway.
+    #[error("That is this node — use `svrn mesh leave` to give up membership")]
+    CannotForgetSelf,
+
+    /// `forget_member` refused: the target is ACTIVE and ONLINE, and it is
+    /// not one of a colliding pair. Retiring a member that is right there
+    /// gossiping is an eviction, not a repair — and it does not even work,
+    /// since the member re-announces itself with a newer `last_seen` on its
+    /// next round. Refuse loudly rather than perform a no-op that reads as a
+    /// success (ARCH §18.3). `--force` overrides.
+    #[error(
+        "'{0}' is online and not part of an endpoint-key collision — retiring it \
+         would be an eviction, and its next gossip round would undo it anyway. \
+         Pass --force if that is really what you mean"
+    )]
+    MemberStillLive(String),
 
     /// `switch_mesh` was given a mesh this node is not a member of.
     #[error("Not a member of any mesh matching '{0}' — `svrn mesh list` shows what is joined")]

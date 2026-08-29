@@ -79,6 +79,8 @@ impl MeshState {
                                 .collect::<Vec<_>>(),
                         ))
                     },
+                    node_pubkey: m.node_pubkey.map(|k| k.to_string()),
+                    active: m.is_active(),
                     backend: m
                         .capabilities
                         .hardware

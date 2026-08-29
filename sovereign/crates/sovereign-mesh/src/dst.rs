@@ -33,8 +33,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::Bytes;
-use commonwealth_core::ids::NodeId;
-use commonwealth_core::mesh::NodeStatus;
+use commonwealth_core::ids::{NodeId, NodePubkey};
+use commonwealth_core::mesh::{aliased_endpoint_keys, EndpointClaim, NodeStatus};
 use commonwealth_core::{partition, TestClock};
 use commonwealth_test_harness::fault::{shared_policy, FaultProxy, FaultTransport, SharedPolicy};
 use commonwealth_test_harness::simulated_mesh::SimulatedMesh;
@@ -397,6 +397,8 @@ impl DstMesh {
                             MemberStat {
                                 live: m.status != NodeStatus::Offline,
                                 last_seen: m.last_seen,
+                                node_pubkey: m.node_pubkey,
+                                active: m.is_active(),
                             },
                         )
                     })
@@ -422,6 +424,19 @@ pub struct MemberStat {
     /// `status != Offline` — i.e. considered reachable/present.
     pub live: bool,
     pub last_seen: u64,
+    /// The endpoint key this member is dialed on.
+    ///
+    /// CARRIED SO AN INVARIANT CAN SEE IT. Until 2026-08-28 this snapshot held
+    /// only `{live, last_seen}`, which made the whole pack structurally
+    /// incapable of noticing that two rows named ONE endpoint — and an 8h soak
+    /// duly ran clean over a mesh that had exactly that. A check cannot fail
+    /// on a field its snapshot does not carry.
+    pub node_pubkey: Option<NodePubkey>,
+    /// `removed_at.is_none()` — NOT the same as [`Self::live`], which is a
+    /// liveness/reachability judgement. Tombstoning is the qualifier
+    /// [`UniqueEndpointKey`] scopes on, because a tombstoned row may
+    /// legitimately share a key with a rejoined node.
+    pub active: bool,
 }
 
 /// One node's view of the mesh at snapshot time.
@@ -617,6 +632,51 @@ impl MeshInvariant for Liveness {
     }
 }
 
+/// No endpoint key is claimed by two ACTIVE members, on any node's view.
+///
+/// The rule, the live defect that motivated it, and why it is scoped to
+/// active rows are documented once, at the predicate:
+/// [`commonwealth_core::mesh::aliased_endpoint_keys`]. This checks it per
+/// node view; `merge_from_authenticated` enforces it at admission. Both call
+/// that one function (§10.6).
+pub struct UniqueEndpointKey;
+impl MeshInvariant for UniqueEndpointKey {
+    fn name(&self) -> &'static str {
+        "unique_endpoint_key"
+    }
+    fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {
+        for v in &snap.views {
+            // Delegate, don't re-derive. `aliased_endpoint_keys` is the ONE
+            // implementation of this rule; the admission guard in
+            // `merge_from_authenticated` asks the same function. A checker and
+            // an admitter with separate opinions is the §10.6 duplicated
+            // decider, and this is the last place you want a second one.
+            let claims = v.members.iter().map(|(id, m)| EndpointClaim {
+                node_id: *id,
+                name: String::new(),
+                node_pubkey: m.node_pubkey,
+                active: m.active,
+            });
+            if let Some(alias) = aliased_endpoint_keys(claims).into_iter().next() {
+                let ids: Vec<NodeId> = alias.members.iter().map(|(id, _)| *id).collect();
+                return Err(Violation {
+                    invariant: "unique_endpoint_key",
+                    detail: format!(
+                        "node {:?} sees {} ACTIVE members claiming endpoint key {}: {:?} \
+                         — a cloned node identity; their liveness is split across rows \
+                         and neither will read online",
+                        v.self_id,
+                        ids.len(),
+                        &alias.node_pubkey.to_string()[..16],
+                        ids
+                    ),
+                });
+            }
+        }
+        Ok(())
+    }
+}
+
 /// The default invariant pack checked at quiescence for membership/gossip
 /// scenarios. (Knowledge-fan-out and double-emit invariants need heavier
 /// fixtures and are added with their scenarios.)
@@ -627,6 +687,7 @@ pub fn default_invariants() -> Vec<Box<dyn MeshInvariant>> {
         Box::new(NoGhostMembers),
         Box::new(AdmissionSafety),
         Box::new(Liveness),
+        Box::new(UniqueEndpointKey),
     ]
 }
 
@@ -636,4 +697,101 @@ pub fn check_all(snap: &MeshSnapshot) -> Vec<Violation> {
         .iter()
         .filter_map(|inv| inv.check(snap).err())
         .collect()
+}
+
+#[cfg(test)]
+mod invariant_tests {
+    use super::*;
+
+    fn view(self_id: u128, rows: &[(u128, Option<u8>, bool)]) -> NodeView {
+        NodeView {
+            self_id: NodeId::from_u128(self_id),
+            members: rows
+                .iter()
+                .map(|(id, key, active)| {
+                    (
+                        NodeId::from_u128(*id),
+                        MemberStat {
+                            live: true,
+                            last_seen: 100,
+                            node_pubkey: key.map(|b| NodePubkey([b; 32])),
+                            active: *active,
+                        },
+                    )
+                })
+                .collect(),
+            peer_inflight: 0,
+            inflight_ceiling: 8,
+        }
+    }
+
+    fn snap(views: Vec<NodeView>) -> MeshSnapshot {
+        MeshSnapshot {
+            online_truth: views.iter().map(|v| v.self_id).collect(),
+            views,
+        }
+    }
+
+    /// THE LIVE DEFECT, as a deterministic check.
+    ///
+    /// Mesh `27ba8166…` on 2026-08-28 carried two ACTIVE rows on one endpoint
+    /// key (`Alexs-MacBook-Pro-2` + `BeefyMac`, both `86627fd5…`). Every
+    /// invariant in the pack ran clean over it — including through an 8h soak
+    /// — because `MemberStat` did not carry `node_pubkey` at all. This is the
+    /// check that could not previously exist.
+    #[test]
+    fn a_cloned_node_identity_is_caught() {
+        let s = snap(vec![view(
+            1,
+            &[
+                (1, Some(0x86), true),
+                (2, Some(0x86), true),
+                (3, Some(0x11), true),
+            ],
+        )]);
+        let v = UniqueEndpointKey
+            .check(&s)
+            .expect_err("two ACTIVE members on one endpoint key must violate");
+        assert_eq!(v.invariant, "unique_endpoint_key");
+        assert!(
+            v.detail.contains("8686868686868686"),
+            "the violation must name the aliased key so an operator can find \
+             the rows: {}",
+            v.detail
+        );
+    }
+
+    /// The cry-wolf guard. A tombstoned row may legitimately hold the same key
+    /// as a rejoined node — the rejoin stamps newer activity and wins the LWW.
+    /// An invariant that fires on every honest rejoin is one that gets turned
+    /// off, and it would take the real defect with it.
+    #[test]
+    fn a_tombstoned_row_sharing_a_key_is_not_a_violation() {
+        let s = snap(vec![view(
+            1,
+            &[(1, Some(0x42), false), (2, Some(0x42), true)],
+        )]);
+        assert!(UniqueEndpointKey.check(&s).is_ok());
+    }
+
+    /// Keyless members are legacy pre-identity builds. `None` is not a key and
+    /// two of them must never alias with each other.
+    #[test]
+    fn absent_keys_do_not_alias() {
+        let s = snap(vec![view(1, &[(1, None, true), (2, None, true)])]);
+        assert!(UniqueEndpointKey.check(&s).is_ok());
+    }
+
+    /// The pack must actually carry it — an invariant nobody runs is not a gate.
+    #[test]
+    fn the_default_pack_includes_the_endpoint_key_check() {
+        assert!(
+            default_invariants()
+                .iter()
+                .any(|i| i.name() == "unique_endpoint_key"),
+            "UniqueEndpointKey must be in the default pack, or the soak and \
+             `svrn mesh check-invariants` will keep running clean over a \
+             cloned identity"
+        );
+    }
 }

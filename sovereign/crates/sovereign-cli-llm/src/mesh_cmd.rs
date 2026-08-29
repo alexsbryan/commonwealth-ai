@@ -81,6 +81,7 @@ pub async fn run_mesh(args: &[String]) -> i32 {
         "list" => cmd_list(&args[1..]).await,
         "switch" => cmd_switch(&args[1..]).await,
         "forget" => cmd_forget(&args[1..]).await,
+        "forget-member" => crate::mesh_member_cmd::cmd_forget_member(&args[1..]).await,
         "rotate" => cmd_rotate(&args[1..]).await,
         "grant" => crate::mesh_guest::cmd_grant(&args[1..]).await,
         "use" => crate::mesh_guest::cmd_use(&args[1..]).await,
@@ -473,6 +474,10 @@ const HELP_MESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::
             ("list", "Show every mesh this node has joined; the active one is marked"),
             ("switch <mesh>", "Park the active mesh and bring another one up"),
             ("forget <mesh>", "Drop a parked mesh from this node"),
+            (
+                "forget-member <node>",
+                "Retire one member row — the repair for an endpoint-key collision",
+            ),
             ("leave", "Leave the current mesh"),
             ("logs", "Show mesh daemon logs"),
             (
@@ -2918,7 +2923,7 @@ async fn cmd_rotate(args: &[String]) -> i32 {
 
 /// The daemon's client port from `SetupConfig`, not a hardcoded 9741 — a
 /// sandbox pointed at its own daemon must not rotate the operator's mesh.
-fn daemon_client_port() -> u16 {
+pub(crate) fn daemon_client_port() -> u16 {
     sovereign_core::setup_config::SetupConfig::load()
         .map(|c| c.daemon.client_port)
         .unwrap_or(9741)
@@ -3153,11 +3158,22 @@ async fn cmd_status(args: &[String]) -> i32 {
         // gracefully if a future format grows it.
         let nid: String = m.node_id.chars().take(22).collect();
         let name: String = m.name.chars().take(12).collect();
+        // A tombstoned row has no liveness worth reporting — it is not a
+        // member. Rendering its last known `status` as "offline" made a
+        // successful `forget-member` look like a no-op: the operator repairs
+        // the roster, re-runs this, and sees the row exactly where it was.
+        let status = if m.active {
+            m.status.as_str()
+        } else {
+            "retired"
+        };
         println!(
             "  {:<22} {:<12} {:<8} {}{}",
-            nid, name, m.status, addr_disp, self_tag,
+            nid, name, status, addr_disp, self_tag,
         );
     }
+    crate::mesh_member_cmd::print_alias_warnings(&members);
+
     if !self_only {
         println!();
         if let Some(k) = status.join_key.as_deref() {

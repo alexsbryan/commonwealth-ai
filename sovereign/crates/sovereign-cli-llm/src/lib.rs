@@ -72,6 +72,7 @@ mod mcp_demo_server;
 mod mesh_bench;
 mod mesh_cmd;
 mod mesh_guest;
+mod mesh_member_cmd;
 mod mesh_soak;
 mod mesh_travel;
 mod meshapp_cmd;

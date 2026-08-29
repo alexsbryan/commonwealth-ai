@@ -32,6 +32,13 @@ pub struct MeshStatus {
     pub self_reachability: Option<crate::daemon::SelfReachability>,
 }
 
+/// Serde default for [`MeshMember::active`]: a payload from a daemon that
+/// predates the field describes members it considers present, so absent reads
+/// as active. Defaulting to `false` would tombstone a whole mesh on upgrade.
+pub(crate) fn default_true() -> bool {
+    true
+}
+
 /// A member of the mesh, as shown in the UI.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MeshMember {
@@ -68,6 +75,26 @@ pub struct MeshMember {
     /// default would collide every unidentified host into a single key.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hw_fingerprint: Option<u64>,
+    /// The endpoint key this member is dialed on, lowercase hex.
+    ///
+    /// EXPOSED SO THE COLLISION IS VISIBLE. `node_pubkey` is what peers dial
+    /// and what the iroh acceptor admits on, so two ACTIVE members carrying
+    /// one key is a defect
+    /// ([`commonwealth_core::mesh::aliased_endpoint_keys`]) — but until
+    /// 2026-08-28 no read surface carried the field, so an operator staring
+    /// at `svrn mesh status` could not see it and the live invariant check
+    /// could not test for it. `None` for a peer running a pre-identity build.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node_pubkey: Option<String>,
+    /// `removed_at.is_none()` — this row is not a tombstone.
+    ///
+    /// Distinct from [`MeshMember::status`], which is a liveness judgement: a
+    /// departed member is `Offline` AND inactive, while a crashed one is
+    /// `Offline` and still active. The alias rule is scoped on THIS, because a
+    /// tombstoned row sharing a key with a rejoined node is a legitimate
+    /// rejoin rather than a collision.
+    #[serde(default = "crate::types::default_true")]
+    pub active: bool,
     /// GPU compute backend as advertised (`cuda` | `rocm` | `metal` | `vulkan`).
     ///
     /// Displayed beside a measurement so the reader knows which stack produced

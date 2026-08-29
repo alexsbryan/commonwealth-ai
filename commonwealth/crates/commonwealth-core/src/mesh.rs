@@ -4,6 +4,8 @@ use std::net::SocketAddr;
 
 use serde::{Deserialize, Serialize};
 
+pub use crate::mesh_identity::{aliased_endpoint_keys, AliasedEndpointKey, EndpointClaim};
+
 use crate::capabilities::NodeCapabilities;
 use crate::ids::{MeshId, NodeId, NodePubkey};
 
@@ -192,6 +194,7 @@ pub struct Mesh {
     pub members: HashMap<NodeId, MemberRecord>,
     pub peers: Vec<MeshPeering>,
 }
+
 
 /// Record of a member node in the mesh.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -382,9 +385,19 @@ pub struct MergeReport {
     /// measures *local observation staleness*, not the peer's own
     /// (possibly clock-skewed) `last_seen`. Empty on a rejected merge.
     pub observed: Vec<NodeId>,
+    /// Records this merge REFUSED because writing them would have left two
+    /// ACTIVE members claiming one endpoint key.
+    ///
+    /// Non-zero means a peer is gossiping a roster we will not adopt, and the
+    /// mesh needs an operator: `svrn mesh members --aliased` names the pair
+    /// and `svrn mesh forget-member` retires the ghost. It is counted rather
+    /// than folded into `rejected` because the rest of the round is still
+    /// good — one poisoned row must not cost us a whole gossip cycle.
+    pub aliased_refused: usize,
 }
 
 impl Mesh {
+
     /// Merge another view of this mesh into `self`. Per-member
     /// `last_seen` acts as the Lamport-ish clock: the record with
     /// the higher timestamp wins. Own record (the caller's
@@ -431,6 +444,7 @@ impl Mesh {
                 observed: Vec::new(),
                 peer_pre_split: false,
                 auth_arm: GossipAuthArm::Refused,
+                aliased_refused: 0,
             };
         }
 
@@ -492,6 +506,20 @@ impl Mesh {
                     let mut record = incoming.clone();
                     Self::reconcile_dial_info(&mut record, None, enforce_signed);
                     let active = record.is_active();
+                    if let Some(clash) = self.alias_clash(&record, active) {
+                        report.aliased_refused += 1;
+                        tracing::warn!(
+                            candidate = ?record.node_id,
+                            candidate_name = %record.name,
+                            held_by = ?clash.0,
+                            held_by_name = %clash.1,
+                            "gossip: REFUSED a new member claiming an endpoint key an \
+                             active member already holds — admitting it would split one \
+                             node's liveness across two rows; `svrn mesh forget-member` \
+                             retires whichever is the ghost"
+                        );
+                        continue;
+                    }
                     self.members.insert(*id, record);
                     report.added += 1;
                     // A tombstone we've never seen is still added (so it
@@ -522,6 +550,18 @@ impl Mesh {
                     // cannot move a peer's reachability (WS-D).
                     Self::reconcile_dial_info(&mut record, Some(existing), enforce_signed);
                     let active = record.is_active();
+                    if let Some(clash) = self.alias_clash(&record, active) {
+                        report.aliased_refused += 1;
+                        tracing::warn!(
+                            candidate = ?record.node_id,
+                            candidate_name = %record.name,
+                            held_by = ?clash.0,
+                            held_by_name = %clash.1,
+                            "gossip: REFUSED an LWW update that would move an endpoint \
+                             key onto a second active member — the local record stands"
+                        );
+                        continue;
+                    }
                     self.members.insert(*id, record);
                     report.updated += 1;
                     if active {
@@ -806,7 +846,7 @@ impl Mesh {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     #[test]
@@ -854,7 +894,7 @@ mod tests {
 
     use crate::capabilities::{AvailableResources, HardwareProfile};
 
-    fn member(id: NodeId, name: &str, last_seen: u64) -> MemberRecord {
+    pub(crate) fn member(id: NodeId, name: &str, last_seen: u64) -> MemberRecord {
         MemberRecord {
             removed_at: None,
             node_pubkey: None,
@@ -894,7 +934,7 @@ mod tests {
         }
     }
 
-    fn mesh_with(members: Vec<MemberRecord>, id: MeshId, hash: [u8; 32]) -> Mesh {
+    pub(crate) fn mesh_with(members: Vec<MemberRecord>, id: MeshId, hash: [u8; 32]) -> Mesh {
         let mut map = HashMap::new();
         for m in members {
             map.insert(m.node_id, m);
@@ -911,6 +951,8 @@ mod tests {
             peers: vec![],
         }
     }
+
+
 
     #[test]
     fn is_dialable_accepts_ip_or_iroh_paths() {
@@ -1162,6 +1204,66 @@ mod tests {
             merged.relay_url.is_none(),
             "encrypted mesh must reject unsigned dial info (cleared), got {:?}",
             merged.relay_url
+        );
+    }
+
+    // The two negative controls for the monotone encryption join
+    // (`merge_from_authenticated`, "stricter wins"). Until 2026-08-28 that
+    // rule was asserted only in prose beside the code — ARCH §7.2's smell,
+    // and §18.1's "a check with no failing input you can name": nothing
+    // anywhere asserted that a peer advertising `false` could not demote a
+    // local `true`, on a field that decides whether the whole ring speaks
+    // encrypted.
+    //
+    // They are TWO tests because they fail on different mutations, and
+    // either one alone is green against a broken join:
+    //   * `never_downgrades` is red if the join becomes an assignment or LWW
+    //     (`self.require_encryption = other.require_encryption`) — the
+    //     downgrade path. It is GREEN if the line is deleted outright.
+    //   * `turns_on_from_peer` is red if the line is deleted — the
+    //     never-propagates path. It is GREEN under LWW.
+    // Both were watched failing under their own mutation before landing.
+
+    #[test]
+    fn encryption_policy_never_downgrades() {
+        let mesh_id = MeshId::from_u128(21);
+        let hash = [9u8; 32];
+        let a = NodeId::from_u128(1);
+
+        let mut local = mesh_with(vec![member(a, "A", 100)], mesh_id, hash);
+        local.require_encryption = true;
+
+        // A peer past the auth boundary — stale or hostile — advertising the
+        // weaker policy. Newer `last_seen`, so an LWW join would take it.
+        let mut remote = mesh_with(vec![member(a, "A", 200)], mesh_id, hash);
+        remote.require_encryption = false;
+
+        local.merge_from(a, &remote);
+        assert!(
+            local.require_encryption,
+            "a peer advertising require_encryption=false must never relax a \
+             local true — once a node learns the mesh is encrypted, no gossip \
+             round demotes it to plaintext"
+        );
+    }
+
+    #[test]
+    fn encryption_policy_turns_on_from_peer() {
+        let mesh_id = MeshId::from_u128(22);
+        let hash = [9u8; 32];
+        let a = NodeId::from_u128(1);
+
+        let mut local = mesh_with(vec![member(a, "A", 100)], mesh_id, hash);
+        local.require_encryption = false;
+
+        let mut remote = mesh_with(vec![member(a, "A", 100)], mesh_id, hash);
+        remote.require_encryption = true;
+
+        local.merge_from(a, &remote);
+        assert!(
+            local.require_encryption,
+            "the join is monotone, not inert: a peer advertising \
+             require_encryption=true must turn a local false ON"
         );
     }
 

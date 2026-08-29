@@ -4,4 +4,4 @@
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- arch-gate --tighten
 1768	.claude/CLAUDE.md
-40374	AGENTS.md
+40919	AGENTS.md

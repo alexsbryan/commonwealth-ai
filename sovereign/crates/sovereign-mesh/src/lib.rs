@@ -82,6 +82,7 @@ pub mod reading_formatters;
 pub mod reading_http;
 #[cfg(feature = "treesitter")]
 pub mod reindexer;
+pub mod roster_repair;
 pub mod rpc_warm_http;
 /// The routing decision as a pure function — shared by the production
 /// selector and the Tier-1 simulator (`SCHEDULER_QUALITY.md` §5).

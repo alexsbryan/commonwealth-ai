@@ -249,6 +249,18 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // in particular HAD to move: an offline rotation was reverted by the next
     // gossip round. Class unchanged — loopback to our own daemon.
     ("sovereign/crates/sovereign-cli-llm/src/mesh_cmd.rs", Class::Mesh, 10),
+    // NEW 2026-08-28: `svrn mesh forget-member`, the repair for an
+    // endpoint-key collision, posts to the running daemon's
+    // /v1/mesh/forget-member. Class Mesh — 127.0.0.1 loopback to our own
+    // daemon, and deliberately so: the roster lives in the daemon's memory,
+    // and an offline edit to mesh.json would be reverted by the next gossip
+    // round exactly as `mesh rotate`'s was. One site; the collision WARNING
+    // that names this command is pure rendering and builds no client.
+    (
+        "sovereign/crates/sovereign-cli-llm/src/mesh_member_cmd.rs",
+        Class::Mesh,
+        1,
+    ),
     // NEW 2026-08-27: `svrn mesh grant` / `svrn mesh use`, the two ends of an
     // ephemeral guest link. One shared `http_client()` builder serves both
     // directions — loopback to our own daemon to mint/revoke/list, and one

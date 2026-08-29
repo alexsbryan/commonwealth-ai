@@ -4951,8 +4951,24 @@ gossip round before it is willing to refuse — it never reports a verdict from 
 instrument it has not run. `--force` overrides.
 
 Mesh HTTP surface (`mesh_http.rs`, loopback-only): `GET /v1/mesh/status`,
-`POST /v1/mesh/{create,join,rotate,switch,leave}`,
+`POST /v1/mesh/{create,join,rotate,switch,leave,forget-member}`,
 `GET /v1/mesh/relay-candidates`, `POST`/`GET /v1/mesh/measurements`.
+
+`forget-member` (2026-08-28) retires ONE member row — the repair half of the
+endpoint-key rule. `node_pubkey` is what peers dial and what the iroh acceptor
+admits on, so two ACTIVE members carrying one key split a single node's
+liveness across two records that each read offline while the endpoint behind
+both answers; observed live on mesh `27ba8166…`. The rule has one
+implementation, `commonwealth_core::mesh::aliased_endpoint_keys`
+(`mesh_identity.rs`), and three callers: `merge_from_authenticated` refuses to
+admit a record that would CREATE a collision (`MergeReport::aliased_refused`),
+the DST pack's `UniqueEndpointKey` checks for one, and `svrn mesh status`
+warns on one and names this route's CLI verb as the repair. It tombstones
+rather than deletes, so the removal converges; a row belonging to a live
+daemon is re-announced on that node's next round, which is why the repair
+cannot evict a live member. `GET /v1/mesh/status` carries `node_pubkey` and
+`active` per member as of the same date — before that no read surface exposed
+the field, so the collision was undiagnosable from outside the process.
 `switch` answers `202` and detaches, like `leave` — it is served by the
 listener it drops.
 
