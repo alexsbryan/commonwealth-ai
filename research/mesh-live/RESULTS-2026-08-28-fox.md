@@ -143,3 +143,63 @@ Both are MAC-driven with FOX observing. Nothing claimed.
    retargeted in place (port held) peer=86627fd5 bridge=127.0.0.1:45169`
    fires ~6x per 10s gossip round for the same peer with an UNCHANGED
    bridge address. Change-detection appears to be firing on equal input.
+
+---
+
+# RE-RUN — 2026-08-28 12:5x, fresh daemons both sides
+
+The first run's Phase 3 was invalidated twice: once by the FOX-side auth
+bug MAC found (grant unusable on a token-less daemon), once by FOX's
+daemon restarting between mint and use and silently voiding the grant.
+This is a THIRD observation, not a replacement for either.
+
+State: FOX HEAD `4b8e966ae` == origin/main, `ca254fe88` ancestor.
+Daemon pid **3873176**, started 12:55:13, single lifetime for everything
+below (pid asserted at both ends of each sequence).
+
+PARITY, stated precisely rather than as a blanket claim: the binary
+(12:54:35) predates HEAD (12:57:30), but every commit in that window is
+a rebase of next-edit work plus `.opencode/opencode.json`. Seven `.rs`
+files are newer than the binary — all next-edit / fim / doctor. NONE in
+the mesh, guest or auth path: `client_auth.rs`, `guest_grant.rs`,
+`routes_inference.rs` and all of `sovereign-mesh` predate the build. The
+binary carries the code under test. It is stale only for next-edit,
+which is out of scope here.
+
+## F0 / F1  **PASS**
+
+MAC (`Alexs-MacBoo`) **online**, 2/6. BeefyMac reads **offline** despite
+being booted on latest origin/main — not gossiped in at observation time.
+FOX dial ports moved to 33276 (they move every restart).
+
+## F2 — stranger dials, reproduced on fresh daemons  **PASS**
+
+| probe | observed | bar |
+|---|---|---|
+| stranger `CLIENT_ALPN` `/v1/models` | **403** `remote access not configured` | refused, not 200 |
+| stranger `CLIENT_ALPN` `/status` | **200**, `node_id: node-37f17554b6c4ff29` | 200 |
+| stranger `RPC_ALPN` | **NO RESPONSE** | no response |
+
+Third independent reproduction of the 403-not-401 mismatch. The bar text
+should read "401 or 403".
+
+## Phase 2 reverse — MAC's member arm admits FOX  **PASS**
+
+    model : Qwopus3.5-4B-v3-MTP-Q8_0 @ peer Alexs-MacBook-Pro-2
+
+Reproduced on fresh daemons. Both directions of the regression bar hold.
+
+## F3 — mint  **PASS**, guest half pending MAC
+
+Token `7af90e87`, 90m, verified PRESENT in the store immediately after
+mint (`live:true, revoked:false`), pid unchanged 3873176.
+
+**The volatility disclosure shipped and is observed.** The CLI now
+prints:
+
+    Expires:  in 1h30m (unix 1787952858), or when this daemon restarts
+
+That closes the gap this run's second invalidation exposed: previously
+the link promised an hour and could die in seconds with nothing said.
+`dial_probe` also now carries `--body`, so the POST-shaped scope bar
+(3.4) is drivable.
