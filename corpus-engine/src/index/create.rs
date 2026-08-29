@@ -577,6 +577,41 @@ impl CorpusIndex {
             .unwrap_or(false)
     }
 
+    /// Did the ingest FINISH — not merely stop running?
+    ///
+    /// [`Self::is_ingestion_complete`] answers "is no ingest currently in
+    /// progress". That is a DIFFERENT question, and it is the one that keeps
+    /// being mistaken for this one. An ingest that committed its chunks and
+    /// then died before `build_indexes()` leaves `ingestion_in_progress:
+    /// false` beside `indexes_built: false`, and `is_ingestion_complete`
+    /// calls that complete — reporting a stopped ingest as a finished one
+    /// (ARCH 18.3: absence reported as success).
+    ///
+    /// Nothing can search such a corpus. `corpus_unavailability` in
+    /// sovereign-core returns `NotBuilt` on `!indexes_built` BEFORE it looks
+    /// at the query, so vector and FTS retrieval both refuse it.
+    ///
+    /// Measured 2026-08-28: 7 of 355 local corpora sat in exactly this state
+    /// and `svrn corpus status` printed `ready` for every one — including
+    /// `wikipedia-newsworthy` (26 data fragments, no vector index). Its empty
+    /// retrieval sent a chaos-soak triage down the wrong path twice: the
+    /// app's own "I cannot search this corpus" was TRUE, and was read as a
+    /// fabricated system status because the status surface disagreed with the
+    /// retrieval path about the same corpus.
+    ///
+    /// Prefer this predicate whenever the question is "can a consumer USE
+    /// this corpus". Prefer `is_ingestion_complete` only when the question is
+    /// literally "is a writer active right now" — which is what
+    /// `installed_indexes()` and the resume paths ask.
+    ///
+    /// Reads only `_corpus_meta.json`; it never opens the Lance dataset, so
+    /// it is safe over a directory whose tables are half-written.
+    pub fn is_ingest_finished(path: &Path) -> bool {
+        read_meta(path)
+            .map(|m| !m.ingestion_in_progress && m.indexes_built)
+            .unwrap_or(false)
+    }
+
     /// The incomplete-ingest marker for `path`, or `None` when the ingest
     /// finished (or no readable meta lives there).
     ///

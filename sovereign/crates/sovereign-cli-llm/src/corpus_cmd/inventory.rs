@@ -662,7 +662,7 @@ pub(super) async fn cmd_corpus_status(args: &[String]) -> i32 {
             // status that matched nothing must say so in the state
             // vocabulary the caller is grepping for, and must not print
             // an empty table that a `stdout_non_empty` check would pass.
-            println!("{:<32} {:>10}", want, CorpusReadiness::Absent.label());
+            println!("{:<32} {:>12}", want, CorpusReadiness::Absent.label());
             println!(
                 "(no index for '{want}' under {} — `svrn corpus install {want} --wait`)",
                 indexes_dir.display()
@@ -675,7 +675,7 @@ pub(super) async fn cmd_corpus_status(args: &[String]) -> i32 {
         return 0;
     }
     println!(
-        "{:<32} {:>10} {:>14} {:>10} {:>10} {:>10} {:>12}",
+        "{:<32} {:>12} {:>14} {:>10} {:>10} {:>10} {:>12}",
         "corpus", "state", "chunks", "atlas", "tier-2", "embed-cache", "tier-2 toks"
     );
     println!("{}", "─".repeat(105));
@@ -702,7 +702,7 @@ pub(super) async fn cmd_corpus_status(args: &[String]) -> i32 {
             .map(format_count)
             .unwrap_or_else(|| "—".into());
         println!(
-            "{:<32} {:>10} {:>14} {:>10} {:>10} {:>10} {:>12}",
+            "{:<32} {:>12} {:>14} {:>10} {:>10} {:>10} {:>12}",
             r.corpus_id,
             r.state.label(),
             chunks,
@@ -786,17 +786,25 @@ fn read_meta_corpus_id(dir: &std::path::Path) -> Option<String> {
 /// `corpus install --wait` cannot drift apart (§10.6).
 ///
 /// It delegates the actual judgement to
-/// [`corpus_engine::index::CorpusIndex::is_ingestion_complete`], which is
-/// what the engine's own `installed_indexes()` uses to skip partial
-/// indexes. Before this existed, `corpus status` answered the same
+/// [`corpus_engine::index::CorpusIndex::is_ingest_finished`] — NOT to
+/// `is_ingestion_complete`, which answers the narrower "is a writer active
+/// right now" and which this surface used until 2026-08-28. That predicate
+/// is true for an ingest that stopped without ever building its indexes, so
+/// `corpus status` printed `ready` for 7 of 355 local corpora that no
+/// retrieval path would touch (`corpus_unavailability` refuses `NotBuilt`
+/// before it looks at the query). One of them, `wikipedia-newsworthy`, cost
+/// a chaos-soak triage two wrong conclusions: the app's honest "I cannot
+/// search this corpus" was read as a fabricated system status, because this
+/// surface contradicted it about the same corpus. Before this existed, `corpus status` answered the same
 /// question by asking whether a DIRECTORY existed — a second, wrong
 /// implementation of "is it installed", and the one that reported an
 /// ingest 0 seconds old as an installed corpus.
 ///
-/// Three states, not a boolean, deliberately: `Building` is the state the
-/// old surface had no name for and therefore rendered as success. Same
-/// shape as `sovereign-ci-bench.sh`'s `PASS(warn:setup)` — when the thing
-/// you would judge is not there yet, say THAT rather than pass.
+/// Four states, not a boolean, deliberately: `Building` is the state the
+/// old surface had no name for and therefore rendered as success, and
+/// `Unsearchable` is the one it had no name for AFTER that. Same shape as
+/// `sovereign-ci-bench.sh`'s `PASS(warn:setup)` — when the thing you would
+/// judge is not there yet, say THAT rather than pass.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CorpusReadiness {
     /// The canonical index exists and its ingestion is fully committed.
@@ -806,6 +814,13 @@ pub(crate) enum CorpusReadiness {
     /// Bytes are landing: a partition directory exists, or the canonical
     /// directory is present but still flagged `ingestion_in_progress`.
     Building,
+    /// On disk, no writer running — and the indexes were never built. The
+    /// ingest STOPPED rather than finished, so every retrieval path refuses
+    /// this corpus (`UnavailabilityReason::NotBuilt`) even though nothing is
+    /// in progress and the directory looks complete. Distinct from
+    /// `Building`, which will resolve on its own; this one will not, and
+    /// wants a rebuild.
+    Unsearchable,
     /// Nothing on disk for this corpus id.
     Absent,
 }
@@ -817,6 +832,7 @@ impl CorpusReadiness {
         match self {
             Self::Ready => "ready",
             Self::Building => "building",
+            Self::Unsearchable => "unsearchable",
             Self::Absent => "absent",
         }
     }
@@ -828,8 +844,13 @@ impl CorpusReadiness {
 pub(crate) fn corpus_readiness(indexes_dir: &std::path::Path, corpus_id: &str) -> CorpusReadiness {
     let canonical = indexes_dir.join(corpus_id);
     if canonical.is_dir() {
-        if corpus_engine::index::CorpusIndex::is_ingestion_complete(&canonical) {
+        if corpus_engine::index::CorpusIndex::is_ingest_finished(&canonical) {
             return CorpusReadiness::Ready;
+        }
+        if corpus_engine::index::CorpusIndex::is_ingestion_complete(&canonical) {
+            // No writer running, yet the ingest never built its indexes.
+            // Reported `ready` until 2026-08-28 — see the type's docs.
+            return CorpusReadiness::Unsearchable;
         }
         // The canonical dir exists but its ingest never committed — a
         // process killed mid-embed. `installed_indexes()` skips it; so do
@@ -954,7 +975,26 @@ mod tests {
     /// That failure direction is the correct one — an unparseable meta is
     /// not an installed corpus — but it makes the fixture's completeness
     /// part of what these tests assert, so do not trim this down.
+    /// The ordinary two states. `indexes_built` is derived as
+    /// `!ingestion_in_progress` here because that is what a HEALTHY ingest
+    /// looks like — but the coupling is exactly the assumption that broke
+    /// `corpus status` (a stopped-but-unfinished ingest has neither flag
+    /// set), so the stalled case needs [`write_meta_with`].
     fn write_meta(dir: &Path, corpus_id: &str, ingestion_in_progress: bool) {
+        write_meta_with(
+            dir,
+            corpus_id,
+            ingestion_in_progress,
+            !ingestion_in_progress,
+        );
+    }
+
+    fn write_meta_with(
+        dir: &Path,
+        corpus_id: &str,
+        ingestion_in_progress: bool,
+        indexes_built: bool,
+    ) {
         std::fs::create_dir_all(dir).unwrap();
         let meta = serde_json::json!({
             "corpus_id": corpus_id,
@@ -968,7 +1008,7 @@ mod tests {
             "schema_version": 3,
             "is_shard": false,
             "ingestion_in_progress": ingestion_in_progress,
-            "indexes_built": !ingestion_in_progress,
+            "indexes_built": indexes_built,
         });
         std::fs::write(
             Corpus::meta_in(dir),
@@ -1115,6 +1155,42 @@ mod tests {
     fn readiness_labels_are_stable_api() {
         assert_eq!(CorpusReadiness::Ready.label(), "ready");
         assert_eq!(CorpusReadiness::Building.label(), "building");
+        assert_eq!(CorpusReadiness::Unsearchable.label(), "unsearchable");
         assert_eq!(CorpusReadiness::Absent.label(), "absent");
+    }
+
+    /// The 2026-08-28 failing input, recorded from disk rather than imagined:
+    /// `wikipedia-newsworthy` had `ingestion_in_progress: false` beside
+    /// `indexes_built: false` — 26 data fragments, no vector index — and this
+    /// surface called it `ready`. 7 of 355 local corpora were in that state.
+    ///
+    /// It is not `Building`: nothing is writing, so it will never resolve on
+    /// its own. It is not `Ready`: every retrieval path refuses it with
+    /// `UnavailabilityReason::NotBuilt`. Reporting it as either is the
+    /// substitution ARCH 18.3 forbids, and it made a truthful "I cannot
+    /// search this corpus" from the app look like a fabrication.
+    #[test]
+    fn a_stopped_ingest_that_never_built_indexes_is_not_ready() {
+        let tmp = tempfile::tempdir().unwrap();
+        let indexes = tmp.path();
+        write_meta_with(&indexes.join("stalled"), "stalled", false, false);
+        assert_eq!(
+            corpus_readiness(indexes, "stalled"),
+            CorpusReadiness::Unsearchable,
+            "a stopped ingest with no indexes must not report ready"
+        );
+    }
+
+    /// The other direction: the change must not reclassify healthy corpora.
+    #[test]
+    fn a_finished_ingest_is_still_ready() {
+        let tmp = tempfile::tempdir().unwrap();
+        let indexes = tmp.path();
+        write_meta_with(&indexes.join("healthy"), "healthy", false, true);
+        assert_eq!(corpus_readiness(indexes, "healthy"), CorpusReadiness::Ready);
+        // And a live writer is still Building, not Unsearchable — indexes are
+        // legitimately absent mid-ingest and that state resolves itself.
+        write_meta_with(&indexes.join("live"), "live", true, false);
+        assert_eq!(corpus_readiness(indexes, "live"), CorpusReadiness::Building);
     }
 }
