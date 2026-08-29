@@ -128,7 +128,16 @@ const REPLAY_BANK = (() => {
       /* skip */
     }
   }
-  return bank.length ? bank : null;
+  if (!bank.length) return null;
+  // SOVEREIGN_CHAOS_REPLAY_REPEAT=N runs the whole bank N times. A paired A/B
+  // wants each question ONCE (the loop at ~1620 stops at bank.length), but a
+  // VARIANCE probe wants the identical question re-asked against the identical
+  // scope — the only way to tell a real behaviour change from sampling spread,
+  // which ARCH 18.5 says a single run can never do. Added 2026-08-28, when two
+  // refusals-on-evidence in a 60-min soak had a same-input counterexample that
+  // answered, and nothing in the harness could re-ask them.
+  const repeat = Math.max(1, Number.parseInt(process.env.SOVEREIGN_CHAOS_REPLAY_REPEAT ?? "1", 10) || 1);
+  return repeat > 1 ? Array.from({ length: repeat }, () => bank).flat() : bank;
 })();
 // Instrument honesty. `REPLAY_BANK` degrades to `null` on an unreadable path
 // OR on a journal whose truncated `args` yield zero parsable questions, and
@@ -617,6 +626,7 @@ async function attachQuestion() {
     const entry = REPLAY_BANK[replayIdx % REPLAY_BANK.length];
     replayIdx += 1;
     state.scopedCorpus = entry.corpus;
+    state.questionSource = "replay";
     // Replay isolation: a FRESH conversation per bank question. Banks mix
     // corpora; one shared thread let earlier answers contaminate later
     // retrieval/synthesis (observed 2026-07-01: a watched-corpus "most
@@ -639,24 +649,94 @@ async function attachQuestion() {
     state.lastQuestion = entry.question;
     return entry.question;
   }
-  if (chance(0.12)) return pick(EDGE_MESSAGES);
-  if (state.lastQuestion && chance(0.2)) return `Wait — also: ${state.lastQuestion}`;
-  const corpus = pick(state.corpora);
-  if (!corpus) return nextUserMessage();
-  // Record the scoped corpus so the CASE diagnostic can re-search it with
-  // lc_search when the gated retrieval returns 0 — a SPECIFIC question is
-  // answerable from this corpus by construction, so raw hits there prove the
-  // gated path dropped an answerable chunk (recall bug) vs genuinely off-domain.
+  if (chance(0.12)) { state.questionSource = "edge"; return pick(EDGE_MESSAGES); }
+  if (state.lastQuestion && chance(0.2)) {
+    state.questionSource = "re-ask";
+    return `Wait — also: ${state.lastQuestion}`;
+  }
+
+  // Pick a corpus that can ACTUALLY SERVE A PASSAGE. Until 2026-08-28 this was a
+  // single pick() + a single read_get_chunk at a random id in 1..40, and every
+  // failure fell silently through to the generic question below. That is a
+  // substitution with no signal (ARCH 18.3) and it emptied the whole instrument:
+  // 315 synthetic dr-estate-* fixtures (84K indexes, a handful of chunks each)
+  // had grown to ~91% of the 347 resident corpora, so the random id missed on
+  // ~88% of turns and 28 of 32 questions in the 60-min soak were the generic
+  // string. The generic question names the CORPUS ID, which appears nowhere in
+  // the text, so the answer carries no checkable value, assess_asserted_value
+  // returns NoValue, and every one of those turns scored unjudgeable.
+  // Two fixes, both structural: try low chunk ids that a small corpus actually
+  // has, and remember the corpora that cannot serve one instead of re-drawing
+  // them forever. Thin-ness is discovered, never hardcoded by name — a denylist
+  // of ids would rot the moment the next fixture family lands.
+  const excluded = process.env.SOVEREIGN_CHAOS_EXCLUDE_CORPORA
+    ? new RegExp(process.env.SOVEREIGN_CHAOS_EXCLUDE_CORPORA)
+    : null;
+  const eligible = state.corpora.filter(
+    (c) => !state.thinCorpora.has(c) && !(excluded && excluded.test(c)),
+  );
+  if (eligible.length === 0) {
+    // Every corpus is thin/excluded. Say so once — a wander that silently
+    // degrades to generic asks is the failure this whole block exists to stop.
+    if (!state.warnedAllThin) {
+      state.warnedAllThin = true;
+      console.log(
+        `[chaos] ⚠ no corpus can serve a passage (${state.thinCorpora.size} thin, ${state.corpora.length} resident) — questions will be UNJUDGEABLE`,
+      );
+    }
+    const c0 = pick(state.corpora);
+    if (!c0) return nextUserMessage();
+    state.scopedCorpus = c0;
+    state.questionSource = "generic-fallback";
+    const g = `What is the most important thing in the "${c0}" material, and why?`;
+    state.lastQuestion = g;
+    return g;
+  }
+
+  // Small corpora are the common case now, so try ids they plausibly have
+  // before giving up on one: a random draw first (keeps coverage on big
+  // corpora), then the low ids that any non-empty corpus holds.
+  const passageOf = async (corpusId) => {
+    for (const chunkId of [1 + Math.floor(rand() * 40), 1, 2, 3]) {
+      try {
+        const rec = await invoke("read_get_chunk", { corpusId, chunkId }, 15_000);
+        const text = String(rec?.content ?? rec?.text ?? "").slice(0, 1200);
+        if (text.trim()) return text;
+      } catch {
+        /* try the next id */
+      }
+    }
+    return null;
+  };
+
+  let corpus = null;
+  let passage = null;
+  for (let attempt = 0; attempt < 3 && !passage; attempt += 1) {
+    const cand = pick(eligible.filter((c) => !state.thinCorpora.has(c)));
+    if (!cand) break;
+    const got = await passageOf(cand);
+    if (got) {
+      corpus = cand;
+      passage = got;
+    } else {
+      // Remember it, so the next 300 turns do not re-draw the same dead fixture.
+      state.thinCorpora.add(cand);
+    }
+  }
+  if (!corpus) {
+    const c0 = pick(state.corpora);
+    if (!c0) return nextUserMessage();
+    state.scopedCorpus = c0;
+    state.questionSource = "generic-fallback";
+    const g = `What is the most important thing in the "${c0}" material, and why?`;
+    state.lastQuestion = g;
+    return g;
+  }
+
   state.scopedCorpus = corpus;
   // Scope the chat to the SOURCE corpus so the question is actually answerable
-  // (focused retrieval, no cross-corpus dilution among 30+ corpora). This is
-  // the complement to the unscoped finding (the app declines answerable Qs when
-  // everything is in scope): scoped, the answer SHOULD land — so the oracle now
-  // measures answer QUALITY (grounded? complete? coherent? graceful?) on Qs the
-  // app ought to nail, which is where the deeper bugs live.
-  // SOVEREIGN_CHAOS_NO_SCOPE=1 leaves the chat UNSCOPED (retrieval fans out
-  // over all corpora) so we can measure the cross-corpus dilution path + the
-  // KQ cap/floor fix against it. Default: scope to the source corpus.
+  // (focused retrieval, no cross-corpus dilution). SOVEREIGN_CHAOS_NO_SCOPE=1
+  // leaves it unscoped to measure the cross-corpus dilution path instead.
   if (state.convo && !process.env.SOVEREIGN_CHAOS_NO_SCOPE) {
     await invoke(
       "set_conversation_enabled_corpora",
@@ -664,20 +744,15 @@ async function attachQuestion() {
       10_000,
     ).catch(() => {});
   }
-  try {
-    const rec = await invoke(
-      "read_get_chunk",
-      { corpusId: corpus, chunkId: 1 + Math.floor(rand() * 40) },
-      15_000,
-    );
-    const passage = String(rec?.content ?? rec?.text ?? "").slice(0, 1200);
-    if (passage && BRAIN_MODEL) {
+
+  if (BRAIN_MODEL) {
+    try {
       const q = await chatCompletion(
         [
           {
             role: "system",
             content:
-              "You are a sharp, demanding power-user of a knowledge app. Given a passage from the user's own corpus, ask ONE hard, specific question that this passage answers — the kind that tests whether the app can find and synthesize the detail (a name, a number, a claim, a comparison). Reply with ONLY the question.",
+              "You are a sharp, demanding power-user of a knowledge app. Given a passage from the user's own corpus, ask ONE hard, specific question that this passage answers — the kind that tests whether the app can find and synthesize the detail (a name, a number, a claim, a comparison). The question MUST be answerable by quoting a specific value from the passage, and MUST NOT refer to the corpus by id or filename. Reply with ONLY the question.",
           },
           { role: "user", content: `Passage:\n${passage}\n\nYour question:` },
         ],
@@ -696,12 +771,14 @@ async function attachQuestion() {
             ? `${question} Answer in exhaustive, comprehensive detail — at least 1500 words.`
             : question;
         state.lastQuestion = q2;
+        state.questionSource = "passage";
         return q2;
       }
+    } catch {
+      /* brain unreachable — fall through, and SAY so via questionSource */
     }
-  } catch {
-    /* fall through to a generic exploratory ask */
   }
+  state.questionSource = "generic-fallback";
   const generic = `What is the most important thing in the "${corpus}" material, and why?`;
   state.lastQuestion = generic;
   return generic;
@@ -709,7 +786,23 @@ async function attachQuestion() {
 
 // Per-run mutable state. convos[] lets the user switch among / delete real
 // prior conversations (coherent sessions, not orphaned ids).
-const state = { convo: null, convos: [], corpora: [], config: null, budget: null, assetId: null, lastQuestion: null };
+// questionSource / thinCorpora added 2026-08-28: a wander whose questions all
+// came from the generic fallback measures nothing, and before this the run had
+// no way to say so. thinCorpora is the discovered set of corpora that cannot
+// serve a passage.
+const state = {
+  convo: null,
+  convos: [],
+  corpora: [],
+  config: null,
+  budget: null,
+  assetId: null,
+  lastQuestion: null,
+  questionSource: null,
+  questionSources: {},
+  thinCorpora: new Set(),
+  warnedAllThin: false,
+};
 
 // ── mutation layer (raw entropy on top of the brain's direction) ───
 function mutateArgs(args) {
@@ -1090,7 +1183,11 @@ async function chaosStep(memorySummary) {
   // still fires when the brain fixates on a feature thread (v1 did 1 chat
   // turn in 162 moves — that was the gap).
   if (REPLAY_BANK || chance(0.28) || movesSinceChat >= 6) {
-    const message = ATTACH ? await attachQuestion() : nextUserMessage();
+    state.questionSource = null;
+  const message = ATTACH ? await attachQuestion() : nextUserMessage();
+  if (ATTACH)
+    state.questionSources[state.questionSource ?? "unknown"] =
+      (state.questionSources[state.questionSource ?? "unknown"] ?? 0) + 1;
     chosen = { cmd: "send_message_stream", args: { message, conversationId: state.convo } };
     goal = "ask my knowledge base a question";
   } else {
@@ -1311,6 +1408,11 @@ async function chaosStep(memorySummary) {
     // the turn's gate action. null on non-chat moves.
     grounding,
     scopedCorpus: state.scopedCorpus ?? null,
+    // Where the question came from. "generic-fallback" means no passage could
+    // be fetched, so the ask names a corpus id that appears in no text and the
+    // grounding oracle cannot score it — such a turn is UNJUDGEABLE by
+    // construction and must never be read as an app failure.
+    questionSource: state.questionSource ?? null,
     userJudge,
     latencyMs,
     surprise: surprise.score,
@@ -1607,6 +1709,24 @@ async function main() {
     `\ncoverage this wander: ${seen.commands.size}/${CATALOG.length} commands touched, ` +
       `${seen.eventTypes.size} event types, ${seen.logSigs.size} distinct ERROR/WARN log shapes.`,
   );
+
+  // Where the questions came from. Read this BEFORE the verdict ledger below:
+  // a run dominated by generic-fallback asked questions no oracle can score,
+  // so its grounding numbers describe the harness, not the app (2026-08-28).
+  if (ATTACH) {
+    const qs = Object.entries(state.questionSources).sort((a, b) => b[1] - a[1]);
+    const tot = qs.reduce((a, [, v]) => a + v, 0);
+    const fb = state.questionSources["generic-fallback"] ?? 0;
+    console.log(
+      `question sources: ${qs.map(([k, v]) => `${k}=${v}`).join("  ")}` +
+        `${state.thinCorpora.size ? `   (thin corpora skipped: ${state.thinCorpora.size})` : ""}`,
+    );
+    if (tot && fb / tot > 0.25)
+      console.log(
+        `⚠ ${((100 * fb) / tot).toFixed(0)}% of questions were the GENERIC FALLBACK — those turns are UNJUDGEABLE ` +
+          `by construction (the ask names a corpus id no passage contains). Treat this run's grounding rate as not measured.`,
+      );
+  }
 
   // The bench-aligned answer ledger — the same grounding vocabulary as the
   // chaos-monkey scorer, so a wander's honesty profile is comparable to a
