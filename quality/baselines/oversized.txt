@@ -12,7 +12,7 @@
 1701	commonwealth/crates/commonwealth-api/src/routes_internal/mesh_admin.rs
 2753	commonwealth/crates/commonwealth-api/src/routes_responses.rs
 2592	commonwealth/crates/commonwealth-api/src/state.rs
-2005	commonwealth/crates/commonwealth-core/src/mesh.rs
+1946	commonwealth/crates/commonwealth-core/src/mesh.rs
 1475	commonwealth/crates/commonwealth-transport/src/iroh.rs
 1484	corpus-engine-atos/src/features.rs
 7794	corpus-engine-notes/src/notes.rs
@@ -53,7 +53,7 @@
 2914	sovereign/crates/sovereign-agent-bench/src/runners/native.rs
 2670	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs
 1371	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs
-1326	sovereign/crates/sovereign-cli-daemon/src/setup_cmd/fim.rs
+1321	sovereign/crates/sovereign-cli-daemon/src/setup_cmd/fim.rs
 1240	sovereign/crates/sovereign-cli-dev/src/amend.rs
 4750	sovereign/crates/sovereign-cli-dev/src/atos_cmd/run.rs
 1537	sovereign/crates/sovereign-cli-dev/src/code_capability_graph.rs
@@ -62,7 +62,7 @@
 1485	sovereign/crates/sovereign-cli-dev/src/refactor_cmd/detector.rs
 1691	sovereign/crates/sovereign-cli-llm/src/bench_cmd/all.rs
 2543	sovereign/crates/sovereign-cli-llm/src/bench_cmd/book_report.rs
-2060	sovereign/crates/sovereign-cli-llm/src/bench_cmd/chaos_monkey.rs
+2160	sovereign/crates/sovereign-cli-llm/src/bench_cmd/chaos_monkey.rs
 1350	sovereign/crates/sovereign-cli-llm/src/bench_cmd/mechanism_fidelity.rs
 1915	sovereign/crates/sovereign-cli-llm/src/bench_cmd/vault_report.rs
 1338	sovereign/crates/sovereign-cli-llm/src/corpus_snapshot_cmd.rs
@@ -77,7 +77,7 @@
 1347	sovereign/crates/sovereign-cli-llm/src/knowledge_gym_cmd/runner.rs
 2291	sovereign/crates/sovereign-cli-llm/src/mesh_bench.rs
 1611	sovereign/crates/sovereign-cli-llm/src/mesh_bench/tests.rs
-5214	sovereign/crates/sovereign-cli-llm/src/mesh_cmd.rs
+5218	sovereign/crates/sovereign-cli-llm/src/mesh_cmd.rs
 1753	sovereign/crates/sovereign-cli-llm/src/pipeline_cmd.rs
 1208	sovereign/crates/sovereign-cli-llm/src/reading_diag_cmd.rs
 1851	sovereign/crates/sovereign-cli-llm/src/recipe_agent_live_trial.rs
@@ -118,13 +118,13 @@
 3007	sovereign/crates/sovereign-core/src/runtime/grounding/judge.rs
 6072	sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs
 1432	sovereign/crates/sovereign-core/src/runtime/handlers/attached_doc.rs
-2112	sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs
+2113	sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs
 1605	sovereign/crates/sovereign-core/src/runtime/retrieval/atom_enum.rs
 1206	sovereign/crates/sovereign-core/src/runtime/retrieval/corpus_search.rs
 1369	sovereign/crates/sovereign-core/src/runtime/retrieval/history.rs
 1584	sovereign/crates/sovereign-core/src/runtime/retrieval/query_expansion.rs
 2921	sovereign/crates/sovereign-core/src/runtime/retrieval_pipeline.rs
-4595	sovereign/crates/sovereign-core/src/runtime/streaming.rs
+4596	sovereign/crates/sovereign-core/src/runtime/streaming.rs
 1263	sovereign/crates/sovereign-core/src/title.rs
 2441	sovereign/crates/sovereign-core/tests/core_tests.rs
 1965	sovereign/crates/sovereign-core/tests/functional.rs
