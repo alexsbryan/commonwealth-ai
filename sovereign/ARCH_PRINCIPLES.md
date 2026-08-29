@@ -792,6 +792,45 @@ than a branch. If two implementations genuinely must exist, share the body and
 add a golden equivalence test — conventional agreement decays, structural
 inseparability does not.
 
+### 10.7 Collapse the drive before you split the file
+
+The two refactors this workspace knows how to do are not equal, and only one of
+them removes mass.
+
+**Carve a leaf crate out of a junk drawer** is the one with a playbook
+(`corpus-engine/DECOMPOSITION.md`, its numbered steps quoted into `Cargo.toml`),
+seven worked instances, and a metric. It is also mass-neutral: seven crates came
+out of `corpus-engine` and `corpus-engine/src` went **4.3MB to 5.6MB (+30%)**
+over the same window, because the leaf was never the tangle and the junk drawer
+stays the default destination for whatever arrives next. `notes.rs` was carved
+out at 2,781 lines, recorded as cleared, and is **7,794** today.
+
+**Collapse the drive** is the one that removes it. N call sites re-implement one
+sequence; extract ONE implementation and make the differences a parameter — a
+sink, a mode, or a composed bundle. Never a copy, never a flag inside the drive.
+
+1. **Find the N sites running one sequence.** The reliable tell is a shared bug:
+   six copies of the turn drive each caught the non-streamable refusal and re-ran
+   `handle_message`, and **all six wrote the user's message to the conversation
+   twice**, because the streaming path persists it before it bails. A re-derived
+   loop reproduces the bug it re-derives.
+2. **Extract one implementation.**
+3. **Make the difference a parameter, not a copy.** `TurnSink`
+   (`sovereign-core/src/runtime/serve.rs`) is the trait-object form: an in-process
+   host reaches the one driver through a sink, an out-of-process one through
+   `sovereign-turn-client`. `ToolBundle` (`sovereign-contracts/src/tool_bundle.rs`)
+   is the composition form, and it inverted open/closed — the recipe names no tool
+   and a host composes `Vec<Box<dyn ToolBundle>>`, so adopting the shared recipe
+   stopped costing a host its capabilities.
+4. **Pin the count in a census that only shrinks**, each remaining entry carrying
+   what would remove it: `TURN_EXECUTION_SITES` 18 to 6, `UNSHARED_RECIPES` to
+   empty, turn-registry divergence 26 to 23, `Runtime` reach-throughs 35 to 0 —
+   all in `sovereign-core/tests/runtime_commission_census.rs`.
+
+**A carve-out owes a census number too.** Blast radius measures rebuild time, not
+mass, and it improved throughout the 30% growth above. A refactor that cannot name
+a count that went down has not been measured.
+
 ---
 
 ## 11. Verify before claiming

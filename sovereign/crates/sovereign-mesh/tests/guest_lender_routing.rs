@@ -34,6 +34,22 @@ use sovereign_mesh::peer_inference::{MeshInferenceProvider, PeerEndpointSource};
 mod common;
 use common::spawn_router;
 
+/// Unwrap a `Granted` posture, or fail naming what was seen instead. Written
+/// as a helper so a test that expects a grant cannot silently accept
+/// `Unusable` — which is the distinction the posture type exists to make.
+trait GrantedOrPanic {
+    fn granted_or_panic(self, msg: &str) -> (String, Vec<String>);
+}
+
+impl GrantedOrPanic for sovereign_mesh::guest_lender::GrantPosture {
+    fn granted_or_panic(self, msg: &str) -> (String, Vec<String>) {
+        match self {
+            sovereign_mesh::guest_lender::GrantPosture::Granted { lender, ids } => (lender, ids),
+            other => panic!("{msg}: expected Granted, got {other:?}"),
+        }
+    }
+}
+
 const GRANTED: &str = "lender-only-model";
 const TOKEN: &str = "aa11bb22cc33dd44ee55ff66aa77bb88cc99dd00ee11ff22aa33bb44cc55dd66";
 
@@ -112,7 +128,7 @@ fn provider_with_link(root: &std::path::Path) -> MeshInferenceProvider {
         local_without_the_model(),
         Arc::new(NoPeers) as Arc<dyn PeerEndpointSource>,
     );
-    p.set_guest_source(Arc::new(StoredGuestLink::new(root.to_path_buf())));
+    p.set_guest_source(Arc::new(StoredGuestLink::new_in(root.to_path_buf())));
     p
 }
 
@@ -178,11 +194,11 @@ async fn the_granted_ids_are_advertised_for_the_models_listing() {
     let dir = tempfile::tempdir().unwrap();
     store_link(dir.path(), &lender);
 
-    let src = StoredGuestLink::new(dir.path().to_path_buf());
+    let src = StoredGuestLink::new_in(dir.path().to_path_buf());
     let (who, ids) = src
-        .granted_models()
+        .posture()
         .await
-        .expect("a live link advertises what it buys");
+        .granted_or_panic("a live link advertises what it buys");
     assert_eq!(ids, vec![GRANTED.to_string()]);
     assert_eq!(
         who, lender,
@@ -197,10 +213,13 @@ async fn the_granted_ids_are_advertised_for_the_models_listing() {
 async fn a_node_without_a_link_advertises_nothing_extra() {
     use sovereign_mesh::guest_lender::GuestLenderSource;
     let dir = tempfile::tempdir().unwrap();
-    assert!(StoredGuestLink::new(dir.path().to_path_buf())
-        .granted_models()
-        .await
-        .is_none());
+    assert_eq!(
+        StoredGuestLink::new_in(dir.path().to_path_buf())
+            .posture()
+            .await,
+        sovereign_mesh::guest_lender::GrantPosture::NoLink,
+        "a node with no guest.json has NO LINK — not a refused one"
+    );
 }
 
 /// With no link stored, the same request resolves to nothing rather than
@@ -245,4 +264,172 @@ async fn an_expired_link_does_not_route() {
         !seen.presented_the_bearer.load(Ordering::SeqCst),
         "an expired link must not even be dialled"
     );
+}
+
+/// Local knows nothing AND says so, in words no lender response contains.
+/// The existing `local_without_the_model` is enough for a NAMED request (a
+/// name local cannot serve can only have come from the lender); a request
+/// that names nothing needs local's answer to be distinguishable, because
+/// the whole bug is that local answered and it looked fine.
+fn local_that_answers() -> Arc<dyn InferenceProvider> {
+    Arc::new(
+        common::TestProvider::new()
+            .with_model_id("something-else")
+            .with_complete_text("served by THIS node"),
+    )
+}
+
+fn provider_with_link_and_answering_local(root: &std::path::Path) -> MeshInferenceProvider {
+    let p = MeshInferenceProvider::with_peer_source(
+        local_that_answers(),
+        Arc::new(NoPeers) as Arc<dyn PeerEndpointSource>,
+    );
+    p.set_guest_source(Arc::new(StoredGuestLink::new_in(root.to_path_buf())));
+    p
+}
+
+/// LIVE BAR 3.3, as a test. A turn that names NO model must go to the lender
+/// while a grant is live.
+///
+/// This is the bug the 2026-08-28 two-machine run found and no unit test
+/// could: `serve_turn` builds its `CompletionRequest` with `model_id: None`,
+/// so every daemon-run turn took the ranked path and answered from this
+/// node's own slot with the grant sitting unused. Two live runs produced
+/// good-looking answers; only the pre-registered discriminator
+/// (`local_pick=` in the routing trace) showed the machine talking to itself.
+///
+/// The assertion is on WHO ANSWERED, not on the exit status — a served
+/// answer is precisely what the defect produced.
+#[tokio::test]
+async fn a_turn_that_names_no_model_is_served_by_the_lender_while_a_grant_is_live() {
+    let seen = Arc::new(Seen::default());
+    let lender = spawn_lender(Arc::clone(&seen)).await;
+    let dir = tempfile::tempdir().unwrap();
+    store_link(dir.path(), &lender);
+
+    let resp = provider_with_link_and_answering_local(dir.path())
+        .complete(&CompletionRequest::new("hello"))
+        .await
+        .expect("a bare turn is served");
+
+    assert!(
+        resp.text.contains("served by the lender"),
+        "a bare turn under a live grant must reach the lender; this node \
+         answered instead with {:?} — the live 3.3 defect",
+        resp.text
+    );
+    assert_eq!(
+        resp.model_id, GRANTED,
+        "attribution must name the granted model, not this node's slot"
+    );
+    assert!(
+        seen.named_the_real_model.load(Ordering::SeqCst),
+        "the granted id must be on the wire — the lender's scope check \
+         matches on the name"
+    );
+}
+
+/// The privacy discriminator, and the reason `guest_primary_id` carries no
+/// gate of its own. Naming the granted model is not consent to send the turn
+/// off the node: an envelope that states `local_only` (the §3.1 default for a
+/// PRESENT envelope) must keep the turn here even with a live grant, and it
+/// must do so by falling back to ranked selection rather than erroring.
+///
+/// Without this, removing the gate at the naming site is one edit away from
+/// a guest link overriding the privacy contract, with nothing going red.
+#[tokio::test]
+async fn a_local_only_envelope_keeps_a_bare_turn_home_despite_a_live_grant() {
+    let seen = Arc::new(Seen::default());
+    let lender = spawn_lender(Arc::clone(&seen)).await;
+    let dir = tempfile::tempdir().unwrap();
+    store_link(dir.path(), &lender);
+
+    let req = CompletionRequest::new("hello")
+        .with_oicp(sovereign_contracts::oicp::InferenceRequirements::new());
+    let resp = provider_with_link_and_answering_local(dir.path())
+        .complete(&req)
+        .await
+        .expect("a local_only turn is still served — here");
+
+    assert!(
+        resp.text.contains("served by THIS node"),
+        "local_only must not cross to a node that is not even a mesh member; \
+         got {:?}",
+        resp.text
+    );
+}
+
+/// A lender that authenticates the bearer and then refuses the scope — the
+/// shape a restarted lending node presents, because grants live in RAM and
+/// die with the process.
+async fn spawn_refusing_lender() -> String {
+    async fn refuse() -> axum::http::StatusCode {
+        axum::http::StatusCode::FORBIDDEN
+    }
+    let app = Router::new()
+        .route("/v1/models", get(refuse))
+        .route("/v1/chat/completions", post(refuse));
+    format!("http://{}", spawn_router(app).await)
+}
+
+/// THE INVARIANT THIS WHOLE POSTURE TYPE EXISTS FOR.
+///
+/// A live guest link whose lender refuses must NOT be served from the local
+/// model. Before `GrantPosture`, `granted_models()` returned `None` for both
+/// "no link" and "refused", so the turn fell through to ranked selection and
+/// this node answered — which is what happened live on 2026-08-28 when the
+/// lending node's service manager restarted it and MAC's next four requests
+/// got `403`. Every surface reported success and the answers looked fine.
+///
+/// The assertion is that the turn FAILS, and that the failure names the
+/// lender. A test that only checked "did not reach the lender" would pass on
+/// the defective behaviour too.
+#[tokio::test]
+async fn a_refused_grant_is_never_answered_by_the_local_model() {
+    let lender = spawn_refusing_lender().await;
+    let dir = tempfile::tempdir().unwrap();
+    store_link(dir.path(), &lender);
+
+    let err = provider_with_link_and_answering_local(dir.path())
+        .complete(&CompletionRequest::new("hello"))
+        .await
+        .expect_err(
+            "a refused grant must refuse the turn — serving this from the local              model answers a borrowed question with our own",
+        );
+
+    let text = err.to_string();
+    assert!(
+        text.contains(&lender),
+        "the error must name the lending node so the operator knows WHICH link          is the problem; got: {text}"
+    );
+    assert!(
+        text.contains("--forget"),
+        "the error must name the one-command repair; got: {text}"
+    );
+}
+
+/// The other half: a refused grant must not advertise models either. A
+/// listing that keeps naming ids the lender will not serve is the §10.6 lie
+/// in the other direction.
+#[tokio::test]
+async fn a_refused_grant_advertises_nothing() {
+    use sovereign_mesh::guest_lender::GuestLenderSource;
+    let lender = spawn_refusing_lender().await;
+    let dir = tempfile::tempdir().unwrap();
+    store_link(dir.path(), &lender);
+
+    let posture = StoredGuestLink::new_in(dir.path().to_path_buf())
+        .posture()
+        .await;
+    match posture {
+        sovereign_mesh::guest_lender::GrantPosture::Unusable { lender: l, why } => {
+            assert_eq!(l, lender);
+            assert!(
+                why.contains("403"),
+                "the reason must carry the status the lender actually sent, \
+                 because 403 and 'unreachable' have different repairs; got: {why}"
+            );
+        }
+        other => panic!("a refused grant must read as Unusable, got {other:?}"),
+    }
 }

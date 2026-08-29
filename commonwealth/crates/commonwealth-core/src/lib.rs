@@ -14,6 +14,7 @@ pub mod knowledge;
 pub mod latency;
 pub mod mesh;
 pub mod mesh_identity;
+pub mod mesh_merge;
 pub mod model;
 pub mod model_aliases;
 pub mod peer_addr;

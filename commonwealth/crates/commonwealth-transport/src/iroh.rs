@@ -392,8 +392,22 @@ pub struct HttpBridge {
     task: tokio::task::JoinHandle<()>,
 }
 
+/// How many accept() errors in a row before the loop gives up. Transient
+/// errors are the norm; a listener that fails this many times consecutively
+/// is broken, and spinning on it would burn a core silently.
+const MAX_CONSECUTIVE_ACCEPT_FAILURES: u32 = 32;
+
 impl Drop for HttpBridge {
     fn drop(&mut self) {
+        // Traced because dropping this is what makes a live local port stop
+        // answering, and callers cache that port's URL. Without this line the
+        // only evidence is a connection refused on an address that was
+        // serving a minute ago — which reads as the far end's fault.
+        tracing::debug!(
+            target: "transport",
+            addr = %self.local_addr,
+            "iroh bridge: dropped — its local port stops answering now"
+        );
         self.task.abort();
     }
 }
@@ -414,9 +428,57 @@ impl HttpBridge {
         let target = Arc::new(std::sync::Mutex::new(target));
         let target_slot = Arc::clone(&target);
         let task = tokio::spawn(async move {
+            // Consecutive accept failures. An accept error is almost always
+            // transient (ECONNABORTED on a peer that hung up mid-handshake,
+            // EMFILE under fd pressure, EINTR), and the old code treated
+            // EVERY one as terminal: `let Ok(..) = accept().await else
+            // { break }`, with no tracing on the branch. A single transient
+            // error therefore killed the port permanently and SILENTLY.
+            //
+            // Observed live 2026-08-28: a guest tunnel opened at 21:11:10,
+            // served a `/v1/models` listing, and by 21:12:39 the port was
+            // refusing connections with nothing in the log to say why or
+            // when. Every surface above it kept advertising the dead address
+            // (`StoredGuestLink` caches the base URL), so the failure
+            // presented as "the lender revoked your grant".
+            let mut consecutive_failures: u32 = 0;
             loop {
-                let Ok((tcp, _)) = listener.accept().await else {
-                    break;
+                let (tcp, _) = match listener.accept().await {
+                    Ok(accepted) => {
+                        consecutive_failures = 0;
+                        accepted
+                    }
+                    Err(e) => {
+                        consecutive_failures += 1;
+                        tracing::warn!(
+                            target: "transport",
+                            peer = %peer_label,
+                            addr = %local_addr,
+                            error = %e,
+                            kind = ?e.kind(),
+                            consecutive_failures,
+                            "iroh bridge: accept failed — the tunnel stays open"
+                        );
+                        // Bounded, so a genuinely broken listener cannot spin
+                        // a core forever. The bound is loud when it fires:
+                        // this port going quiet is what the caller sees, and
+                        // it must never be something they have to infer.
+                        if consecutive_failures >= MAX_CONSECUTIVE_ACCEPT_FAILURES {
+                            tracing::error!(
+                                target: "transport",
+                                peer = %peer_label,
+                                addr = %local_addr,
+                                error = %e,
+                                consecutive_failures,
+                                "iroh bridge: accept loop EXITING after repeated failures — \
+                                 this local port stops answering and any cached base URL \
+                                 pointing at it is now dead"
+                            );
+                            break;
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                        continue;
+                    }
                 };
                 // Nagle on this loopback hop stacks with the peer's delayed
                 // ACK into ~40 ms stalls per direction on request/response

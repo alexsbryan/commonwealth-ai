@@ -171,6 +171,59 @@ routes, and a GET against one is refused by the auth layer BEFORE routing, so
 it cannot tell an out-of-scope refusal from a method mismatch — which is the
 distinction 3.4 is about.
 
+## Phase 3, THIRD observation — on `129460da4` + two live-only fixes. 3.3 STILL NOT DEMONSTRATED.
+
+3.2 PASS again (verified through the tunnel, ids read back from FOX).
+
+**TWO BUGS THE UNIT TESTS WERE STRUCTURALLY BLIND TO, both found only here.**
+
+1. `StoredGuestLink` was constructed with the daemon's `cfg.data.dir`, which on
+   this machine is `/Users/alexsbryan/.sovereign`, while `svrn mesh use` writes
+   `/Users/alexsbryan/.svrnmesh/guest.json`. Different directories, so every
+   lookup found nothing — silently, with no error on any surface. The unit
+   tests hand both halves the same tempdir, so the roots were equal by
+   construction and none of them could fail. Fixed structurally:
+   `StoredGuestLink::new()` now takes NO path and resolves
+   `svrnmesh_root()`, the SSOT both halves already share; `new_in` is
+   test-only. Regression test `the_default_root_is_the_one_the_cli_writes_to`.
+
+2. Only the hot-RELOAD factory (`daemon_cmd/provider.rs`) called
+   `set_guest_source`. The COLD-START assembly point
+   (`bootstrap::build_mesh_provider`) did not, so a freshly started daemon kept
+   `NoGuestLenders` and the route was dead until something happened to trigger
+   a provider reload. Wired at the assembly point, which exists precisely so
+   there is "no slot this bootstrap can forget".
+
+**AFTER BOTH FIXES, the listing half is PROVEN LIVE:**
+
+    GET /v1/models ->  Qwen3.5-4B-UD-MTP-Q6_K_XL | advertised_by: ["http://100.115.12.21:9741"]
+    daemon.err    ->  guest-lender: opened the mesh tunnel to a lending node
+                      lender=http://100.115.12.21:9741 bridge=http://127.0.0.1:53093
+
+The lender is a holder under its OWN name, not `local` and not a peer name.
+
+**3.3 IS NOT DEMONSTRATED, and the reason is a seam not previously named.**
+Two runs, both served from MAC's own slot:
+
+    mesh-inference: scoring local ... local_pick="Qwen3.8-27B-UD-Q6_K_XL"
+
+`scoring local` is the RANKED path — the request carried no explicit model id
+at all. The conversation DID stay local (correct, and the 3.3 fix works), but
+so did the completion. Cause: `sovereign-turn-client` has no model parameter
+anywhere (`grep model` in `src/lib.rs`: one doc comment, no field), so a
+daemon-run turn picks its own model and the CLI's resolved `chat_model` never
+reaches it. Making bootstrap prefer a lender-advertised id — landed, and
+correct on its own terms — cannot fix this, because the id is never put on the
+wire.
+
+WHAT IS OWED for 3.3: the DAEMON's turn pipeline must prefer a granted model
+when a live link exists. That is the same thesis as the rest of this change
+(the link is a daemon-level fact), applied to model SELECTION rather than to
+model ROUTING. Not attempted here; naming it rather than guessing at it.
+
+NOT ROUNDED UP: two runs answered a question and looked fine on stdout. Both
+were MAC talking to itself. The pre-registered discriminator is what caught it.
+
 ## Phases 4, 5 — NOT RUN
 
 Park/switch and rotation need the peer to run commands or to have its status
@@ -200,3 +253,75 @@ The reverse pass was watched failing: remove one kernel, it reports
 
 Linux is unaffected by both (GGML_METAL=OFF, and no ibverbs found), which is
 why #52 landed green from the Fedora host.
+
+---
+
+# Round 2 — afternoon, after the daemon-side model-selection fix
+
+Daemon pid 47769, binary mtime 15:18:40, restarted 15:18 (P0.2 satisfied:
+binary predates the process, and the running exe is that binary).
+Grant `5efa5c56`, minted by FOX 22:10:53 UTC, TTL 60m.
+
+## 3.2 PASS (re-run, new grant)
+
+    Verified against http://100.115.12.21:9741 (over the mesh tunnel) — models in scope:
+      Qwen3.5-4B-UD-MTP-Q6_K_XL
+
+## 3.3 PASS — first time it is actually demonstrated
+
+    stdout banner:  … · 135.0s · LOOKUP · Qwen3.5-4B-UD-MTP-Q6_K_XL
+    stderr:         Guest link: routing to http://100.115.12.21:9741 over the mesh tunnel
+
+    22:22:31  mesh-inference: a live guest link supplies the primary model for a
+              turn that named none  lender=http://100.115.12.21:9741
+              model=Qwen3.5-4B-UD-MTP-Q6_K_XL
+    22:22:31  mesh-inference: serving a named model from a GUEST LINK
+    22:22:31  mesh-inference: routing to a GUEST LENDER by model name  soft=true
+
+The pre-registered discriminator (`scoring local` / `local_pick=`) does NOT
+appear for the answering call. Three earlier calls in the same turn fell
+through with `reason=PrivacyLocalOnly` — internal stages carrying a
+`local_only` envelope, which is correct and is pinned by
+`a_local_only_envelope_keeps_a_bare_turn_home_despite_a_live_grant`.
+
+## THREE ROOT CAUSES, all found only by running it on two machines
+
+**R1 — the turn pipeline never named the granted model.** `serve_turn` builds
+its `CompletionRequest` with `model_id: None`, so `select_route` fell to
+ranked scoring and answered locally. Fixed: a live grant supplies the SOFT
+named target, guest before shared. No privacy gate at the naming site — the
+enforcement already lives one call down in `resolve_named_dispatch`, and a
+second reading of "may this leave" is the §10.6 duplicated decider. The
+conservative reading would have made the fix inert, since the turn path
+carries no OICP envelope at all.
+
+**R2 — a bridge died silently and the cache kept selling its address.**
+`HttpBridge`'s accept loop was `let Ok(..) = accept().await else { break }`
+with NO tracing on the branch, so one transient error killed the port
+permanently and invisibly. Observed: tunnel opened 21:11:10 on port 61564,
+served a `/v1/models` listing, and by 21:12:39 refused connections with
+nothing in the log. `StoredGuestLink` cached that base URL and kept handing it
+out, so the failure presented as "the lender revoked your grant". Fixed both
+ends: the loop logs every accept failure, survives transient ones, exits only
+after 32 consecutive with a loud ERROR naming the dead port; `Drop` traces;
+and `route_for` TCP-probes the cached bridge before use and reopens if dead.
+
+**R3 — a refused grant was indistinguishable from no grant.** FOX's service
+manager restarted it at 14:19:38 (grants are RAM-only), MAC's next four
+requests got `403`, and `granted_models()` returned `None` — the same value it
+returns for a node that never borrowed anything. Every one of those turns was
+answered by MAC's own 27B, silently. That is the SAME defect this exercise was
+convened to catch, reached by a different route. Fixed with a three-state
+`GrantPosture { NoLink, Unusable{lender,why}, Granted{lender,ids} }`; an
+`Unusable` posture refuses the turn naming the lender, the reason and
+`--forget`, bounded by the link's own TTL.
+
+Tests: 9 in `guest_lender_routing`, 6 in the `guest_lender` unit module, all
+green. Four are new and discriminating — a bare turn reaching the lender, a
+`local_only` envelope staying home, a refused grant refusing the turn, and a
+liveness probe that must tell a bound listener from a dropped one.
+
+## Not yet judged
+
+3.6 (revoke-in-place) — sampler armed, awaiting FOX's revoke.
+3.7 (`--forget`) — follows 3.6.

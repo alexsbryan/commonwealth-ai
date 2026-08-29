@@ -55,6 +55,20 @@ use crate::traits::StateStore;
 /// to tell the turn — the turn is already running and cancelling it is the
 /// caller's decision, not the sink's — so `emit` swallows that rather than
 /// making every emit site handle an error it cannot act on.
+///
+/// # The pattern this is an instance of
+///
+/// **Collapse the drive** (ARCH §10.7): N sites re-implement one sequence, so
+/// extract ONE implementation and make the differences a parameter. This is the
+/// *trait-object* form — an in-process host reaches the one driver through a
+/// sink, an out-of-process one through `sovereign-turn-client`. The
+/// *composition* form is `sovereign_contracts::tool_bundle::ToolBundle`.
+///
+/// What it was worth here: six hosts each drove a turn by hand, and **all six
+/// wrote the user's message to the conversation twice** on the non-streamable
+/// path — a re-derived loop reproduces the bug it re-derives. The ratchet is
+/// `TURN_EXECUTION_SITES` (18 to 6) in
+/// `sovereign-core/tests/runtime_commission_census.rs`.
 pub trait TurnSink: Send + Sync {
     /// Deliver one frame. Best-effort.
     fn emit(&self, frame: TurnFrame);

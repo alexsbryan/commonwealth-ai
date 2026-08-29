@@ -456,17 +456,48 @@ async fn resolve_model_ids(v1: &str, globals: &ChatGlobals) -> Result<(String, S
         };
         let lower = id.to_lowercase();
         let is_embed = lower.contains("embedding") || lower.contains("-embed");
+        // Under a guest link the chat model must be one the LENDER
+        // advertises. This listing carries local slots, mesh peers AND the
+        // lender's granted ids, and taking whichever non-embed id comes
+        // first means a guest borrows a model and then asks their own local
+        // slot the question. That is exactly what the first live 3.3 did:
+        // the turn served from `Qwen3.8-27B-UD-Q6_K_XL` on this machine
+        // while a grant for the lender's model sat unused.
+        //
+        // `advertised_by` is the daemon's own answer to "who holds this",
+        // so there is no second scope lookup here (§10.6).
+        let lender_holds = |m: &serde_json::Value| -> bool {
+            let Some(lender) = globals.guest_lender_url.as_deref() else {
+                return false;
+            };
+            m.get("advertised_by")
+                .and_then(|a| a.as_array())
+                .is_some_and(|rows| rows.iter().any(|h| h.as_str() == Some(lender)))
+        };
         if is_embed {
             if embed_found.is_none() {
                 embed_found = Some(id.to_string());
             }
-        } else if chat_found.is_none() {
+        } else if chat_found.is_none() && (!guest || lender_holds(m)) {
             chat_found = Some(id.to_string());
         }
     }
 
     match (chat_found, embed_found) {
         (Some(c), Some(e)) => Ok((c, e)),
+        // Under a guest link this branch has ONE cause and it is not the
+        // local slots: the lender advertises nothing under this grant, so it
+        // expired, was revoked, or the lending node restarted (grants are
+        // held in memory). Sending the operator to `svrn setup` for that is
+        // the B1 misattribution shape — a true statement about the wrong
+        // subject. This is the surface live bar 3.6 reads.
+        (None, _) if guest => Err(Error::Serialization(
+            "the guest link is live but the lending node grants no chat model — the grant has \
+             expired, been revoked, or the lender restarted (grants are held in memory). \
+             Nothing was served from this node in its place; `svrn mesh use --forget` drops \
+             the link."
+                .into(),
+        )),
         (None, _) => Err(Error::Serialization(
             "daemon lists no chat models — check `svrn setup` and the primary/fast slots".into(),
         )),

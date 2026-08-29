@@ -195,7 +195,6 @@ pub struct Mesh {
     pub peers: Vec<MeshPeering>,
 }
 
-
 /// Record of a member node in the mesh.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemberRecord {
@@ -345,59 +344,10 @@ pub enum PeerTrustLevel {
     Full,
 }
 
-/// Summary of what a `Mesh::merge_from` call did. Used for tracing
-/// ("we learned about 1 new member") and test assertions.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct MergeReport {
-    /// Members that were absent locally and got added from `other`.
-    pub added: usize,
-    /// Members that existed locally but were replaced by a newer
-    /// record from `other` (higher `last_seen`).
-    pub updated: usize,
-    /// Whether the peer we merged FROM is running a pre-split build — its
-    /// payload carried no [`Mesh::mesh_secret`], so serde defaulted it to
-    /// zero.
-    ///
-    /// This is the ONLY moment that fact is observable: it lives in the
-    /// gossip payload, not in any member record, so a caller that does not
-    /// capture it here cannot recover it later. `EmbeddedDaemon::rotate_invite`
-    /// needs it, because rotating while such a peer is online partitions
-    /// exactly that peer (it still authorizes gossip on `invite_key_hash`).
-    ///
-    /// Meaningful only when [`Self::rejected`] is false — a refused merge
-    /// tells us nothing about the sender's build.
-    ///
-    /// Derived from [`Self::auth_arm`], never from the payload alone: an
-    /// upgraded peer withholds its `mesh_secret` deliberately, so a zeroed
-    /// field is no longer evidence of a pre-split build.
-    pub peer_pre_split: bool,
-    /// Which predicate authorized this merge. The caller's reply uses it to
-    /// decide whether the raw `mesh_secret` still needs to be on the wire —
-    /// see `routes_internal::gossip`.
-    pub auth_arm: GossipAuthArm,
-    /// True when the merge was refused outright because `other`
-    /// described a different mesh (mismatching `id` or
-    /// `invite_key_hash`). When set, nothing was mutated.
-    pub rejected: bool,
-    /// Node IDs whose records we just observed advance (added or
-    /// LWW-updated) in this merge. The caller stamps these in its local
-    /// liveness map (`AppState::observe_peer_contact`) so offline-decay
-    /// measures *local observation staleness*, not the peer's own
-    /// (possibly clock-skewed) `last_seen`. Empty on a rejected merge.
-    pub observed: Vec<NodeId>,
-    /// Records this merge REFUSED because writing them would have left two
-    /// ACTIVE members claiming one endpoint key.
-    ///
-    /// Non-zero means a peer is gossiping a roster we will not adopt, and the
-    /// mesh needs an operator: `svrn mesh members --aliased` names the pair
-    /// and `svrn mesh forget-member` retires the ghost. It is counted rather
-    /// than folded into `rejected` because the rest of the round is still
-    /// good — one poisoned row must not cost us a whole gossip cycle.
-    pub aliased_refused: usize,
-}
+pub use crate::mesh_merge::MergeReport;
+use crate::mesh_merge::{MemberOutcome, MergeArm, RefusalReason, SkipReason};
 
 impl Mesh {
-
     /// Merge another view of this mesh into `self`. Per-member
     /// `last_seen` acts as the Lamport-ish clock: the record with
     /// the higher timestamp wins. Own record (the caller's
@@ -489,91 +439,86 @@ impl Mesh {
         report.auth_arm = arm;
         report.peer_pre_split = arm != GossipAuthArm::Proof && !other.has_mesh_secret();
         for (id, incoming) in &other.members {
-            if *id == self_node_id {
-                // Authoritative-for-self: never accept an incoming
-                // record about us, regardless of its `last_seen`.
-                // If a buggy peer has a stale view of us, we'll
-                // correct them on our next gossip round when we
-                // ship our current record in the push-pull reply.
-                continue;
-            }
-            match self.members.get(id) {
-                None => {
-                    // First sight of this member: trust its dial info only
-                    // if it is validly signed, else clear it (a new member
-                    // can't be poisoned with attacker-supplied reachability
-                    // on first contact). The member is still added.
-                    let mut record = incoming.clone();
-                    Self::reconcile_dial_info(&mut record, None, enforce_signed);
-                    let active = record.is_active();
-                    if let Some(clash) = self.alias_clash(&record, active) {
-                        report.aliased_refused += 1;
-                        tracing::warn!(
-                            candidate = ?record.node_id,
-                            candidate_name = %record.name,
-                            held_by = ?clash.0,
-                            held_by_name = %clash.1,
-                            "gossip: REFUSED a new member claiming an endpoint key an \
-                             active member already holds — admitting it would split one \
-                             node's liveness across two rows; `svrn mesh forget-member` \
-                             retires whichever is the ghost"
-                        );
-                        continue;
-                    }
-                    self.members.insert(*id, record);
-                    report.added += 1;
-                    // A tombstone we've never seen is still added (so it
-                    // converges mesh-wide), but it is not "observed alive".
-                    if active {
-                        report.observed.push(*id);
-                    }
-                }
-                Some(existing) if incoming.event_time() > existing.event_time() => {
-                    // Anti-downgrade: a newer record relayed by a
-                    // pre-identity build carries `node_pubkey: None`.
-                    // Without this preservation, ONE old peer in the
-                    // gossip path strips every node's pubkey on each
-                    // LWW win. An identity key never changes within
-                    // a membership, so keeping the locally-known key
-                    // while taking the rest of the newer record is
-                    // always correct.
-                    let preserved_pubkey = match incoming.node_pubkey {
-                        Some(pk) => Some(pk),
-                        None => existing.node_pubkey,
-                    };
-                    let mut record = incoming.clone();
-                    record.node_pubkey = preserved_pubkey;
-                    // The non-security fields (last_seen, status, …) take
-                    // the LWW win, but dial info travels only if signed +
-                    // fresh; otherwise it is pinned to the value we already
-                    // trust. So a forged-newer record advances liveness but
-                    // cannot move a peer's reachability (WS-D).
-                    Self::reconcile_dial_info(&mut record, Some(existing), enforce_signed);
-                    let active = record.is_active();
-                    if let Some(clash) = self.alias_clash(&record, active) {
-                        report.aliased_refused += 1;
-                        tracing::warn!(
-                            candidate = ?record.node_id,
-                            candidate_name = %record.name,
-                            held_by = ?clash.0,
-                            held_by_name = %clash.1,
-                            "gossip: REFUSED an LWW update that would move an endpoint \
-                             key onto a second active member — the local record stands"
-                        );
-                        continue;
-                    }
-                    self.members.insert(*id, record);
-                    report.updated += 1;
-                    if active {
-                        report.observed.push(*id);
-                    }
-                }
-                Some(_) => {
-                    // Existing is equal or newer — keep ours.
-                }
-            }
+            let outcome = self.merge_one_member(*id, incoming, self_node_id, enforce_signed);
+            report.record(*id, &incoming.name, outcome);
         }
         report
+    }
+
+    /// Decide what one incoming member record does to the local roster, and
+    /// apply it. Returns the decision; [`MergeReport::record`] is what turns
+    /// it into a number.
+    ///
+    /// Split out of the round loop so the four paths are four returns rather
+    /// than five scattered counter increments and two `continue`s. The
+    /// refusal returns like any other outcome, which is what lets one poisoned
+    /// row be abandoned without costing the rest of the cycle.
+    fn merge_one_member(
+        &mut self,
+        id: NodeId,
+        incoming: &MemberRecord,
+        self_node_id: NodeId,
+        enforce_signed: bool,
+    ) -> MemberOutcome {
+        if id == self_node_id {
+            // Authoritative-for-self: never accept an incoming record about
+            // us, regardless of its `last_seen`. If a buggy peer has a stale
+            // view of us, we correct them on our next push-pull reply.
+            return MemberOutcome::NotApplicable(SkipReason::AuthoritativeForSelf);
+        }
+        match self.members.get(&id) {
+            None => {
+                // First sight: trust dial info only if validly signed, else
+                // clear it — a new member can't be poisoned with
+                // attacker-supplied reachability on first contact. The member
+                // is still added.
+                let mut record = incoming.clone();
+                Self::reconcile_dial_info(&mut record, None, enforce_signed);
+                let active = record.is_active();
+                if let Some((held_by, held_by_name)) = self.alias_clash(&record, active) {
+                    return MemberOutcome::Refused(RefusalReason::EndpointKeyHeldByActiveMember {
+                        held_by,
+                        held_by_name,
+                        arm: MergeArm::FirstSight,
+                    });
+                }
+                self.members.insert(id, record);
+                // A tombstone we have never seen is still added (so it
+                // converges mesh-wide), but it is not "observed alive".
+                MemberOutcome::Added { observed: active }
+            }
+            Some(existing) if incoming.event_time() > existing.event_time() => {
+                // Anti-downgrade: a newer record relayed by a pre-identity
+                // build carries `node_pubkey: None`. Without this
+                // preservation, ONE old peer in the gossip path strips every
+                // node's pubkey on each LWW win. An identity key never changes
+                // within a membership, so keeping the locally-known key while
+                // taking the rest of the newer record is always correct.
+                let preserved_pubkey = match incoming.node_pubkey {
+                    Some(pk) => Some(pk),
+                    None => existing.node_pubkey,
+                };
+                let mut record = incoming.clone();
+                record.node_pubkey = preserved_pubkey;
+                // Non-security fields take the LWW win, but dial info travels
+                // only if signed + fresh; otherwise it is pinned to the value
+                // we already trust. So a forged-newer record advances liveness
+                // but cannot move a peer's reachability (WS-D).
+                Self::reconcile_dial_info(&mut record, Some(existing), enforce_signed);
+                let active = record.is_active();
+                if let Some((held_by, held_by_name)) = self.alias_clash(&record, active) {
+                    return MemberOutcome::Refused(RefusalReason::EndpointKeyHeldByActiveMember {
+                        held_by,
+                        held_by_name,
+                        arm: MergeArm::LwwUpdate,
+                    });
+                }
+                self.members.insert(id, record);
+                MemberOutcome::Updated { observed: active }
+            }
+            // Existing is equal or newer — keep ours.
+            Some(_) => MemberOutcome::NotApplicable(SkipReason::LocalRecordNotOlder),
+        }
     }
 
     /// Proof that we hold `mesh_secret`, without transmitting it.
@@ -951,8 +896,6 @@ pub(crate) mod tests {
             peers: vec![],
         }
     }
-
-
 
     #[test]
     fn is_dialable_accepts_ip_or_iroh_paths() {

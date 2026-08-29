@@ -80,6 +80,41 @@ pub struct GuestLender {
     pub display: String,
 }
 
+/// What this node's guest link is worth RIGHT NOW.
+///
+/// # Why this is three states and not an `Option`
+///
+/// It was an `Option<(String, Vec<String>)>`, and `None` meant both "this
+/// node has no guest link" and "this node has a live link the lender just
+/// refused". Those demand opposite behaviour: the first should route
+/// normally, the second must not quietly answer from the local model —
+/// that is the silent substitution §18.3 forbids, and it is the SAME defect
+/// the two-machine run was convened to catch, reached by a different route.
+///
+/// Observed live 2026-08-28: the lending node's service manager restarted it
+/// (grants are held in RAM), MAC's next four requests got `403`, and every
+/// one of them was answered by MAC's own 27B with nothing said. The operator
+/// had asked to borrow a model and got their own, and no surface disagreed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GrantPosture {
+    /// No guest link on this node — the overwhelmingly common case. Route
+    /// local/peer as if the feature did not exist.
+    NoLink,
+    /// A link that is live BY ITS OWN TTL, which the lender is nonetheless
+    /// not honouring: revoked, the lender restarted, or the tunnel to it
+    /// cannot be opened. Never treated as `NoLink`.
+    Unusable {
+        /// The lender's display URL, for the error the operator reads.
+        lender: String,
+        /// Why, in the words the operator needs — a status code, or the
+        /// transport failure. Carried, not summarised: "refused" and
+        /// "unreachable" have different repairs.
+        why: String,
+    },
+    /// A live link the lender is honouring, and what it currently buys.
+    Granted { lender: String, ids: Vec<String> },
+}
+
 /// "Do I hold a live grant for this model id?"
 ///
 /// A trait so the dispatch path can be tested without a lender, a tunnel, or
@@ -90,14 +125,15 @@ pub trait GuestLenderSource: Send + Sync + std::fmt::Debug {
     /// ordinary local/peer resolution.
     async fn lender_for(&self, model_id: &str) -> Option<GuestLender>;
 
-    /// Every model id this node's guest link currently buys, with the
-    /// lender's display name.
+    /// What this node's guest link is worth right now.
     ///
-    /// `/v1/models` MUST include these. The listing's contract is that it
-    /// matches what name resolution can actually serve — omitting a model
-    /// `locate_named_model` will happily route is the same lie, in the other
-    /// direction, that the peer listing was fixed for (§10.6).
-    async fn granted_models(&self) -> Option<(String, Vec<String>)>;
+    /// `/v1/models` MUST include a `Granted` posture's ids. The listing's
+    /// contract is that it matches what name resolution can actually serve —
+    /// omitting a model `locate_named_model` will happily route is the same
+    /// lie, in the other direction, that the peer listing was fixed for
+    /// (§10.6). `Unusable` is equally load-bearing: it is what stops a
+    /// refused grant being served as if it were an absent one.
+    async fn posture(&self) -> GrantPosture;
 
     /// Called when the lender refuses a dispatch with 401. The grant is gone —
     /// expired, revoked, or the lender restarted (its store is RAM-only) — so
@@ -114,8 +150,8 @@ impl GuestLenderSource for NoGuestLenders {
     async fn lender_for(&self, _model_id: &str) -> Option<GuestLender> {
         None
     }
-    async fn granted_models(&self) -> Option<(String, Vec<String>)> {
-        None
+    async fn posture(&self) -> GrantPosture {
+        GrantPosture::NoLink
     }
     async fn invalidate(&self) {}
 }
@@ -142,8 +178,67 @@ pub struct StoredGuestLink {
     tunnel: RwLock<Option<(String, Arc<crate::guest_tunnel::GuestTunnel>)>>,
 }
 
+/// Is `base_url`'s loopback listener still accepting connections?
+///
+/// A TCP connect, not an HTTP request: the question is whether the BRIDGE is
+/// alive, and a request would also exercise the lender, the grant and the
+/// network — so a refusal could not be attributed. One connect answers
+/// exactly one question (§18.4).
+async fn tunnel_is_accepting(base_url: &str) -> bool {
+    let Some(authority) = base_url.strip_prefix("http://") else {
+        // Not a loopback bridge URL — nothing local to probe, so do not claim
+        // it is dead. A link with no `dial=` resolves to the lender's own URL
+        // and never reaches this path.
+        return true;
+    };
+    let authority = authority.trim_end_matches('/');
+    match tokio::time::timeout(
+        Duration::from_millis(750),
+        tokio::net::TcpStream::connect(authority),
+    )
+    .await
+    {
+        Ok(Ok(_)) => true,
+        Ok(Err(e)) => {
+            tracing::debug!(
+                target: "transport",
+                bridge = %base_url,
+                error = %e,
+                "guest-lender: cached tunnel refused a probe connection"
+            );
+            false
+        }
+        Err(_) => {
+            tracing::debug!(
+                target: "transport",
+                bridge = %base_url,
+                "guest-lender: cached tunnel did not accept within 750ms"
+            );
+            false
+        }
+    }
+}
+
 impl StoredGuestLink {
-    pub fn new(root: PathBuf) -> Self {
+    /// Read `guest.json` from the SAME root `svrn mesh use` writes it to.
+    ///
+    /// Takes no path ON PURPOSE. It was constructed with the daemon's
+    /// `cfg.data.dir` for one afternoon, which is a DIFFERENT directory —
+    /// this operator's is `~/.sovereign` while the CLI writes `~/.svrnmesh`
+    /// — so the lookup silently found nothing and the whole guest route was
+    /// dead with no error anywhere. The unit tests could not see it: they
+    /// hand both sides the same tempdir, so the two roots were equal by
+    /// construction. Only the two-machine run caught it.
+    ///
+    /// `svrnmesh_root()` is the SSOT both halves already resolve through, so
+    /// there is nothing left for a caller to get wrong (§7.6, §10.6).
+    pub fn new() -> Self {
+        Self::new_in(sovereign_contracts::rebrand::svrnmesh_root())
+    }
+
+    /// Test-only escape hatch. Production must use [`Self::new`] — a root
+    /// passed in is a root that can disagree with the writer's.
+    pub fn new_in(root: PathBuf) -> Self {
         Self {
             root,
             http: reqwest::Client::new(),
@@ -161,8 +256,31 @@ impl StoredGuestLink {
             return Some(link.url.clone());
         };
         if let Some((open_for, t)) = self.tunnel.read().await.as_ref() {
+            // A CACHED TUNNEL IS A CLAIM, AND IT IS CHECKED BEFORE IT IS USED.
+            //
+            // Handing back `t.base_url()` on the strength of the key alone
+            // assumes the bridge behind it is still accepting. It need not be:
+            // the bridge's accept loop can exit, and the `GuestTunnel` can be
+            // dropped by a provider rebuild, either of which leaves this entry
+            // naming a port that refuses connections. Nothing here noticed,
+            // so every later request went to the dead address and surfaced as
+            // "the lending node refused the grant" — a true-sounding error
+            // about the wrong subject (§18.3).
+            //
+            // Observed live 2026-08-28: tunnel opened 21:11:10 on port 61564,
+            // served the `/v1/models` listing, and at 21:12:39 the completion
+            // got connection-refused on that same port while the daemon was
+            // still up and the grant still valid.
             if open_for == dial {
-                return Some(t.base_url().to_string());
+                if tunnel_is_accepting(t.base_url()).await {
+                    return Some(t.base_url().to_string());
+                }
+                tracing::warn!(
+                    target: "transport",
+                    lender = %link.url,
+                    stale_bridge = %t.base_url(),
+                    "guest-lender: the cached mesh tunnel is no longer accepting —                      reopening rather than sending the request to a dead port"
+                );
             }
         }
         // The guest's OWN iroh posture, not the lender's: a node that severed
@@ -200,10 +318,10 @@ impl StoredGuestLink {
     }
 
     /// Model ids this grant currently buys, straight from the lender.
-    async fn granted_ids(&self, link: &GuestLink, base: &str) -> Vec<String> {
+    async fn granted_ids(&self, link: &GuestLink, base: &str) -> Result<Vec<String>, String> {
         if let Some(c) = self.scope.read().await.as_ref() {
             if c.token == link.token && c.fetched_at.elapsed() < SCOPE_TTL {
-                return c.ids.clone();
+                return Ok(c.ids.clone());
             }
         }
         let url = format!("{}/v1/models", base.trim_end_matches('/'));
@@ -229,17 +347,23 @@ impl StoredGuestLink {
                 })
                 .unwrap_or_default(),
             Ok(r) => {
+                let status = r.status();
                 tracing::info!(
                     lender = %link.url,
-                    status = %r.status(),
+                    status = %status,
                     "guest-lender: the lending node refused the grant — it has expired, \
                      been revoked, or the lender restarted (grants are held in memory)"
                 );
-                Vec::new()
+                // The REASON travels with the failure. Collapsing it to an
+                // empty vec here is what made a refused grant indistinguishable
+                // from no grant three layers up.
+                *self.scope.write().await = None;
+                return Err(format!("the lending node answered {status}"));
             }
             Err(e) => {
                 tracing::warn!(lender = %link.url, error = %e, "guest-lender: unreachable");
-                Vec::new()
+                *self.scope.write().await = None;
+                return Err(format!("the lending node was unreachable: {e}"));
             }
         };
         *self.scope.write().await = Some(CachedScope {
@@ -247,26 +371,64 @@ impl StoredGuestLink {
             token: link.token.clone(),
             fetched_at: Instant::now(),
         });
-        ids
+        Ok(ids)
     }
+}
+
+/// [`StoredGuestLink::resolve`]'s three outcomes, carrying what each needs.
+///
+/// The public [`GrantPosture`] is this minus the dispatch material; they are
+/// derived from one another rather than computed twice (§10.6).
+enum Resolved {
+    NoLink,
+    Unusable {
+        lender: String,
+        why: String,
+    },
+    Ok {
+        link: GuestLink,
+        base: String,
+        ids: Vec<String>,
+    },
 }
 
 impl StoredGuestLink {
     /// The live link, its route, and what it buys — the one place those three
     /// are resolved together, so "what may I name" and "where do I send it"
     /// can never disagree.
-    async fn resolve(&self) -> Option<(GuestLink, String, Vec<String>)> {
-        let link = guest_link::load_live_in(&self.root, guest_link::now_secs())?;
-        let base = self.route_for(&link).await?;
-        let ids = self.granted_ids(&link, &base).await;
-        Some((link, base, ids))
+    async fn resolve(&self) -> Resolved {
+        let Some(link) = guest_link::load_live_in(&self.root, guest_link::now_secs()) else {
+            return Resolved::NoLink;
+        };
+        let Some(base) = self.route_for(&link).await else {
+            // A link whose tunnel will not open is NOT the same as no link.
+            // Returning `None` here is how an unopenable tunnel used to read
+            // as "this node never borrowed anything".
+            return Resolved::Unusable {
+                lender: link.url.clone(),
+                why: "the mesh tunnel to the lending node could not be opened".to_string(),
+            };
+        };
+        match self.granted_ids(&link, &base).await {
+            Ok(ids) if ids.is_empty() => Resolved::Unusable {
+                lender: link.url.clone(),
+                why: "the grant currently covers no models".to_string(),
+            },
+            Ok(ids) => Resolved::Ok { link, base, ids },
+            Err(why) => Resolved::Unusable {
+                lender: link.url.clone(),
+                why,
+            },
+        }
     }
 }
 
 #[async_trait]
 impl GuestLenderSource for StoredGuestLink {
     async fn lender_for(&self, model_id: &str) -> Option<GuestLender> {
-        let (link, base, ids) = self.resolve().await?;
+        let Resolved::Ok { link, base, ids } = self.resolve().await else {
+            return None;
+        };
         if !ids.iter().any(|i| i == model_id) {
             return None;
         }
@@ -277,12 +439,15 @@ impl GuestLenderSource for StoredGuestLink {
         })
     }
 
-    async fn granted_models(&self) -> Option<(String, Vec<String>)> {
-        let (link, _, ids) = self.resolve().await?;
-        if ids.is_empty() {
-            return None;
+    async fn posture(&self) -> GrantPosture {
+        match self.resolve().await {
+            Resolved::NoLink => GrantPosture::NoLink,
+            Resolved::Unusable { lender, why } => GrantPosture::Unusable { lender, why },
+            Resolved::Ok { link, ids, .. } => GrantPosture::Granted {
+                lender: link.url.clone(),
+                ids,
+            },
         }
-        Some((link.url.clone(), ids))
     }
 
     async fn invalidate(&self) {
@@ -294,6 +459,65 @@ impl GuestLenderSource for StoredGuestLink {
 mod tests {
     use super::*;
 
+    /// THE regression, and the one the unit tests were structurally blind to.
+    ///
+    /// `StoredGuestLink::new()` must read the SAME file `svrn mesh use`
+    /// writes. It was built from the daemon's `cfg.data.dir` for one
+    /// afternoon — a configurable directory that on the operator's machine
+    /// was `~/.sovereign` while the CLI wrote `~/.svrnmesh` — so every
+    /// lookup found nothing, silently, and the guest route was dead with no
+    /// error on any surface.
+    ///
+    /// Every other test here passes an explicit tempdir to both halves, so
+    /// the two roots are equal by construction and none of them could fail.
+    /// This one asserts the PRODUCTION root against the SSOT the CLI
+    /// resolves through.
+    #[test]
+    fn the_default_root_is_the_one_the_cli_writes_to() {
+        let expected = sovereign_contracts::rebrand::svrnmesh_root();
+        assert_eq!(
+            StoredGuestLink::new().root,
+            expected,
+            "the daemon must read guest.json where `svrn mesh use` put it; a \
+             configurable data dir is NOT that place"
+        );
+        assert_eq!(
+            guest_link::path_in(&StoredGuestLink::new().root)
+                .file_name()
+                .unwrap(),
+            "guest.json"
+        );
+    }
+
+    /// The liveness probe must actually distinguish a live bridge from a dead
+    /// one. A probe that returns `true` unconditionally would restore exactly
+    /// the bug it was written for, and every other test here would still pass.
+    #[tokio::test]
+    async fn the_probe_tells_a_live_bridge_from_a_dead_one() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        assert!(
+            tunnel_is_accepting(&base).await,
+            "a bound listener must probe as accepting"
+        );
+
+        drop(listener);
+        assert!(
+            !tunnel_is_accepting(&base).await,
+            "a dropped listener must probe as DEAD — this is the check that \
+             stops a cached tunnel handing out a port that refuses connections"
+        );
+    }
+
+    /// A link with no `dial=` resolves to the lender's own URL and never opens
+    /// a local bridge, so there is nothing loopback to probe. The probe must
+    /// not report those as dead — that would refuse a perfectly good plaintext
+    /// link on the strength of a check that does not apply to it.
+    #[tokio::test]
+    async fn a_non_bridge_url_is_not_reported_dead() {
+        assert!(tunnel_is_accepting("https://lender.example:9741").await);
+    }
+
     #[tokio::test]
     async fn a_node_with_no_link_lends_nothing() {
         assert!(NoGuestLenders.lender_for("anything").await.is_none());
@@ -304,7 +528,7 @@ mod tests {
     #[tokio::test]
     async fn an_absent_guest_file_resolves_to_nothing() {
         let dir = tempfile::tempdir().unwrap();
-        let src = StoredGuestLink::new(dir.path().to_path_buf());
+        let src = StoredGuestLink::new_in(dir.path().to_path_buf());
         assert!(src.lender_for("some-model").await.is_none());
     }
 
@@ -326,7 +550,7 @@ mod tests {
             },
         )
         .unwrap();
-        let src = StoredGuestLink::new(dir.path().to_path_buf());
+        let src = StoredGuestLink::new_in(dir.path().to_path_buf());
         assert!(src.lender_for("some-model").await.is_none());
     }
 }

@@ -150,7 +150,7 @@ impl ProviderFactory for LlamaCppFactory {
         // `guest.json`; a node that never ran it gets `NoGuestLenders` and
         // pays nothing. See `sovereign_mesh::guest_lender`.
         mesh_provider.set_guest_source(std::sync::Arc::new(
-            sovereign_mesh::guest_lender::StoredGuestLink::new(cfg.data.dir.clone()),
+            sovereign_mesh::guest_lender::StoredGuestLink::new(),
         ));
         // Route this node's primary turns into the mesh-hosted shared model, if
         // one is configured (SOVEREIGN_SHARED_MODEL_ID, from [shared_model]

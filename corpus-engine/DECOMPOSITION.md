@@ -240,6 +240,22 @@ the *concerns match the workflow*. Editing a watcher is a watcher
 concern. Editing a note is a note concern. Editing an ingest pipeline is
 an ingest concern. None of those should rebuild each other.
 
+**A fourth marker, added 2026-08-28 — and it is the one this list was missing.**
+Every marker above measures *rebuild*: blast radius, recompile scope, seconds off
+a loop. None measures mass, and over the window that executed these carve-outs the
+two moved in opposite directions. Blast radius improved as predicted. Meanwhile
+`corpus-engine/src` went **4.3MB to 5.6MB (+30%)**, 210 to 250 files, through
+seven extractions — and `notes.rs`, which left at 2,781 lines and was recorded as
+cleared from the ARCH §3.1 list, is **7,794** today.
+
+That is not an argument against carving; the blast-radius wins are real and were
+delivered. It is an argument that a carve-out is **mass-neutral by construction** —
+the leaf was never the tangle, and the origin crate stays the default destination
+for whatever arrives next. So a carve-out owes a count that went down, the same way
+a drive-collapse does (ARCH §10.7, the pattern to prefer when both are available).
+A refactor whose only number is rebuild time has not been measured for the thing
+that actually grows.
+
 ---
 
 ## Pointers

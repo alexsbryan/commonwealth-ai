@@ -2194,6 +2194,98 @@ impl MeshInferenceProvider {
         self.shared_model_id.load_full().map(|s| (*s).clone())
     }
 
+    /// The model a LIVE GUEST LINK grants, as a soft named target for a
+    /// request that named none.
+    ///
+    /// Without this the borrowed model is reachable only when some caller
+    /// types its id. The daemon's own turn pipeline never does: `serve_turn`
+    /// builds its `CompletionRequest` with `model_id: None` (and, on the
+    /// knowledge-query path, `oicp: None` too), so `select_route` fell
+    /// straight through to ranked scoring and answered from this node's own
+    /// slot. Observed live 2026-08-28 with a valid grant in place: two
+    /// `svrn chat ask` turns both logged
+    /// `mesh-inference: scoring local local_pick="Qwen3.8-27B-UD-Q6_K_XL"`
+    /// while the grant sat unused. Both answers looked fine on stdout; this
+    /// machine was talking to itself.
+    ///
+    /// NO PRIVACY GATE HERE, deliberately, and it is not an omission.
+    /// [`Self::shared_primary_id`] carries one because SLOT_POLICY §5 scopes
+    /// the shared model to offload-eligible turns; this method only *names* a
+    /// model. Whether the named turn may actually cross to the lender is
+    /// decided one call down in [`Self::resolve_named_dispatch`], whose
+    /// `Lender(..) if !privacy_permits_peer` and `if !may_forward` arms turn
+    /// it into `Unknown`, which under `soft` falls back through to ranked
+    /// selection. Adding a second reading of "may this leave" here is exactly
+    /// the duplicated-decider shape §10.6 forbids — and the conservative
+    /// reading (`is_some_and`) would have made this whole method inert on the
+    /// turn path, which carries no envelope at all.
+    async fn guest_primary_id(&self) -> Result<Option<String>> {
+        match self.guest_source().posture().await {
+            crate::guest_lender::GrantPosture::NoLink => Ok(None),
+            crate::guest_lender::GrantPosture::Granted { lender, ids } => {
+                let Some(id) = ids.into_iter().next() else {
+                    return Ok(None);
+                };
+                tracing::info!(
+                    lender = %lender,
+                    model = %id,
+                    "mesh-inference: a live guest link supplies the primary model for a \
+                     turn that named none"
+                );
+                Ok(Some(id))
+            }
+            // THE REFUSAL IS THE ANSWER. Falling through to ranked selection
+            // here serves the operator's own model to a question they asked a
+            // BORROWED one — silently, with every surface reporting success.
+            // That is §18.3, and it is what four consecutive 403s produced on
+            // 2026-08-28 while the operator watched good-looking answers come
+            // back from the wrong machine.
+            //
+            // Bounded by the link's own TTL: once it lapses, `posture()`
+            // reports `NoLink` and routing returns to normal with no
+            // intervention. `svrn mesh use --forget` is the immediate repair,
+            // and the error names it.
+            crate::guest_lender::GrantPosture::Unusable { lender, why } => {
+                tracing::warn!(
+                    lender = %lender,
+                    why = %why,
+                    "mesh-inference: REFUSING the turn — a live guest link is in \
+                     effect and the lending node is not honouring it; serving this \
+                     from the local model would answer a borrowed question with \
+                     our own"
+                );
+                Err(sovereign_core::error::Error::Routing(format!(
+                    "the guest link for {lender} is in effect but not usable: {why}. \
+                     Nothing was served from this node in its place — run \
+                     `svrn mesh use --forget` to drop the link, or ask the lending \
+                     node for a fresh grant."
+                )))
+            }
+        }
+    }
+
+    /// The soft named target for a request that named no model: a live guest
+    /// link's grant first, then the configured shared model.
+    ///
+    /// GUEST BEFORE SHARED, and the ordering is the point. A grant is a
+    /// deliberate, TTL-bounded act the operator performed just now (`svrn
+    /// mesh use`); `[shared_model]` is standing config. Reading the config
+    /// first would make `svrn mesh use` inert on precisely the nodes that
+    /// configured a primary — the same silent-inertness shape as the two bugs
+    /// the two-machine run found — and this preference expires on its own
+    /// when the grant does, which standing config never would.
+    async fn soft_primary_id(
+        &self,
+        request: &CompletionRequest,
+    ) -> Result<Option<(String, SoftSource)>> {
+        match self.guest_primary_id().await? {
+            Some(id) => Ok(Some((id, SoftSource::GuestLink))),
+            None => Ok(self
+                .shared_primary_id(request)
+                .map(|id| (id, SoftSource::SharedModel))),
+        }
+    }
+
     /// THE decider for "where does a named request go": name resolution, the
     /// hop bound, and the decision record, in one place.
     ///
@@ -2384,12 +2476,17 @@ impl MeshInferenceProvider {
 
     async fn select_route(&self, request: &CompletionRequest) -> Result<RoutePlan> {
         // Effective named target: an explicit `model_id` (Hard — fail loud if no
-        // node advertises it) takes priority; otherwise a configured shared-model
-        // primary (Soft — degrade to the local model when the cluster is forming
-        // or the host is unreachable).
-        let (named, soft) = match explicit_model_id(request) {
-            Some(id) => (Some(id.to_string()), false),
-            None => (self.shared_primary_id(request), true),
+        // node advertises it) takes priority; otherwise a live guest link's
+        // grant, then a configured shared-model primary (both Soft — degrade to
+        // the local model when the cluster is forming or the host is
+        // unreachable). See [`Self::soft_primary_id`] for why the guest link is
+        // read first.
+        let (named, soft, soft_source) = match explicit_model_id(request) {
+            Some(id) => (Some(id.to_string()), false, None),
+            None => match self.soft_primary_id(request).await? {
+                Some((id, src)) => (Some(id), true, Some(src)),
+                None => (None, true, None),
+            },
         };
         if let Some(model_id) = named {
             let NamedDispatch {
@@ -2511,10 +2608,21 @@ impl MeshInferenceProvider {
                         // (`oicp_select::offload_verdict`), so the request is
                         // still bounded — but an operator reading only this
                         // line would not know which of the two happened.
+                        // NAME THE ACTUAL SOURCE. This said "shared model"
+                        // unconditionally, which became a false statement the
+                        // moment a guest link could also supply the soft
+                        // target: the 2026-08-28 live run logged "shared
+                        // model unavailable ... shared=Qwen3.5-4B-UD-MTP-Q6_K_XL"
+                        // for a model that came from a GUEST GRANT and no
+                        // shared-model config existed on the node at all.
+                        // A true-sounding line about the wrong subject is the
+                        // B1 shape, and it costs an operator the one clue that
+                        // would have told them which mechanism was in play.
                         tracing::info!(
-                            shared = %model_id,
+                            soft_target = %model_id,
+                            source = ?soft_source,
                             reason = ?reason,
-                            "mesh-inference: shared model unavailable on the \
+                            "mesh-inference: soft target unavailable on the \
                              named path — falling through to ranked mesh selection"
                         );
                         Ok(self
@@ -2920,6 +3028,20 @@ impl NamedUnknownReason {
 /// Trim and reject empty `request.model_id`. Empty/whitespace
 /// strings are not a routing signal — they fall through to the
 /// OICP-driven path.
+/// Where a SOFT named target came from, so the fallthrough log can name it.
+///
+/// Two mechanisms now produce one: a live guest grant and a configured shared
+/// model. They have different repairs — one is `svrn mesh use --forget` or a
+/// fresh grant, the other is `[shared_model]` config — so a log line that
+/// reports both as "shared model" sends the operator to the wrong file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SoftSource {
+    /// `svrn mesh use` — a bounded, borrowed model.
+    GuestLink,
+    /// `[shared_model]` / `SOVEREIGN_SHARED_MODEL_ID` — standing config.
+    SharedModel,
+}
+
 fn explicit_model_id(request: &CompletionRequest) -> Option<&str> {
     request
         .model_id
@@ -3662,7 +3784,15 @@ impl InferenceProvider for MeshInferenceProvider {
     /// Same source `locate_named_model` consults, so the listing and the
     /// routing cannot disagree about what a guest link buys.
     async fn lender_manifest(&self) -> Option<(String, Vec<String>)> {
-        self.guest_source().granted_models().await
+        match self.guest_source().posture().await {
+            crate::guest_lender::GrantPosture::Granted { lender, ids } => Some((lender, ids)),
+            // A refused grant advertises nothing — the listing must not name
+            // models the lender will not serve. The REFUSAL is reported on the
+            // routing path (`select_route`), which is where an operator is
+            // waiting on an answer; a listing is not the place to raise it.
+            crate::guest_lender::GrantPosture::NoLink
+            | crate::guest_lender::GrantPosture::Unusable { .. } => None,
+        }
     }
 
     fn effective_context_size(&self) -> Option<u32> {

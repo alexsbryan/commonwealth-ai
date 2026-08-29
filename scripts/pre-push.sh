@@ -271,7 +271,7 @@ fi
 # breaks is a CODE file being renamed out from under a citation.
 run_gate "docs-gate (cited paths resolve)" cargo run --quiet -p xtask -- docs-gate
 
-# ── Gate 2b: the other seven xtask gates. ADVISORY. ────────────────────────
+# ── Gate 2b: the other seven xtask gates. BLOCKING. ────────────────────────
 #
 # docs-gate above was ONE of ten. The rest ran only when somebody typed
 # `cargo xtask quality` — not in CI (ci.yml's `gates:` job has been commented
@@ -282,27 +282,63 @@ run_gate "docs-gate (cited paths resolve)" cargo run --quiet -p xtask -- docs-ga
 # caller at all.
 #
 # Wiring them here makes them structural instead of remembered (ARCH §7; the
-# ten's #10). The marginal cost is ~0 — xtask is already compiled for
-# docs-gate above, and each gate runs in well under a second.
-ADVISORY_GATES=(arch-gate boundary-gate layer-gate lock-gate layout-gate env-gate concept-gate)
+# ten's #10). Re-measured 2026-08-28: FOUR of ten were failing, not six of
+# eight — arch-gate (87 size violations), docs-gate (one stale citation), plus
+# api-gate and lint-gate, which are tooling/usage errors rather than code
+# failures and are not push gates at all. docs-gate is fixed; arch-gate is
+# baselined at 170 oversized files and now blocks regressions.
+#
+# BLOCKING since 2026-08-28, and the two changes are one decision. Advisory
+# WITH SUPPRESSED OUTPUT is indistinguishable from passing to anyone reading
+# quickly, which is exactly how six failures sat unseen for a month. A gate
+# nobody consults is not a gate (ARCH §18.1) — so it either blocks and shows
+# its findings, or it should be deleted.
+#
+# The budget that makes blocking tolerable: ONE xtask build, then the BINARY
+# per gate. `cargo run` re-resolves freshness over 56 workspace crates and
+# costs ~5.4s per invocation against a gate that runs in 0.04s — so ~38s of
+# the old ~70s was cargo, not gates. Measured 2026-08-28 on this host:
+#   concept 15.1s · arch 6.3s · env 4.2s · layout 3.9s · boundary/layer/lock <0.1s
+#   = 29.6s for all seven, plus one build.
+# If that ever creeps, concept-gate is 51% of it and REFACTOR_LEDGER.md
+# already specifies its content-hash cache.
+#
+# api-gate and lint-gate are deliberately NOT here. api-gate needs a pinned
+# nightly plus `cargo install cargo-public-api` (a CI concern, and it burns
+# 15.7s failing to find the binary); lint-gate consumes a clippy JSON stream
+# and belongs to the lint script that produces one. Neither is a push gate.
+XTASK_GATES=(arch-gate boundary-gate layer-gate lock-gate layout-gate env-gate concept-gate)
 
-xtask_advisory_gates() {
-    local g rc=0
+xtask_gates() {
+    local g rc=0 out xtask
     local -a failed=()
-    for g in "${ADVISORY_GATES[@]}"; do
-        # Output is suppressed on purpose: seven gates' full findings at every
-        # push is the crisis-wall shape the rustfmt note below warns about.
-        # Name who failed, point at the one command that explains it.
-        cargo run --quiet -p xtask -- "$g" >/dev/null 2>&1 || { failed+=("$g"); rc=1; }
+
+    # One build for all seven. A build failure is its own verdict — it is not
+    # "the gates passed" and it is not "your code is bad" (ARCH §18.3).
+    if ! cargo build --quiet -p xtask 2>/dev/null; then
+        printf '%s\n' "  ${C_BOLD}xtask failed to build${C_RESET} — the gates did not run" >&2
+        printf '\n%s\n\n' "  ${C_BOLD}see why:${C_RESET} cargo build -p xtask" >&2
+        return 1
+    fi
+    xtask="${REPO_ROOT}/target/debug/xtask"
+
+    for g in "${XTASK_GATES[@]}"; do
+        # Per-gate capture: on failure show THAT gate's findings only. Seven
+        # gates' full output at every push is the crisis-wall shape the
+        # rustfmt note above warns about — but zero output was worse.
+        out="$("$xtask" "$g" 2>&1)" && continue
+        failed+=("$g"); rc=1
+        printf '\n%s\n' "  ${C_BOLD}${g}${C_RESET}" >&2
+        printf '%s\n' "$out" | grep -E '✗|FAILED|^error' | head -6 | sed 's/^/    /' >&2
     done
     if (( rc )); then
-        printf '%s\n' "  ${C_BOLD}${#failed[@]} of ${#ADVISORY_GATES[@]} failing:${C_RESET} ${failed[*]}" >&2
-        printf '\n%s\n\n' "  ${C_BOLD}see why:${C_RESET} cargo xtask quality   ${C_DIM}(each gate's output ends with its own fix command)${C_RESET}" >&2
+        printf '\n%s\n' "  ${C_BOLD}${#failed[@]} of ${#XTASK_GATES[@]} failing:${C_RESET} ${failed[*]}" >&2
+        printf '\n%s\n\n' "  ${C_BOLD}full output:${C_RESET} cargo xtask quality   ${C_DIM}(each gate's output ends with its own fix command)${C_RESET}" >&2
     fi
     return $rc
 }
 
-warn_gate "xtask gates (advisory)" xtask_advisory_gates
+run_gate "xtask gates (arch/boundary/layer/lock/layout/env/concept)" xtask_gates
 
 # ── Gate 3: the workspace test suite. The expensive one. ───────────────────
 if (( RUST )); then

@@ -65,6 +65,13 @@ pub struct ChatGlobals {
     /// wrong answer, and `/v1/models` (which now lists the granted ids) is
     /// the right one.
     pub guest_link_active: bool,
+    /// The lending node's display URL, when a guest link is in effect.
+    ///
+    /// Bootstrap needs it to pick a GRANTED model rather than whichever
+    /// non-embed id `/v1/models` happens to list first. Without this the
+    /// guest borrows a model and then asks their own local slot the
+    /// question — which is what happened on the first live 3.3.
+    pub guest_lender_url: Option<String>,
     /// True iff `--daemon` was passed explicitly. A guest link must never
     /// override an endpoint the operator named on the command line — an
     /// explicit `--daemon` is the more specific instruction, and silently
@@ -115,6 +122,7 @@ impl ChatGlobals {
         Self {
             daemon_base,
             guest_link_active: false,
+            guest_lender_url: None,
             data_dir,
             chat_model: None,
             embed_model: None,
@@ -271,6 +279,7 @@ pub fn apply_guest_link(globals: &mut ChatGlobals, link: Option<GuestLink>, base
     // this whole surface refuses.
     let _ = base;
     globals.guest_link_active = true;
+    globals.guest_lender_url = Some(link.url.clone());
     true
 }
 

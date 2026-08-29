@@ -50,6 +50,19 @@ use crate::registry::ToolRegistry;
 /// exposes is "put your tools in this registry and tell me what happened".
 /// That is the whole seam — interface segregation on purpose, so a bundle
 /// never sees the host, the recipe, or the other bundles.
+///
+/// # The pattern this is an instance of
+///
+/// **Collapse the drive** (ARCH §10.7): N sites re-implement one sequence, so
+/// extract ONE implementation and make the differences a parameter. This is the
+/// *composition* form — the recipe names no tool, a host composes
+/// `Vec<Box<dyn ToolBundle>>`, and adoption therefore stopped costing a host its
+/// capabilities. The *trait-object* form is `sovereign_core::runtime::TurnSink`.
+///
+/// Copy this shape rather than carving a new leaf crate: a carve-out moves mass,
+/// this deletes it. The ratchet is a census that only shrinks — see
+/// `sovereign-core/tests/runtime_commission_census.rs`, where `UNSHARED_RECIPES`
+/// reached empty and turn-registry divergence went 26 to 23.
 #[async_trait]
 pub trait ToolBundle: Send + Sync {
     /// Stable family name, for tracing and for the host census. Not a tool
