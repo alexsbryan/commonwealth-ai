@@ -984,12 +984,7 @@ async fn any_scip_graph_populated() -> bool {
     false
 }
 
-fn print_decision(
-    plan: &Plan,
-    v: &Verified,
-    editor: &EditorOutcome,
-    scip_populated: bool,
-) {
+fn print_decision(plan: &Plan, v: &Verified, editor: &EditorOutcome, scip_populated: bool) {
     println!();
     println!("  {}", "─".repeat(54));
     println!("  \u{2713} Inline completion is live");

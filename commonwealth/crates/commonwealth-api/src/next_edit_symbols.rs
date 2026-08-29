@@ -230,7 +230,10 @@ pub fn trigger_at(path: Option<&str>, text: &str, cursor: usize) -> Result<Trigg
     if text.len() > MAX_PARSE_BYTES {
         return Err(Decline::NotParsed);
     }
-    let ext = path.rsplit('.').next().ok_or(Decline::UnsupportedLanguage)?;
+    let ext = path
+        .rsplit('.')
+        .next()
+        .ok_or(Decline::UnsupportedLanguage)?;
     let cfg = corpus_engine::extractors::code::language_for_extension(ext)
         .ok_or(Decline::UnsupportedLanguage)?;
     if !TRIGGER_LANGUAGES.contains(&cfg.id) {
@@ -269,7 +272,10 @@ pub fn trigger_at(path: Option<&str>, text: &str, cursor: usize) -> Result<Trigg
         name,
         decl_start: decl.start_byte(),
         decl_end: decl.end_byte(),
-        params: normalise(text.get(params.start_byte()..params.end_byte()).unwrap_or_default()),
+        params: normalise(
+            text.get(params.start_byte()..params.end_byte())
+                .unwrap_or_default(),
+        ),
     })
 }
 
@@ -504,8 +510,7 @@ where
             if p == decl_path {
                 buffer_lines.get(line as usize).map(|l| l.to_string())
             } else {
-                read_saved(p)
-                    .and_then(|src| src.split('\n').nth(line as usize).map(str::to_string))
+                read_saved(p).and_then(|src| src.split('\n').nth(line as usize).map(str::to_string))
             }
         },
     );
@@ -566,7 +571,10 @@ fn caller() {
         // normalise to an identical parameter list, or the lane would
         // fire on every keystroke in an untouched signature.
         let t = trigger_at(Some("x.rs"), SRC, at("b: usize")).unwrap();
-        assert_eq!(params_of("x.rs", SRC, "helper").as_deref(), Some(t.params.as_str()));
+        assert_eq!(
+            params_of("x.rs", SRC, "helper").as_deref(),
+            Some(t.params.as_str())
+        );
     }
 
     #[test]
@@ -581,8 +589,12 @@ fn caller() {
     #[test]
     fn a_changed_parameter_list_is_visible_as_a_difference() {
         let before = params_of("x.rs", SRC, "helper").unwrap();
-        let after = params_of("x.rs", "fn helper(a: usize, b: usize, c: u8) -> usize { a }", "helper")
-            .unwrap();
+        let after = params_of(
+            "x.rs",
+            "fn helper(a: usize, b: usize, c: u8) -> usize { a }",
+            "helper",
+        )
+        .unwrap();
         assert_ne!(before, after);
     }
 
@@ -600,8 +612,8 @@ fn caller() {
         assert!(Decline::GraphUnavailable.is_actionable());
         assert!(Decline::GraphUnavailable.remedy().is_some());
         for ordinary in [
-            Decline::SymbolNotIndexed,      // a function being typed for the first time
-            Decline::SignatureUnchanged,    // every keystroke in an untouched signature
+            Decline::SymbolNotIndexed,   // a function being typed for the first time
+            Decline::SignatureUnchanged, // every keystroke in an untouched signature
             Decline::CursorNotInParameterList,
             Decline::UnsupportedLanguage,
             Decline::NoPath,
@@ -611,7 +623,10 @@ fn caller() {
             Decline::TimedOut,
         ] {
             assert!(!ordinary.is_actionable(), "{ordinary:?} must not warn");
-            assert!(ordinary.remedy().is_none(), "{ordinary:?} has nothing to run");
+            assert!(
+                ordinary.remedy().is_none(),
+                "{ordinary:?} has nothing to run"
+            );
         }
     }
 
@@ -652,11 +667,9 @@ fn caller() {
             },
         ];
         let (sites, truncated, dropped) =
-            sites_from_callers(&callers, "decl.rs", None, "helper", |p, _| {
-                match p {
-                    "a.rs" => Some("    let _ = helper(1, 2);".to_string()),
-                    _ => Some("    something_else();".to_string()),
-                }
+            sites_from_callers(&callers, "decl.rs", None, "helper", |p, _| match p {
+                "a.rs" => Some("    let _ = helper(1, 2);".to_string()),
+                _ => Some("    something_else();".to_string()),
             });
         assert_eq!(sites.len(), 1);
         assert_eq!(sites[0].path, "a.rs");

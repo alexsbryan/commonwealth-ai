@@ -121,20 +121,31 @@ async fn a_signature_edit_names_every_call_site_and_no_import() {
         .expect("the lane should fire on a changed parameter list");
 
     assert_eq!(nav.symbol, "helper");
-    let jumps: Vec<(String, i32)> = nav
-        .sites
-        .iter()
-        .map(|s| (s.path.clone(), s.line))
-        .collect();
+    let jumps: Vec<(String, i32)> = nav.sites.iter().map(|s| (s.path.clone(), s.line)).collect();
     // RECALL: both real call sites are named.
-    assert!(jumps.contains(&("a.rs".to_string(), 3)), "missing a.rs:3 — {jumps:?}");
-    assert!(jumps.contains(&("b.rs".to_string(), 1)), "missing b.rs:1 — {jumps:?}");
+    assert!(
+        jumps.contains(&("a.rs".to_string(), 3)),
+        "missing a.rs:3 — {jumps:?}"
+    );
+    assert!(
+        jumps.contains(&("b.rs".to_string(), 1)),
+        "missing b.rs:1 — {jumps:?}"
+    );
     // PRECISION, the measured free filter: the `use` import and the
     // declaration itself are not destinations.
-    assert!(!jumps.iter().any(|(p, l)| p == "a.rs" && *l == 0), "offered the import — {jumps:?}");
-    assert!(!jumps.iter().any(|(p, _)| p == "lib.rs"), "offered the declaration — {jumps:?}");
+    assert!(
+        !jumps.iter().any(|(p, l)| p == "a.rs" && *l == 0),
+        "offered the import — {jumps:?}"
+    );
+    assert!(
+        !jumps.iter().any(|(p, _)| p == "lib.rs"),
+        "offered the declaration — {jumps:?}"
+    );
     assert_eq!(nav.sites.len(), 2, "{jumps:?}");
-    assert_eq!(nav.dropped, 1, "the import should be counted as dropped, not hidden");
+    assert_eq!(
+        nav.dropped, 1,
+        "the import should be counted as dropped, not hidden"
+    );
     assert!(!nav.truncated);
 
     // A jump list without context is a list of numbers.
@@ -191,7 +202,13 @@ async fn an_overload_set_refuses_rather_than_offering_the_union() {
         .ingest_symbols_and_refs(
             vec![
                 sym("helper", QUAL, "lib.rs", 0, 2),
-                sym("helper", "rust-analyzer cargo e2e 0.1.0 lib/Other#helper().", "lib.rs", 8, 9),
+                sym(
+                    "helper",
+                    "rust-analyzer cargo e2e 0.1.0 lib/Other#helper().",
+                    "lib.rs",
+                    8,
+                    9,
+                ),
             ],
             vec![r#ref("helper", QUAL, "a.rs", 3, 10)],
         )
@@ -210,7 +227,11 @@ async fn a_call_site_whose_line_moved_since_the_save_is_dropped_not_pointed_at()
     // names the symbol, jumping there lands the developer somewhere
     // arbitrary — worse than one entry fewer.
     let (dir, graph) = fixture().await;
-    std::fs::write(dir.path().join("b.rs"), "pub fn two() -> usize {\n    0\n}\n").unwrap();
+    std::fs::write(
+        dir.path().join("b.rs"),
+        "pub fn two() -> usize {\n    0\n}\n",
+    )
+    .unwrap();
     let cursor = EDITED.find("c: u8").unwrap();
     let nav = navigate(&graph, Some("lib.rs"), EDITED, cursor, reader(dir.path()))
         .await
