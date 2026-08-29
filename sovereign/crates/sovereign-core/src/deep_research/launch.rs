@@ -105,9 +105,23 @@ pub struct Launch {
 /// Resolve the daemon endpoint and the draft/embed model ids from the
 /// operator's `SetupConfig`. The ONE read — a host that wants to show
 /// them reads them off `Launch`, never a second `SetupConfig::load`.
+/// The `/v1` root of the daemon this run will talk to — [`client_daemon_base`]
+/// plus the suffix, and nothing else.
+///
+/// Split out of [`daemon_targets`] because the endpoint and the two MODEL ids
+/// have different dependencies: the ids genuinely need a `SetupConfig` on
+/// disk, the endpoint does not. `daemon_targets` used to build this from
+/// `cfg.daemon.client_port`, which made a deep-research run — the single most
+/// expensive thing in this tree to misdirect — ignore `SOVEREIGN_DAEMON_URL`
+/// and silently drive the operator's local daemon instead of the one the
+/// operator had just pointed it at (§10.6, §18.3).
+pub fn daemon_endpoint() -> String {
+    format!("{}/v1", crate::setup_config::client_daemon_base())
+}
+
 pub fn daemon_targets() -> Result<(String, String, String), String> {
     let cfg = SetupConfig::load().map_err(|e| format!("SetupConfig load: {e}"))?;
-    let endpoint = format!("http://localhost:{}/v1", cfg.daemon.client_port);
+    let endpoint = daemon_endpoint();
     let draft_model = cfg
         .models
         .primary
@@ -563,7 +577,64 @@ fn now_unix() -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use super::write_race_render;
+    use super::{daemon_endpoint, write_race_render};
+
+    // ------------------------------------------------------------------
+    // The daemon endpoint is the ONE decider's, not a second reading of
+    // `[daemon] client_port` (order vast-dev-daemon, part B).
+    // ------------------------------------------------------------------
+
+    static DAEMON_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    struct DaemonEnvGuard {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        prior: Vec<(&'static str, Option<String>)>,
+    }
+
+    impl DaemonEnvGuard {
+        fn set(pairs: &[(&'static str, &str)]) -> Self {
+            let lock = DAEMON_ENV_LOCK
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            const KEYS: [&str; 2] = ["SOVEREIGN_DAEMON_URL", "SVRNMESH_DAEMON_URL"];
+            let prior = KEYS.iter().map(|k| (*k, std::env::var(k).ok())).collect();
+            for k in KEYS {
+                std::env::remove_var(k);
+            }
+            for (k, v) in pairs {
+                std::env::set_var(k, v);
+            }
+            Self { _lock: lock, prior }
+        }
+    }
+
+    impl Drop for DaemonEnvGuard {
+        fn drop(&mut self) {
+            for (k, v) in &self.prior {
+                match v {
+                    Some(v) => std::env::set_var(k, v),
+                    None => std::env::remove_var(k),
+                }
+            }
+        }
+    }
+
+    /// RED on the tree before this sweep: `daemon_targets` built the endpoint
+    /// from `cfg.daemon.client_port` and ignored `SOVEREIGN_DAEMON_URL`, so a
+    /// deep-research run pointed at a rented daemon silently drove the
+    /// operator's local one instead — and a run is the most expensive thing
+    /// in the tree to misdirect.
+    ///
+    /// This resolves WITHOUT a `SetupConfig` on disk, deliberately: the
+    /// endpoint is not a config-dependent fact once it goes through
+    /// `client_daemon_base`, which carries its own fallback. Only the two
+    /// MODEL ids still need the config, which is why `daemon_targets` keeps
+    /// returning a `Result` and this accessor does not.
+    #[test]
+    fn the_daemon_endpoint_honours_the_knob() {
+        let _g = DaemonEnvGuard::set(&[("SOVEREIGN_DAEMON_URL", "http://a-rented-pod:9841")]);
+        assert_eq!(daemon_endpoint(), "http://a-rented-pod:9841/v1");
+    }
 
     // ------------------------------------------------------------------
     // T6b pre-window slice — the post-flight RACE page (RED-FIRST: the

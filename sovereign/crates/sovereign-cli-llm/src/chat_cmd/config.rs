@@ -10,8 +10,6 @@ use std::path::PathBuf;
 
 use sovereign_core::setup_config::SetupConfig;
 
-use sovereign_cli_shared::urls::DEFAULT_CLIENT_PORT;
-
 use crate::guest_link::{self, GuestLink};
 
 /// Shared config resolved once per subcommand invocation. Subcommands
@@ -92,18 +90,27 @@ pub fn default_globals_for_voice_eval() -> ChatGlobals {
 
 impl ChatGlobals {
     /// Seed from `SetupConfig` when it exists; otherwise fall back to
-    /// hard defaults (localhost:9741 + ~/.svrnmesh). Never fails —
-    /// a missing config is a fresh-install state, not an error.
+    /// hard defaults (`~/.svrnmesh`). Never fails — a missing config is a
+    /// fresh-install state, not an error.
+    ///
+    /// The daemon base comes from [`client_daemon_base`], NOT from a second
+    /// reading of `[daemon] client_port`. It used to be the latter, which
+    /// made `svrn chat` blind to `SOVEREIGN_DAEMON_URL` — so pointing a
+    /// session at a second daemon moved `svrn enrich` and left the CHAT verb
+    /// talking to the operator's local one, and it answered normally while
+    /// doing it. A wrong daemon that responds is worse than one that refuses
+    /// (§18.3), and two resolvers for one endpoint is the §10.6 shape the
+    /// decider exists to collapse.
+    ///
+    /// Precedence end to end: `--daemon` (parsed after this, and it sets
+    /// `daemon_explicit`) > the env knob > `[daemon] client_port` > compiled
+    /// default. The flag still wins because an endpoint the operator typed is
+    /// the more specific instruction.
     fn default_from_setup() -> Self {
-        let (daemon_base, data_dir) = match SetupConfig::load() {
-            Ok(cfg) => (
-                format!("http://localhost:{}", cfg.daemon.client_port),
-                cfg.data.dir,
-            ),
-            Err(_) => (
-                format!("http://localhost:{DEFAULT_CLIENT_PORT}"),
-                sovereign_contracts::rebrand::svrnmesh_root(),
-            ),
+        let daemon_base = sovereign_core::setup_config::client_daemon_base();
+        let data_dir = match SetupConfig::load() {
+            Ok(cfg) => cfg.data.dir,
+            Err(_) => sovereign_contracts::rebrand::svrnmesh_root(),
         };
         Self {
             daemon_base,
@@ -395,6 +402,81 @@ mod tests {
 
     fn svec(items: &[&str]) -> Vec<String> {
         items.iter().map(|s| s.to_string()).collect()
+    }
+
+    // These mutate PROCESS-global env, and after the sweep `parse_globals`
+    // READS it — so the same lock/restore discipline as
+    // `setup_config`'s own knob tests (§18.1: a gate that passes only under
+    // nextest's process-per-test and flakes under `--engine cargo` is not a
+    // gate). No existing test in this module asserts an absolute
+    // `daemon_base`; every one either passes `--daemon` or compares to a
+    // value it captured itself, so a guarded window cannot flip them.
+    static DAEMON_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    struct DaemonEnvGuard {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        prior: Vec<(&'static str, Option<String>)>,
+    }
+
+    impl DaemonEnvGuard {
+        fn set(pairs: &[(&'static str, &str)]) -> Self {
+            let lock = DAEMON_ENV_LOCK
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            const KEYS: [&str; 2] = ["SOVEREIGN_DAEMON_URL", "SVRNMESH_DAEMON_URL"];
+            let prior = KEYS.iter().map(|k| (*k, std::env::var(k).ok())).collect();
+            for k in KEYS {
+                std::env::remove_var(k);
+            }
+            for (k, v) in pairs {
+                std::env::set_var(k, v);
+            }
+            Self { _lock: lock, prior }
+        }
+    }
+
+    impl Drop for DaemonEnvGuard {
+        fn drop(&mut self) {
+            for (k, v) in &self.prior {
+                match v {
+                    Some(v) => std::env::set_var(k, v),
+                    None => std::env::remove_var(k),
+                }
+            }
+        }
+    }
+
+    /// RED on the tree before this sweep. `default_from_setup` built the base
+    /// from `cfg.daemon.client_port` and could not see the knob, so `svrn
+    /// chat` — the verb a second session pointed at a rented daemon actually
+    /// drives — kept talking to the OPERATOR's local daemon while
+    /// `SOVEREIGN_DAEMON_URL` said otherwise, and answered successfully while
+    /// doing it. That is the §18.3 silent substitution, and it is the same
+    /// one `client_daemon_base` was minted to close for `svrn enrich`.
+    #[test]
+    fn chat_globals_honour_the_daemon_knob() {
+        let _g = DaemonEnvGuard::set(&[("SOVEREIGN_DAEMON_URL", "http://a-rented-pod:9841")]);
+        let (g, _) = parse_globals(&svec(&["ask", "hi"])).unwrap();
+        assert_eq!(
+            g.daemon_base, "http://a-rented-pod:9841",
+            "chat must resolve through the ONE decider, not re-read client_port"
+        );
+        assert!(
+            !g.daemon_explicit,
+            "the env is a default, not an operator-typed endpoint — a guest \
+             link may still override it"
+        );
+    }
+
+    /// The precedence the sweep must not disturb: an endpoint the operator
+    /// TYPED is more specific than one they exported. `--daemon` wins, and it
+    /// still marks itself explicit so a stored guest link cannot displace it.
+    #[test]
+    fn an_explicit_daemon_flag_beats_the_env_knob() {
+        let _g = DaemonEnvGuard::set(&[("SOVEREIGN_DAEMON_URL", "http://a-rented-pod:9841")]);
+        let (g, _) = parse_globals(&svec(&["--daemon", "http://mine:9741", "ask"])).unwrap();
+        assert_eq!(g.daemon_base, "http://mine:9741");
+        assert!(g.daemon_explicit);
     }
 
     #[test]
