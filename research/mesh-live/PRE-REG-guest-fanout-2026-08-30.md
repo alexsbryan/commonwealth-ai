@@ -81,3 +81,69 @@ Exactly one of B1/B2/B3 is the result, and only if P1 held.
                  "max_tokens":16,"temperature":0}'`
 5. FOX: same pid still? If not, B4 — the grant died mid-run.
 6. FOX: journal for the request — peer dispatch present or absent.
+
+---
+
+# B5, ADOPTED 2026-08-30 AFTER THE FIRST RUN — read before any rerun
+
+B5  **PEER-BUSY REFUSAL.** The serving peer was yielding / shedding at probe
+    time (`yielding=true`, `published=0.0`, non-zero `yielding_secs_remaining`).
+    MEANS: **could-not-judge**, NOT B2.
+
+Why it is not optional. A peer that refuses because it is busy returns
+something HTTP-indistinguishable from a serve-path guard, which is exactly the
+B2/B4 confound one layer over. On the first run MAC read
+`yielding_secs_remaining: 14` immediately after the probe and had held a local
+batch specifically to stop it firing — so the margin was seconds, not luck we
+can count on twice.
+
+CHECK: the peer reports its yield posture at probe time, and the run is void
+unless it was serving.
+
+---
+
+# RESULT — first run, 2026-08-30
+
+**B1. SERVED BY FANOUT.** P1, P2 held; B5 verified clear by margin.
+
+MAC (guest, via `dial_probe --alpn guest`, bypassing its own daemon):
+HTTP 200 at 20:31:41Z, real completion.
+
+FOX (lender, journal, pid 1236108 unchanged before AND after — bracket held):
+
+    20:31:41.747 routing decision path=NamedModel verdict=named_peer:Alexs-MacBook-Pro-2
+    20:31:41.747 mesh-inference: routing to peer by model name
+                 peer=Alexs-MacBook-Pro-2 model=Qwopus3.5-4B-v3-MTP-Q8_0
+                 soft=false local_alternative=SoleHolder
+    20:31:42.280 routing outcome served_by=peer:Alexs-MacBook-Pro-2 total_ms=532 shed=false
+
+MAC corroborates independently: `peer_requests.served_total: 1` from
+`node-44ae76142b0c3c72`; ledger `InferenceServed for_node=44ae76142b0c3c72,
+model=Qwopus3.5-4B-v3-MTP-Q8_0, 16 tokens, 0.500s`; `served_by=local:…`.
+FOX's 532ms wraps MAC's 500ms — the two records reconcile.
+
+`local_alternative=SoleHolder` is the finding in the code's own words: the
+lender had no local copy, forwarded anyway, and the peer tallied it as
+ordinary member traffic billed to the lender. **Nothing on the serving side
+records that a guest was behind the request.**
+
+CONCLUSION: a grant's TOKEN is bilateral, but its REACH is the lender's whole
+routing table. On a 20-node mesh one node can extend a bearer drawing on all
+20, without the holders consenting or knowing.
+
+## Two defects found, neither is B3
+
+D1  **`model` carries a provenance suffix.** FOX returned
+    `"Qwen…Q8_0 @ peer Alexs-MacBook-Pro-2"`; MAC returns the clean id for the
+    identical request served locally. Ruled B1-with-defect, NOT B3: the RIGHT
+    weights served it, and B3 exists for a DIFFERENT model silently swapped in
+    (§18.3). Calling this B3 would drain the bar that matters.
+    Not cosmetic: grants match model ids by EXACT string, no globs — so a
+    client round-tripping this value into its next request gets
+    `model_not_granted`. It breaks turn 2 of any guest conversation.
+
+D2  **`finish_reason: "stop"` on a `max_tokens` truncation.** MAC returns
+    `"length"` for the same request at the same truncation point, so this is
+    the peer path's response assembly, not the model. Ranked ABOVE D1: agent
+    loops read `finish_reason` to decide whether to continue, so a coding
+    agent on a borrowed model silently drops work mid-generation.

@@ -473,7 +473,23 @@ mod tests {
         use std::sync::atomic::{AtomicUsize, Ordering};
 
         async fn minimal_endpoint(seed: u8) -> Endpoint {
-            let cfg = RelayConfig::from_parts(vec![], None); // n0_services=false → Minimal
+            // `Some("none")` is what severs n0. `None` means "the config
+            // names no discovery", which `from_parts` resolves to the SAFE
+            // BOOTSTRAP DEFAULT of full n0 services — the opposite of what
+            // this test needs. It read `None` until 2026-08-30, so the
+            // endpoint carried n0's relays and homed to
+            // usw1-1.relay.n0.iroh.link: healthy, never degraded, no
+            // rebuild. It passed here only because this host took ~3.5s to
+            // home and the assertion reads at 2s; on a CI runner with a
+            // faster path to n0 it homed inside the window and the test was
+            // red on every run. Assert the posture rather than trusting the
+            // spelling — the endpoint must be relay-less, or the whole
+            // escalation this test claims to prove never triggers.
+            let cfg = RelayConfig::from_parts(vec![], Some("none"));
+            assert!(
+                !cfg.n0_services,
+                "this test needs a relay-LESS endpoint; n0 services would home it and read healthy"
+            );
             let secret = SecretKey::from_bytes(&[seed; 32]);
             build_relayed_endpoint(secret, vec![b"cwth/http/0".to_vec()], &cfg)
                 .await
@@ -503,9 +519,29 @@ mod tests {
             ..Default::default()
         };
         let handle = spawn(endpoint, rebuild, cfg);
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        // Poll for the outcome instead of sleeping a fixed window: the
+        // escalation is ~360ms of timer ticks, so a fixed sleep is only ever
+        // a bet on how loaded the machine is. Waiting for the CONDITION with
+        // a ceiling keeps the fast path fast and turns a slow runner into a
+        // slower pass, not a red.
+        let status = handle.status_arc();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let snap = loop {
+            let snap = status.read().await.clone();
+            if snap.rebuilds >= 1 {
+                break snap;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "watchdog never escalated to a rebuild within 10s \
+                 (degraded={}, relay_homed={}, rebuilds={})",
+                snap.degraded,
+                snap.relay_homed,
+                snap.rebuilds
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        };
 
-        let snap = handle.status_arc().read().await.clone();
         assert!(
             snap.degraded,
             "a never-relay-homed endpoint must read degraded"

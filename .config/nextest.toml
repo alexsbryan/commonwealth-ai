@@ -60,3 +60,30 @@ status-level = "pass"
 # [[profile.default.overrides]]
 # filter = "test(/mesh::discovery::/)"
 # slow-timeout = { period = "180s", terminate-after = 2 }
+
+# THE TRYBUILD SUITES — the compile-fail proofs (`*_reds`). A trybuild suite is
+# a SECOND BUILD: trybuild pins CARGO_TARGET_DIR to target/tests/trybuild and
+# supplies its own rustflags, so nothing already built in the workspace's
+# target/ can be reused, and the project it generates inherits the whole
+# [dependencies] table of the crate under test. For corpus-engine that is
+# lance, arrow, parquet, lancedb, bundled rusqlite and zstd — ~2.5 GB of
+# artifacts compiled before the first fixture is judged.
+#
+# Measured 2026-08-30 on 4 cores with CARGO_BUILD_JOBS=3 (the CI shape):
+# evidence_reds cold 240.9s, warm 2.3s end to end. The default budget is 180s
+# (60s x 3 strikes), and on CI the tree is ALWAYS cold — rust-cache prunes
+# unrecognized dirs under target/ — so evidence_reds was TERMINATED mid-build
+# on every run and reported as a failure. It was never a flake and never a red
+# proof: the suite was killed before it could return a verdict.
+#
+# The two kernel-types suites are the same shape and were merely under the wire
+# (80.7s / 154.5s cold in the same run). Covering all three by binary, not just
+# the one that happened to cross first, is the point: the cost of this ceiling
+# is zero whenever the tree is warm.
+[[profile.default.overrides]]
+filter = "binary(evidence_reds) + binary(judgement_reds) + binary(answer_reds)"
+slow-timeout = { period = "300s", terminate-after = 4 }
+
+[[profile.ci.overrides]]
+filter = "binary(evidence_reds) + binary(judgement_reds) + binary(answer_reds)"
+slow-timeout = { period = "300s", terminate-after = 4 }

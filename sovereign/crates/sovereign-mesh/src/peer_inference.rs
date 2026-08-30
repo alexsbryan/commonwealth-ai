@@ -2033,6 +2033,23 @@ impl MeshInferenceProvider {
             );
             return None;
         }
+        // Same treatment, different reason — the pair `peer_candidate_view`
+        // already applies on the ranked path. Without this the named path
+        // WRITES `yield_backoff` (`record_refusal`) and never READS it, so
+        // "the next turn will not re-dial it" — logged at the refusal — was
+        // false on every explicit-model turn: measured 2026-08-30, a peer
+        // inside its own 14s window was re-dialled 15ms after that line, with
+        // `excluded=0` on the decision. A guest grant PINS a model id, so the
+        // guest path is exactly this path and paid the tax every turn.
+        if let Some(secs) = self.yield_backoff.secs_remaining(&peer.name) {
+            tracing::debug!(
+                peer = %peer.name,
+                model = %model_id,
+                retry_after_secs = secs,
+                "mesh-inference: skipping peer inside its yielded_to_local window for explicit model"
+            );
+            return None;
+        }
         let fetch = if bypass_cache {
             self.get_peer_manifest_fresh(&peer).await
         } else {
@@ -4385,6 +4402,38 @@ mod tests {
         match mip.locate_named_model("peer-only").await {
             NamedModelLocation::Peer(_, _, LocalAlternative::SoleHolder) => {}
             other => panic!("only the peer advertises this id; got {other:?}"),
+        }
+    }
+
+    /// The named path WROTE `yield_backoff` and never READ it, so the
+    /// refusal's own log line — "the next turn will not re-dial it" —
+    /// was false on every explicit-model turn. Measured against the live
+    /// daemon 2026-08-30: a peer inside its own 14s window was re-dialled
+    /// 15ms after that line, `excluded=0` on the decision, ten times over
+    /// three minutes. The ranked path excluded it correctly the whole
+    /// time (`peer_candidate_view`), so the two paths disagreed about the
+    /// same peer — §10.6.
+    ///
+    /// Pinned to the SOLE-HOLDER case on purpose: the peer is the only
+    /// advertiser, so a route to it is the tempting answer. Excluding it
+    /// must yield `Unknown` (the caller then fails or falls back) rather
+    /// than a dial that is already known to be refused.
+    #[tokio::test]
+    async fn a_yielding_peer_is_not_re_dialled_for_an_explicit_model() {
+        let (mip, _) = mip_with_peer("something-else", "peer-only", false).await;
+        // Precondition: without the refusal on record, this same call
+        // routes to the peer — that is the assertion above.
+        mip.yield_backoff.record_refusal("DeadPeer", 14);
+        assert!(
+            mip.yield_backoff.secs_remaining("DeadPeer").is_some(),
+            "the refusal must be on record, or this test passes for the wrong reason"
+        );
+        match mip.locate_named_model("peer-only").await {
+            NamedModelLocation::Unknown(_) => {}
+            other => panic!(
+                "the only advertiser is inside its own yielded_to_local window, so the \
+                 named path must not re-dial it; got {other:?}"
+            ),
         }
     }
 
