@@ -8,8 +8,30 @@ bound not yet built and now REQUIRED.**
 
 **§4.5's participant class SHIPPED 2026-08-30 as `NodeClass::Terminal`** — a
 full mesh member that holds no weights and binds to a `[node] entry`. Gates
-green; NOT yet exercised on a real two-machine pair, so every claim here about
-its behaviour is a claim about code and tests, not about a live run. Hardened
+green, and exercised live on 2026-08-30 — but CO-LOCATED (holder :9741,
+terminal :9841 on one Mac), not on a real two-machine pair, so nothing here is
+a claim about network behaviour, WAN ingest throughput, or cross-machine
+gossip. What the co-located run did establish: `setup --terminal` probes,
+records the entry node's id and embed model, proves a served turn
+(`answered by Qwen3.8-27B-UD-Q6_K_XL`) and exits 0, while an unreachable entry
+exits 1 having written nothing; the terminal daemon boots with
+`inference.resident: []` and no `SOVEREIGN_SKIP_VRAM_CHECK`; `/v1/mesh/status`
+and `svrn doctor` both report `terminal`; and embeddings forward to the entry
+node.
+
+**What it also found, and this is a gap in the class as built:** a terminal
+that has not yet joined the mesh CANNOT complete. Embeddings forward (the
+provider is asked directly), but chat resolves the model name against
+advertised manifests first — and the terminal now honestly advertises none of
+its own while its entry node is not a peer until `svrn mesh join`. So
+`[node] entry` is only half a binding: it routes embeddings, and chat routes on
+the mesh manifest instead. Two mechanisms answer "where does this turn go" and
+they disagree for a non-member terminal. The documented flow (setup → join →
+daemon) hides it, and `docs/ANCHOR_NODE.md` now says so explicitly; whether the
+completion path should fall back to the bound entry is an open design question,
+deliberately not settled inside the hardening order.
+
+Hardened
 the same day (order `tn-1-terminal-honesty`): it now advertises no embed model
 as well as no chat model, its class is judged on content rather than on whether
 a `[models]` table exists, and `svrn doctor` + `/v1/mesh/status` report the

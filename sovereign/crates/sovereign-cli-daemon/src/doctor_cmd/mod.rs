@@ -144,6 +144,7 @@ async fn run_checks(sovereign_dir: &std::path::Path) -> Vec<CheckResult> {
     // First on the Sovereign page: every check below reads differently
     // depending on the answer — a terminal SHOULD have no local slots.
     results.push(sov::check_node_class());
+    results.push(sov::check_entry_node_identity().await);
     results.push(sov::check_server_running().await);
     results.push(sov::check_server_tools().await);
     results.push(sov::check_embed_slot().await);

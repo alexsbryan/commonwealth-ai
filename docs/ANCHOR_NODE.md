@@ -121,6 +121,18 @@ svrn mesh join "sovereign://join/cwth-…"     # the same link as any member
 svrn daemon
 ```
 
+**`svrn mesh join` is not optional, and the order matters.** Measured
+2026-08-30 on a co-located pair: a terminal that has been set up but has
+NOT joined answers embeddings (those go straight through the forwarder to
+the anchor) while chat 503s with *"no node in this mesh advertises model
+'primary'"*, and its own `/v1/models` is empty. Completions resolve the
+model name against advertised manifests — the terminal now honestly
+advertises none of its own, and the anchor is not a peer until the join.
+So the node is not usable for chat between `setup --terminal` and
+`mesh join`, even though setup reported a served turn: setup proves that
+turn by asking the anchor **directly**, not through the daemon it just
+configured.
+
 `--terminal` refuses rather than writing a config it can't stand behind:
 it asks the anchor's `/status` for the embed model id (which decides the
 vector space this node's corpora land in) and drives one real completion

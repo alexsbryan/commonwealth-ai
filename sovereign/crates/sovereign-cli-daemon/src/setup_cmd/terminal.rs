@@ -72,15 +72,30 @@ fn normalize_entry(raw: &str) -> Result<(String, String), String> {
     Ok((origin, v1))
 }
 
+/// What one `/status` read tells us about the entry node.
+struct EntryNodeFacts {
+    /// The entry node's embed slot id. `None` when it declares none.
+    embed: Option<String>,
+    /// The entry node's mesh node id, recorded so `svrn doctor` can later tell
+    /// "my entry node" from "whatever now answers at my entry node's address"
+    /// (§7.5; see `NodeSection::entry_node_id`).
+    node_id: Option<String>,
+}
+
 /// The entry node's embed slot id, read from its `/status`.
 ///
-/// `Ok(None)` means the node answered but declares no embed slot — a real,
-/// reportable state (its own retrieval is degraded), distinct from `Err`,
-/// which means we could not ask at all.
-async fn probe_embed_model(
+/// A `None` FIELD means the node answered but declares no such thing — for
+/// the embed slot that is a real, reportable state (its own retrieval is
+/// degraded). `Err` means we could not ask at all. The two must not collapse
+/// (§18.2).
+///
+/// ONE probe for both facts, deliberately: they come off the same `/status`
+/// body, and a second request would be a second chance for the two halves to
+/// describe different moments.
+async fn probe_entry_node(
     client: &reqwest::Client,
     origin: &str,
-) -> Result<Option<String>, String> {
+) -> Result<EntryNodeFacts, String> {
     let url = format!("{origin}/status");
     let resp = client
         .get(&url)
@@ -108,7 +123,14 @@ async fn probe_embed_model(
         .and_then(|s| s.get("model_id"))
         .and_then(|m| m.as_str())
         .map(str::to_string);
-    Ok(embed)
+    // `/status.node_id` is the entry node's mesh identity, top level and
+    // present whether or not it has joined a mesh (`routes_status.rs`).
+    let node_id = body
+        .get("node_id")
+        .and_then(|n| n.as_str())
+        .filter(|n| !n.is_empty())
+        .map(str::to_string);
+    Ok(EntryNodeFacts { embed, node_id })
 }
 
 /// Drive one real completion through the entry node and return the model id
@@ -204,8 +226,8 @@ pub(super) async fn run_terminal_setup(entry_raw: &str, opts: &Opts) -> i32 {
     print!("  Asking the entry node what it holds... ");
     use std::io::Write as _;
     std::io::stdout().flush().ok();
-    let embed_model = match probe_embed_model(&client, &origin).await {
-        Ok(e) => e,
+    let facts = match probe_entry_node(&client, &origin).await {
+        Ok(f) => f,
         Err(msg) => {
             println!();
             eprintln!("error: {msg}");
@@ -219,6 +241,7 @@ pub(super) async fn run_terminal_setup(entry_raw: &str, opts: &Opts) -> i32 {
             return 1;
         }
     };
+    let embed_model = facts.embed;
     match embed_model.as_deref() {
         Some(m) => println!("embed model: {m}"),
         None => {
@@ -242,6 +265,10 @@ pub(super) async fn run_terminal_setup(entry_raw: &str, opts: &Opts) -> i32 {
         models: None,
         node: NodeSection {
             entry: Some(v1.clone()),
+            // Recorded, not resolved through. See `NodeSection::entry_node_id`:
+            // the bind is still the URL, and this is what lets `svrn doctor`
+            // notice when that URL stops pointing at the same machine.
+            entry_node_id: facts.node_id.clone(),
             entry_embed_model: embed_model.clone(),
         },
         compute: Default::default(),

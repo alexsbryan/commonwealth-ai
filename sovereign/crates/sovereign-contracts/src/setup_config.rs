@@ -306,6 +306,27 @@ pub struct NodeSection {
     /// stalest exactly when it wakes).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entry: Option<String>,
+    /// The entry node's mesh node id, recorded at setup time.
+    ///
+    /// NOT the binding — [`entry`](Self::entry) is, and it is a URL. This is
+    /// the identity that URL pointed at when the operator ran `svrn setup
+    /// --terminal`, kept so the mismatch can be DETECTED even though it cannot
+    /// currently be resolved around.
+    ///
+    /// That distinction is the whole point. ARCH §7.5 says a stable thing keyed
+    /// on a volatile address eventually answers confidently and wrongly, and a
+    /// terminal is exposed to exactly that: when a DHCP lease moves and another
+    /// machine takes the address, the terminal forwards there without erroring.
+    /// Resolving by identity was priced and deferred
+    /// (`sovereign/DEFAULTS_LEDGER.md`), so the interim posture is to make the
+    /// drift visible rather than silent — `svrn doctor`'s `entry_node_identity`
+    /// check probes the address and compares what answers against this.
+    ///
+    /// `None` on a config written before this field existed, or when the entry
+    /// node did not report an id; the check then reports could-not-judge rather
+    /// than inventing a verdict (§18.2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry_node_id: Option<String>,
     /// The entry node's embed model id, recorded at setup time.
     ///
     /// A terminal embeds over HTTP, so the vector space its corpora land in is

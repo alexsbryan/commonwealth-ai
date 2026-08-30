@@ -86,6 +86,97 @@ pub(super) fn check_node_class() -> CheckResult {
     }
 }
 
+/// Does this terminal's entry node address still point at the SAME machine?
+///
+/// The interim mitigation for a debt we chose not to repay yet. `[node] entry`
+/// is a URL, and ARCH §7.5 says a stable thing keyed on a volatile address
+/// eventually answers confidently and wrongly — when a DHCP lease moves and
+/// another machine takes the address, a terminal forwards there and nothing
+/// errors. Resolving by node id was priced and deferred
+/// (`sovereign/DEFAULTS_LEDGER.md`), so the posture is: cannot route around it,
+/// must not fail to NOTICE it.
+///
+/// Four verdicts, not two (§18.2). Reaching a different node is a FAILURE.
+/// Being unable to ask, or having no recorded id to compare against, is
+/// `Skipped` — a could-not-judge, never a pass.
+pub(super) async fn check_entry_node_identity() -> CheckResult {
+    use sovereign_core::setup_config::{NodeClass, SetupConfig};
+    const NAME: &str = "entry_node_identity";
+
+    let Ok(cfg) = SetupConfig::load() else {
+        return CheckResult {
+            name: NAME,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Skipped,
+            message: "no readable config".to_string(),
+            repair: Repair::None,
+        };
+    };
+    if cfg.node_class() != NodeClass::Terminal {
+        return CheckResult {
+            name: NAME,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Skipped,
+            message: "not a terminal — no entry node to verify".to_string(),
+            repair: Repair::None,
+        };
+    }
+    let entry = cfg.node.entry.as_deref().unwrap_or_default();
+    let Some(recorded) = cfg.node.entry_node_id.as_deref() else {
+        return CheckResult {
+            name: NAME,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Skipped,
+            message: format!(
+                "no entry node id was recorded for {entry}, so a moved address \
+                 cannot be detected — re-run `svrn setup --reset --terminal {entry}` \
+                 to record one"
+            ),
+            repair: Repair::None,
+        };
+    };
+
+    // `entry` carries the `/v1` suffix the OpenAI clients want; `/status` lives
+    // on the bare origin.
+    let origin = entry.trim_end_matches("/v1").trim_end_matches('/');
+    let Some(body) = http_get_json(&format!("{origin}/status")).await else {
+        return CheckResult {
+            name: NAME,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Skipped,
+            message: format!(
+                "entry node {origin} did not answer — cannot tell a moved address \
+                 from a node that is merely down"
+            ),
+            repair: Repair::None,
+        };
+    };
+    let seen = body.get("node_id").and_then(|n| n.as_str()).unwrap_or("");
+    if seen == recorded {
+        return CheckResult {
+            name: NAME,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Passed,
+            message: format!("{origin} is still node {recorded}"),
+            repair: Repair::None,
+        };
+    }
+    CheckResult {
+        name: NAME,
+        layer: Layer::Sovereign,
+        status: CheckStatus::Failed,
+        message: format!(
+            "{origin} now answers as node {seen}, but this terminal was set up \
+             against {recorded}. Every turn and every embedding from this node \
+             has been going to a DIFFERENT machine than the one it was bound to, \
+             without erroring."
+        ),
+        repair: Repair::Executable(format!(
+            "svrn setup --reset --terminal <entry>   # re-bind, after checking which host you meant ({origin} moved)"
+        )),
+    }
+}
+
 pub(super) async fn check_embed_slot() -> CheckResult {
     const NAME: &str = "embed_slot";
     let repair = Repair::Executable("sovereign daemon stop && sovereign daemon start".to_string());
