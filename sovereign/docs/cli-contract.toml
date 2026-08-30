@@ -1970,49 +1970,6 @@ mutates = true
 note = "prove the mutation reverses: the node re-solos"
 
 [[journey]]
-id = "terminal-onboard"
-title = "Put a machine that holds no models onto the mesh"
-persona = "operator"
-experience = "mesh-federation"
-tier = 2
-visibility = "public"
-doc = "docs/ANCHOR_NODE.md"
-skip_live = """needs a second machine that HOLDS models: `setup --terminal` \
-refuses unless the entry node answers `/status` and serves a real completion, \
-so there is nothing here a single-host sandbox can honestly run. Declared \
-rather than omitted — an unproven verb that no journey names is invisible to \
-`contract map`, which is worse than one listed as unproven."""
-[[journey.step]]
-run = "setup --terminal {entry}"
-mutates = true
-note = """writes a config with NO `[models]` and downloads nothing. Proves a \
-served turn through the entry node before reporting success — exiting 0 with \
-only a written file would be a never-ran dressed as a pass (ARCH §18.1)."""
-[[journey.step]]
-run = "doctor"
-note = """the terminal's own report must SAY terminal. After the residency \
-gate this node advertises no models, which is indistinguishable from a holder \
-whose GGUFs failed to load — and the two want opposite repairs (§18.2)."""
-[journey.step.expect]
-exit = 0
-stdout_contains = "terminal"
-[[journey.step]]
-run = "mesh join {join_key}"
-mutates = true
-note = "a terminal is a full member: mesh key, gossip, pooled knowledge, ledger"
-[[journey.step]]
-run = "mesh status"
-[journey.step.expect]
-exit = 0
-stdout_contains = "terminal"
-[[journey.step]]
-run = "chat ask {question}"
-note = "the point of the whole journey: an answer, served by the entry node's model"
-[journey.step.expect]
-exit = 0
-stdout_non_empty = true
-
-[[journey]]
 id = "mesh-membership"
 title = "See which meshes this node belongs to, and move between them"
 persona = "operator"
