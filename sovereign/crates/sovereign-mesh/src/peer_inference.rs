@@ -59,7 +59,7 @@ use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 use sovereign_core::error::Result;
 use sovereign_core::oicp::{ExtensionRegistry, ExtensionStats, NodeObservations, ProviderManifest};
-use sovereign_core::traits::InferenceProvider;
+use sovereign_core::traits::{InferenceProvider, ServingLocus};
 use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities, Speed};
 use sovereign_inference::remote::RemoteApiProvider;
 use tokio::sync::RwLock;
@@ -1906,6 +1906,34 @@ impl MeshInferenceProvider {
         }
 
         if !local_has && peer_candidates.is_empty() {
+            // A node that owns NO weights forwards every turn, and the thing it
+            // forwards to does its own name resolution — so "nobody here
+            // advertises it" is not this node's verdict to give. Hand it to the
+            // forwarder and let the far end answer.
+            //
+            // This is what makes `[node] entry` a real binding rather than a
+            // field the config carries. Without it a `terminal` could embed
+            // (the provider is asked directly) but never complete: chat resolves
+            // against advertised manifests first, the terminal honestly
+            // advertises none of its own, and its entry node is not a peer until
+            // `svrn mesh join` — so a correctly configured node 503'd on every
+            // turn until it joined, measured 2026-08-30.
+            //
+            // NOT a substitution (§18.3): `build_request` puts
+            // `request.model_id` on the wire verbatim
+            // (`oicp-client/src/lib.rs`), so the far end is asked for the SAME
+            // name and refuses on its own terms if it cannot serve it. The
+            // privacy consequence — this hop may leave the machine — is gated
+            // in `resolve_named_dispatch`, not here.
+            if self.local.serving_locus() != ServingLocus::OwnWeights {
+                tracing::info!(
+                    model = %model_id,
+                    locus = ?self.local.serving_locus(),
+                    "mesh-inference: this node owns no weights — forwarding the \
+                     named request to its bound target, which resolves the name"
+                );
+                return NamedModelLocation::Local;
+            }
             return NamedModelLocation::Unknown(NamedUnknownReason::NotAdvertised);
         }
 
@@ -2461,6 +2489,27 @@ impl MeshInferenceProvider {
                     NamedModelLocation::Unknown(NamedUnknownReason::PrivacyLocalOnly)
                 }
             }
+            // A weightless node's `Local` is a FORWARD, and if it lands on
+            // another machine it crosses the boundary `local_only` defends.
+            // The two arms above only guard `Peer`/`Lender` because until a
+            // forwarding provider existed, `Local` meant "our own slots" and
+            // could never cross anything.
+            //
+            // On-box forwarding (attach-mode desktop, CLI chat bootstrap →
+            // their own daemon over loopback) is untouched: nothing leaves the
+            // machine, so `local_only` is satisfied exactly.
+            NamedModelLocation::Local
+                if !privacy_permits_peer
+                    && self.local.serving_locus() == ServingLocus::ForwardsOffBox =>
+            {
+                tracing::debug!(
+                    model = %model_id,
+                    gate = "forwarder_cannot_serve_local_only",
+                    "mesh-inference: envelope says local_only and this node owns \
+                     no weights — refusing rather than forwarding off-box"
+                );
+                NamedModelLocation::Unknown(NamedUnknownReason::ForwarderCannotServeLocalOnly)
+            }
             other => other,
         };
 
@@ -2994,6 +3043,17 @@ enum NamedUnknownReason {
     /// A peer may advertise it, but `SOVEREIGN_DISABLE_PEER_INFERENCE`
     /// forbids this node from looking outward at all.
     PeerInferenceDisabled,
+    /// This node owns no weights and forwards OFF-BOX, so there is no
+    /// way to honour `sharding = local_only` here at all — not by
+    /// serving locally (nothing runs locally) and not by forwarding
+    /// (that is the boundary crossing the envelope forbids).
+    ///
+    /// Distinct from [`Self::PrivacyLocalOnly`], which means "a peer has
+    /// it and we declined to cross": there the operator can re-send with
+    /// `mesh_allowed` OR install the model here. Here only the first
+    /// works, and saying otherwise sends them to install weights on a
+    /// machine chosen precisely because it holds none (§18.2).
+    ForwarderCannotServeLocalOnly,
     /// A peer advertises it, but the request's envelope says
     /// `sharding = local_only`, so serving it would carry the prompt
     /// across the trust boundary. Refusing is the contract (§18.3:
@@ -3016,6 +3076,14 @@ impl NamedUnknownReason {
             Self::NotAdvertised => format!(
                 "no node in this mesh advertises model '{model_id}' — \
                  check `/v1/models` for available names"
+            ),
+            Self::ForwarderCannotServeLocalOnly => format!(
+                "this node holds no models — every turn is forwarded to its \
+                 entry node — so a request for '{model_id}' with \
+                 `sharding = local_only` cannot be served anywhere: running it \
+                 here is impossible and forwarding it is the boundary crossing \
+                 you asked to avoid. Re-send with `mesh_allowed`, or send it to \
+                 a node that holds the model"
             ),
             Self::ForwardBudgetExhausted => format!(
                 "model '{model_id}' is advertised by a peer, but this request \
@@ -4416,6 +4484,157 @@ mod tests {
                 .insert(local_id.to_string(), 1);
         }
         (mip, served)
+    }
+
+    /// A provider that owns no weights and forwards everywhere — the
+    /// `terminal`/attach-mode shape. Parameterised on locus so the on-box and
+    /// off-box cases are the SAME stub with one field different; two stubs
+    /// would let the privacy case drift from the routing case.
+    struct Forwarder(ServingLocus);
+
+    #[async_trait]
+    impl InferenceProvider for Forwarder {
+        async fn complete(
+            &self,
+            _r: &CompletionRequest,
+        ) -> sovereign_core::error::Result<CompletionResponse> {
+            unreachable!("these tests resolve routing; they never dispatch")
+        }
+        async fn complete_stream(
+            &self,
+            _r: &CompletionRequest,
+        ) -> sovereign_core::error::Result<
+            Pin<
+                Box<
+                    dyn futures::Stream<Item = sovereign_core::error::Result<String>>
+                        + Send
+                        + 'static,
+                >,
+            >,
+        > {
+            unreachable!("these tests resolve routing; they never stream")
+        }
+        async fn embed(&self, _t: &str) -> sovereign_core::error::Result<Vec<f32>> {
+            unreachable!("these tests resolve routing; they never embed")
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: false,
+                relative_speed: Speed::Fast,
+                relative_reasoning: Depth::Moderate,
+            }
+        }
+        /// Empty, and that is the premise: this node holds nothing, so
+        /// `build_self_manifest` advertises nothing and no name resolves here.
+        fn resident_slots(&self) -> Vec<sovereign_core::traits::ResidentSlot> {
+            Vec::new()
+        }
+        fn serving_locus(&self) -> ServingLocus {
+            self.0
+        }
+    }
+
+    fn forwarder(locus: ServingLocus) -> MeshInferenceProvider {
+        MeshInferenceProvider::with_peer_source(Arc::new(Forwarder(locus)), Arc::new(NoPeers))
+    }
+
+    /// A node that owns no weights forwards a name nobody advertises, instead
+    /// of refusing it.
+    ///
+    /// This is what makes `[node] entry` a binding rather than a config field.
+    /// Measured 2026-08-30: a correctly configured terminal could embed but
+    /// never complete, because chat resolves against advertised manifests
+    /// first, the terminal honestly advertises none of its own, and its entry
+    /// node is not a peer until `svrn mesh join`. Every turn 503'd with "no
+    /// node in this mesh advertises model 'primary'".
+    ///
+    /// Not a substitution: `build_request` puts `request.model_id` on the wire
+    /// verbatim, so the far end is asked for the SAME name and refuses on its
+    /// own terms.
+    #[tokio::test]
+    async fn a_weightless_node_forwards_a_name_nobody_here_advertises() {
+        for locus in [ServingLocus::ForwardsOnBox, ServingLocus::ForwardsOffBox] {
+            let mip = forwarder(locus);
+            match mip.locate_named_model("primary").await {
+                NamedModelLocation::Local => {}
+                other => panic!(
+                    "a node holding no weights must hand '{}' to its forwarder; got {other:?}",
+                    "primary"
+                ),
+            }
+        }
+    }
+
+    /// The guard that keeps the fix from becoming a blanket "never refuse".
+    ///
+    /// A node that DOES own weights and genuinely cannot place a name still
+    /// says so. Without this, a typo'd model id on an ordinary holder would
+    /// silently reach whatever its local provider decided to do with it.
+    #[tokio::test]
+    async fn a_holder_still_refuses_a_name_nobody_advertises() {
+        let local = Arc::new(ServesOne {
+            id: "held-model",
+            served: Arc::new(AtomicU32::new(0)),
+            saw_model: Arc::new(std::sync::Mutex::new(None)),
+        });
+        let mip = MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers));
+        match mip.locate_named_model("not-a-real-model").await {
+            NamedModelLocation::Unknown(NamedUnknownReason::NotAdvertised) => {}
+            other => panic!("a holder must still refuse an unplaceable name; got {other:?}"),
+        }
+    }
+
+    /// `local_only` on an OFF-BOX forwarder is unsatisfiable, and must refuse.
+    ///
+    /// The consequence of the fix above: a weightless node's `Local` is a
+    /// forward, and if it lands on another machine it crosses exactly the
+    /// boundary the envelope forbids. Nothing runs here, so there is no second
+    /// way to honour it — the refusal has to say that rather than send the
+    /// operator to install weights on a node chosen because it holds none.
+    #[tokio::test]
+    async fn local_only_on_an_off_box_forwarder_refuses_rather_than_crossing() {
+        let mip = forwarder(ServingLocus::ForwardsOffBox);
+        // `InferenceRequirements::new()` states no sharding, which OICP §3.1
+        // reads as LocalOnly — privacy is the default, not a request.
+        let req = CompletionRequest {
+            model_id: Some("primary".to_string()),
+            ..CompletionRequest::new("hi").with_oicp(InferenceRequirements::new())
+        };
+        let dispatch = mip.resolve_named_dispatch(&req, "primary").await;
+        match dispatch.located {
+            NamedModelLocation::Unknown(NamedUnknownReason::ForwarderCannotServeLocalOnly) => {}
+            other => panic!(
+                "local_only on a node that can only forward off-box must refuse; got {other:?}"
+            ),
+        }
+        let msg = NamedUnknownReason::ForwarderCannotServeLocalOnly.refusal("primary");
+        assert!(
+            msg.contains("mesh_allowed"),
+            "the refusal must name the one thing that actually works: {msg}"
+        );
+    }
+
+    /// ...and an ON-BOX forwarder still serves it.
+    ///
+    /// The attach-mode desktop and the CLI chat bootstrap both forward to their
+    /// OWN daemon over loopback. Nothing leaves the machine, so `local_only` is
+    /// satisfied exactly and refusing would be a false positive.
+    #[tokio::test]
+    async fn local_only_on_an_on_box_forwarder_is_still_served() {
+        let mip = forwarder(ServingLocus::ForwardsOnBox);
+        let req = CompletionRequest {
+            model_id: Some("primary".to_string()),
+            ..CompletionRequest::new("hi").with_oicp(InferenceRequirements::new())
+        };
+        let dispatch = mip.resolve_named_dispatch(&req, "primary").await;
+        match dispatch.located {
+            NamedModelLocation::Local => {}
+            other => panic!(
+                "loopback forwarding crosses no boundary, so local_only must be \
+                 honoured by serving it; got {other:?}"
+            ),
+        }
     }
 
     fn named(id: &str) -> CompletionRequest {

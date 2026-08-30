@@ -1275,6 +1275,82 @@ pub struct SplitInferenceProvider {
     status_url: String,
 }
 
+/// Does this `/v1` endpoint point at something on this machine?
+///
+/// Host-only, and deliberately conservative: anything we cannot parse or do not
+/// recognise as loopback counts as OFF-box. A false "on-box" reading would let
+/// a `local_only` turn cross the network, which is the failure this whole check
+/// exists to prevent — so the unknown case must fail toward refusal (§18.3).
+fn endpoint_is_loopback(endpoint: &str) -> bool {
+    let rest = endpoint
+        .strip_prefix("http://")
+        .or_else(|| endpoint.strip_prefix("https://"))
+        .unwrap_or(endpoint);
+    let authority = rest.split('/').next().unwrap_or("");
+    // Strip the port. IPv6 literals arrive bracketed (`[::1]:9741`).
+    let host = if let Some(close) = authority.find(']') {
+        authority.get(1..close).unwrap_or("")
+    } else {
+        authority.split(':').next().unwrap_or("")
+    };
+    matches!(host, "localhost" | "127.0.0.1" | "::1")
+        || host.starts_with("127.")
+        || host.eq_ignore_ascii_case("ip6-localhost")
+}
+
+#[cfg(test)]
+mod loopback_tests {
+    use super::endpoint_is_loopback;
+
+    /// The forms a daemon endpoint actually takes on this fleet.
+    #[test]
+    fn loopback_endpoints_are_recognised() {
+        for e in [
+            "http://localhost:9741/v1",
+            "http://127.0.0.1:9741/v1",
+            "http://127.0.0.1:9741",
+            "https://localhost:9741/v1",
+            "http://[::1]:9741/v1",
+            "http://127.9.9.9:9841/v1",
+        ] {
+            assert!(endpoint_is_loopback(e), "{e} is on this machine");
+        }
+    }
+
+    /// A `terminal`'s entry node, and the shapes that must not be mistaken for
+    /// loopback. `localhost.example.com` is the one worth a test: a prefix or
+    /// `contains` check would call it local and let a `local_only` turn cross
+    /// the network.
+    #[test]
+    fn remote_endpoints_are_not_loopback() {
+        for e in [
+            "http://halo:9741/v1",
+            "http://192.168.1.10:9741/v1",
+            "http://localhost.example.com:9741/v1",
+            "http://notlocalhost:9741/v1",
+            "https://10.0.0.4:9741",
+        ] {
+            assert!(!endpoint_is_loopback(e), "{e} is another machine");
+        }
+    }
+
+    /// Anything unparseable counts as OFF-box.
+    ///
+    /// The asymmetry is deliberate (§18.3): a wrong "off-box" reading refuses a
+    /// turn that could have run, which the operator sees and can act on. A
+    /// wrong "on-box" reading carries a `local_only` prompt across the network,
+    /// which nobody sees at all.
+    #[test]
+    fn an_unreadable_endpoint_fails_toward_refusal() {
+        for e in ["", "://", "http://", "garbage"] {
+            assert!(
+                !endpoint_is_loopback(e),
+                "{e:?} cannot be shown to be local, so it must not be treated as local"
+            );
+        }
+    }
+}
+
 impl SplitInferenceProvider {
     /// Build the daemon-backed pair from an explicit context window and embed
     /// query-instruction prefix.
@@ -1494,6 +1570,22 @@ impl InferenceProvider for SplitInferenceProvider {
 
     fn embed_model_id(&self) -> String {
         self.embed_model_id.clone()
+    }
+
+    /// Forwarding, and WHERE to matters.
+    ///
+    /// Loopback means the turn stays on this machine — the attach-mode desktop
+    /// and the CLI chat bootstrap both point here at their own daemon, and a
+    /// `local_only` envelope is perfectly satisfiable that way. A remote host
+    /// is a `terminal` bound to its entry node, and there `local_only` cannot
+    /// be honoured by anyone: this process owns no weights and the only place
+    /// the turn can run is another machine.
+    fn serving_locus(&self) -> sovereign_contracts::traits::ServingLocus {
+        if endpoint_is_loopback(&self.chat.endpoint) {
+            sovereign_contracts::traits::ServingLocus::ForwardsOnBox
+        } else {
+            sovereign_contracts::traits::ServingLocus::ForwardsOffBox
+        }
     }
 
     fn capabilities(&self) -> ProviderCapabilities {

@@ -19,17 +19,31 @@ exits 1 having written nothing; the terminal daemon boots with
 and `svrn doctor` both report `terminal`; and embeddings forward to the entry
 node.
 
-**What it also found, and this is a gap in the class as built:** a terminal
-that has not yet joined the mesh CANNOT complete. Embeddings forward (the
-provider is asked directly), but chat resolves the model name against
-advertised manifests first — and the terminal now honestly advertises none of
-its own while its entry node is not a peer until `svrn mesh join`. So
-`[node] entry` is only half a binding: it routes embeddings, and chat routes on
-the mesh manifest instead. Two mechanisms answer "where does this turn go" and
-they disagree for a non-member terminal. The documented flow (setup → join →
-daemon) hides it, and `docs/ANCHOR_NODE.md` now says so explicitly; whether the
-completion path should fall back to the bound entry is an open design question,
-deliberately not settled inside the hardening order.
+**One gap found and closed the same day.** A terminal that had not joined the
+mesh could embed but not complete: chat resolved the model name against
+advertised manifests first, the terminal honestly advertises none of its own,
+and its entry node is not a peer until `svrn mesh join`. So `[node] entry` was
+only half a binding — it routed embeddings while chat routed on the mesh
+manifest, two mechanisms answering one question and disagreeing for a
+non-member.
+
+Closed by making the binding real: a node whose provider reports
+`ServingLocus != OwnWeights` hands a name it cannot place to its forwarder,
+because the far end does its own resolution and `build_request` puts the
+requested id on the wire verbatim — the same name, refused on the far end's own
+terms if it cannot serve it. Verified live: an UNJOINED terminal answered
+`primary`, served by the entry node's `Qwen3.6-35B-A3B-UD-MTP-IQ4_NL`, while
+its own `/v1/models` stayed empty.
+
+That created a privacy obligation, discharged in the same place. A weightless
+node's "local" dispatch IS a forward, so on a terminal it crosses the machine
+boundary `ShardingPrivacy::LocalOnly` defends — and unlike a holder there is no
+second way to honour the envelope, because nothing runs locally at all.
+`ServingLocus` separates the three cases (`OwnWeights`, `ForwardsOnBox`,
+`ForwardsOffBox`), so an attach-mode desktop forwarding to its own daemon over
+loopback still serves `local_only` exactly, while an off-box terminal refuses
+and names `mesh_allowed` as the only thing that would work. The loopback
+classifier fails toward refusal on anything it cannot parse.
 
 Hardened
 the same day (order `tn-1-terminal-honesty`): it now advertises no embed model

@@ -256,6 +256,27 @@ pub use crate::oicp::{ComputeChildStatus, ResidentSlot, SlotPlacement, WorkerPla
 /// embeddings, optional rerank, plus slot/model introspection. Implemented by
 /// the embedded llama.cpp engine, remote HTTP forwarders, mesh-peer wrappers,
 /// and test stubs — the many defaulted methods keep those impls minimal.
+/// Where a turn actually executes, from the serving provider's point of view.
+///
+/// A closed set of three, so an enum rather than a pair of booleans that can
+/// disagree (ARCH §2.1). The distinction that earns the third variant is
+/// privacy: forwarding to a daemon on `127.0.0.1` crosses no trust boundary,
+/// forwarding to another machine crosses the one that `ShardingPrivacy::LocalOnly`
+/// exists to defend.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ServingLocus {
+    /// This process owns the weights and runs the turn itself.
+    OwnWeights,
+    /// Forwards to another process on THIS machine — the attach-mode desktop
+    /// and the CLI's chat bootstrap, both pointed at a local daemon over
+    /// loopback. Nothing leaves the box.
+    ForwardsOnBox,
+    /// Forwards to another MACHINE — a `terminal`-class node and its bound
+    /// entry node. The prompt leaves this host, so a `local_only` envelope
+    /// cannot be honoured here at all.
+    ForwardsOffBox,
+}
+
 #[async_trait]
 pub trait InferenceProvider: Send + Sync {
     /// One-shot completion (no streaming).
@@ -464,6 +485,21 @@ pub trait InferenceProvider: Send + Sync {
     /// embed model (`SplitInferenceProvider`, `EmbeddedLlamaCpp`).
     fn embed_model_id(&self) -> String {
         "unknown".to_string()
+    }
+
+    /// Where a turn this provider serves actually EXECUTES.
+    ///
+    /// Not the same question as `resident_slots()`. That one asks what this
+    /// process holds; this one asks where the compute happens, and the two
+    /// diverge on every forwarding provider. Routing needs the first, privacy
+    /// needs the second, and answering both from one signal is how a
+    /// `local_only` turn ends up on another machine.
+    ///
+    /// Default [`ServingLocus::OwnWeights`]: an embedded engine serves from
+    /// its own slots, and so does every test stub, so nothing changes for them
+    /// by omission. Forwarding providers override it.
+    fn serving_locus(&self) -> ServingLocus {
+        ServingLocus::OwnWeights
     }
 
     /// The actual context window size the chat slots are currently

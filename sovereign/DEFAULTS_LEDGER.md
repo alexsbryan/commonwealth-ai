@@ -58,6 +58,14 @@ omits one method silently inherits the default and re-introduces a measured
 regression with nothing red — §18.3's failure shape, built by construction.
 That risk is larger than the debt it would repay today, on a one-terminal fleet.
 
+**Re-priced 2026-08-30, upward.** When this row was written, `[node] entry`
+routed embeddings only — chat resolved on the mesh manifest — so keying it on
+an address looked like a contained debt. Closing that gap made `entry` the
+decider for EVERY turn a terminal serves, which makes the address-keying matter
+more, not less: a moved DHCP lease now silently redirects chat as well as
+embeddings. The interim detection below is doing more work than it was meant
+to, and the flip conditions should be read as closer, not further away.
+
 **Flip condition (any one):**
 - A terminal's entry node changes address in the field and the terminal breaks
   or, worse, silently serves from the wrong machine. One occurrence settles it.
@@ -74,11 +82,12 @@ re-deriving the design; the survey of what already exists
 (`peer_inference_endpoints`, `PeerEndpointSource`, `DeferredDaemon`, `/status`
 already returning `node_id`) is recorded there and is still good.
 
-**Interim mitigation: NONE shipped.** The drift is currently undetectable —
-proposed but not built: a `svrn doctor` check that probes `[node] entry` for
-`/status.node_id` and compares it against the id recorded at setup, turning the
-confident wrong answer into a reported one. That needs a new config field and
-so was left to the operator's call rather than taken under a stop condition.
+**Interim mitigation: SHIPPED.** `[node] entry_node_id` records the entry
+node's identity at setup, and `svrn doctor`'s `entry_node_identity` check probes
+the address and reports a mismatch as a FAILURE naming both ids. Four verdicts:
+unreachable and never-recorded are `Skipped`, because "the node is down" and
+"another machine took the address" want opposite responses. Verified live
+2026-08-30. It detects the drift; it still cannot route around it.
 
 **Review by:** 2026-11-30, or the first field occurrence above, whichever comes
 first.

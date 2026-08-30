@@ -121,17 +121,21 @@ svrn mesh join "sovereign://join/cwth-…"     # the same link as any member
 svrn daemon
 ```
 
-**`svrn mesh join` is not optional, and the order matters.** Measured
-2026-08-30 on a co-located pair: a terminal that has been set up but has
-NOT joined answers embeddings (those go straight through the forwarder to
-the anchor) while chat 503s with *"no node in this mesh advertises model
-'primary'"*, and its own `/v1/models` is empty. Completions resolve the
-model name against advertised manifests — the terminal now honestly
-advertises none of its own, and the anchor is not a peer until the join.
-So the node is not usable for chat between `setup --terminal` and
-`mesh join`, even though setup reported a served turn: setup proves that
-turn by asking the anchor **directly**, not through the daemon it just
-configured.
+**Chat works before they join.** The terminal forwards any model name it
+cannot place itself to its entry node, which resolves the name and
+serves it — so `svrn setup --terminal` alone is enough to get answers.
+(This was not true until 2026-08-30: chat resolved against advertised
+manifests first, the terminal honestly advertises none of its own, and
+the anchor is not a peer until the join, so every turn 503'd.)
+
+Joining is still worth doing, for what membership actually buys: gossip,
+pooled knowledge, the contribution ledger, and — once the anchor is a
+peer — a route that survives the anchor swapping addresses.
+
+One thing a terminal cannot do at all: honour a `local_only` request.
+Nothing runs on that machine, so the only place a turn can execute is
+another host, which is the boundary `local_only` exists to defend. It
+refuses and says so, rather than quietly forwarding.
 
 `--terminal` refuses rather than writing a config it can't stand behind:
 it asks the anchor's `/status` for the embed model id (which decides the
