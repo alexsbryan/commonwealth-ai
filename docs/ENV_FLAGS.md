@@ -218,6 +218,7 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 | `SOVEREIGN_RPC_QUORUM_ANCHORS` | unset | shipped | Anchor quorum for the pooled shared model. *(shadows `SetupConfig.shared_model.quorum_anchors`)* |
 | `SOVEREIGN_RPC_SERVE` | unset | shipped | Anchor/host half of the shared-model role (env half of the config's role field). *(shadows `SetupConfig.shared_model.role`)* |
 | `SOVEREIGN_RPC_SHARD_FETCH` | unset | shipped | Shard-fetch strategy for distributed model load. *(shadows `SetupConfig.shared_model.shard_fetch`)* |
+| `SOVEREIGN_RPC_WORKER_PROCESS` | unset (in-process worker) | experiment | Serve the ggml RPC worker from a supervised child process instead of a thread in the daemon, so a peer-reachable GGML_ASSERT abort kills the child and not the process holding the mesh key. Accepts 1/true. |
 | `SOVEREIGN_SEAT` | unset | shipped | Seat sessions only: makes the ambient notes read (inject-notes.py) pass include_operational=true, so seat coordination records are PRESENT instead of withheld (order seat-durable-rail UC-D4 inverse). Ordinary sessions never set it. |
 | `SOVEREIGN_SHARED_MODEL_HOST_NODE_ID` | unset | shipped | Distributed-inference host node id override. *(shadows `SetupConfig.shared_model.host_node_id`)* |
 | `SOVEREIGN_SHARED_MODEL_ID` | unset | shipped | Distributed-inference shared model id override (bootstrap.rs env-or-config). *(shadows `SetupConfig.shared_model.model_id`)* |

@@ -144,7 +144,7 @@ fn main() -> ExitCode {
         // kills only this child and not the window. `Worker` cannot be reached
         // through this binary today (it needs the `daemon` verb) but routes
         // with it rather than silently opening a window.
-        Launch::ComputeChild { .. } | Launch::Worker { .. } => {
+        Launch::ComputeChild { .. } | Launch::RpcWorker { .. } | Launch::Worker { .. } => {
             std::process::exit(sovereign_cli_daemon::run_with_args(args));
         }
 

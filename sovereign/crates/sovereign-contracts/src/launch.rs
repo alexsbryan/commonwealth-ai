@@ -66,6 +66,21 @@ pub enum Launch {
         args: Vec<String>,
     },
 
+    /// The ggml RPC worker behind a process boundary: serves this node's
+    /// local GPU to mesh peers over the raw ggml RPC protocol, and owns no
+    /// model, no data root and no mesh identity.
+    ///
+    /// It exists because that protocol is the one surface here that feeds
+    /// PEER-supplied bytes into llama.cpp, and ggml enforces its bounds with
+    /// `GGML_ASSERT` — an unconditional `abort()`, not a rejected message. In
+    /// process, one malformed tensor takes down the daemon holding the mesh
+    /// key and the conversation store; out of process it takes down a child
+    /// the supervisor re-spawns. Spawned as `current_exe() --rpc-worker …`.
+    RpcWorker {
+        /// Args after the `--rpc-worker` flag.
+        args: Vec<String>,
+    },
+
     /// A crash probe: load one model, decode one token, exit. Spawned by the
     /// desktop before it loads a model into the user-facing slot.
     Smoketest {
@@ -134,6 +149,13 @@ pub const COMPUTE_CHILD_FLAG: &str = "--compute-child";
 /// different socket, not a flag on the daemon.
 pub const WORKER_MODE_FLAG: &str = "--worker-mode";
 
+/// Spawns the out-of-process ggml RPC worker ([`Launch::RpcWorker`]). Set by
+/// `sovereign-inference`'s supervisor when `SOVEREIGN_RPC_WORKER_PROCESS=1`,
+/// on a `current_exe()` re-exec — so, like [`COMPUTE_CHILD_FLAG`], ANY binary
+/// that can be `current_exe` must route this variant instead of falling
+/// through to verb matching.
+pub const RPC_WORKER_FLAG: &str = "--rpc-worker";
+
 // NOTE — the smoketest token is deliberately NOT declared here.
 // `sovereign_inference::smoketest::SMOKETEST_FLAG` already owns it, next to
 // the smoketest implementation, and the desktop re-exports it from there.
@@ -156,6 +178,11 @@ impl Launch {
         // matching.
         if let Some(i) = args.iter().position(|a| a == COMPUTE_CHILD_FLAG) {
             return Launch::ComputeChild {
+                args: args[i + 1..].to_vec(),
+            };
+        }
+        if let Some(i) = args.iter().position(|a| a == RPC_WORKER_FLAG) {
+            return Launch::RpcWorker {
                 args: args[i + 1..].to_vec(),
             };
         }
@@ -214,6 +241,7 @@ impl Launch {
             Launch::Daemon { .. } => "daemon",
             Launch::Worker { .. } => "worker",
             Launch::ComputeChild { .. } => "compute-child",
+            Launch::RpcWorker { .. } => "rpc-worker",
             Launch::Smoketest { .. } => "smoketest",
             Launch::Desktop => "desktop",
             Launch::Server => "server",
@@ -581,6 +609,40 @@ mod tests {
         assert!(parse(&["daemon", "run"]).is_resident());
         assert!(parse(&["--daemon-child"]).is_resident());
         assert_eq!(parse(&["--daemon-child"]).as_str(), "daemon");
+    }
+
+    /// The RPC worker is a child re-exec like `--compute-child`: it must keep
+    /// only the args after its own flag, and must be found wherever the flag
+    /// sits in argv.
+    #[test]
+    fn rpc_worker_keeps_only_the_args_after_its_flag() {
+        let Launch::RpcWorker { args } =
+            parse(&["--rpc-worker", "--bind", "127.0.0.1:50052"])
+        else {
+            panic!("expected RpcWorker");
+        };
+        assert_eq!(args, v(&["--bind", "127.0.0.1:50052"]));
+        assert_eq!(
+            parse(&["--quiet", "--rpc-worker", "--bind", "x:1"]).as_str(),
+            "rpc-worker"
+        );
+    }
+
+    /// The RPC worker owns no data root and binds nothing the run lock knows
+    /// about, so it must NOT be resident — residency installs the daemon panic
+    /// hook against a data dir this process does not own.
+    #[test]
+    fn rpc_worker_is_not_resident_and_is_not_a_daemon() {
+        let w = parse(&["--rpc-worker", "--bind", "x:1"]);
+        assert!(!w.is_resident());
+        assert_ne!(w, parse(&["daemon", "run"]));
+    }
+
+    /// Same trap the compute child has: a worker spawned with a verb-shaped
+    /// argument must not boot a second daemon.
+    #[test]
+    fn the_rpc_worker_flag_outranks_a_verb() {
+        assert_eq!(parse(&["daemon", "--rpc-worker"]).as_str(), "rpc-worker");
     }
 
     /// Worker mode is a different server on a different socket, so it must not

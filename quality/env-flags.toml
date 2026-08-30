@@ -983,6 +983,13 @@ shadows = "shared_model.role"
 purpose = "Anchor/host half of the shared-model role (env half of the config's role field)."
 
 [[flag]]
+name = "SOVEREIGN_RPC_WORKER_PROCESS"
+cluster = "mesh"
+default = "unset (in-process worker)"
+status = "experiment"
+purpose = "Serve the ggml RPC worker from a supervised child process instead of a thread in the daemon, so a peer-reachable GGML_ASSERT abort kills the child and not the process holding the mesh key. Accepts 1/true."
+
+[[flag]]
 name = "SOVEREIGN_RPC_DISCOVER"
 cluster = "mesh"
 default = "unset"

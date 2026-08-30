@@ -2283,6 +2283,79 @@ static RPC_SERVE_STARTED: std::sync::Once = std::sync::Once::new();
 /// device, mirroring stock `rpc-server`'s default selection.
 /// `ggml_backend_rpc_start_server` blocks, so it owns a dedicated thread for
 /// the life of the process.
+/// Should the ggml RPC worker run behind a process boundary?
+///
+/// Phase 0 ships `false` — the in-process thread stays the default. Opt in
+/// with `SOVEREIGN_RPC_WORKER_PROCESS=1`; the flip condition and review-by
+/// date are in `sovereign/DEFAULTS_LEDGER.md`.
+fn rpc_worker_out_of_process() -> bool {
+    accepts_out_of_process(
+        std::env::var("SOVEREIGN_RPC_WORKER_PROCESS")
+            .ok()
+            .as_deref(),
+    )
+}
+
+/// THE rule, separated from the environment so the accepted spellings are
+/// testable without racing another test's `set_var`.
+///
+/// `1` or `true` case-insensitively — the convention `SOVEREIGN_FORCE_CPU_CHAT`
+/// already set here. Everything else, an empty value included, keeps the
+/// in-process worker: a half-set flag must not silently change what the daemon
+/// becomes, and `SOVEREIGN_RPC_SERVE=""` is exactly the bug `RpcServe` exists
+/// to close one layer up.
+fn accepts_out_of_process(raw: Option<&str>) -> bool {
+    raw.map(str::trim)
+        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+}
+
+/// The local GPU devices this node serves to peers: every non-CPU device that
+/// is not itself a remote RPC device.
+///
+/// The RPC filter is load-bearing only in-process, where a host that has
+/// already registered peer workers would otherwise re-serve someone else's GPU
+/// as its own. In the child it is trivially satisfied — a fresh process has
+/// registered no RPC backends — so the process boundary REMOVES that hazard
+/// rather than relocating it. Shared by both paths so the two can never
+/// disagree about which devices this node owns (ARCH §10.6).
+pub(crate) fn collect_local_gpu_devices() -> Vec<crate::llama::sys::ggml_backend_dev_t> {
+    let mut devices: Vec<crate::llama::sys::ggml_backend_dev_t> = Vec::new();
+    let n = unsafe { crate::llama::sys::ggml_backend_dev_count() };
+    for i in 0..n {
+        let dev = unsafe { crate::llama::sys::ggml_backend_dev_get(i) };
+        if unsafe { crate::llama::sys::ggml_backend_dev_type(dev) }
+            == crate::llama::sys::GGML_BACKEND_DEVICE_TYPE_CPU
+        {
+            continue;
+        }
+        let reg = unsafe { crate::llama::sys::ggml_backend_dev_backend_reg(dev) };
+        let reg_name =
+            unsafe { std::ffi::CStr::from_ptr(crate::llama::sys::ggml_backend_reg_name(reg)) }
+                .to_string_lossy();
+        if reg_name == "RPC" {
+            continue;
+        }
+        devices.push(dev);
+    }
+    devices
+}
+
+/// CPU threads for the RPC worker's own device: half the machine, at least one.
+/// Shared with the child so `--threads` defaults identically whether the parent
+/// passes it or the child derives it.
+pub(crate) fn rpc_worker_threads() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get() / 2)
+        .unwrap_or(4)
+        .max(1)
+}
+
+/// Start this node's ggml RPC worker, if `SOVEREIGN_RPC_SERVE` names a bind.
+///
+/// Two shapes behind one call, chosen by [`rpc_worker_out_of_process`]:
+/// a thread in this process (the default), or a supervised `current_exe()
+/// --rpc-worker` child. Both serve the identical protocol on the identical
+/// port from the identical devices; they differ only in what an abort costs.
 pub(crate) fn serve_rpc_worker_if_configured() {
     RPC_SERVE_STARTED.call_once(|| {
         // THE reading of this variable (ARCH §10.6). This site is the
@@ -2296,149 +2369,265 @@ pub(crate) fn serve_rpc_worker_if_configured() {
             return;
         };
 
-        // Collect local GPU devices (skip CPU and any already-registered remote
-        // RPC devices, so a host+worker hybrid never re-serves a peer).
-        let mut devices: Vec<crate::llama::sys::ggml_backend_dev_t> = Vec::new();
-        let n = unsafe { crate::llama::sys::ggml_backend_dev_count() };
-        for i in 0..n {
-            let dev = unsafe { crate::llama::sys::ggml_backend_dev_get(i) };
-            if unsafe { crate::llama::sys::ggml_backend_dev_type(dev) }
-                == crate::llama::sys::GGML_BACKEND_DEVICE_TYPE_CPU
-            {
-                continue;
-            }
-            let reg = unsafe { crate::llama::sys::ggml_backend_dev_backend_reg(dev) };
-            let reg_name =
-                unsafe { std::ffi::CStr::from_ptr(crate::llama::sys::ggml_backend_reg_name(reg)) }
-                    .to_string_lossy();
-            if reg_name == "RPC" {
-                continue;
-            }
-            devices.push(dev);
+        if rpc_worker_out_of_process() {
+            serve_rpc_worker_out_of_process(bind);
+        } else {
+            serve_rpc_worker_in_process(bind);
         }
-        if devices.is_empty() {
+    });
+}
+
+/// The out-of-process worker: re-exec this binary as `--rpc-worker` and
+/// supervise it.
+///
+/// The parent deliberately does NOT pre-check for a local GPU. The child
+/// enumerates its own registry, and a parent that answered on its behalf would
+/// be claiming something about an environment it is not in. A child that finds
+/// no device exits non-zero, says so, and never binds — which is exactly what
+/// `/status`'s TCP probe already reports as "not a worker".
+fn serve_rpc_worker_out_of_process(bind: String) {
+    let exe = match std::env::current_exe() {
+        Ok(e) => e,
+        Err(e) => {
             tracing::warn!(
-                bind,
-                "SOVEREIGN_RPC_SERVE set but no local GPU device found — RPC worker not started"
+                error = %e,
+                "cannot resolve current_exe — RPC worker not started (unset \
+                 SOVEREIGN_RPC_WORKER_PROCESS to serve in process instead)"
             );
             return;
         }
-        let c_bind = match std::ffi::CString::new(bind.clone()) {
-            Ok(c) => c,
-            Err(_) => {
+    };
+
+    let cache = rpc_cache_dir();
+    let threads = rpc_worker_threads();
+    let mut args: Vec<String> = vec![
+        sovereign_contracts::launch::RPC_WORKER_FLAG.to_string(),
+        "--bind".to_string(),
+        bind.clone(),
+        "--threads".to_string(),
+        threads.to_string(),
+    ];
+    // Absent flag, not the string "off" — see `rpc_warm_cache::resolve_cache_dir`
+    // for the bug that spelling produced last time.
+    if let Some(dir) = cache.as_ref() {
+        args.push("--cache-dir".to_string());
+        args.push(dir.display().to_string());
+    }
+
+    tracing::info!(
+        bind = %bind,
+        exe = %exe.display(),
+        threads,
+        cache = cache.as_ref().map(|p| p.display().to_string()),
+        "starting out-of-process RPC worker (serving local GPU to mesh peers)"
+    );
+
+    let spawned = std::thread::Builder::new()
+        .name("rpc-worker-sup".into())
+        .spawn(move || {
+            let mut consecutive_fast_exits: u32 = 0;
+            loop {
+                let started = Instant::now();
+                let outcome = spawn_and_wait(&exe, &args, &bind);
+                let ran_for = started.elapsed();
+
+                consecutive_fast_exits = if ran_for >= std::time::Duration::from_secs(30) {
+                    0
+                } else {
+                    consecutive_fast_exits.saturating_add(1)
+                };
+                let backoff = rpc_worker_restart_backoff(consecutive_fast_exits);
                 tracing::warn!(
-                    bind,
-                    "RPC bind contains an interior NUL — worker not started"
+                    bind = %bind,
+                    outcome = %outcome,
+                    ran_secs = ran_for.as_secs_f64(),
+                    consecutive_fast_exits,
+                    backoff_ms = backoff.as_millis() as u64,
+                    "out-of-process RPC worker exited — restarting"
                 );
-                return;
+                std::thread::sleep(backoff);
             }
-        };
-        let n_devices = devices.len();
-        let n_threads = std::thread::available_parallelism()
-            .map(|n| n.get() / 2)
-            .unwrap_or(4)
-            .max(1);
+        });
+    if let Err(e) = spawned {
+        tracing::warn!(error = %e, "failed to spawn RPC worker supervisor thread");
+    }
+}
 
-        // Tensor cache: with a cache dir, a reload of the same model loads each
-        // weight tensor from local disk instead of re-receiving it over the
-        // network (llama.cpp hashes weight tensors >10MB and skips the transfer
-        // on a cache hit). So the cold first load pays the wire cost once; every
-        // reload after is hash round-trips only.
-        let cache = rpc_cache_dir();
-        let c_cache = cache
-            .as_ref()
-            .and_then(|p| std::ffi::CString::new(p.to_string_lossy().as_bytes()).ok());
-        tracing::info!(
-            bind,
-            n_devices,
-            n_threads,
-            cache = cache.as_ref().map(|p| p.display().to_string()),
-            "starting in-process RPC worker (serving local GPU to mesh peers)"
-        );
+/// Run one worker generation to completion, draining its stderr into `tracing`
+/// so the child stays as legible as the in-process thread was. Returns a short
+/// description of how the generation ended.
+fn spawn_and_wait(exe: &std::path::Path, args: &[String], bind: &str) -> String {
+    use std::io::BufRead;
+    use std::process::{Command, Stdio};
 
-        // Device pointers are valid for the process lifetime (owned by ggml's
-        // registry) but `*mut` is not Send; wrap to move into the server thread.
-        struct Served {
-            bind: std::ffi::CString,
-            cache: Option<std::ffi::CString>,
-            devices: Vec<crate::llama::sys::ggml_backend_dev_t>,
-        }
-        // SAFETY: the wrapped pointers reference process-static ggml devices.
-        unsafe impl Send for Served {}
-        let payload = Served {
-            bind: c_bind,
-            cache: c_cache,
-            devices,
-        };
+    let mut child = match Command::new(exe)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => return format!("spawn failed: {e}"),
+    };
+    let pid = child.id();
 
-        let spawned = std::thread::Builder::new()
-            .name("rpc-worker".into())
+    // Drain on this thread's helper so a chatty worker can never fill the pipe
+    // buffer and block its own accept loop.
+    let drain = child.stderr.take().map(|err| {
+        let bind = bind.to_string();
+        std::thread::Builder::new()
+            .name("rpc-worker-log".into())
             .spawn(move || {
-                // Re-bind the whole `payload` so the closure captures the Send
-                // wrapper as a unit — Rust 2021 disjoint capture would otherwise
-                // grab the non-Send `Vec<*mut>` field directly.
-                let mut payload = payload;
-                let cache_ptr = payload
-                    .cache
-                    .as_ref()
-                    .map_or(std::ptr::null(), |c| c.as_ptr());
-                let bind_str = payload.bind.to_string_lossy().into_owned();
-                // Supervisor loop. `ggml_backend_rpc_start_server` runs ggml's
-                // accept loop and blocks — but ggml `return`s from it on a SINGLE
-                // failed `accept()` (ggml-rpc.cpp: a transient ECONNABORTED from a
-                // peer that connected then reset tears the whole worker down — it
-                // `return`s rather than `continue`s). A one-shot call therefore
-                // left the worker permanently dead while `/status` still
-                // advertised the port, so every host kept connecting and skipping
-                // it. We supervise instead: when the server loop returns, re-create
-                // it (re-binding the freed port) with exponential backoff — a
-                // transient error recovers in ~100ms, while a persistent fault
-                // (e.g. the port is already held) can't hot-loop. Runs for the life
-                // of the process; the only exit is process teardown.
-                let mut consecutive_fast_exits: u32 = 0;
-                loop {
-                    let started = Instant::now();
-                    tracing::info!(
-                        bind = %bind_str,
-                        n_devices,
-                        "in-process RPC worker: entering ggml server accept loop"
-                    );
-                    // SAFETY: device pointers outlive the process; start_server
-                    // blocks here until its accept loop tears down, then returns.
-                    unsafe {
-                        crate::llama::sys::ggml_backend_rpc_start_server(
-                            payload.bind.as_ptr(),
-                            cache_ptr,
-                            n_threads,
-                            n_devices,
-                            payload.devices.as_mut_ptr(),
-                        );
-                    }
-                    // A loop that ran a meaningful while was healthy; reset the flap
-                    // counter so the next teardown recovers quickly. A loop that
-                    // exits fast is flapping → back off harder each time.
-                    let ran_for = started.elapsed();
-                    consecutive_fast_exits = if ran_for >= std::time::Duration::from_secs(30) {
-                        0
-                    } else {
-                        consecutive_fast_exits.saturating_add(1)
-                    };
-                    let backoff = rpc_worker_restart_backoff(consecutive_fast_exits);
-                    tracing::warn!(
-                        bind = %bind_str,
-                        ran_secs = ran_for.as_secs_f64(),
-                        consecutive_fast_exits,
-                        backoff_ms = backoff.as_millis() as u64,
-                        "in-process RPC worker server loop exited — restarting \
-                         (ggml tears its accept loop down on a transient accept() error)"
-                    );
-                    std::thread::sleep(backoff);
+                for line in std::io::BufReader::new(err).lines().map_while(|l| l.ok()) {
+                    tracing::info!(target: "rpc_worker", pid, bind = %bind, "{line}");
                 }
-            });
-        if let Err(e) = spawned {
-            tracing::warn!(error = %e, "failed to spawn RPC worker thread");
-        }
+            })
     });
+
+    let status = child.wait();
+    if let Some(Ok(handle)) = drain {
+        let _ = handle.join();
+    }
+    match status {
+        Ok(s) => match s.code() {
+            Some(c) => format!("exit code {c}"),
+            // No code means a signal — which on this path is the interesting
+            // case: SIGABRT is a `GGML_ASSERT` a peer reached, and the whole
+            // point of the boundary is that it landed here and not on us.
+            None => format!("killed by signal ({s})"),
+        },
+        Err(e) => format!("wait failed: {e}"),
+    }
+}
+
+/// The in-process worker: ggml's accept loop on a thread in this process.
+/// Phase 0 default, and the escape hatch after the flip.
+fn serve_rpc_worker_in_process(bind: String) {
+    let mut devices = collect_local_gpu_devices();
+    if devices.is_empty() {
+        tracing::warn!(
+            bind,
+            "SOVEREIGN_RPC_SERVE set but no local GPU device found — RPC worker not started"
+        );
+        return;
+    }
+    let c_bind = match std::ffi::CString::new(bind.clone()) {
+        Ok(c) => c,
+        Err(_) => {
+            tracing::warn!(
+                bind,
+                "RPC bind contains an interior NUL — worker not started"
+            );
+            return;
+        }
+    };
+    let n_devices = devices.len();
+    let n_threads = rpc_worker_threads();
+
+    // Tensor cache: with a cache dir, a reload of the same model loads each
+    // weight tensor from local disk instead of re-receiving it over the
+    // network (llama.cpp hashes weight tensors >10MB and skips the transfer
+    // on a cache hit). So the cold first load pays the wire cost once; every
+    // reload after is hash round-trips only.
+    let cache = rpc_cache_dir();
+    let c_cache = cache
+        .as_ref()
+        .and_then(|p| std::ffi::CString::new(p.to_string_lossy().as_bytes()).ok());
+    tracing::info!(
+        bind,
+        n_devices,
+        n_threads,
+        cache = cache.as_ref().map(|p| p.display().to_string()),
+        "starting in-process RPC worker (serving local GPU to mesh peers)"
+    );
+
+    // Device pointers are valid for the process lifetime (owned by ggml's
+    // registry) but `*mut` is not Send; wrap to move into the server thread.
+    struct Served {
+        bind: std::ffi::CString,
+        cache: Option<std::ffi::CString>,
+        devices: Vec<crate::llama::sys::ggml_backend_dev_t>,
+    }
+    // SAFETY: the wrapped pointers reference process-static ggml devices.
+    unsafe impl Send for Served {}
+    let payload = Served {
+        bind: c_bind,
+        cache: c_cache,
+        devices,
+    };
+
+    let spawned = std::thread::Builder::new()
+        .name("rpc-worker".into())
+        .spawn(move || {
+            // Re-bind the whole `payload` so the closure captures the Send
+            // wrapper as a unit — Rust 2021 disjoint capture would otherwise
+            // grab the non-Send `Vec<*mut>` field directly.
+            let mut payload = payload;
+            let cache_ptr = payload
+                .cache
+                .as_ref()
+                .map_or(std::ptr::null(), |c| c.as_ptr());
+            let bind_str = payload.bind.to_string_lossy().into_owned();
+            // Supervisor loop. `ggml_backend_rpc_start_server` runs ggml's
+            // accept loop and blocks — but ggml `return`s from it on a SINGLE
+            // failed `accept()` (ggml-rpc.cpp: a transient ECONNABORTED from a
+            // peer that connected then reset tears the whole worker down — it
+            // `return`s rather than `continue`s). A one-shot call therefore
+            // left the worker permanently dead while `/status` still
+            // advertised the port, so every host kept connecting and skipping
+            // it. We supervise instead: when the server loop returns, re-create
+            // it (re-binding the freed port) with exponential backoff — a
+            // transient error recovers in ~100ms, while a persistent fault
+            // (e.g. the port is already held) can't hot-loop. Runs for the life
+            // of the process; the only exit is process teardown.
+            //
+            // What this loop CANNOT catch is the reason the out-of-process
+            // path exists: a `GGML_ASSERT` inside the accept loop aborts, and
+            // an abort takes this whole daemon with it.
+            let mut consecutive_fast_exits: u32 = 0;
+            loop {
+                let started = Instant::now();
+                tracing::info!(
+                    bind = %bind_str,
+                    n_devices,
+                    "in-process RPC worker: entering ggml server accept loop"
+                );
+                // SAFETY: device pointers outlive the process; start_server
+                // blocks here until its accept loop tears down, then returns.
+                unsafe {
+                    crate::llama::sys::ggml_backend_rpc_start_server(
+                        payload.bind.as_ptr(),
+                        cache_ptr,
+                        n_threads,
+                        n_devices,
+                        payload.devices.as_mut_ptr(),
+                    );
+                }
+                // A loop that ran a meaningful while was healthy; reset the flap
+                // counter so the next teardown recovers quickly. A loop that
+                // exits fast is flapping → back off harder each time.
+                let ran_for = started.elapsed();
+                consecutive_fast_exits = if ran_for >= std::time::Duration::from_secs(30) {
+                    0
+                } else {
+                    consecutive_fast_exits.saturating_add(1)
+                };
+                let backoff = rpc_worker_restart_backoff(consecutive_fast_exits);
+                tracing::warn!(
+                    bind = %bind_str,
+                    ran_secs = ran_for.as_secs_f64(),
+                    consecutive_fast_exits,
+                    backoff_ms = backoff.as_millis() as u64,
+                    "in-process RPC worker server loop exited — restarting \
+                     (ggml tears its accept loop down on a transient accept() error)"
+                );
+                std::thread::sleep(backoff);
+            }
+        });
+    if let Err(e) = spawned {
+        tracing::warn!(error = %e, "failed to spawn RPC worker thread");
+    }
 }
 
 /// Restart backoff for the in-process RPC worker supervisor. The first restart
@@ -2447,7 +2636,7 @@ pub(crate) fn serve_rpc_worker_if_configured() {
 /// fault such as the port already being held — backs off exponentially to a 5s
 /// cap so the supervisor can never hot-loop. Pure fn so the schedule is
 /// unit-testable without standing up a real worker.
-fn rpc_worker_restart_backoff(consecutive_fast_exits: u32) -> std::time::Duration {
+pub(crate) fn rpc_worker_restart_backoff(consecutive_fast_exits: u32) -> std::time::Duration {
     let ms = match consecutive_fast_exits {
         0 => 100,
         // 200, 400, 800, 1600, 3200, then capped at 5000.
@@ -2471,6 +2660,51 @@ fn rpc_cache_dir() -> Option<std::path::PathBuf> {
         return None;
     }
     Some(dir)
+}
+
+#[cfg(test)]
+mod rpc_worker_process_tests {
+    use super::*;
+
+    /// The accepted spellings, and — more importantly — the refused ones. A
+    /// half-set flag must not change what the daemon becomes: `SOVEREIGN_RPC_SERVE=""`
+    /// gossiping `can_anchor: true` is the exact bug `RpcServe` exists to close,
+    /// and this flag is one layer down from it.
+    #[test]
+    fn only_one_and_true_select_the_child_process() {
+        for on in ["1", "true", "TRUE", "True", " 1 ", " true "] {
+            assert!(
+                accepts_out_of_process(Some(on)),
+                "{on:?} must select the out-of-process worker"
+            );
+        }
+        for off in ["", "   ", "0", "false", "yes", "on", "2", "1.0", "child"] {
+            assert!(
+                !accepts_out_of_process(Some(off)),
+                "{off:?} must NOT silently select the out-of-process worker"
+            );
+        }
+        assert!(
+            !accepts_out_of_process(None),
+            "unset is the in-process default (DEFAULTS_LEDGER 2026-08-29)"
+        );
+    }
+
+    /// Both worker shapes must derive the same thread count, or the child and
+    /// the thread it replaces are not the same worker.
+    #[test]
+    fn thread_count_is_positive_and_shared_by_both_paths() {
+        assert!(rpc_worker_threads() >= 1);
+    }
+
+    /// The backoff schedule is shared with the child's inner loop, so it has
+    /// two readers now and must stay a pure function of the flap count.
+    #[test]
+    fn backoff_is_fast_when_healthy_and_capped_when_flapping() {
+        assert_eq!(rpc_worker_restart_backoff(0).as_millis(), 100);
+        assert!(rpc_worker_restart_backoff(1) < rpc_worker_restart_backoff(3));
+        assert_eq!(rpc_worker_restart_backoff(50).as_millis(), 5_000);
+    }
 }
 
 #[cfg(test)]

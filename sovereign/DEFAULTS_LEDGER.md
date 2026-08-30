@@ -30,6 +30,69 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### `SOVEREIGN_RPC_WORKER_PROCESS` — shipped OFF (2026-08-29)
+
+**What is dark.** The out-of-process ggml RPC worker. With the flag set, the
+daemon re-execs `current_exe() --rpc-worker --bind … --cache-dir … --threads N`
+and supervises it; unset, ggml's accept loop runs on a thread inside the daemon
+exactly as before. Both paths call the identical
+`ggml_backend_rpc_start_server` on the identical devices and port.
+
+**Why it exists.** ggml enforces its RPC bounds with `GGML_ASSERT`, which
+expands to an unconditional `ggml_abort()` — no `NDEBUG` guard
+(`ggml.h:288`). Two of those sites take peer-supplied input:
+`deserialize_tensor`'s buffer-bounds check (`ggml-rpc.cpp:1103`) and
+`graph_compute`'s `GGML_ASSERT(status == GGML_STATUS_SUCCESS)` (`:1468`) —
+the second needs no malformed message, only a graph large enough to fail
+allocation. In process, either aborts the daemon holding the mesh secret key,
+the secret store and the conversation database. Upstream states the posture
+itself (`tools/rpc/README.md`): *"fragile and insecure. Never run the RPC
+server on an open network."*
+
+**Why it is not the default yet.** Nothing about parity has been MEASURED on a
+real two-node run. Three specific unknowns, in priority order:
+
+1. **Hybrid host+worker VRAM accounting.** A host that also serves
+   (`QWEN122B_DISTRIBUTED_HANDOFF.md:132` does exactly this) has one ggml
+   allocator today. Split into two processes it has two, and Metal's
+   working-set query is per-process where CUDA's free-VRAM query is not. The
+   host's own placement planning (`rpc_headroom_factor`, default 1.2) may
+   therefore over-commit on macOS hybrid nodes.
+2. **Warm-cache parity.** The child is passed `--cache-dir` explicitly so it
+   reads where `warm_cache_from_gguf` writes, but no run has yet confirmed a
+   cache HIT across the process boundary.
+3. **Orphan handling under real teardown.** `PR_SET_PDEATHSIG` covers Linux;
+   macOS uses a 1s parent-pid poll. **The macOS half is watched working**
+   (2026-08-29, M2 Max): parent `SIGKILL`ed while the worker held
+   `127.0.0.1:50098`, worker gone and the port released with zero listeners.
+   The Linux `PDEATHSIG` half is untested on this host. **Windows has no guard
+   at all** — `libc::getppid` does not exist there, so the `cfg` is
+   `all(unix, not(linux))`; an orphaned Windows worker is caught only by the
+   supervisor failing to re-bind. Closing that needs a Job Object.
+
+**Flip condition.** Flip ON by default when a two-node run shows, on both a
+Linux and a macOS worker: (a) a distributed load completing with zero weight
+bytes on the wire after a warm — proving the cache crosses the boundary; (b) a
+`kill -9` of the daemon leaving no process holding the RPC port within 2s; and
+(c) a hybrid host+worker load that does not OOM where the in-process build does
+not. A green build is NOT sufficient — none of the three is visible to the
+build gate. (b) is half-done: macOS is proven, Linux is not.
+
+**What IS proven as of 2026-08-29.** The child dispatches, refuses malformed
+arguments with exit 2 rather than defaulting (`--bind` absent, unknown
+argument, `--threads 0`), initialises Metal, enumerates exactly the local GPU
+with the CPU excluded, and binds — watched on an M2 Max:
+`rpc-worker: serving local GPU to mesh peers (out of process) bind=127.0.0.1:50099 n_devices=1`.
+That is the entry path, not parity.
+
+**What it costs while dark.** Nothing. The in-process path is untouched and
+remains the default; the flag adds one branch at
+`serve_rpc_worker_if_configured`.
+
+**Review by.** 2026-10-15. If unflipped and unmeasured by then, the honest
+options are to run the three checks or to delete the child path — a second
+worker shape that nobody exercises is worse than either.
+
 ### `SOVEREIGN_FRONTDOOR_AUTO_ALLOWLIST` — shipped OFF (2026-08-29)
 
 **What is dark.** The daemon's synthesis of a citation allowlist from the

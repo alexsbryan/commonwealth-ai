@@ -591,12 +591,14 @@ pub fn assemble(
             }),
         },
 
-        // The remaining four assemble nothing. `Server` is RESIDENT but is a
+        // The remaining five assemble nothing. `Server` is RESIDENT but is a
         // surface, not an assembler — the distinction that widened the first
         // number from seven to eight without touching the second (§10).
-        Launch::Server | Launch::ComputeChild { .. } | Launch::Smoketest { .. } | Launch::Bare => {
-            Err(AssemblyRefusal::NotAnAssembler { launch: name })
-        }
+        Launch::Server
+        | Launch::ComputeChild { .. }
+        | Launch::RpcWorker { .. }
+        | Launch::Smoketest { .. }
+        | Launch::Bare => Err(AssemblyRefusal::NotAnAssembler { launch: name }),
     }
 }
 

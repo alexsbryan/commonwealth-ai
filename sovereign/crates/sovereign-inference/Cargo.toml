@@ -13,6 +13,10 @@ license.workspace = true
 sovereign-contracts = { workspace = true }
 # Pid-liveness probe (kill(pid, 0)) for the prefix-state stale-dir sweep.
 libc = "0.2"
+# Not dev-only: `rpc_worker_main` is a child-process ENTRYPOINT and must
+# install its own subscriber, the same reason sovereign-compute's
+# `child_main` carries it. Workspace-pinned, so no version skew (§8.2).
+tracing-subscriber = { workspace = true }
 sovereign-core = { workspace = true }
 # For `fair_sched::EtaEwma` — the ONE queue-wait prediction, shared with the
 # chat scheduler rather than reimplemented here (ARCH_PRINCIPLES §10.6).
@@ -181,7 +185,6 @@ windows-cuda = ["llama-cpp-4/cuda"]
 
 [dev-dependencies]
 tempfile = "3"
-tracing-subscriber = { workspace = true }
 
 [[example]]
 name = "complete"

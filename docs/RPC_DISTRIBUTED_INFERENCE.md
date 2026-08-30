@@ -11,7 +11,8 @@ binary is built or run** — a node takes a role purely by environment:
 
 | Role | Env var | What it does |
 |---|---|---|
-| **Worker** | `SOVEREIGN_RPC_SERVE=0.0.0.0:50052` | Daemon starts an in-process RPC server exposing this node's local GPU to peers. |
+| **Worker** | `SOVEREIGN_RPC_SERVE=0.0.0.0:50052` | Daemon starts an RPC server exposing this node's local GPU to peers. In-process by default — see "Where the worker runs" below, and read the bind warning there before using `0.0.0.0`. |
+| Worker isolation | `SOVEREIGN_RPC_WORKER_PROCESS=1` | Optional, **experimental**. Serve from a supervised child process instead of a daemon thread, so a peer-triggered abort kills the child. See "Where the worker runs". |
 | Worker cache | `SOVEREIGN_RPC_CACHE_DIR=<dir>` | Optional. On-disk tensor cache (default `~/.svrnmesh/rpc-cache`); set `off`/`0` to disable. See "Transfer cost" below. |
 | **Host (auto)** | `SOVEREIGN_RPC_DISCOVER=1` | **Auto-discovery + auto-reload** — the host scans peers' `/status` for advertised workers (no IP list). When the worker set **changes** — a worker joins *or dies* — and settles (~20s debounce), it **force-reloads the primary** so the model redistributes; a dead worker is pruned from the device set (ggml has no unregister, so the reload passes an explicit live-only device list). |
 | Host (manual) | `SOVEREIGN_RPC_WORKERS=<ip>:50052,<ip2>:50052` | Explicit worker list (union'd with auto-discovery). Use when you want to pin specific peers. |
@@ -20,10 +21,47 @@ binary is built or run** — a node takes a role purely by environment:
 A node may be both (set both vars). Unset = ordinary single-node local inference,
 byte-for-byte unchanged.
 
-> Mechanism: the worker calls `ggml_backend_rpc_start_server` on a thread; the
+> Mechanism: the worker calls `ggml_backend_rpc_start_server`; the
 > host calls `ggml_backend_rpc_add_server` + `ggml_backend_register`, after which
 > llama.cpp's loader treats each worker as a GPU device named `RPC` and splits
-> layers across them. See `sovereign-inference/src/embedded/model_slot.rs`.
+> layers across them. See `sovereign-inference/src/embedded/rpc_distribution.rs`.
+
+## Where the worker runs, and why it matters
+
+**The ggml RPC protocol authenticates nothing and is the one surface here that
+feeds peer-supplied bytes into llama.cpp.** Upstream is explicit
+(`llama.cpp/tools/rpc/README.md`): *"the functionality is fragile and insecure.
+Never run the RPC server on an open network or in a sensitive environment!"* Its
+own `rpc-server` binary defaults to `127.0.0.1`.
+
+That matters concretely because ggml enforces its bounds with `GGML_ASSERT`,
+which expands to an unconditional `ggml_abort()` — there is no `NDEBUG` guard
+(`ggml.h:288`). It is not a rejected message; it is `abort()`. Two of those
+sites take peer input directly: `deserialize_tensor`'s buffer-bounds check
+(`ggml-rpc.cpp:1103`), and `graph_compute`'s
+`GGML_ASSERT(status == GGML_STATUS_SUCCESS)` (`:1468`) — which needs no
+malformed message at all, only a graph large enough to fail allocation.
+
+**So prefer a loopback bind and let the mesh carry the traffic.** On an
+encrypted mesh the iroh acceptor already forwards `cwth/rpc/0` to
+`127.0.0.1:<port>` **for members only**, refusing strangers outright
+(`sovereign-mesh/src/iroh_access.rs`). `SOVEREIGN_RPC_SERVE=127.0.0.1:50052`
+plus mesh membership is the authenticated topology; `0.0.0.0` is for a
+perimeter you fully control, and the examples below use it because they predate
+the iroh route.
+
+**Two worker shapes.** Default: ggml's accept loop on a thread inside the
+daemon — an abort there takes down the process holding the mesh key, the secret
+store and the conversation database. With `SOVEREIGN_RPC_WORKER_PROCESS=1` the
+daemon instead re-execs itself as `--rpc-worker` and supervises the child, so an
+abort costs a child restart (~100ms plus backend init) and the daemon keeps
+serving. Same protocol, same port, same devices, same tensor cache — the child
+is passed `--cache-dir` explicitly so warm-cache hits are unaffected.
+
+The child path is **experimental and off by default**: its parity has not yet
+been measured on a two-node run. `sovereign/DEFAULTS_LEDGER.md` carries the
+three checks that would flip it (warm-cache hit across the boundary, no orphan
+holding the port after `kill -9`, and no hybrid host+worker OOM regression).
 
 ## Rung 1 — heterogeneous 2-node bring-up (Mac host + Strix worker)
 
@@ -40,7 +78,9 @@ ss -ltnp | grep 50052           # (or: lsof -nP -iTCP:50052 -sTCP:LISTEN)
 ```
 
 The daemon logs `starting in-process RPC worker (serving local GPU to mesh peers)`
-and the RPC banner lists the Vulkan device + its free VRAM.
+— or `starting out-of-process RPC worker …` under
+`SOVEREIGN_RPC_WORKER_PROCESS=1` — and the RPC banner lists the Vulkan device +
+its free VRAM.
 
 **On the Mac** (the host), point at the Strix over Tailscale:
 

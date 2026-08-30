@@ -167,6 +167,17 @@ pub fn run_with_args(raw_args: Vec<String>) -> i32 {
         return sovereign_compute::child_main::run(args);
     }
 
+    // RPC-worker re-exec: the embedded engine's supervisor spawns
+    // `current_exe() --rpc-worker …` when SOVEREIGN_RPC_WORKER_PROCESS is set,
+    // so a `GGML_ASSERT` reached by a mesh peer aborts THIS process instead of
+    // the daemon holding the mesh key and the conversation store. Like the
+    // compute child it skips the rebrand migration, the panic hook and the
+    // daemon runtime below: it owns no data root, and it needs no tokio — the
+    // ggml accept loop is blocking and synchronous.
+    if let Launch::RpcWorker { args } = &launch {
+        return sovereign_inference::rpc_worker_main::run(args);
+    }
+
     // Rebrand back-compat (see sovereign_core::rebrand): idempotent, non-destructive.
     // The daemon is the migration authority — it runs before binding the API port.
     sovereign_core::rebrand::promote_legacy_env();
@@ -269,6 +280,7 @@ async fn dispatch(launch: Launch, raw_args: &[String]) -> i32 {
         // Handled before the runtime is built; listed so the match stays
         // exhaustive rather than falling through a wildcard.
         Launch::ComputeChild { .. } => unreachable!("compute-child returns in run_with_args"),
+        Launch::RpcWorker { .. } => unreachable!("rpc-worker returns in run_with_args"),
         // Other binaries' launches. Named explicitly so that adding a variant
         // forces a decision here instead of silently landing in a `_` arm.
         Launch::Desktop | Launch::Server | Launch::Smoketest { .. } => {
