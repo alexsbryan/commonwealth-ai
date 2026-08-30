@@ -9,12 +9,20 @@ MESSAGE.** That single fact decides everything about portability.
 Banking works in any harness, from a cron job, with no session alive.
 Escalation is harness-level by design — it must work when the daemon and
 every MCP tool are down — which means it exists only inside a live
-session of a harness that has a message channel.
+session of a harness that has a message channel. **Two of the three
+harnesses have one**: Claude Code `SendMessage`, pi
+`contact_supervisor`. opencode has no child-to-parent channel at all, so
+there the worker stops and returns with `ESCALATION:` as its first line
+and the seat reads it on landing — a delayed escalation, not a live one.
+The per-harness spellings are the capability map in
+`.claude/skills/comaintainer/SKILL.md` ("Harness capability map"); the
+seat substitutes one slot when it pastes the clause.
 
 ## The two channels, as they stand
 
 Both are verbatim clauses the seat copies into every spawn prompt
-(`.claude/skills/comaintainer/SKILL.md:192-217`).
+(`.claude/skills/comaintainer/SKILL.md`, "Banking clause" and
+"Escalation clause" under Intake → order → spawn step 5).
 
 | Concern | Channel | Lands in | Read by |
 |---|---|---|---|
@@ -28,9 +36,10 @@ a gate failing nightly leaves one item that keeps getting fresher rather
 than thirty. Everything a producer files lands unvetted, so a noisy
 worker costs the operator a scroll, never a wrong pull.
 
-Escalation is an interrupt. `SKILL.md:222-225`: act directly if
-seat-owned, **draft a steer if operator-owned**, and log every escalation
-and its resolution as a directive pair.
+Escalation is an interrupt where the harness has a channel. `SKILL.md`
+Oversight §6: act directly if seat-owned, **draft a steer if
+operator-owned**, and log every escalation and its resolution as a
+directive pair.
 
 ## What the console closed, and what it did not
 

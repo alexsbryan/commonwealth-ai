@@ -285,7 +285,7 @@ impl ClaimSearcher {
         // Hybrid search tolerates an empty vector leg (FTS still
         // runs), so an embed failure degrades rather than aborts.
         let embedding = self.inference.embed_query(claim).await.unwrap_or_default();
-        let indexes = match engine.installed_indexes().await {
+        let indexes = match engine.usable_indexes().await {
             Ok(ix) => ix,
             Err(e) => {
                 tracing::warn!(

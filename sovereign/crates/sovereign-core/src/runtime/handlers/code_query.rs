@@ -125,7 +125,7 @@ impl Runtime {
     pub(crate) async fn code_corpus_ids(&self) -> Vec<String> {
         let mut ids = Vec::new();
         if let Some(engine) = &self.corpus_engine {
-            for info in engine.installed_indexes().await.unwrap_or_default() {
+            for info in engine.usable_indexes().await.unwrap_or_default() {
                 if info.is_code_corpus() {
                     ids.push(info.corpus_id);
                 }

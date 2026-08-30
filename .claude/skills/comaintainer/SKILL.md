@@ -34,12 +34,58 @@ else is audited after the fact. The iteration journal is the worker's
 artifact, the directive log the seat's, ledger + verdicts the promotion
 tier's; the nightly sweep and landing review are the audit.
 
+## Harness capability map — the seat runs in three of them
+
+The seat is defined by its DUTIES, never by one harness's tool names.
+Below, this file says *spawn*, *steer*, *escalate* and means the
+capability; the row is the spelling. Same discipline and the same reason
+as `AGENTS.md`'s own map: a fix lands once, for every harness. All three
+already discover this skill from `.claude/skills/` — Claude Code
+natively, pi via `skills` in `.pi/settings.json`, opencode by scanning
+`.claude/skills/**/SKILL.md` itself (measured 2026-08-30: `opencode
+debug skill` lists it, no config entry).
+
+| Capability | Claude Code | pi | opencode |
+|---|---|---|---|
+| Take the seat | `/comaintainer` | `/skill:comaintainer` | `skill({name: "comaintainer"})` |
+| Spawn a worker | `Agent(subagent_type: "general-purpose", model, run_in_background: true)` | `subagent({agent: "worker", task, model, async: true})` | `task({subagent_type, description, prompt, background: true})` — refused unless `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=1`, and without it the concurrency cap is unreachable |
+| Pick the Engine | `model:` per spawn | `model` per spawn | agent-level only (`.opencode/agent/<name>.md`) — no per-call override |
+| Steer a live worker | `SendMessage` to the worker | `subagent({action: "steer", id, message, mode})` | `task({task_id, prompt})` — same id re-prompts the running task |
+| Worker → seat | `SendMessage` to `main` | `contact_supervisor({reason: "need_decision", message})` | **no live channel** — the worker returns early, `ESCALATION:` first line |
+| Seat answers it | the interrupt arrives in-session | `subagent_supervisor({action: "pending" \| "reply"})` | the returned task result |
+| Worker status | the harness shows it | `subagent({action: "status", view: "fleet" \| "transcript"})` | the harness shows it |
+| Context reset | `/clear` | `/new` | `/new` |
+| Notes, code intel, atlas | MCP | no MCP by design — `sovereign tools call <id> --key=value` | MCP (`.opencode/opencode.json` points at `:9741/mcp`) |
+| Worker worktree base | `.claude/worktrees/agent-<id>` | `worktreeBaseDir` (`pi-subagents`), temp dir by default | `git worktree` by hand |
+
+Two rows are load-bearing beyond their spelling.
+
+**Escalation is a message, and only two harnesses have one.** Banking is
+a script and works anywhere, with no session alive; escalation needs a
+live seat session in a harness with a channel (`docs/COMAINTAINER_CHANNELS.md`).
+Under opencode the worker cannot interrupt the seat at all — it stops
+and returns, and the seat reads the escalation when the task lands. Say
+so in the spawn prompt rather than pasting a clause naming a tool the
+worker does not have; a worker told to call a missing tool improvises,
+and improvising around a blocker is the exact thing escalate-and-wait
+exists to prevent. None of these channels reaches the operator directly,
+by design — opencode's `question` tool would, which is exactly why a
+worker is never pointed at it: it routes around M0.
+
+**The spawn row fixes the worker's harness**, so every clause the seat
+pastes verbatim carries the SPAWNING harness's spelling, not this file's
+default.
+
+Everything else is identical in all three: every `scripts/co-*` driver,
+`sovereign`/`svrn`, launchd, git.
+
 ## Boot
 
 1. **The boot block** — the ambient hook injects it once (seat todos,
    recent seat decisions, open orders, directive-log stats; ~12k chars).
-   First prompt if you were started with `/comaintainer`, else the
-   second. Do NOT re-run those four reads — the block is their index.
+   First prompt if you were started with the take-the-seat command for
+   your harness (map above), else the second. Do NOT re-run those four
+   reads — the block is their index.
    Read `gym/comaintainer/CHARTER.md`; hold the eleven from the compass
    (`AGENTS.md`) — workers get those, not the whole constitution.
 
@@ -55,9 +101,13 @@ tier's; the nightly sweep and landing review are the audit.
    `svrn notes list --id` reads the repo-local store, not the daemon's.
 
    **You hold the seat because you are running THIS skill.** The hook
-   detects that from a `/comaintainer` prompt or the skill marker in the
-   transcript — never the bare word, so a session discussing the seat is
-   not mistaken for one. `SOVEREIGN_SEAT=1` is an override only.
+   detects that from the take-the-seat command or the skill marker in
+   the transcript — never the bare word, so a session discussing the
+   seat is not mistaken for one. Under pi the adapter
+   (`.pi/extensions/sovereign-hooks`) matches `/skill:comaintainer` on
+   the first prompt and is sticky thereafter, because the shared script's
+   other signals read a Claude-format transcript that does not exist
+   there. `SOVEREIGN_SEAT=1` is an override only.
 
 2. **Morning render:** `svrn code fieldglass --window 48h --open`
    (operator direction 2026-08-12: the kickoff wants the last 48h, not
@@ -176,8 +226,9 @@ OVERDUE rendering carries the review pressure.
    inferred from text diff (note 87201cbe). One-shot (draft, final) form
    takes the same flag. **No spawn before the resolve — the M0 line.**
 
-5. **On approval, spawn:** Agent tool, `general-purpose`,
-   run_in_background, `model:` from the order's Engine. Spawn prompt =
+5. **On approval, spawn:** the spawn row of the map, backgrounded, with
+   the order's Engine as the model — and where the harness has no
+   per-call model (opencode), the Engine picks the AGENT. Spawn prompt =
    ORDER TEXT VERBATIM + the eleven + "claim your Scope via
    declare_scope at start; release at end" + the near-miss protocol +
    the banking clause + the escalation clause, all verbatim. Under a
@@ -193,8 +244,9 @@ OVERDUE rendering carries the review pressure.
    seams between them and the operator's console are mapped in
    `docs/COMAINTAINER_CHANNELS.md` — read it before changing either.**
    The asymmetry that matters: banking is a SCRIPT (works in any harness,
-   no session alive), escalation is a MESSAGE (harness-level, and only
-   deliverable by a live seat session).
+   no session alive), escalation is a MESSAGE (harness-level, only
+   deliverable by a live seat session, and only in a harness that has a
+   channel at all — see the map).
 
    **Banking clause (verbatim in every spawn prompt; 2026-08-16).** The
    escalation clause says what MUST reach the seat; this says what must
@@ -211,23 +263,34 @@ OVERDUE rendering carries the review pressure.
    report. What reaches the seat is the escalation list below and
    near-miss steps 2 and 3 — nothing else."
 
-   **Escalation clause (copy verbatim into every spawn prompt):**
+   **Escalation clause (copy verbatim into every spawn prompt, with
+   `<CHANNEL>` replaced from the map's worker→seat row — the ONE
+   substitution, and it must be a channel the spawned worker actually
+   has):**
    "ESCALATION: when blocked by something only the seat may do —
    daemon restart or wedge, config change, model swap, disk emergency,
-   a seam that needs renegotiating — SendMessage to `main`
+   a seam that needs renegotiating — reach the seat via <CHANNEL>
    immediately, stating (1) what is blocked, (2) the evidence (probes,
    exit codes), (3) the action you need. Then STOP on that deliverable
    and wait; the seat performs the action and replies, and the reply
    resumes you. Escalate-and-wait REPLACES working around; park
-   remains the fallback only if the seat does not answer. SendMessage
-   is harness-level — it works even when the daemon and every MCP tool
-   are down."
+   remains the fallback only if the seat does not answer. The channel
+   is harness-level — it works even when the daemon and every code-intel
+   tool is down."
+
+   `<CHANNEL>` per harness: Claude Code `SendMessage` to `main`; pi
+   `contact_supervisor({reason: "need_decision", message})`. **opencode
+   has no live channel**, so the clause changes shape rather than tool
+   name — "STOP on that deliverable and RETURN NOW, with `ESCALATION:`
+   as the first line of your final message and nothing after it; do not
+   continue other deliverables, and do not ask the operator" — because
+   there the wait cannot be resumed, only re-spawned with `task_id`.
 
 ## Oversight
 
 6. The harness shows live progress; the seat adds judgment, not a status
-   feed. Steers: draft (kind=steer) → operator approve/edit →
-   SendMessage. Worker escalations are interrupts: act directly if
+   feed. Steers: draft (kind=steer) → operator approve/edit → deliver
+   on the map's steer row. Worker escalations are interrupts: act directly if
    seat-owned, draft a steer if operator-owned, log every escalation +
    resolution as a directive pair. If the seat session is gone, TTL and
    park protocols are the backstop.
@@ -248,9 +311,9 @@ work:
   runs/<name>/run.sh per <directive-id>`. Seat check is MECHANICAL
   (script exists, authorization cited, markers declared); launch, reply
   RUN-STARTED. Unauthorized work routes through SEAT-AUTH. Launch tier:
-  <25 min = seat harness task; longer = launchd one-shot (the harness
-  reaper kills tracked tasks — note 512fd04e), monitored with short
-  disposable waiters.
+  <25 min = a background task of the seat's own harness; longer =
+  launchd one-shot (the harness reaper kills tracked tasks — note
+  512fd04e), monitored with short disposable waiters.
 - **Must-survive-everything** (nightly lanes): launchd, system-owned.
 - **`launchctl submit` is BANNED** — implicit keepalive and no plist to
   find, so a stray job becomes a respawner nobody can locate. A one-shot
@@ -278,17 +341,20 @@ work:
 - **Yellow (ctx ≥250k):** read the worker's frame — Objective still the
   order's verbatim? Next serves done-when? Budget in bounds (`sovereign
   cache-audit --session <id>` if in doubt)? Deviation = draft steer,
-  never silent correction. Subagents (no frames): same check via
-  alignment probe over SendMessage at plan-step boundaries.
+  never silent correction. Subagents (no frames): same check via an
+  alignment probe on the map's steer row, at plan-step boundaries — and
+  where steering is a re-prompt rather than an interrupt (opencode) the
+  probe costs the worker a turn, so it buys its own place.
 - **Hard cut (ctx ≥500k / frame restart):** no split or respawn without
   operator ack, routed through the seat — present carry/drop/spend, then
   boot. A worker at red mid-flight parks.
-- **Park every HELD worker BEFORE recommending /clear.** A subagent does
+- **Park every HELD worker BEFORE recommending a context reset**
+  (`/clear`, `/new` — map). A subagent does
   not survive its parent, so "the successor will release the worker" is
   a promise nobody can keep — it dies holding its claims and its
   unbanked state. Each held worker gets a park directive first (bank to
   a note or frame, release claims, name its marker files); only then is
-  /clear on the table.
+  the reset on the table.
 - **A frame banked at hard cut ends with the successor's boot line**,
   literally: `/comaintainer`, plus `sovereign session attach <id>` when
   the frame is not this terminal's lineage. A successor not told to take
@@ -350,9 +416,12 @@ work:
 8c. **Prune worker worktrees at landing** (operator direction
    2026-08-13: "prune the worktrees when we're done — we don't want
    60GB target dirs lingering until we run out of disk"). After the
-   branch merges to main: (1) `git worktree remove .claude/worktrees/agent-<id>`
-   (worktrees with commits do NOT auto-clean — only unchanged ones
-   do), (2) `git worktree prune`, (3) verify with `git worktree list`
+   branch merges to main: (1) `git worktree remove <the worker's
+   worktree>` — the base is per harness (map), so read `git worktree
+   list` for the path rather than assuming Claude Code's
+   `.claude/worktrees/agent-<id>`; worktrees with commits do NOT
+   auto-clean, only unchanged ones do — (2) `git worktree prune`,
+   (3) verify with `git worktree list`
    + `df -h /home`. The branch ref stays (costs nothing, preserves
    history); only the checkout + its target/ dir go. Safety rule
    before ANY removal: tree clean + tip merged or patch-equivalent
@@ -461,9 +530,11 @@ event). Two lines of why + pointers.
   read of the same rail. Drill cases: UC-D1..D4 (relay-run,
   `co-mesh-drill.sh report`) + UC-F1..F8 (self-running, one start note;
   procedure `scripts/CO_MESH_DRILL.md`).
-- **Audit:** MCP `notes(query: "comaintainer-seat")`. CLI caveat: from a
-  repo cwd `sovereign notes` can resolve the WRONG store confidently
-  (measured 2026-08-09) — prefer MCP; scripts name the store path.
+- **Audit:** `notes(query: "comaintainer-seat")` over MCP, or
+  `sovereign tools call read_notes --related_to=comaintainer-seat` where
+  there is no MCP (pi). CLI caveat: from a repo cwd `sovereign notes`
+  can resolve the WRONG store confidently (measured 2026-08-09) — prefer
+  MCP where you have it, and scripts name the store path.
 - Clean history: supersede or retire with a pointer (`svrn notes
   rationalize`), never silent edits. Misses belong in the log.
 - Handoff: fresh seat queries the anchor (todos first) + open orders +

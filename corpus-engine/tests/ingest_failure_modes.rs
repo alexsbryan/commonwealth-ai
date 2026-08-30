@@ -451,6 +451,77 @@ async fn reinstalling_after_failure_works() {
     );
 }
 
+/// A stopped ingest is listed by `installed_indexes()` and REFUSED by
+/// `usable_indexes()` — the two questions are different and must not share
+/// one answer.
+///
+/// The state is not contrived. Measured on the dev host 2026-08-30: 41
+/// corpora carry a meta, 41 pass the writer predicate, 38 pass the consumer
+/// one. The three in the gap (`e2e-notebook`, `wikipedia-newsworthy`, a
+/// folder-governance corpus) all sit at `committed_iter_pos: 0` with a
+/// `chunks.lance` on disk and `indexes_built: false` — an ingest that
+/// committed its chunks and died before `build_indexes()`. That is the shape
+/// that made `corpus status` print `ready` for seven unsearchable corpora.
+///
+/// `installed_indexes()` is deliberately gated on `is_ingestion_complete`,
+/// which asks "is a writer active right now" — the right question for the
+/// resume paths and the wrong one for retrieval. Before `usable_indexes()`
+/// existed, ~84 call sites each decided for themselves and exactly one
+/// retrieval leg checked `indexes_built` (ARCH §10.6, one decider).
+#[tokio::test]
+async fn a_stopped_ingest_is_listed_but_not_usable() {
+    let dir = tempfile::tempdir().unwrap();
+    let recipes_dir = dir.path().join("recipes");
+    let indexes_dir = dir.path().join("indexes");
+    std::fs::create_dir_all(&recipes_dir).unwrap();
+
+    let parquet_path = dir.path().join("fixture.parquet");
+    make_tiny_parquet(&parquet_path);
+    let recipe_path = write_recipe(&recipes_dir, &parquet_path, 8);
+
+    let working_embed: EmbedFn = Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.1_f32; 8]) }));
+    let engine = build_engine(working_embed, recipes_dir, indexes_dir.clone());
+    engine
+        .ingest(&CorpusSpec::RecipePath(recipe_path), None)
+        .await
+        .expect("ingest should succeed");
+
+    // Positive control: while the corpus is whole, both surfaces agree.
+    let listed = engine.installed_indexes().await.unwrap();
+    let usable = engine.usable_indexes().await.unwrap();
+    assert!(listed.iter().any(|i| i.corpus_id == "test_corpus"));
+    assert!(
+        usable.iter().any(|i| i.corpus_id == "test_corpus"),
+        "a finished ingest must be usable — otherwise this test proves nothing"
+    );
+
+    // Now reproduce the stranded state: chunks committed, indexes never built.
+    let meta_path = indexes_dir.join("test_corpus").join("_corpus_meta.json");
+    let raw = std::fs::read_to_string(&meta_path).unwrap();
+    let mut meta: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    meta["ingestion_in_progress"] = serde_json::json!(false);
+    meta["indexes_built"] = serde_json::json!(false);
+    std::fs::write(&meta_path, serde_json::to_string(&meta).unwrap()).unwrap();
+
+    let engine2 = build_engine(
+        Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.1_f32; 8]) })),
+        dir.path().join("recipes"),
+        indexes_dir,
+    );
+    let listed = engine2.installed_indexes().await.unwrap();
+    let usable = engine2.usable_indexes().await.unwrap();
+
+    assert!(
+        listed.iter().any(|i| i.corpus_id == "test_corpus"),
+        "no writer is active, so installed_indexes() must still list it"
+    );
+    assert!(
+        !usable.iter().any(|i| i.corpus_id == "test_corpus"),
+        "indexes_built is false, so usable_indexes() must refuse it — this is \
+         the assertion that fails if the two questions are collapsed again"
+    );
+}
+
 /// `ensure_empty_index` must materialise the index even when the index
 /// DIRECTORY already exists without an index in it.
 ///

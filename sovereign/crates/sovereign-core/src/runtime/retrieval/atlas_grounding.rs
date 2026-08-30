@@ -53,7 +53,7 @@ impl Runtime {
         chunk_id: u64,
     ) -> Option<corpus_engine::ScoredChunk> {
         let engine = self.corpus_engine.as_ref()?;
-        let indexes = engine.installed_indexes().await.ok()?;
+        let indexes = engine.usable_indexes().await.ok()?;
         let info = indexes.into_iter().find(|i| i.corpus_id == corpus_id)?;
         let index = corpus_engine::index::CorpusIndex::open(&info.path)
             .await

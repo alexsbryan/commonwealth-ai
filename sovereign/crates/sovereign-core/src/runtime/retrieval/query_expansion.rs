@@ -376,7 +376,7 @@ pub(crate) async fn fetch_entity_obligations(
         return Vec::new();
     }
 
-    let Ok(installed) = engine.installed_indexes().await else {
+    let Ok(installed) = engine.usable_indexes().await else {
         return Vec::new();
     };
     let paths: Vec<std::path::PathBuf> = installed
@@ -855,7 +855,7 @@ pub(crate) async fn ppr_propose_and_gate(
         let t_fetch = std::time::Instant::now();
         let engine = &lane.engine;
         let fetch_corpora: Vec<String> = {
-            let Ok(installed) = engine.installed_indexes().await else {
+            let Ok(installed) = engine.usable_indexes().await else {
                 tracing::warn!("ppr_expand: installed_indexes failed — admitting nothing");
                 return Vec::new();
             };

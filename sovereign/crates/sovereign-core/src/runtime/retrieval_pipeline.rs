@@ -1709,7 +1709,7 @@ async fn personal_corpus_ids(rt: &Runtime) -> std::collections::HashSet<String> 
     let Some(engine) = rt.corpus_engine.as_ref() else {
         return Default::default();
     };
-    match engine.installed_indexes().await {
+    match engine.usable_indexes().await {
         Ok(ix) => ix
             .into_iter()
             .filter(|i| i.personal_scope)

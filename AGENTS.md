@@ -1,21 +1,30 @@
 # Agent instructions — commonwealth-ai
 
 **This file is the single source.** It is the cross-harness standard (`AGENTS.md`),
-read directly by pi, Codex, and most other agent CLIs. Claude Code reads
-`.claude/CLAUDE.md`, which imports this file and adds only its own harness
+read directly by pi, opencode, Codex, and most other agent CLIs. Claude Code
+reads `.claude/CLAUDE.md`, which imports this file and adds only its own harness
 specifics — so there is one compass, not one per tool. Edit it here; never
 copy a section into a harness file.
 
 **Harness capability map.** The instructions below assume the *capability*, not
-the tool that provides it. Where a harness lacks one, the fallback is named:
+the tool that provides it. Where a harness lacks one, the fallback is named.
+Three harnesses are configured in this repo — `.claude/`, `.pi/`, `.opencode/`:
 
-| Capability | Claude Code | pi | Fallback that always works |
-|---|---|---|---|
-| Code intel (`symbols`, `callers`, `notes`, …) | MCP, 33 tools | no MCP (by design) | `sovereign tools call <id> --key=value` |
-| Boot block + notes injection | hooks in `.claude/settings.json` | `.pi/extensions/sovereign-hooks` | `sh .claude/hooks/session-boot.sh` by hand |
-| Skills | `/comaintainer` | `/skill:comaintainer` | read `.claude/skills/<name>/SKILL.md` |
-| Worker pool | Agent tool | `pi-subagents` package | one session, no delegation |
-| Long jobs (>25 min) | launchd one-shot | launchd one-shot | launchd one-shot |
+| Capability | Claude Code | pi | opencode | Fallback that always works |
+|---|---|---|---|---|
+| Code intel (`symbols`, `callers`, `notes`, …) | MCP, 33 tools | no MCP (by design) | MCP (`.opencode/opencode.json` → `:9741/mcp`) | `sovereign tools call <id> --key=value` |
+| Boot block + notes injection | hooks in `.claude/settings.json` | `.pi/extensions/sovereign-hooks` | `.opencode/plugins/` (boot hook not wired) | `sh .claude/hooks/session-boot.sh` by hand |
+| Skills | `/comaintainer` | `/skill:comaintainer` | `skill({name: "comaintainer"})` | read `.claude/skills/<name>/SKILL.md` |
+| Worker pool | Agent tool | `pi-subagents` package | `task` tool (background needs `OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=1`) | one session, no delegation |
+| Long jobs (>25 min) | launchd one-shot | launchd one-shot | launchd one-shot | launchd one-shot |
+
+All three read `.claude/skills/` directly: Claude Code natively, pi via the
+`skills` array in `.pi/settings.json`, opencode by scanning `.claude` for
+`skills/**/SKILL.md`. A skill lands once and all three see it — which is why
+`.claude/hooks/tests/skill-frontmatter.sh` validates frontmatter under a STRICT
+YAML parser: Claude Code's is lenient, and a scalar that only it accepts makes
+the skill vanish from the other two with no error at all.
+
 
 The hook scripts under `.claude/hooks/` are harness-neutral despite the path:
 they read a four-field JSON envelope (`session_id`, `source`, `prompt`,

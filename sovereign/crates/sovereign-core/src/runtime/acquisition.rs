@@ -305,7 +305,7 @@ pub async fn routes_for_gap(
                 e.catalog_status.clone().unwrap_or_default(),
             ));
         }
-        if let Ok(infos) = engine.installed_indexes().await {
+        if let Ok(infos) = engine.usable_indexes().await {
             installed.extend(infos.into_iter().map(|i| i.corpus_id));
         }
     }

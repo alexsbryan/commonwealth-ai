@@ -142,7 +142,7 @@ impl Runtime {
                 };
             }
         };
-        let indexes = match engine.installed_indexes().await {
+        let indexes = match engine.usable_indexes().await {
             Ok(ix) => ix,
             Err(e) => {
                 tracing::warn!(error = %e, "{label}: installed_indexes() failed");
@@ -744,7 +744,7 @@ impl Runtime {
                 return chunks;
             }
         };
-        let indexes = match engine.installed_indexes().await {
+        let indexes = match engine.usable_indexes().await {
             Ok(ix) => ix,
             Err(e) => {
                 tracing::warn!(error = %e, "{label}: installed_indexes() failed");

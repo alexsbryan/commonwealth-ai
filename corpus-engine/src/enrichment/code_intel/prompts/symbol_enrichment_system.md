@@ -15,6 +15,4 @@ Rules:
   it is merely given or searches through.
 - One function, one job — state that job concretely and specifically.
 
-Output EXACTLY this shape and nothing else:
-SUMMARY: <one accurate, plain sentence on what this function does>
-ASKS: <two plain-English questions someone might ask that this function answers>
+Give a one-sentence `summary` of what this function does, and `asks`: two plain-English questions someone might ask that it answers.

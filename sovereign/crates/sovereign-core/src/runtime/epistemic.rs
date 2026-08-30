@@ -542,7 +542,7 @@ pub async fn coverage_probe(
         }
         let engine = engine?;
         let started = std::time::Instant::now();
-        let infos = match engine.installed_indexes().await {
+        let infos = match engine.usable_indexes().await {
             Ok(i) => i,
             Err(e) => {
                 tracing::debug!(target: "epistemic.ledger", error = %e, "coverage probe: installed_indexes failed");

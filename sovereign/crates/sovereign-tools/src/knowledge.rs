@@ -89,7 +89,7 @@ impl KnowledgeTool {
                 let mut full_text: Vec<(String, String, f32)> = Vec::new();
                 let mut catalog: Vec<CatalogHit> = Vec::new();
 
-                let indexes = engine.installed_indexes().await.unwrap_or_default();
+                let indexes = engine.usable_indexes().await.unwrap_or_default();
                 // Build the `corpus_id → CorpusKind` map once.
                 let mut kinds: HashMap<String, CorpusKind> = HashMap::new();
                 for info in &indexes {

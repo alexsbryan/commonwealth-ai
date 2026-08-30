@@ -1569,6 +1569,52 @@ impl CorpusEngine {
         Ok(self.dedupe_by_corpus_id(indexes))
     }
 
+    /// The indexes a CONSUMER may actually search, as opposed to the ones a
+    /// writer is not currently touching.
+    ///
+    /// [`Self::installed_indexes`] answers "is a writer active right now" and
+    /// is deliberately gated on `is_ingestion_complete`
+    /// (`index::create::is_ingest_finished` states that split). That is the
+    /// right question for the resume paths. It is the WRONG question for
+    /// retrieval, and the difference is not cosmetic: an ingest that committed
+    /// its chunks and died before `build_indexes()` leaves
+    /// `ingestion_in_progress: false` beside `indexes_built: false`, so it is
+    /// "installed" and unsearchable at the same time.
+    ///
+    /// Measured 2026-08-30 on this host: 41 corpora carry a meta, 41 pass the
+    /// writer predicate, 38 pass this one. The three in the gap
+    /// (`e2e-notebook`, `wikipedia-newsworthy`, a folder-governance corpus)
+    /// all sit at `committed_iter_pos: 0` with a `chunks.lance` present —
+    /// exactly the state that made `corpus status` print `ready` for seven
+    /// unsearchable corpora and sent a chaos-soak triage down the wrong path
+    /// twice.
+    ///
+    /// The truth was already on every row: `IndexInfo::indexes_built`. The
+    /// defect was that ~84 call sites each decided for themselves what
+    /// "installed" meant and only one retrieval leg
+    /// (`runtime::retrieval::corpus_search::corpus_unavailability`) checked.
+    /// One question, one decider (ARCH §10.6) — ask this one when the question
+    /// is "can I search it", and `installed_indexes` only when it is "is a
+    /// writer active".
+    pub async fn usable_indexes(&self) -> Result<Vec<IndexInfo>> {
+        let all = self.installed_indexes().await?;
+        let total = all.len();
+        let usable: Vec<IndexInfo> = all.into_iter().filter(|i| i.indexes_built).collect();
+        if usable.len() != total {
+            // Absence is reported, never defaulted (ARCH §18.3). A caller that
+            // silently searched fewer corpora than it listed is the bug this
+            // accessor exists to prevent, so the drop is always visible.
+            tracing::debug!(
+                target: "corpus.usable_indexes",
+                listed = total,
+                usable = usable.len(),
+                dropped = total - usable.len(),
+                "corpora listed as installed but not searchable (indexes_built=false)"
+            );
+        }
+        Ok(usable)
+    }
+
     /// Every index directory `installed_indexes()` drops because its ingest
     /// never completed — the other half of the same walk, reported instead of
     /// swallowed (§18.3: absence is reported, never defaulted).

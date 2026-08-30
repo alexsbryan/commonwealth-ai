@@ -43,7 +43,7 @@ impl Runtime {
         };
 
         // Find the corpus's index path.
-        let indexes = match engine.installed_indexes().await {
+        let indexes = match engine.usable_indexes().await {
             Ok(ix) => ix,
             Err(e) => {
                 tracing::warn!(
@@ -366,7 +366,7 @@ impl Runtime {
         groups.truncate(EXPANSION_MULTI_SOURCE_GROUPS);
 
         // Resolve corpus paths once.
-        let indexes = match engine.installed_indexes().await {
+        let indexes = match engine.usable_indexes().await {
             Ok(ix) => ix,
             Err(e) => {
                 tracing::warn!(

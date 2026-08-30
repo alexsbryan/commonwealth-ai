@@ -355,7 +355,7 @@ pub(crate) async fn query_all_code_indexes(
     limit: usize,
 ) -> Result<Vec<CodeRow>, CorpusError> {
     let mut out = Vec::new();
-    let Ok(indexes) = engine.installed_indexes().await else {
+    let Ok(indexes) = engine.usable_indexes().await else {
         return Ok(out);
     };
 

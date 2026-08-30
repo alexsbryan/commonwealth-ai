@@ -134,7 +134,7 @@ impl CodeSearchTool {
 
         let indexes = self
             .engine
-            .installed_indexes()
+            .usable_indexes()
             .await
             .map_err(|e| Error::Tool {
                 tool_id: "code_search".to_string(),

@@ -68,6 +68,29 @@ const MAX_OUTPUT_TOKENS: u32 = 160;
 /// Low temperature — factual descriptions, not creative prose.
 const TEMPERATURE: f32 = 0.2;
 
+/// The output contract, enforced by grammar rather than asked for in prose.
+///
+/// ARCH §7.6 — never ask a model to guarantee what code can enforce. The
+/// prompts used to end "Output EXACTLY this shape and nothing else"; measured
+/// 2026-08-30 on this host's fast slot (Qwopus3.5-4B), that produced 0 usable
+/// responses in 5 configurations — the model reasons aloud and the 160-token
+/// budget is gone before any label appears. `/no_think` and
+/// `chat_template_kwargs` are both dropped by the compatible path, so neither
+/// is a fix. `refactor_cmd::label_model` hit the identical wall (13/13 parse
+/// failures) and solved it this way; this is the same solution, one crate over.
+fn response_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "summary": {"type": "string"},
+            "asks": {"type": "array", "items": {"type": "string"},
+                     "minItems": 2, "maxItems": 2}
+        },
+        "required": ["summary", "asks"],
+        "additionalProperties": false
+    })
+}
+
 const SUMMARY_LABEL: &str = "summary:";
 const ASKS_LABEL: &str = "asks:";
 
@@ -148,7 +171,7 @@ impl PromptKind {
 /// this landed after a full corpus run instead of before one, fixing a prompt
 /// would have meant regenerating everything — measured at 3.5s/symbol under
 /// load, that is the difference between an hour and a day and a half.
-pub const PROMPT_VERSION: u32 = 1;
+pub const PROMPT_VERSION: u32 = 2;
 
 /// The cache identity for one symbol: body, prompt, and prompt version.
 ///
@@ -344,6 +367,7 @@ pub fn compose_symbol_prompt_for(
         .with_phase_id(PHASE_ID)
         .with_temperature(TEMPERATURE)
         .with_max_output_tokens(MAX_OUTPUT_TOKENS)
+        .with_response_schema("code_intel_entry", response_schema())
 }
 
 /// Case-insensitive (ASCII) substring search returning the byte offset in the
@@ -363,6 +387,29 @@ fn find_ci(haystack: &str, needle: &str) -> Option<usize> {
 /// surfaced as an error by [`enrich_symbol`].
 pub fn parse_symbol_response(text: &str) -> (String, Vec<String>) {
     let t = text.trim();
+    // Grammar-constrained responses are JSON. Try that first: the label parser
+    // below would find `"summary":` INSIDE the object and hand back the rest of
+    // the blob. The label path stays for entries generated before PROMPT_VERSION
+    // 2 and for any provider that ignores the schema.
+    if t.starts_with('{') {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(t) {
+            let summary = v.get("summary").and_then(|x| x.as_str()).unwrap_or("");
+            if !summary.trim().is_empty() {
+                let asks = v
+                    .get("asks")
+                    .and_then(|x| x.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|q| q.as_str())
+                            .map(|q| clean(q))
+                            .filter(|q| !q.is_empty())
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                return (clean(summary), asks);
+            }
+        }
+    }
     let s_at = find_ci(t, SUMMARY_LABEL);
     let a_at = find_ci(t, ASKS_LABEL);
     let (sl, al) = (SUMMARY_LABEL.len(), ASKS_LABEL.len());

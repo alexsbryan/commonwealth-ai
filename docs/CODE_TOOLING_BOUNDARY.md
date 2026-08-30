@@ -240,7 +240,7 @@ shared leaf. Repointing them is mechanical and changes no behaviour.
 
 | Import | Files | Resolution |
 |---|---|---|
-| `corpus_engine::CorpusEngine` | `callers`, `callees`, `symbol_lookup`, `recent_changes`, `code_search`, `mod` | Trait, §6.1 — only `open_index` (2 call sites) and `installed_indexes` (1) are ever called |
+| `corpus_engine::CorpusEngine` | `callers`, `callees`, `symbol_lookup`, `recent_changes`, `code_search`, `mod` | Trait, §6.1 — only `open_index` (2 call sites) and `usable_indexes` (2) are ever called |
 | `corpus_engine::index::CorpusIndex` | `mod`, `dry_report` | Trait, §6.1 |
 | `corpus_engine::facts_store::FactStore` | `facts_tool` | Moves with `code-facts` (Phase 2) |
 | `corpus_engine::enrichment::atlas::{read_atlas_atoms, AtomEnvelope}` | `brief` | Trait, §6.1 |
@@ -305,11 +305,15 @@ pub trait SymbolIndex: Send + Sync {
 }
 
 /// Everything the package can only get from a corpus host: raw-chunk search,
-/// the installed-corpus list, atlas atoms. OPTIONAL — absent standalone.
-/// Satisfied in-tree by corpus-engine; `open_index` and `installed_indexes`
-/// are the only two CorpusEngine methods the tools ever call.
+/// the SEARCHABLE-corpus list, atlas atoms. OPTIONAL — absent standalone.
+/// Satisfied in-tree by corpus-engine; `open_index` and `usable_indexes`
+/// are the only two CorpusEngine methods the tools ever call. It is
+/// `usable_indexes` and not `installed_indexes`: the latter answers "is a
+/// writer active", so extracting it here would re-import the defect where a
+/// corpus whose ingest died before `build_indexes()` is handed to a searcher
+/// that cannot search it.
 pub trait CorpusHost: Send + Sync {
-    fn installed_indexes(&self) -> Vec<IndexInfo>;
+    fn usable_indexes(&self) -> Vec<IndexInfo>;
     fn open_index(&self, corpus_id: &str) -> Result<Box<dyn ChunkSearch>>;
     fn read_atoms(&self, corpus_id: &str) -> Result<Vec<AtomEnvelope>>;
 }

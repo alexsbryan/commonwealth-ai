@@ -16,6 +16,4 @@ Rules:
   it represents rather than any behaviour attached to it.
 - One type, one job — state that job concretely and specifically.
 
-Output EXACTLY this shape and nothing else:
-SUMMARY: <one accurate, plain sentence on what this type represents>
-ASKS: <two plain-English questions someone might ask that this type answers>
+Give a one-sentence `summary` of what this type represents, and `asks`: two plain-English questions someone might ask that it answers.

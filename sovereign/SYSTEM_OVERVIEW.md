@@ -763,11 +763,26 @@ Out-of-band names (`.legacy-backup`, `.retired`) are excluded.
 **A directory under `indexes/` is not an installed corpus.** An ingest in
 flight writes `<corpus_id>-partition-<node_id>/`; the canonical
 `indexes/<corpus_id>/` is materialised only by the finalise/merge step
-(`CorpusEngine::partition_path`). Readiness is therefore decided by
+(`CorpusEngine::partition_path`). Whether a WRITER is active is decided by
 `CorpusIndex::is_ingestion_complete` on the CANONICAL path — the gate
-`installed_indexes()` uses to skip partial indexes, and, since 2026-08-12,
-the gate the CLI's `corpus status` and `corpus install --wait` share via
+`installed_indexes()` uses, and, since 2026-08-12, the gate the CLI's
+`corpus status` and `corpus install --wait` share via
 `corpus_cmd::inventory::corpus_readiness` (`ready` / `building` / `absent`).
+
+**That gate does not mean the corpus can be SEARCHED, and since 2026-08-30
+the two questions have separate accessors.** An ingest that committed its
+chunks and died before `build_indexes()` leaves `ingestion_in_progress:
+false` beside `indexes_built: false` — installed and unsearchable at the same
+time, so `installed_indexes()` lists it. Ask `CorpusEngine::usable_indexes()`
+when the question is "can I search this": it filters on
+`IndexInfo::indexes_built` and traces every drop at `corpus.usable_indexes`
+(§18.3, absence reported and never defaulted). Ask `installed_indexes()` only
+when the question is "is a writer active" — the resume paths. Measured on the
+dev host at the split: 41 corpora carry a meta, 41 pass the writer predicate,
+38 pass the usable one; the three in the gap sat at `committed_iter_pos: 0`
+with a `chunks.lance` present. Before the split ~84 call sites each decided
+for themselves what "installed" meant and exactly one retrieval leg checked
+(§10.6, one question one decider).
 Before that, `corpus status` answered "is it installed?" by asking whether a
 directory existed — a second, wrong implementation that reported a
 zero-second-old ingest as an installed corpus, and reported the partition

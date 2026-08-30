@@ -1054,7 +1054,7 @@ impl Runtime {
         ) = if let Some(engine) = &self.corpus_engine {
             let mut kinds_map = std::collections::HashMap::new();
             let mut display_map = std::collections::HashMap::new();
-            for info in engine.installed_indexes().await.unwrap_or_default() {
+            for info in engine.usable_indexes().await.unwrap_or_default() {
                 if let Some(d) = &info.display {
                     if let Some(cat) = &d.category {
                         display_map.insert(info.corpus_id.clone(), cat.clone());
