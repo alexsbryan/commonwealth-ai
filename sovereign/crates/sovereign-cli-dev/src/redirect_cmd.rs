@@ -161,7 +161,7 @@ pub async fn run(args: &[String]) -> i32 {
     }
 
     let indexes_dir = sovereign_cli_shared::dirs::sovereign_root().join("indexes");
-    let corpus_id = match resolve_corpus(corpus_id, &indexes_dir) {
+    let corpus_id = match crate::converge_cmd::resolve_corpus(corpus_id, &indexes_dir) {
         Ok(c) => c,
         Err(code) => return code,
     };
@@ -481,38 +481,6 @@ fn registered_root(corpus_id: &str) -> Option<String> {
         .iter()
         .find(|p| p.get("corpus_id").and_then(|c| c.as_str()) == Some(corpus_id))
         .and_then(|p| p.get("root")?.as_str().map(str::to_string))
-}
-
-fn resolve_corpus(explicit: Option<String>, indexes_dir: &Path) -> Result<String, i32> {
-    if let Some(c) = explicit {
-        return Ok(c);
-    }
-    let mut corpora: Vec<String> = std::fs::read_dir(indexes_dir)
-        .map(|rd| {
-            rd.flatten()
-                .filter(|e| e.path().join("scip_graph.db").exists())
-                .filter_map(|e| e.file_name().to_str().map(String::from))
-                .collect()
-        })
-        .unwrap_or_default();
-    corpora.sort();
-    match corpora.len() {
-        1 => Ok(corpora.remove(0)),
-        0 => {
-            eprintln!(
-                "error: no code corpus under {} — run `svrn project init` first",
-                indexes_dir.display()
-            );
-            Err(ERROR)
-        }
-        _ => {
-            eprintln!(
-                "error: multiple code corpora — pass --corpus-id <one of: {}>",
-                corpora.join(", ")
-            );
-            Err(ERROR)
-        }
-    }
 }
 
 #[cfg(test)]

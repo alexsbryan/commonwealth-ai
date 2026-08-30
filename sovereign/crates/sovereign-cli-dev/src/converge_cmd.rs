@@ -357,38 +357,136 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     }
 }
 
+// ── Which code corpus? One decider (ARCH §10.6) ──────────────────────────────
+//
+// Six commands answered this question with six copies of one block, and every
+// copy carried the same defect: "the sole indexed code corpus" is a default
+// that expires the moment anyone indexes a second one. On 2026-08-29 this host
+// carried three (commonwealth-ai plus two scratchpad fixtures) and the relayed
+// `converge status` began refusing — which surfaced as concept-gate reporting
+// COULD-NOT-JUDGE and blaming a stale sibling binary, sending the reader to a
+// four-crate rebuild that could not help. Nothing was stale; the QUESTION was
+// ambiguous. `concept_gate.rs` patched itself by naming the corpus; the other
+// five callers, and every interactive invocation, were left refusing.
+//
+// So when the answer is ambiguous, ASK THE REPO. A corpus records the tree it
+// was built from in `_corpus_meta.json.source_path`, and the caller is standing
+// in a git worktree. Exactly one match resolves it, and the resolution is
+// ANNOUNCED rather than assumed (§18.3 — never silently substitute). Anything
+// else still refuses, but now names the root it tried and every candidate's
+// source, so the message can no longer point at the wrong cause.
+
+/// A code corpus under `indexes_dir`: its id, and the tree it was built from.
+pub(crate) fn code_corpora(
+    indexes_dir: &std::path::Path,
+) -> Vec<(String, Option<std::path::PathBuf>)> {
+    let mut v: Vec<(String, Option<std::path::PathBuf>)> = std::fs::read_dir(indexes_dir)
+        .map(|rd| {
+            rd.flatten()
+                .filter(|e| e.path().join("scip_graph.db").exists())
+                .filter_map(|e| {
+                    let id = e.file_name().to_str()?.to_string();
+                    let src = std::fs::read_to_string(e.path().join("_corpus_meta.json"))
+                        .ok()
+                        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+                        .and_then(|v| v.get("source_path")?.as_str().map(std::path::PathBuf::from));
+                    Some((id, src))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    v.sort();
+    v
+}
+
+/// The git worktree containing `start`, if any. `.git` is a FILE in a linked
+/// worktree, so this tests existence rather than directory-ness.
+pub(crate) fn git_root_of(start: &std::path::Path) -> Option<std::path::PathBuf> {
+    let mut p = Some(start);
+    while let Some(dir) = p {
+        if dir.join(".git").exists() {
+            return Some(dir.to_path_buf());
+        }
+        p = dir.parent();
+    }
+    None
+}
+
+/// The choice itself — pure: no filesystem, no cwd, no process. `Ok((id, note))`
+/// where `note` is the glassbox line for a resolution that was not trivial.
+pub(crate) fn pick_corpus(
+    explicit: Option<String>,
+    candidates: &[(String, Option<std::path::PathBuf>)],
+    root: Option<&std::path::Path>,
+    indexes_dir: &std::path::Path,
+) -> Result<(String, Option<String>), String> {
+    if let Some(c) = explicit {
+        return Ok((c, None));
+    }
+    let ambiguous = || {
+        let listed = candidates
+            .iter()
+            .map(|(id, src)| match src {
+                Some(p) => format!("  {id}  (built from {})", p.display()),
+                None => format!("  {id}  (no source_path recorded)"),
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let tried = match root {
+            Some(r) => format!("none of them was built from this repo ({})", r.display()),
+            None => "and the working directory is not inside a git repository".to_string(),
+        };
+        format!(
+            "error: {} indexed code corpora, {tried} — pass --corpus-id:\n{listed}",
+            candidates.len()
+        )
+    };
+    match candidates.len() {
+        0 => Err(format!(
+            "error: no code corpus under {} — run `svrn project init` first",
+            indexes_dir.display()
+        )),
+        1 => Ok((candidates[0].0.clone(), None)),
+        _ => {
+            let root = root.ok_or_else(ambiguous)?;
+            let hits: Vec<&String> = candidates
+                .iter()
+                .filter(|(_, src)| src.as_deref() == Some(root))
+                .map(|(id, _)| id)
+                .collect();
+            match hits.len() {
+                1 => {
+                    let id = hits[0].clone();
+                    let note = format!(
+                        "corpus: {id} (of {} indexed — the one built from {})",
+                        candidates.len(),
+                        root.display()
+                    );
+                    Ok((id, Some(note)))
+                }
+                _ => Err(ambiguous()),
+            }
+        }
+    }
+}
+
 // `pub(crate)` since rf-1: `refactor_cmd::schedule` resolves the corpus the
 // same way rather than growing a fourth copy of this lookup (ARCH §10.6).
 pub(crate) fn resolve_corpus(
     explicit: Option<String>,
     indexes_dir: &std::path::Path,
 ) -> Result<String, i32> {
-    if let Some(c) = explicit {
-        return Ok(c);
-    }
-    let mut corpora: Vec<String> = std::fs::read_dir(indexes_dir)
-        .map(|rd| {
-            rd.flatten()
-                .filter(|e| e.path().join("scip_graph.db").exists())
-                .filter_map(|e| e.file_name().to_str().map(String::from))
-                .collect()
-        })
-        .unwrap_or_default();
-    corpora.sort();
-    match corpora.len() {
-        1 => Ok(corpora.remove(0)),
-        0 => {
-            eprintln!(
-                "error: no code corpus under {} — run `svrn project init` first",
-                indexes_dir.display()
-            );
-            Err(1)
+    let candidates = code_corpora(indexes_dir);
+    let root = std::env::current_dir().ok().and_then(|d| git_root_of(&d));
+    match pick_corpus(explicit, &candidates, root.as_deref(), indexes_dir) {
+        Ok((id, note)) => {
+            if let Some(n) = note {
+                eprintln!("{n}");
+            }
+            Ok(id)
         }
-        _ => {
-            eprintln!(
-                "error: multiple code corpora — pass --corpus-id <one of: {}>",
-                corpora.join(", ")
-            );
+        Err(msg) => {
+            eprintln!("{msg}");
             Err(1)
         }
     }
@@ -900,5 +998,83 @@ mod tests {
         assert!(out.contains("svrn project refresh --name commonwealth-ai --local"));
         assert!(out.contains("NOT about this commit"));
         assert!(out.contains("caveat: 1 uncommitted"));
+    }
+
+    // ── Which corpus? ────────────────────────────────────────────────────────
+    // The planted failure these exist for: a second indexed corpus used to make
+    // the question unanswerable, and the refusal was reported by concept-gate as
+    // a stale sibling binary. `two_code_corpora_resolve_by_repo_root` fails on
+    // the pre-2026-08-30 resolver, which counted candidates and gave up at two.
+
+    fn cand(id: &str, src: Option<&str>) -> (String, Option<std::path::PathBuf>) {
+        (id.to_string(), src.map(std::path::PathBuf::from))
+    }
+
+    #[test]
+    fn two_code_corpora_resolve_by_repo_root() {
+        let c = [
+            cand("commonwealth-ai", Some("/home/u/dev/commonwealth-ai")),
+            cand("semver", Some("/tmp/scratch/semver")),
+        ];
+        let root = std::path::Path::new("/home/u/dev/commonwealth-ai");
+        let (id, note) =
+            pick_corpus(None, &c, Some(root), std::path::Path::new("/idx")).expect("resolvable");
+        assert_eq!(id, "commonwealth-ai");
+        // The resolution is announced, never assumed (ARCH §18.3).
+        assert!(note.expect("a note").contains("commonwealth-ai"));
+    }
+
+    #[test]
+    fn an_explicit_corpus_id_is_never_second_guessed() {
+        let c = [cand("a", Some("/x")), cand("b", Some("/y"))];
+        let (id, note) =
+            pick_corpus(Some("b".into()), &c, None, std::path::Path::new("/idx")).unwrap();
+        assert_eq!(id, "b");
+        assert!(note.is_none(), "an explicit choice needs no explanation");
+    }
+
+    #[test]
+    fn a_sole_corpus_resolves_without_a_repo() {
+        let c = [cand("only", None)];
+        let (id, _) = pick_corpus(None, &c, None, std::path::Path::new("/idx")).unwrap();
+        assert_eq!(id, "only");
+    }
+
+    #[test]
+    fn ambiguity_the_root_cannot_break_still_refuses_and_names_what_it_tried() {
+        let c = [
+            cand("one", Some("/home/u/repo")),
+            cand("two", Some("/home/u/repo")),
+        ];
+        let root = std::path::Path::new("/home/u/repo");
+        let err = pick_corpus(None, &c, Some(root), std::path::Path::new("/idx"))
+            .expect_err("two corpora built from the same tree is not resolvable");
+        // The old message named neither the root nor the candidates' sources,
+        // which is how it sent a reader to rebuild a sibling that was fine.
+        assert!(
+            err.contains("/home/u/repo"),
+            "names the root it tried: {err}"
+        );
+        assert!(
+            err.contains("one") && err.contains("two"),
+            "lists candidates: {err}"
+        );
+        assert!(err.contains("--corpus-id"), "names the repair: {err}");
+    }
+
+    #[test]
+    fn outside_a_git_repo_the_refusal_says_so() {
+        let c = [cand("a", Some("/x")), cand("b", Some("/y"))];
+        let err = pick_corpus(None, &c, None, std::path::Path::new("/idx")).unwrap_err();
+        assert!(err.contains("not inside a git repository"), "{err}");
+    }
+
+    #[test]
+    fn no_corpus_at_all_points_at_project_init() {
+        let err = pick_corpus(None, &[], None, std::path::Path::new("/idx")).unwrap_err();
+        assert!(
+            err.contains("no code corpus") && err.contains("project init"),
+            "{err}"
+        );
     }
 }

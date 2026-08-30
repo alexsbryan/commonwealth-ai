@@ -71,36 +71,9 @@ pub(crate) async fn run(args: &[String]) -> i32 {
 
     // Resolve the corpus: explicit, or the sole indexed code corpus.
     let indexes_dir = sovereign_cli_shared::dirs::sovereign_root().join("indexes");
-    let corpus_id = match corpus_id {
-        Some(c) => c,
-        None => {
-            let mut corpora: Vec<String> = std::fs::read_dir(&indexes_dir)
-                .map(|rd| {
-                    rd.flatten()
-                        .filter(|e| e.path().join("scip_graph.db").exists())
-                        .filter_map(|e| e.file_name().to_str().map(String::from))
-                        .collect()
-                })
-                .unwrap_or_default();
-            corpora.sort();
-            match corpora.len() {
-                1 => corpora.remove(0),
-                0 => {
-                    eprintln!(
-                        "error: no code corpus under {} — run `svrn project init` first",
-                        indexes_dir.display()
-                    );
-                    return 1;
-                }
-                _ => {
-                    eprintln!(
-                        "error: multiple code corpora — pass --corpus-id one of: {}",
-                        corpora.join(", ")
-                    );
-                    return 1;
-                }
-            }
-        }
+    let corpus_id = match crate::converge_cmd::resolve_corpus(corpus_id, &indexes_dir) {
+        Ok(c) => c,
+        Err(code) => return code,
     };
 
     let db_path = indexes_dir.join(&corpus_id).join("scip_graph.db");
