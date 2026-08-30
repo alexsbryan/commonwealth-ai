@@ -1495,13 +1495,30 @@ impl CorpusEngine {
             // The mtime self-invalidates on any write — including an
             // ingestion-in-progress meta rewrite — so the validity gates
             // re-run whenever the index actually changes.
-            let version_mtime = std::fs::metadata(path.join("chunks.lance").join("_versions"))
-                .and_then(|m| m.modified())
-                .or_else(|_| {
-                    std::fs::metadata(crate::corpus::Corpus::meta_in(&path))
-                        .and_then(|m| m.modified())
-                })
-                .ok();
+            //
+            // BOTH mtimes, not the first one that exists. `_versions` alone
+            // meant an edit to `_corpus_meta.json` on an index with a
+            // chunks.lance was INVISIBLE until the next committed write —
+            // and the flags that live only in that file include
+            // `query_sharing`, the per-corpus dial that decides whether mesh
+            // peers may run federated searches against this copy
+            // (`capabilities.rs`, `build_hosted_corpora`). So flipping a
+            // corpus to `query_sharing = false` left it advertised, and
+            // hosted, for as long as nobody wrote a chunk. A privacy control
+            // that silently does not take effect is worse than none (ARCH
+            // §18.1 — a guard nobody has watched deny is not a guard).
+            //
+            // `max` rather than a fallback chain: either write must
+            // invalidate, and the cache stays stat-only either way.
+            let mtime_of =
+                |p: std::path::PathBuf| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+            let version_mtime = match (
+                mtime_of(path.join("chunks.lance").join("_versions")),
+                mtime_of(crate::corpus::Corpus::meta_in(&path)),
+            ) {
+                (Some(a), Some(b)) => Some(a.max(b)),
+                (a, b) => a.or(b),
+            };
             if let Some(mtime) = version_mtime {
                 if let Ok(cache) = self.index_info_cache.lock() {
                     if let Some((cached_mtime, info)) = cache.get(&path) {

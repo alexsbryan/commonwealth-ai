@@ -31,6 +31,7 @@
 pub mod atlas_ann;
 pub mod attribution;
 pub mod bank;
+pub mod lost_corpora;
 pub mod report;
 pub mod routing_metrics;
 pub mod runner;
@@ -41,8 +42,7 @@ use runner_threads as threads;
 
 use std::path::PathBuf;
 
-use crate::chat_cmd::bootstrap::build_session;
-use crate::chat_cmd::config::parse_globals;
+use crate::chat_cmd::{bootstrap::build_session, config::parse_globals};
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {

@@ -2611,8 +2611,12 @@ const HELP_MESH_ROTATE: sovereign_cli_shared::help::Help = sovereign_cli_shared:
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage("svrn mesh rotate"),
         sovereign_cli_shared::help::HelpSection::Notes(
-            "Existing members keep their connections. If the daemon is running, restart it\n\
-             so the new key is active in-memory (the persisted mesh.json is updated on disk).",
+            "Existing members keep their connections — rotation changes only who may JOIN.\n\
+             Needs a RUNNING daemon: the rotation happens in-process, so no restart is\n\
+             required and stopping the daemon first makes this refuse. (This note used to\n\
+             say the opposite. It described the offline-disk-write era, when the daemon\n\
+             re-persisted the old hash over the new one on its next gossip round and a\n\
+             restart was the workaround.)",
         ),
     ],
 };
@@ -2666,6 +2670,7 @@ async fn cmd_create(args: &[String]) -> i32 {
     match daemon.create_mesh(&mesh_name, &node_name).await {
         Ok(result) => {
             print_mesh_share(
+                "Mesh created.",
                 &result.mesh_name,
                 &result.join_key,
                 result.client_token.as_deref(),
@@ -2690,6 +2695,7 @@ async fn cmd_create(args: &[String]) -> i32 {
 /// (the offline rotate path — no running daemon, no dial to read)
 /// prints the bare form.
 fn print_mesh_share(
+    headline: &str,
     mesh_name: &str,
     join_key: &str,
     client_token: Option<&str>,
@@ -2719,7 +2725,7 @@ fn print_mesh_share(
         }
     };
     println!();
-    println!("Mesh created.");
+    println!("{headline}");
     println!();
     println!("  Join key:  {join_key}");
     if let Some(token) = client_token {
@@ -2968,7 +2974,7 @@ async fn rotate_via_running_daemon(force: bool) -> i32 {
             .unwrap_or("(unknown)");
         eprintln!();
         eprintln!("Existing members stay connected — rotation changes only who may JOIN.");
-        print_mesh_share(mesh_name, join_key, None, None);
+        print_mesh_share("Join key rotated.", mesh_name, join_key, None, None);
         0
     } else {
         let err = payload

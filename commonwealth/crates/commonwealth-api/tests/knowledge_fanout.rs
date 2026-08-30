@@ -330,3 +330,94 @@ async fn fanout_survives_offline_peer() {
         "sep should be reported unavailable, got {unavailable:?}"
     );
 }
+
+/// **The withdrawal case, and the one the two above miss.**
+///
+/// `fanout_survives_offline_peer` covers a peer we DIALED and could not reach.
+/// This covers the corpus nobody offers at all: the caller names `sep`, no
+/// live member advertises it in `hosted_corpora`, so it never reaches
+/// `fanout_jobs` and no loss site ever records it. Before 2026-08-29 the
+/// response was `results: []`, `corpora_unavailable: []` — byte-identical to
+/// "we searched it and it had nothing to say".
+///
+/// That shape was measured for real (flight 49188146): a rented peer asked a
+/// founder for `sep` after the founder was switched to `query_sharing =
+/// false`, and got a well-formed empty answer with nothing flagged. The same
+/// shape appears whenever the hosting peer merely goes offline mid-run — which
+/// is precisely the loss the bench refusal downstream keys on, so swallowing
+/// it here makes that refusal unreachable for the case it exists to catch.
+///
+/// Delete the `requested` loop in `build_response` and this fails.
+#[tokio::test]
+async fn a_named_corpus_nobody_hosts_is_reported_unavailable_not_empty() {
+    let joiner_id = NodeId::from_u128(400);
+    // A live, reachable peer — it simply does not advertise `sep`. This is the
+    // withdrawal shape, NOT the unreachable shape: make the peer unreachable
+    // and you are re-testing `fanout_survives_offline_peer`.
+    let peer = member(
+        NodeId::from_u128(401),
+        "SharesNothing",
+        NodeStatus::Online,
+        "127.0.0.1:1".parse().unwrap(),
+        vec![],
+    );
+    let joiner_state = make_state(joiner_id, peer, None);
+
+    let request = serde_json::json!({
+        "query_embedding": vec![0.0_f32; 8],
+        "query_text": "anything",
+        "corpora": ["sep"],
+        "limit": 4,
+    });
+    let (status, body) = post_knowledge_search(joiner_state, request).await;
+    assert_eq!(status, StatusCode::OK, "an unhosted corpus must not 5xx");
+    assert!(
+        body["results"].as_array().unwrap().is_empty(),
+        "nobody hosts sep, so there is nothing to return"
+    );
+    let unavailable = body["corpora_unavailable"].as_array().unwrap();
+    assert!(
+        unavailable.iter().any(|c| c == "sep"),
+        "a corpus the caller NAMED that nobody searched must be reported \
+         unavailable — an empty result set alone reads as `searched, found \
+         nothing`; got {unavailable:?}"
+    );
+}
+
+/// The no-regression bar for the rule above: an UNCONSTRAINED request cannot
+/// have a missing corpus, because it asked for whatever the mesh could reach.
+/// Flag one there and every ordinary chat turn on a node with an idle peer
+/// starts reporting phantom losses.
+#[tokio::test]
+async fn an_unconstrained_search_reports_nothing_unavailable() {
+    let joiner_id = NodeId::from_u128(500);
+    let peer = member(
+        NodeId::from_u128(501),
+        "SharesNothing",
+        NodeStatus::Online,
+        "127.0.0.1:1".parse().unwrap(),
+        vec![],
+    );
+    let joiner_state = make_state(joiner_id, peer, None);
+
+    let request = serde_json::json!({
+        "query_embedding": vec![0.0_f32; 8],
+        "query_text": "anything",
+        "limit": 4,
+    });
+    let (status, body) = post_knowledge_search(joiner_state, request).await;
+    assert_eq!(status, StatusCode::OK);
+    // The field is `skip_serializing_if = "Vec::is_empty"`, so ABSENT is how
+    // "nothing lost" arrives on the wire. Asserting on `.as_array().unwrap()`
+    // would panic on the passing case.
+    let unavailable = body
+        .get("corpora_unavailable")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    assert!(
+        unavailable.is_empty(),
+        "an unconstrained search named no corpus, so none can be missing; \
+         got {unavailable:?}"
+    );
+}

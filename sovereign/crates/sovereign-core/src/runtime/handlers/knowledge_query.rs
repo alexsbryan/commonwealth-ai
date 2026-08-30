@@ -317,6 +317,7 @@ impl Runtime {
                 chunks: kc.chunks,
                 search_ms: t0.elapsed().as_millis() as u64,
                 result_quality: "deep_pipeline",
+                unavailable_corpora: kc.unavailable_corpora,
             });
         }
         let plan = self
@@ -326,6 +327,7 @@ impl Runtime {
             chunks: plan.chunks,
             search_ms: plan.search_ms,
             result_quality: plan.result_quality,
+            unavailable_corpora: plan.unavailable_corpora,
         })
     }
 

@@ -31,6 +31,24 @@ struct Cli {
     cmd: Cmd,
 }
 
+/// Default for every `--daemon-url` flag below: the ONE decider for "which
+/// daemon does this CLI talk to" (`SOVEREIGN_DAEMON_URL` / `SVRNMESH_DAEMON_URL`,
+/// then `[daemon] client_port`, then the compiled default).
+///
+/// Three `default_value = "http://localhost:9741"` literals stood here until
+/// 2026-08-29 — a fourth, fifth and sixth answer to a question that has one
+/// (§10.6). The cost is not "cannot reach the daemon": on a normal host 9741
+/// ANSWERS, because it is the operator's own daemon. So pointing a session at a
+/// rented pod and running `sovereign-eval score` silently graded the run on the
+/// local models instead, successfully. §18.3 — a wrong daemon that answers is
+/// the failure.
+///
+/// Still a clap DEFAULT, not an override: an explicit `--daemon-url` wins, and
+/// `--daemon-url skip` keeps its existing "no daemon at all" meaning.
+fn default_daemon_url() -> String {
+    sovereign_contracts::setup_config::client_daemon_base()
+}
+
 #[derive(Subcommand)]
 enum Cmd {
     /// Mark a run as ended and dump its manifest.
@@ -38,7 +56,7 @@ enum Cmd {
         run_id: String,
         #[arg(long)]
         experiment_repo: Option<PathBuf>,
-        #[arg(long, default_value = "http://localhost:9741")]
+        #[arg(long, default_value_t = default_daemon_url())]
         daemon_url: String,
         #[arg(long)]
         out_dir: Option<PathBuf>,
@@ -75,7 +93,7 @@ enum Cmd {
 #[derive(Args, Debug)]
 struct CognitiveArgs {
     /// Daemon base URL. /v1/chat/completions is appended.
-    #[arg(long, default_value = "http://localhost:9741")]
+    #[arg(long, default_value_t = default_daemon_url())]
     daemon_url: String,
 
     /// gguf file-stem of the model to invoke (NOT a slot alias like
@@ -249,7 +267,7 @@ struct ScoreArgs {
     run_id: String,
     #[arg(long)]
     experiment_repo: PathBuf,
-    #[arg(long, default_value = "http://localhost:9741")]
+    #[arg(long, default_value_t = default_daemon_url())]
     daemon_url: String,
     #[arg(long)]
     out_dir: Option<PathBuf>,

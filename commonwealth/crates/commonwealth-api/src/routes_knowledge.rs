@@ -172,6 +172,14 @@ pub async fn knowledge_search(
     // Step 3: resolve the actual target set. If the caller passed
     // `corpora`, honour it; otherwise search every corpus reachable
     // on the mesh (local OR peer-hosted).
+    // What the CALLER named, kept for the response envelope: `target_corpora`
+    // below loses the distinction between "asked for these" and "asked for
+    // everything", and the envelope needs it to tell an unserved corpus from
+    // one that was never in scope.
+    let requested_corpora: Option<Vec<String>> = match &request.corpora {
+        Some(c) if !c.is_empty() => Some(c.clone()),
+        _ => None,
+    };
     let target_corpora: HashSet<String> = match &request.corpora {
         Some(c) if !c.is_empty() => c.iter().cloned().collect(),
         _ => target_corpora_if_unconstrained,
@@ -281,7 +289,13 @@ pub async fn knowledge_search(
                 tracing::warn!(error = %e, "knowledge: HTTP client build failed");
                 // Return what we have locally; don't fail the whole
                 // request over a transport construction error.
-                return build_response(all_results, corpora_searched, corpora_unavailable, limit);
+                return build_response(
+                    all_results,
+                    corpora_searched,
+                    corpora_unavailable,
+                    requested_corpora.as_deref(),
+                    limit,
+                );
             }
         };
 
@@ -362,7 +376,13 @@ pub async fn knowledge_search(
         );
     }
 
-    build_response(all_results, corpora_searched, corpora_unavailable, limit)
+    build_response(
+        all_results,
+        corpora_searched,
+        corpora_unavailable,
+        requested_corpora.as_deref(),
+        limit,
+    )
 }
 
 /// RAII gauge guard for `AppStateInner::fanout_inflight`: increments on
@@ -551,10 +571,15 @@ async fn fanout_one_peer(
 /// Dedupe key is `(corpus_id, content)` so a peer-hosted replica
 /// doesn't double-count when the same chunk text shows up from two
 /// sources. Score ties use the first-seen record.
+///
+/// `requested` is the corpus set the CALLER named (`None` when the request was
+/// unconstrained). Every named corpus that nobody searched is reported as
+/// unavailable — see the note on the loop below.
 fn build_response(
     mut all_results: Vec<KnowledgeResult>,
     corpora_searched: HashSet<String>,
     mut corpora_unavailable: HashSet<String>,
+    requested: Option<&[String]>,
     limit: usize,
 ) -> (StatusCode, Json<KnowledgeSearchResponse>) {
     // Dedupe: keep the highest-scored entry for each (corpus, content).
@@ -566,6 +591,33 @@ fn build_response(
     let mut seen: HashSet<(String, String)> = HashSet::new();
     all_results.retain(|r| seen.insert((r.corpus_id.clone(), r.content.clone())));
     all_results.truncate(limit);
+
+    // A NAMED CORPUS THAT NOBODY SEARCHED IS UNAVAILABLE, NOT EMPTY.
+    //
+    // The two loss families above only cover corpora somebody TRIED: a local
+    // index that failed to open, or a peer that was dialed and did not serve.
+    // A corpus the caller asked for that no live member advertises is in
+    // neither — it never reached `fanout_jobs`, so the response came back
+    // well-shaped, `results: []`, `corpora_unavailable: []`. Indistinguishable
+    // from "searched it, found nothing".
+    //
+    // Measured 2026-08-29 on flight 49188146: a rented peer asked for `sep`,
+    // the founder was switched to `query_sharing = false`, and the pod's next
+    // query returned exactly that shape — zero hits, nothing flagged. The same
+    // shape appears whenever the hosting peer simply goes offline mid-run,
+    // which is the failure this whole path is supposed to make visible: a
+    // measurement scored on a pool a corpus fell out of, reported as a number
+    // (ARCH §18.3 — absence is REPORTED, never defaulted).
+    //
+    // Only for an EXPLICIT corpus list. An unconstrained request means "search
+    // whatever the mesh can reach", and nothing can be missing from that.
+    if let Some(named) = requested {
+        for c in named {
+            if !corpora_searched.contains(c) {
+                corpora_unavailable.insert(c.clone());
+            }
+        }
+    }
 
     // Corpora that appear in `unavailable` but also appear in
     // `searched` shouldn't be flagged — a replica found it even if a

@@ -295,6 +295,23 @@ pub struct EvidenceRetrieval {
     /// `"empty" | "focused" | "synthesis" | "routed"` — the plan's
     /// result-quality label (same value message metadata carries).
     pub result_quality: &'static str,
+    /// Corpora this turn would have searched and could not — carried out of
+    /// `PipelineState::unavailable_corpora` exactly as the chat surface
+    /// carries it, so the MEASUREMENT surface can see the same loss the
+    /// ANSWER surface reports.
+    ///
+    /// It was dropped here until 2026-08-29, and dropping it is what makes a
+    /// bench score on partial retrieval look like a score. Both plan shapes
+    /// compute it one function away (`KnowledgeQueryPlan::unavailable_corpora`
+    /// and its `KnowledgeContext` twin); this struct simply had nowhere to put
+    /// it, so the parity lane read a pool assembled without a corpus and
+    /// reported a number for it. That is the success-shaped wrong result
+    /// ARCH §18.3 forbids, and it is worst exactly where retrieval crosses the
+    /// mesh: a peer that times out costs the pool a corpus and costs the run
+    /// nothing.
+    ///
+    /// Empty on every turn that lost nothing, which is the no-regression bar.
+    pub unavailable_corpora: Vec<crate::traits::CorpusUnavailable>,
 }
 
 /// Streaming handle returned by [`super::Runtime::handle_message_stream`].

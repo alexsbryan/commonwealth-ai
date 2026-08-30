@@ -23,6 +23,7 @@
 
 use std::time::Instant;
 
+use super::lost_corpora;
 use corpus_engine::enrichment::atlas::{
     read_atlas_atoms, read_atlas_edges, AtomEnvelope, EdgeType, ATLAS_DIRNAME,
 };
@@ -1204,6 +1205,13 @@ async fn run_question_prod(
             return empty_result(q).with_error(format!("retrieve_evidence: {e}"));
         }
     };
+
+    // A turn that lost a corpus in scope cannot be scored — see
+    // `lost_corpora::refusal_for_lost_corpora` for why, and why the refusal
+    // lives here rather than in the mesh fan-out.
+    if let Some(why) = lost_corpora::refusal_for_lost_corpora(&ev.unavailable_corpora) {
+        return empty_result(q).with_error(why);
+    }
 
     let mut all_hits = ev.chunks;
     if all_hits.len() > limit {
