@@ -686,13 +686,7 @@ async fn maybe_rebuild_lancedb_corpus(
     let meta_path = data_dir.join(corpus_id).join("_corpus_meta.json");
     let current_embed_stem = sovereign_core::setup_config::SetupConfig::load()
         .ok()
-        .and_then(|c| {
-            c.models
-                .embed
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .map(|s| s.to_string())
-        });
+        .and_then(|c| c.embed_model_stem());
 
     let reason = lancedb_rebuild_reason(force, &meta_path, current_embed_stem.as_deref());
     let reason = match reason {

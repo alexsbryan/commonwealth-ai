@@ -1341,8 +1341,15 @@ async fn run_bench(args: BenchArgs) -> i32 {
         }
     };
     let port = cfg.daemon.client_port;
-    let n_ctx = cfg.models.effective_context_size();
-    let primary_path = cfg.models.primary.clone();
+    let n_ctx = cfg.effective_context_size();
+    // The bench reads the GGUF header off disk, so it needs a real local file.
+    let primary_path = match cfg.models() {
+        Ok(m) => m.primary.clone(),
+        Err(e) => {
+            eprintln!("{e}");
+            return exit::NO_KEY;
+        }
+    };
 
     // ── the model, from the config the daemon loads from ───────────────────
     let (n_layer, sizes) = match read_model_header(&primary_path) {

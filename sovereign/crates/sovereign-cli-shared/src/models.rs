@@ -25,7 +25,11 @@ const DEFAULT_EMBED_MODEL: &str = "qwen3-embedding-0.6b";
 /// when the stem can't be resolved (ARCH §18.3: never silently substitute).
 pub fn configured_embed_model_name() -> String {
     if let Ok(cfg) = sovereign_contracts::setup_config::SetupConfig::load() {
-        if let Some(stem) = cfg.models.embed.file_stem().and_then(|s| s.to_str()) {
+        // `local_embed_model_id()`: on a terminal the space this node's text
+        // lands in is the ENTRY node's, and that is the honest label. This
+        // function's contract is that a LABEL may fall back while an actual
+        // embed call may not (see `build_daemon_embed_fn`).
+        if let Some(stem) = cfg.local_embed_model_id() {
             return stem.to_lowercase();
         }
     }

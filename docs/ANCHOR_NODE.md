@@ -108,6 +108,42 @@ svrn doctor                                     # must come back clean
 worth leaving alone — a local `fast` slot keeps completions and small
 edits off the network, and the anchor still takes the heavy turns.
 
+### When their box can't hold a model at all
+
+An IoT device, a small VM, a machine you don't want carrying weights: set
+it up as a **terminal** instead. It is a full member — mesh key, gossip,
+pooled knowledge, ledger — that simply holds nothing and routes every
+turn *and every embedding* to the anchor.
+
+```sh
+svrn setup --terminal http://<anchor>:9741   # downloads nothing
+svrn mesh join "sovereign://join/cwth-…"     # the same link as any member
+svrn daemon
+```
+
+`--terminal` refuses rather than writing a config it can't stand behind:
+it asks the anchor's `/status` for the embed model id (which decides the
+vector space this node's corpora land in) and drives one real completion
+through it, printing which model answered. A config with no served turn
+behind it is not a working setup.
+
+Their editor still points at their **own** `localhost:9741` — §3 below is
+unchanged. The daemon there advertises no models of its own — and no embed
+model either, so the collaborative-ingestion planner never partitions chunks
+onto a node that would only proxy them back here. `svrn mesh status` on the
+anchor shows them as a member holding nothing, and no peer will ever route work
+*to* them.
+
+On the terminal itself, `svrn doctor` and `svrn mesh status` both say
+`terminal` and name the entry node. That line matters: an empty model lineup
+looks identical on a terminal and on a holder whose GGUFs failed to load, and
+only one of those wants fixing.
+
+What they give up: nothing runs locally, so there is no offline mode and
+no local `fast` slot — every completion is a network hop. Ingest works
+(chunks embed over HTTP against the anchor) but is slower than on a node
+with its own embed slot.
+
 **On the anchor**, read the invite:
 
 ```sh

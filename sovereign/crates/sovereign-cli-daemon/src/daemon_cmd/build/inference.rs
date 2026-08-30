@@ -65,14 +65,79 @@ pub(crate) fn load_provider(
 ) -> Result<
     (
         Arc<dyn InferenceProvider>,
-        Arc<EmbeddedLlamaCpp>,
+        Option<Arc<EmbeddedLlamaCpp>>,
         ModelFamily,
         Option<Arc<sovereign_compute::manager::DynamicChildSlot>>,
     ),
     (),
 > {
-    let resolved_embed_family = config
-        .models
+    // ── terminal: hold nothing, forward everything ──────────────────────
+    //
+    // A `terminal`-class node has no `[models]`, so there is no GGUF to load
+    // and no engine to hand back. Its provider is the SAME
+    // `SplitInferenceProvider` the CLI's chat bootstrap and the attach-mode
+    // desktop already use — chat and embeddings each go to the entry node over
+    // HTTP, with `embed_batch` routed to the batch path so corpus ingest does
+    // not degrade to one round-trip per chunk (`oicp-client/src/lib.rs:1477`).
+    //
+    // It inherits `resident_slots() == []` from the trait, which is what makes
+    // `build_self_manifest` advertise nothing: this node must not claim its
+    // entry node's model as its own, or peers would route to a machine that
+    // holds no weights (§18.3).
+    //
+    // The chat id is the mesh ALIAS `primary`, not a GGUF stem. Aliases are the
+    // routable names — the entry node resolves one to whichever slot is hot,
+    // and a concrete quant would pin this terminal to one machine's filename
+    // and break the day that node swaps quants (`docs/ANCHOR_NODE.md`).
+    if let Some(entry) = config.node.entry.as_deref() {
+        // `node_class()`, not `models.is_none()`: a `[models]` table that
+        // exists but names no primary holds nothing, and a node holding
+        // nothing with an entry node is a terminal however its file is shaped.
+        if config.node_class() == sovereign_core::setup_config::NodeClass::Terminal {
+            // `"unknown"` on absence, never `""`. That literal is the TRAIT's
+            // sentinel for "this provider cannot identify its embed model"
+            // (`sovereign-contracts::traits::embed_model_id`), and the readers
+            // test for it by value — `memory.rs`'s `model_known` gate is the
+            // one that decides whether a stored embedding may be matched and
+            // persisted under this name. An empty string passes that gate as a
+            // real model named empty-string, so rows land under it and a later
+            // real embed model mis-ranks against them (§18.3).
+            let embed_model_id = config
+                .local_embed_model_id()
+                .unwrap_or_else(|| "unknown".to_string());
+            tracing::info!(
+                entry = %entry,
+                embed_model = %embed_model_id,
+                "terminal node: holding no weights, forwarding chat + embeddings to the entry node"
+            );
+            let provider = Arc::new(sovereign_inference::remote::SplitInferenceProvider::new(
+                entry,
+                "primary".to_string(),
+                embed_model_id,
+                config.effective_context_size(),
+                String::new(),
+            ));
+            return Ok((
+                provider as Arc<dyn InferenceProvider>,
+                // No engine: nothing in this process owns weights, so the
+                // RPC-worker reload path and every other engine-only caller
+                // must see the absence rather than a stub that lies about it.
+                None,
+                ModelFamily::Unknown,
+                None,
+            ));
+        }
+    }
+
+    let models = match config.models() {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return Err(());
+        }
+    };
+
+    let resolved_embed_family = models
         .embed
         .file_name()
         .and_then(|s| s.to_str())
@@ -97,7 +162,7 @@ pub(crate) fn load_provider(
     if !super::containment::check_containment(config, None) {
         return Err(());
     }
-    if child_owns_primary && config.models.fast_path() == config.models.primary.as_path() {
+    if child_owns_primary && models.fast_path() == models.primary.as_path() {
         eprintln!(
             "error: [compute] distributed_primary = true requires a DISTINCT small `fast` model."
         );
@@ -105,31 +170,31 @@ pub(crate) fn load_provider(
             "hint: with no `[models].fast`, fast_path() falls back to the primary GGUF ({}), so \
              the daemon would load the distributed model locally as its fast slot — the exact \
              host-starving load this mode exists to prevent. Set `[models].fast` to a small GGUF.",
-            config.models.primary.display()
+            models.primary.display()
         );
         return Err(());
     }
     if child_owns_primary {
         tracing::info!(
             target: "compute_child",
-            primary = %config.models.primary.display(),
+            primary = %models.primary.display(),
             "[compute] distributed_primary — the daemon withholds the primary; a compute child owns it"
         );
     }
 
     let arc = match EmbeddedLlamaCpp::load_full_with_families(
-        config.models.fast_path(),
+        models.fast_path(),
         if child_owns_primary {
             None
         } else {
-            Some(&config.models.primary)
+            Some(&models.primary)
         },
-        Some(&config.models.embed),
+        Some(&models.embed),
         // PR-E2: optional Code specialist. When set, `code`-hinted
         // requests hot-swap into the lazy slot (shared with primary).
         // None = pre-E2 two-slot behaviour — all substantive work on
         // the Main responder.
-        config.models.code.as_deref(),
+        models.code.as_deref(),
         // context_size — sourced from `[models].context_size` so a batch
         // host (Strix Halo, 128 GB unified) can opt into 32k without
         // touching code, while a 64 GB Mac stays at the safe 16384
@@ -138,7 +203,7 @@ pub(crate) fn load_provider(
         // Per-slot windows (2026-08-25). `from_models` honours
         // `[models].fast_context_size` and falls back to the primary's
         // window when it is unset, so an existing config.toml is unchanged.
-        sovereign_inference::embedded::SlotWindows::from_models(&config.models),
+        sovereign_inference::embedded::SlotWindows::from_models(models),
         None, // gpu_layers — auto-detect
         ModelFamily::Unknown,
         ModelFamily::Unknown,
@@ -171,7 +236,7 @@ pub(crate) fn load_provider(
     // budget set, each `load_extra` call (including the eager startup loads
     // from `[models.extra]`) checks against it and evicts cold slots if
     // needed. Without a budget, eviction is disabled and slots persist.
-    if let Err(e) = arc.set_extras_memory_budget(config.models.max_extras_memory_bytes()) {
+    if let Err(e) = arc.set_extras_memory_budget(models.max_extras_memory_bytes()) {
         eprintln!("error: failed to set extras memory budget: {e}");
         return Err(());
     }
@@ -180,11 +245,8 @@ pub(crate) fn load_provider(
     // Operator-declared additional chat slots. Each `[models.extra]` entry
     // is loaded eagerly here; failures fail the daemon. Routing kicks in
     // when `/v1/chat/completions` arrives with a matching `model` field.
-    if !config.models.extra.is_empty() {
-        if let Err(e) = arc.install_extras(
-            config.models.extra.clone(),
-            config.models.effective_context_size(),
-        ) {
+    if !models.extra.is_empty() {
+        if let Err(e) = arc.install_extras(models.extra.clone(), models.effective_context_size()) {
             eprintln!("error: failed to install extras slots: {e}");
             return Err(());
         }
@@ -193,11 +255,11 @@ pub(crate) fn load_provider(
     // marker-less model must not block daemon startup — the routes
     // report their own unavailability, and the install logs the
     // actionable fix itself.
-    match config.models.edit.as_ref() {
+    match models.edit.as_ref() {
         // Operator chose an editing model. This always wins over the
         // fallback below.
         Some(edit) => {
-            if let Err(e) = arc.install_edit_slot(edit, config.models.fast_path()) {
+            if let Err(e) = arc.install_edit_slot(edit, models.fast_path()) {
                 tracing::warn!(
                     target: "edit_slot",
                     error = %e,
@@ -276,8 +338,7 @@ pub(crate) fn load_provider(
             // node declares one (that is what peers address it by), else the
             // GGUF's own stem. Both are accepted as `model_id` on the way in.
             let distributed_spec = child_owns_primary.then(|| {
-                let stem = config
-                    .models
+                let stem = models
                     .primary
                     .file_stem()
                     .map(|s| s.to_string_lossy().into_owned())
@@ -315,8 +376,8 @@ pub(crate) fn load_provider(
                         .join("compute-distribution")
                         .join(format!("{name}.json")),
                     name,
-                    model: config.models.primary.clone(),
-                    context_size: Some(config.models.effective_context_size()),
+                    model: models.primary.clone(),
+                    context_size: Some(models.effective_context_size()),
                     n_gpu_layers: None,
                     model_ids,
                 }
@@ -346,7 +407,12 @@ pub(crate) fn load_provider(
             inner
         };
 
-    Ok((provider, arc, resolved_embed_family, distributed_primary))
+    Ok((
+        provider,
+        Some(arc),
+        resolved_embed_family,
+        distributed_primary,
+    ))
 }
 
 /// Every `model_id` that must route to the distributed-primary child: the GGUF

@@ -30,8 +30,30 @@ use serde::{Deserialize, Serialize};
 /// Top-level structure of `~/.svrnmesh/config.toml`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SetupConfig {
-    /// `[models]` — GGUF slot paths. The only required section.
-    pub models: ModelsSection,
+    /// `[models]` — GGUF slot paths, or `None` on a node that holds no
+    /// weights at all.
+    ///
+    /// `None` is the `terminal` class (see [`SetupConfig::node_class`]): a full
+    /// mesh member — it holds the mesh key, gossips, shares knowledge and the
+    /// ledger — that runs no local inference and routes every turn to a bound
+    /// `[node] entry`. An IoT device or a laptop beside a heavy box.
+    ///
+    /// Absent rather than empty, deliberately. This was a required
+    /// `ModelsSection` whose "no models" state was `ModelsSection::default()` —
+    /// three empty `PathBuf`s, indistinguishable from a config that lost its
+    /// paths. `Option` makes the two different values, so a site that needs a
+    /// model refuses by name ([`SetupConfig::models`]) instead of opening `""`
+    /// and reporting whatever llama.cpp says about it (§18.3).
+    ///
+    /// `#[serde(default)]` means a `config.toml` with no `[models]` parses. It
+    /// does not mean it LOADS: `load_from` refuses a config that declares
+    /// neither models nor an entry node, so "my models went missing" cannot
+    /// quietly become "I am a terminal".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub models: Option<ModelsSection>,
+    /// `[node]` — what kind of participant this node is on the mesh.
+    #[serde(default)]
+    pub node: NodeSection,
     /// `[daemon]` — listener ports and service options.
     #[serde(default)]
     pub daemon: DaemonSection,
@@ -236,6 +258,104 @@ pub struct TransportSection {
     /// inference activation traffic); `None` = default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rpc_tensor: Option<String>,
+}
+
+/// `[node]` — this node's participant class on the mesh.
+///
+/// One stored fact: where to send work this node cannot do itself. The class
+/// itself is DERIVED from it plus `[models]` ([`SetupConfig::node_class`])
+/// rather than stored, so there is no third field to disagree with the other
+/// two (§7.5). Writing `class = "terminal"` beside a populated `[models]` would
+/// be exactly that disagreement, and the config would have to pick a winner.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeSection {
+    /// The peer this node routes inference through when it holds no models of
+    /// its own, as an **HTTP base URL including `/v1`** — e.g.
+    /// `http://halo:9741/v1`. Written by `svrn setup --terminal`, which
+    /// normalises whatever the operator typed, and handed straight to
+    /// `SplitInferenceProvider::new`, whose first parameter is `endpoint_v1`.
+    ///
+    /// This doc used to say "a mesh node name or id, as `svrn mesh status`
+    /// prints it". It never was: a reader who believed it would write a name,
+    /// `validate_class` would accept the file, and the failure would surface at
+    /// the first turn, far from the cause.
+    ///
+    /// **Known tension, deliberately carried (2026-08-30).** ARCH §7.5 says the
+    /// address is a mutable attribute of a thing and never its name, and this
+    /// mesh has the scar to prove it — an iroh bridge's loopback port used as
+    /// peer identity produced 14 rebuilds in 21 minutes for a peer that had not
+    /// moved. Keyed on a URL, a terminal does not follow its entry node across
+    /// networks, gets none of `PeerTransport`'s ranked multi-homed candidates,
+    /// and — when a DHCP lease moves — forwards to whatever machine now answers
+    /// there without erroring.
+    ///
+    /// The identity-keyed design was priced (order `tn-1-terminal-honesty`, D5)
+    /// and deferred: resolving through `PeerEndpointSource` per turn needs a
+    /// provider that wraps `SplitInferenceProvider`, and `InferenceProvider`
+    /// has 27 methods of which 24 carry defaults — including `embed_batch`,
+    /// whose default is the per-item loop `SplitInferenceProvider` overrides
+    /// precisely because it made corpus ingest embed-bound. A wrapper that
+    /// forgets one method silently inherits that, with nothing red. See
+    /// `sovereign/DEFAULTS_LEDGER.md` for the re-open condition.
+    ///
+    /// Required when `[models]` is absent and meaningless when it is present.
+    /// Named deliberately rather than discovered: a node with no weights and no
+    /// entry has nowhere to send a turn, and picking "whoever gossiped last"
+    /// would make its behaviour depend on mesh timing (N4 §4.5 — a consumer
+    /// should bind to a home node, not run a scheduler over a view that is
+    /// stalest exactly when it wakes).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry: Option<String>,
+    /// The entry node's embed model id, recorded at setup time.
+    ///
+    /// A terminal embeds over HTTP, so the vector space its corpora land in is
+    /// the ENTRY node's, not its own — and the memory-embedding staleness guard
+    /// compares against whatever `embed_model_id()` reports. Reporting a
+    /// placeholder would make that guard agree with itself and with nothing
+    /// else, so the real id is captured once, when the mesh is up and can be
+    /// asked, rather than guessed at every boot (§18.3).
+    ///
+    /// `None` until `svrn setup --terminal` records it; the forwarder then has
+    /// no id to vouch with and the guard treats the space as unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry_embed_model: Option<String>,
+}
+
+/// What kind of participant a node is — derived, never stored.
+///
+/// NOT to be confused with [`SharedModelRole`], which is a different axis
+/// entirely: that one says whether a node lends GPU memory to an RPC
+/// layer-split, and its `Consumer` default describes almost every node in a
+/// fleet, weights or no weights. A node can be a `Holder` here and a `Consumer`
+/// there at the same time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NodeClass {
+    /// Holds model weights and serves them — the ordinary node.
+    Holder,
+    /// Holds no weights. A full mesh member that routes every turn to
+    /// `[node] entry`.
+    Terminal,
+    /// Neither models nor an entry: `svrn setup` has not run here, or it ran
+    /// and left a placeholder `[models]` behind.
+    ///
+    /// A third state, not a flavour of `Terminal`. "Holds nothing and knows
+    /// where to send work" and "holds nothing and does not" fail in different
+    /// ways and want different messages, so they must not collapse into one
+    /// (§18.2).
+    Unconfigured,
+}
+
+impl NodeClass {
+    /// The stable wire/display spelling. ONE place the class becomes a string,
+    /// so `/v1/mesh/status`, `svrn mesh status` and `svrn doctor` cannot drift
+    /// into three vocabularies for one closed set (ARCH §2.1).
+    pub fn id(&self) -> &'static str {
+        match self {
+            Self::Holder => "holder",
+            Self::Terminal => "terminal",
+            Self::Unconfigured => "unconfigured",
+        }
+    }
 }
 
 /// `[shared_model]` — opt-in participation in a mesh-hosted shared
@@ -733,6 +853,48 @@ impl ModelsSection {
     /// treat fast as if it always existed.
     pub fn fast_path(&self) -> &Path {
         self.fast.as_deref().unwrap_or(&self.primary)
+    }
+
+    /// The primary GGUF's filename stem — the id the slot manager resolves by
+    /// and the name a caller passes as `model` over HTTP.
+    ///
+    /// Lives here rather than on [`SetupConfig`] because every sibling slot
+    /// accessor does (`fast_path`, `has_explicit_fast`, `effective_context_size`,
+    /// `max_extras_memory_bytes`); a reader looking for "what can this slot
+    /// table tell me" should find them in one place.
+    pub fn primary_stem(&self) -> Option<String> {
+        self.primary
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(str::to_string)
+    }
+
+    /// The embed GGUF's filename stem. See [`Self::primary_stem`].
+    pub fn embed_stem(&self) -> Option<String> {
+        self.embed
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(str::to_string)
+    }
+
+    /// `true` when this section actually names a model — i.e. it is a slot
+    /// table and not a placeholder.
+    ///
+    /// A `[models]` section can EXIST and hold nothing: the desktop wizard
+    /// writes `ModelsSection::default()` mid-flight so a config file is present
+    /// before the user has chosen slots, and a truncated or badly-merged file
+    /// lands in the same shape. Both are "setup has not finished", not "this
+    /// node holds models" — so presence of the section is the wrong question
+    /// and this is the right one.
+    ///
+    /// `primary` is the discriminator because it is the one slot with no
+    /// fallback: `fast_path()` subsumes to it, `embed` without a primary cannot
+    /// serve a turn, and every path that refuses for lack of models refuses for
+    /// lack of THIS. Used by [`SetupConfig::node_class`] and
+    /// [`SetupConfig::models`] so "does this node hold models" has one answer
+    /// (§7.5).
+    pub fn is_populated(&self) -> bool {
+        !self.primary.as_os_str().is_empty()
     }
 
     /// `true` when an explicit fast GGUF is configured (the
@@ -1267,6 +1429,187 @@ fn default_data_dir() -> PathBuf {
 }
 
 impl SetupConfig {
+    /// What kind of participant this node is. Derived from `[models]` and
+    /// `[node] entry` — the ONE place that judgement is made (§7.5), so
+    /// preflight, provider construction, `svrn doctor` and the status surface
+    /// cannot reach different answers.
+    ///
+    /// Judged on CONTENT, not on whether the `[models]` table exists. A
+    /// section that is present but names no primary is a placeholder — the
+    /// desktop wizard writes one mid-flight — and a node holding a placeholder
+    /// holds no models, whatever the file looks like. Keying this on presence
+    /// made that node a `Holder` with nothing in it, which is the same
+    /// three-empty-`PathBuf`s ambiguity `Option` was introduced to remove.
+    ///
+    /// Deliberately a different question from [`validate_class`], which asks
+    /// whether the FILE is coherent enough to load and stays presence-based so
+    /// the wizard's mid-flight config keeps loading. One implementation each;
+    /// they are not two answers to one question (§10.6).
+    pub fn node_class(&self) -> NodeClass {
+        let holds_models = self
+            .models
+            .as_ref()
+            .is_some_and(ModelsSection::is_populated);
+        match (holds_models, self.node.entry.is_some()) {
+            (true, _) => NodeClass::Holder,
+            (false, true) => NodeClass::Terminal,
+            (false, false) => NodeClass::Unconfigured,
+        }
+    }
+
+    /// The model slots this node holds, or a refusal that says why there are
+    /// none.
+    ///
+    /// The one way to read `[models]` on a path that genuinely needs a GGUF.
+    /// The two absences are reported apart because they are fixed differently:
+    /// a terminal is working as configured and the caller should route instead,
+    /// while an unconfigured node needs `svrn setup` (§18.2, §18.3).
+    ///
+    /// An unpopulated section refuses exactly like a missing one: a caller on
+    /// this path needs a GGUF, and handing it `ModelsSection::default()`'s
+    /// empty `PathBuf`s would have it open `""` and report whatever llama.cpp
+    /// says about that — the substitution this accessor exists to prevent
+    /// (§18.3).
+    pub fn models(&self) -> Result<&ModelsSection, String> {
+        let populated = self.models.as_ref().filter(|m| m.is_populated());
+        populated.ok_or_else(|| match self.node_class() {
+            NodeClass::Terminal => format!(
+                "this node is a terminal — it holds no models and routes \
+                 inference to its entry node ({}). Nothing here can be served \
+                 from a local slot.",
+                self.node.entry.as_deref().unwrap_or("unset"),
+            ),
+            _ => format!(
+                "no models are configured in {} — run `svrn setup` (or \
+                 `svrn setup --terminal <join-link>` for a node that routes to \
+                 a peer instead of holding its own).",
+                Self::default_path().display(),
+            ),
+        })
+    }
+
+    /// [`models`](Self::models), for the paths that WRITE a slot.
+    ///
+    /// Same refusal, same wording, one implementation — `svrn model set` was
+    /// reaching for `is_none()` plus an `expect`, and borrowing the message
+    /// from `models()` to stay in step with it.
+    pub fn models_mut(&mut self) -> Result<&mut ModelsSection, String> {
+        // Judged before the mutable borrow so the error can still read `self`.
+        if let Err(e) = self.models() {
+            return Err(e);
+        }
+        Ok(self
+            .models
+            .as_mut()
+            .expect("models() returned Ok, so the section is present"))
+    }
+
+    /// The chat context window this node budgets against.
+    ///
+    /// Delegates to `[models] context_size` on a holder. On a terminal there is
+    /// no local slot to read, so this is the documented default — and it is an
+    /// APPROXIMATION of the entry node's real window, not a reading of it. The
+    /// value drives client-side prompt budgeting only; the entry node enforces
+    /// its own limit and refuses an over-long prompt on its own terms, so a
+    /// mismatch costs a rejected turn rather than a silently truncated one.
+    pub fn effective_context_size(&self) -> u32 {
+        self.models
+            .as_ref()
+            .map(|m| m.effective_context_size())
+            .unwrap_or_else(default_context_size)
+    }
+
+    /// The primary model's GGUF file stem — the id the slot manager resolves
+    /// by, and the name a caller passes as `model` over HTTP.
+    ///
+    /// `None` on a terminal (no slots) and on a primary path with no stem.
+    /// Collapses a chain that was copy-pasted at six call sites
+    /// (`audit_extract`, `code_cmd`, `chat_cmd::bootstrap`,
+    /// `recipe_agent_live_trial`, `deep_research::launch`, `mesh_bench`), each
+    /// of which had to be updated in lockstep to stay right (§10.6).
+    pub fn primary_model_stem(&self) -> Option<String> {
+        self.models.as_ref()?.primary_stem()
+    }
+
+    /// The embed model's GGUF file stem. `None` on a terminal.
+    ///
+    /// Callers that merely LABEL may fall back to a default name; callers that
+    /// actually embed must not, because this name decides which vector space
+    /// the result lands in (`sovereign-cli-shared::models`'s doc states that
+    /// split, and `build_daemon_embed_fn` is the side that refuses).
+    pub fn embed_model_stem(&self) -> Option<String> {
+        self.models.as_ref()?.embed_stem()
+    }
+
+    /// The embed model this node's own embedding calls land in — the local
+    /// GGUF's stem on a holder, the ENTRY NODE's recorded id on a terminal.
+    ///
+    /// A terminal embeds over HTTP, so the vector space its text lands in is
+    /// the entry node's. Anything keyed on "which space is this" — the corpus
+    /// engine's cache key, the provider's `embed_model_id()`, a label — wants
+    /// this one.
+    ///
+    /// **Not** what this node advertises to peers; that is
+    /// [`advertised_embed_model_id`], and the two differ on purpose. Answering
+    /// both from one accessor is what made a terminal offer its entry node's
+    /// model as its own (§10.6): the chain `stem → entry` is right for the
+    /// first question and a capability lie for the second.
+    ///
+    /// `None` means this node cannot name its embedding space at all — an
+    /// unconfigured node, or a terminal whose entry node declares no embed
+    /// slot. Callers that persist or compare under this name must map `None`
+    /// to the trait's `"unknown"` sentinel rather than to an empty string:
+    /// `""` is not the sentinel, so it reads downstream as a real model named
+    /// empty-string and matches other rows stored the same way (§18.3, and
+    /// `sovereign-core::memory`'s `model_known` check is the reader).
+    pub fn local_embed_model_id(&self) -> Option<String> {
+        self.embed_model_stem()
+            .or_else(|| self.node.entry_embed_model.clone())
+    }
+
+    /// The embed model this node offers MESH PEERS — `None` on a terminal.
+    ///
+    /// Deliberately local-only, and deliberately its own name rather than a
+    /// call to [`embed_model_stem`]: this is the one question whose answer must
+    /// never fall back to the entry node. A terminal can embed, but only by
+    /// forwarding, so advertising an embed model here would have the
+    /// collaborative-ingestion planner partition work onto a node that can only
+    /// proxy every chunk straight back to the machine the planner was trying to
+    /// spread load off (`sovereign-mesh::capabilities`, whose own doc names
+    /// `None` as "don't include me in distribution").
+    pub fn advertised_embed_model_id(&self) -> Option<String> {
+        self.embed_model_stem()
+    }
+
+    /// Reject a config whose class cannot be honoured.
+    ///
+    /// The guard that lets `models` be optional without letting absence be
+    /// defaulted: a `[models]` section that went missing — a bad merge, a
+    /// half-written file, a hand edit — must not read as a deliberate terminal,
+    /// because a terminal without an entry node has nowhere to send a turn and
+    /// would fail later, at the first request, far from the cause.
+    ///
+    /// Asks about PRESENCE, not content, and so does not go through
+    /// [`node_class`](Self::node_class) — the two are different questions and
+    /// each keeps its own implementation. Loadability has to stay permissive:
+    /// the desktop wizard writes a config with an empty `[models]` table before
+    /// the user has chosen slots, and refusing to load that would break setup
+    /// mid-flight. What must be refused is the file that declares NEITHER a
+    /// slot table nor an entry node, because nothing later in the boot can tell
+    /// that apart from a deliberate terminal.
+    fn validate_class(&self, path: &Path) -> Result<(), String> {
+        match self.models.is_some() || self.node.entry.is_some() {
+            true => Ok(()),
+            false => Err(format!(
+                "{} declares neither `[models]` nor `[node] entry`, so this \
+                 node can neither serve a turn nor route one. Run `svrn setup` \
+                 to hold models locally, or `svrn setup --terminal \
+                 <join-link>` to route to a peer that does.",
+                path.display(),
+            )),
+        }
+    }
+
     /// A config for a process that has **no `config.toml`** — no model slots
     /// configured, every other section at its documented default (`:9741` /
     /// `:9742`, loopback client bind, `0.0.0.0` internal bind, no bearer
@@ -1281,7 +1624,8 @@ impl SetupConfig {
     /// must report the failure first.
     pub fn unconfigured() -> Self {
         Self {
-            models: ModelsSection::default(),
+            models: None,
+            node: NodeSection::default(),
             daemon: DaemonSection::default(),
             data: DataSection::default(),
             watched_folders: WatchedFoldersSection::default(),
@@ -1362,6 +1706,7 @@ impl SetupConfig {
         let mut cfg: SetupConfig =
             toml::from_str(&content).map_err(|e| format!("parse {}: {e}", path.display()))?;
         cfg.expand_paths();
+        cfg.validate_class(path)?;
         Ok(cfg)
     }
 
@@ -1396,16 +1741,21 @@ impl SetupConfig {
     /// Expand leading `~` in all path fields to the user's home dir.
     /// TOML stores `~/.svrnmesh/...` literally; we resolve at load time.
     fn expand_paths(&mut self) {
-        self.models.primary = expand_home(&self.models.primary);
-        if let Some(fast) = &self.models.fast {
-            self.models.fast = Some(expand_home(fast));
-        }
-        self.models.embed = expand_home(&self.models.embed);
-        if let Some(p) = self.models.code.as_mut() {
-            *p = expand_home(p);
-        }
-        for path in self.models.extra.values_mut() {
-            *path = expand_home(path);
+        // A terminal has no `[models]`, so there is nothing to expand — and
+        // nothing to invent. `data.dir` is expanded either way: every node has
+        // one, weights or no weights.
+        if let Some(models) = self.models.as_mut() {
+            models.primary = expand_home(&models.primary);
+            if let Some(fast) = &models.fast {
+                models.fast = Some(expand_home(fast));
+            }
+            models.embed = expand_home(&models.embed);
+            if let Some(p) = models.code.as_mut() {
+                *p = expand_home(p);
+            }
+            for path in models.extra.values_mut() {
+                *path = expand_home(path);
+            }
         }
         self.data.dir = expand_home(&self.data.dir);
     }
@@ -1598,9 +1948,15 @@ embed = "/models/embed.gguf"
 [data]
 "#;
         let cfg: SetupConfig = toml::from_str(toml).unwrap();
-        assert_eq!(cfg.models.primary, PathBuf::from("/models/primary.gguf"));
-        assert!(cfg.models.fast.is_none());
-        assert_eq!(cfg.models.fast_path(), Path::new("/models/primary.gguf"));
+        assert_eq!(
+            cfg.models().unwrap().primary,
+            PathBuf::from("/models/primary.gguf")
+        );
+        assert!(cfg.models().unwrap().fast.is_none());
+        assert_eq!(
+            cfg.models().unwrap().fast_path(),
+            Path::new("/models/primary.gguf")
+        );
     }
 
     #[test]
@@ -1661,12 +2017,214 @@ embed = "/m/e.gguf"
         assert_eq!(cfg.iroh.discovery, None);
     }
 
+    /// The three participant states are three values, and none of them is a
+    /// flavour of another (§18.2).
+    #[test]
+    fn node_class_is_derived_from_models_and_entry() {
+        let mut cfg = SetupConfig::unconfigured();
+        assert_eq!(cfg.node_class(), NodeClass::Unconfigured);
+
+        cfg.node.entry = Some("http://halo:9741/v1".into());
+        assert_eq!(cfg.node_class(), NodeClass::Terminal);
+
+        cfg.models = Some(models("/m/p.gguf", None, "/m/e.gguf"));
+        assert_eq!(
+            cfg.node_class(),
+            NodeClass::Holder,
+            "holding weights makes a node a holder even with an entry configured — \
+             the entry is then simply unused"
+        );
+    }
+
+    /// A `[models]` table that EXISTS but names nothing is not a holder.
+    ///
+    /// The desktop wizard writes exactly this shape mid-flight
+    /// (`commands/config_setup.rs` — `Some(ModelsSection::default())` so a file
+    /// exists before the user has picked slots), and a truncated or
+    /// badly-merged file lands in it too. Judged on presence, such a node was a
+    /// `Holder` holding nothing and `models()` handed callers three empty
+    /// `PathBuf`s — the same ambiguity `Option<ModelsSection>` was introduced to
+    /// remove, surviving on the other side of the boundary.
+    #[test]
+    fn a_placeholder_models_table_is_unconfigured_not_a_holder() {
+        let mut cfg = SetupConfig::unconfigured();
+        cfg.models = Some(ModelsSection::default());
+
+        assert_eq!(
+            cfg.node_class(),
+            NodeClass::Unconfigured,
+            "a `[models]` section naming no primary holds no models, whatever \
+             shape the file is in"
+        );
+        let err = cfg
+            .models()
+            .expect_err("a placeholder section must refuse, not hand back empty paths");
+        assert!(
+            err.contains("svrn setup"),
+            "the refusal must name the fix, got: {err}"
+        );
+    }
+
+    /// ...and it must still LOAD, or the wizard breaks mid-flight.
+    ///
+    /// Loadability and class are deliberately different questions with
+    /// different implementations: `validate_class` asks whether the file is
+    /// coherent enough to open (presence), `node_class` asks what the node is
+    /// (content). Collapsing them would either break the desktop's mid-setup
+    /// write or resurrect the placeholder-as-holder bug above.
+    #[test]
+    fn a_placeholder_models_table_still_loads() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "[models]\nprimary = \"\"\nembed = \"\"\n\n[daemon]\n[data]\n",
+        )
+        .unwrap();
+
+        let cfg = SetupConfig::load_from(&path)
+            .expect("the desktop wizard's mid-flight config must keep loading");
+        assert_eq!(cfg.node_class(), NodeClass::Unconfigured);
+    }
+
+    /// "Which embed model" is TWO questions, and a terminal answers them
+    /// differently.
+    ///
+    /// `local_embed_model_id` is the space this node's own text lands in — the
+    /// entry node's, because a terminal embeds over HTTP.
+    /// `advertised_embed_model_id` is what it offers PEERS, and must stay
+    /// `None`: the collaborative-ingestion planner filters candidates by exact
+    /// match on it, so advertising here partitions work onto a node that can
+    /// only proxy every chunk back to the machine the planner was spreading
+    /// load off. One accessor answering both is how the terminal came to
+    /// advertise its entry node's model as its own (§10.6).
+    #[test]
+    fn a_terminal_embeds_under_its_entry_node_but_advertises_nothing() {
+        let mut cfg = SetupConfig::unconfigured();
+        cfg.node.entry = Some("http://halo:9741/v1".into());
+        cfg.node.entry_embed_model = Some("qwen3-embedding-0.6b".into());
+
+        assert_eq!(
+            cfg.local_embed_model_id().as_deref(),
+            Some("qwen3-embedding-0.6b"),
+            "a terminal's vectors land in its ENTRY node's space, and that is \
+             the honest name for them"
+        );
+        assert_eq!(
+            cfg.advertised_embed_model_id(),
+            None,
+            "a terminal holds no embed slot, so it offers peers none"
+        );
+    }
+
+    /// A holder answers both questions with its own slot.
+    #[test]
+    fn a_holder_advertises_the_slot_it_embeds_with() {
+        let mut cfg = SetupConfig::unconfigured();
+        cfg.models = Some(models("/m/p.gguf", None, "/m/qwen3-embedding-0.6b.gguf"));
+
+        assert_eq!(
+            cfg.local_embed_model_id().as_deref(),
+            Some("qwen3-embedding-0.6b")
+        );
+        assert_eq!(
+            cfg.advertised_embed_model_id().as_deref(),
+            Some("qwen3-embedding-0.6b"),
+            "the two answers coincide on a holder — which is why keying both on \
+             one accessor stayed invisible until a terminal existed"
+        );
+    }
+
+    /// An entry node with no embed slot leaves the space UNNAMEABLE, and that
+    /// must not become a name.
+    ///
+    /// `svrn setup --terminal` supports this state explicitly (it prints "no
+    /// embed slot" and records the absence). The value must stay `None` here so
+    /// the provider maps it to the trait's `"unknown"` sentinel; an empty
+    /// string would pass `memory.rs`'s `model_known` gate as a real model named
+    /// empty-string and get embeddings persisted under it (§18.3).
+    #[test]
+    fn a_terminal_whose_entry_has_no_embed_slot_names_no_model() {
+        let mut cfg = SetupConfig::unconfigured();
+        cfg.node.entry = Some("http://halo:9741/v1".into());
+
+        assert_eq!(cfg.local_embed_model_id(), None);
+        assert_eq!(cfg.advertised_embed_model_id(), None);
+    }
+
+    /// `[models]` going missing must not read as "I meant to be a terminal".
+    ///
+    /// This is the guard that lets the section be optional at all: without it,
+    /// a bad merge or a half-written file silently reclassifies the node, and
+    /// the failure surfaces later as a turn with nowhere to go (§18.3).
+    #[test]
+    fn a_config_with_neither_models_nor_an_entry_is_refused_at_load() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("config.toml");
+        std::fs::write(&path, "[daemon]\n[data]\n").unwrap();
+
+        let err = SetupConfig::load_from(&path)
+            .expect_err("a config that can neither serve nor route must not load");
+        assert!(
+            err.contains("neither") && err.contains("svrn setup"),
+            "the refusal must name both the cause and the fix, got: {err}"
+        );
+    }
+
+    /// The terminal config is a real, loadable shape — not merely one the
+    /// validator tolerates.
+    #[test]
+    fn a_terminal_config_loads_and_reports_its_entry() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "[node]\nentry = \"http://halo:9741/v1\"\n\n[daemon]\n[data]\n",
+        )
+        .unwrap();
+
+        let cfg = SetupConfig::load_from(&path).expect("a terminal config must load");
+        assert_eq!(cfg.node_class(), NodeClass::Terminal);
+        assert_eq!(cfg.node.entry.as_deref(), Some("http://halo:9741/v1"));
+        assert!(cfg.models.is_none());
+    }
+
+    /// A terminal's refusal has to say WHICH absence this is, because the two
+    /// are fixed differently: route instead, versus run setup.
+    #[test]
+    fn the_two_absences_of_models_are_reported_apart() {
+        let mut terminal = SetupConfig::unconfigured();
+        terminal.node.entry = Some("http://halo:9741/v1".into());
+        let terminal_err = terminal.models().unwrap_err();
+        assert!(
+            terminal_err.contains("terminal") && terminal_err.contains("http://halo:9741/v1"),
+            "a terminal's refusal must name the class and the entry node, got: {terminal_err}"
+        );
+
+        let unconfigured_err = SetupConfig::unconfigured().models().unwrap_err();
+        assert!(
+            unconfigured_err.contains("svrn setup") && !unconfigured_err.contains("terminal —"),
+            "an unconfigured node's refusal must point at setup, got: {unconfigured_err}"
+        );
+    }
+
+    /// A terminal budgets against the documented default rather than reading a
+    /// slot it does not have — and says so instead of panicking.
+    #[test]
+    fn a_terminal_reports_the_default_context_window() {
+        let mut cfg = SetupConfig::unconfigured();
+        cfg.node.entry = Some("http://halo:9741/v1".into());
+        assert_eq!(cfg.effective_context_size(), default_context_size());
+        assert_eq!(cfg.primary_model_stem(), None);
+        assert_eq!(cfg.embed_model_stem(), None);
+    }
+
     #[test]
     fn roundtrip_minimal_config() {
         let cfg = SetupConfig {
             compute: Default::default(),
             search: Default::default(),
-            models: ModelsSection {
+            models: Some(ModelsSection {
                 primary: PathBuf::from("/models/primary.gguf"),
                 fast: Some(PathBuf::from("/models/fast.gguf")),
                 embed: PathBuf::from("/models/embed.gguf"),
@@ -1677,7 +2235,8 @@ embed = "/m/e.gguf"
                 max_extras_memory_gb: None,
                 primary_pool: None,
                 edit: None,
-            },
+            }),
+            node: NodeSection::default(),
             daemon: DaemonSection::default(),
             data: DataSection::default(),
             watched_folders: WatchedFoldersSection::default(),
@@ -1691,7 +2250,10 @@ embed = "/m/e.gguf"
         let path = tmp.path().join("config.toml");
         cfg.save_to(&path).unwrap();
         let loaded = SetupConfig::load_from(&path).unwrap();
-        assert_eq!(loaded.models.primary, cfg.models.primary);
+        assert_eq!(
+            loaded.models().unwrap().primary,
+            cfg.models().unwrap().primary
+        );
         assert_eq!(loaded.daemon.client_port, 9741);
         assert_eq!(loaded.daemon.internal_port, 9742);
         assert!(loaded.daemon.autostart);
@@ -1707,7 +2269,7 @@ embed = "/m/e.gguf"
         let cfg = SetupConfig {
             compute: Default::default(),
             search: Default::default(),
-            models: ModelsSection {
+            models: Some(ModelsSection {
                 primary: PathBuf::from("/m/p.gguf"),
                 fast: None,
                 embed: PathBuf::from("/m/e.gguf"),
@@ -1718,7 +2280,8 @@ embed = "/m/e.gguf"
                 max_extras_memory_gb: None,
                 primary_pool: None,
                 edit: None,
-            },
+            }),
+            node: NodeSection::default(),
             daemon: DaemonSection::default(),
             data: DataSection::default(),
             watched_folders: WatchedFoldersSection::default(),
@@ -1950,7 +2513,7 @@ fast = "/m/f.gguf"
 embed = "/m/e.gguf"
 "#;
         let cfg: SetupConfig = toml::from_str(toml_str).unwrap();
-        assert!(cfg.models.extra.is_empty());
+        assert!(cfg.models().unwrap().extra.is_empty());
     }
 
     #[test]
@@ -1969,13 +2532,13 @@ reasoning = "/m/big.gguf"
 bulk = "/m/small.gguf"
 "#;
         let cfg: SetupConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(cfg.models.extra.len(), 2);
+        assert_eq!(cfg.models().unwrap().extra.len(), 2);
         assert_eq!(
-            cfg.models.extra.get("reasoning"),
+            cfg.models().unwrap().extra.get("reasoning"),
             Some(&PathBuf::from("/m/big.gguf"))
         );
         assert_eq!(
-            cfg.models.extra.get("bulk"),
+            cfg.models().unwrap().extra.get("bulk"),
             Some(&PathBuf::from("/m/small.gguf"))
         );
     }
@@ -1989,7 +2552,7 @@ fast = "/m/f.gguf"
 embed = "/m/e.gguf"
 "#;
         let cfg: SetupConfig = toml::from_str(toml_str).unwrap();
-        assert!(cfg.models.max_extras_memory_bytes().is_none());
+        assert!(cfg.models().unwrap().max_extras_memory_bytes().is_none());
     }
 
     #[test]
@@ -2004,7 +2567,7 @@ max_extras_memory_gb = 12.0
         let cfg: SetupConfig = toml::from_str(toml_str).unwrap();
         // 12 GiB = 12 * 2^30 bytes.
         assert_eq!(
-            cfg.models.max_extras_memory_bytes(),
+            cfg.models().unwrap().max_extras_memory_bytes(),
             Some(12 * (1u64 << 30))
         );
     }
@@ -2022,7 +2585,7 @@ embed = "/m/e.gguf"
 max_extras_memory_gb = 0.0
 "#;
         let cfg: SetupConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(cfg.models.max_extras_memory_bytes(), Some(0));
+        assert_eq!(cfg.models().unwrap().max_extras_memory_bytes(), Some(0));
     }
 
     #[test]
@@ -2050,7 +2613,7 @@ reasoning = "~/dev/big.gguf"
         std::fs::write(&path, toml_str).unwrap();
         let cfg = SetupConfig::load_from(&path).unwrap();
         assert_eq!(
-            cfg.models.extra.get("reasoning"),
+            cfg.models().unwrap().extra.get("reasoning"),
             Some(&home.join("dev/big.gguf"))
         );
     }

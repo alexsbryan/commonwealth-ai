@@ -466,7 +466,10 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
             Ok(t) => t,
             Err(()) => return 1,
         };
-    let engine_handle: Option<Arc<EmbeddedLlamaCpp>> = Some(raw_engine);
+    // `None` on a terminal: nothing in this process owns weights, so the
+    // engine-only paths (RPC-worker reload, slot hot-swap) have nothing to act
+    // on and must see the absence rather than a stub.
+    let engine_handle: Option<Arc<EmbeddedLlamaCpp>> = raw_engine;
 
     // ── Note store (for MCP notes tools + ring-buffer logging) ────
     let data_dir = config.data.dir.clone();

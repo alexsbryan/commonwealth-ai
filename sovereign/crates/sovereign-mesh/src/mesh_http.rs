@@ -119,6 +119,25 @@ pub struct RotateResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StatusResponse {
     pub running: bool,
+    /// What kind of participant THIS node is — `holder`, `terminal`, or
+    /// `unconfigured` ([`NodeClass::id`]).
+    ///
+    /// Local only: derived from this daemon's own `SetupConfig`, never
+    /// gossiped, so `members[]` carries no such field. It is reported because
+    /// the manifest cannot answer it. Since candidacy began keying on
+    /// residency, a terminal and a holder whose slots failed to load both
+    /// advertise zero models, and an operator staring at an empty lineup has no
+    /// way to tell "holds nothing by design" from "should hold something and
+    /// does not" (§18.2).
+    ///
+    /// `#[serde(default)]` so a desktop or CLI built before this field can
+    /// still deserialise a newer daemon's response.
+    #[serde(default)]
+    pub node_class: String,
+    /// The entry node a `terminal` forwards every turn and embedding to.
+    /// `None` on a holder.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub entry_node: Option<String>,
     /// Every mesh this node is a member of — the active one and the parked
     /// ones. Empty on a daemon with persistence disabled.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -389,6 +408,9 @@ async fn mesh_status(
     }
 
     let running = daemon.is_running().await;
+    // Read live off the daemon's config — see `EmbeddedDaemon::node_class`.
+    let node_class = daemon.node_class().await.id().to_string();
+    let entry_node = daemon.entry_node().await;
     // RPC worker eligibility (host side) — the same tracker the discovery loop
     // gates on, so the operator sees the live state without DEBUG logs.
     let rpc_workers = crate::worker_eligibility::global()
@@ -428,6 +450,8 @@ async fn mesh_status(
             Json(
                 serde_json::to_value(StatusResponse {
                     running,
+                    node_class,
+                    entry_node,
                     meshes: known_mesh_dtos(&daemon),
                     mesh_name: None,
                     members_online: 0,
@@ -500,6 +524,8 @@ async fn mesh_status(
         Json(
             serde_json::to_value(StatusResponse {
                 running,
+                node_class,
+                entry_node,
                 meshes: known_mesh_dtos(&daemon),
                 mesh_name: Some(s.status.name),
                 members_online: s.status.members_online,
@@ -1121,7 +1147,7 @@ mod tests {
         SetupConfig {
             compute: Default::default(),
             search: Default::default(),
-            models: ModelsSection {
+            models: Some(ModelsSection {
                 primary: PathBuf::from("/models/primary.gguf"),
                 fast: None,
                 embed: PathBuf::from("/models/embed.gguf"),
@@ -1132,7 +1158,8 @@ mod tests {
                 extra: BTreeMap::new(),
                 primary_pool: None,
                 edit: None,
-            },
+            }),
+            node: Default::default(),
             daemon: DaemonSection {
                 client_port: 0,
                 internal_port: 0,

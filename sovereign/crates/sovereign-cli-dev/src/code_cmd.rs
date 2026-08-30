@@ -514,13 +514,7 @@ async fn cmd_check_spec(args: &[String]) -> i32 {
         }
     };
     let port = cfg.daemon.client_port;
-    let chat_model = cfg
-        .models
-        .primary
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("")
-        .to_string();
+    let chat_model = cfg.primary_model_stem().unwrap_or_default().to_string();
     let (embed, _) = match sovereign_cli_shared::code_index::build_daemon_embed_fn().await {
         Ok(e) => e,
         Err(e) => {

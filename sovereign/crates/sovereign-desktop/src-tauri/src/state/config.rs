@@ -594,12 +594,16 @@ impl DesktopConfig {
         // that simply has no embed model — repeatedly, since desktop.toml
         // is never rewritten here (the exact divergence bug this
         // single-source-of-truth work exists to kill).
+        // `is_populated()`, not a hand-rolled empty-primary check: "does this
+        // node hold models" is one question and it has one implementation
+        // (§10.6). This site is where the predicate was first written by hand,
+        // and `SetupConfig::node_class` now asks it too.
         let setup_has_models = existing
             .as_ref()
-            .is_some_and(|c| !c.models.primary.as_os_str().is_empty());
+            .is_some_and(|c| c.models.as_ref().is_some_and(|m| m.is_populated()));
         let setup_has_ctx = existing
             .as_ref()
-            .is_some_and(|c| c.models.context_size.is_some());
+            .is_some_and(|c| c.models.as_ref().is_some_and(|m| m.context_size.is_some()));
         // Nothing to do if SetupConfig is already authoritative for
         // whatever the legacy file could contribute.
         let need_paths = has_any_path && !setup_has_models;
@@ -611,7 +615,7 @@ impl DesktopConfig {
         let mut setup = existing.unwrap_or_else(|| SetupConfig {
             compute: Default::default(),
             search: Default::default(),
-            models: ModelsSection {
+            models: Some(ModelsSection {
                 primary: PathBuf::new(),
                 fast: None,
                 embed: PathBuf::new(),
@@ -622,7 +626,8 @@ impl DesktopConfig {
                 max_extras_memory_gb: None,
                 primary_pool: None,
                 edit: None,
-            },
+            }),
+            node: Default::default(),
             daemon: Default::default(),
             data: DataSection {
                 dir: default_data_dir(),
@@ -644,22 +649,31 @@ impl DesktopConfig {
                 .clone()
                 .or_else(|| legacy.model_path.clone())
                 .unwrap_or_default();
-            setup.models.fast = match legacy.model_path.clone() {
+            // A legacy desktop.toml carrying model paths means this node
+            // HOLDS models, so materialise the section rather than dropping
+            // the migration on the floor — `need_paths` already proved there
+            // is something to carry over.
+            let models = setup.models.get_or_insert_with(Default::default);
+            models.fast = match legacy.model_path.clone() {
                 Some(f) if !f.as_os_str().is_empty() && f != primary => Some(f),
                 _ => None,
             };
-            setup.models.primary = primary;
+            models.primary = primary;
             if let Some(e) = legacy.embed_model_path.clone() {
-                setup.models.embed = e;
+                models.embed = e;
             }
             // Only carry a code slot the legacy file actually has —
             // a legacy None must not wipe one already in SetupConfig.
             if let Some(c) = legacy.code_model_path.clone() {
-                setup.models.code = Some(c);
+                models.code = Some(c);
             }
         }
         if need_ctx {
-            setup.models.context_size = legacy.context_size;
+            // Same reasoning, for the context-size-only migration.
+            setup
+                .models
+                .get_or_insert_with(Default::default)
+                .context_size = legacy.context_size;
         }
 
         match setup.save() {
@@ -729,7 +743,7 @@ impl ResolvedModelSlots {
     /// machine use [`Self::load_or_default`].
     pub fn load() -> Result<Self, String> {
         let setup = sovereign_core::setup_config::SetupConfig::load()?;
-        Ok(Self::from_setup(&setup))
+        Ok(Self::from_setup(setup.models()?))
     }
 
     /// Read from `SetupConfig`, or an all-empty placeholder when
@@ -737,19 +751,29 @@ impl ResolvedModelSlots {
     /// errors.
     pub fn load_or_default() -> Self {
         match sovereign_core::setup_config::SetupConfig::load() {
-            Ok(setup) => Self::from_setup(&setup),
-            Err(_) => Self {
-                fast: PathBuf::new(),
-                primary: None,
-                embed: PathBuf::new(),
-                code: None,
-                windows: sovereign_inference::embedded::SlotWindows::uniform(16_384),
+            // A terminal reaches the placeholder arm too: it holds no slots,
+            // and an all-empty `ResolvedModelSlots` is what "no local weights"
+            // already means to every reader of this type.
+            Ok(setup) => match setup.models() {
+                Ok(m) => Self::from_setup(m),
+                Err(_) => Self::empty(),
             },
+            Err(_) => Self::empty(),
         }
     }
 
-    fn from_setup(setup: &sovereign_core::setup_config::SetupConfig) -> Self {
-        let m = &setup.models;
+    /// The all-empty placeholder: no local weights, from any cause.
+    fn empty() -> Self {
+        Self {
+            fast: PathBuf::new(),
+            primary: None,
+            embed: PathBuf::new(),
+            code: None,
+            windows: sovereign_inference::embedded::SlotWindows::uniform(16_384),
+        }
+    }
+
+    fn from_setup(m: &sovereign_core::setup_config::ModelsSection) -> Self {
         Self {
             fast: m.fast_path().to_path_buf(),
             primary: Some(m.primary.clone()),

@@ -443,6 +443,33 @@ impl EmbeddedDaemon {
         (cfg.daemon.client_port, cfg.daemon.internal_port)
     }
 
+    /// What kind of participant this node is, read LIVE from the daemon's
+    /// `SetupConfig` rather than from a copy taken at boot.
+    ///
+    /// Derived on every read, deliberately (§7.5): the class is already a
+    /// judgement over two config fields, and caching it here would make a
+    /// third fact that can disagree with the two — exactly what
+    /// `SetupConfig::node_class`'s own doc rules out. The read is a `RwLock`
+    /// borrow of a struct the daemon already owns, so there is nothing to
+    /// amortise.
+    ///
+    /// Surfaced on `GET /v1/mesh/status` because it answers a question the
+    /// manifest cannot: after `build_self_manifest` began gating candidacy on
+    /// residency, a terminal and a holder whose models failed to load BOTH
+    /// advertise nothing, and "holds nothing by design" and "should hold
+    /// something and does not" are different verdicts that must not collapse
+    /// into one (§18.2).
+    pub async fn node_class(&self) -> sovereign_core::setup_config::NodeClass {
+        self.setup_config.read().await.node_class()
+    }
+
+    /// The entry node a `terminal` forwards to, or `None` on a holder.
+    /// Reported beside [`node_class`](Self::node_class) so an operator reading
+    /// "terminal" can see WHERE its turns go without opening `config.toml`.
+    pub async fn entry_node(&self) -> Option<String> {
+        self.setup_config.read().await.node.entry.clone()
+    }
+
     /// Borrow the `CorpusEngine` this host commissioned the daemon with, if
     /// its variant carries one. `reading_http` and the knowledge handlers
     /// call this; `MeshAdmin` answers `None` by construction.
@@ -3676,18 +3703,31 @@ fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, node_id: 
     use std::collections::HashMap;
     use std::hash::{DefaultHasher, Hash, Hasher};
 
+    // A node with no `[models]` registers no slots — the mirror of
+    // `capacity::build_slots_from_config`'s early return, which that function's
+    // doc asks to be kept in sync. Registering nothing is what makes a
+    // `terminal` honest end to end: no local slot in the store, and therefore
+    // nothing for `build_self_manifest` to advertise to peers.
+    let Some(models) = cfg.models.as_ref() else {
+        tracing::info!(
+            node = %node_id,
+            "register_local_model_slots: no [models] — terminal node, registering none"
+        );
+        return;
+    };
+
     let mut slots: Vec<(String, &std::path::Path)> = vec![
-        ("primary".into(), cfg.models.primary.as_path()),
-        ("embed".into(), cfg.models.embed.as_path()),
+        ("primary".into(), models.primary.as_path()),
+        ("embed".into(), models.embed.as_path()),
     ];
     // Mesh-advertise fast only when it's a distinct GGUF. If the
     // primary subsumes the fast role, a separate "fast" advertisement
     // would mislead peers into thinking there are two chat models on
     // this node when there's actually one.
-    if cfg.models.has_explicit_fast() {
-        slots.push(("fast".into(), cfg.models.fast_path()));
+    if models.has_explicit_fast() {
+        slots.push(("fast".into(), models.fast_path()));
     }
-    if let Some(code_path) = cfg.models.code.as_ref() {
+    if let Some(code_path) = models.code.as_ref() {
         slots.push(("code".into(), code_path.as_path()));
     }
     // Multi-primary pool: register N additional primary-class slots so
@@ -3696,7 +3736,7 @@ fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, node_id: 
     // Each pool member is registered under `primary_<i>` and points at
     // the same GGUF; the OICP capability advertiser surfaces them as
     // distinct claims so the scheduler can dispatch round-robin.
-    if let Some(pool) = cfg.models.primary_pool.as_ref() {
+    if let Some(pool) = models.primary_pool.as_ref() {
         for i in 0..pool.copies {
             slots.push((format!("primary_{i}"), pool.path.as_path()));
         }
@@ -3706,7 +3746,7 @@ fn register_local_model_slots(app_state: &AppState, cfg: &SetupConfig, node_id: 
     // advertises them. Without this entry, clients sending
     // `model: "<extras-stem>"` would see a 404 from the OICP
     // capability lookup before the slot picker ever runs.
-    for (slot_name, path) in cfg.models.extra.iter() {
+    for (slot_name, path) in models.extra.iter() {
         slots.push((format!("extras:{slot_name}"), path.as_path()));
     }
 
@@ -4433,7 +4473,7 @@ mod tests {
         let cfg = SetupConfig {
             compute: Default::default(),
             search: Default::default(),
-            models: ModelsSection {
+            models: Some(ModelsSection {
                 primary: PathBuf::from("/m/qwen3-coder-30b.gguf"),
                 fast: Some(PathBuf::from("/m/qwen3-1.7b.gguf")),
                 embed: PathBuf::from("/m/qwen3-embedding-0.6b.gguf"),
@@ -4444,7 +4484,8 @@ mod tests {
                 extra: std::collections::BTreeMap::new(),
                 primary_pool: None,
                 edit: None,
-            },
+            }),
+            node: Default::default(),
             daemon: DaemonSection::default(),
             data: DataSection::default(),
             watched_folders: Default::default(),

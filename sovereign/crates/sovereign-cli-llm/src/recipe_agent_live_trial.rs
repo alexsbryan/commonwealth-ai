@@ -391,13 +391,7 @@ async fn resolve_chat_model(
         return Ok(c.to_string());
     }
     if let Ok(cfg) = sovereign_core::setup_config::SetupConfig::load() {
-        if let Some(stem) = cfg
-            .models
-            .primary
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .map(String::from)
-        {
+        if let Some(stem) = cfg.primary_model_stem() {
             return Ok(stem);
         }
     }

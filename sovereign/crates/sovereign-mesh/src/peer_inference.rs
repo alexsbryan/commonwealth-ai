@@ -3965,6 +3965,25 @@ mod tests {
     use sovereign_core::types::Depth;
     use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
+    /// A warm slot, for stubs that own weights.
+    ///
+    /// Every local-provider stub below must report its residency, because
+    /// `build_self_manifest` reads `resident_slots()` to decide whether this
+    /// node holds anything at all — an empty report means "forwards to a
+    /// remote, owns nothing" and advertises no models. A stub that skipped this
+    /// would be modelling a thin client while claiming to serve, which is the
+    /// exact confusion the manifest gate exists to prevent.
+    fn warm_slot(role: &str, model_id: &str) -> sovereign_core::traits::ResidentSlot {
+        sovereign_core::traits::ResidentSlot {
+            role: role.to_string(),
+            model_id: model_id.to_string(),
+            resident: true,
+            size_bytes: None,
+            transitioning: false,
+            placement: None,
+        }
+    }
+
     /// A local provider whose advertised lineup FLIPS at runtime — the shape of
     /// a compute child that reaches Serving minutes after the daemon booted.
     /// Before the flip it answers the Slow tier with a small model and offers no
@@ -4015,6 +4034,18 @@ mod tests {
             } else {
                 Vec::new()
             }
+        }
+
+        /// Residency mirrors the flip: the small fast slot is always held, and
+        /// the big model joins it only once the compute child serves. Stated
+        /// rather than inherited, so the "advertised lineup flips" premise is
+        /// carried by residency too and not only by the names.
+        fn resident_slots(&self) -> Vec<sovereign_core::traits::ResidentSlot> {
+            let mut slots = vec![warm_slot("fast", "small-fast-model")];
+            if self.serving.load(Ordering::SeqCst) {
+                slots.push(warm_slot("primary", "big-late-model"));
+            }
+            slots
         }
     }
 
@@ -4247,6 +4278,10 @@ mod tests {
         fn model_id_for(&self, _speed: Speed) -> String {
             self.id.to_string()
         }
+
+        fn resident_slots(&self) -> Vec<sovereign_core::traits::ResidentSlot> {
+            vec![warm_slot("primary", self.id)]
+        }
     }
 
     /// A local provider whose serving step REFUSES with the queue shed —
@@ -4285,6 +4320,12 @@ mod tests {
 
         fn model_id_for(&self, _speed: Speed) -> String {
             "shed-model".into()
+        }
+
+        /// The slot is HELD — that is why there is a queue to shed from. A shed
+        /// is backpressure on a model this node owns, never absence of one.
+        fn resident_slots(&self) -> Vec<sovereign_core::traits::ResidentSlot> {
+            vec![warm_slot("primary", "shed-model")]
         }
     }
 

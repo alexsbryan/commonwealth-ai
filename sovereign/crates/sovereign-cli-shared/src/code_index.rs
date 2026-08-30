@@ -634,13 +634,25 @@ pub async fn build_daemon_embed_fn() -> std::result::Result<(EmbedFn, String), S
         .map_err(|e| format!("read ~/.svrnmesh/config.toml: {e}"))?;
     let port = cfg.daemon.client_port;
     let endpoint = format!("http://localhost:{port}/v1");
-    let embed_model = cfg
-        .models
-        .embed
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .ok_or_else(|| "SetupConfig.models.embed has no filename stem".to_string())?
-        .to_string();
+    // The embedding happens on the DAEMON at `endpoint`, over loopback — so
+    // the question is not "does this process hold a GGUF" but "can the daemon
+    // this is about to call name the space its vectors land in". A terminal's
+    // daemon can: it forwards to its entry node, and `local_embed_model_id()`
+    // is that node's recorded id. Gating on `models()` instead made `svrn code
+    // index` refuse on a terminal for a capability the node actually has.
+    //
+    // Still no default. This name decides which vector space the corpus lands
+    // in, so a space that cannot be named is a refusal, never a fallback —
+    // that is the split `sovereign-cli-shared::models` documents, and this is
+    // the side that refuses (§18.3).
+    let embed_model = cfg.local_embed_model_id().ok_or_else(|| {
+        "this node cannot name its embedding model — a holder needs \
+         `[models] embed` in ~/.svrnmesh/config.toml, and a terminal needs its \
+         entry node to declare an embed slot (re-run `svrn setup --terminal \
+         <entry>` once it has one). Indexing under an unnamed space would \
+         produce a corpus that cannot be searched back."
+            .to_string()
+    })?;
 
     // Probe before we return — a daemon-down failure 40 minutes
     // into a 10k-file reindex is much worse than an up-front bail.

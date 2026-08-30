@@ -138,19 +138,34 @@ impl ConfigDiff {
     /// restart-required).
     pub(crate) fn diff(old: &SetupConfig, new: &SetupConfig) -> Self {
         let mut d = ConfigDiff::default();
-        if old.models.primary != new.models.primary {
+        // `[models]` appearing or disappearing is a CLASS change (holder
+        // <-> terminal), not a slot swap: the provider stops being an
+        // embedded engine and becomes a forwarder, or the reverse. The
+        // factory cannot hot-swap that, so it is restart-required and the
+        // per-field comparisons below are skipped — comparing a slot path
+        // against an absent section would report "primary changed" for a
+        // node that no longer has slots at all.
+        let (old_models, new_models) = match (old.models.as_ref(), new.models.as_ref()) {
+            (Some(o), Some(n)) => (o, n),
+            (None, None) => return Self::finish_non_model_fields(d, old, new),
+            _ => {
+                d.restart_required.push("models");
+                return Self::finish_non_model_fields(d, old, new);
+            }
+        };
+        if old_models.primary != new_models.primary {
             d.models_changed.push("models.primary");
         }
-        if old.models.fast != new.models.fast {
+        if old_models.fast != new_models.fast {
             d.models_changed.push("models.fast");
         }
-        if old.models.embed != new.models.embed {
+        if old_models.embed != new_models.embed {
             d.models_changed.push("models.embed");
         }
-        if old.models.code != new.models.code {
+        if old_models.code != new_models.code {
             d.models_changed.push("models.code");
         }
-        if old.models.context_size != new.models.context_size {
+        if old_models.context_size != new_models.context_size {
             // Hot-reloadable, NOT restart-required: the provider factory
             // reads `effective_context_size()` and rebuilds every slot from
             // scratch, so the swap picks the new window up. It was simply
@@ -163,6 +178,19 @@ impl ConfigDiff {
             // said it had applied (§18.3 — a success message for work that
             // did not happen).
             d.models_changed.push("models.context_size");
+        }
+        Self::finish_non_model_fields(d, old, new)
+    }
+
+    /// The non-`[models]` half of the diff, shared by every arm above so a
+    /// class change still reports a moved port or data dir. Splitting it out
+    /// rather than duplicating: a second copy is how one arm quietly stops
+    /// noticing `daemon.client_bind` (§10.6).
+    fn finish_non_model_fields(mut d: Self, old: &SetupConfig, new: &SetupConfig) -> Self {
+        if old.node.entry != new.node.entry {
+            // The entry node is where a terminal forwards every turn. The
+            // forwarding provider is built once, against that address.
+            d.restart_required.push("node.entry");
         }
         if old.daemon.client_port != new.daemon.client_port {
             d.restart_required.push("daemon.client_port");
@@ -277,7 +305,7 @@ mod tests {
         let cfg = SetupConfig {
             compute: Default::default(),
             search: Default::default(),
-            models: ModelsSection {
+            models: Some(ModelsSection {
                 primary: PathBuf::from(primary),
                 fast: Some(PathBuf::from("/m/fast.gguf")),
                 embed: PathBuf::from("/m/embed.gguf"),
@@ -288,7 +316,8 @@ mod tests {
                 extra: std::collections::BTreeMap::new(),
                 primary_pool: None,
                 edit: None,
-            },
+            }),
+            node: Default::default(),
             daemon: DaemonSection::default(),
             data: DataSection::default(),
             watched_folders: Default::default(),
@@ -307,7 +336,7 @@ mod tests {
         let base = SetupConfig {
             compute: Default::default(),
             search: Default::default(),
-            models: ModelsSection {
+            models: Some(ModelsSection {
                 primary: PathBuf::from("/m/primary.gguf"),
                 fast: None,
                 embed: PathBuf::from("/m/embed.gguf"),
@@ -318,7 +347,8 @@ mod tests {
                 extra: std::collections::BTreeMap::new(),
                 primary_pool: None,
                 edit: None,
-            },
+            }),
+            node: Default::default(),
             daemon: DaemonSection::default(),
             data: DataSection::default(),
             watched_folders: Default::default(),
@@ -479,7 +509,11 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let path = write_cfg(&tmp, "/m/primary.gguf");
         let initial = SetupConfig::load_from(&path).unwrap();
-        assert_eq!(initial.models.context_size, None, "fixture starts at auto");
+        assert_eq!(
+            initial.models().unwrap().context_size,
+            None,
+            "fixture starts at auto"
+        );
 
         // Commissioned through the total constructor, like every other test in
         // this file. These two tests arrived on main written against the
@@ -495,7 +529,7 @@ mod tests {
         );
 
         let mut modified = initial;
-        modified.models.context_size = Some(65_536);
+        modified.models.as_mut().unwrap().context_size = Some(65_536);
         modified.save_to(&path).unwrap();
 
         let base = spawn(Arc::clone(&daemon)).await;
@@ -547,7 +581,7 @@ mod tests {
         );
 
         let mut modified = initial;
-        modified.models.code = Some(PathBuf::from("/m/coder.gguf"));
+        modified.models.as_mut().unwrap().code = Some(PathBuf::from("/m/coder.gguf"));
         modified.save_to(&path).unwrap();
 
         let base = spawn(Arc::clone(&daemon)).await;

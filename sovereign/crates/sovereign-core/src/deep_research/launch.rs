@@ -122,15 +122,16 @@ pub fn daemon_endpoint() -> String {
 pub fn daemon_targets() -> Result<(String, String, String), String> {
     let cfg = SetupConfig::load().map_err(|e| format!("SetupConfig load: {e}"))?;
     let endpoint = daemon_endpoint();
-    let draft_model = cfg
-        .models
+    // Deep research names its draft + embed models by GGUF stem, which a node
+    // holding no weights cannot do. The refusal says which case this is.
+    let models = cfg.models()?;
+    let draft_model = models
         .primary
         .file_stem()
         .and_then(|s| s.to_str())
         .ok_or("SetupConfig.models.primary has no filename stem (the draft model id)")?
         .to_string();
-    let embed_model = cfg
-        .models
+    let embed_model = models
         .embed
         .file_stem()
         .and_then(|s| s.to_str())

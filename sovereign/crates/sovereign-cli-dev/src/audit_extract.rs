@@ -360,13 +360,7 @@ pub async fn run_with_default_backend(repo_root: &Path, notes: &NoteStore) -> Ex
     // Primary model id is the GGUF file stem — see
     // `setup_config::ModelsSection.primary` doc comment + the
     // slot manager's resolve-by-stem convention.
-    let model_id = match setup
-        .models
-        .primary
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .map(String::from)
-    {
+    let model_id = match setup.primary_model_stem() {
         Some(s) => s,
         None => {
             return ExtractRunSummary {

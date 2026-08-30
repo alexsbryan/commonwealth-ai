@@ -210,7 +210,7 @@ async fn one_shot(pair: &Pair, out: &Path) -> Result<(), String> {
     let cfg = SetupConfig::load().map_err(|e| format!("{}: read config: {e}", pair.id))?;
     let endpoint = format!("http://localhost:{}/v1", cfg.daemon.client_port);
     let draft_model = cfg
-        .models
+        .models()?
         .primary
         .file_stem()
         .and_then(|s| s.to_str())

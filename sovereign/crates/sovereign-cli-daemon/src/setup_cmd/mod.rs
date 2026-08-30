@@ -45,6 +45,7 @@ mod download;
 mod fim;
 mod finish;
 mod opencode;
+mod terminal;
 
 use args::{parse_args, print_usage};
 use byom::prompt_byom_paths;
@@ -76,6 +77,30 @@ pub async fn run_setup(args: &[String]) -> i32 {
             return 0;
         }
         return fim::run_fim_setup(&opts).await;
+    }
+
+    // `--terminal` is likewise a destination, not a modifier: it downloads
+    // nothing, detects no hardware, and writes a config with no `[models]`.
+    // Dispatched before the deprecation shim for the same reason `--fim` is —
+    // "use `svrn daemon --setup-only`" is wrong advice for it.
+    if args.iter().any(|a| a == "--terminal") {
+        let opts = match parse_args(args) {
+            Ok(o) => o,
+            Err(msg) => {
+                eprintln!("error: {msg}");
+                print_usage();
+                return 2;
+            }
+        };
+        if opts.help {
+            print_usage();
+            return 0;
+        }
+        let entry = opts
+            .terminal
+            .clone()
+            .expect("--terminal was present, so parse_args set it");
+        return terminal::run_terminal_setup(&entry, &opts).await;
     }
 
     // Phase 4: `svrn setup` is now a wizard-only shim. The
@@ -294,6 +319,11 @@ pub async fn run_setup(args: &[String]) -> i32 {
 
 #[derive(Debug)]
 struct Opts {
+    /// `--terminal <entry>`: set this machine up as a node that holds NO
+    /// models and routes every turn to the named entry node. Not a modifier
+    /// on the wizard — a different destination, like `--fim`, so it
+    /// dispatches before hardware detection and downloads nothing.
+    terminal: Option<String>,
     reset: bool,
     yes: bool,
     data_dir: Option<PathBuf>,
@@ -386,12 +416,19 @@ async fn run_repair() -> i32 {
     // subsumes primary, primary is checked once — there's no separate
     // file to validate for the fast role. has_explicit_fast() gates
     // adding it to the sweep.
+    // Nothing was downloaded on a terminal, and an unpopulated `[models]`
+    // names no files either, so in both cases there is nothing to sweep.
+    // Through `models()` rather than the field, so "holds no models" has the
+    // same answer here as everywhere else.
+    let Ok(models) = cfg.models() else {
+        return 0;
+    };
     let mut slots: Vec<(&str, &std::path::Path)> = vec![
-        ("primary", cfg.models.primary.as_path()),
-        ("embed", cfg.models.embed.as_path()),
+        ("primary", models.primary.as_path()),
+        ("embed", models.embed.as_path()),
     ];
-    if cfg.models.has_explicit_fast() {
-        slots.push(("fast", cfg.models.fast_path()));
+    if models.has_explicit_fast() {
+        slots.push(("fast", models.fast_path()));
     }
 
     let mut removed = 0usize;
@@ -633,6 +670,34 @@ mod tests {
         assert!(opts.reset);
         assert!(opts.yes);
         assert_eq!(opts.data_dir.as_deref(), Some(Path::new("/tmp/sv")));
+    }
+
+    #[test]
+    fn parse_args_takes_the_terminal_entry_address() {
+        let opts = parse_args(&s(&["--terminal", "http://halo:9741"])).unwrap();
+        assert_eq!(opts.terminal.as_deref(), Some("http://halo:9741"));
+        assert!(opts.terminal.is_some() && !opts.fim);
+    }
+
+    #[test]
+    fn parse_args_defaults_terminal_off() {
+        assert!(parse_args(&s(&[])).unwrap().terminal.is_none());
+    }
+
+    /// `--terminal` with nothing after it is a typo, not a request to set up
+    /// against the empty string — which would write a config pointing nowhere.
+    #[test]
+    fn parse_args_rejects_a_dangling_terminal() {
+        let err = parse_args(&s(&["--terminal"])).unwrap_err();
+        assert!(err.contains("--terminal"), "got: {err}");
+    }
+
+    /// Two destinations, not a destination plus a modifier. Accepting both
+    /// would silently run one and drop the other.
+    #[test]
+    fn parse_args_refuses_terminal_together_with_fim() {
+        let err = parse_args(&s(&["--terminal", "http://halo:9741", "--fim"])).unwrap_err();
+        assert!(err.contains("separately"), "got: {err}");
     }
 
     /// Phase 4: `--wizard-only` is the internal flag that

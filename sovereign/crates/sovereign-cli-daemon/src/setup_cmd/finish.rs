@@ -28,7 +28,7 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
     let cfg = SetupConfig {
         compute: Default::default(),
         search: Default::default(),
-        models: ModelsSection {
+        models: Some(ModelsSection {
             primary: paths.primary,
             // `svrn setup` always prompts for an explicit fast
             // GGUF (BYOM is committed; no blank-to-use-default).
@@ -43,7 +43,8 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
             max_extras_memory_gb: None,
             primary_pool: None,
             edit: None,
-        },
+        }),
+        node: Default::default(),
         daemon: DaemonSection::default(),
         data: DataSection {
             dir: data_dir.clone(),

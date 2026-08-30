@@ -30,6 +30,59 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### `[node] entry` — keyed on an ADDRESS, not a node id (2026-08-30)
+
+**What is deferred.** A `terminal`-class node binds to its entry node by HTTP
+base URL (`http://halo:9741/v1`), not by mesh node id. The identity-keyed
+design — store the node id, resolve to ranked addresses through
+`PeerEndpointSource` at use time, keep the URL only as a bootstrap seed — was
+designed and priced in order `tn-1-terminal-honesty` D5, and not built.
+
+**Why it is a debt and not a preference.** ARCH §7.5: "the address is a mutable
+attribute of the thing, never its name," and its second cited incident is this
+mesh's own — an iroh bridge's loopback port used as peer identity produced 14
+rebuilds in 21 minutes for a peer that had not moved. Concretely, a URL-keyed
+terminal (a) does not follow its entry node when it changes network, (b) gets
+one address where `EmbeddedDaemon::peer_inference_endpoints` would hand it
+`PeerTransport`'s port-rewritten, rank-ordered, multi-homed candidate list, and
+(c) on a moved DHCP lease forwards to whatever machine now answers at that
+address — a confident wrong answer, not an error.
+
+**Why it was deferred.** Per-turn resolution requires a provider type wrapping
+`SplitInferenceProvider`, because `SplitInferenceProvider::new` takes a fixed
+`endpoint_v1: &str`. `InferenceProvider` carries **27 methods, 24 of them
+defaulted**. The default `embed_batch` (`traits.rs:384`) is a per-item loop, and
+`SplitInferenceProvider` overrides it precisely because that shape "made corpus
+ingest embed-bound" (`oicp-client/src/lib.rs:1477`). A delegating wrapper that
+omits one method silently inherits the default and re-introduces a measured
+regression with nothing red — §18.3's failure shape, built by construction.
+That risk is larger than the debt it would repay today, on a one-terminal fleet.
+
+**Flip condition (any one):**
+- A terminal's entry node changes address in the field and the terminal breaks
+  or, worse, silently serves from the wrong machine. One occurrence settles it.
+- A second terminal joins, or an entry node becomes dual-homed (WiFi +
+  Tailscale) — at which point the missing fallback chain is a live cost rather
+  than a hypothetical.
+- `InferenceProvider` is narrowed (ARCH §5.1) far enough that a delegating
+  wrapper cannot silently inherit a wrong default — e.g. the batch/stream
+  methods move to a sub-trait, or a `#[delegate]`-style macro makes the
+  delegation total.
+
+**Settled by.** Order `tn-1-terminal-honesty`, D5 — re-open it rather than
+re-deriving the design; the survey of what already exists
+(`peer_inference_endpoints`, `PeerEndpointSource`, `DeferredDaemon`, `/status`
+already returning `node_id`) is recorded there and is still good.
+
+**Interim mitigation: NONE shipped.** The drift is currently undetectable —
+proposed but not built: a `svrn doctor` check that probes `[node] entry` for
+`/status.node_id` and compares it against the id recorded at setup, turning the
+confident wrong answer into a reported one. That needs a new config field and
+so was left to the operator's call rather than taken under a stop condition.
+
+**Review by:** 2026-11-30, or the first field occurrence above, whichever comes
+first.
+
 ### `SOVEREIGN_RPC_WORKER_PROCESS` — shipped OFF (2026-08-29)
 
 **What is dark.** The out-of-process ggml RPC worker. With the flag set, the

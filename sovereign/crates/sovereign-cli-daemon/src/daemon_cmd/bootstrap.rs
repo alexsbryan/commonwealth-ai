@@ -229,12 +229,8 @@ pub(super) fn build_corpus_engine(
         // `/internal/corpus/install` POST hits this engine and bombs at
         // the pre-flight before the first byte is downloaded.
         let embed_model_name = config
-            .models
-            .embed
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("unknown-embed-model")
-            .to_string();
+            .local_embed_model_id()
+            .unwrap_or_else(|| "unknown-embed-model".to_string());
         // recipes_dir doubles as the registry's overrides_dir. Locally-
         // published recipes from `svrn recipe publish` land at
         // `~/.svrnmesh/recipes/<id>/recipe.toml` and only resolve when
@@ -1744,6 +1740,36 @@ pub(super) async fn advertise_embed_model(
     // Probe the provider for the real output dimensions rather than
     // trusting a hardcoded value — gets us the same ground truth the
     // corpus-engine uses for its dimension-mismatch guard.
+    // ── A node that holds no embed slot advertises none ─────────────────
+    //
+    // Before the probe, because on a terminal the probe SUCCEEDS: the provider
+    // forwards to the entry node, so a probe that was written to ask "is my
+    // embed slot working" instead answers "is someone else's". Advertising on
+    // the strength of it publishes the entry node's model as this node's own
+    // capability — and `capabilities.rs`'s own doc says the
+    // collaborative-ingestion planner filters candidates by exact match on this
+    // field, so the terminal gets partitioned work it can only proxy straight
+    // back to the machine the planner was spreading load off (§18.3).
+    //
+    // `Unavailable` rather than a silent skip: the type exists precisely so
+    // "declines to advertise" and "probe failed" do not look alike, and a
+    // terminal is the first case, permanently and by configuration.
+    let Some(advertised_model_id) = config.advertised_embed_model_id() else {
+        let reason = match config.node_class() {
+            sovereign_core::setup_config::NodeClass::Terminal => format!(
+                "terminal node: holds no embed slot of its own and forwards \
+                 embeddings to its entry node ({})",
+                config.node.entry.as_deref().unwrap_or("unset"),
+            ),
+            _ => "no embed model is configured on this node".to_string(),
+        };
+        tracing::info!(
+            %reason,
+            "embed model info: NOT advertising to mesh peers — this node holds no embed slot"
+        );
+        return sovereign_mesh::EmbedAdvertisement::Unavailable { reason };
+    };
+
     match provider.embed("probe").await {
         Ok(probe_vec) => {
             // `model_id` = bare filename stem (e.g.
@@ -1751,13 +1777,10 @@ pub(super) async fn advertise_embed_model(
             // for exact equality, so the string has to match what
             // the desktop/other CLI daemons advertise for the same
             // GGUF. File-stem is the stable shared handle.
-            let model_id = config
-                .models
-                .embed
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("embed")
-                .to_string();
+            // Bound by the guard above, so there is no fallback literal here
+            // and no second chain to drift from it. This is a LOCAL stem by
+            // construction — never the entry node's id.
+            let model_id = advertised_model_id;
             // Resolve the embed family from the bundled manifest so
             // pooling + normalisation match whatever the desktop
             // path would advertise for the same GGUF. Without this,
@@ -1995,14 +2018,10 @@ pub(super) async fn setup_watched_folders(
             // fresh setup with no models picked, fall back
             // to empty strings so the driver returns a clear
             // "defaults not installed" error to the UI.
-            fn id_from_path(p: &std::path::Path) -> String {
-                p.file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("")
-                    .to_string()
-            }
-            let chat_model = id_from_path(&config.models.primary);
-            let embed_model = id_from_path(&config.models.embed);
+            // Empty on a terminal, which the `!is_empty()` guard below
+            // already treats as "don't wire enrichment defaults".
+            let chat_model = config.primary_model_stem().unwrap_or_default();
+            let embed_model = config.embed_model_stem().unwrap_or_default();
             if !chat_model.is_empty() && !embed_model.is_empty() {
                 let base_url = format!("http://127.0.0.1:{}", config.daemon.client_port);
                 manager
@@ -2046,7 +2065,7 @@ pub(super) async fn setup_watched_folders(
                 &manager,
                 data_dir,
                 format!("http://127.0.0.1:{}", config.daemon.client_port),
-                id_from_path(&config.models.primary),
+                config.primary_model_stem().unwrap_or_default(),
             )
             .await;
             // Living trigger: workflows attached to a watched folder
@@ -2666,5 +2685,92 @@ mod rpc_worker_flag_tests {
             rpc_worker_flag(&args(&["--rpc-worker", "192.168.1.2:50052"])).expect("parsed once");
         let forwarded = args(&["run", &format!("--rpc-worker={bind}")]);
         assert_eq!(rpc_worker_flag(&forwarded), Some(bind));
+    }
+}
+
+#[cfg(test)]
+mod advertise_tests {
+    use super::*;
+    use sovereign_core::setup_config::SetupConfig;
+    use sovereign_core::traits::InferenceProvider;
+    use sovereign_core::types::{CompletionRequest, CompletionResponse, Depth, Speed};
+
+    /// A provider whose embed probe SUCCEEDS while owning no weights — the
+    /// terminal's actual shape, since `SplitInferenceProvider` forwards the
+    /// probe to the entry node and returns a perfectly good vector.
+    ///
+    /// This is the whole point of the test: the probe cannot be the thing that
+    /// decides whether to advertise, because on a terminal it answers a
+    /// question about somebody else's machine.
+    struct ForwardingProbe;
+
+    #[async_trait::async_trait]
+    impl InferenceProvider for ForwardingProbe {
+        async fn complete(
+            &self,
+            _request: &CompletionRequest,
+        ) -> sovereign_core::error::Result<CompletionResponse> {
+            unreachable!("advertise_embed_model never completes a turn")
+        }
+
+        async fn complete_stream(
+            &self,
+            _request: &CompletionRequest,
+        ) -> sovereign_core::error::Result<
+            std::pin::Pin<
+                Box<
+                    dyn futures::Stream<Item = sovereign_core::error::Result<String>>
+                        + Send
+                        + 'static,
+                >,
+            >,
+        > {
+            unreachable!("advertise_embed_model never streams")
+        }
+
+        async fn embed(&self, _text: &str) -> sovereign_core::error::Result<Vec<f32>> {
+            Ok(vec![0.0; 1024])
+        }
+
+        fn capabilities(&self) -> sovereign_core::types::ProviderCapabilities {
+            sovereign_core::types::ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: false,
+                relative_speed: Speed::Fast,
+                relative_reasoning: Depth::Moderate,
+            }
+        }
+    }
+
+    /// A terminal advertises NO embed model, even though its probe answers.
+    ///
+    /// Before the guard, `model_id` was resolved as `stem → entry_embed_model`,
+    /// so this node published its ENTRY node's model as its own capability —
+    /// and `capabilities.rs` filters collaborative-ingestion candidates by
+    /// exact match on that field, so the planner would partition chunks onto a
+    /// machine that can only proxy each one back to the node it was spreading
+    /// load off (§18.3).
+    #[tokio::test]
+    async fn a_terminal_advertises_no_embed_model_even_though_its_probe_answers() {
+        let mut cfg = SetupConfig::unconfigured();
+        cfg.node.entry = Some("http://halo:9741/v1".into());
+        cfg.node.entry_embed_model = Some("qwen3-embedding-0.6b".into());
+
+        let ad = advertise_embed_model(Arc::new(ForwardingProbe), &cfg, ModelFamily::Unknown).await;
+
+        assert!(
+            ad.info().is_none(),
+            "a terminal published an embed capability it does not hold: {:?}",
+            ad.info().map(|i| i.model_id.clone()),
+        );
+        match ad {
+            sovereign_mesh::EmbedAdvertisement::Unavailable { reason } => assert!(
+                reason.contains("terminal") && reason.contains("halo"),
+                "the absence must say WHY and name the entry node, got: {reason}"
+            ),
+            sovereign_mesh::EmbedAdvertisement::Advertised(_) => {
+                unreachable!("asserted absent above")
+            }
+        }
     }
 }

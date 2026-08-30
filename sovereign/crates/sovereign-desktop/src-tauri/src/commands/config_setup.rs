@@ -340,7 +340,7 @@ pub async fn get_setup_context_size(
     state: State<'_, Arc<AppState>>,
 ) -> Result<SetupContextWindow, String> {
     let configured = sovereign_core::setup_config::SetupConfig::load()
-        .map(|c| c.models.effective_context_size())
+        .map(|c| c.effective_context_size())
         .unwrap_or(16384);
     let (effective, n_ctx_train) = match state.inference.read().await.as_ref() {
         Some(inf) => (inf.effective_context_size(), inf.n_ctx_train_for_primary()),
@@ -407,7 +407,11 @@ pub async fn set_setup_context_size(
             SetupConfig {
                 compute: Default::default(),
                 search: Default::default(),
-                models: sovereign_core::setup_config::ModelsSection {
+                // The wizard is about to fill these in; an all-empty
+                // section is what "the user has not chosen models yet" has
+                // always meant on this path, and it is NOT the terminal
+                // class (which is `None` plus an entry node).
+                models: Some(sovereign_core::setup_config::ModelsSection {
                     primary: std::path::PathBuf::new(),
                     fast: None,
                     embed: std::path::PathBuf::new(),
@@ -418,7 +422,8 @@ pub async fn set_setup_context_size(
                     max_extras_memory_gb: None,
                     primary_pool: None,
                     edit: None,
-                },
+                }),
+                node: Default::default(),
                 daemon: Default::default(),
                 data: sovereign_core::setup_config::DataSection { dir: data_dir },
                 watched_folders: Default::default(),
@@ -431,7 +436,7 @@ pub async fn set_setup_context_size(
         }
     };
 
-    cfg.models.context_size = Some(new_ctx);
+    cfg.models.get_or_insert_with(Default::default).context_size = Some(new_ctx);
     let path = cfg.save().map_err(|e| format!("save SetupConfig: {e}"))?;
     tracing::info!(
         new_ctx,
@@ -521,7 +526,7 @@ pub(crate) fn write_model_slots_to_setup(
         Err(_) => SetupConfig {
             compute: Default::default(),
             search: Default::default(),
-            models: ModelsSection {
+            models: Some(ModelsSection {
                 primary: primary_path.clone(),
                 fast: fast_field.clone(),
                 embed: embed.clone(),
@@ -532,7 +537,8 @@ pub(crate) fn write_model_slots_to_setup(
                 max_extras_memory_gb: None,
                 primary_pool: None,
                 edit: None,
-            },
+            }),
+            node: Default::default(),
             daemon: Default::default(),
             data: DataSection { dir: data_dir },
             watched_folders: Default::default(),
@@ -543,10 +549,12 @@ pub(crate) fn write_model_slots_to_setup(
             mcp_servers: Vec::new(),
         },
     };
-    cli.models.primary = primary_path;
-    cli.models.fast = fast_field;
-    cli.models.embed = embed;
-    cli.models.code = code;
+    // The desktop wizard is choosing local models, so this node holds them.
+    let models = cli.models.get_or_insert_with(Default::default);
+    models.primary = primary_path;
+    models.fast = fast_field;
+    models.embed = embed;
+    models.code = code;
     cli.save()
 }
 
@@ -560,8 +568,11 @@ pub async fn get_setup_model_slots(
     let code_family = state.config.read().await.code_family.clone();
     let show = |p: &std::path::Path| p.display().to_string();
     match sovereign_core::setup_config::SetupConfig::load() {
-        Ok(cfg) => {
-            let m = &cfg.models;
+        // A terminal falls through to the empty arm below: the panel's
+        // "no slots" rendering is already the right answer for a node that
+        // holds none, and it is the same shape as pre-wizard.
+        Ok(cfg) if cfg.models.is_some() => {
+            let m = cfg.models.as_ref().expect("matched Some above");
             Ok(SetupModelSlots {
                 // EXPLICIT fast only — empty when subsumed by primary.
                 // Returning the resolved `fast_path()` here materializes
@@ -577,7 +588,7 @@ pub async fn get_setup_model_slots(
                 code_family,
             })
         }
-        Err(_) => Ok(SetupModelSlots {
+        Ok(_) | Err(_) => Ok(SetupModelSlots {
             fast: String::new(),
             primary: None,
             embed: None,
@@ -747,21 +758,37 @@ pub async fn complete_setup(
     let fast: Option<std::path::PathBuf> = if !setup.model_path.is_empty() {
         Some(setup.model_path.clone().into())
     } else {
-        cli_cfg.as_ref().map(|c| c.models.fast_path().to_path_buf())
+        cli_cfg
+            .as_ref()
+            .and_then(|c| c.models.as_ref())
+            .map(|m| m.fast_path().to_path_buf())
     };
     let primary: Option<std::path::PathBuf> = setup
         .primary_model_path
         .clone()
         .map(std::path::PathBuf::from)
-        .or_else(|| cli_cfg.as_ref().map(|c| c.models.primary.clone()));
+        .or_else(|| {
+            cli_cfg
+                .as_ref()
+                .and_then(|c| c.models.as_ref())
+                .map(|m| m.primary.clone())
+        });
     let embed: std::path::PathBuf = setup
         .embed_model_path
         .clone()
         .map(std::path::PathBuf::from)
-        .or_else(|| cli_cfg.as_ref().map(|c| c.models.embed.clone()))
+        .or_else(|| {
+            cli_cfg
+                .as_ref()
+                .and_then(|c| c.models.as_ref())
+                .map(|m| m.embed.clone())
+        })
         .unwrap_or_default();
     // The DTO carries no code slot — preserve any existing one.
-    let code: Option<std::path::PathBuf> = cli_cfg.as_ref().and_then(|c| c.models.code.clone());
+    let code: Option<std::path::PathBuf> = cli_cfg
+        .as_ref()
+        .and_then(|c| c.models.as_ref())
+        .and_then(|m| m.code.clone());
 
     let mut config = state.config.write().await;
     if let Some(dir) = setup.data_dir.clone() {

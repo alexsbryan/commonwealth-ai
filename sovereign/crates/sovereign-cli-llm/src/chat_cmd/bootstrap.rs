@@ -544,18 +544,8 @@ struct ConfigModelStems {
 fn chat_and_embed_stems_from_config() -> Option<ConfigModelStems> {
     let cfg = sovereign_core::setup_config::SetupConfig::load().ok()?;
     Some(ConfigModelStems {
-        chat: cfg
-            .models
-            .primary
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .map(|s| s.to_string()),
-        embed: cfg
-            .models
-            .embed
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .map(|s| s.to_string()),
+        chat: cfg.primary_model_stem(),
+        embed: cfg.embed_model_stem(),
     })
 }
 

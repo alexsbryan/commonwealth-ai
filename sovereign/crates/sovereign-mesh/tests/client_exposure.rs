@@ -27,7 +27,7 @@ fn cfg_with_ports(client_port: u16, internal_port: u16) -> SetupConfig {
     SetupConfig {
         compute: Default::default(),
         search: Default::default(),
-        models: ModelsSection {
+        models: Some(ModelsSection {
             primary: PathBuf::from("/models/primary.gguf"),
             fast: Some(PathBuf::from("/models/fast.gguf")),
             embed: PathBuf::from("/models/embed.gguf"),
@@ -38,7 +38,8 @@ fn cfg_with_ports(client_port: u16, internal_port: u16) -> SetupConfig {
             extra: BTreeMap::new(),
             primary_pool: None,
             edit: None,
-        },
+        }),
+        node: Default::default(),
         daemon: DaemonSection {
             client_port,
             internal_port,

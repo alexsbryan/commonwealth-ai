@@ -171,6 +171,14 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-mesh/src/model_fetch.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-mesh/src/loopback_guard.rs", Class::Mesh, 3),
     ("sovereign/crates/sovereign-mesh/src/peer_inference.rs", Class::Mesh, 2),
+    // setup_cmd/terminal.rs (2026-08-30, the `terminal` node class): ONE
+    // client, used twice against the ENTRY NODE the operator just named on the
+    // command line — `GET /status` to read its embed model id, and one
+    // `POST /v1/chat/completions` to prove a turn actually comes back served.
+    // Mesh, not third-party: the entry node is a peer on the operator's own
+    // mesh, addressed by an address they typed, and the only payload that
+    // leaves is a fixed four-word probe prompt with no estate content in it.
+    ("sovereign/crates/sovereign-cli-daemon/src/setup_cmd/terminal.rs", Class::Mesh, 1),
     // guest_lender.rs (2026-08-28, order mesh-guest-grant): resolving a model
     // id to a node this one holds a GUEST GRANT with, so a guest's turn runs
     // on their own daemon and only the completion crosses. ONE site — the

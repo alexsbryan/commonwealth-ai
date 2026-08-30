@@ -244,24 +244,29 @@ pub fn render_report(inp: &ReportInputs<'_>) -> String {
 
     out.push_str("## Daemon config (redacted)\n\n");
     match config {
-        Some(c) => {
+        // A terminal has no slots to redact; say so rather than print four
+        // blank backticked paths, which triage would read as a broken config.
+        Some(c) if c.models.is_none() => {
             out.push_str(&format!(
-                "- Primary model: `{}`\n",
-                basename(&c.models.primary)
+                "- Holds no models (terminal); entry node: `{}`\n",
+                c.node.entry.as_deref().unwrap_or("<unset>")
             ));
+            out.push_str(&format!("- Client port: `{}`\n", c.daemon.client_port));
+            out.push_str(&format!("- Internal port: `{}`\n", c.daemon.internal_port));
+        }
+        Some(c) => {
+            let m = c.models.as_ref().expect("matched Some above");
+            out.push_str(&format!("- Primary model: `{}`\n", basename(&m.primary)));
             // Show the explicit fast GGUF when one is configured;
             // otherwise tell triage that primary is doing double duty
             // so they don't go hunting for a fast-slot misconfig.
-            if c.models.has_explicit_fast() {
-                out.push_str(&format!(
-                    "- Fast model: `{}`\n",
-                    basename(c.models.fast_path())
-                ));
+            if m.has_explicit_fast() {
+                out.push_str(&format!("- Fast model: `{}`\n", basename(m.fast_path())));
             } else {
                 out.push_str("- Fast model: <subsumed by primary>\n");
             }
-            out.push_str(&format!("- Embed model: `{}`\n", basename(&c.models.embed)));
-            if let Some(code) = &c.models.code {
+            out.push_str(&format!("- Embed model: `{}`\n", basename(&m.embed)));
+            if let Some(code) = &m.code {
                 out.push_str(&format!("- Code model: `{}`\n", basename(code)));
             }
             out.push_str(&format!("- Client port: `{}`\n", c.daemon.client_port));
@@ -503,7 +508,7 @@ mod tests {
         SetupConfig {
             compute: Default::default(),
             search: Default::default(),
-            models: ModelsSection {
+            models: Some(ModelsSection {
                 primary: "/home/alex/.sovereign/models/Darwin-36B.gguf".into(),
                 fast: Some("/home/alex/.sovereign/models/Qwen3-2B.gguf".into()),
                 embed: "/home/alex/.sovereign/models/embed.gguf".into(),
@@ -514,7 +519,8 @@ mod tests {
                 extra: BTreeMap::new(),
                 primary_pool: None,
                 edit: None,
-            },
+            }),
+            node: Default::default(),
             daemon: DaemonSection {
                 client_port: 9741,
                 internal_port: 9742,

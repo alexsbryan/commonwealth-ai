@@ -43,15 +43,19 @@ impl ProviderFactory for LlamaCppFactory {
         // size or auto-gpu-layer behaviour. Pulls context size and
         // idle timeout from `cfg` for the same reason: a hot-reload
         // shouldn't drop the operator's tuned values.
+        // Only a holder has an engine to rebuild. A terminal's provider is a
+        // forwarder built once against its entry node; there is nothing here to
+        // hot-reload, and refusing by name beats loading empty paths.
+        let models = cfg.models()?;
         let provider = EmbeddedLlamaCpp::load_full_with_families(
-            cfg.models.fast_path(),
-            Some(&cfg.models.primary),
-            Some(&cfg.models.embed),
-            cfg.models.code.as_deref(),
+            models.fast_path(),
+            Some(&models.primary),
+            Some(&models.embed),
+            models.code.as_deref(),
             // Per-slot windows (2026-08-25). `from_models` honours
             // `[models].fast_context_size` and falls back to the primary's
             // window when it is unset, so an existing config.toml is unchanged.
-            sovereign_inference::embedded::SlotWindows::from_models(&cfg.models),
+            sovereign_inference::embedded::SlotWindows::from_models(models),
             None,
             ModelFamily::Unknown,
             ModelFamily::Unknown,

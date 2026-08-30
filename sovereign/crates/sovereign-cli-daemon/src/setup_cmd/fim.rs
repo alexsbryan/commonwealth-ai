@@ -285,7 +285,7 @@ async fn build_plan(opts: &Opts) -> Result<Plan, String> {
     // all — the daemon simply refuses to start without one.
     let existing_embed = existing_cfg
         .as_ref()
-        .map(|c| c.models.embed.clone())
+        .and_then(|c| c.models.as_ref().map(|m| m.embed.clone()))
         .filter(|p| file_is_present(p));
     let (embed_download, embed_path) = match existing_embed {
         Some(p) => (None, p),
@@ -298,10 +298,15 @@ async fn build_plan(opts: &Opts) -> Result<Plan, String> {
         }
     };
 
-    let existing = existing_cfg.as_ref().map(|c| ExistingConfig {
-        primary: c.models.primary.clone(),
-        fim_path: c.models.edit.as_ref().map(|f| f.path.clone()),
-    });
+    // `--fim` edits a slot table, so it needs one: a terminal has no
+    // `[models]` to add `[models.edit]` to.
+    let existing = existing_cfg
+        .as_ref()
+        .and_then(|c| c.models.as_ref())
+        .map(|m| ExistingConfig {
+            primary: m.primary.clone(),
+            fim_path: m.edit.as_ref().map(|f| f.path.clone()),
+        });
 
     Ok(Plan {
         profile,
@@ -542,8 +547,13 @@ fn write_config(plan: &Plan) -> Result<(), String> {
     // at the cost of the user's chat model. The editing model is
     // 1.54 GB now, so it is pinned as its own slot and the chat
     // model survives: primary + fast + embed + edit.
-    cfg.models.embed = plan.embed_path.clone();
-    cfg.models.edit = Some(fim);
+    // `--fim` requires an existing slot table; `plan` was built from one.
+    let models = cfg
+        .models
+        .as_mut()
+        .ok_or("`svrn setup --fim` needs a node that holds models — a terminal has no [models] to add an editing slot to")?;
+    models.embed = plan.embed_path.clone();
+    models.edit = Some(fim);
 
     let path = cfg.save()?;
     println!("    \u{2713} Wrote {}", path.display());

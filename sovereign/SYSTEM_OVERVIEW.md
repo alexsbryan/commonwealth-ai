@@ -4869,7 +4869,39 @@ atlas store in memory, so CLI claims never gossip; CLEANUP), `features.db`
 symlink the migrator leaves behind (`rebrand::run_startup_migration`); on this
 host the migration has run. Key members: `config.toml` (`SetupConfig` — THE
 per-user config; note the accumulating `config.toml.bak-*` experiment
-siblings), `work-atlas.toml` (atlas node config + privacy default),
+siblings. **`[models]` is OPTIONAL since 2026-08-30**: absent — or present but
+naming no primary — plus a `[node] entry`, is `NodeClass::Terminal`: a full mesh
+member that holds no weights and forwards every turn and every embedding to the
+named entry node over HTTP. The class is DERIVED by `SetupConfig::node_class()`,
+never stored, and judged on CONTENT via `ModelsSection::is_populated()` — a
+`[models]` table the desktop wizard wrote mid-flight names nothing and is
+`Unconfigured`, not a `Holder` holding nothing. Loadability is a SEPARATE
+question with its own implementation: `validate_class` stays presence-based so
+that mid-wizard file keeps loading, while refusing one that declares neither a
+table nor an entry. `models()` (and `models_mut()`) return a named refusal that
+distinguishes a terminal from an unconfigured node and never hand back empty
+paths. A terminal plans zero VRAM slots (`capacity::build_slots_from_config`),
+registers no local models (`daemon::register_local_model_slots`), advertises no
+models to peers (`build_self_manifest` gates candidacy on `resident_slots()`
+being non-empty) and **no embed model either** (`advertise_embed_model` returns
+`EmbedAdvertisement::Unavailable` BEFORE probing, because on a terminal the
+probe succeeds by forwarding and would publish the entry node's model as this
+node's own — the collaborative-ingestion planner filters candidates by exact
+match on that field), and gets a `SplitInferenceProvider` instead of an
+`EmbeddedLlamaCpp` — so the daemon's engine handle is `Option`. Two accessors
+keep the embed question honest: `local_embed_model_id()` (the space this node's
+own text lands in — the entry node's, on a terminal) and
+`advertised_embed_model_id()` (what it offers peers — `None` on a terminal).
+Written by `svrn setup --terminal <entry>`, which probes the entry node's
+`/status` for its embed model id and refuses unless one real turn comes back
+served. The class is reported by `svrn doctor` (`node_class` check) and on
+`GET /v1/mesh/status` (`node_class` / `entry_node`, local-only, never gossiped),
+because after the residency gate a terminal and a holder whose slots failed to
+load both advertise nothing. `[node] entry` is an HTTP base URL and NOT a node
+id — a known §7.5 debt with a row in `DEFAULTS_LEDGER.md`. Design + the naming
+collision with `SharedModelRole::Consumer`:
+`docs/specs/MESH_N4_TOPOLOGY.md` §4.5),
+`work-atlas.toml` (atlas node config + privacy default),
 `projects.json` (project registry — writer `sovereign project register` and
 readers now share one accessor), `~/.svrnmesh/indexes/<corpus>/` (LanceDB
 chunks, `scip_graph.db`, atlas), `~/.svrnmesh/drift/` (drift-report mirror),

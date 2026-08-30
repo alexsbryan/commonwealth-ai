@@ -25,6 +25,67 @@ use super::{registered_root, CheckResult, CheckStatus, Layer, Repair};
 /// request and returns an error body is DOWN, and nothing else we run can see
 /// that (ARCH §18.1: a gate you have not watched fail is not a gate — this one
 /// was watched failing in production before it was written).
+/// What kind of participant this node is, and whether that is a coherent state.
+///
+/// Reported because nothing else on this page can distinguish the two ways a
+/// node ends up advertising no models. Since routing candidacy began keying on
+/// residency, a `terminal` and a holder whose slots failed to load look
+/// identical from the mesh — and they want opposite repairs (§18.2: a
+/// could-not-judge is not a failure, and a working-as-configured is neither).
+///
+/// Local config only, so it answers with the daemon down. `terminal` PASSES:
+/// holding no weights is the configured state, not a defect.
+pub(super) fn check_node_class() -> CheckResult {
+    use sovereign_core::setup_config::{NodeClass, SetupConfig};
+    const NAME: &str = "node_class";
+
+    let cfg = match SetupConfig::load() {
+        Ok(c) => c,
+        Err(e) => {
+            return CheckResult {
+                name: NAME,
+                layer: Layer::Sovereign,
+                status: CheckStatus::Skipped,
+                message: format!("could not read config: {e}"),
+                repair: Repair::None,
+            }
+        }
+    };
+
+    match cfg.node_class() {
+        NodeClass::Holder => CheckResult {
+            name: NAME,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Passed,
+            message: "holder — serves turns from its own model slots".to_string(),
+            repair: Repair::None,
+        },
+        NodeClass::Terminal => CheckResult {
+            name: NAME,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Passed,
+            message: format!(
+                "terminal — holds no models by design; every turn and embedding \
+                 routes to {}. An empty model lineup here is correct, not broken.",
+                cfg.node.entry.as_deref().unwrap_or("<unset>"),
+            ),
+            repair: Repair::None,
+        },
+        NodeClass::Unconfigured => CheckResult {
+            name: NAME,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Failed,
+            message: "unconfigured — this node names neither a usable `[models]` \
+                      primary nor a `[node] entry`, so it can neither serve a turn \
+                      nor route one"
+                .to_string(),
+            repair: Repair::Executable(
+                "svrn setup   # or: svrn setup --terminal <entry> to route to a peer".to_string(),
+            ),
+        },
+    }
+}
+
 pub(super) async fn check_embed_slot() -> CheckResult {
     const NAME: &str = "embed_slot";
     let repair = Repair::Executable("sovereign daemon stop && sovereign daemon start".to_string());

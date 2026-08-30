@@ -298,15 +298,25 @@ pub fn check_fit(slots: &[SlotPlan], hw: &HardwareProfile) -> CapacityReport {
 /// dependency arrow runs core ← inference ← mesh; reaching the
 /// other way would cycle.
 pub fn build_slots_from_config(cfg: &sovereign_core::setup_config::SetupConfig) -> Vec<SlotPlan> {
+    // A node with no `[models]` loads no slots, so it plans none. Empty is the
+    // whole answer for a `terminal`: `check_fit` over zero slots requires zero
+    // bytes and therefore FITS, which is what lets the daemon boot on a machine
+    // that will never hold a GGUF. It is also why the terminal path does not
+    // need `SOVEREIGN_SKIP_VRAM_CHECK` — nothing is being skipped, there is
+    // genuinely nothing to weigh.
+    let Some(models) = cfg.models.as_ref() else {
+        return Vec::new();
+    };
+
     // Primary's context is the operator-configured one; everything
     // else stays at 8K (fast/embed don't benefit from long ctx and
     // would balloon KV cache estimates well past their real cost).
-    let primary_ctx = cfg.models.effective_context_size();
+    let primary_ctx = models.effective_context_size();
 
     let mut slots = Vec::new();
     slots.push(SlotPlan {
         role: "primary".into(),
-        path: cfg.models.primary.clone(),
+        path: models.primary.clone(),
         n_seq_max: 1,
         n_ctx: primary_ctx,
     });
@@ -316,21 +326,21 @@ pub fn build_slots_from_config(cfg: &sovereign_core::setup_config::SetupConfig) 
     // skipped. (The primary SlotPlan already covers the weights;
     // primary's KV cache also handles the few extra concurrent
     // short calls fast normally would.)
-    if cfg.models.has_explicit_fast() {
+    if models.has_explicit_fast() {
         slots.push(SlotPlan {
             role: "fast".into(),
-            path: cfg.models.fast_path().to_path_buf(),
+            path: models.fast_path().to_path_buf(),
             n_seq_max: 8,
             n_ctx: 8_192,
         });
     }
     slots.push(SlotPlan {
         role: "embed".into(),
-        path: cfg.models.embed.clone(),
+        path: models.embed.clone(),
         n_seq_max: 8,
         n_ctx: 8_192,
     });
-    if let Some(code) = &cfg.models.code {
+    if let Some(code) = &models.code {
         slots.push(SlotPlan {
             role: "code".into(),
             path: code.clone(),
@@ -338,7 +348,7 @@ pub fn build_slots_from_config(cfg: &sovereign_core::setup_config::SetupConfig) 
             n_ctx: primary_ctx,
         });
     }
-    if let Some(pool) = &cfg.models.primary_pool {
+    if let Some(pool) = &models.primary_pool {
         for i in 0..pool.copies {
             slots.push(SlotPlan {
                 role: format!("primary_pool[{i}]"),
@@ -348,7 +358,7 @@ pub fn build_slots_from_config(cfg: &sovereign_core::setup_config::SetupConfig) 
             });
         }
     }
-    for (name, path) in &cfg.models.extra {
+    for (name, path) in &models.extra {
         slots.push(SlotPlan {
             role: format!("extras:{name}"),
             path: path.clone(),

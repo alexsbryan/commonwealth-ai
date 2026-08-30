@@ -9,6 +9,7 @@ use super::Opts;
 
 pub(super) fn parse_args(args: &[String]) -> Result<Opts, String> {
     let mut opts = Opts {
+        terminal: None,
         reset: false,
         yes: false,
         data_dir: None,
@@ -22,6 +23,18 @@ pub(super) fn parse_args(args: &[String]) -> Result<Opts, String> {
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
+            "--terminal" => {
+                i += 1;
+                opts.terminal = Some(
+                    args.get(i)
+                        .ok_or_else(|| {
+                            "--terminal needs the entry node's address (e.g. \
+                             http://halo:9741)"
+                                .to_string()
+                        })?
+                        .clone(),
+                );
+            }
             "--reset" => opts.reset = true,
             "--yes" | "-y" => opts.yes = true,
             "--repair" => opts.repair = true,
@@ -58,6 +71,11 @@ pub(super) fn parse_args(args: &[String]) -> Result<Opts, String> {
         }
         i += 1;
     }
+    if opts.terminal.is_some() && opts.fim {
+        return Err(
+            "--terminal and --fim are different destinations; run them separately".to_string(),
+        );
+    }
     if opts.quant.is_some() && !opts.fim {
         return Err("--quant only applies to --fim".to_string());
     }
@@ -85,10 +103,19 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage(
             "svrn setup [--yes] [--reset] [--data-dir <path>]\n\
+             svrn setup --terminal <entry> [--reset] [--data-dir <path>]\n\
              svrn setup --fim [--quant <rung>] [--yes] [--skip-editor]",
         ),
         sovereign_cli_shared::help::HelpSection::Flags(&[
             ("--yes, -y", "Non-interactive; accept recommended choices"),
+            (
+                "--terminal <entry>",
+                "Set up a node that holds NO models: downloads nothing, writes no \
+                 [models], and routes every turn and embedding to <entry> (e.g. \
+                 http://halo:9741). Probes the entry node and proves one served turn \
+                 before reporting success. Follow with `svrn mesh join` to become a \
+                 full member",
+            ),
             (
                 "--reset",
                 "Wipe config and re-run (uninstalls service first if present)",

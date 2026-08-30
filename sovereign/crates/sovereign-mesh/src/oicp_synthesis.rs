@@ -126,6 +126,40 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
     // Cheap and non-blocking: the provider's implementation is `try_lock`
     // throughout and never forces a load to answer.
     let slots = provider.resident_slots();
+
+    // A provider that reports NO slots at all owns no weights, and a node that
+    // owns no weights advertises nothing.
+    //
+    // Every push site below keys off a NAME (`model_id_for`, `code_model_id`,
+    // `extras_inventory`), and a forwarding provider answers those with the id
+    // it *asks a remote for* — `SplitInferenceProvider::model_id_for` returns
+    // `chat_model_id` (`oicp-client/src/lib.rs:1488`). Without this gate a
+    // `terminal`-class daemon, the CLI's chat bootstrap, or the attach-mode
+    // desktop would advertise its entry node's model as its own, and peers
+    // would route real traffic to a node that holds nothing. That is §10.6's
+    // slot-alias incident in a new place: a plausible manifest, HTTP 200, and
+    // the wrong node serving.
+    //
+    // The gate is emptiness, never per-model residency. `resident_slots()`
+    // lists every CONFIGURED slot with `resident` as a flag — a lazily-unloaded
+    // primary is present and cold — so this does not narrow what a holder
+    // advertises, and a slot the provider under-reports still reads cold via
+    // `status_for` rather than disappearing (§18.3).
+    //
+    // Placed here rather than at the five push sites deliberately: a sixth site
+    // added later inherits it (§7.1), which is exactly the drift
+    // `every_advertised_model_carries_a_status_reading` exists to catch.
+    if slots.is_empty() {
+        // INFO, not silence: "advertised nothing because it holds nothing" and
+        // "failed to build a manifest" are indistinguishable in a quiet log,
+        // and the first is the terminal's normal steady state (§9.1).
+        tracing::info!(
+            provider_names_a_model = %provider.model_id_for(Speed::Slow),
+            "build_self_manifest: provider reports no resident slots — this node \
+             holds no weights and advertises no models"
+        );
+        return manifest_of(resolve_primary_model_name(provider), Vec::new());
+    }
     // Speed::Fast first, then Speed::Slow. Iterating in this order
     // means that if Fast and Slow resolve to the same underlying
     // model name (e.g. a stripped-down test harness that only
@@ -410,6 +444,18 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
     // (~28 GB primary) so peers attributed every reply to the
     // code model.
     let provider_name = resolve_primary_model_name(provider);
+    manifest_of(provider_name, models)
+}
+
+/// Wrap an advertised model set in the manifest envelope.
+///
+/// The ONE construction site for `ProviderManifest` in this module, shared by
+/// the ordinary path and the holds-no-weights early return above. Split out so
+/// the envelope — version, provider type, and especially the `features` list —
+/// cannot drift between them: a node advertising zero models must still
+/// negotiate features identically to one advertising five, or peers would read
+/// its capability set as a downgrade rather than as an empty inventory.
+fn manifest_of(provider_name: String, models: Vec<ProviderModel>) -> ProviderManifest {
     ProviderManifest {
         oicp_version: OICP_VERSION.to_string(),
         provider: Some(ProviderInfo {
@@ -693,6 +739,42 @@ mod self_manifest_tests {
         );
     }
 
+    /// A provider that holds NO weights advertises NOTHING — not a slot row,
+    /// not an alias.
+    ///
+    /// `SplitInferenceProvider` (the CLI's chat bootstrap, the desktop's attach
+    /// mode, and a `terminal`-class daemon) forwards over HTTP and owns no
+    /// GGUF, so `resident_slots()` is empty while `model_id_for` still returns
+    /// the id it *asks the remote for*. Keying candidacy on the name therefore
+    /// makes a node advertise a model it cannot serve, and peers route real
+    /// traffic to it — §10.6's slot-alias incident in a new place.
+    ///
+    /// The gate is "reports NO slots at all", never "this model is not resident
+    /// right now". `resident_slots()` lists every CONFIGURED slot, cold ones
+    /// included (`ResidentSlot::resident` carries the state), so a holder whose
+    /// primary is idle-unloaded still advertises it — and a slot the provider
+    /// under-reports still reads cold rather than vanishing. Those two are
+    /// pinned from the other side by
+    /// `manifest_reports_indeterminate_and_absent_residency_as_cold`.
+    #[test]
+    fn weightless_provider_advertises_no_models_at_all() {
+        let stub = SlotStub {
+            fast_id: "fast.Q4_0",
+            primary_id: "primary.Q5_K_M",
+            code_id: None,
+            // The weightless case: names resolve, residency is empty.
+            slots: &[],
+        };
+        let manifest = build_self_manifest(&stub);
+        assert!(
+            manifest.models.is_empty(),
+            "a provider holding no weights advertised {} model(s) — peers would \
+             route to a node that cannot serve them: {:#?}",
+            manifest.models.len(),
+            manifest.models,
+        );
+    }
+
     #[test]
     fn manifest_advertises_embedded_features_over_gossip() {
         // SLOT_POLICY §6: the gossip manifest must carry the embedded
@@ -904,7 +986,16 @@ mod self_manifest_tests {
             fast_id: "fast.Q4_0",
             primary_id: "primary.Q5_K_M",
             code_id: Some("qwen-coder-32b-instruct.Q4_K_M"),
-            slots: &[],
+            // Slots CONFIGURED, none of them warm. This used to be `&[]`, which
+            // now means "holds no weights" and advertises nothing — the guard
+            // would go vacuous rather than red. Cold-but-present is also the
+            // more faithful setup for what this test is about: a node whose
+            // lazy slots are idle-unloaded, where every row must read its
+            // residency instead of asserting it.
+            slots: &[
+                ("fast.Q4_0", false, false),
+                ("primary.Q5_K_M", false, false),
+            ],
         };
         let manifest = build_self_manifest(&stub);
         assert!(

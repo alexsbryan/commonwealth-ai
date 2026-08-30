@@ -297,7 +297,14 @@ struct GenIroh {
 /// selection happens daemon-side via the OICP `latency_class` the Runtime's
 /// `preferred_speed` maps to, so no per-request `model_id` is needed.
 pub fn generate_server_toml(setup: &SetupConfig, mh: &MobileHostConfig) -> Result<String, String> {
-    let ctx = setup.models.effective_context_size();
+    // A terminal holds no slots to describe, and the mobile host's config
+    // needs concrete `model` / `embed_model` paths for its metadata even
+    // though the remote backend is what actually serves. Refuse by name
+    // rather than emit empty paths (§18.3); pointing a phone at a node that
+    // forwards to another node is a real shape, but it needs its own config,
+    // not this one with two blanks in it.
+    let models = setup.models()?;
+    let ctx = models.effective_context_size();
     let daemon_endpoint = format!("http://127.0.0.1:{}/v1", setup.daemon.client_port);
     let store_path = setup.data.dir.join("mobile-host.db");
 
@@ -315,8 +322,8 @@ pub fn generate_server_toml(setup: &SetupConfig, mh: &MobileHostConfig) -> Resul
             keys,
         },
         inference: GenInference {
-            model: setup.models.fast_path().display().to_string(),
-            embed_model: setup.models.embed.display().to_string(),
+            model: models.fast_path().display().to_string(),
+            embed_model: models.embed.display().to_string(),
             context_size: ctx,
             backends: vec![GenBackend {
                 name: "daemon".to_string(),
@@ -377,7 +384,7 @@ mod tests {
         SetupConfig {
             compute: Default::default(),
             search: Default::default(),
-            models: ModelsSection {
+            models: Some(ModelsSection {
                 primary: PathBuf::from("/m/primary.gguf"),
                 fast: Some(PathBuf::from("/m/fast.gguf")),
                 embed: PathBuf::from("/m/qwen-embedding-0.6b.gguf"),
@@ -388,7 +395,8 @@ mod tests {
                 max_extras_memory_gb: None,
                 primary_pool: None,
                 edit: None,
-            },
+            }),
+            node: Default::default(),
             daemon: DaemonSection::default(),
             data: DataSection {
                 dir: PathBuf::from("/home/u/.sovereign"),

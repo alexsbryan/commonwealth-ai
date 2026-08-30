@@ -346,7 +346,7 @@ mod tests {
         let cfg = SetupConfig {
             compute: Default::default(),
             search: Default::default(),
-            models: sovereign_core::setup_config::ModelsSection {
+            models: Some(sovereign_core::setup_config::ModelsSection {
                 primary: "/p".into(),
                 fast: Some("/f".into()),
                 embed: "/e".into(),
@@ -357,7 +357,8 @@ mod tests {
                 extra: std::collections::BTreeMap::new(),
                 primary_pool: None,
                 edit: None,
-            },
+            }),
+            node: Default::default(),
             daemon: sovereign_core::setup_config::DaemonSection {
                 client_port: 19_741,
                 internal_port: 19_742,

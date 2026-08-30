@@ -74,15 +74,19 @@ async fn cmd_set(args: &[String]) -> i32 {
         Ok(c) => c,
         Err(rc) => return rc,
     };
+    let models = match models_mut(&mut cfg) {
+        Ok(m) => m,
+        Err(rc) => return rc,
+    };
     let path = match resolve_model_path(spec) {
         Ok(p) => p,
         Err(rc) => return rc,
     };
     match slot {
-        "primary" => cfg.models.primary = path.clone(),
-        "embed" => cfg.models.embed = path.clone(),
-        "fast" => cfg.models.fast = Some(path.clone()),
-        "code" => cfg.models.code = Some(path.clone()),
+        "primary" => models.primary = path.clone(),
+        "embed" => models.embed = path.clone(),
+        "fast" => models.fast = Some(path.clone()),
+        "code" => models.code = Some(path.clone()),
         _ => unreachable!(),
     }
     apply(
@@ -105,9 +109,13 @@ async fn cmd_unset(args: &[String]) -> i32 {
         Ok(c) => c,
         Err(rc) => return rc,
     };
+    let models = match models_mut(&mut cfg) {
+        Ok(m) => m,
+        Err(rc) => return rc,
+    };
     match slot {
-        "fast" => cfg.models.fast = None,
-        "code" => cfg.models.code = None,
+        "fast" => models.fast = None,
+        "code" => models.code = None,
         "primary" | "embed" => {
             eprintln!("svrn model unset: '{slot}' is required and cannot be cleared (use `set` to change it)");
             return 2;
@@ -137,11 +145,15 @@ async fn cmd_set_extra(args: &[String]) -> i32 {
         Ok(c) => c,
         Err(rc) => return rc,
     };
+    let models = match models_mut(&mut cfg) {
+        Ok(m) => m,
+        Err(rc) => return rc,
+    };
     let path = match resolve_model_path(spec) {
         Ok(p) => p,
         Err(rc) => return rc,
     };
-    cfg.models.extra.insert(name.to_string(), path.clone());
+    models.extra.insert(name.to_string(), path.clone());
     apply(
         cfg,
         "models.extra",
@@ -162,7 +174,11 @@ async fn cmd_rm_extra(args: &[String]) -> i32 {
         Ok(c) => c,
         Err(rc) => return rc,
     };
-    if cfg.models.extra.remove(name).is_none() {
+    let models = match models_mut(&mut cfg) {
+        Ok(m) => m,
+        Err(rc) => return rc,
+    };
+    if models.extra.remove(name).is_none() {
         eprintln!("svrn model rm-extra: no extra slot named '{name}'");
         return 2;
     }
@@ -181,13 +197,17 @@ async fn cmd_context(args: &[String]) -> i32 {
         Ok(c) => c,
         Err(rc) => return rc,
     };
+    let models = match models_mut(&mut cfg) {
+        Ok(m) => m,
+        Err(rc) => return rc,
+    };
     let desc = if raw.eq_ignore_ascii_case("auto") || raw == "0" {
-        cfg.models.context_size = None;
+        models.context_size = None;
         "context_size → auto (default)".to_string()
     } else {
         match raw.parse::<u32>() {
             Ok(n) if n >= 512 => {
-                cfg.models.context_size = Some(n);
+                models.context_size = Some(n);
                 format!("context_size → {n}")
             }
             _ => {
@@ -204,6 +224,10 @@ async fn cmd_context(args: &[String]) -> i32 {
 async fn cmd_list() -> i32 {
     let cfg = match load_cfg() {
         Ok(c) => c,
+        Err(rc) => return rc,
+    };
+    let models = match models_of(&cfg) {
+        Ok(m) => m,
         Err(rc) => return rc,
     };
     let resident = fetch_resident().await; // None when the daemon isn't reachable
@@ -226,28 +250,28 @@ async fn cmd_list() -> i32 {
     println!("Models (from {})", SetupConfig::default_path().display());
     println!(
         "  primary  {}{}",
-        cfg.models.primary.display(),
-        mark(&cfg.models.primary)
+        models.primary.display(),
+        mark(&models.primary)
     );
-    match &cfg.models.fast {
+    match &models.fast {
         Some(p) => println!("  fast     {}{}", p.display(), mark(p)),
         None => println!("  fast     (subsumed by primary)"),
     }
     println!(
         "  embed    {}{}",
-        cfg.models.embed.display(),
-        mark(&cfg.models.embed)
+        models.embed.display(),
+        mark(&models.embed)
     );
-    match &cfg.models.code {
+    match &models.code {
         Some(p) => println!("  code     {}{}", p.display(), mark(p)),
         None => println!("  code     (none; primary handles code)"),
     }
-    for (name, p) in &cfg.models.extra {
+    for (name, p) in &models.extra {
         println!("  extra:{name}  {}{}", p.display(), mark(p));
     }
     println!(
         "  context  {}",
-        cfg.models
+        models
             .context_size
             .map(|n| n.to_string())
             .unwrap_or_else(|| "auto".to_string())
@@ -260,6 +284,30 @@ async fn cmd_list() -> i32 {
 }
 
 // ── shared: load, resolve, apply+reload ──────────────────────────────────────
+
+/// The slot table, or a refusal with an exit code.
+///
+/// `svrn model` is entirely about local slots, so on a terminal every one of
+/// its subcommands is meaningless rather than merely empty. Refusing by name
+/// beats printing a table of blanks (§18.3) — a user who ran `svrn model list`
+/// on a terminal and saw empty paths would reasonably conclude their config was
+/// corrupt.
+fn models_of(cfg: &SetupConfig) -> Result<&sovereign_core::setup_config::ModelsSection, i32> {
+    cfg.models().map_err(|e| {
+        eprintln!("svrn model: {e}");
+        2
+    })
+}
+
+/// As [`models_of`], for the subcommands that WRITE a slot.
+fn models_mut(
+    cfg: &mut SetupConfig,
+) -> Result<&mut sovereign_core::setup_config::ModelsSection, i32> {
+    cfg.models_mut().map_err(|e| {
+        eprintln!("svrn model: {e}");
+        2
+    })
+}
 
 fn load_cfg() -> Result<SetupConfig, i32> {
     if !SetupConfig::exists() {

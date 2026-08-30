@@ -992,7 +992,7 @@ async fn cmd_plan(args: &[String]) -> i32 {
     // reload paths use, so a plan and the load it previews cannot disagree
     // about KV size — which is part of the measurement key.
     let n_ctx = sovereign_core::setup_config::SetupConfig::load()
-        .map(|c| c.models.effective_context_size())
+        .map(|c| c.effective_context_size())
         .unwrap_or(16384);
 
     // llama.cpp's three-term projection (KV + compute per device) — the SAME
@@ -3122,6 +3122,8 @@ async fn cmd_status(args: &[String]) -> i32 {
             "members": members,
             "join_key": status.join_key,
             "join_link": status.join_link,
+            "node_class": status.node_class,
+            "entry_node": status.entry_node,
         });
         match serde_json::to_string_pretty(&filtered) {
             Ok(s) => println!("{s}"),
@@ -3147,6 +3149,24 @@ async fn cmd_status(args: &[String]) -> i32 {
         online = status.members_online,
         total = status.members_total,
     );
+    // This node's participant class, printed only when it is NOT the ordinary
+    // `holder` — a fleet of holders should not pay a line of noise for the
+    // common case, while the two classes that change what the node can do say
+    // so. `terminal` is the one an operator most needs: its members table looks
+    // identical to a broken holder's, because both advertise nothing.
+    //
+    // An older daemon sends no `node_class` at all and the field defaults to
+    // empty, which prints nothing rather than guessing "holder" (§18.3).
+    match status.node_class.as_str() {
+        "terminal" => println!(
+            "  this node: terminal — holds no models, routes every turn to {}",
+            status.entry_node.as_deref().unwrap_or("<unset>"),
+        ),
+        "unconfigured" => {
+            println!("  this node: unconfigured — no models and no entry node; run `svrn setup`")
+        }
+        _ => {}
+    }
     println!();
     println!(
         "  {:<22} {:<12} {:<8} address(es)",
@@ -3558,8 +3578,8 @@ async fn cmd_fetch_model(args: &[String]) -> i32 {
         None => match sovereign_core::setup_config::SetupConfig::load() {
             Ok(cfg) => cfg
                 .models
-                .primary
-                .parent()
+                .as_ref()
+                .and_then(|m| m.primary.parent())
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from(".")),
             Err(e) => {

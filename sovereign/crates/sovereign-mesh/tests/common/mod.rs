@@ -442,6 +442,31 @@ impl InferenceProvider for TestProvider {
         self.code_model_id.clone()
     }
 
+    /// Report the configured models as resident slots.
+    ///
+    /// `build_self_manifest` reads this to decide whether the node holds
+    /// anything at all: an empty report means "forwards to a remote, owns no
+    /// weights" and advertises nothing, which is how a `terminal`-class daemon
+    /// and the attach-mode desktop avoid claiming their entry node's model as
+    /// their own. A `TestProvider` stands in for a node that DOES hold its
+    /// models, so it has to say so — inheriting the empty default would model a
+    /// thin client while every other method claims to serve.
+    fn resident_slots(&self) -> Vec<sovereign_core::traits::ResidentSlot> {
+        let slot = |role: &str, model_id: String| sovereign_core::traits::ResidentSlot {
+            role: role.to_string(),
+            model_id,
+            resident: true,
+            size_bytes: None,
+            transitioning: false,
+            placement: None,
+        };
+        let mut slots = vec![slot("primary", self.model_id.clone())];
+        if let Some(code) = &self.code_model_id {
+            slots.push(slot("code", code.clone()));
+        }
+        slots
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         self.capabilities.clone()
     }

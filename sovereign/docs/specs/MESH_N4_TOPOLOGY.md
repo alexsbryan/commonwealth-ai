@@ -1,9 +1,20 @@
 # Four peers, four places — mesh topology design for N=4
 
-**Status:** written 2026-08-05; milestone ledger current to 2026-08-06.
+**Status:** written 2026-08-05; milestone ledger current to 2026-08-06, with
+§4.5's consumer class built 2026-08-30.
 **M1 shipped + live-PASSED · M3 done · M6 done · M4 WITHDRAWN (not runnable on
 this fleet) · M2 half-withdrawn (B blocked, A open and cheap) · M5 measured, its
 bound not yet built and now REQUIRED.**
+
+**§4.5's participant class SHIPPED 2026-08-30 as `NodeClass::Terminal`** — a
+full mesh member that holds no weights and binds to a `[node] entry`. Gates
+green; NOT yet exercised on a real two-machine pair, so every claim here about
+its behaviour is a claim about code and tests, not about a live run. Hardened
+the same day (order `tn-1-terminal-honesty`): it now advertises no embed model
+as well as no chat model, its class is judged on content rather than on whether
+a `[models]` table exists, and `svrn doctor` + `/v1/mesh/status` report the
+class so an empty lineup can be read as deliberate. The entry bind is still an
+address — see the note in §4.5.
 
 **§7's exit clause is SETTLED (operator, 2026-08-06): the target is BOTH peer
 fleets AND hub-plus-thin-clients, so the clause does not fire and the harder
@@ -490,10 +501,48 @@ travels with.
 
 #### What consumers still need
 
-- **An entry node, bound deliberately.** A consumer should not run a scheduler.
-  It should bind to a home node that routes on its behalf — which also gives it
-  a stable place for its KV to live. The cost is that the entry node is a single
-  point of failure for that client, which is why the next item is not optional.
+- ~~**An entry node, bound deliberately.**~~ **BUILT 2026-08-30, and the class is
+  spelled `terminal`, not `consumer`.** A node with no `[models]` and a
+  `[node] entry` is a `NodeClass::Terminal`
+  (`sovereign-contracts/src/setup_config.rs`): it boots with zero slots, plans
+  zero VRAM, registers no local models, and its provider is the already-shipped
+  `SplitInferenceProvider` pointed at the entry node, so chat and embeddings
+  both cross the wire while `resident_slots()` stays empty. `svrn setup
+  --terminal <entry>` writes it, probes the entry node, and refuses unless one
+  real turn comes back served.
+
+  > **Why not `consumer`.** `SharedModelRole::Consumer` already owns that word
+  > on a different axis — it means "lends no GPU memory to the RPC layer-split"
+  > and is the serde default for every node in the fleet, weights or no weights.
+  > A node is routinely a `Holder` here and a `Consumer` there. Reusing the name
+  > would have made the two indistinguishable in config and in prose.
+
+  > **The prerequisite this exposed.** `build_self_manifest` decided routing
+  > candidacy from `model_id_for` while the alias block's own comment said it
+  > decided from residency — one question, two answers (§10.6), agreeing only by
+  > accident on nodes that hold weights. A forwarding provider splits them: it
+  > answers `model_id_for` with the id it ASKS a remote for, so a terminal would
+  > have advertised its entry node's model as its own and peers would have
+  > routed real traffic to a machine holding nothing. Candidacy now reads
+  > `resident_slots()`, and an empty report advertises nothing at all.
+
+  > **The bind is an ADDRESS, and that is a known debt.** `[node] entry` holds
+  > `http://halo:9741/v1`, not a node id — so a terminal does not follow its
+  > entry node across networks, gets one address where
+  > `peer_inference_endpoints` would hand it `PeerTransport`'s ranked
+  > multi-homed candidates, and on a moved DHCP lease forwards to whatever now
+  > answers there. ARCH §7.5 forbids exactly this ("the address is a mutable
+  > attribute of the thing, never its name") and cites this mesh's own iroh
+  > bridge-port incident. The identity-keyed design was priced in order
+  > `tn-1-terminal-honesty` D5 and deferred: per-turn resolution needs a
+  > provider wrapping `SplitInferenceProvider`, and `InferenceProvider` carries
+  > 27 methods of which 24 are defaulted — including an `embed_batch` whose
+  > default is the per-item loop that once made corpus ingest embed-bound. A
+  > wrapper that misses one silently inherits it. Flip conditions are in
+  > `sovereign/DEFAULTS_LEDGER.md`.
+
+  The single-point-of-failure cost stands unchanged, which is why the next item
+  is still not optional.
 - **Retry is not forwarding, and the budget cannot currently tell them apart.**
   If an entry node's chosen holder is down, failing over is a *second* forward,
   which a budget of one forbids.
@@ -521,8 +570,12 @@ travels with.
   models that is not a rounding error — DSv4's measured TTFT was 12.6 s, and the
   122B prefills at 12–14 tok/s distributed, so discarding an 8k-token prefix
   costs seconds *per call* in a loop that makes dozens.
-- **A `consumer` role that binds to an entry node.** A thin client is currently
-  a full daemon, which is the wrong shape for a phone.
+- ~~**A `consumer` role that binds to an entry node.**~~ **BUILT 2026-08-30 as
+  `NodeClass::Terminal` — see §4.5.** A thin client is still a full daemon, and
+  that turned out to be the RIGHT shape for a mesh member: it keeps the mesh
+  key, gossip, pooled knowledge and the ledger, and only the weights go away.
+  (It remains the wrong shape for a phone, which is what `sovereign-server`'s
+  mobile-host path is for — a client, not a member.)
 
   > **Correction, 2026-08-06.** This originally said `SharedModelRole::Consumer`
   > "exists today only in containment classification (`containment.rs:242`); it
