@@ -129,6 +129,11 @@ tauri-build = { version = "2", features = [] }
 # Used by enrich_commands.rs tests for isolated tempdir fixtures
 # (JSONL synthesizer smoke + future filesystem-touching tests).
 tempfile = "3"
+# Parses the `#[tauri::command]` surface for tests/command_surface.rs, which
+# generates the typed frontend bridge. Dev-only: no runtime cost, and the
+# commands carry no doc-gen derives.
+syn = { version = "2", features = ["full", "extra-traits"] }
+quote = "1"
 
 [lints]
 workspace = true

@@ -145,11 +145,22 @@ echo "   /oicp/v1/capabilities models = $ADV"
 [ "$ADV" = "[]" ] || fail "a node holding nothing advertised $ADV — peers would route real work to it"
 
 say "7. …but local clients still see the mesh alias"
-curl -s "http://127.0.0.1:$TERM_PORT/v1/models" | python3 -c '
-import sys,json
-ids=[m["id"] for m in json.load(sys.stdin).get("data",[])]
-print("   ",ids); raise SystemExit(0 if "primary" in ids else 1)' \
-  || fail "a joined terminal must surface 'primary' to its own clients"
+# Polled, not read once. The merge is fed by GOSSIP, so an empty list right
+# after the join is "not yet", not "never" (§18.2) — and a single-shot read
+# here passed only because earlier drafts happened to have slower steps in
+# front of it. The invariant is that it converges, so wait for it and fail on
+# the deadline.
+for i in $(seq 1 40); do
+  IDS=$(curl -s "http://127.0.0.1:$TERM_PORT/v1/models" | python3 -c '
+import sys,json;print(",".join(m["id"] for m in json.load(sys.stdin).get("data",[])))' 2>/dev/null)
+  case ",$IDS," in *,primary,*) break ;; esac
+  sleep 1
+done
+echo "   $IDS"
+case ",$IDS," in
+  *,primary,*) ;;
+  *) fail "a joined terminal must surface 'primary' to its own clients (waited 40s)" ;;
+esac
 
 say "8. /v1/mesh/status names the class and the binding"
 curl -s "http://127.0.0.1:$TERM_PORT/v1/mesh/status" | python3 -c '

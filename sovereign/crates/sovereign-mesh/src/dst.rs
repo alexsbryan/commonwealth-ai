@@ -882,7 +882,10 @@ mod invariant_tests {
     fn no_split_brain_falsifier_disjoint_live_sets_elect_different_leaders() {
         // Each node sees only itself as live — the shape a partition leaves
         // behind, and the one where two halves each crown themselves.
-        let s = snap(vec![view(1, &[(1, None, true)]), view(2, &[(2, None, true)])]);
+        let s = snap(vec![
+            view(1, &[(1, None, true)]),
+            view(2, &[(2, None, true)]),
+        ]);
         let v = NoSplitBrain
             .check(&s)
             .expect_err("disjoint live sets must elect different leaders");
@@ -898,10 +901,7 @@ mod invariant_tests {
     fn no_ghost_members_falsifier_a_down_node_is_still_seen_live() {
         // Node 2 is not in online_truth: the harness knows it is down, and
         // node 1 still has it live. This is failed offline-decay.
-        let s = snap_truth(
-            vec![view(1, &[(1, None, true), (2, None, true)])],
-            &[1],
-        );
+        let s = snap_truth(vec![view(1, &[(1, None, true), (2, None, true)])], &[1]);
         let v = NoGhostMembers
             .check(&s)
             .expect_err("a live row for a down node must violate no_ghost_members");
@@ -935,7 +935,10 @@ mod invariant_tests {
         // Both nodes are up, but node 1 has never heard of node 2. The
         // converse of a ghost: a real peer missing from a real view.
         let s = snap_truth(
-            vec![view(1, &[(1, None, true)]), view(2, &[(1, None, true), (2, None, true)])],
+            vec![
+                view(1, &[(1, None, true)]),
+                view(2, &[(1, None, true), (2, None, true)]),
+            ],
             &[1, 2],
         );
         let v = Liveness
@@ -1006,7 +1009,8 @@ mod invariant_tests {
         let packed: BTreeSet<&str> = default_invariants().iter().map(|i| i.name()).collect();
         let controlled: BTreeSet<&str> = CONTROLLED.iter().copied().collect();
         assert_eq!(
-            packed, controlled,
+            packed,
+            controlled,
             "every invariant in default_invariants() needs a falsifier in this \
              module proving it can fail, and every entry here needs a live \
              invariant. In pack but uncontrolled: {:?}. Controlled but not in \

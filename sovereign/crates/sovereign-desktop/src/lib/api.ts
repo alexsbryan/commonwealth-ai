@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
+import type { CommandArgs, CommandName } from "./invoke";
 import { normalizeError } from "./errors";
 import type { PrimarySource } from "./setup/setupTypes";
 import type {
@@ -71,9 +72,9 @@ import type {
 /// `internal`. Callers can therefore `catch (e) { toastError(e) }`
 /// uniformly and branch on `e.code`. Migrate a command's callers to this
 /// as the command's Rust side flips to `Result<_, DesktopError>`.
-export async function invokeChecked<T>(
-  cmd: string,
-  args?: Record<string, unknown>,
+export async function invokeChecked<T, K extends CommandName = CommandName>(
+  cmd: K,
+  args?: CommandArgs[K],
 ): Promise<T> {
   try {
     return await invoke<T>(cmd, args);

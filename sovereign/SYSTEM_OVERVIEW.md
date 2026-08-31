@@ -819,17 +819,21 @@ end-to-end search from 5.33s to 2.96s (−43%). Measured 2026-08-05.
 
 Two surfaces, one implementation (`corpus_engine::index::maintain`):
 
-- **`svrn corpus optimize <id> [--all] [--prune-days N]`** — the
-  operator tool. Reports before/after fragments/versions/indices/GB
-  plus `unindexed_rows_before`.
+- **`svrn corpus optimize <id> [--all] [--prune-days N]
+  [--keep-versions N]`** — the operator tool. Reports before/after
+  fragments/versions/indices/GB plus `unindexed_rows_before`, and says
+  so out loud when a REQUESTED prune reclaimed nothing (it could
+  previously exit 0 having deleted zero bytes while the directory grew).
 - **The daemon sweep** (`sovereign-cli-daemon/src/corpus_maintenance.rs`),
   spawned supervised right after `build_corpus_engine`. This is the one
   that matters for the product: the person who most needs a healthy
   corpus is a desktop user who will never open a terminal. Cheap-check,
   rare-act — every cycle reads `unindexed_rows_estimate()` per corpus
   (a metadata read; 38 corpora in 6.4s measured) and does real work only
-  past a floor. Knobs:
-  `SOVEREIGN_CORPUS_MAINTENANCE_{INTERVAL_MINS=60,UNINDEXED_FLOOR=5000,PRUNE_DAYS=7}`.
+  past a floor. **Two independent gates since 2026-08-31**: the
+  expensive fold is earned by `unindexed_rows_estimate()`, the cheap
+  prune by `version_count()`. Knobs:
+  `SOVEREIGN_CORPUS_MAINTENANCE_{INTERVAL_MINS=60,UNINDEXED_FLOOR=5000,PRUNE_DAYS=1,KEEP_VERSIONS=1000}`.
 
 Two invariants that are easy to get backwards:
 
@@ -842,8 +846,24 @@ Two invariants that are easy to get backwards:
 - **Compaction is non-destructive, so disk GROWS until you prune.**
   Superseded fragments stay readable under old manifests. Pruning is
   destructive and irreversible, so the CLI has no default and refuses
-  `--prune-days 0`; the daemon uses a generous 7 days, far outside any
-  in-flight reader.
+  `--prune-days 0`.
+- **An age alone bounds nothing on an appended corpus, and the two
+  gates must stay separate.** Both were got backwards until 2026-08-31,
+  and the pair cost 153.9 GB on `wikipedia` (207 GB on disk holding
+  12.3 GB of live data across 5,972 manifest versions). First, prune was
+  gated on the SAME unindexed-row floor as the index fold — and
+  `newsworthy_watcher` folds every tick's writes on purpose, which pins
+  `unindexed` permanently below that floor (`max_unindexed=3153
+  floor=5000 acted=0`, cycle after cycle). The producer of versions was
+  suppressing the signal the reclaimer waited on. Second, even when the
+  sweep did fire, the generous 7-day window had **zero** eligible
+  versions, because the corpus writes ~850 a day. Retention is now
+  `Retention { min_age_days, keep_versions }`: age is reader safety
+  only, count is the space bound. `keep_versions` can only ever reach
+  further BACK than the age floor, never nearer — so the smallest
+  reachable directory is whatever the corpus writes during
+  `min_age_days`, and a corpus still over budget needs a shorter floor,
+  not a smaller count.
 
 Everything the sweep emits rides the literal target
 `corpus_maintenance` (listed in `DAEMON_TRACING_FILTER`, without which a

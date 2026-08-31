@@ -99,7 +99,9 @@ fn oicp_conformance_row() -> Judgement {
         "pass" => Judgement::passed(name, reason(format!("{summary} vs quality/baselines/oicp"))),
         "fail" => Judgement::failed(
             name,
-            reason(format!("{summary} — detail: scripts/oicp-conformance-lane.sh")),
+            reason(format!(
+                "{summary} — detail: scripts/oicp-conformance-lane.sh"
+            )),
         ),
         // Never collapse an unknown word into a verdict: a lane that starts
         // emitting a word this row does not know must say so, not pick one.
@@ -107,7 +109,11 @@ fn oicp_conformance_row() -> Judgement {
             name,
             reason(format!(
                 "lane reported `{}` — {summary}",
-                if other.is_empty() { "no verdict" } else { other }
+                if other.is_empty() {
+                    "no verdict"
+                } else {
+                    other
+                }
             )),
         ),
     };

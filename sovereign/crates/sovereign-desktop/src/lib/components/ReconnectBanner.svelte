@@ -2,7 +2,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { invoke } from "@tauri-apps/api/core";
+  import { invoke, invokePlugin } from "../invoke";
   import { prepareCrashReport } from "../api";
 
   interface Props {
@@ -127,7 +127,7 @@
       // The locally-saved report path is surfaced below so the user
       // can attach it to the issue they open. Nothing auto-uploads.
       try {
-        await invoke("plugin:shell|open", { path: info.issues_url });
+        await invokePlugin("plugin:shell|open", { path: info.issues_url });
       } catch {
         // Shell open failed (e.g. no default browser). The path is
         // still visible so the user can open an issue and attach it.

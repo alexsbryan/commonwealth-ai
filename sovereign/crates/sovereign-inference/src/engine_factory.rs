@@ -355,6 +355,7 @@ fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sovereign_core::setup_config::ModelsSection;
 
     /// The default must stay `Llama`: an existing `config.toml` names no
     /// engine, and `#[serde(default)]` on the section must therefore
@@ -458,11 +459,17 @@ mod tests {
         };
         // Deliberately absent paths: if this engine touched a GGUF the
         // build would fail, and that failure is the assertion.
-        let models = config
-            .models_mut()
-            .expect("the fixture config carries a [models] table");
-        models.primary = "/nonexistent/primary.gguf".into();
-        models.embed = "/nonexistent/embed.gguf".into();
+        //
+        // SUPPLY the section rather than reaching through `models_mut()`.
+        // `unconfigured()` carries `models: None` by contract, and the
+        // accessor refuses a missing section on purpose (§18.3) — so
+        // mutating through it here could only ever panic, which is what it
+        // did. A fixture that wants a `[models]` table has to provide one.
+        config.models = Some(ModelsSection {
+            primary: "/nonexistent/primary.gguf".into(),
+            embed: "/nonexistent/embed.gguf".into(),
+            ..Default::default()
+        });
 
         let built = build_engine(&config).expect("the remote engine needs no weights");
         assert!(

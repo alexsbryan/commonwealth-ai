@@ -7,7 +7,7 @@ mod enrichment;
 mod evidence;
 mod maintain;
 mod provenance;
-pub use maintain::MaintenanceStats;
+pub use maintain::{MaintenanceStats, Retention};
 pub mod raptor;
 mod read;
 mod search;

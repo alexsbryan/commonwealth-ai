@@ -616,8 +616,7 @@ mod tests {
     /// sits in argv.
     #[test]
     fn rpc_worker_keeps_only_the_args_after_its_flag() {
-        let Launch::RpcWorker { args } =
-            parse(&["--rpc-worker", "--bind", "127.0.0.1:50052"])
+        let Launch::RpcWorker { args } = parse(&["--rpc-worker", "--bind", "127.0.0.1:50052"])
         else {
             panic!("expected RpcWorker");
         };

@@ -105,9 +105,16 @@ purpose = "Rows-outside-the-index a corpus must exceed before the daemon's maint
 [[flag]]
 name = "SOVEREIGN_CORPUS_MAINTENANCE_PRUNE_DAYS"
 cluster = "corpus"
-default = "7"
+default = "1"
 status = "shipped"
-purpose = "Age below which superseded dataset versions are KEPT by the maintenance sweep. Compaction is non-destructive — superseded fragments stay readable under old manifests — so without pruning the directory grows without bound, which on a desktop install is its own product failure. Seven days is far outside any in-flight reader while still bounding growth. 0 disables pruning and retains every version."
+purpose = "Reader-safety floor: no dataset version younger than this is ever deleted by the maintenance sweep. Was 7 until 2026-08-31, defended as far outside any in-flight reader WHILE ALSO bounding growth; the first claim held and the second did not, and the second was the one the default carried. wikipedia writes ~850 manifest versions a day, so all 5,972 it retained were younger than seven days and the prune phase had zero eligible targets while 153.9GB of superseded fragments sat on disk. Bounding space is now SOVEREIGN_CORPUS_MAINTENANCE_KEEP_VERSIONS' job and this knob is only what it can actually guarantee. One day is still ~10^5x the longest read that holds a version open. 0 disables pruning and retains every version."
+
+[[flag]]
+name = "SOVEREIGN_CORPUS_MAINTENANCE_KEEP_VERSIONS"
+cluster = "corpus"
+default = "1000"
+status = "shipped"
+purpose = "Manifest versions a corpus may retain before the maintenance sweep reclaims, regardless of age — the bound an age alone cannot provide on a continuously-appended corpus. Deliberately generous: a ceiling that catches unbounded accumulation, not a target. Reclamation still never deletes anything younger than SOVEREIGN_CORPUS_MAINTENANCE_PRUNE_DAYS, so the directory settles at whatever the corpus writes in that window rather than at this number. 0 disables the count bound and leaves age as the only limit, which is the configuration that leaked 153.9GB on wikipedia before 2026-08-31."
 
 [[flag]]
 name = "SOVEREIGN_GATE_CLAIM_SEARCH_LADDER"

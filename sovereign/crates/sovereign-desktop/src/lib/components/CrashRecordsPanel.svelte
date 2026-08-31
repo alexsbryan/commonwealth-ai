@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts">
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
+  import { invokePlugin } from "../invoke";
   import {
     listCrashRecords,
     deleteCrashRecord,
@@ -72,7 +72,7 @@
       // attach the redacted markdown we just wrote. Best-effort — the path
       // stays visible even if no default browser is configured.
       try {
-        await invoke("plugin:shell|open", { path: info.issues_url });
+        await invokePlugin("plugin:shell|open", { path: info.issues_url });
       } catch {
         /* no-op: path is surfaced below regardless */
       }

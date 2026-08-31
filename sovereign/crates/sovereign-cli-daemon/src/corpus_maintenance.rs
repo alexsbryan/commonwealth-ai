@@ -40,7 +40,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use corpus_engine::CorpusEngine;
+use corpus_engine::{CorpusEngine, Retention};
 
 /// Minutes between sweeps. `0` disables the sweep entirely.
 fn interval_mins() -> u64 {
@@ -62,19 +62,46 @@ fn unindexed_floor() -> usize {
         .unwrap_or(5_000)
 }
 
-/// Age below which superseded versions are KEPT.
+/// Reader-safety floor: no version younger than this is ever deleted.
 ///
-/// Deliberately generous. Compaction is non-destructive — superseded fragments
-/// remain readable under old manifests — so without pruning the directory grows
-/// forever, which on a desktop is its own product failure. But a threshold near
-/// zero can delete a version an in-flight reader still holds. Seven days is far
-/// outside any live query and still bounds the growth. `0` disables pruning and
-/// keeps every version.
+/// Was 7 days until 2026-08-31, defended as "far outside any live query and
+/// still bounds the growth". The first clause was true and the second was not,
+/// and the second is the one the default was carrying. `wikipedia` writes ~850
+/// manifest versions a day; measured that day it held 5,972 of them and NOT
+/// ONE was older than seven days, so the prune phase had zero eligible targets
+/// while 153.9GB of superseded fragments sat on disk. An age cannot bound a
+/// store whose write rate outruns it — that is now `keep_versions`' job, and
+/// this knob went back to being only what it can actually guarantee.
+///
+/// One day is still ~10^5 times the longest read that holds a version open (a
+/// query is sub-second; the longest observed index-holding job is an ~11h
+/// enrichment pass). `0` disables pruning and retains every version.
 fn prune_days() -> i64 {
     std::env::var("SOVEREIGN_CORPUS_MAINTENANCE_PRUNE_DAYS")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(7)
+        .unwrap_or(1)
+}
+
+/// Manifest versions a corpus may retain before the sweep reclaims, regardless
+/// of age.
+///
+/// The bound that `prune_days` alone could not provide. Deliberately generous:
+/// this is a ceiling that catches unbounded accumulation, not a target to
+/// hold corpora at. Reclamation still never deletes anything younger than
+/// `prune_days` (see `corpus_engine::index::maintain::Retention`), so the
+/// directory settles at whatever the corpus writes in that window — for
+/// wikipedia, ~850 versions rather than ~6,000. `0` disables the count bound
+/// and leaves age as the only limit, which is the behaviour that leaked.
+fn keep_versions() -> Option<usize> {
+    match std::env::var("SOVEREIGN_CORPUS_MAINTENANCE_KEEP_VERSIONS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+    {
+        Some(0) => None,
+        Some(n) => Some(n),
+        None => Some(1_000),
+    }
 }
 
 /// Spawn the supervised self-healing sweep.
@@ -98,11 +125,17 @@ pub(crate) fn spawn(engine: Arc<CorpusEngine>) {
             }
             let floor = unindexed_floor();
             let prune = prune_days();
+            let keep = keep_versions();
+            // Two bounds, logged separately, because they gate two different
+            // phases and a reader of this line needs to know which one is
+            // slack. `prune_days=7 keep_versions=none` — the shipped pair
+            // until 2026-08-31 — reclaims nothing on an appended corpus.
             tracing::info!(
                 target: "corpus_maintenance",
                 interval_mins = mins,
                 unindexed_floor = floor,
                 prune_days = prune,
+                keep_versions = ?keep,
                 "corpus maintenance sweep armed"
             );
 
@@ -113,13 +146,25 @@ pub(crate) fn spawn(engine: Arc<CorpusEngine>) {
             tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
                 tick.tick().await;
-                sweep_once(&engine, floor, prune).await;
+                sweep_once(&engine, floor, prune, keep).await;
             }
         }
     });
 }
 
-async fn sweep_once(engine: &Arc<CorpusEngine>, floor: usize, prune: i64) {
+async fn sweep_once(
+    engine: &Arc<CorpusEngine>,
+    floor: usize,
+    prune: i64,
+    keep: Option<usize>,
+) {
+    // `None` only when pruning is disabled outright; otherwise every corpus
+    // gets the same policy and the per-corpus decision below is purely about
+    // whether it has earned each phase.
+    let retention = (prune > 0).then_some(Retention {
+        min_age_days: prune,
+        keep_versions: keep,
+    });
     let cycle_started = std::time::Instant::now();
     let indexes = match engine.installed_indexes().await {
         Ok(v) => v,
@@ -134,6 +179,10 @@ async fn sweep_once(engine: &Arc<CorpusEngine>, floor: usize, prune: i64) {
     // The largest backlog seen this cycle, so the INFO summary below can show
     // the approach to the floor rather than only the crossing of it.
     let mut max_unindexed = 0usize;
+    // The reclamation counterpart, for the same reason: an operator watching
+    // this climb between cycles can see the version bound approaching before
+    // it is crossed.
+    let mut max_versions = 0usize;
     for info in indexes {
         // TRANSIENT open, deliberately. `open_index` populates a
         // never-evicted query-path cache; this loop visits EVERY
@@ -164,13 +213,43 @@ async fn sweep_once(engine: &Arc<CorpusEngine>, floor: usize, prune: i64) {
         // a number to watch climb between sweeps.
         let unindexed = idx.unindexed_rows_estimate().await;
         max_unindexed = max_unindexed.max(unindexed);
-        if unindexed < floor {
+
+        // GATE 1 — the EXPENSIVE phases (compact + index fold). Unchanged:
+        // folding costs seconds-to-minutes on a large corpus and is earned by
+        // rows sitting outside the index.
+        let fold = unindexed >= floor;
+
+        // GATE 2 — the CHEAP phase (prune), and INDEPENDENT of gate 1. This
+        // separation is the fix, and the bug it closes is not that the floor
+        // was too high; it is that gate 1 was held shut BY the very subsystem
+        // producing the versions. `newsworthy_watcher` folds each tick's
+        // writes into the index immediately so search never degrades, which
+        // pins `unindexed` permanently below the floor — measured
+        // 2026-08-31: `max_unindexed=3153 floor=5000 acted=0`, cycle after
+        // cycle, while wikipedia's directory reached 207GB holding 12.3GB of
+        // live data. Pruning is a metadata delete earned by ACCUMULATED
+        // VERSIONS, which is a number gate 1 says nothing about, so it now
+        // asks its own question. That question is one metadata listing — the
+        // same budget as the row estimate above (ARCH §10.6: two decisions,
+        // two deciders, rather than one threshold standing in for both).
+        let versions = if retention.is_some() {
+            idx.version_count().await
+        } else {
+            0
+        };
+        max_versions = max_versions.max(versions);
+        let reclaim = retention
+            .and_then(|r| r.keep_versions)
+            .is_some_and(|k| versions > k);
+
+        if !fold && !reclaim {
             tracing::debug!(
                 target: "corpus_maintenance",
                 corpus = %info.corpus_id,
                 unindexed,
                 floor,
-                "sweep: below floor — skipping"
+                versions,
+                "sweep: below both gates — skipping"
             );
             continue;
         }
@@ -180,13 +259,26 @@ async fn sweep_once(engine: &Arc<CorpusEngine>, floor: usize, prune: i64) {
             corpus = %info.corpus_id,
             unindexed,
             floor,
-            "sweep: corpus has drifted past the floor — maintaining"
+            versions,
+            fold,
+            reclaim,
+            "sweep: corpus has earned maintenance"
         );
         let started = std::time::Instant::now();
-        match idx
-            .optimize(if prune > 0 { Some(prune) } else { None })
-            .await
-        {
+        let outcome = match (fold, retention) {
+            // Full pass. The compact -> index -> prune ordering is
+            // load-bearing and stays inside `optimize`.
+            (true, r) => idx.optimize(r).await,
+            // Reclaim only — skips the two expensive phases this corpus has
+            // not earned. The whole point of the split.
+            (false, Some(r)) => idx.prune(&r).await,
+            // Unreachable: `reclaim` cannot be true without a policy, and we
+            // continued above when neither gate opened. A branch rather than
+            // an `expect` so a future edit to the gates degrades into a
+            // skipped corpus, never a panicking daemon.
+            (false, None) => continue,
+        };
+        match outcome {
             Ok(stats) => {
                 acted += 1;
                 tracing::info!(
@@ -234,6 +326,7 @@ async fn sweep_once(engine: &Arc<CorpusEngine>, floor: usize, prune: i64) {
         failed,
         max_unindexed,
         floor,
+        max_versions,
         elapsed_ms = cycle_started.elapsed().as_millis() as u64,
         "sweep: cycle complete"
     );

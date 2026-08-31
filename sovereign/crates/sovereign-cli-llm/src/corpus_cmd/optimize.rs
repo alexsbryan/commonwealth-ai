@@ -81,6 +81,7 @@ pub async fn run_optimize(args: &[String]) -> i32 {
     let mut target: Option<String> = None;
     let mut all = false;
     let mut prune_days: Option<i64> = None;
+    let mut keep_versions: Option<usize> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -100,16 +101,34 @@ pub async fn run_optimize(args: &[String]) -> i32 {
                     }
                 }
             }
+            "--keep-versions" => {
+                i += 1;
+                match args.get(i).and_then(|v| v.parse::<usize>().ok()) {
+                    Some(n) if n >= 1 => keep_versions = Some(n),
+                    _ => {
+                        eprintln!("error: --keep-versions requires an integer >= 1");
+                        return 2;
+                    }
+                }
+            }
             "-h" | "--help" => {
                 println!(
-                    "svrn corpus optimize <id> [--prune-days N]\n\
-                     svrn corpus optimize --all [--prune-days N]\n\n\
+                    "svrn corpus optimize <id> [--prune-days N] [--keep-versions N]\n\
+                     svrn corpus optimize --all [--prune-days N] [--keep-versions N]\n\n\
                      Compact fragments and fold unindexed fragments into existing indexes.\n\
                      Non-destructive by default: compaction and index optimization only ADD a\n\
                      new dataset version, leaving earlier ones readable.\n\n\
-                     --prune-days N   ALSO delete superseded versions older than N days.\n\
-                                      DESTRUCTIVE and irreversible. Reclaims the storage that\n\
-                                      continuous appends leave behind.\n\n\
+                     --prune-days N      ALSO delete superseded versions older than N days.\n\
+                                         DESTRUCTIVE and irreversible.\n\
+                     --keep-versions N   ALSO delete superseded versions beyond the newest N,\n\
+                                         however recent they are — subject to --prune-days,\n\
+                                         which is a floor this can never undercut.\n\n\
+                     AN AGE ALONE MAY RECLAIM NOTHING. A corpus fed by a continuous appender\n\
+                     can write thousands of versions a day, so every version it retains is\n\
+                     newer than any age you can safely pass and --prune-days has no eligible\n\
+                     target. Measured on wikipedia 2026-08-31: 5,972 versions, ZERO older than\n\
+                     7 days, 153.9GB of superseded fragments. --keep-versions is the bound for\n\
+                     that case.\n\n\
                      Corpora fed by a continuous appender (e.g. wikipedia via the\n\
                      wikipedia-newsworthy freshness daemon) re-earn this maintenance over time;\n\
                      static corpora need it once."
@@ -127,7 +146,9 @@ pub async fn run_optimize(args: &[String]) -> i32 {
         i += 1;
     }
     if target.is_none() && !all {
-        eprintln!("usage: svrn corpus optimize <id> [--prune-days N]   (or --all)");
+        eprintln!(
+            "usage: svrn corpus optimize <id> [--prune-days N] [--keep-versions N]   (or --all)"
+        );
         return 2;
     }
 
@@ -161,10 +182,26 @@ pub async fn run_optimize(args: &[String]) -> i32 {
         return 1;
     }
 
-    if prune_days.is_some() {
+    // `--keep-versions` alone still needs an age floor to stand on: it can only
+    // ever reach FURTHER BACK than the floor, never nearer (`Retention`). Use
+    // the flag when given, else the smallest value the flag itself accepts, so
+    // an operator asking only for a count bound gets one that can actually bite
+    // without being handed a reader-safety decision they did not make.
+    let retention = match (prune_days, keep_versions) {
+        (None, None) => None,
+        (days, keep) => Some(corpus_engine::Retention {
+            min_age_days: days.unwrap_or(1),
+            keep_versions: keep,
+        }),
+    };
+    if let Some(r) = retention {
         println!(
-            "PRUNING ENABLED — superseded versions older than {} day(s) will be DELETED.\n",
-            prune_days.unwrap()
+            "PRUNING ENABLED — superseded versions older than {} day(s) will be DELETED{}.\n",
+            r.min_age_days,
+            match r.keep_versions {
+                Some(k) => format!(", keeping at most the newest {k}"),
+                None => String::new(),
+            }
         );
     }
 
@@ -191,7 +228,7 @@ pub async fn run_optimize(args: &[String]) -> i32 {
         };
 
         let t = std::time::Instant::now();
-        match idx.optimize(prune_days).await {
+        match idx.optimize(retention).await {
             Ok(stats) => {
                 let after = shape_of(&dataset);
                 println!(
@@ -222,7 +259,37 @@ pub async fn run_optimize(args: &[String]) -> i32 {
                 // the filesystem counts: compaction is non-destructive, so the
                 // superseded fragments stay on disk until a prune and the
                 // directory counts barely move even on a large compaction.
-                if stats.skipped_as_clean && stats.old_versions_removed == 0 {
+                if let (Some(r), 0) = (retention, stats.old_versions_removed) {
+                    // A REQUESTED prune that deleted nothing, reported FIRST
+                    // because it outranks every other note here. This command
+                    // shipped able to exit 0 having reclaimed zero bytes while
+                    // the directory GREW: on 2026-08-31 `--prune-days 7` did
+                    // exactly that on wikipedia (+12GB, 0 pruned) because all
+                    // 5,972 of its versions were younger than the window, and
+                    // nothing in the output said so. A no-op must never read
+                    // as a success (ARCH §18.1, §18.3).
+                    println!(
+                        "   NOTE: pruning was REQUESTED and reclaimed NOTHING. Every one of this\n\
+                         \x20        corpus's {} retained versions is newer than the {}-day floor,\n\
+                         \x20        so there was no eligible target.{}",
+                        after.versions,
+                        r.min_age_days,
+                        if r.keep_versions.is_none() {
+                            "\n            An age cannot bound a continuously-appended corpus — \
+                             pass\n            `--keep-versions N` to bound it by count instead."
+                        } else {
+                            "\n            The count bound was slack too: it can only reach FURTHER \
+                             back\n            than the age floor, never nearer. Lower --prune-days."
+                        }
+                    );
+                    if after.bytes > before.bytes {
+                        println!(
+                            "   NOTE: on-disk size GREW {:.2} GB in the process — compaction wrote new\n\
+                             \x20        fragments and nothing reclaimed the superseded ones.",
+                            gb(after.bytes.saturating_sub(before.bytes))
+                        );
+                    }
+                } else if stats.skipped_as_clean && stats.old_versions_removed == 0 {
                     println!(
                         "   NOTE: already maintained — no unindexed rows, nothing compacted. The\n\
                          \x20        index pass was SKIPPED on purpose: it is not idempotent and\n\
@@ -230,7 +297,7 @@ pub async fn run_optimize(args: &[String]) -> i32 {
                     );
                 } else if stats.fragments_removed == 0 && stats.old_versions_removed == 0 {
                     println!("   NOTE: nothing moved — this dataset was already maintained.");
-                } else if prune_days.is_none() && after.bytes > before.bytes {
+                } else if retention.is_none() && after.bytes > before.bytes {
                     // Say this out loud: an operator watching disk USAGE GROW
                     // after running a "cleanup" command deserves the reason.
                     println!(

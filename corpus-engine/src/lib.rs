@@ -141,7 +141,7 @@ pub use index::raptor::{
 pub use index::{
     read_provenance, set_provenance, CorpusIndex, CorpusProvenance, DedupeReport,
     EnrichmentChunkRow, Evidence, FilterOverride, InsertChunk, MaintenanceStats, NeighborWindow,
-    ScopeMeta, StoredChunk, StoredChunkWithMetadata,
+    Retention, ScopeMeta, StoredChunk, StoredChunkWithMetadata,
 };
 // `Evidence`'s value types, from the crate consumers already depend on. A
 // caller cannot hold an `Evidence` without being able to read its `Origin` and

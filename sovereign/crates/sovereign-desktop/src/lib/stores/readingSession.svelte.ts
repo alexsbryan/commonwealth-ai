@@ -19,7 +19,7 @@
 // fresh slate. The conversation it was sourced from persists via
 // the existing chat store.
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../invoke";
 
 // ─── Types ────────────────────────────────────────────────────────
 
