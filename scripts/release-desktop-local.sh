@@ -54,11 +54,12 @@ done
 CONF=sovereign/crates/sovereign-desktop/src-tauri/tauri.conf.json
 VERSION="$(python3 -c "import json;print(json.load(open('$CONF'))['version'])")"
 TAG="desktop-v$VERSION"
-# Releases publish to the PUBLIC shelf repo, not the (invite-only) source
-# repo: assets on a private repo aren't anonymously fetchable, which breaks
-# install.sh, the landing-page downloads, and the desktop auto-updater.
+# Releases publish to THIS repo. It is public, so its release assets are
+# anonymously fetchable by install.sh, the landing-page downloads and the
+# desktop auto-updater — which is the only reason the `svrnmesh-releases`
+# shelf ever existed. That indirection is retired (2026-08-31).
 # Override for testing with RELEASES_REPO.
-RELEASES_REPO="${RELEASES_REPO:-alexsbryan/svrnmesh-releases}"
+RELEASES_REPO="${RELEASES_REPO:-alexsbryan/commonwealth-ai}"
 log "Releasing $TAG"
 
 [[ "$RELEASE_HOST_KIND" != unsupported ]] || die "$RELEASE_HOST_UNSUPPORTED_MSG"

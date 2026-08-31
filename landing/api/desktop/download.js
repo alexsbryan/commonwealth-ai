@@ -12,11 +12,14 @@
 // landing page, docs, and READMEs link /download/<platform> and each release
 // publish updates what that means. GitHub's own /releases/latest/download/
 // can't do this — `latest` is a single repo-global pointer shared with the
-// cli-v* stream, and asset names embed the version anyway. Resolution matches
-// updater.js: newest published, non-draft, non-prerelease desktop-v* tag.
+// cli-v* stream, and asset names embed the version anyway. Resolution is the
+// shared max-semver pick, minus prereleases (the updater keeps those).
 //
-// Same env as updater.js: GITHUB_OWNER, GITHUB_REPO (defaults point at the
-// public svrnmesh-releases shelf), optional GITHUB_TOKEN.
+// Which repo the assets come from, the retired-shelf fallback, and the env
+// that configures both live in `_releases.js`, shared with the updater
+// endpoint — one decider, not two.
+
+import { latestRelease } from './_releases.js';
 
 const PLATFORM_TO_ASSET_PATTERN = {
   // Installer artifacts (what a human downloads), NOT the updater archives.
@@ -41,33 +44,21 @@ export default async function handler(req) {
     );
   }
 
-  const owner = process.env.GITHUB_OWNER || 'alexsbryan';
-  const repo  = process.env.GITHUB_REPO  || 'svrnmesh-releases';
-  if (!owner || !repo) {
-    console.error('[download] GITHUB_OWNER / GITHUB_REPO not configured');
-    return text('server not configured', 500);
-  }
-
-  const headers = { accept: 'application/vnd.github+json', 'user-agent': 'svrnme.sh-download' };
-  if (process.env.GITHUB_TOKEN) {
-    headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
-  }
-
-  // The unauthenticated /releases list excludes drafts; skip prereleases and
-  // anything from the cli-v* stream.
-  const res = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/releases?per_page=20`,
-    { headers }
-  );
-  if (!res.ok) {
-    console.error(`[download] GitHub API ${res.status}`);
+  // Drafts and prereleases are not something a human should land on from a
+  // download button; the cli-v* / vscode-v* streams are filtered by prefix.
+  let latest;
+  try {
+    latest = await latestRelease({
+      tagPrefix: 'desktop-v',
+      perPage: 20,
+      userAgent: 'svrnme.sh-download',
+    });
+  } catch (e) {
+    console.error('[download] github fetch failed', e);
     return text('upstream error', 502);
   }
-  const releases = await res.json();
-  const release = releases.find(
-    (r) => !r.draft && !r.prerelease && r.tag_name.startsWith('desktop-v')
-  );
-  if (!release) return text('no desktop release found', 404);
+  if (!latest) return text('no desktop release found', 404);
+  const release = latest.release;
 
   const asset = release.assets.find((a) => pattern.test(a.name));
   if (!asset) return text(`no ${platform} asset in ${release.tag_name}`, 404);

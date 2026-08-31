@@ -43,9 +43,9 @@ cd "$EXT_DIR"
 # ─── Pre-flight ───────────────────────────────────────────────────────
 VERSION="$(node -p "require('./package.json').version")"
 TAG="vscode-v$VERSION"
-# Same shelf the CLI and desktop publish to — assets on the private source
-# repo aren't anonymously fetchable, which is the whole point of the split.
-RELEASES_REPO="${RELEASES_REPO:-alexsbryan/svrnmesh-releases}"
+# Same repo the CLI and desktop publish to: this one. Override with
+# RELEASES_REPO.
+RELEASES_REPO="${RELEASES_REPO:-alexsbryan/commonwealth-ai}"
 VSIX="sovereign-fim-$VERSION.vsix"
 log "Releasing $TAG (extension version $VERSION) to $RELEASES_REPO"
 

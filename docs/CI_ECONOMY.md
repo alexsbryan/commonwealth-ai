@@ -323,7 +323,7 @@ Off the critical path entirely; advisory.
 ### Releases — local is primary, hosted is the fallback
 
 `scripts/release-all.sh` is the release process: one command, every target,
-cut from the arm64 Mac, publishing to `alexsbryan/svrnmesh-releases`. It costs
+cut from the arm64 Mac, publishing to `alexsbryan/commonwealth-ai`. It costs
 **zero Actions minutes** and it is where the real guards live — the
 version-already-published check, the disk reclaim, and the CPU-aware per-leg
 stall watchdog that exists because the Linux leg once hung silently for 10.5
@@ -357,13 +357,14 @@ unavailable. Four changes made that split real:
 What was already right and was left alone: `build` correctly `needs`
 `router-cache-gate`, so you never pay 10× to discover a version mismatch.
 
-**Known divergence — the two paths publish to different repos.** The local
-scripts publish to `alexsbryan/svrnmesh-releases`; the hosted workflows use
-`softprops/action-gh-release`, which targets the *current* repo
-(`commonwealth-ai`) — which is private, so its release assets are not publicly
-downloadable. The hosted fallback therefore produces correct artifacts in the
-wrong place. Deliberately not changed here: where a release publishes is
-outward-facing. Fix it before relying on the fallback to actually ship.
+**Resolved 2026-08-31 — the two paths now publish to the same repo.** The
+local scripts targeted `alexsbryan/svrnmesh-releases` (a public shelf, needed
+only because a private repo's assets aren't anonymously fetchable) while the
+hosted workflows used `softprops/action-gh-release`, which targets the current
+repo — so the hosted fallback produced correct artifacts in the wrong place.
+With the repo open source, `RELEASES_REPO` defaults to `commonwealth-ai` and
+both paths land in one place. The shelf is read-only now; see RELEASING.md for
+the consumer-side fallback and when to retire it.
 
 ### Dependabot
 

@@ -9,7 +9,7 @@ function, no framework, no build step.
 landing/
 ├── index.html         ← the page (CSS inlined, ~10 KB before fonts)
 ├── favicon.svg
-├── install.sh         ← the real curl-pipe installer (pulls from svrnmesh-releases)
+├── install.sh         ← the real curl-pipe installer (pulls from commonwealth-ai)
 ├── robots.txt
 ├── api/
 │   ├── subscribe.js   ← POST /api/subscribe, forwards to Resend Audiences
@@ -80,13 +80,20 @@ Listmonk (self-hosted), or your own Postgres/KV.
 The page is hand-written HTML. Edit `index.html`. The CSS is inlined inside
 a single `<style>` block at the top of `<head>` — no preprocessing.
 
-GitHub links currently point at `github.com/alexsbryan/svrnmesh-releases` — the
-public releases shelf, which is where the "report a bug" link in the footer
-lands while the source repo is invite-only. Update them in three places when the
-canonical URL changes:
+GitHub links point at `github.com/alexsbryan/commonwealth-ai` — the source
+repo, which is where the "report a bug" link in the footer lands. Update them
+in three places when the canonical URL changes:
 - the `<a>` tags in the hero and footer of `index.html`
 - the `install.sh` banner
 - `package.json` (if you add a `repository` field)
+
+Which repo the *release assets* come from is a separate question, answered in
+one place: `api/desktop/_releases.js` (shared by both edge endpoints) and the
+matching `REPO` / `SHELF_REPO` pair at the top of `install.sh`. Both still read
+the retired `svrnmesh-releases` shelf as a fallback and take the max semver
+across the two; see the top-level RELEASING.md for when to drop it. Files under
+`api/` whose name starts with `_` are modules, not routes — Vercel does not
+turn them into functions.
 
 ## Performance budget
 

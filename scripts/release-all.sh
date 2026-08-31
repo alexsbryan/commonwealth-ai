@@ -80,7 +80,7 @@ for a in "$@"; do
 done
 
 # Tunables (env-overridable).
-RELEASES_REPO="${RELEASES_REPO:-alexsbryan/svrnmesh-releases}"
+RELEASES_REPO="${RELEASES_REPO:-alexsbryan/commonwealth-ai}"
 STALL_SECS="${RELEASE_STALL_SECS:-1200}"       # no-output + idle-VM ⇒ hung
 RECLAIM_MIN_GB="${RELEASE_RECLAIM_MIN_GB:-20}" # reclaim target/debug above this
 LOG_DIR="${TMPDIR:-/tmp}/release-all.$$"

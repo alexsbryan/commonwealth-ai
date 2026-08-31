@@ -147,9 +147,11 @@ If instead you get a 503, the response body tells you exactly what to fix.
 code --install-extension sovereign-fim-<version>.vsix
 ```
 
-Get the file from the release shelf — open
-<https://github.com/alexsbryan/svrnmesh-releases/releases>, pick the
+Get the file from the releases page — open
+<https://github.com/alexsbryan/commonwealth-ai/releases>, pick the
 newest `vscode-v*` release, and download its `sovereign-fim-*.vsix`.
+(Releases published before 2026-08-31 are on the retired shelf at
+<https://github.com/alexsbryan/svrnmesh-releases/releases>.)
 (There is no per-prefix `latest` pointer; `/releases/latest` is
 repo-global and belongs to the desktop app.) Or build it yourself:
 `npm install && npm run package` in `packages/vscode-sovereign`.

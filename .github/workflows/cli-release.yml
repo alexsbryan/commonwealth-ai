@@ -24,7 +24,7 @@ name: CLI release
 # THIS IS THE FALLBACK PATH, NOT THE PRIMARY ONE (2026-07-24).
 #
 # Releases are cut LOCALLY with `scripts/release-all.sh` (which wraps
-# `scripts/release-cli-local.sh`), publishing to `alexsbryan/svrnmesh-releases`
+# `scripts/release-cli-local.sh`), publishing to `alexsbryan/commonwealth-ai`
 # at zero Actions cost. This workflow is for verification and disaster
 # recovery. See docs/CI_ECONOMY.md.
 #
