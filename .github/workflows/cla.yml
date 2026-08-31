@@ -7,21 +7,37 @@
 # timestamp) into a JSON file on a dedicated `cla-signatures` branch. A signed
 # author sails through on all future PRs. See CONTRIBUTING.md → Licensing.
 #
-# ONE-TIME SETUP before this enforces anything (the workflow no-ops until then):
-#   1. Create a Personal Access Token (classic, `repo` scope, or a fine-grained
-#      token with Contents read/write on this repo). This is what lets the
-#      action commit signatures to the cla-signatures branch. The default
-#      GITHUB_TOKEN is intentionally NOT used for the signature store so the
-#      record can't be rewritten by ordinary workflow permissions.
-#   2. Add it as a repository secret named `CLA_ACCESS_TOKEN`
-#      (Settings → Secrets and variables → Actions → New repository secret).
-#      Secret names can't start with GITHUB_, hence the CLA_ prefix; it's mapped
-#      to the action's PERSONAL_ACCESS_TOKEN env var below.
-#   3. That's it — the branch and JSON file are created automatically on the
-#      first signature. Nothing to pre-commit.
+# SETUP — done 2026-08-31. Written down because the failure mode is opaque.
 #
-# To revoke everyone's signatures (e.g. the CLA text changes materially), delete
-# the JSON file on the cla-signatures branch; everyone re-signs on their next PR.
+# The `cla-signatures` branch MUST ALREADY EXIST. The action stores signatures
+# through the GitHub Contents API, which creates FILES but never BRANCHES, so a
+# missing branch 404s and every PR fails with:
+#   Error occurred when creating the signed contributors file:
+#     Branch cla-signatures not found.
+#   Error: Committers of pull request N have to sign the CLA
+# That second line lands even when the PR's only author is on the allowlist
+# below — `setupClaCheck.ts` throws it unconditionally on the create-the-file
+# path, before any signed/not-signed check runs. The earlier version of this
+# comment claimed the branch was created automatically; it is not.
+#
+# The file is seeded too, not just the branch, because that same path would
+# otherwise fail the FIRST run after setup for the same reason. The branch is
+# an orphan holding `signatures/version1/cla.json` = {"signedContributors": []}
+# plus a README explaining itself. Do NOT protect it — the action commits to it
+# directly. To revoke everyone's signatures (e.g. the CLA text changes
+# materially), reset that array to `[]`; everyone re-signs on their next PR.
+#
+# CLA_ACCESS_TOKEN is INERT here, and kept only to leave the door open.
+# `persistence.ts` reaches for the PAT client only when `remote-repository-name`
+# or `remote-organization-name` is set; with the store in THIS repo, every read
+# and write goes through GITHUB_TOKEN — which is why `permissions: contents:
+# write` below is the setting that actually matters.
+#
+# Pinned at v2.6.1, which is the newest release (Sept 2024). The "Node 20 is
+# being deprecated" line on every run comes from the action's own
+# `runs: using: node20`; there is nothing to bump to. It is a warning, not the
+# failure — but when GitHub drops node20 support this action stops working and
+# has to be replaced.
 
 name: CLA Assistant
 
