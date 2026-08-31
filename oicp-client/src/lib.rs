@@ -1393,8 +1393,13 @@ impl SplitInferenceProvider {
         // constructor: this provider owns no weights, so the far end is the
         // only holder and there is nowhere else to route.
         let chat = std::sync::Arc::new(
-            RemoteApiProvider::new(chat_endpoint_v1, bearer.clone(), &chat_model_id, context_size)
-                .waiting_out_sheds(),
+            RemoteApiProvider::new(
+                chat_endpoint_v1,
+                bearer.clone(),
+                &chat_model_id,
+                context_size,
+            )
+            .waiting_out_sheds(),
         );
         let embed = std::sync::Arc::new(
             RemoteApiProvider::new(embed_endpoint_v1, bearer, &embed_model_id, context_size)

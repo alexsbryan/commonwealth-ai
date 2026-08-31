@@ -74,7 +74,10 @@ fn err(status: StatusCode, msg: impl Into<String>) -> Response {
     (status, Json(serde_json::json!({ "error": msg.into() }))).into_response()
 }
 
-pub async fn ring_sync(State(state): State<AppState>, Json(req): Json<RingSyncRequest>) -> Response {
+pub async fn ring_sync(
+    State(state): State<AppState>,
+    Json(req): Json<RingSyncRequest>,
+) -> Response {
     let Some(rail) = state.ring_rail() else {
         // A node with no ring storage cannot participate. Refusing is the
         // honest answer; a 200 with an empty digest would tell the peer this

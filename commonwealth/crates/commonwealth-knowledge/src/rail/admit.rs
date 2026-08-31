@@ -74,9 +74,7 @@ use super::{Person, RailAct, Roster, SignedOp};
 ///
 /// Ordered and sorted before admission returns, so two nodes holding the same
 /// ops produce a byte-identical report and not merely an equal set of acts.
-#[derive(
-    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "gap", rename_all = "snake_case")]
 pub enum RailGap {
     /// A journal line this build could not parse. From
@@ -286,10 +284,9 @@ pub fn admit(
                 line: *line,
                 error: error.clone(),
             },
-            SkippedLine::NewerVersion { line, v } => RailGap::NewerVersionLine {
-                line: *line,
-                v: *v,
-            },
+            SkippedLine::NewerVersion { line, v } => {
+                RailGap::NewerVersionLine { line: *line, v: *v }
+            }
         })
         .collect();
 

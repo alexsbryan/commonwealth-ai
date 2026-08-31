@@ -147,18 +147,55 @@ Two principles, in priority order.
 
 ### Tier 0 — the local gate (`scripts/pre-push.sh`)
 
-Runs on every `git push`. Costs nothing, so it can run forever.
+Runs on every `git push`. Costs nothing to run, so it can run forever — but
+it costs a minute of *your* time, and that is the budget it is now held to.
 
-It scopes to what the push changes — a docs-only push costs about a second —
-and reuses your warm `target/`. The workspace suite runs on cargo-nextest
-(59s vs 126s for serial `cargo test`).
+**The one-minute rule (operator direction, 2026-08-30).** A gate people skip
+protects nothing, and the thing that gets a gate skipped is its wall clock.
+So the workspace *test* run left this tier on 2026-08-30: ~45-60s warm against
+~15s for every other gate combined, and CI already runs it on a clean checkout.
+Everything that stayed is fast, deterministic, and answers a question you
+cannot answer by reading the diff. Measured 2026-08-30: **22s for a full push
+touching Rust, docs and the desktop app; 27s with three of the workspace's
+most-depended-on crates dirtied.**
 
-| Gate | When |
-|---|---|
-| `cargo fmt --all --check` | Rust files changed |
-| `xtask docs-gate` (cited paths resolve) | always — a citation usually breaks because *code* was renamed |
-| `scripts/sovereign-test.sh --human` | Rust files changed |
-| `npm run check` + `npm run test` | `sovereign-desktop/` changed |
+| Gate | When | Cost |
+|---|---|---|
+| `scripts/sovereign-lint.sh` (`cargo check --all-targets`) | Rust files changed | 14-58s, **concurrent** |
+| `cargo fmt --all --check` | Rust files changed | 4.5s |
+| eight `xtask` gates, one binary, one build check | always | 5s |
+| CLI journey self-test | the journey harness changed | 2s |
+| release script self-test | a release driver / Containerfile changed | ~2s |
+| `npm run check` + `npm run test` | `sovereign-desktop/` changed | 10s |
+
+The eight are docs-gate (every path the narrative docs cite resolves — checked
+on *any* change, because a citation usually breaks when *code* is renamed),
+arch-gate, boundary-gate, layer-gate, lock-gate, layout-gate, env-gate and
+concept-gate. docs-gate used to run as its own `cargo run -p xtask --`, which
+re-resolved freshness over 56 workspace crates to invoke a gate that finishes
+in 0.4s; it is the same binary as the other seven and now rides the same loop.
+
+**The compile check runs concurrently, and that is what pays for it.** It is
+the only gate that can exceed the budget alone, and what drives its cost is
+free memory rather than diff size — `sovereign-lint.sh` derives `--jobs` at
+4GB/job, so the same workspace check measured 21.5s at `jobs: 12` and 58.1s at
+`jobs: 3`. Read the `jobs:` line before concluding a slow run means anything
+else. Started first and collected last, the hook costs `max(check, ~21s)`
+rather than their sum: serial, the memory-starved case is 79s and out of
+budget; overlapped it is ~58s and inside it.
+
+Ordering is load-bearing. The xtask build is hoisted *above* the launch point
+because `cargo build` and `cargo check` contend for the same target-directory
+lock — in the first draft it ran after, and sat on that lock for the whole
+check. Nothing after the launch point takes the cargo lock (rustfmt does not
+build; the journey and desktop gates are shell and node). Keep it that way or
+the concurrency quietly becomes a queue.
+
+**What this costs, stated rather than buried:** nothing in this tier runs a
+test any more. It still proves the workspace *compiles* under the repo's real
+feature contract. `./scripts/sovereign-test.sh --human` is the local authority
+for "do the tests pass here" — run it when you mean to — and CI is the
+authority for "do they pass on a machine that isn't yours".
 
 Installed by `scripts/install-git-hooks.sh` (called from `scripts/bootstrap.sh`),
 which points `core.hooksPath` at the version-controlled `.githooks/`. Hooks
@@ -171,7 +208,7 @@ uninstalled:
 ```
 git push --no-verify                  # skip all hooks, one push
 SOVEREIGN_SKIP_PREPUSH=1 git push
-SOVEREIGN_PREPUSH_QUICK=1 git push    # fmt + docs only, skip the test run
+SOVEREIGN_PREPUSH_QUICK=1 git push    # skip the desktop node gates
 ./scripts/pre-push.sh                 # run the gate by hand, no push
 ```
 
@@ -187,17 +224,31 @@ running if a red result tells you what to do next, so:
 - A rustfmt failure prints the *file list* and the one command that fixes it
   (`cargo fmt --all`), not fifteen screens of diff. The diff is derivable; the
   next action is what you needed.
-- A workspace that does not *compile* is reported as a build failure, not a
-  test failure — sovereign-test.sh already distinguishes them (non-zero cargo
-  exit, zero tests parsed) and the hook now reads that. Calling a build break a
-  "test failure" sends you reading test code for a missing header.
+- Only the *failing* gate's findings are printed. Eight gates' full output on
+  every push is the same crisis-wall that teaches people to reach for
+  `--no-verify`; zero output was worse, and is how six failing gates sat unseen
+  for a month (2026-08-27).
 - **A build break in a third-party build script does not block the push.**
   `break_is_first_party()` asks whether any rustc diagnostic points at source
   in this repo. If one does, it is yours and the push is blocked. If the only
-  failure is a dependency's build script or the native linker, the push goes
-  through with a loud `UNVERIFIED` warning naming the crate, because no edit to
-  that push could have fixed it. It fails closed: an unclassifiable log counts
-  as first-party.
+  failure is a dependency's build script or the native linker — a push from the
+  Fedora host, where llama-cpp-sys-4 dies on `stdbool.h` every time — the push
+  goes through with a loud `UNVERIFIED` warning naming the crate, because no
+  edit to that push could have fixed it. It fails closed: an unclassifiable log
+  counts as first-party.
+- **Four verdicts, not two** (ARCH §18.2). concept-gate does not count anything
+  itself — it relays `svrn code converge status`, whose exit codes are 0 pass,
+  1 a duplicate was ADDED, 3 the graph cannot speak for this commit, 4 never
+  ran. Only `1` is about your push; `3` and `4` are properties of the indexer,
+  which lags HEAD by design. Those are reported as COULD-NOT-JUDGE and do not
+  block, and the verdict line says so rather than printing "all gates passed".
+- **The elapsed total is printed every run**, and a run over 60s says so. The
+  budget is checkable rather than remembered: a gate that creeps shows up as a
+  number instead of as a growing habit of skipping the hook.
+
+(The block that distinguished "tests failed" from "the workspace did not
+build" went with the test run; `break_is_first_party()` outlived it and now
+classifies the compile check's failures instead.)
 
   This is not laxity, it is where the gate's authority actually ends. This repo
   builds `llama-cpp-sys-4`, which needs cmake, clang and clang's own builtin
@@ -381,9 +432,10 @@ cold build, and do not schedule one next to a release week.
 2. **Watch for the silent-stop failure mode.** A job that fails in under ~10
    seconds with no logs is a billing or permissions failure, not a code
    failure. `gh run view <id>` shows the annotation.
-3. **Green CI is not the gate — a green pre-push is.** If you find yourself
-   pushing to see what CI says, the local gate is either too slow or too
-   broad; fix that rather than routing around it.
+3. **A slow gate is a broken gate.** The hook is held to one minute. If you
+   find yourself reaching for `--no-verify`, or pushing to see what CI says,
+   the local gate is too slow or too broad — fix that rather than routing
+   around it. That is exactly why the test run moved to CI on 2026-08-30.
 4. **Keep the two filter lists in sync.** `scripts/pre-push.sh`'s `match`
    patterns mirror the `changes` job in `ci.yml`. Widen one, widen the other,
    or a green local run stops predicting a green CI run.

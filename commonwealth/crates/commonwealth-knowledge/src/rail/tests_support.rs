@@ -49,13 +49,7 @@ pub(super) fn signed(k: &SigningKey, ts: i64, seq: u64, act: RailAct) -> Op<Sign
     signed_in(NS, k, ts, seq, act)
 }
 
-pub(super) fn signed_in(
-    ns: &str,
-    k: &SigningKey,
-    ts: i64,
-    seq: u64,
-    act: RailAct,
-) -> Op<SignedOp> {
+pub(super) fn signed_in(ns: &str, k: &SigningKey, ts: i64, seq: u64, act: RailAct) -> Op<SignedOp> {
     let body = serde_json::to_string(&act).unwrap();
     let signature = sign_ring_op(k, ns, ts, seq, &body);
     Op::new(

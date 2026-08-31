@@ -3,15 +3,15 @@
 #   cargo run -p xtask -- arch-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- arch-gate --tighten
-1272	commonwealth/crates/commonwealth-api/src/admission.rs
+1317	commonwealth/crates/commonwealth-api/src/admission.rs
 5820	commonwealth/crates/commonwealth-api/src/frontdoor.rs
 2462	commonwealth/crates/commonwealth-api/src/next_edit_model.rs
 1412	commonwealth/crates/commonwealth-api/src/routes_edit_predictions.rs
-2301	commonwealth/crates/commonwealth-api/src/routes_inference.rs
+2339	commonwealth/crates/commonwealth-api/src/routes_inference.rs
 1496	commonwealth/crates/commonwealth-api/src/routes_internal/corpus_ingest.rs
 1701	commonwealth/crates/commonwealth-api/src/routes_internal/mesh_admin.rs
 2753	commonwealth/crates/commonwealth-api/src/routes_responses.rs
-2592	commonwealth/crates/commonwealth-api/src/state.rs
+2622	commonwealth/crates/commonwealth-api/src/state.rs
 1946	commonwealth/crates/commonwealth-core/src/mesh.rs
 1475	commonwealth/crates/commonwealth-transport/src/iroh.rs
 1484	corpus-engine-atos/src/features.rs
@@ -20,7 +20,7 @@
 1300	corpus-engine-scip/src/scip_export.rs
 3684	corpus-engine-scip/src/scip_graph.rs
 2457	corpus-engine/src/engine/ingest.rs
-3787	corpus-engine/src/engine/mod.rs
+3804	corpus-engine/src/engine/mod.rs
 1438	corpus-engine/src/enrichment/atlas/analysis/sec_facts/mod.rs
 1459	corpus-engine/src/enrichment/atlas/analysis/tensions.rs
 1873	corpus-engine/src/enrichment/atlas/atoms.rs
@@ -46,13 +46,13 @@
 1728	corpus-engine/src/testing.rs
 1830	corpus-engine/src/update/newsworthy_watcher.rs
 1619	corpus-engine/src/wikipedia_graph.rs
-2429	oicp-client/src/lib.rs
+2483	oicp-client/src/lib.rs
 1269	oicp-types/src/scoring.rs
 2053	sovereign/crates/commonwealth-agent-tools/src/executor.rs
 1457	sovereign/crates/commonwealth-tdd/src/trial.rs
 2914	sovereign/crates/sovereign-agent-bench/src/runners/native.rs
-2670	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs
-1371	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs
+2672	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs
+1380	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs
 1321	sovereign/crates/sovereign-cli-daemon/src/setup_cmd/fim.rs
 1240	sovereign/crates/sovereign-cli-dev/src/amend.rs
 4750	sovereign/crates/sovereign-cli-dev/src/atos_cmd/run.rs
@@ -72,12 +72,12 @@
 1204	sovereign/crates/sovereign-cli-llm/src/enrich_cmd/extract.rs
 1351	sovereign/crates/sovereign-cli-llm/src/enrich_cmd/inference_client.rs
 1510	sovereign/crates/sovereign-cli-llm/src/enrich_cmd/init.rs
-2441	sovereign/crates/sovereign-cli-llm/src/eval_cmd/runner.rs
+2449	sovereign/crates/sovereign-cli-llm/src/eval_cmd/runner.rs
 2385	sovereign/crates/sovereign-cli-llm/src/inner_chaos/recall.rs
 1347	sovereign/crates/sovereign-cli-llm/src/knowledge_gym_cmd/runner.rs
 2291	sovereign/crates/sovereign-cli-llm/src/mesh_bench.rs
 1611	sovereign/crates/sovereign-cli-llm/src/mesh_bench/tests.rs
-5218	sovereign/crates/sovereign-cli-llm/src/mesh_cmd.rs
+5224	sovereign/crates/sovereign-cli-llm/src/mesh_cmd.rs
 1753	sovereign/crates/sovereign-cli-llm/src/pipeline_cmd.rs
 1208	sovereign/crates/sovereign-cli-llm/src/reading_diag_cmd.rs
 1851	sovereign/crates/sovereign-cli-llm/src/recipe_agent_live_trial.rs
@@ -86,12 +86,12 @@
 1422	sovereign/crates/sovereign-cli-llm/src/workflow_cmd.rs
 1473	sovereign/crates/sovereign-cli-shared/src/cli_contract.rs
 2727	sovereign/crates/sovereign-cli/src/cache_audit_cmd.rs
-1479	sovereign/crates/sovereign-cli/src/main.rs
+1484	sovereign/crates/sovereign-cli/src/main.rs
 2205	sovereign/crates/sovereign-cli/src/notes_cmd.rs
 3562	sovereign/crates/sovereign-cli/src/session_cmd.rs
 1667	sovereign/crates/sovereign-compute/src/manager.rs
 2028	sovereign/crates/sovereign-compute/src/supervisor.rs
-2178	sovereign/crates/sovereign-contracts/src/setup_config.rs
+2189	sovereign/crates/sovereign-contracts/src/setup_config.rs
 1433	sovereign/crates/sovereign-contracts/src/skills.rs
 1917	sovereign/crates/sovereign-contracts/src/traits.rs
 1710	sovereign/crates/sovereign-contracts/src/types/mod.rs
@@ -118,7 +118,7 @@
 3007	sovereign/crates/sovereign-core/src/runtime/grounding/judge.rs
 6072	sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs
 1432	sovereign/crates/sovereign-core/src/runtime/handlers/attached_doc.rs
-2113	sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs
+2115	sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs
 1605	sovereign/crates/sovereign-core/src/runtime/retrieval/atom_enum.rs
 1206	sovereign/crates/sovereign-core/src/runtime/retrieval/corpus_search.rs
 1369	sovereign/crates/sovereign-core/src/runtime/retrieval/history.rs
@@ -143,13 +143,13 @@
 1927	sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs
 1314	sovereign/crates/sovereign-mesh/src/auto_ingest.rs
 1593	sovereign/crates/sovereign-mesh/src/corpus_watch_http.rs
-4660	sovereign/crates/sovereign-mesh/src/daemon.rs
-1532	sovereign/crates/sovereign-mesh/src/decision_log.rs
-1644	sovereign/crates/sovereign-mesh/src/gossip.rs
-2067	sovereign/crates/sovereign-mesh/src/inference_adapter.rs
-1866	sovereign/crates/sovereign-mesh/src/mesh_http.rs
+4708	sovereign/crates/sovereign-mesh/src/daemon.rs
+1533	sovereign/crates/sovereign-mesh/src/decision_log.rs
+1647	sovereign/crates/sovereign-mesh/src/gossip.rs
+2086	sovereign/crates/sovereign-mesh/src/inference_adapter.rs
+1867	sovereign/crates/sovereign-mesh/src/mesh_http.rs
 2394	sovereign/crates/sovereign-mesh/src/mesh_sim/mod.rs
-4783	sovereign/crates/sovereign-mesh/src/peer_inference.rs
+4832	sovereign/crates/sovereign-mesh/src/peer_inference.rs
 2116	sovereign/crates/sovereign-mesh/src/reindexer.rs
 1214	sovereign/crates/sovereign-mesh/src/rpc_warm_http.rs
 1282	sovereign/crates/sovereign-mesh/src/scheduler_core.rs

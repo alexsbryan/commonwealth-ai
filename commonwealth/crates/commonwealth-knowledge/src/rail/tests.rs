@@ -266,8 +266,14 @@ fn a_line_from_a_newer_build_is_a_gap_not_an_invisible_omission() {
         },
     ];
     let f = admit(&ops, &skipped, &ring(), NS);
-    assert_eq!(applied(&f), vec!["readable"], "what it CAN read is still right");
-    assert!(f.gaps.contains(&RailGap::NewerVersionLine { line: 4, v: 2 }));
+    assert_eq!(
+        applied(&f),
+        vec!["readable"],
+        "what it CAN read is still right"
+    );
+    assert!(f
+        .gaps
+        .contains(&RailGap::NewerVersionLine { line: 4, v: 2 }));
     assert!(f
         .gaps
         .iter()
@@ -360,7 +366,11 @@ fn a_hole_in_an_actors_sequence_is_reported() {
             missing: 1
         }]
     );
-    assert_eq!(applied(&f), vec!["a", "c"], "what we hold is still admitted");
+    assert_eq!(
+        applied(&f),
+        vec!["a", "c"],
+        "what we hold is still admitted"
+    );
 }
 
 /// One actor, one sequence number, two different ops: either equivocation or
@@ -407,7 +417,14 @@ fn an_act_the_rail_cannot_interpret_is_still_admitted() {
         "nested": { "z": 1, "a": [1, 2, 3] },
     }))
     .unwrap();
-    let op = signed(&key(1), 100, 0, RailAct::Record { payload: weird.clone() });
+    let op = signed(
+        &key(1),
+        100,
+        0,
+        RailAct::Record {
+            payload: weird.clone(),
+        },
+    );
     let f = admitted(&[op]);
     assert!(f.is_complete(), "{:?}", f.gaps);
     assert_eq!(f.ops[0].payload.as_ref(), Some(&weird));
@@ -462,7 +479,14 @@ fn open(dir: &std::path::Path) -> RingJournal {
 #[test]
 fn a_namespace_cannot_be_a_path() {
     let dir = tempfile::tempdir().unwrap();
-    for bad in ["../../etc", "a/b", "", "Has-Caps", "with space", &"x".repeat(65)] {
+    for bad in [
+        "../../etc",
+        "a/b",
+        "",
+        "Has-Caps",
+        "with space",
+        &"x".repeat(65),
+    ] {
         assert!(
             matches!(
                 RingJournal::open(dir.path(), bad),
@@ -526,7 +550,10 @@ fn the_door_refuses_to_author_under_a_key_the_ring_does_not_know() {
     let Err(RailError::Rejected(why)) = stranger else {
         panic!("the door authored an op nobody in the ring can read");
     };
-    assert!(why.contains("roster add"), "the refusal must name the fix: {why}");
+    assert!(
+        why.contains("roster add"),
+        "the refusal must name the fix: {why}"
+    );
     assert_eq!(journal.read().unwrap().0.len(), 0, "nothing was written");
 
     // A member writes fine.
@@ -588,7 +615,10 @@ fn ingesting_a_peers_op_preserves_it_and_is_idempotent() {
     let journal = open(dir.path());
     let peer = signed(&key(2), 100, 0, record("x"));
     assert!(journal.ingest(&peer).unwrap());
-    assert!(!journal.ingest(&peer).unwrap(), "second delivery is a no-op");
+    assert!(
+        !journal.ingest(&peer).unwrap(),
+        "second delivery is a no-op"
+    );
     let (back, _) = journal.read().unwrap();
     assert_eq!(back, vec![peer]);
     assert_eq!(journal.admit(&ring()).unwrap().ops.len(), 1);
@@ -682,7 +712,11 @@ fn a_half_delivered_peer_is_a_named_hole_not_a_clean_answer() {
         "A holds nothing contiguous from B, so it must claim nothing"
     );
     let repair = b.ops_missing_from(&a.digest().unwrap()).unwrap();
-    assert_eq!(repair.len(), 2, "the hole and everything above it come back");
+    assert_eq!(
+        repair.len(),
+        2,
+        "the hole and everything above it come back"
+    );
     a.ingest_all(&repair).unwrap();
     let healed = a.admit(&r).unwrap();
     assert!(healed.is_complete(), "{:?}", healed.gaps);

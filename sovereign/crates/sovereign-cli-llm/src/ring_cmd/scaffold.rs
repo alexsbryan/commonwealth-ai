@@ -38,9 +38,13 @@ pub(super) fn run_new(args: &[String]) -> i32 {
         return 2;
     };
     let dir = PathBuf::from(dir);
-    let name = flag(args, "--name")
-        .map(str::to_string)
-        .unwrap_or_else(|| title_case(&dir.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()));
+    let name = flag(args, "--name").map(str::to_string).unwrap_or_else(|| {
+        title_case(
+            &dir.file_name()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+        )
+    });
     if dir.join("index.html").exists() {
         // Not an error, and it writes nothing. Re-running the scaffold is
         // what somebody does when they have lost the thread, and the useful
@@ -72,7 +76,10 @@ pub(super) fn run_new(args: &[String]) -> i32 {
     println!();
     println!("  index.html + app.js   the page");
     println!("  expenses.js           what an act MEANS — the part that is yours");
-    println!("  expenses.test.mjs     its tests: `node --test {}`", dir.display());
+    println!(
+        "  expenses.test.mjs     its tests: `node --test {}`",
+        dir.display()
+    );
     println!();
     println!("  svrn ring roster add <you> --self --ring <namespace>");
     println!("  svrn ring dev <namespace> --dir {}", dir.display());
@@ -92,9 +99,6 @@ fn title_case(slug: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
 }
-
-
-
 
 #[cfg(test)]
 mod tests {

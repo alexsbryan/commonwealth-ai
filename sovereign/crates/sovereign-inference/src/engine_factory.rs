@@ -82,7 +82,10 @@ impl std::fmt::Debug for BuiltEngine {
         f.debug_struct("BuiltEngine")
             .field("holds_llama_slots", &self.llama.is_some())
             .field("embed_family", &self.embed_family)
-            .field("max_context_tokens", &self.provider.capabilities().max_context_tokens)
+            .field(
+                "max_context_tokens",
+                &self.provider.capabilities().max_context_tokens,
+            )
             .finish()
     }
 }
@@ -296,7 +299,10 @@ fn build_remote(section: &EngineSection) -> Result<BuiltEngine, String> {
                  from the chat id is how a chat model ends up on the embeddings route."
                     .to_string()
             })?;
-            let embed_endpoint = section.embed_endpoint.clone().unwrap_or_else(|| endpoint.to_string());
+            let embed_endpoint = section
+                .embed_endpoint
+                .clone()
+                .unwrap_or_else(|| endpoint.to_string());
             tracing::info!(
                 target: "engine_factory",
                 endpoint = %endpoint,

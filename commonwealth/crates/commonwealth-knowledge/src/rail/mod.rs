@@ -106,9 +106,7 @@ pub use sync::{digest, ops_missing_from, Digest};
 /// paid for groceries" renders as *Alex*. The binding from name to signing
 /// key lives in the [`Roster`], which is why the name can be changed without
 /// rewriting history.
-#[derive(
-    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
 #[serde(transparent)]
 pub struct Person(String);
 
@@ -283,9 +281,7 @@ pub enum RailError {
     /// A namespace is a directory name. Anything that is not plainly one is
     /// refused here rather than sanitised downstream, so no caller can reach
     /// outside its own namespace by naming a path (ARCH §7.1).
-    #[error(
-        "'{0}' is not a ring namespace — use 1..=64 characters from a-z, 0-9, '-' and '_'"
-    )]
+    #[error("'{0}' is not a ring namespace — use 1..=64 characters from a-z, 0-9, '-' and '_'")]
     BadNamespace(String),
     #[error("ring rail io: {0}")]
     Io(String),
@@ -566,10 +562,7 @@ impl RingJournal {
     /// Every op this node holds that `theirs` says the peer is missing.
     /// Author-blind: a node republishes what it HOLDS, so a housemate who
     /// leaves the ring does not take their half of the journal with them.
-    pub fn ops_missing_from(
-        &self,
-        theirs: &sync::Digest,
-    ) -> Result<Vec<Op<SignedOp>>, RailError> {
+    pub fn ops_missing_from(&self, theirs: &sync::Digest) -> Result<Vec<Op<SignedOp>>, RailError> {
         Ok(sync::ops_missing_from(&self.read()?.0, theirs))
     }
 
@@ -587,8 +580,7 @@ impl RingJournal {
         let (existing, _) = log
             .read_all_with_skips()
             .map_err(|e| RailError::Io(e.to_string()))?;
-        let mut held: std::collections::BTreeSet<&OpId> =
-            existing.iter().map(|o| &o.id).collect();
+        let mut held: std::collections::BTreeSet<&OpId> = existing.iter().map(|o| &o.id).collect();
         let mut fresh: Vec<Op<SignedOp>> = Vec::new();
         for op in ops {
             // Also dedupes WITHIN the batch: a peer that sends the same op
@@ -631,10 +623,8 @@ impl RingJournal {
 
     pub fn set_roster(&self, roster: &Roster) -> Result<(), RailError> {
         std::fs::create_dir_all(&self.dir).map_err(|e| RailError::Io(e.to_string()))?;
-        let raw =
-            serde_json::to_string_pretty(roster).map_err(|e| RailError::Io(e.to_string()))?;
-        std::fs::write(self.dir.join("roster.json"), raw)
-            .map_err(|e| RailError::Io(e.to_string()))
+        let raw = serde_json::to_string_pretty(roster).map_err(|e| RailError::Io(e.to_string()))?;
+        std::fs::write(self.dir.join("roster.json"), raw).map_err(|e| RailError::Io(e.to_string()))
     }
 }
 

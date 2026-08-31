@@ -377,9 +377,9 @@ mod tests {
             &self,
             _: &CompletionRequest,
         ) -> Result<Pin<Box<dyn futures::Stream<Item = StreamFrame> + Send>>> {
-            Ok(Box::pin(futures::stream::iter(vec![
-                StreamFrame::Token("partial".to_string()),
-            ])))
+            Ok(Box::pin(futures::stream::iter(vec![StreamFrame::Token(
+                "partial".to_string(),
+            )])))
         }
     }
 

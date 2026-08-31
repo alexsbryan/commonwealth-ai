@@ -86,7 +86,10 @@ fn is_newer(candidate: &str, current: &str) -> bool {
     let (a, b) = (parts(candidate), parts(current));
     let len = a.len().max(b.len());
     for i in 0..len {
-        let (x, y) = (a.get(i).copied().unwrap_or(0), b.get(i).copied().unwrap_or(0));
+        let (x, y) = (
+            a.get(i).copied().unwrap_or(0),
+            b.get(i).copied().unwrap_or(0),
+        );
         if x != y {
             return x > y;
         }
@@ -109,7 +112,10 @@ mod tests {
     #[test]
     fn ten_is_newer_than_nine() {
         assert!(is_newer("10.0.0", "9.0.0"));
-        assert!("10.0.0" < "9.0.0", "the string compare really was backwards");
+        assert!(
+            "10.0.0" < "9.0.0",
+            "the string compare really was backwards"
+        );
     }
 
     #[test]

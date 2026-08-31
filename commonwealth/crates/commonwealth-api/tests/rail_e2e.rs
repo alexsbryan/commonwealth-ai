@@ -65,8 +65,14 @@ fn state_with_rail(root: &std::path::Path, key: &SigningKey) -> AppState {
     let rail = Arc::new(RingRail::new(root, Arc::new(key.clone())));
     let mut members = std::collections::BTreeMap::new();
     members.insert(Person::from("alex"), vec![key.actor()]);
-    members.insert(Person::from("bo"), vec!["bo-has-not-joined-yet".to_string()]);
-    rail.journal(NS).unwrap().set_roster(&Roster::new(members)).unwrap();
+    members.insert(
+        Person::from("bo"),
+        vec!["bo-has-not-joined-yet".to_string()],
+    );
+    rail.journal(NS)
+        .unwrap()
+        .set_roster(&Roster::new(members))
+        .unwrap();
     state.install_ring_rail(rail);
     state
 }
@@ -80,10 +86,7 @@ fn with_guest(state: AppState, scopes: Vec<Scope>) -> AppState {
     state
 }
 
-async fn call(
-    state: AppState,
-    req: Request<Body>,
-) -> (StatusCode, serde_json::Value) {
+async fn call(state: AppState, req: Request<Body>) -> (StatusCode, serde_json::Value) {
     let resp = client_router(state).oneshot(req).await.unwrap();
     let status = resp.status();
     let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
@@ -95,7 +98,13 @@ async fn call(
     )
 }
 
-fn request(method: &str, path: &str, peer: &str, bearer: Option<&str>, body: Option<serde_json::Value>) -> Request<Body> {
+fn request(
+    method: &str,
+    path: &str,
+    peer: &str,
+    bearer: Option<&str>,
+    body: Option<serde_json::Value>,
+) -> Request<Body> {
     let mut b = Request::builder().method(method).uri(path);
     if let Some(t) = bearer {
         b = b.header(axum::http::header::AUTHORIZATION, format!("Bearer {t}"));
@@ -157,7 +166,13 @@ async fn a_ring_app_appends_an_act_and_reads_it_back_attributed_to_a_person() {
 
     let (status, body) = call(
         state.clone(),
-        request("POST", "/v1/rail/append", LAN_PEER, Some(GUEST_TOKEN), Some(groceries())),
+        request(
+            "POST",
+            "/v1/rail/append",
+            LAN_PEER,
+            Some(GUEST_TOKEN),
+            Some(groceries()),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
@@ -182,7 +197,10 @@ async fn a_ring_app_appends_an_act_and_reads_it_back_attributed_to_a_person() {
     assert_eq!(ops[0]["payload"]["description"], "groceries");
     assert_eq!(ops[0]["payload"]["amount_cents"], 6000);
     // And the rail computed no total, because it cannot.
-    assert!(log.get("balances").is_none(), "the rail invented a reading: {log}");
+    assert!(
+        log.get("balances").is_none(),
+        "the rail invented a reading: {log}"
+    );
 }
 
 /// The journal survives the process. A ring app that loses a month of acts
@@ -198,7 +216,13 @@ async fn the_journal_outlives_the_state_that_wrote_it() {
         );
         let (status, body) = call(
             state,
-            request("POST", "/v1/rail/append", LAN_PEER, Some(GUEST_TOKEN), Some(groceries())),
+            request(
+                "POST",
+                "/v1/rail/append",
+                LAN_PEER,
+                Some(GUEST_TOKEN),
+                Some(groceries()),
+            ),
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
@@ -344,7 +368,10 @@ async fn a_payload_with_no_canonical_form_is_refused_in_a_sentence() {
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
     let why = body["error"].as_str().unwrap_or_default();
-    assert!(why.contains("whole number"), "not a sentence a person can act on: {why}");
+    assert!(
+        why.contains("whole number"),
+        "not a sentence a person can act on: {why}"
+    );
     assert!(!why.contains('{'), "rendered as a dump: {why}");
 
     let (_, log) = call(
@@ -402,17 +429,19 @@ async fn an_operator_names_the_namespace_and_is_refused_without_one() {
 
     let (named, body) = call(
         state.clone(),
-        request("GET", &format!("/v1/rail/log?namespace={NS}"), LOOPBACK, None, None),
+        request(
+            "GET",
+            &format!("/v1/rail/log?namespace={NS}"),
+            LOOPBACK,
+            None,
+            None,
+        ),
     )
     .await;
     assert_eq!(named, StatusCode::OK, "{body}");
     assert_eq!(body["namespace"], NS);
 
-    let (unnamed, _) = call(
-        state,
-        request("GET", "/v1/rail/log", LOOPBACK, None, None),
-    )
-    .await;
+    let (unnamed, _) = call(state, request("GET", "/v1/rail/log", LOOPBACK, None, None)).await;
     assert_eq!(unnamed, StatusCode::BAD_REQUEST);
 }
 
@@ -602,10 +631,7 @@ async fn a_node_without_ring_storage_refuses_the_exchange() {
 // ── the rail listener, where the grant is the only way in ────
 
 /// Drive the RAIL bind rather than the operator one.
-async fn call_rail(
-    state: AppState,
-    req: Request<Body>,
-) -> (StatusCode, serde_json::Value) {
+async fn call_rail(state: AppState, req: Request<Body>) -> (StatusCode, serde_json::Value) {
     let resp = commonwealth_api::server::client_router_for(
         state,
         commonwealth_api::server::ClientSurface::Rail,
@@ -692,11 +718,7 @@ async fn the_rail_bind_serves_nothing_but_the_rail() {
             request("GET", path, LOOPBACK, Some(GUEST_TOKEN), None),
         )
         .await;
-        assert_eq!(
-            scoped,
-            StatusCode::FORBIDDEN,
-            "a rail grant reached {path}"
-        );
+        assert_eq!(scoped, StatusCode::FORBIDDEN, "a rail grant reached {path}");
 
         // The same path under a credential that has no scope limit at all.
         let (unscoped, _) =
@@ -721,8 +743,11 @@ async fn the_rail_bind_serves_nothing_but_the_rail() {
             state_with_rail(dir.path(), &key),
             vec![Scope::Rails(NS.into())],
         );
-        let (status, _) =
-            call_rail(state, request("GET", "/status", LOOPBACK, Some(bearer), None)).await;
+        let (status, _) = call_rail(
+            state,
+            request("GET", "/status", LOOPBACK, Some(bearer), None),
+        )
+        .await;
         assert_eq!(status, StatusCode::NOT_FOUND, "/status under {bearer}");
     }
 

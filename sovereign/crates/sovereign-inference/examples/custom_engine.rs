@@ -188,7 +188,10 @@ impl EngineBuilder for HypertunedBuilder {
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // ── STEP 3 — register, before anything builds a provider ─────────
     register_engine(ENGINE_NAME, Arc::new(HypertunedBuilder))?;
-    println!("registered. this binary can serve: {:?}\n", available_engines());
+    println!(
+        "registered. this binary can serve: {:?}\n",
+        available_engines()
+    );
 
     // ── STEP 4 — a REAL config.toml, parsed by the real loader ───────
     let dir = tempfile::tempdir()?;
@@ -241,7 +244,9 @@ context_size = 32768
     }
 
     // ── And actually serve, through the same seam the runtime uses ───
-    let answer = engine.complete(&CompletionRequest::new("what hardware are you?")).await?;
+    let answer = engine
+        .complete(&CompletionRequest::new("what hardware are you?"))
+        .await?;
     println!("\ncomplete()      -> {}", answer.text);
     println!("model_id        -> {}", answer.model_id);
 

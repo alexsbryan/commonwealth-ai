@@ -308,7 +308,12 @@ pub(crate) fn load_provider(
             inner
         };
 
-    Ok((provider, built.llama, resolved_embed_family, distributed_primary))
+    Ok((
+        provider,
+        built.llama,
+        resolved_embed_family,
+        distributed_primary,
+    ))
 }
 
 /// Every `model_id` that must route to the distributed-primary child: the GGUF

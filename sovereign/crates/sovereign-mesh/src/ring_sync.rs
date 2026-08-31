@@ -201,9 +201,7 @@ async fn exchange(
         &serde_json::json!({ "namespace": namespace, "digest": mine, "ops": [] }),
     )
     .await?;
-    let pulled = journal
-        .ingest_all(&first.ops)
-        .map_err(|e| e.to_string())?;
+    let pulled = journal.ingest_all(&first.ops).map_err(|e| e.to_string())?;
 
     // Call 2 — give them what they lack, out of everything we now hold.
     let for_peer = journal

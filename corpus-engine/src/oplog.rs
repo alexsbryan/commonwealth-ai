@@ -321,7 +321,10 @@ impl<K: Journaled> Oplog<K> {
                         v = op.v,
                         "oplog: skipping op from a newer format version"
                     );
-                    skipped.push(SkippedLine::NewerVersion { line: line_no, v: op.v });
+                    skipped.push(SkippedLine::NewerVersion {
+                        line: line_no,
+                        v: op.v,
+                    });
                 }
                 Ok(op) => out.push(op),
                 Err(err) => {
@@ -457,7 +460,10 @@ mod tests {
         log.append(&Op::new(touch("y"), 8, "ingest")).unwrap();
         fs::write(
             log.path(),
-            format!("{}\nnot json at all\n", fs::read_to_string(log.path()).unwrap().trim()),
+            format!(
+                "{}\nnot json at all\n",
+                fs::read_to_string(log.path()).unwrap().trim()
+            ),
         )
         .unwrap();
 

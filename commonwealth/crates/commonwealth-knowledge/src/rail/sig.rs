@@ -171,7 +171,10 @@ mod tests {
         let a = actor_of(&k);
         let body = r#"{"op":"record"}"#;
         let sig = sign_ring_op(&k, "house", 100, 1, body);
-        assert!(!verify_ring_op(&a, "lending", 100, 1, body, &sig), "namespace");
+        assert!(
+            !verify_ring_op(&a, "lending", 100, 1, body, &sig),
+            "namespace"
+        );
         assert!(!verify_ring_op(&a, "house", 101, 1, body, &sig), "ts_unix");
         assert!(!verify_ring_op(&a, "house", 100, 2, body, &sig), "seq");
         assert!(
@@ -201,9 +204,15 @@ mod tests {
         let sig = sign_ring_op(&k, "house", 100, 1, "{}");
         let a = actor_of(&k);
         assert!(!verify_ring_op("not-hex", "house", 100, 1, "{}", &sig));
-        assert!(!verify_ring_op("ab", "house", 100, 1, "{}", &sig), "short key");
+        assert!(
+            !verify_ring_op("ab", "house", 100, 1, "{}", &sig),
+            "short key"
+        );
         assert!(!verify_ring_op(&a, "house", 100, 1, "{}", "not-hex"));
-        assert!(!verify_ring_op(&a, "house", 100, 1, "{}", "abcd"), "short sig");
+        assert!(
+            !verify_ring_op(&a, "house", 100, 1, "{}", "abcd"),
+            "short sig"
+        );
         assert!(!verify_ring_op(&a, "house", 100, 1, "{}", ""));
     }
 

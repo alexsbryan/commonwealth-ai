@@ -350,7 +350,11 @@ async fn roster_list(namespace: &str) -> i32 {
             for (person, keys) in members {
                 let keys: Vec<String> = keys
                     .as_array()
-                    .map(|a| a.iter().filter_map(|k| k.as_str().map(str::to_string)).collect())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|k| k.as_str().map(str::to_string))
+                            .collect()
+                    })
                     .unwrap_or_default();
                 println!("{person}");
                 for k in keys {
@@ -375,7 +379,10 @@ async fn roster_list(namespace: &str) -> i32 {
 /// guessing at one for the tenant that happens to be in front of us is how a
 /// second expense implementation gets born.
 async fn run_log(args: &[String]) -> i32 {
-    let Some(namespace) = args.first().filter(|a| !a.starts_with("--")).map(String::as_str)
+    let Some(namespace) = args
+        .first()
+        .filter(|a| !a.starts_with("--"))
+        .map(String::as_str)
     else {
         eprintln!("ring log: which ring? `svrn ring log <namespace>`");
         return 2;
@@ -528,7 +535,10 @@ mod tests {
             "person": "bo", "ts_unix": 1_756_512_000,
             "payload": { "kind": "expense" }, "voided": true,
         });
-        assert!(op_line(&voided).contains("[voided]"), "a voided act must say so");
+        assert!(
+            op_line(&voided).contains("[voided]"),
+            "a voided act must say so"
+        );
 
         let withdrawal = serde_json::json!({
             "person": "cy", "ts_unix": 1_756_512_000,
