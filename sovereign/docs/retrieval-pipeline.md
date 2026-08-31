@@ -1,6 +1,6 @@
 <!-- GENERATED FILE — do not edit by hand.
 Source: sovereign-core/src/runtime/retrieval_pipeline.rs
-Regenerate: UPDATE_RETRIEVAL_PIPELINE_DOC=1 cargo test -p sovereign-core --test retrieval_pipeline_doc -->
+Regenerate: UPDATE_RETRIEVAL_PIPELINE_DOC=1 cargo test -p sovereign-core --test main retrieval_pipeline_doc -->
 
 # Retrieval pipeline — steps and knobs
 

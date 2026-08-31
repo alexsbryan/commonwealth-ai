@@ -182,7 +182,7 @@ export SOVEREIGN_DISABLE_PEER_INFERENCE=1
 # one that serves gossip (mesh_cmd.rs:2767-2782).
 #
 # It reports its own verdict and never pretends: no timeout, no non-2xx, no
-# missing link is swallowed. `tee`, NOT `>>`: `dev-pod.sh logs` shows the
+# missing link is swallowed. \`tee\`, NOT \`>>\`: \`dev-pod.sh logs\` shows the
 # CONTAINER's stdout, so a waiter that only appended to /workspace/daemon.log
 # was invisible from the operator side — measured on flight 49188146, where the
 # join SUCCEEDED and the only way to know was to ask the founder. A verdict
@@ -433,7 +433,7 @@ print(best["id"])
   # Everything conversational goes to stderr; stdout carries the id ALONE, so
   # `id=$(dev-pod.sh up)` works.
   echo "[dev-pod] offer $offer  image: $IMAGE  disk: ${DISK}G  ctx: $CTX  mode: $mode" >&2
-  boot=$(mktemp /tmp/dev-pod-boot.XXXX.sh); onstart_script "$join_link" > "$boot"
+  boot="$(mktemp -d)/dev-pod-boot.sh"; onstart_script "$join_link" > "$boot"
   bash -n "$boot" || { echo "[dev-pod] refusing to rent: boot script does not parse"; exit 1; }
   # --dry-run: everything up to the point of spending. The rendered boot script
   # is the part nobody can review once the pod is billing — an unquoted-heredoc

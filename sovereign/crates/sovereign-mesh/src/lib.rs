@@ -38,6 +38,7 @@ pub mod decision_trace;
 pub mod deep_link;
 #[cfg(feature = "dst")]
 pub mod dst;
+pub mod entry_endpoint;
 pub mod fim_adapter;
 pub mod gossip;
 pub mod guest_lender;

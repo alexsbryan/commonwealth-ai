@@ -1759,7 +1759,11 @@ pub(super) async fn advertise_embed_model(
             sovereign_core::setup_config::NodeClass::Terminal => format!(
                 "terminal node: holds no embed slot of its own and forwards \
                  embeddings to its entry node ({})",
-                config.node.entry.as_deref().unwrap_or("unset"),
+                config
+                    .node
+                    .binding()
+                    .map(|b| b.describe())
+                    .unwrap_or_else(|| "unset".to_string()),
             ),
             _ => "no embed model is configured on this node".to_string(),
         };
@@ -2110,13 +2114,18 @@ pub(super) async fn setup_watched_folders(
 /// (the daemon serves peers through a provider that routes to peers), so the
 /// cycle is broken by the handle: `run_daemon` builds every service, commissions
 /// the daemon with all of them at once, then calls `DeferredDaemon::bind`.
+/// The handle is an ARGUMENT rather than minted here because a terminal's
+/// forwarding provider is built earlier still — in `load_provider`, before this
+/// runs — and binds to its entry node through the same handle. One
+/// `DeferredDaemon` per daemon, or the terminal would resolve its entry node
+/// through a mesh view nobody ever binds (§10.6).
 pub(super) async fn build_mesh_provider(
     provider: Arc<dyn InferenceProvider>,
+    daemon: Arc<sovereign_mesh::DeferredDaemon>,
 ) -> (
     Arc<sovereign_mesh::DeferredDaemon>,
     Arc<sovereign_mesh::peer_inference::MeshInferenceProvider>,
 ) {
-    let daemon = Arc::new(sovereign_mesh::DeferredDaemon::new());
 
     // Wrap the raw `EmbeddedLlamaCpp` in `MeshInferenceProvider`
     // before installing it as the daemon's serving provider.

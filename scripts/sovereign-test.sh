@@ -778,7 +778,7 @@ failed_names="$(cat "$fails_file" 2>/dev/null || true)"
 # Measured 2026-07-26 (note 8def98d7): triaging a red test with
 # `--filter cross_view_digest_surfaces_resonance` built for 252s, ran ZERO
 # tests, and reported All green — while `cargo nextest run -p sovereign-tools
-# --test knowledge_view_e2e cross_view_digest` ran 2 and passed 2. The
+# --test main knowledge_view_e2e cross_view_digest` ran 2 and passed 2. The
 # --filter → owning-crate auto-scoping (see above) had picked a scope where
 # the target test binary never ran. An agent triaging that way gets a green
 # light having verified nothing: the same fail-open class as note d4a08e0d.

@@ -102,6 +102,6 @@ echo "=== one-shot arm: the comparator (production Deck + draft_round) ==="
 toolbox run -c "$TOOLBOX" env \
     DR_ARM_PAIRS="$RUNS/pairs.json" \
     DR_ARM_OUT="$ONESHOT" \
-    cargo test --test oneshot_rag -- --ignored
+    cargo test --test main oneshot_rag -- --ignored
 echo "one-shot exit=$?"
 echo "=== arms complete: pairs.json + loop/ + oneshot/ under $RUNS ==="

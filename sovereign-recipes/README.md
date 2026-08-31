@@ -71,7 +71,7 @@ When you `sovereign corpus install <id>`, the engine takes the first hit:
    the report, open a PR.
 
 Editing recipe fields? Run `UPDATE_RECIPE_SCHEMA=1 cargo test -p corpus-engine
---test recipe_schema` to regenerate `SCHEMA.md`; CI fails if it's stale.
+--test main recipe_schema` to regenerate `SCHEMA.md`; CI fails if it's stale.
 
 ## License
 

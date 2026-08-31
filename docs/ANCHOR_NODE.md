@@ -115,22 +115,30 @@ it up as a **terminal** instead. It is a full member — mesh key, gossip,
 pooled knowledge, ledger — that simply holds nothing and routes every
 turn *and every embedding* to the anchor.
 
+Hand them the **same join link** you hand every other member — the
+`join link:` line from `svrn mesh status`. There is no second artifact
+for terminals and no token to copy:
+
 ```sh
-svrn setup --terminal http://<anchor>:9741   # downloads nothing
-svrn mesh join "sovereign://join/cwth-…"     # the same link as any member
+svrn setup --terminal "sovereign://join/cwth-…"   # downloads nothing
 svrn daemon
 ```
 
-**Chat works before they join.** The terminal forwards any model name it
-cannot place itself to its entry node, which resolves the name and
-serves it — so `svrn setup --terminal` alone is enough to get answers.
-(This was not true until 2026-08-30: chat resolved against advertised
-manifests first, the terminal honestly advertises none of its own, and
-the anchor is not a peer until the join, so every turn 503'd.)
+`--terminal` with a join link joins the mesh, finds the member holding
+the models, and binds **that node's identity** — not its address. So the
+terminal follows the anchor when its lease moves, gets the transport's
+ranked multi-homed candidates, and reaches it over the iroh path on an
+encrypted mesh, where the plaintext client API is closed to the network
+and an address would answer nothing at all. If several members hold
+models, setup refuses to guess and prints the ids to pick from:
+`--entry <node-id>`.
 
-Joining is still worth doing, for what membership actually buys: gossip,
-pooled knowledge, the contribution ledger, and — once the anchor is a
-peer — a route that survives the anchor swapping addresses.
+`svrn setup --terminal http://host:9741` still works and still writes an
+address binding. Use it only when the entry node is *not* a mesh member
+— most often a daemon on the same machine. It carries the exposure that
+identity binding removes: nothing notices the day another machine
+answers there, which is what `svrn doctor`'s `entry_node_identity` check
+exists to catch.
 
 One thing a terminal cannot do at all: honour a `local_only` request.
 Nothing runs on that machine, so the only place a turn can execute is
@@ -142,6 +150,11 @@ it asks the anchor's `/status` for the embed model id (which decides the
 vector space this node's corpora land in) and drives one real completion
 through it, printing which model answered. A config with no served turn
 behind it is not a working setup.
+
+It also refuses to run beside a live daemon (`svrn daemon stop` first).
+Setup joins the mesh in-process and needs `:9741`/`:9742`; joining
+alongside a running daemon updates the CLI's copy of the mesh and never
+the one that actually serves gossip.
 
 Their editor still points at their **own** `localhost:9741` — §3 below is
 unchanged. The daemon there advertises no models of its own — and no embed

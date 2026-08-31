@@ -152,7 +152,7 @@ divergence the delta path can't fix:
 Two-node smoke (channel transport, no daemons):
 
 ```sh
-cargo test -p corpus-engine-notes --test propagation
+cargo test -p corpus-engine-notes --test main propagation
 ```
 
 Wire size + mixed-mesh shapes + local re-embed at ingest:
@@ -181,7 +181,7 @@ fixture, snapshot `~/.svrnmesh/notes.db` — never open the live one,
 
 ```sh
 RED_BASELINE_NOTES_DB=/path/to/snapshot.db \
-  cargo test -p corpus-engine-notes --test red_baseline_note_wire_size \
+  cargo test -p corpus-engine-notes --test main red_baseline_note_wire_size \
   -- --ignored --nocapture
 ```
 

@@ -467,7 +467,16 @@ impl EmbeddedDaemon {
     /// Reported beside [`node_class`](Self::node_class) so an operator reading
     /// "terminal" can see WHERE its turns go without opening `config.toml`.
     pub async fn entry_node(&self) -> Option<String> {
-        self.setup_config.read().await.node.entry.clone()
+        // Through `binding()`, not the `entry` field: a terminal bound by mesh
+        // identity has no address to report and would otherwise read as
+        // "terminal, entry node: null" — a node class with no visible
+        // destination, which is the opposite of why this is reported at all.
+        self.setup_config
+            .read()
+            .await
+            .node
+            .binding()
+            .map(|b| b.describe())
     }
 
     /// Borrow the `CorpusEngine` this host commissioned the daemon with, if

@@ -103,7 +103,7 @@ jobs:
       - name: System deps
         run: sudo apt-get update && sudo apt-get install -y mold clang protobuf-compiler libprotobuf-dev
       - name: Router embed cache is fresh
-        run: cargo test -p sovereign-core --test router_cache_fresh
+        run: cargo test -p sovereign-core --test main router_cache_fresh
 
   build:
     name: build / ${{ matrix.platform.name }}

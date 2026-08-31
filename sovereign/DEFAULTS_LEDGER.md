@@ -30,67 +30,55 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
-### `[node] entry` — keyed on an ADDRESS, not a node id (2026-08-30)
+### `[node] entry` — keyed on an ADDRESS, not a node id — **CLOSED 2026-08-31**
 
-**What is deferred.** A `terminal`-class node binds to its entry node by HTTP
-base URL (`http://halo:9741/v1`), not by mesh node id. The identity-keyed
-design — store the node id, resolve to ranked addresses through
-`PeerEndpointSource` at use time, keep the URL only as a bootstrap seed — was
-designed and priced in order `tn-1-terminal-honesty` D5, and not built.
+**Repaid.** A terminal now binds its entry node by mesh identity
+(`[node] entry_node`) and resolves it through `PeerEndpointSource` on every
+call. `EntryNodeEndpoint` (`sovereign-mesh/src/entry_endpoint.rs`) is the
+resolver; `EndpointResolver` / `EndpointRef` (`oicp-client/src/lib.rs`) is the
+seam it plugs into. `svrn setup --terminal <join-link>` joins the mesh first,
+so there is a real node id to bind. The address form survives for an entry node
+that is not a mesh member, and `validate_class` refuses a config carrying both.
 
-**Why it is a debt and not a preference.** ARCH §7.5: "the address is a mutable
-attribute of the thing, never its name," and its second cited incident is this
-mesh's own — an iroh bridge's loopback port used as peer identity produced 14
-rebuilds in 21 minutes for a peer that had not moved. Concretely, a URL-keyed
-terminal (a) does not follow its entry node when it changes network, (b) gets
-one address where `EmbeddedDaemon::peer_inference_endpoints` would hand it
-`PeerTransport`'s port-rewritten, rank-ordered, multi-homed candidate list, and
-(c) on a moved DHCP lease forwards to whatever machine now answers at that
-address — a confident wrong answer, not an error.
+**The deferral reason was wrong, and that is the lesson worth keeping.** This
+row priced the fix as "a provider type wrapping `SplitInferenceProvider`" and
+then correctly refused it: `InferenceProvider` carries 27 methods, 24 defaulted,
+and a delegating wrapper that omits `embed_batch` silently re-introduces the
+per-item loop that once made corpus ingest embed-bound. All true — and it was
+pricing the wrong design. `self.endpoint` is read at seven sites inside
+`RemoteApiProvider`. Putting the indirection THERE leaves `SplitInferenceProvider`
+with every override intact by construction, so there is no wrapper and no
+default to inherit. The estimate that justified deferring was an estimate of a
+design nobody had to build.
 
-**Why it was deferred.** Per-turn resolution requires a provider type wrapping
-`SplitInferenceProvider`, because `SplitInferenceProvider::new` takes a fixed
-`endpoint_v1: &str`. `InferenceProvider` carries **27 methods, 24 of them
-defaulted**. The default `embed_batch` (`traits.rs:384`) is a per-item loop, and
-`SplitInferenceProvider` overrides it precisely because that shape "made corpus
-ingest embed-bound" (`oicp-client/src/lib.rs:1477`). A delegating wrapper that
-omits one method silently inherits the default and re-introduces a measured
-regression with nothing red — §18.3's failure shape, built by construction.
-That risk is larger than the debt it would repay today, on a one-terminal fleet.
+**Three failures, one cause.** The row listed address-keying's cost as a moved
+DHCP lease and a missing multi-homed fallback chain. There was a third it did
+not see: an encrypted mesh forces its plaintext client API loopback-only
+(`sovereign-mesh/src/daemon.rs:2718`) and routes peers over the iroh acceptor,
+so a literal `http://host:9741/v1` answers **nothing** there. Terminals were
+unreachable on the posture this fleet actually runs, and the two-machine test
+that would have shown it had never been run. All three were consequences of
+bypassing `PeerTransport`, and resolving through it fixed all three at once.
 
-**Re-priced 2026-08-30, upward.** When this row was written, `[node] entry`
-routed embeddings only — chat resolved on the mesh manifest — so keying it on
-an address looked like a contained debt. Closing that gap made `entry` the
-decider for EVERY turn a terminal serves, which makes the address-keying matter
-more, not less: a moved DHCP lease now silently redirects chat as well as
-embeddings. The interim detection below is doing more work than it was meant
-to, and the flip conditions should be read as closer, not further away.
+**What did NOT change.** `serving_locus` is now a stored fact on
+`SplitInferenceProvider` rather than a loopback test on the endpoint string.
+That is load-bearing, not tidying: a resolved binding on an encrypted mesh is an
+iroh bridge at `127.0.0.1:<port>` whose far end is another machine, so the old
+string test would have answered `ForwardsOnBox` and honoured `local_only` for a
+turn leaving the host — the exact inversion `ServingLocus` was introduced to
+prevent, arriving through the fix for something else.
 
-**Flip condition (any one):**
-- A terminal's entry node changes address in the field and the terminal breaks
-  or, worse, silently serves from the wrong machine. One occurrence settles it.
-- A second terminal joins, or an entry node becomes dual-homed (WiFi +
-  Tailscale) — at which point the missing fallback chain is a live cost rather
-  than a hypothetical.
-- `InferenceProvider` is narrowed (ARCH §5.1) far enough that a delegating
-  wrapper cannot silently inherit a wrong default — e.g. the batch/stream
-  methods move to a sub-trait, or a `#[delegate]`-style macro makes the
-  delegation total.
+**Still owed.** `EntryNodeEndpoint::base_url` takes the top-ranked candidate
+rather than carrying the whole ranked list into the provider's retry loop, so a
+terminal whose entry node is reachable only on a lower-ranked address fails the
+turn and re-resolves on the next. Stated in the code. Left until a real
+multi-homed terminal shows it is not enough, because the alternative is a second
+implementation of candidate ordering that `peer_inference` already owns (§10.6).
 
-**Settled by.** Order `tn-1-terminal-honesty`, D5 — re-open it rather than
-re-deriving the design; the survey of what already exists
-(`peer_inference_endpoints`, `PeerEndpointSource`, `DeferredDaemon`, `/status`
-already returning `node_id`) is recorded there and is still good.
-
-**Interim mitigation: SHIPPED.** `[node] entry_node_id` records the entry
-node's identity at setup, and `svrn doctor`'s `entry_node_identity` check probes
-the address and reports a mismatch as a FAILURE naming both ids. Four verdicts:
-unreachable and never-recorded are `Skipped`, because "the node is down" and
-"another machine took the address" want opposite responses. Verified live
-2026-08-30. It detects the drift; it still cannot route around it.
-
-**Review by:** 2026-11-30, or the first field occurrence above, whichever comes
-first.
+**Verified.** Unit-level only at time of writing: the resolver's seven tests
+(follows a moved address, refuses an impostor at the right address, no fallback
+to another peer, empty mesh, ranking honoured, id parsing). **The two-machine
+run is NOT done** — see `MESH_N4_TOPOLOGY.md` §4.5.
 
 ### `SOVEREIGN_RPC_WORKER_PROCESS` — shipped OFF (2026-08-29)
 

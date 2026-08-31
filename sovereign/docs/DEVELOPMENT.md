@@ -39,8 +39,8 @@ The footgun to know about: edit a verb's code, rebuild only `sovereign-cli`, and
 
 ```sh
 cargo test --workspace                              # all tests
-cargo test -p sovereign-core --test functional      # functional tests (provenance, FTS5, KBs)
-cargo test -p sovereign-tools --test smoke_tests    # smoke tests (Parquet ingestion, full pipeline)
+cargo test -p sovereign-core --test main functional      # functional tests (provenance, FTS5, KBs)
+cargo test -p sovereign-tools --test main smoke_tests    # smoke tests (Parquet ingestion, full pipeline)
 ```
 
 Three layers:

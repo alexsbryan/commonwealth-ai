@@ -172,7 +172,7 @@ dst = ["dep:commonwealth-test-harness"]
 # `mesh_sim.rs` + `tests/mesh_sim_scoreboard.rs`. Pure compute — no
 # extra dependencies, no network, no wall clock — but off by default
 # so a production build never links a measurement harness. Run:
-#   cargo test -p sovereign-mesh --features mesh-sim,treesitter --test mesh_sim_scoreboard -- --nocapture
+#   cargo test -p sovereign-mesh --features mesh-sim,treesitter --test main mesh_sim_scoreboard -- --nocapture
 mesh-sim = []
 # Forward the ATOS served-middleware pipeline through to commonwealth-api.
 # OFF by default; an atos daemon build turns it on via the feature chain.
@@ -187,7 +187,7 @@ treesitter = ["corpus-engine/treesitter"]
 # EXPERIMENTAL: compiles commonwealth-transport's iroh dial-by-key
 # transport and the spike e2e (tests/iroh_transport_e2e.rs). Off by
 # default — never part of the workspace gates. Run via:
-#   cargo test -p sovereign-mesh --features iroh-experimental --test iroh_transport_e2e
+#   cargo test -p sovereign-mesh --features iroh-experimental --test main iroh_transport_e2e
 iroh-experimental = ["commonwealth-transport/iroh"]
 
 # Bench/measurement-only: lets `SOVEREIGN_IROH_RELAY_ONLY=1` pin the daemon's

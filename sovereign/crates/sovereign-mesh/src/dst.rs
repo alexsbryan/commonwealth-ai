@@ -794,4 +794,225 @@ mod invariant_tests {
              cloned identity"
         );
     }
+
+    // ─── The falsifier bank ──────────────────────────────────────────────
+    //
+    // WHY THIS EXISTS. Until now this module held four tests, all of them for
+    // `UniqueEndpointKey` — the one invariant that had already been caught
+    // running clean over a real defect. The other five had no falsifier at
+    // all, so "the pack is green" said nothing about whether five of its six
+    // predicates could fail. A check with no failing input you can name is not
+    // a check (ARCH_PRINCIPLES §18.1), and the pack's own history is the
+    // argument: `a_cloned_node_identity_is_caught` documents an 8-hour soak
+    // that passed over a mesh with two active rows on one endpoint key.
+    //
+    // Each falsifier below perturbs a snapshot so ONE named invariant must
+    // fail, and asserts the violation NAMES THE ACTORS — an operator reading
+    // a soak finding has to be able to go look at the right nodes. Where a
+    // legitimate shape sits close to the defect, a cry-wolf guard fences it:
+    // an invariant that fires on healthy state gets switched off, and takes
+    // the real defect with it.
+    //
+    // A richer view builder than `view()`: `live` and the admission counters
+    // are fixed there, and three of the six invariants read exactly those.
+    fn view_full(
+        self_id: u128,
+        rows: &[(u128, Option<u8>, bool, bool)],
+        peer_inflight: usize,
+        inflight_ceiling: usize,
+    ) -> NodeView {
+        NodeView {
+            self_id: NodeId::from_u128(self_id),
+            members: rows
+                .iter()
+                .map(|(id, key, active, live)| {
+                    (
+                        NodeId::from_u128(*id),
+                        MemberStat {
+                            live: *live,
+                            last_seen: 100,
+                            node_pubkey: key.map(|b| NodePubkey([b; 32])),
+                            active: *active,
+                        },
+                    )
+                })
+                .collect(),
+            peer_inflight,
+            inflight_ceiling,
+        }
+    }
+
+    /// A snapshot whose `online_truth` is stated rather than derived from the
+    /// views, so "who is actually up" can disagree with "who is looking".
+    fn snap_truth(views: Vec<NodeView>, truth: &[u128]) -> MeshSnapshot {
+        MeshSnapshot {
+            views,
+            online_truth: truth.iter().map(|i| NodeId::from_u128(*i)).collect(),
+        }
+    }
+
+    #[test]
+    fn convergence_falsifier_two_nodes_know_different_member_sets() {
+        let s = snap(vec![
+            view(1, &[(1, None, true), (2, None, true)]),
+            view(2, &[(2, None, true)]),
+        ]);
+        let v = Convergence
+            .check(&s)
+            .expect_err("differing member key sets must violate convergence");
+        assert_eq!(v.invariant, "convergence");
+        assert!(
+            v.detail.contains(&NodeId::from_u128(1).to_string())
+                && v.detail.contains(&NodeId::from_u128(2).to_string()),
+            "the violation must name BOTH disagreeing nodes: {}",
+            v.detail
+        );
+    }
+
+    #[test]
+    fn convergence_cry_wolf_guard_identical_member_sets_pass() {
+        let s = snap(vec![
+            view(1, &[(1, None, true), (2, None, true)]),
+            view(2, &[(1, None, true), (2, None, true)]),
+        ]);
+        assert!(Convergence.check(&s).is_ok());
+    }
+
+    #[test]
+    fn no_split_brain_falsifier_disjoint_live_sets_elect_different_leaders() {
+        // Each node sees only itself as live — the shape a partition leaves
+        // behind, and the one where two halves each crown themselves.
+        let s = snap(vec![view(1, &[(1, None, true)]), view(2, &[(2, None, true)])]);
+        let v = NoSplitBrain
+            .check(&s)
+            .expect_err("disjoint live sets must elect different leaders");
+        assert_eq!(v.invariant, "no_split_brain");
+        assert!(
+            v.detail.contains("leader disagreement") || v.detail.contains("owner disagreement"),
+            "the violation must say WHICH decider disagreed: {}",
+            v.detail
+        );
+    }
+
+    #[test]
+    fn no_ghost_members_falsifier_a_down_node_is_still_seen_live() {
+        // Node 2 is not in online_truth: the harness knows it is down, and
+        // node 1 still has it live. This is failed offline-decay.
+        let s = snap_truth(
+            vec![view(1, &[(1, None, true), (2, None, true)])],
+            &[1],
+        );
+        let v = NoGhostMembers
+            .check(&s)
+            .expect_err("a live row for a down node must violate no_ghost_members");
+        assert_eq!(v.invariant, "no_ghost_members");
+        assert!(
+            v.detail.contains(&NodeId::from_u128(2).to_string()),
+            "the violation must name the ghost so an operator can find it: {}",
+            v.detail
+        );
+    }
+
+    #[test]
+    fn no_ghost_members_cry_wolf_guard_a_decayed_row_is_not_a_ghost() {
+        // Same topology, but node 1 has correctly decayed node 2 to not-live.
+        // Offline decay working is the common case; firing on it would make
+        // every honest shutdown a violation.
+        let s = snap_truth(
+            vec![view_full(
+                1,
+                &[(1, None, true, true), (2, None, true, false)],
+                0,
+                8,
+            )],
+            &[1],
+        );
+        assert!(NoGhostMembers.check(&s).is_ok());
+    }
+
+    #[test]
+    fn liveness_falsifier_an_up_node_is_not_seen_at_all() {
+        // Both nodes are up, but node 1 has never heard of node 2. The
+        // converse of a ghost: a real peer missing from a real view.
+        let s = snap_truth(
+            vec![view(1, &[(1, None, true)]), view(2, &[(1, None, true), (2, None, true)])],
+            &[1, 2],
+        );
+        let v = Liveness
+            .check(&s)
+            .expect_err("an up node absent from a peer's view must violate liveness");
+        assert_eq!(v.invariant, "liveness");
+        assert!(
+            v.detail.contains(&NodeId::from_u128(2).to_string()),
+            "the violation must name the unseen node: {}",
+            v.detail
+        );
+    }
+
+    #[test]
+    fn admission_safety_falsifier_inflight_over_the_ceiling() {
+        let s = snap(vec![view_full(1, &[(1, None, true, true)], 9, 8)]);
+        let v = AdmissionSafety
+            .check(&s)
+            .expect_err("peer_inflight above the ceiling must violate admission_safety");
+        assert_eq!(v.invariant, "admission_safety");
+        assert!(
+            v.detail.contains('9') && v.detail.contains('8'),
+            "the violation must carry the count and the ceiling: {}",
+            v.detail
+        );
+    }
+
+    /// The second half of AdmissionSafety, and a distinct defect: a count
+    /// UNDER the ceiling but non-zero at a fixpoint is a guard that was taken
+    /// and never released. It would pass the ceiling test forever.
+    #[test]
+    fn admission_safety_falsifier_a_leaked_guard_at_quiescence() {
+        let s = snap(vec![view_full(1, &[(1, None, true, true)], 1, 8)]);
+        let v = AdmissionSafety
+            .check(&s)
+            .expect_err("a non-zero inflight count at quiescence must violate");
+        assert_eq!(v.invariant, "admission_safety");
+        assert!(
+            v.detail.contains("guard leak"),
+            "a leak and an over-ceiling are different repairs; the detail must \
+             say which one this is: {}",
+            v.detail
+        );
+    }
+
+    /// THE TRIPWIRE.
+    ///
+    /// Set equality, not a count, and deliberately in both directions: a
+    /// seventh invariant added without a falsifier fails here, and so does a
+    /// falsifier left behind for an invariant that has been retired. This is
+    /// the piece that makes the bank self-maintaining rather than a snapshot
+    /// of one afternoon's diligence — the same job `CONTROLLED_ASSERTIONS`
+    /// does for the desktop turn pack in
+    /// `tests/e2e/specs/negative-controls.spec.ts`.
+    ///
+    /// If you are here because this test is red: write the falsifier. Adding
+    /// the name to this list without one buys a green build and nothing else.
+    #[test]
+    fn every_invariant_in_the_pack_has_a_falsifier() {
+        const CONTROLLED: &[&str] = &[
+            "convergence",
+            "no_split_brain",
+            "no_ghost_members",
+            "admission_safety",
+            "liveness",
+            "unique_endpoint_key",
+        ];
+        let packed: BTreeSet<&str> = default_invariants().iter().map(|i| i.name()).collect();
+        let controlled: BTreeSet<&str> = CONTROLLED.iter().copied().collect();
+        assert_eq!(
+            packed, controlled,
+            "every invariant in default_invariants() needs a falsifier in this \
+             module proving it can fail, and every entry here needs a live \
+             invariant. In pack but uncontrolled: {:?}. Controlled but not in \
+             pack: {:?}.",
+            packed.difference(&controlled).collect::<Vec<_>>(),
+            controlled.difference(&packed).collect::<Vec<_>>(),
+        );
+    }
 }

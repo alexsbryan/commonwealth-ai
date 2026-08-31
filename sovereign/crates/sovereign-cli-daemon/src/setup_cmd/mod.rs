@@ -324,6 +324,12 @@ struct Opts {
     /// on the wizard — a different destination, like `--fim`, so it
     /// dispatches before hardware detection and downloads nothing.
     terminal: Option<String>,
+    /// `--entry <node-id>`: which member to bind, when a mesh has more than one
+    /// that holds models. Only meaningful with a `--terminal <join-link>`;
+    /// setup picks the sole holder unaided and refuses to guess between
+    /// several, so this exists to answer that refusal rather than to be typed
+    /// routinely.
+    entry: Option<String>,
     reset: bool,
     yes: bool,
     data_dir: Option<PathBuf>,

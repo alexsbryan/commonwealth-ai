@@ -219,7 +219,7 @@ on the verdict line, because a silent 6/7 is how coverage quietly leaks away.
 
 **One front door: `svrn contract`.** Everything in this section existed before
 2026-07-30 and none of it was findable. The experience map lived inside
-`cargo test -p sovereign-cli --features dev-tools --test cli_contract_journeys
+`cargo test -p sovereign-cli --features dev-tools --test main cli_contract_journeys
 print_the_experience_map -- --nocapture`, which nobody guesses; the lanes are two
 scripts under `scripts/`; the nightly's verdict is a `latest.json` under
 `~/.svrnmesh/`. A quality surface that cannot be found dies the same death as one

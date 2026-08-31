@@ -60,8 +60,13 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 ///   the slot whose child owns the mesh-distributed primary. The worker-
 ///   discovery loop respawns it on every worker-set change instead of calling
 ///   `engine.reload_primary()`.
+/// `mesh` is the view a `terminal` resolves its entry node through. Unbound at
+/// this point in the boot — it answers "no peers" until `DeferredDaemon::bind`
+/// — which is correct: a terminal that boots before gossip converges reports
+/// its entry node unreachable and starts serving the moment it appears.
 pub(crate) fn load_provider(
     config: &SetupConfig,
+    mesh: Arc<sovereign_mesh::DeferredDaemon>,
 ) -> Result<
     (
         Arc<dyn InferenceProvider>,
@@ -89,11 +94,14 @@ pub(crate) fn load_provider(
     // routable names — the entry node resolves one to whichever slot is hot,
     // and a concrete quant would pin this terminal to one machine's filename
     // and break the day that node swaps quants (`docs/ANCHOR_NODE.md`).
-    if let Some(entry) = config.node.entry.as_deref() {
-        // `node_class()`, not `models.is_none()`: a `[models]` table that
-        // exists but names no primary holds nothing, and a node holding
-        // nothing with an entry node is a terminal however its file is shaped.
-        if config.node_class() == sovereign_core::setup_config::NodeClass::Terminal {
+    // `node_class()`, not `models.is_none()`: a `[models]` table that exists but
+    // names no primary holds nothing, and a node holding nothing with an entry
+    // is a terminal however its file is shaped.
+    if config.node_class() == sovereign_core::setup_config::NodeClass::Terminal {
+        // `node_class()` answered Terminal, which it only does when a binding
+        // is present — but read it rather than assert it, so a future change to
+        // one cannot make the other lie.
+        if let Some(binding) = config.node.binding() {
             // `"unknown"` on absence, never `""`. That literal is the TRAIT's
             // sentinel for "this provider cannot identify its embed model"
             // (`sovereign-contracts::traits::embed_model_id`), and the readers
@@ -106,19 +114,61 @@ pub(crate) fn load_provider(
                 .local_embed_model_id()
                 .unwrap_or_else(|| "unknown".to_string());
             tracing::info!(
-                entry = %entry,
+                entry = %binding.describe(),
                 embed_model = %embed_model_id,
                 "terminal node: holding no weights, forwarding chat + embeddings to the entry node"
             );
-            let provider = Arc::new(sovereign_inference::remote::SplitInferenceProvider::new(
-                entry,
-                "primary".to_string(),
-                embed_model_id,
-                config.effective_context_size(),
-                String::new(),
-            ));
+            use sovereign_core::setup_config::EntryBinding;
+            let provider: Arc<dyn InferenceProvider> = match binding {
+                // Bound by identity: resolved through the mesh on every turn,
+                // so the terminal follows its entry node across addresses and
+                // reaches it over whatever path the transport offers —
+                // including the iroh one, which on an encrypted mesh is the
+                // only ingress there is.
+                EntryBinding::Node(hex) => {
+                    let resolver = match sovereign_mesh::entry_endpoint::EntryNodeEndpoint::parse(
+                        mesh as Arc<dyn sovereign_mesh::peer_inference::PeerEndpointSource>,
+                        &hex,
+                    ) {
+                        Ok(r) => Arc::new(r),
+                        Err(e) => {
+                            eprintln!("error: [node] entry_node is unusable — {e}");
+                            return Err(());
+                        }
+                    };
+                    Arc::new(sovereign_inference::remote::SplitInferenceProvider::resolved(
+                        resolver,
+                        // Always off-box, and structurally so: peers are the
+                        // mesh MINUS this node, so an entry node resolved from
+                        // the peer set is by construction another machine. The
+                        // locus is passed rather than sniffed because the
+                        // resolved address is often an iroh bridge on
+                        // 127.0.0.1 whose far end is that other machine —
+                        // reading the address would report ForwardsOnBox and
+                        // honour `local_only` for a turn that leaves the host.
+                        sovereign_core::traits::ServingLocus::ForwardsOffBox,
+                        "primary".to_string(),
+                        embed_model_id,
+                        config.effective_context_size(),
+                        String::new(),
+                    ))
+                }
+                // Bound by address: an entry node that is not a mesh member —
+                // a daemon on this machine, or one on a trusted LAN. Unchanged
+                // from the 2026-08-30 shape, including deriving the locus from
+                // the address, which is the whole truth in this case.
+                EntryBinding::Address(url) => {
+                    Arc::new(sovereign_inference::remote::SplitInferenceProvider::new(
+                        &url,
+                        "primary".to_string(),
+                        embed_model_id,
+                        config.effective_context_size(),
+                        String::new(),
+                    ))
+                }
+            };
             return Ok((
-                provider as Arc<dyn InferenceProvider>,
+                provider,
                 // No engine: nothing in this process owns weights, so the
                 // RPC-worker reload path and every other engine-only caller
                 // must see the absence rather than a stub that lies about it.

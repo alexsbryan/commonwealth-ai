@@ -262,6 +262,40 @@ pub struct TransportSection {
 
 /// `[node]` — this node's participant class on the mesh.
 ///
+/// How a terminal names the node it routes through.
+///
+/// A closed set of two, so an enum rather than "whichever of these fields is
+/// populated" (ARCH §2.1). The two are not ranked and one config carries
+/// exactly one of them — [`SetupConfig::validate_class`] refuses a file that
+/// sets both, because that file has two answers to "where does a turn go".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EntryBinding {
+    /// The entry node's mesh IDENTITY, resolved through the mesh on every
+    /// turn. What `svrn setup --terminal <join-link>` writes, and the form
+    /// ARCH §7.5 asks for: a node that moves networks, changes DHCP lease, or
+    /// is only reachable over an encrypted mesh's iroh path is still the same
+    /// node, and still found.
+    Node(String),
+    /// A literal `…/v1` address. For an entry node that is not a mesh member —
+    /// a daemon on this same machine, or one on a trusted LAN — where there is
+    /// no identity to resolve and the address genuinely is the whole truth.
+    ///
+    /// Carries the §7.5 exposure knowingly: nothing detects the day another
+    /// machine answers at that address. `svrn doctor`'s `entry_node_identity`
+    /// check exists for exactly this form.
+    Address(String),
+}
+
+impl EntryBinding {
+    /// How to name this binding to a person — an identity, or an address.
+    pub fn describe(&self) -> String {
+        match self {
+            Self::Node(id) => format!("entry node {id}"),
+            Self::Address(url) => url.clone(),
+        }
+    }
+}
+
 /// One stored fact: where to send work this node cannot do itself. The class
 /// itself is DERIVED from it plus `[models]` ([`SetupConfig::node_class`])
 /// rather than stored, so there is no third field to disagree with the other
@@ -306,6 +340,26 @@ pub struct NodeSection {
     /// stalest exactly when it wakes).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entry: Option<String>,
+    /// The entry node's mesh node id, used as the BINDING — resolved through
+    /// the mesh on every turn rather than stored as an address.
+    ///
+    /// This is what ARCH §7.5 asks for and what [`entry`](Self::entry) could
+    /// not give: the identity is what the operator chose, the address is a
+    /// mutable attribute of it, and this mesh has the scar to prove the
+    /// difference — an iroh bridge's loopback port used as peer identity
+    /// produced 14 rebuilds in 21 minutes for a peer that had not moved.
+    ///
+    /// Written by `svrn setup --terminal <join-link>`, which joins the mesh
+    /// first and so has a real node id to bind. Resolution goes through the
+    /// same `PeerTransport` seam every other peer-bound traffic class uses, so
+    /// a terminal inherits multi-homed candidate ranking and — on an encrypted
+    /// mesh — the iroh path, which is the only ingress such a mesh has.
+    ///
+    /// NOT to be confused with [`entry_node_id`](Self::entry_node_id), which
+    /// records what an ADDRESS binding pointed at so drift can be detected.
+    /// This one IS the binding, and an identity cannot drift.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry_node: Option<String>,
     /// The entry node's mesh node id, recorded at setup time.
     ///
     /// NOT the binding — [`entry`](Self::entry) is, and it is a URL. This is
@@ -340,6 +394,26 @@ pub struct NodeSection {
     /// no id to vouch with and the guard treats the space as unknown.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entry_embed_model: Option<String>,
+}
+
+impl NodeSection {
+    /// Where this node sends work it cannot do itself, or `None` when it was
+    /// never told.
+    ///
+    /// THE one place that judgement is made, so provider construction,
+    /// `node_class`, `svrn doctor` and the status surface cannot reach
+    /// different answers (§10.6). A file carrying both forms is refused at
+    /// load, so the order of these two arms is not a precedence rule — it is
+    /// only what the compiler needs.
+    pub fn binding(&self) -> Option<EntryBinding> {
+        if let Some(node) = self.entry_node.as_deref().filter(|s| !s.trim().is_empty()) {
+            return Some(EntryBinding::Node(node.to_string()));
+        }
+        self.entry
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .map(|url| EntryBinding::Address(url.to_string()))
+    }
 }
 
 /// What kind of participant a node is — derived, never stored.
@@ -1471,7 +1545,7 @@ impl SetupConfig {
             .models
             .as_ref()
             .is_some_and(ModelsSection::is_populated);
-        match (holds_models, self.node.entry.is_some()) {
+        match (holds_models, self.node.binding().is_some()) {
             (true, _) => NodeClass::Holder,
             (false, true) => NodeClass::Terminal,
             (false, false) => NodeClass::Unconfigured,
@@ -1498,7 +1572,10 @@ impl SetupConfig {
                 "this node is a terminal — it holds no models and routes \
                  inference to its entry node ({}). Nothing here can be served \
                  from a local slot.",
-                self.node.entry.as_deref().unwrap_or("unset"),
+                self.node
+                    .binding()
+                    .map(|b| b.describe())
+                    .unwrap_or_else(|| "unset".to_string()),
             ),
             _ => format!(
                 "no models are configured in {} — run `svrn setup` (or \
@@ -1619,13 +1696,27 @@ impl SetupConfig {
     /// slot table nor an entry node, because nothing later in the boot can tell
     /// that apart from a deliberate terminal.
     fn validate_class(&self, path: &Path) -> Result<(), String> {
-        match self.models.is_some() || self.node.entry.is_some() {
+        // Two bindings is not a preference to resolve, it is a file that says
+        // two different things about where a turn goes. Refuse it here rather
+        // than let `binding()` pick a winner — a silent pick is how the wrong
+        // one ends up load-bearing and nobody finds out until a turn lands on
+        // the wrong machine (§18.3).
+        if self.node.entry_node.is_some() && self.node.entry.is_some() {
+            return Err(format!(
+                "{} sets BOTH `[node] entry_node` (a mesh identity) and \
+                 `[node] entry` (an address), which are two answers to where a \
+                 turn goes. Keep the identity and delete the address, or \
+                 re-run `svrn setup --reset --terminal <join-link>`.",
+                path.display(),
+            ));
+        }
+        match self.models.is_some() || self.node.binding().is_some() {
             true => Ok(()),
             false => Err(format!(
-                "{} declares neither `[models]` nor `[node] entry`, so this \
-                 node can neither serve a turn nor route one. Run `svrn setup` \
-                 to hold models locally, or `svrn setup --terminal \
-                 <join-link>` to route to a peer that does.",
+                "{} declares neither `[models]` nor a `[node]` entry binding, \
+                 so this node can neither serve a turn nor route one. Run \
+                 `svrn setup` to hold models locally, or `svrn setup \
+                 --terminal <join-link>` to route to a peer that does.",
                 path.display(),
             )),
         }
@@ -2055,6 +2146,86 @@ embed = "/m/e.gguf"
             "holding weights makes a node a holder even with an entry configured — \
              the entry is then simply unused"
         );
+    }
+
+    /// A mesh identity is a binding in its own right — the one `svrn setup
+    /// --terminal <join-link>` writes, and the one ARCH §7.5 asks for.
+    #[test]
+    fn an_identity_alone_makes_a_terminal() {
+        let mut cfg = SetupConfig::unconfigured();
+        cfg.node.entry_node = Some("44ae76142b0c3c723051ff98f043104a".into());
+        assert_eq!(cfg.node_class(), NodeClass::Terminal);
+        assert_eq!(
+            cfg.node.binding(),
+            Some(EntryBinding::Node(
+                "44ae76142b0c3c723051ff98f043104a".into()
+            ))
+        );
+    }
+
+    /// An address alone still binds — an entry node that is not a mesh member
+    /// has no identity to resolve, and that case stays supported.
+    #[test]
+    fn an_address_alone_still_binds() {
+        let mut cfg = SetupConfig::unconfigured();
+        cfg.node.entry = Some("http://halo:9741/v1".into());
+        assert_eq!(
+            cfg.node.binding(),
+            Some(EntryBinding::Address("http://halo:9741/v1".into()))
+        );
+    }
+
+    /// An empty string is not a binding. Serde `default` plus a hand-edited
+    /// file can produce one, and treating it as present would send every turn
+    /// to `"" `and report the node as a working terminal (§18.3).
+    #[test]
+    fn a_blank_binding_is_no_binding() {
+        let mut cfg = SetupConfig::unconfigured();
+        cfg.node.entry = Some("   ".into());
+        cfg.node.entry_node = Some(String::new());
+        assert_eq!(cfg.node.binding(), None);
+        assert_eq!(cfg.node_class(), NodeClass::Unconfigured);
+    }
+
+    /// Two bindings is a file that says two different things about where a
+    /// turn goes. Refused at LOAD, so it cannot be resolved by precedence
+    /// somewhere further in and land turns on the wrong machine.
+    #[test]
+    fn a_config_carrying_both_bindings_is_refused_at_load() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "[node]\n\
+             entry = \"http://halo:9741/v1\"\n\
+             entry_node = \"44ae76142b0c3c723051ff98f043104a\"\n\
+             \n\
+             [data]\n\
+             dir = \"/tmp/x\"\n",
+        )
+        .expect("write");
+        let err = SetupConfig::load_from(&path).expect_err("both bindings must be refused");
+        assert!(err.contains("entry_node"), "got: {err}");
+        assert!(err.contains("entry"), "got: {err}");
+    }
+
+    /// One binding loads fine — the guard above must not have made every
+    /// terminal config unloadable.
+    #[test]
+    fn a_config_with_one_binding_loads() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "[node]\n\
+             entry_node = \"44ae76142b0c3c723051ff98f043104a\"\n\
+             \n\
+             [data]\n\
+             dir = \"/tmp/x\"\n",
+        )
+        .expect("write");
+        let cfg = SetupConfig::load_from(&path).expect("one binding is a valid terminal");
+        assert_eq!(cfg.node_class(), NodeClass::Terminal);
     }
 
     /// A `[models]` table that EXISTS but names nothing is not a holder.

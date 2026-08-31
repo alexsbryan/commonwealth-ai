@@ -562,20 +562,29 @@ travels with.
   > routed real traffic to a machine holding nothing. Candidacy now reads
   > `resident_slots()`, and an empty report advertises nothing at all.
 
-  > **The bind is an ADDRESS, and that is a known debt.** `[node] entry` holds
-  > `http://halo:9741/v1`, not a node id — so a terminal does not follow its
-  > entry node across networks, gets one address where
-  > `peer_inference_endpoints` would hand it `PeerTransport`'s ranked
-  > multi-homed candidates, and on a moved DHCP lease forwards to whatever now
-  > answers there. ARCH §7.5 forbids exactly this ("the address is a mutable
-  > attribute of the thing, never its name") and cites this mesh's own iroh
-  > bridge-port incident. The identity-keyed design was priced in order
-  > `tn-1-terminal-honesty` D5 and deferred: per-turn resolution needs a
-  > provider wrapping `SplitInferenceProvider`, and `InferenceProvider` carries
-  > 27 methods of which 24 are defaulted — including an `embed_batch` whose
-  > default is the per-item loop that once made corpus ingest embed-bound. A
-  > wrapper that misses one silently inherits it. Flip conditions are in
-  > `sovereign/DEFAULTS_LEDGER.md`.
+  > **The bind was an ADDRESS. Repaid 2026-08-31.** `[node] entry_node` now
+  > holds the entry node's mesh node id and `EntryNodeEndpoint`
+  > (`sovereign-mesh/src/entry_endpoint.rs`) resolves it through
+  > `PeerEndpointSource` on every call, so a terminal gets the same
+  > `PeerTransport` candidates every other peer-bound traffic class gets. The
+  > seam it plugs into is `EndpointResolver` / `EndpointRef` in `oicp-client`:
+  > `RemoteApiProvider` reads its endpoint through it at seven sites, which is
+  > why no wrapper around `SplitInferenceProvider` was needed and none of its
+  > 24 defaulted methods could be silently inherited. `svrn setup --terminal
+  > <join-link>` joins first, then binds what it finds.
+
+  > **The failure this exposed, which §4.5 had not stated.** An ENCRYPTED mesh
+  > forces its plaintext client API loopback-only and routes peers over the
+  > iroh acceptor, so a terminal bound to `http://host:9741/v1` could not reach
+  > its entry node at all — the class was unreachable on the posture the fleet
+  > actually runs, and every claim about it was a claim about co-located tests.
+  > Identity binding fixes this for the same reason it fixes the moved-lease
+  > case: both were consequences of bypassing `PeerTransport`.
+
+  > **Still address-shaped, deliberately.** An entry node that is not a mesh
+  > member has no identity to resolve, so `[node] entry` remains for that case
+  > — a loopback daemon, or a node on a trusted LAN. A config carrying both
+  > forms is refused at load rather than resolved by precedence.
 
   The single-point-of-failure cost stands unchanged, which is why the next item
   is still not optional.

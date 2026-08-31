@@ -2,7 +2,7 @@
 
 > **Generated** from `corpus-engine/src/recipe.rs` (+ the filter config types) by
 > the `recipe_schema` test. Do not edit by hand — regenerate with
-> `UPDATE_RECIPE_SCHEMA=1 cargo test -p corpus-engine --test recipe_schema`.
+> `UPDATE_RECIPE_SCHEMA=1 cargo test -p corpus-engine --test main recipe_schema`.
 >
 > This is the authoritative field list. The strings in the **TOML key** columns
 > are exactly what a recipe author writes. See `GETTING_STARTED.md` for a

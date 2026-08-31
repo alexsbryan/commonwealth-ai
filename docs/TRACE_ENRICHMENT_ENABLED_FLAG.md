@@ -196,7 +196,7 @@ closed afterwards on `fix/enrichment-blind-arms`:
      `enrichment_requested` so the enrichment report does not become the
      machine's general ingest-failure log.
 
-   Watched-to-fail, `sovereign-tools --test enrichment_health_e2e`: with the
+   Watched-to-fail, `sovereign-tools --test main enrichment_health_e2e`: with the
    resolution reverted and the partition scan deleted,
    `checker_opens_the_path_the_listing_reported_not_the_canonical_name` and
    `checker_reports_a_failed_ingest_partition_no_listing_can_see` both fail
@@ -222,7 +222,7 @@ closed afterwards on `fix/enrichment-blind-arms`:
    failed. A `debug!` tally is emitted unconditionally. The guard is
    `calls > 0 && failed == calls`: `0/0` is an absence of work, not an outage.
 
-   Watched-to-fail, `sovereign-tools --test enrichment_health_e2e`,
+   Watched-to-fail, `sovereign-tools --test main enrichment_health_e2e`,
    `a_total_inference_outage_says_so_at_completion_and_stays_reportable`: with
    the completion WARN deleted the test fails with an empty match against a
    buffer that contains only the pipeline's own per-call warnings; with it the

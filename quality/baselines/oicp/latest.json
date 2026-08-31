@@ -1,0 +1,78 @@
+{
+  "host": "http://127.0.0.1:9741",
+  "oicp_version": "0.4.0",
+  "checks": [
+    {
+      "id": "manifest.schema",
+      "level": "must",
+      "status": "pass",
+      "detail": "6 model(s), oicp_version 0.4.0"
+    },
+    {
+      "id": "manifest.features",
+      "level": "must",
+      "status": "pass",
+      "detail": "constraint:json_schema, constraint:json_object, constraint:lark, constraint:allowlist:url, constraint:allowlist:evidence_id, constraint:allowlist:cmd_prefix, think_budget, oicp:request_properties, x:forced_choice, ingest:v1, ingest:recipe_test"
+    },
+    {
+      "id": "manifest.embed_model",
+      "level": "should",
+      "status": "pass",
+      "detail": "embed_model populated"
+    },
+    {
+      "id": "inference.baseline",
+      "level": "must",
+      "status": "pass",
+      "detail": "chat completion returned content"
+    },
+    {
+      "id": "inference.model_identity",
+      "level": "must",
+      "status": "pass",
+      "detail": "response model `Qwopus3.5-4B-v3-MTP-Q8_0` ∈ manifest ids"
+    },
+    {
+      "id": "constraint.json_object",
+      "level": "feature",
+      "status": "pass",
+      "detail": "output is a JSON object"
+    },
+    {
+      "id": "constraint.json_schema",
+      "level": "feature",
+      "status": "pass",
+      "detail": "output conforms to the probe schema"
+    },
+    {
+      "id": "constraint.lark",
+      "level": "feature",
+      "status": "pass",
+      "detail": "output `yes` ∈ grammar language"
+    },
+    {
+      "id": "embed.bitcompat",
+      "level": "feature",
+      "status": "pass",
+      "detail": "deterministic, 1024-dim"
+    },
+    {
+      "id": "knowledge.search",
+      "level": "feature",
+      "status": "pass",
+      "detail": "search returned a well-shaped result set"
+    },
+    {
+      "id": "ingest.state_machine",
+      "level": "feature",
+      "status": "skip",
+      "detail": "no --fixture-recipe supplied"
+    },
+    {
+      "id": "auth.posture",
+      "level": "feature",
+      "status": "skip",
+      "detail": "loopback host is unauthenticated by posture"
+    }
+  ]
+}

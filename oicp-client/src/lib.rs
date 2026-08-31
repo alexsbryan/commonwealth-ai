@@ -103,6 +103,78 @@ fn error_excerpt(body: &str) -> &str {
 
 /// OpenAI-compatible API client.
 ///
+/// Where a forwarding provider's base URL comes from, when the operator did
+/// not name one.
+///
+/// The binding a `terminal` node writes is its entry node's mesh IDENTITY, not
+/// an address (ARCH §7.5 — "the address is a mutable attribute of the thing,
+/// never its name"). Resolving that identity is the mesh's job and the mesh is
+/// far above this crate, so the capability arrives as a trait: `oicp-client`
+/// states what it needs, `sovereign-mesh` supplies it, and the layer map
+/// (`quality/ARCH_LAYERS.toml`) keeps its one sovereign edge unchanged.
+///
+/// Resolution is per-call rather than per-boot on purpose. That is what makes
+/// a moved DHCP lease, a peer that reconnects on a different interface, and a
+/// mesh whose plaintext ingress is closed all reach the same place: whatever
+/// the transport says the peer is reachable at *now*.
+#[async_trait]
+pub trait EndpointResolver: Send + Sync + std::fmt::Debug {
+    /// The target's current OpenAI-shaped base (`…/v1`), or `None` when it
+    /// cannot be located right now.
+    ///
+    /// `None` is a real, reportable state — a bound peer that is offline — and
+    /// callers must surface it. It is never a cue to fall back to a remembered
+    /// address: that is how a terminal ends up talking confidently to whichever
+    /// machine inherited the lease (§18.3).
+    async fn base_url(&self) -> Option<String>;
+
+    /// Stable name of the binding for logs and errors. The IDENTITY, never an
+    /// address — an error that names an address teaches the reader to trust it.
+    fn describe(&self) -> String;
+}
+
+/// A provider's endpoint: fixed, or resolved on every call.
+///
+/// Two variants rather than an `Option<Arc<dyn EndpointResolver>>` beside a
+/// `String`, because those two fields can disagree and this cannot (§2.1). A
+/// provider has exactly one answer to "where do I send this".
+#[derive(Clone, Debug)]
+pub enum EndpointRef {
+    /// A base URL the caller named. Every provider built before terminals
+    /// existed, and every one pointed at a fixed host.
+    Static(String),
+    /// A binding resolved through the mesh on each call.
+    Dynamic(std::sync::Arc<dyn EndpointResolver>),
+}
+
+impl EndpointRef {
+    /// The base URL to use for THIS call.
+    ///
+    /// The `Dynamic` miss is an `Err`, not a silent skip: a turn that cannot
+    /// locate its entry node has not been served, and the caller must hear
+    /// that rather than receive a success-shaped nothing (§18.3).
+    async fn resolve(&self) -> Result<String> {
+        match self {
+            Self::Static(url) => Ok(url.clone()),
+            Self::Dynamic(resolver) => resolver.base_url().await.ok_or_else(|| {
+                Error::Inference(format!(
+                    "{} is not reachable right now — this node holds no weights, so \
+                     there is nowhere else to run this turn",
+                    resolver.describe()
+                ))
+            }),
+        }
+    }
+
+    /// What this endpoint is bound to, for logs and errors.
+    pub fn describe(&self) -> String {
+        match self {
+            Self::Static(url) => url.clone(),
+            Self::Dynamic(resolver) => resolver.describe(),
+        }
+    }
+}
+
 /// Works with any endpoint implementing the OpenAI chat/completions API:
 /// vLLM, Ollama, llama.cpp server, text-generation-inference, etc.
 pub struct RemoteApiProvider {
@@ -125,7 +197,7 @@ pub struct RemoteApiProvider {
     /// 17ms against a 32-second hint (note `bf432b4d`).
     wait_out_sheds: bool,
     client: reqwest::Client,
-    endpoint: String,
+    endpoint: EndpointRef,
     api_key: Option<String>,
     model_id: String,
     /// When true, `model_id` is a routing/attribution LABEL rather than
@@ -221,7 +293,7 @@ impl RemoteApiProvider {
     /// that would corrupt retrieval in a way no test downstream would
     /// catch.
     async fn embed_many_one_request(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
-        let url = format!("{}/embeddings", self.endpoint);
+        let url = format!("{}/embeddings", self.endpoint.resolve().await?);
         let body = serde_json::json!({
             "model": &self.model_id,
             "input": texts,
@@ -293,7 +365,7 @@ impl RemoteApiProvider {
             // Off: see the field docs — a peer shed is a routing signal, not a wait.
             wait_out_sheds: false,
             client,
-            endpoint: endpoint.trim_end_matches('/').to_string(),
+            endpoint: EndpointRef::Static(endpoint.trim_end_matches('/').to_string()),
             api_key,
             model_id: model_id.to_string(),
             model_id_is_placeholder: false,
@@ -306,6 +378,41 @@ impl RemoteApiProvider {
             // (`embed`, which ignores the prefix) leave it empty.
             query_instruction: String::new(),
         }
+    }
+
+    /// Construct against a binding resolved on every call rather than a fixed
+    /// address — a `terminal` node and its entry node.
+    ///
+    /// Everything else is `new`'s behaviour: only the endpoint is late, so a
+    /// caller cannot acquire different request-building, streaming or envelope
+    /// handling by choosing this door.
+    pub fn dynamic(
+        resolver: std::sync::Arc<dyn EndpointResolver>,
+        api_key: Option<String>,
+        model_id: &str,
+        context_size: u32,
+    ) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(DEFAULT_TIMEOUT)
+            .build()
+            .unwrap_or_default();
+        Self {
+            // Off: see the field docs — a peer shed is a routing signal, not a wait.
+            wait_out_sheds: false,
+            client,
+            endpoint: EndpointRef::Dynamic(resolver),
+            api_key,
+            model_id: model_id.to_string(),
+            model_id_is_placeholder: false,
+            node_id: None,
+            context_size,
+            query_instruction: String::new(),
+        }
+    }
+
+    /// What this provider is bound to — an address, or the identity behind one.
+    pub fn endpoint_ref(&self) -> &EndpointRef {
+        &self.endpoint
     }
 
     /// Construct with a pre-built `reqwest::Client` and an explicit
@@ -328,7 +435,7 @@ impl RemoteApiProvider {
             // Off: see the field docs — a peer shed is a routing signal, not a wait.
             wait_out_sheds: false,
             client,
-            endpoint: endpoint.trim_end_matches('/').to_string(),
+            endpoint: EndpointRef::Static(endpoint.trim_end_matches('/').to_string()),
             api_key: Some(bearer),
             model_id: model_id.to_string(),
             model_id_is_placeholder: false,
@@ -733,18 +840,30 @@ impl RemoteApiProvider {
         self.api_key.as_ref().map(|k| format!("Bearer {k}"))
     }
 
-    /// The daemon root: `self.endpoint` with any `/v1` suffix stripped. Routes
-    /// mounted at the daemon root (not under `/v1`) — warmup and the OICP
-    /// capabilities manifest — resolve from here. Two endpoint shapes appear in
-    /// the codebase: callers like `chat_cmd/bootstrap` pass
-    /// `http://host:9741/v1`; peer-inference callers pass `http://peer:9741`.
-    /// Both resolve to the same root here.
-    fn daemon_root(&self) -> &str {
-        self.endpoint.strip_suffix("/v1").unwrap_or(&self.endpoint)
+    /// The daemon root: this provider's endpoint with any `/v1` suffix
+    /// stripped. Routes mounted at the daemon root (not under `/v1`) — warmup,
+    /// `/status`, and the OICP capabilities manifest — resolve from here. Two
+    /// endpoint shapes appear in the codebase: callers like
+    /// `chat_cmd/bootstrap` pass `http://host:9741/v1`; peer-inference callers
+    /// pass `http://peer:9741`. Both resolve to the same root here.
+    ///
+    /// Async because the endpoint may be a binding rather than an address, and
+    /// the ONE derivation of "root" for every caller — `SplitInferenceProvider`
+    /// used to keep a second copy in a `status_url` field, which is two answers
+    /// to one question (§10.6).
+    pub(crate) async fn daemon_root(&self) -> Result<String> {
+        let endpoint = self.endpoint.resolve().await?;
+        Ok(endpoint
+            .strip_suffix("/v1")
+            .unwrap_or(&endpoint)
+            .to_string())
     }
 
-    fn warmup_url(&self) -> String {
-        format!("{}/internal/inference/warmup", self.daemon_root())
+    async fn warmup_url(&self) -> Result<String> {
+        Ok(format!(
+            "{}/internal/inference/warmup",
+            self.daemon_root().await?
+        ))
     }
 
     /// Fetch the OICP capabilities manifest from a provider.
@@ -754,7 +873,7 @@ impl RemoteApiProvider {
         // `/v1` (same as warmup) — strip a `/v1` endpoint suffix so a caller
         // holding the OpenAI `/v1` URL still reaches it. Without this, a
         // `/v1`-shaped endpoint hit `…/v1/oicp/v1/capabilities` → 404 → None.
-        let url = format!("{}/oicp/v1/capabilities", self.daemon_root());
+        let url = format!("{}/oicp/v1/capabilities", self.daemon_root().await.ok()?);
 
         let req = self.stamped(self.client.get(&url));
 
@@ -869,7 +988,7 @@ struct StreamDelta {
 impl InferenceProvider for RemoteApiProvider {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
         let start = Instant::now();
-        let url = format!("{}/chat/completions", self.endpoint);
+        let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
         let body = self.build_request(request);
 
         let response = self
@@ -940,7 +1059,7 @@ impl InferenceProvider for RemoteApiProvider {
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = sovereign_contracts::types::StreamFrame> + Send>>> {
         use sovereign_contracts::types::{FinishReason, StreamFrame, StreamUsage};
-        let url = format!("{}/chat/completions", self.endpoint);
+        let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
         let mut body = self.build_request(request);
         body["stream"] = serde_json::json!(true);
 
@@ -1021,7 +1140,7 @@ impl InferenceProvider for RemoteApiProvider {
         &self,
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-        let url = format!("{}/chat/completions", self.endpoint);
+        let url = format!("{}/chat/completions", self.endpoint.resolve().await?);
         let mut body = self.build_request(request);
         body["stream"] = serde_json::json!(true);
 
@@ -1079,7 +1198,7 @@ impl InferenceProvider for RemoteApiProvider {
     }
 
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
-        let url = format!("{}/embeddings", self.endpoint);
+        let url = format!("{}/embeddings", self.endpoint.resolve().await?);
         let body = serde_json::json!({
             "model": &self.model_id,
             "input": text,
@@ -1220,7 +1339,13 @@ impl InferenceProvider for RemoteApiProvider {
     /// the trait's default impl is a no-op for the same reason: an
     /// unwarmed slot is a slow first turn, not a broken caller.
     async fn warmup_primary(&self) -> Result<()> {
-        let url = self.warmup_url();
+        let Ok(url) = self.warmup_url().await else {
+            tracing::debug!(
+                binding = %self.endpoint.describe(),
+                "RemoteApiProvider::warmup_primary: endpoint unresolved, treating as no-op"
+            );
+            return Ok(());
+        };
         let req = self.stamped(self.client.post(&url).json(&serde_json::json!({})));
         match req.send().await {
             Ok(r) if r.status().is_success() => Ok(()),
@@ -1268,11 +1393,23 @@ pub struct SplitInferenceProvider {
     /// uses) so `effective_context_size` answers without a daemon round-trip —
     /// the runtime's budget-aware compaction arm reads it.
     context_size: u32,
-    /// Absolute URL of the daemon's `/status`, derived once from the `/v1`
-    /// endpoint. Sole consumer is [`Self::primary_slot_status`]: this
-    /// provider holds no weights, so the only honest answer to "is the
-    /// deep slot cold?" comes from the node that does.
-    status_url: String,
+    /// Where a turn built by this provider actually executes.
+    ///
+    /// STORED, not re-derived from the endpoint. It used to be answered by
+    /// string-matching the chat endpoint's host for loopback, which was right
+    /// only while every forwarder held a literal address. A terminal resolves
+    /// its entry node through the mesh, and on an encrypted mesh that resolves
+    /// to an iroh bridge on `127.0.0.1` — a loopback address whose far end is
+    /// another machine. Sniffing it would report `ForwardsOnBox` and start
+    /// honouring `local_only` for turns that leave the host, which is the exact
+    /// inversion [`ServingLocus`] exists to prevent.
+    ///
+    /// So the party that knows answers: the builder of the provider. The
+    /// address-shaped constructors keep deciding it by loopback test, because
+    /// for them the address IS the whole truth.
+    ///
+    /// [`ServingLocus`]: sovereign_contracts::traits::ServingLocus
+    locus: sovereign_contracts::traits::ServingLocus,
 }
 
 /// Does this `/v1` endpoint point at something on this machine?
@@ -1430,17 +1567,58 @@ impl SplitInferenceProvider {
             chat_model_id,
             embed_model_id,
             context_size,
-            // `endpoint_v1` is the OpenAI-shaped base (".../v1"); `/status`
-            // is its sibling, not a child. Trim exactly one trailing "/v1"
-            // (and any trailing slash) rather than string-replacing, so a
-            // host whose path legitimately contains "v1" elsewhere survives.
-            status_url: format!(
-                "{}/status",
-                endpoint_v1
-                    .trim_end_matches('/')
-                    .trim_end_matches("/v1")
-                    .trim_end_matches('/')
-            ),
+            // The address is the whole truth for this constructor: a caller who
+            // named `127.0.0.1` named this machine. See the field docs for why
+            // the resolved-binding constructor is told instead of asked.
+            locus: if endpoint_is_loopback(endpoint_v1) {
+                sovereign_contracts::traits::ServingLocus::ForwardsOnBox
+            } else {
+                sovereign_contracts::traits::ServingLocus::ForwardsOffBox
+            },
+        }
+    }
+
+    /// Build against an entry node resolved through the mesh on every call —
+    /// the `terminal` node's provider.
+    ///
+    /// `locus` is an argument because this constructor cannot work it out: the
+    /// resolved address may be an iroh bridge on loopback whose far end is
+    /// another machine. The caller knows which node it bound, so the caller
+    /// says. A terminal always passes [`ServingLocus::ForwardsOffBox`].
+    ///
+    /// [`ServingLocus::ForwardsOffBox`]: sovereign_contracts::traits::ServingLocus::ForwardsOffBox
+    pub fn resolved(
+        resolver: std::sync::Arc<dyn EndpointResolver>,
+        locus: sovereign_contracts::traits::ServingLocus,
+        chat_model_id: String,
+        embed_model_id: String,
+        context_size: u32,
+        embed_query_instruction: String,
+    ) -> Self {
+        // Both slots wait out a shed for the reason given in `new_with_bearer`:
+        // this provider owns no weights, so the node on the far end is the only
+        // holder there is and there is nowhere to route a refusal.
+        let chat = std::sync::Arc::new(
+            RemoteApiProvider::dynamic(
+                std::sync::Arc::clone(&resolver),
+                None,
+                &chat_model_id,
+                context_size,
+            )
+            .waiting_out_sheds(),
+        );
+        let embed = std::sync::Arc::new(
+            RemoteApiProvider::dynamic(resolver, None, &embed_model_id, context_size)
+                .with_query_instruction(embed_query_instruction)
+                .waiting_out_sheds(),
+        );
+        Self {
+            chat,
+            embed,
+            chat_model_id,
+            embed_model_id,
+            context_size,
+            locus,
         }
     }
 
@@ -1574,18 +1752,17 @@ impl InferenceProvider for SplitInferenceProvider {
 
     /// Forwarding, and WHERE to matters.
     ///
-    /// Loopback means the turn stays on this machine — the attach-mode desktop
-    /// and the CLI chat bootstrap both point here at their own daemon, and a
-    /// `local_only` envelope is perfectly satisfiable that way. A remote host
-    /// is a `terminal` bound to its entry node, and there `local_only` cannot
-    /// be honoured by anyone: this process owns no weights and the only place
-    /// the turn can run is another machine.
+    /// On-box means the turn stays on this machine — the attach-mode desktop
+    /// and the CLI chat bootstrap both point at their own daemon, and a
+    /// `local_only` envelope is perfectly satisfiable that way. Off-box is a
+    /// `terminal` bound to its entry node, and there `local_only` cannot be
+    /// honoured by anyone: this process owns no weights and the only place the
+    /// turn can run is another machine.
+    ///
+    /// Decided at construction — see the `locus` field for why asking the
+    /// address here would invert the answer for a mesh-resolved binding.
     fn serving_locus(&self) -> sovereign_contracts::traits::ServingLocus {
-        if endpoint_is_loopback(&self.chat.endpoint) {
-            sovereign_contracts::traits::ServingLocus::ForwardsOnBox
-        } else {
-            sovereign_contracts::traits::ServingLocus::ForwardsOffBox
-        }
+        self.locus
     }
 
     fn capabilities(&self) -> ProviderCapabilities {
@@ -1634,8 +1811,12 @@ impl InferenceProvider for SplitInferenceProvider {
             transitioning: bool,
         }
 
+        // Derived from the chat provider's endpoint rather than a stored copy:
+        // on a resolved binding there is no fixed address to have stored, and
+        // two derivations of "the daemon root" is two answers to one question.
+        let status_url = format!("{}/status", self.chat.daemon_root().await.ok()?);
         let resp = reqwest::Client::new()
-            .get(&self.status_url)
+            .get(&status_url)
             .timeout(std::time::Duration::from_millis(1500))
             .send()
             .await
@@ -2055,20 +2236,20 @@ mod tests {
         assert_eq!(provider.auth_header(), None);
     }
 
-    #[test]
-    fn warmup_url_strips_v1_suffix() {
+    #[tokio::test]
+    async fn warmup_url_strips_v1_suffix() {
         let provider = RemoteApiProvider::new("http://localhost:9741/v1", None, "model", 4096);
         assert_eq!(
-            provider.warmup_url(),
+            provider.warmup_url().await.unwrap(),
             "http://localhost:9741/internal/inference/warmup",
         );
     }
 
-    #[test]
-    fn warmup_url_preserves_bare_host() {
+    #[tokio::test]
+    async fn warmup_url_preserves_bare_host() {
         let provider = RemoteApiProvider::new("http://peer:9741", None, "mesh-peer", 32_768);
         assert_eq!(
-            provider.warmup_url(),
+            provider.warmup_url().await.unwrap(),
             "http://peer:9741/internal/inference/warmup",
         );
     }
@@ -2379,18 +2560,21 @@ mod tests {
         assert!(provider.resident_slots().is_empty());
     }
 
-    #[test]
-    fn capabilities_url_resolves_at_daemon_root_for_both_endpoint_shapes() {
+    #[tokio::test]
+    async fn capabilities_url_resolves_at_daemon_root_for_both_endpoint_shapes() {
         // `/oicp/v1/capabilities` is mounted at the daemon root, so a `/v1`
         // endpoint (chat-bootstrap shape) must strip it — otherwise the fetch
         // hits `…/v1/oicp/v1/capabilities` (404) and manifest-driven context
         // silently falls back to the hardcoded default.
         let with_v1 = RemoteApiProvider::new("http://host:9741/v1", None, "m", 4096);
         let bare = RemoteApiProvider::new("http://host:9741", None, "m", 4096);
-        assert_eq!(with_v1.daemon_root(), "http://host:9741");
-        assert_eq!(bare.daemon_root(), "http://host:9741");
+        assert_eq!(with_v1.daemon_root().await.unwrap(), "http://host:9741");
+        assert_eq!(bare.daemon_root().await.unwrap(), "http://host:9741");
         assert_eq!(
-            format!("{}/oicp/v1/capabilities", with_v1.daemon_root()),
+            format!(
+                "{}/oicp/v1/capabilities",
+                with_v1.daemon_root().await.unwrap()
+            ),
             "http://host:9741/oicp/v1/capabilities"
         );
     }

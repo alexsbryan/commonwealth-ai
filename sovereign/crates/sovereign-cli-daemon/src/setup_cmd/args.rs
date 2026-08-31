@@ -10,6 +10,7 @@ use super::Opts;
 pub(super) fn parse_args(args: &[String]) -> Result<Opts, String> {
     let mut opts = Opts {
         terminal: None,
+        entry: None,
         reset: false,
         yes: false,
         data_dir: None,
@@ -30,6 +31,18 @@ pub(super) fn parse_args(args: &[String]) -> Result<Opts, String> {
                         .ok_or_else(|| {
                             "--terminal needs the entry node's address (e.g. \
                              http://halo:9741)"
+                                .to_string()
+                        })?
+                        .clone(),
+                );
+            }
+            "--entry" => {
+                i += 1;
+                opts.entry = Some(
+                    args.get(i)
+                        .ok_or_else(|| {
+                            "--entry needs a mesh node id (the 32-hex id `svrn setup \
+                             --terminal` lists when several members hold models)"
                                 .to_string()
                         })?
                         .clone(),

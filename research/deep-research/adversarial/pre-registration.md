@@ -7266,7 +7266,7 @@ Auditing-only guard.
 
 **Red, watched at HEAD (own runs, before the fix):**
 
-- `cargo test -p sovereign-core --test gym_deck unsearchable_estate` —
+- `cargo test -p sovereign-core --test main gym_deck unsearchable_estate` —
   FAILED: "state machine: no transition for (auditing, RoundStarted)".
 - `cargo test -p sovereign-core --lib deep_research::acquisition::tests::
   queries_come_from_gaps_deterministically` — FAILED: left

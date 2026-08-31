@@ -76,7 +76,7 @@ Landed since the original MVP plan:
   rejection at container boundary, three-pod pool drain. Run with:
 
   ```
-  cargo test --package sovereign-mesh --test local_pod_smoke \
+  cargo test --package sovereign-mesh --test main local_pod_smoke \
     -- --ignored --nocapture
   ```
 

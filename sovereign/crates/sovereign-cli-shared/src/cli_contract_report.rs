@@ -8,7 +8,7 @@
 //! by knowing to run
 //!
 //! ```text
-//! cargo test -p sovereign-cli --test cli_contract_journeys --features dev-tools \
+//! cargo test -p sovereign-cli --test main cli_contract_journeys --features dev-tools \
 //!     print_the_experience_map -- --nocapture
 //! ```
 //!
@@ -530,8 +530,8 @@ fn stale_meaning(t: &NightlyTrigger) -> String {
 const HOW_TO_RUN: &str = "\
 ── run it yourself ──
   static (no daemon, ~1s, runs in CI on every push):
-    cargo test -p sovereign-cli --features dev-tools --test cli_contract_journeys
-    cargo test -p sovereign-cli --features dev-tools --test cli_contract_code
+    cargo test -p sovereign-cli --features dev-tools --test main cli_contract_journeys
+    cargo test -p sovereign-cli --features dev-tools --test main cli_contract_code
   the runner's own negative controls (stub binary + stub daemon, ~10s, CI):
     sovereign/scripts/tests/cli-journey-selftest.sh
   read-only against the daemon you already have (safe anywhere, ~1m):

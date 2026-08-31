@@ -18,11 +18,31 @@ QA layer makes those behaviours observable, reproducible, and gated.
 N in-process nodes running the **real** gossip path (`run_one_round`) against
 live in-process axum servers, through a per-node fault-injecting transport, with
 a seeded fault schedule. Quiesce-then-assert against the invariant pack. Fast,
-no GPU/network/weights — runs in CI.
+no GPU/network/weights.
+
+**This genuinely runs in CI as of 2026-08-31, and did not before.** The claim
+sat here from the day the layer was written while the `mesh-dst` job was
+shelved (`.github/workflows/ci.yml`, July) and the `dst` feature was outside
+every gate's feature set — so the pack was compiled by the lint gate and
+executed by nothing. `dst` and `mesh-sim` now resolve in
+`scripts/lib/cargo-scope.sh`, so the pack rides the ordinary workspace test job
+on every push and every local `./scripts/sovereign-test.sh`.
 
 ```
-cargo test -p sovereign-mesh --features dst --test dst_scenarios
+# the whole workspace, the way CI and the pre-push hook run it:
+./scripts/sovereign-test.sh --human
+
+# just this layer:
+cargo test -p sovereign-mesh --features dst,treesitter --test main dst_scenarios
 ```
+
+Each of the six invariants carries a **falsifier** in
+`sovereign-mesh/src/dst.rs` (`mod invariant_tests`) proving it can fail, and
+`every_invariant_in_the_pack_has_a_falsifier` is set-equality in both
+directions — a seventh invariant added without a falsifier turns the build red,
+and so does a falsifier left behind for a retired one. Until 2026-08-31 the
+bank held four tests, all for `UniqueEndpointKey`; five of six predicates had
+never been watched fail.
 
 - Harness: `commonwealth-test-harness/src/fault/` (FaultTransport, FaultProxy,
   FaultPolicy, seeded FaultSchedule) + `MockLlamaServer` knobs.

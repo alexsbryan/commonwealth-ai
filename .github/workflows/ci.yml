@@ -49,13 +49,19 @@
 # ever turned on, so that a legitimately-skipped job can never wedge a PR in
 # "expected" forever.
 #
-# The heavier gates (mesh-dst fault-injection, boundary/arch/layer/lock,
-# cargo-deny supply-chain, clippy count-ratchet) remain SHELVED, commented out
-# at the bottom. Their local equivalents still run on demand:
+# The heavier gates (boundary/arch/layer/lock, cargo-deny supply-chain, clippy
+# count-ratchet) remain SHELVED, commented out at the bottom. Their local
+# equivalents still run on demand:
 #     cargo xtask quality                                   # boundary/arch/layer/lock
-#     cargo test -p sovereign-mesh --features dst,treesitter --test dst_scenarios
 #     cargo deny check licenses bans sources
 #     cargo clippy --workspace --all-targets
+#
+# mesh-dst is NO LONGER on that list. The `dst` and `mesh-sim` features now
+# resolve in scripts/lib/cargo-scope.sh, so the fault-injection pack and the
+# scheduler simulator ride the `test` job below at their true marginal cost
+# (pure in-process compute; the seeded chaos soak is the slow one at ~71s)
+# rather than needing the separate ~29-min/run job that was shelved in July.
+# Before this they were compiled by the LINT gate and executed by nothing.
 
 name: CI
 
@@ -495,9 +501,16 @@ jobs:
   # ci-ok's `needs` + `check` list, or it will not actually gate anything.
   # Local equivalents:
   #     cargo xtask quality                                   # gates job
-  #     cargo test -p sovereign-mesh --features dst,treesitter --test dst_scenarios
   #     cargo deny check licenses bans sources                # deny job
   #     cargo clippy --workspace --all-targets                # clippy job
+  #
+  # THE mesh-dst BLOCK BELOW IS SUPERSEDED, not merely shelved. Its whole job
+  # was one `cargo test --features dst` invocation, and `dst` now resolves in
+  # the workspace feature set, so the `test` job above already runs
+  # dst_scenarios (7) alongside mesh_sim_scoreboard (24) and
+  # scheduler_replay_agreement (8). Un-shelving it would pay a second ~29-min
+  # workspace build to run tests that already ran. Delete the block when
+  # someone is confident enough to stop keeping the receipt.
   # ===================================================================
 #
 #   mesh-dst:
@@ -570,7 +583,7 @@ jobs:
 #       # `-p sovereign-mesh` build resolves it OFF, so cargo rebuilt corpus-engine
 #       # + its 17 dependents from scratch on every run. Matching the feature set
 #       # makes the cache actually hit.
-#       - run: cargo test -p sovereign-mesh --features dst,treesitter --test dst_scenarios
+#       - run: cargo test -p sovereign-mesh --features dst,treesitter --test main dst_scenarios
 #
 #   # One runner for every xtask gate (each runs in <1s once xtask compiles;
 #   # they used to be two jobs paying the setup twice). Blocking/advisory is

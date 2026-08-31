@@ -63,10 +63,14 @@ async fn main() -> ExitCode {
 
     // Baseline gate.
     let mut regressed = false;
+    // A baseline we cannot read is NOT a pass and NOT a regression — it is a
+    // gate that did not run. Kept separate from `regressed` so the exit code
+    // can say which of the two happened.
+    let mut baseline_unreadable = false;
     if let Some(dir) = &parsed.baseline {
         let latest = format!("{}/latest.json", dir.trim_end_matches('/'));
         match read_report(&latest) {
-            Some(base) => {
+            Ok(Some(base)) => {
                 let regs = regressions(&base, &report);
                 if regs.is_empty() {
                     eprintln!("baseline: no regressions vs {latest}");
@@ -78,7 +82,13 @@ async fn main() -> ExitCode {
                     }
                 }
             }
-            None => eprintln!("baseline: no prior at {latest} (first run — nothing to diff)"),
+            Ok(None) => eprintln!("baseline: no prior at {latest} (first run — nothing to diff)"),
+            Err(e) => {
+                baseline_unreadable = true;
+                eprintln!("baseline: COULD NOT JUDGE — {e}");
+                eprintln!("  the ratchet did not run. This is not a pass.");
+                eprintln!("  re-mint it on a known-good host: --baseline {dir} --update-baseline");
+            }
         }
         if parsed.update_baseline {
             update_baseline(dir, &report);
@@ -93,7 +103,12 @@ async fn main() -> ExitCode {
             .iter()
             .any(|c| c.level == Level::Should && c.status == CheckStatus::Fail);
 
-    if !report.is_conformant() || regressed || should_failed {
+    // 2 is "could not judge" throughout this binary (see the usage-error arm
+    // above), and it must be distinguishable from 1: a corrupt baseline needs
+    // a human to re-mint it, a regression needs a human to read a diff.
+    if baseline_unreadable {
+        ExitCode::from(2)
+    } else if !report.is_conformant() || regressed || should_failed {
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS
@@ -134,9 +149,24 @@ fn write_json(path: &str, report: &Report) -> std::io::Result<()> {
     std::fs::write(path, body)
 }
 
-fn read_report(path: &str) -> Option<Report> {
-    let text = std::fs::read_to_string(path).ok()?;
-    serde_json::from_str(&text).ok()
+/// Read a prior report, keeping ABSENT and UNREADABLE apart.
+///
+/// `Ok(None)` is a real first run. `Err` is a baseline that exists and cannot
+/// be understood — a corrupt file, a truncated write, a schema this binary is
+/// too old to parse. Collapsing the two (both were `None` until 2026-08-31)
+/// disarms the ratchet silently: the run prints "first run — nothing to diff"
+/// and exits 0 while every regression it was built to catch sails through.
+/// Four verdicts, not two (ARCH_PRINCIPLES §18.2); absence is reported, never
+/// defaulted (§18.3).
+fn read_report(path: &str) -> Result<Option<Report>, String> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(format!("cannot read {path}: {e}")),
+    };
+    serde_json::from_str(&text)
+        .map(Some)
+        .map_err(|e| format!("cannot parse {path}: {e}"))
 }
 
 /// Write `latest.json` plus a dated snapshot so history is auditable.
@@ -158,4 +188,51 @@ fn update_baseline(dir: &str, report: &Report) {
         }
     }
     eprintln!("baseline updated: {latest} (+ {dated})");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::read_report;
+
+    /// The defect this pins, measured 2026-08-31: `read_report` used to be
+    /// `read_to_string(..).ok()?` + `from_str(..).ok()`, so a baseline that
+    /// EXISTED but could not be parsed came back `None` — identical to no
+    /// baseline at all. The run then printed "first run — nothing to diff"
+    /// and exited 0. Every regression the ratchet exists to catch went
+    /// through, and the only visible symptom was a reassuring sentence.
+    #[test]
+    fn an_unparseable_baseline_is_not_a_missing_one() {
+        let dir = std::env::temp_dir().join(format!("oicp-rr-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("latest.json");
+
+        // ABSENT — a real first run.
+        let _ = std::fs::remove_file(&path);
+        assert!(
+            matches!(read_report(path.to_str().unwrap()), Ok(None)),
+            "a missing baseline must read as a legitimate first run"
+        );
+
+        // PRESENT BUT UNPARSEABLE — the gate did not run.
+        std::fs::write(&path, "{ this is not a report }").unwrap();
+        let err = read_report(path.to_str().unwrap())
+            .expect_err("an unparseable baseline must NOT read as 'no baseline'");
+        assert!(
+            err.contains("cannot parse"),
+            "the error must name what went wrong, got: {err}"
+        );
+
+        // PRESENT AND VALID — the ordinary path still works.
+        std::fs::write(
+            &path,
+            r#"{"host":"h","oicp_version":"0.4.0","checks":[]}"#,
+        )
+        .unwrap();
+        assert!(
+            matches!(read_report(path.to_str().unwrap()), Ok(Some(_))),
+            "a valid baseline must still parse"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

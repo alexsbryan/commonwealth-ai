@@ -461,8 +461,16 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // `build::inference::load_provider`. `engine_handle` (concrete) feeds
     // the RPC-worker auto-reload path; `resolved_embed_family` feeds the
     // mesh embed-model advertisement.
+    //
+    // Minted HERE, before the provider, because a terminal's provider binds to
+    // its entry node THROUGH this handle: the bind is a mesh identity, resolved
+    // per turn, and the mesh view does not exist yet. `DeferredDaemon` answers
+    // exactly as a commissioned-but-stopped daemon until `bind` — no peers — so
+    // a terminal booting ahead of gossip reports its entry node unreachable
+    // rather than inventing an address for it.
+    let deferred_daemon = Arc::new(sovereign_mesh::DeferredDaemon::new());
     let (provider, raw_engine, resolved_embed_family, distributed_primary_slot) =
-        match build::inference::load_provider(&config) {
+        match build::inference::load_provider(&config, Arc::clone(&deferred_daemon)) {
             Ok(t) => t,
             Err(()) => return 1,
         };
@@ -816,7 +824,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // genuine cycle — the daemon serves peers through a provider that routes
     // to peers — and carries no capability of its own.
     let (deferred_daemon, mesh_provider) =
-        bootstrap::build_mesh_provider(Arc::clone(&provider)).await;
+        bootstrap::build_mesh_provider(Arc::clone(&provider), deferred_daemon).await;
     let routed_provider: Arc<dyn InferenceProvider> = mesh_provider.clone();
 
     // Notes-rail convergence recorder (order commons-fluency fix 9):

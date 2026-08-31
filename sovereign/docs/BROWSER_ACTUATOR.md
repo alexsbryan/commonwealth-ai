@@ -73,7 +73,7 @@ form POST reached the server. It is `#[ignore]`d (CI has no browser); run it
 where `npx` + the browser are installed:
 
 ```bash
-cargo test -p sovereign-tools --test playwright_actuator -- --ignored --nocapture
+cargo test -p sovereign-tools --test main playwright_actuator -- --ignored --nocapture
 ```
 
 ## Notes and gotchas

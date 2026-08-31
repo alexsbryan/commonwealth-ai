@@ -56,8 +56,65 @@ fn sources(repo: Option<&Path>) -> Vec<Judgement> {
         contract_nightly_row(),
         watcher_row(repo),
         env_gate_row(repo),
+        oicp_conformance_row(),
         bench_baselines_row(repo),
     ]
+}
+
+/// The OICP v0.4 wire contract, as last certified against a live host.
+///
+/// The lane is `scripts/oicp-conformance-lane.sh`, scheduled through
+/// `scripts/run-if-stale.sh oicp-conformance`. It drives the certifier in
+/// `commonwealth/crates/oicp-conformance` against the committed baseline at
+/// `quality/baselines/oicp/`, so this row answers "does this host still speak
+/// the protocol it did last time", which no other row covers.
+///
+/// The lane's word is mapped here rather than re-derived: `could-not-judge` is
+/// its own verdict because a stopped or model-less daemon cannot be told from
+/// a broken one by exit code alone, and calling that a failure is how a gate
+/// stops being read.
+fn oicp_conformance_row() -> Judgement {
+    let path = sovereign_cli_shared::dirs::sovereign_root()
+        .join("oicp-conformance")
+        .join("latest.json");
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return Judgement::never_ran(
+            "oicp-conformance",
+            Reason::literal(
+                "the OICP wire contract has never been certified on this host — \
+                 run: scripts/oicp-conformance-lane.sh",
+            ),
+        );
+    };
+    let field = |k: &str| -> Option<String> {
+        let pat = format!("\"{k}\":\"");
+        let rest = text.split_once(&pat)?.1;
+        Some(rest.split_once('"')?.0.to_string())
+    };
+    let verdict = field("verdict").unwrap_or_default();
+    let summary = field("summary").unwrap_or_else(|| "no summary".into());
+    let name = "oicp-conformance";
+    let reason = |s: String| Reason::new(s).expect("a lane summary is never a placeholder");
+    let j = match verdict.as_str() {
+        "pass" => Judgement::passed(name, reason(format!("{summary} vs quality/baselines/oicp"))),
+        "fail" => Judgement::failed(
+            name,
+            reason(format!("{summary} — detail: scripts/oicp-conformance-lane.sh")),
+        ),
+        // Never collapse an unknown word into a verdict: a lane that starts
+        // emitting a word this row does not know must say so, not pick one.
+        other => Judgement::could_not_judge(
+            name,
+            reason(format!(
+                "lane reported `{}` — {summary}",
+                if other.is_empty() { "no verdict" } else { other }
+            )),
+        ),
+    };
+    match mtime(&path) {
+        Some(at) => j.as_of(at).stale_after(REPORT_HORIZON),
+        None => j,
+    }
 }
 
 pub async fn run(args: &[String]) -> i32 {

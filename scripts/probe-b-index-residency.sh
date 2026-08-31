@@ -85,13 +85,13 @@ echo "probe-b: cloned. on-disk $(du -sh "$INDEX_DIR" | cut -f1)"
 
 # Build once so the two arms are not separated by a compile.
 cd "$REPO_ROOT"
-cargo test -p corpus-engine --test probe_index_residency --no-run --quiet
+cargo test -p corpus-engine --test main probe_index_residency --no-run --quiet
 
 for MODE in pinned transient; do
   echo
   echo "── arm: $MODE ─────────────────────────────────────────"
   PROBE_INDEX_DIR="$INDEX_DIR" PROBE_MODE="$MODE" PROBE_EMBED_DIMS="$DIMS" \
-    cargo test -p corpus-engine --test probe_index_residency --quiet \
+    cargo test -p corpus-engine --test main probe_index_residency --quiet \
       -- --ignored --nocapture probe_b_index_handle_residency 2>&1 \
     | grep -E '^PROBE_B_' || {
         echo "probe-b: arm $MODE produced no result line — the probe did not run" >&2

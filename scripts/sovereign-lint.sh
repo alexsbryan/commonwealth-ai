@@ -365,14 +365,14 @@ cargo_args+=(--all-targets)
 # new is awareness_cmd's 7,526 lines, and it is paid once.
 features="corpus-engine/treesitter"
 if (( escalate_to_workspace )) || [[ ${#crates[@]} -eq 0 ]]; then
-    features+=",sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-mesh/mesh-sim"
+    features+=",sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness,sovereign-mesh/mesh-sim,sovereign-mesh/dst"
 else
     for c in "${crates[@]}"; do
         if [[ "$c" == "sovereign-cli" ]]; then
             features+=",sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness"
         fi
         if [[ "$c" == "sovereign-mesh" ]]; then
-            features+=",sovereign-mesh/mesh-sim"
+            features+=",sovereign-mesh/mesh-sim,sovereign-mesh/dst"
         fi
     done
 fi

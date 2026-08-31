@@ -129,10 +129,15 @@ lane_preset() {
       MARKER="$STATE_DIR/co-sweep.last"
       CMD="$REPO/scripts/co-sweep.sh"
       ;;
+    oicp-conformance)
+      LABEL="oicp-conformance"
+      MARKER="$STATE_DIR/oicp-conformance.last"
+      CMD="$REPO/scripts/oicp-conformance-lane.sh"
+      ;;
     *) return 1 ;;
   esac
 }
-LANES=(contract-nightly co-sweep)
+LANES=(contract-nightly co-sweep oicp-conformance)
 
 # Marker age in whole hours; empty string when there is no marker at all.
 # Two states, never collapsed: "never run" is not "very stale" — one means the

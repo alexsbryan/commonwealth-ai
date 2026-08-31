@@ -187,9 +187,14 @@ impl ConfigDiff {
     /// rather than duplicating: a second copy is how one arm quietly stops
     /// noticing `daemon.client_bind` (§10.6).
     fn finish_non_model_fields(mut d: Self, old: &SetupConfig, new: &SetupConfig) -> Self {
-        if old.node.entry != new.node.entry {
-            // The entry node is where a terminal forwards every turn. The
-            // forwarding provider is built once, against that address.
+        // Compared through `binding()` so BOTH forms are covered by one test.
+        // Reading `node.entry` alone stopped noticing the identity binding the
+        // moment it existed, and a terminal re-pointed at a different entry
+        // node would have kept serving from the old one until something else
+        // restarted it.
+        if old.node.binding() != new.node.binding() {
+            // The entry node is where a terminal forwards every turn, and its
+            // provider is built once, at boot.
             d.restart_required.push("node.entry");
         }
         if old.daemon.client_port != new.daemon.client_port {

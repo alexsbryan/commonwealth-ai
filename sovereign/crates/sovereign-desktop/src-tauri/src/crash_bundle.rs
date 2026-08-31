@@ -249,7 +249,10 @@ pub fn render_report(inp: &ReportInputs<'_>) -> String {
         Some(c) if c.models.is_none() => {
             out.push_str(&format!(
                 "- Holds no models (terminal); entry node: `{}`\n",
-                c.node.entry.as_deref().unwrap_or("<unset>")
+                c.node
+                    .binding()
+                    .map(|b| b.describe())
+                    .unwrap_or_else(|| "<unset>".to_string())
             ));
             out.push_str(&format!("- Client port: `{}`\n", c.daemon.client_port));
             out.push_str(&format!("- Internal port: `{}`\n", c.daemon.internal_port));

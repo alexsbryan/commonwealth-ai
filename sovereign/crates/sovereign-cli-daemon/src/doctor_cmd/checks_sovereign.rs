@@ -67,7 +67,10 @@ pub(super) fn check_node_class() -> CheckResult {
             message: format!(
                 "terminal — holds no models by design; every turn and embedding \
                  routes to {}. An empty model lineup here is correct, not broken.",
-                cfg.node.entry.as_deref().unwrap_or("<unset>"),
+                cfg.node
+                    .binding()
+                    .map(|b| b.describe())
+                    .unwrap_or_else(|| "<unset>".to_string()),
             ),
             repair: Repair::None,
         },
@@ -88,13 +91,13 @@ pub(super) fn check_node_class() -> CheckResult {
 
 /// Does this terminal's entry node address still point at the SAME machine?
 ///
-/// The interim mitigation for a debt we chose not to repay yet. `[node] entry`
-/// is a URL, and ARCH §7.5 says a stable thing keyed on a volatile address
-/// eventually answers confidently and wrongly — when a DHCP lease moves and
-/// another machine takes the address, a terminal forwards there and nothing
-/// errors. Resolving by node id was priced and deferred
-/// (`sovereign/DEFAULTS_LEDGER.md`), so the posture is: cannot route around it,
-/// must not fail to NOTICE it.
+/// **Only an ADDRESS binding can fail this, and that is the finding.** A
+/// terminal bound by mesh identity (`[node] entry_node`, what `svrn setup
+/// --terminal <join-link>` writes) resolves its entry node per turn through
+/// `PeerTransport`, so there is no remembered address to go stale and this
+/// check has nothing to judge — it says so and passes. The debt this check was
+/// built to mitigate was repaid on 2026-08-31; it survives for the address
+/// form, which remains legitimate for an entry node that is not a mesh member.
 ///
 /// Four verdicts, not two (§18.2). Reaching a different node is a FAILURE.
 /// Being unable to ask, or having no recorded id to compare against, is
@@ -121,6 +124,22 @@ pub(super) async fn check_entry_node_identity() -> CheckResult {
             repair: Repair::None,
         };
     }
+    // An identity binding cannot drift: the thing bound IS the node, and a
+    // machine that takes over an address does not take over an id. Reported as
+    // a pass with the reason, not as Skipped — "there is nothing here to go
+    // wrong" is a judgement, not an inability to judge (§18.2).
+    if let Some(sovereign_core::setup_config::EntryBinding::Node(id)) = cfg.node.binding() {
+        return CheckResult {
+            name: NAME,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Passed,
+            message: format!(
+                "bound to node {id} by mesh identity, resolved per turn — there is no \
+                 stored address to point at the wrong machine"
+            ),
+            repair: Repair::None,
+        };
+    }
     let entry = cfg.node.entry.as_deref().unwrap_or_default();
     let Some(recorded) = cfg.node.entry_node_id.as_deref() else {
         return CheckResult {
@@ -128,9 +147,10 @@ pub(super) async fn check_entry_node_identity() -> CheckResult {
             layer: Layer::Sovereign,
             status: CheckStatus::Skipped,
             message: format!(
-                "no entry node id was recorded for {entry}, so a moved address \
-                 cannot be detected — re-run `svrn setup --reset --terminal {entry}` \
-                 to record one"
+                "this terminal is bound to the ADDRESS {entry} with no recorded id, \
+                 so a moved address cannot be detected. Re-run `svrn setup --reset \
+                 --terminal <join-link>` to bind the entry node's mesh identity \
+                 instead, which cannot drift at all"
             ),
             repair: Repair::None,
         };
@@ -171,9 +191,10 @@ pub(super) async fn check_entry_node_identity() -> CheckResult {
              has been going to a DIFFERENT machine than the one it was bound to, \
              without erroring."
         ),
-        repair: Repair::Executable(format!(
-            "svrn setup --reset --terminal <entry>   # re-bind, after checking which host you meant ({origin} moved)"
-        )),
+        repair: Repair::Executable(
+            "svrn setup --reset --terminal <join-link>   # re-bind by mesh identity, which cannot move"
+                .to_string(),
+        ),
     }
 }
 
