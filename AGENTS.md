@@ -273,6 +273,8 @@ The lint script reports the host build failure as a build failure and names the 
 
 **"Do tests pass?"** — `./scripts/sovereign-test.sh --human`. Warm full workspace ~45s (~8.4k tests). `--package <crate>` / `--changed` / `--filter <test-name>` scope it down; `--filter` matches the TEST NAME, not the file name.
 
+**`--filter` sets the BUILD scope too, so a vague pattern costs minutes.** The script derives which crates to compile by `git grep`-ing the literal filter string through `*.rs`; a broad substring selects broadly and degrades — silently, and by design — to a full-workspace build. Measured 2026-08-31 on this host, the same single test three ways: `--filter ring` matched nearly every crate (`ring` is inside `string`, `ordering`, `during`) and cost **280s, 275s of it build across 96 test binaries**; `--filter the_scaffolded_door_runs_the_validator_before_writing` scoped to one crate and cost **37.5s**. Bare `cargo test -p <crate> --lib <name>` is NOT the escape hatch — 43.3s, slightly worse, because the ~40s both pay is the rebuild of the crate you just edited. So: **pass the whole test function name, or scope explicitly with `--package`.** Since 2026-08-31 the script says so itself: it prints `--filter '<p>' scoped to N crate(s)` and, when N reaches a third of the workspace, a loud block naming the cost and both escapes — all on stderr, all **before** the build starts. It is a hint, not a refusal (a deliberate sweep is legitimate), so read it and decide: killing the run to narrow the pattern is cheaper than waiting one out.
+
 Both exit non-zero on failure and both write a raw cargo log for triage, so a failure never needs a second run to diagnose. Gate on the exit code.
 
 **Reading the results — three guards bare cargo does not have:**

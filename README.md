@@ -90,6 +90,20 @@ which engine answered and which threshold held. [Next edit in your
 editor](./docs/NEXT_EDIT_IN_YOUR_EDITOR.md) is the walkthrough, and it
 does not need a model for the deterministic half.
 
+## Keep a shared ledger with people you trust
+
+The mesh moves knowledge and compute between machines you trust. The **ring rail** moves state a group makes *together* — a house's expenses, a tool-lending board, a chore rota. Every member keeps a full copy of an append-only log; each entry is signed by the person who wrote it and handed back in an order every machine agrees on. No server holds the group's ledger, and a member who leaves does not take half of it with them.
+
+```sh
+svrn ring new ./house-expenses                            # the page, its reducer, and the reducer's tests
+svrn ring roster add alex --self --ring house-expenses    # bind a name to the key it signs with
+svrn ring dev house-expenses --dir ./house-expenses       # http://127.0.0.1:4318/
+```
+
+The rail carries an opaque payload and guarantees four things about the entries it hands back: each was signed by a key this ring's roster claims, duplicates are gone, corrections never resurrect, and the order is identical on every node. What an entry *means* is your app's. The scaffold is a working shared-expense ledger — penny remainder, settlement idempotency, its own `node --test` suite — and you replace its rules to build something else.
+
+[Split the house expenses](./docs/HOUSE_EXPENSES.md) walks it end to end and is explicit about the M0 boundary: there is no publish verb yet, so each member runs the app from their own copy of the folder.
+
 ## Going deeper
 
 New here? The [ten-minute tour](./docs/ARCHITECTURE_TOUR.md) of the whole stack. To read or build the code: [SYSTEM_OVERVIEW.md](./sovereign/SYSTEM_OVERVIEW.md) maps every subsystem, [ARCH_PRINCIPLES.md](./sovereign/ARCH_PRINCIPLES.md) the design rules, and [SETUP.md](./SETUP.md) takes a fresh clone to a green test suite in about half an hour. Already using another agent harness, editor, or chat UI? [INTEROP.md](./docs/INTEROP.md) points it at a local daemon in five minutes; [GROUND_YOUR_AGENT.md](./docs/GROUND_YOUR_AGENT.md) then gives that agent the session protocol — memory, coordination, handoff; [INTEGRATION_SURFACES.md](./docs/INTEGRATION_SURFACES.md) marks contracts from internals.

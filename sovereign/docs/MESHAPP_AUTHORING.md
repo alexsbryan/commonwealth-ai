@@ -85,7 +85,7 @@ identities.
 
 ## Part B — build the app on it
 
-The bundle is composed from the **MeshApp SDK** (`public/meshapp/_sdk/`,
+The bundle is composed from the **MeshApp SDK** (`sovereign/crates/sovereign-desktop/public/meshapp/_sdk/`,
 dependency-free ES modules). You almost never write DOM — you compose components.
 
 4. **Scaffold** an SDK-composed explorer:
@@ -94,7 +94,7 @@ dependency-free ES modules). You almost never write DOM — you compose componen
    sovereign meshapp new my-explorer --corpus my-corpus
    ```
 
-   This writes `public/meshapp/my-explorer/{index.html, app.js, meshapp.json}` — a
+   This writes `sovereign/crates/sovereign-desktop/public/meshapp/my-explorer/{index.html, app.js, meshapp.json}` — a
    working explorer: a scale banner, a force-directed graph with a type toggle, search,
    and the cited drill-down.
 
@@ -119,10 +119,13 @@ dependency-free ES modules). You almost never write DOM — you compose componen
    | `reconciliationList` | the identity-merge reveal |
    | `searchBox` / `threadList` / `barList` | search, on-ramp cards, degree bars |
    | `entityDetail` / `citedEdge` / `citationExpander` | the cited drill-down |
+   | `typeToggle` | the pill toggle that filters the graph by node type |
+   | `claimList` / `questionList` | argument cards and open-question cards, with the corpus's own words |
+   | `storyShow` / `heatGrid` | the lean-back full-screen card deck (the Wrapped form) and an hour-of-week grid |
 
-   `public/meshapp/enron/app.js` is the full worked example.
+   `sovereign/crates/sovereign-desktop/public/meshapp/enron/app.js` is the full worked example.
 
-6. **Ship it** so consumers get one-click data. In `public/meshapp/my-explorer/`:
+6. **Ship it** so consumers get one-click data. In `sovereign/crates/sovereign-desktop/public/meshapp/my-explorer/`:
    - copy your `recipe.toml` into the bundle (it carries the `[prebuilt]` block);
    - add `corpus_data` to `meshapp.json`:
 
@@ -258,6 +261,22 @@ makes.
 Two nodes converge on their own: each republishes everything it holds to every
 online peer every sixty seconds, so a housemate who was offline for a week gets
 the missing entries back, and one who leaves does not take their half with them.
+
+**What M0 does not do yet — assume otherwise and it will bite.** There is **no
+publish verb.** `svrn ring deploy` does not exist; `window.ring` is injected by
+`ring dev`'s own shim rather than shipped in `_sdk/`, so a bundle put through
+`meshapp publish` comes up without it. Each member gets the folder the way
+they'd get any folder — a git remote, a USB stick, `scp` — and runs `svrn ring
+dev` against their own daemon. **The roster is a local file**
+(`~/.svrnmesh/rings/<ns>/roster.json`), written by `svrn ring roster add` and
+never gossiped: every member adds every other member on their own machine, or
+the ops they receive land as "signed by a key no roster claims" gaps. And the
+rail is **loopback-only** — mounted on the operator and rail listeners, on
+neither the peer nor the guest surface. The journal itself does sync between
+nodes; it is the app bundle and the roster that travel by hand.
+
+[HOUSE_EXPENSES.md](../../docs/HOUSE_EXPENSES.md) walks the reference app end to
+end, including what each of four housemates types.
 
 ## How it all fits (one source of truth)
 

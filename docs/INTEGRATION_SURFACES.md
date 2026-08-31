@@ -55,6 +55,29 @@ manifest; see
 [sovereign/docs/MESHAPP_AUTHORING.md](../sovereign/docs/MESHAPP_AUTHORING.md)
 and copy a shipped example.
 
+**Ring rail** — shared, signed, append-only state belonging to a
+group of people rather than to a host. `POST /v1/rail/append` and
+`GET /v1/rail/log` on the rail listener (`:9743` by default), reached
+with a grant scoped to exactly one namespace. The rail carries an
+opaque JSON payload and never reads inside it; what it promises is
+that every act it hands back was signed by a key the ring's roster
+claims, that duplicates and equivocations are gone, that corrections
+are applied and never resurrect, and that the order is identical on
+every node. `log` returns its **gaps** alongside the acts — a total
+shown without them is a confident number over a subset. Payloads are
+canonical by construction (sorted keys, whole numbers only) because a
+signature covers bytes: the route refuses a fraction rather than sign
+something two nodes would spell differently. For a web app the
+contract is `window.ring` — `log`, `record`, `correct`, and a `fold`
+that walks the rail's order and skips voided acts. Start from
+[HOUSE_EXPENSES.md](./HOUSE_EXPENSES.md); the reference is
+[MESHAPP_AUTHORING.md](../sovereign/docs/MESHAPP_AUTHORING.md).
+Three M0 limits, none of them permanent: the rail is mounted
+loopback-only (no `Peer` or `Guest` surface), rosters are per-node
+files rather than gossiped state, and there is no publish verb — `svrn
+ring dev` serves the bundle, so each member runs the app from their own
+copy of the folder.
+
 **CLI scripting** — `svrn tools call <id> --format json` is the
 stable machine-readable path (stdout stays clean; logs go to stderr).
 Other commands print for humans unless they document a `--format

@@ -135,6 +135,28 @@ mod tests {
         );
     }
 
+    /// **The door must run the validator the reducer runs.**
+    ///
+    /// The comment saying so stood beside a `record` call that did not, which
+    /// is exactly the §7.2 smell: an assertion in prose instead of in a test.
+    /// Unchecked, the page cheerfully writes an act the reducer will refuse —
+    /// an unknown `kind`, a non-positive amount — and every node in the ring
+    /// then reports it as a gap, permanently, because a log does not forget.
+    #[test]
+    fn the_scaffolded_door_runs_the_validator_before_writing() {
+        let (before, after) = STARTER_APP_JS
+            .split_once("expenses.writable(act, roster)")
+            .expect("the submit handler writes without asking whether the act is writable");
+        assert!(
+            !before.contains("window.ring.record("),
+            "the write happens before the validator that is supposed to gate it"
+        );
+        assert!(
+            after.contains("window.ring.record("),
+            "the validator gates nothing — there is no write after it"
+        );
+    }
+
     /// **The gate the money rules kept when they left Rust.**
     ///
     /// `expenses.js` holds the penny remainder, settlement idempotency and

@@ -321,6 +321,53 @@ if [[ $CHANGED -eq 1 ]]; then
     fi
 fi
 
+# ── an over-broad --filter earns a loud hint, BEFORE the build starts ──────
+# The auto-scope below degrades gracefully to the whole workspace, and
+# "gracefully" is not "cheaply". Measured 2026-08-31, one single test three
+# ways: `--filter ring` cost 280s (275s of it build, 96 test binaries) because
+# `ring` is a substring of `string`, `ordering` and `during` and therefore
+# selected nearly every crate; `--filter <whole fn name>` cost 37.5s; bare
+# `cargo test -p <crate> --lib <name>` cost 43.3s, so leaving this script is
+# not the way out — the ~40s floor is the rebuild of the crate you just edited.
+# Nothing said any of this until the build had already been paid for.
+#
+# A HINT, NEVER A REFUSAL. A deliberately broad sweep is legitimate and its
+# coverage is correct (the 29-crate `round_trip` pattern gave a test set
+# identical to the workspace run). So this names the cost and both escapes,
+# then gets out of the way.
+warn_if_scope_is_broad() {
+    local picked="$1" total broad noun
+    total="$(_workspace_members | grep -c . || true)"
+    [[ "$total" =~ ^[0-9]+$ ]] || total=0
+    # A FRACTION so the threshold survives the workspace growing; a fixed 12
+    # when the member list will not resolve, which is the same order today.
+    if [[ "$total" -gt 0 ]]; then broad=$(( total / 3 )); else broad=12; fi
+    local tail_line
+    if [[ -z "$picked" ]]; then
+        # Nothing matched: this is usually a typo, not a sweep. Say so — the
+        # run would otherwise compile everything and then report zero tests.
+        picked="$total"
+        noun="the FULL workspace"
+        tail_line="  Matched NO crate — check the spelling. As written this compiles
+sovereign-test:   everything and then reports zero tests (exit 4)."
+    else
+        noun="${picked}${total:+ of $total} crate(s)"
+        tail_line="  Meant a SWEEP? Ignore this — the coverage is correct either way."
+    fi
+    [[ "$picked" -ge "$broad" && "$broad" -gt 0 ]] || return 0
+
+    echo "sovereign-test:" >&2
+    echo "sovereign-test: ⚠ that --filter is BROAD — ${noun} will be compiled." >&2
+    echo "sovereign-test:   A libtest pattern picks the BUILD scope too (every crate whose" >&2
+    echo "sovereign-test:   .rs sources contain it as a substring), so a short one compiles" >&2
+    echo "sovereign-test:   most of the repo. Measured: '--filter ring' 280s against 37.5s" >&2
+    echo "sovereign-test:   for the whole test function name — the same single test." >&2
+    echo "sovereign-test:   Meant ONE test? Ctrl-C now and pass its full function name, or" >&2
+    echo "sovereign-test:   scope it: --package <crate> --filter '${FILTER}'" >&2
+    echo "sovereign-test: ${tail_line}" >&2
+    echo "sovereign-test:" >&2
+}
+
 # ── --filter → owning crates ───────────────────────────────────────────────
 # A libtest name filter narrows which tests RUN but tells cargo nothing about
 # which crates to COMPILE, so `--filter one_test` used to pay the full
@@ -365,8 +412,10 @@ if [[ -n "$FILTER" && ${#PACKAGES[@]} -eq 0 && $FILTER_WORKSPACE -eq 0 ]]; then
         FILTER_AUTOSCOPED=1
         echo "sovereign-test: --filter '${FILTER}' scoped to ${#PACKAGES[@]} crate(s): ${PACKAGES[*]}" >&2
         echo "sovereign-test:   (--filter-workspace keeps the old compile-everything behaviour)" >&2
+        warn_if_scope_is_broad "${#PACKAGES[@]}"
     else
         echo "sovereign-test: --filter '${FILTER}' matched no workspace crate — running FULL workspace (never under-cover)" >&2
+        warn_if_scope_is_broad ""
     fi
 fi
 

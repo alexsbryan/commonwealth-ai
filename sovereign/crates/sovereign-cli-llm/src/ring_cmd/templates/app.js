@@ -9,6 +9,12 @@ import * as expenses from "./expenses.js";
 
 const el = (id) => document.getElementById(id);
 
+// The roster the last render read, hoisted so the SUBMIT HANDLER can reach it.
+// The door and the reducer have to judge an act against the same names, or
+// "this app never writes what it would later report as a gap" is a comment
+// rather than a fact.
+let roster = {};
+
 async function render() {
   el("err").textContent = "";
   let log;
@@ -26,11 +32,8 @@ async function render() {
   // the reducer wants the person→keys map inside it. `initial` throws rather
   // than accept the wrapper, because the wrong one produces correct balances
   // beside a page of spurious "not in the roster" gaps.
-  const book = window.ring.fold(
-    log,
-    expenses.reducer,
-    expenses.initial((log.roster || {}).members),
-  );
+  roster = (log.roster || {}).members || {};
+  const book = window.ring.fold(log, expenses.reducer, expenses.initial(roster));
 
   el("scope").textContent =
     `${window.ring.namespace} — ${book.counted} entr${book.counted === 1 ? "y" : "ies"}`;
@@ -102,9 +105,24 @@ el("add").addEventListener("submit", async (e) => {
       .map((s) => s.trim())
       .filter(Boolean),
   };
+  // The door runs the SAME validator the reducer runs, so this app never
+  // writes an act it would later report as a gap. One validator, two callers
+  // — a second copy here would be a second answer to "is this writable", and
+  // the door would drift from the reader.
+  //
+  // Only the FATAL gaps stop a write. A balance held against a name the
+  // roster does not know yet is real money and must be recordable; it shows
+  // up in the gap panel, which is the honest place for it.
+  if (!expenses.writable(act, roster)) {
+    el("err").textContent = expenses
+      .validate(act, roster)
+      .filter((g) => g.fatal)
+      .map((g) => g.message)
+      .join("; ");
+    return;
+  }
+
   try {
-    // The door runs the SAME validator the reducer runs, so this app never
-    // writes an act it would later report as a gap.
     await window.ring.record(act);
     e.target.reset();
   } catch (err) {

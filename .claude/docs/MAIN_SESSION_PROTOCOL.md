@@ -336,6 +336,17 @@ Scoping flags for iteration, not for the final gate:
 ./scripts/sovereign-test.sh                                    # raw Tier 2 JSONL (daemon mode)
 ```
 
+`--filter` picks the BUILD scope as well as the run scope, by `git grep`-ing the
+literal pattern through `*.rs` and compiling the crates that match. Give it the
+**whole test function name**. A short substring matches half the workspace and
+degrades to a full build: measured 2026-08-31, one test, `--filter ring` cost
+280s (275s build, 96 binaries) against 37.5s for the full name — and bare
+`cargo test -p <crate> --lib <name>` was 43.3s, so reaching for cargo does not
+buy the time back. The `scoped to N crate(s)` line on stderr is the tell, and
+since 2026-08-31 the script raises a loud block of its own once N reaches a
+third of the workspace — before the build, naming the cost and both escapes. A
+hint, not a refusal: a deliberate sweep is legitimate, so read it and decide.
+
 `--package sovereign-compute` fails on feature scoping (`does not contain this feature: corpus-engine/treesitter`) — use plain `cargo test -p sovereign-compute` there.
 
 Both scripts write adapter logs (`target/sovereign-test/latest/`, `target/sovereign-lint/latest/`) including the raw cargo output, so triaging a failure never requires re-running cargo.
