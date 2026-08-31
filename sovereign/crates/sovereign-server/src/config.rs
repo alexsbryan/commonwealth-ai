@@ -157,8 +157,12 @@ pub struct InferenceSection {
 #[derive(Debug, Clone, Deserialize)]
 pub struct BackendConfig {
     pub name: String,
-    /// `"embedded"` or `"remote"`. Locality is derived from this — see
-    /// `main.rs::build_backends`.
+    /// Which engine serves this backend, in the workspace's engine
+    /// vocabulary (`sovereign_core::setup_config::EngineKind`): `"llama"`
+    /// or `"remote"`, plus `"embedded"` as the accepted legacy alias for
+    /// `"llama"` (`main.rs::backend_engine_kind`). An unrecognised value is
+    /// refused at startup rather than warned past — a skipped backend is a
+    /// silently smaller fleet. Locality is derived from this.
     #[serde(rename = "type")]
     pub backend_type: String,
     #[serde(default = "default_priority")]

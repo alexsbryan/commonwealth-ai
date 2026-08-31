@@ -145,7 +145,9 @@ async fn probe_entry_node(
         .and_then(|r| r.as_array())
         .is_some_and(|slots| {
             slots.iter().any(|s| {
-                s.get("role").and_then(|r| r.as_str()).is_some_and(|r| r != "embed")
+                s.get("role")
+                    .and_then(|r| r.as_str())
+                    .is_some_and(|r| r != "embed")
                     && s.get("model_id")
                         .and_then(|m| m.as_str())
                         .is_some_and(|m| !m.is_empty())
@@ -380,7 +382,10 @@ async fn run_terminal_join(
         }
         _ => {
             println!();
-            eprintln!("error: {} members hold models — name the one to bind:", holders.len());
+            eprintln!(
+                "error: {} members hold models — name the one to bind:",
+                holders.len()
+            );
             eprintln!();
             for (id, name, _, _) in &holders {
                 eprintln!("      svrn setup --reset --terminal \"{raw}\" --entry {id}   # {name}");
@@ -413,6 +418,11 @@ async fn run_terminal_join(
             entry_embed_model: facts.embed.clone(),
         },
         compute: Default::default(),
+        // Default `[engine] kind = llama`, and it is never consulted: a
+        // terminal returns its forwarding provider before `load_provider`
+        // reaches the engine factory. Written as the default rather than
+        // omitted so the file round-trips like any other config.
+        engine: Default::default(),
         search: Default::default(),
         daemon: Default::default(),
         data: DataSection {
@@ -637,6 +647,11 @@ async fn run_terminal_address(entry_raw: &str, opts: &Opts) -> i32 {
             entry_embed_model: embed_model.clone(),
         },
         compute: Default::default(),
+        // Default `[engine] kind = llama`, and it is never consulted: a
+        // terminal returns its forwarding provider before `load_provider`
+        // reaches the engine factory. Written as the default rather than
+        // omitted so the file round-trips like any other config.
+        engine: Default::default(),
         search: Default::default(),
         daemon: Default::default(),
         data: DataSection {

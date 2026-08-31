@@ -136,22 +136,24 @@ pub(crate) fn load_provider(
                             return Err(());
                         }
                     };
-                    Arc::new(sovereign_inference::remote::SplitInferenceProvider::resolved(
-                        resolver,
-                        // Always off-box, and structurally so: peers are the
-                        // mesh MINUS this node, so an entry node resolved from
-                        // the peer set is by construction another machine. The
-                        // locus is passed rather than sniffed because the
-                        // resolved address is often an iroh bridge on
-                        // 127.0.0.1 whose far end is that other machine —
-                        // reading the address would report ForwardsOnBox and
-                        // honour `local_only` for a turn that leaves the host.
-                        sovereign_core::traits::ServingLocus::ForwardsOffBox,
-                        "primary".to_string(),
-                        embed_model_id,
-                        config.effective_context_size(),
-                        String::new(),
-                    ))
+                    Arc::new(
+                        sovereign_inference::remote::SplitInferenceProvider::resolved(
+                            resolver,
+                            // Always off-box, and structurally so: peers are the
+                            // mesh MINUS this node, so an entry node resolved from
+                            // the peer set is by construction another machine. The
+                            // locus is passed rather than sniffed because the
+                            // resolved address is often an iroh bridge on
+                            // 127.0.0.1 whose far end is that other machine —
+                            // reading the address would report ForwardsOnBox and
+                            // honour `local_only` for a turn that leaves the host.
+                            sovereign_core::traits::ServingLocus::ForwardsOffBox,
+                            "primary".to_string(),
+                            embed_model_id,
+                            config.effective_context_size(),
+                            String::new(),
+                        ),
+                    )
                 }
                 // Bound by address: an entry node that is not a mesh member —
                 // a daemon on this machine, or one on a trusted LAN. Unchanged
@@ -178,7 +180,9 @@ pub(crate) fn load_provider(
             ));
         }
     }
-
+    // Past the terminal return, so this node holds weights and `[models]` must
+    // be readable. Through the accessor, not the field: the refusal it returns
+    // names WHY there are no slots, and a terminal has already left above.
     let models = match config.models() {
         Ok(m) => m,
         Err(e) => {
@@ -187,28 +191,17 @@ pub(crate) fn load_provider(
         }
     };
 
-    let resolved_embed_family = models
-        .embed
-        .file_name()
-        .and_then(|s| s.to_str())
-        .and_then(|name| {
-            sovereign_core::models_manifest::DEFAULT_MANIFEST.embed_family_for_file(name)
-        })
-        .unwrap_or(ModelFamily::Unknown);
-
     // `[compute] distributed_primary` — the primary lives in a supervised
-    // child, so the daemon must NOT also hold it. Withholding the path is what
-    // makes that true: every lazy in-process primary load reads
-    // `primary_path`, so `None` means no code path in this process can pull the
-    // distributed model in behind our back (which would double the footprint
-    // AND put ggml's abort-happy RPC client back in the control plane).
+    // child, so the daemon must NOT also hold it. The factory derives this
+    // the same way when it withholds the path; here it gates ADMISSION,
+    // which stays with the daemon because only the daemon owns the
+    // operator-facing diagnostics below.
     let child_owns_primary = config.compute.enabled && config.compute.distributed_primary;
-    // The other half of the same admission question: `child_owns_primary` says
-    // the abort is contained; this says whether running WITHOUT that
+    // The other half of the same admission question: `child_owns_primary`
+    // says the abort is contained; this says whether running WITHOUT that
     // containment is survivable on this node. The guard below fires when
-    // containment IS armed and `fast` aliases `primary`; this one fires when it
-    // is NOT armed and should be. Kept adjacent so both `[compute]` rules read
-    // as one block.
+    // containment IS armed and `fast` aliases `primary`; this one fires
+    // when it is NOT armed and should be.
     if !super::containment::check_containment(config, None) {
         return Err(());
     }
@@ -232,144 +225,120 @@ pub(crate) fn load_provider(
         );
     }
 
-    let arc = match EmbeddedLlamaCpp::load_full_with_families(
-        models.fast_path(),
-        if child_owns_primary {
-            None
-        } else {
-            Some(&models.primary)
-        },
-        Some(&models.embed),
-        // PR-E2: optional Code specialist. When set, `code`-hinted
-        // requests hot-swap into the lazy slot (shared with primary).
-        // None = pre-E2 two-slot behaviour — all substantive work on
-        // the Main responder.
-        models.code.as_deref(),
-        // context_size — sourced from `[models].context_size` so a batch
-        // host (Strix Halo, 128 GB unified) can opt into 32k without
-        // touching code, while a 64 GB Mac stays at the safe 16384
-        // default. 16384 halves KV to ~8 GB and keeps headroom on a Mac;
-        // the atlas Phase 1 pipeline benefits from 32k on Strix Halo.
-        // Per-slot windows (2026-08-25). `from_models` honours
-        // `[models].fast_context_size` and falls back to the primary's
-        // window when it is unset, so an existing config.toml is unchanged.
-        sovereign_inference::embedded::SlotWindows::from_models(models),
-        None, // gpu_layers — auto-detect
-        ModelFamily::Unknown,
-        ModelFamily::Unknown,
-        // Manifest-resolved embed family: drives app-side pooling +
-        // document/query instruction prefixes. C-side pooling is fixed to
-        // `None` inside `EmbedSlot::load`, so a non-Unknown family here no
-        // longer triggers the ggml_abort that motivated the earlier
-        // hard-coded `Unknown`.
-        resolved_embed_family.clone(),
-        // code slot is Qwen3-Coder-30B-A3B-Instruct (the only code GGUF we
-        // ship today). Pinning the family to Qwen3 picks up Qwen's
-        // recommended sampling defaults — top_k=20, top_p=0.95,
-        // presence_penalty=1.5 — and the SystemPromptToken thinking
-        // control; the Unknown defaults left the sampler too permissive on
-        // long Rust emissions (the `f3 2` / `Lat encyClass` char-drop).
-        ModelFamily::Qwen3,
-    ) {
-        Ok(p) => Arc::new(p),
+    // WHICH engine — the one decision, made in one place
+    // (`sovereign_inference::engine_factory`). Default `[engine] kind` is
+    // `llama`, so a config.toml that names no engine builds exactly what
+    // this function used to build unconditionally.
+    let built = match sovereign_inference::engine_factory::build_engine(config) {
+        Ok(b) => b,
         Err(e) => {
-            eprintln!("error: failed to load models: {e}");
+            eprintln!("error: {e}");
             eprintln!(
-                "hint: verify paths in {}",
+                "hint: verify paths and `[engine]` in {}",
                 SetupConfig::default_path().display()
             );
             return Err(());
         }
     };
+    let resolved_embed_family = built.embed_family.clone();
 
-    // Wire the optional LRU memory budget BEFORE installing extras. With a
-    // budget set, each `load_extra` call (including the eager startup loads
-    // from `[models.extra]`) checks against it and evicts cold slots if
-    // needed. Without a budget, eviction is disabled and slots persist.
-    if let Err(e) = arc.set_extras_memory_budget(models.max_extras_memory_bytes()) {
-        eprintln!("error: failed to set extras memory budget: {e}");
-        return Err(());
-    }
-    // Idle-unload monitor for extras slots. Default 0 = disabled.
-    arc.start_extras_idle_monitor(config.daemon.extras_idle_secs);
-    // Operator-declared additional chat slots. Each `[models.extra]` entry
-    // is loaded eagerly here; failures fail the daemon. Routing kicks in
-    // when `/v1/chat/completions` arrives with a matching `model` field.
-    if !models.extra.is_empty() {
-        if let Err(e) = arc.install_extras(models.extra.clone(), models.effective_context_size()) {
-            eprintln!("error: failed to install extras slots: {e}");
+    // Everything below is llama's OWN surface — slot installs and idle
+    // monitors that exist on `EmbeddedLlamaCpp` and on no other engine.
+    // An engine that holds no local slots skips it entirely; the features
+    // it configures report their own unavailability through the trait's
+    // defaults rather than being faked (ARCH §18.3).
+    if let Some(arc) = built.llama.as_ref() {
+        // Wire the optional LRU memory budget BEFORE installing extras. With a
+        // budget set, each `load_extra` call (including the eager startup loads
+        // from `[models.extra]`) checks against it and evicts cold slots if
+        // needed. Without a budget, eviction is disabled and slots persist.
+        if let Err(e) = arc.set_extras_memory_budget(models.max_extras_memory_bytes()) {
+            eprintln!("error: failed to set extras memory budget: {e}");
             return Err(());
         }
-    }
-    // The code-editing slot. Soft-fail like the reranker: a missing or
-    // marker-less model must not block daemon startup — the routes
-    // report their own unavailability, and the install logs the
-    // actionable fix itself.
-    match models.edit.as_ref() {
-        // Operator chose an editing model. This always wins over the
-        // fallback below.
-        Some(edit) => {
-            if let Err(e) = arc.install_edit_slot(edit, models.fast_path()) {
-                tracing::warn!(
+        // Idle-unload monitor for extras slots. Default 0 = disabled.
+        arc.start_extras_idle_monitor(config.daemon.extras_idle_secs);
+        // Operator-declared additional chat slots. Each `[models.extra]` entry
+        // is loaded eagerly here; failures fail the daemon. Routing kicks in
+        // when `/v1/chat/completions` arrives with a matching `model` field.
+        if !models.extra.is_empty() {
+            if let Err(e) =
+                arc.install_extras(models.extra.clone(), models.effective_context_size())
+            {
+                eprintln!("error: failed to install extras slots: {e}");
+                return Err(());
+            }
+        }
+        // The code-editing slot. Soft-fail like the reranker: a missing or
+        // marker-less model must not block daemon startup — the routes
+        // report their own unavailability, and the install logs the
+        // actionable fix itself.
+        match models.edit.as_ref() {
+            // Operator chose an editing model. This always wins over the
+            // fallback below.
+            Some(edit) => {
+                if let Err(e) = arc.install_edit_slot(edit, models.fast_path()) {
+                    tracing::warn!(
+                        target: "edit_slot",
+                        error = %e,
+                        "edit slot install failed — /v1/completions will 503 and next-edit \
+                         is unavailable; check [models.edit].path in config.toml"
+                    );
+                }
+            }
+            // Nothing configured. Serve next-edit off the resident chat
+            // model rather than serving nothing (`NEXT_EDIT.md` §graceful
+            // degradation). Default OFF pending a bench baseline on the
+            // fast slot — see `sovereign/DEFAULTS_LEDGER.md`.
+            None if next_edit_fallback_enabled() => {
+                if let Err(e) = arc.install_fallback_next_edit_slot(NextEditFormat::default()) {
+                    tracing::warn!(
+                        target: "edit_slot",
+                        error = %e,
+                        "next-edit fallback install failed — /v1/edit_predictions will \
+                         report unavailable"
+                    );
+                }
+            }
+            None => {
+                tracing::debug!(
                     target: "edit_slot",
-                    error = %e,
-                    "edit slot install failed — /v1/completions will 503 and next-edit \
-                     is unavailable; check [models.edit].path in config.toml"
+                    "no [models.edit] configured and the next-edit fallback is off — \
+                     next-edit and /v1/completions both unavailable. Set \
+                     SOVEREIGN_NEXT_EDIT_FALLBACK=1 to serve next-edit off the \
+                     resident chat model."
                 );
             }
         }
-        // Nothing configured. Serve next-edit off the resident chat
-        // model rather than serving nothing (`NEXT_EDIT.md` §graceful
-        // degradation). Default OFF pending a bench baseline on the
-        // fast slot — see `sovereign/DEFAULTS_LEDGER.md`.
-        None if next_edit_fallback_enabled() => {
-            if let Err(e) = arc.install_fallback_next_edit_slot(NextEditFormat::default()) {
-                tracing::warn!(
-                    target: "edit_slot",
-                    error = %e,
-                    "next-edit fallback install failed — /v1/edit_predictions will \
-                     report unavailable"
-                );
-            }
-        }
-        None => {
-            tracing::debug!(
-                target: "edit_slot",
-                "no [models.edit] configured and the next-edit fallback is off — \
-                 next-edit and /v1/completions both unavailable. Set \
-                 SOVEREIGN_NEXT_EDIT_FALLBACK=1 to serve next-edit off the \
-                 resident chat model."
-            );
-        }
-    }
-    // Sourced from `[daemon].primary_idle_secs`. Default 300s suits a
-    // desktop; batch workloads (atlas enrich) want 1800+ to skip the
-    // 3–4 s reload tax between back-to-back short LLM calls.
-    arc.start_idle_monitor(config.daemon.primary_idle_secs);
-    // Optional cross-encoder reranker from `SOVEREIGN_RERANK_MODEL_PATH`.
-    // Soft-fail: a missing/broken reranker file must not block startup —
-    // retrieval simply runs the baseline path.
-    if let Ok(rerank_path) = std::env::var("SOVEREIGN_RERANK_MODEL_PATH") {
-        let path = PathBuf::from(&rerank_path);
-        match arc.install_rerank_slot(path, ModelFamily::Reranker) {
-            Ok(model_id) => {
-                tracing::info!(
-                    slot = "rerank",
-                    model_id = %model_id,
-                    "rerank slot installed from SOVEREIGN_RERANK_MODEL_PATH"
-                );
-            }
-            Err(e) => {
-                tracing::warn!(
-                    path = %rerank_path,
-                    error = %e,
-                    "rerank slot install failed — running without reranker"
-                );
+        // Sourced from `[daemon].primary_idle_secs`. Default 300s suits a
+        // desktop; batch workloads (atlas enrich) want 1800+ to skip the
+        // 3–4 s reload tax between back-to-back short LLM calls.
+        arc.start_idle_monitor(config.daemon.primary_idle_secs);
+        // Optional cross-encoder reranker from `SOVEREIGN_RERANK_MODEL_PATH`.
+        // Soft-fail: a missing/broken reranker file must not block startup —
+        // retrieval simply runs the baseline path.
+        if let Ok(rerank_path) = std::env::var("SOVEREIGN_RERANK_MODEL_PATH") {
+            let path = PathBuf::from(&rerank_path);
+            match arc.install_rerank_slot(path, ModelFamily::Reranker) {
+                Ok(model_id) => {
+                    tracing::info!(
+                        slot = "rerank",
+                        model_id = %model_id,
+                        "rerank slot installed from SOVEREIGN_RERANK_MODEL_PATH"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        path = %rerank_path,
+                        error = %e,
+                        "rerank slot install failed — running without reranker"
+                    );
+                }
             }
         }
     }
 
-    let inner: Arc<dyn InferenceProvider> = Arc::clone(&arc) as Arc<dyn InferenceProvider>;
+    let inner: Arc<dyn InferenceProvider> = Arc::clone(&built.provider);
 
     // Compute-child process boundary (DISTRIBUTED_PILOT_READINESS.md P1).
     // When `[compute]` declares pools, wrap the in-process engine in the
@@ -459,7 +428,7 @@ pub(crate) fn load_provider(
 
     Ok((
         provider,
-        Some(arc),
+        built.llama,
         resolved_embed_family,
         distributed_primary,
     ))

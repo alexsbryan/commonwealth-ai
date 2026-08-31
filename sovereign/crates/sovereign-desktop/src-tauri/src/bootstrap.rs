@@ -344,6 +344,7 @@ mod tests {
     #[test]
     fn snapshot_from_cli_setup_signals_cli_config_present() {
         let cfg = SetupConfig {
+            engine: Default::default(),
             compute: Default::default(),
             search: Default::default(),
             models: Some(sovereign_core::setup_config::ModelsSection {

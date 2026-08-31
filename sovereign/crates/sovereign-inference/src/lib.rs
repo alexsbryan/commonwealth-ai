@@ -2,6 +2,10 @@
 pub mod capacity;
 pub mod cpu_compat;
 pub mod embedded;
+/// The contracts an engine must satisfy, as runnable checks.
+pub mod engine_conformance;
+/// Which inference engine serves this node — selection + construction.
+pub mod engine_factory;
 pub mod evidence_id_constraint;
 pub mod fim;
 pub mod gguf_meta;
@@ -23,8 +27,8 @@ pub mod remote {
     pub use oicp_client::*;
 }
 pub mod reranker_standalone;
-pub mod rpc_worker_main;
 pub mod router_circuit;
+pub mod rpc_worker_main;
 pub mod selector;
 pub mod setup_planner;
 pub mod smoketest;

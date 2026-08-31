@@ -39,12 +39,14 @@ pub async fn run(args: &[String]) -> i32 {
                  \x20 svrn meshapp new <id> --corpus <corpus-id> [--name <title>] [--dir <base>]\n\
                  \x20 svrn meshapp dev <id> [--dir <bundle-dir>] [--index <index-dir>] [--port <n>]\n\
                  \x20 svrn meshapp publish <id> [--dir <bundle-dir>] [--out <dir>]\n\
-                 \x20 svrn meshapp install <id> [--from <path|url>]\n\
+                 \x20 svrn meshapp install <id> [--from <path|url>] [--sha <hex>]\n\
                  \x20 svrn meshapp list\n\n\
                  new      scaffold an SDK-composed bundle (index.html + app.js + meshapp.json).\n\
                  dev      serve a bundle with a live `window.meshApp` over a local corpus.\n\
                  publish  pack a bundle (+ _sdk) into a tar.zst + register it.\n\
                  install  fetch + verify + unpack an app into ~/.svrnmesh/meshapps/.\n\
+                 \x20        a curated install verifies against the registry; a --from\n\
+                 \x20        sideload verifies only if you pass --sha.\n\
                  list     show the registry + installed apps."
             );
             2
@@ -371,15 +373,41 @@ async fn static_handler(State(ctx): State<Arc<DevCtx>>, uri: Uri) -> Response {
     let path = uri.path();
     // `/_sdk/x` → the shared SDK; everything else → the bundle dir.
     if let Some(rel) = path.strip_prefix("/_sdk/") {
-        return serve_file(&ctx.sdk_dir.join(rel), false);
+        return serve_under(&ctx.sdk_dir, rel, None);
     }
     let rel = path.trim_start_matches('/');
     let rel = if rel.is_empty() { "index.html" } else { rel };
-    let inject = rel == "index.html";
-    serve_file(&ctx.bundle_dir.join(rel), inject)
+    let shim = (rel == "index.html").then_some("/__meshapp_dev.js");
+    serve_under(&ctx.bundle_dir, rel, shim)
 }
 
-fn serve_file(file: &Path, inject_shim: bool) -> Response {
+/// Serve `rel` from inside `root`, or 404 — **never from outside it**.
+///
+/// The guard is not "reject `..`": a request path can spell an escape many
+/// ways, and a check on the spelling is a check on what the caller authored
+/// (ARCH §18.1). Both sides are canonicalized and the result must still be
+/// under the root, so what is asserted is where the file actually IS.
+///
+/// Until this landed, both dev servers joined the request path onto the
+/// bundle directory and read whatever came out.
+pub(crate) fn serve_under(root: &Path, rel: &str, shim_src: Option<&str>) -> Response {
+    let joined = root.join(rel);
+    let Ok(real_root) = std::fs::canonicalize(root) else {
+        return (StatusCode::NOT_FOUND, "bundle directory is gone").into_response();
+    };
+    let Ok(real) = std::fs::canonicalize(&joined) else {
+        return (StatusCode::NOT_FOUND, format!("not found: {rel}")).into_response();
+    };
+    if !real.starts_with(&real_root) {
+        // Say nothing about what is out there. A 404 and a refusal look the
+        // same to a caller who should not have asked.
+        tracing::warn!(rel, root = %real_root.display(), "dev server: refused a path outside the bundle");
+        return (StatusCode::NOT_FOUND, format!("not found: {rel}")).into_response();
+    }
+    serve_file(&real, shim_src)
+}
+
+pub(crate) fn serve_file(file: &Path, shim_src: Option<&str>) -> Response {
     let bytes = match std::fs::read(file) {
         Ok(b) => b,
         Err(_) => {
@@ -391,9 +419,9 @@ fn serve_file(file: &Path, inject_shim: bool) -> Response {
         }
     };
     let ct = content_type(file);
-    if inject_shim {
+    if let Some(src) = shim_src {
         let html = String::from_utf8_lossy(&bytes);
-        let tag = "<script src=\"/__meshapp_dev.js\"></script>";
+        let tag = format!("<script src=\"{src}\"></script>");
         let injected = if let Some(idx) = html.find("</head>") {
             format!("{}{}{}", &html[..idx], tag, &html[idx..])
         } else {
@@ -404,7 +432,7 @@ fn serve_file(file: &Path, inject_shim: bool) -> Response {
     ([(header::CONTENT_TYPE, ct)], bytes).into_response()
 }
 
-fn content_type(file: &Path) -> &'static str {
+pub(crate) fn content_type(file: &Path) -> &'static str {
     match file.extension().and_then(|e| e.to_str()) {
         Some("html") => "text/html; charset=utf-8",
         Some("js") => "text/javascript; charset=utf-8",

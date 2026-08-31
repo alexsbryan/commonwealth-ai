@@ -308,6 +308,7 @@ mod tests {
     fn write_cfg(dir: &TempDir, primary: &str) -> PathBuf {
         let path = dir.path().join("config.toml");
         let cfg = SetupConfig {
+            engine: Default::default(),
             compute: Default::default(),
             search: Default::default(),
             models: Some(ModelsSection {
@@ -339,6 +340,7 @@ mod tests {
     #[test]
     fn config_diff_flags_iroh_changes_as_restart_required() {
         let base = SetupConfig {
+            engine: Default::default(),
             compute: Default::default(),
             search: Default::default(),
             models: Some(ModelsSection {

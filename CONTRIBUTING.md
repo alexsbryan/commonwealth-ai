@@ -194,7 +194,14 @@ directly and gate on its exit code. The summary carries four verdicts, not two �
 PASS / FAIL / COULD-NOT-JUDGE / NEVER-RAN — because a gate that could not reach
 its evidence did not pass.
 
-If you'd rather be sure before you push:
+**The push gate does not run the test suite.** `scripts/pre-push.sh` is held
+to a one-minute budget — about 22s for a full push — because a gate that costs
+longer is a gate that gets `--no-verify`'d. It still proves the workspace
+*compiles* (`scripts/sovereign-lint.sh`, run concurrently with the other
+gates), alongside rustfmt, the eight structural gates, and the desktop and
+shell self-tests. What it no longer does is run a single test, which makes
+these two the thing you run yourself before a push and CI the first automatic
+run of the suite:
 
 ```sh
 ./scripts/sovereign-lint.sh --human   # workspace check, friendly summary

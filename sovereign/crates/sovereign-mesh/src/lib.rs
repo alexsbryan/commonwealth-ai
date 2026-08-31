@@ -79,10 +79,12 @@ pub mod predicted_time;
 pub mod project_http;
 pub mod projects;
 pub mod prompt_compactor;
+pub mod rail_bind;
 pub mod reading_formatters;
 pub mod reading_http;
 #[cfg(feature = "treesitter")]
 pub mod reindexer;
+pub mod ring_sync;
 pub mod roster_repair;
 pub mod rpc_warm_http;
 /// The routing decision as a pure function — shared by the production

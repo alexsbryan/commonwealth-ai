@@ -20,6 +20,7 @@
 6	corpus-engine/xtask/src/layout_gate.rs
 1	sovereign/crates/sovereign-cli-dev/src/code_cmd.rs
 1	sovereign/crates/sovereign-cli-dev/src/code_fieldglass/assemble.rs
+1	sovereign/crates/sovereign-cli-dev/src/converge_cmd.rs
 7	sovereign/crates/sovereign-cli-dev/src/drift_cmd_orchestrator.rs
 7	sovereign/crates/sovereign-cli-dev/src/project_cmd/refresh.rs
 1	sovereign/crates/sovereign-cli-llm/src/alignment_cmd.rs

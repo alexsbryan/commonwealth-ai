@@ -137,6 +137,20 @@ fn default_api_port() -> u16 {
 fn default_internal_port() -> u16 {
     9742
 }
+/// The loopback port the ring rail listens on, derived from the client port.
+///
+/// **ONE derivation** (ARCH §10.6): the daemon binds it and `svrn ring dev`
+/// dials it, and if those two ever computed it separately a second daemon on a
+/// non-default client port would have its rail silently unreachable — the
+/// worst shape, because the app would get a connection refused and the
+/// operator would go looking at grants.
+///
+/// Derived rather than configured so there is no knob to set inconsistently.
+/// Loopback-only in M0, so it never needs to be advertised or firewalled.
+pub fn rail_port(client_port: u16) -> u16 {
+    client_port.saturating_add(2)
+}
+
 fn default_schedule() -> String {
     "always".into()
 }
@@ -241,6 +255,10 @@ name = "Test Node"
         let config: DaemonConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(config.node.api_port, 9741);
         assert_eq!(config.node.internal_port, 9742);
+        // The rail sits beside them, and moves with the client port so two
+        // daemons on one machine cannot collide on it.
+        assert_eq!(rail_port(config.node.api_port), 9743);
+        assert_eq!(rail_port(19741), 19743);
         assert_eq!(config.contribution.schedule, "always");
         assert_eq!(config.inference.llama_server, "llama-server");
     }

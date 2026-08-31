@@ -432,10 +432,14 @@ const NEVER_GUESTABLE: &[&str] = &["/internal/", "/v1/apps", "/v1/mesh/"];
 /// so the build breaks HERE — in the test that would otherwise not know about
 /// the new variant — rather than shipping an unexamined scope.
 fn one_sample_per_scope_variant() -> Vec<Scope> {
-    let all = vec![Scope::Models(vec![GRANTED_MODEL.into()])];
+    let all = vec![
+        Scope::Models(vec![GRANTED_MODEL.into()]),
+        Scope::Rails("house-expenses".into()),
+    ];
     for s in &all {
         match s {
             Scope::Models(_) => {}
+            Scope::Rails(_) => {}
         }
     }
     all

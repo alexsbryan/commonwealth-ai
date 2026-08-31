@@ -16,9 +16,13 @@ use crate::routes_knowledge;
 use crate::routes_oicp;
 use crate::routes_oicp_ingest;
 use crate::routes_ollama;
+use crate::routes_rail;
 use crate::routes_responses;
 use crate::routes_status;
 use crate::state::AppState;
+// Re-exported, not moved twice: every call site says `server::ClientSurface`
+// and the surface is only ever meaningful next to the router it binds.
+pub use crate::client_surface::ClientSurface;
 
 /// Explicit request-body ceiling for both API surfaces. Makes the bound
 /// intentional and tunable instead of relying on axum's implicit ~2 MB default
@@ -45,63 +49,6 @@ const REQUEST_BODY_READ_TIMEOUT: std::time::Duration = std::time::Duration::from
 /// listener, which trusts a loopback caller.
 pub fn client_router(state: AppState) -> Router {
     client_router_for(state, ClientSurface::Operator)
-}
-
-/// Who reaches a bind of the client router — the closed set of principal
-/// classes, and the ONE thing that decides both the auth posture and the
-/// route set (§2.1, §10.6).
-///
-/// The daemon binds this router three times, and the binds differ in two
-/// ways that used to be tracked separately (and so drifted apart):
-///
-/// | Surface | Reached by | Trusts a loopback peer | Serves `/internal/*` |
-/// |---|---|---|---|
-/// | `Operator` | a real local caller on `:9741` | yes | yes |
-/// | `Peer` | a MEMBER dialling `CLIENT_ALPN` | yes | **no** |
-/// | `Guest` | `GUEST_ALPN`, and a downgraded stranger | no | no |
-///
-/// **`Peer` exists because "is the caller loopback" is meaningless on a
-/// listener the iroh acceptor feeds.** The acceptor forwards by
-/// `TcpStream::connect("127.0.0.1")`, so every tunnelled request wears a
-/// loopback address it did not earn. `Guest` answers that for a stranger by
-/// refusing to trust the address; it could not answer it for a member,
-/// because peer federated inference carries no `Authorization` header at all
-/// and membership-by-key IS its credential. So a member landed on the
-/// `Operator` bind and reached `/internal/guest/grant` — a "forge a
-/// credential for an outsider" lever — with nothing presented. A loopback
-/// guard on those routes would have read as a fix and changed nothing.
-///
-/// The fix is structural rather than a predicate: the principal class picks
-/// the listener, and the listener does not SERVE what that principal must
-/// never reach. See `routes_internal::guest_grant` module docs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ClientSurface {
-    /// The daemon's own `:9741` listener.
-    Operator,
-    /// The loopback bind the iroh acceptor forwards `CLIENT_ALPN` to, once
-    /// the dialer's key has been checked against live membership.
-    Peer,
-    /// The loopback bind the acceptor forwards `GUEST_ALPN` to, and where a
-    /// non-member on `CLIENT_ALPN` is downgraded.
-    Guest,
-}
-
-impl ClientSurface {
-    /// Whether a loopback peer address is evidence of a local caller.
-    /// True only where the caller reached us by actually being on this
-    /// machine, or by proving a member key at the QUIC handshake.
-    pub fn auth_policy(self) -> crate::client_auth::ClientAuthPolicy {
-        match self {
-            Self::Operator | Self::Peer => crate::client_auth::ClientAuthPolicy::default(),
-            Self::Guest => crate::client_auth::ClientAuthPolicy::UNTRUSTED_LOOPBACK,
-        }
-    }
-
-    /// Whether the operator-only `/internal/*` routes are mounted at all.
-    /// Only the surface an operator's own tools talk to.
-    pub fn serves_operator_routes(self) -> bool {
-        matches!(self, Self::Operator)
-    }
 }
 
 /// [`client_router`] for a named principal class. See [`ClientSurface`].
@@ -167,109 +114,139 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
         Router::new()
     };
 
-    Router::new()
-        // OpenAI-compatible inference endpoints.
-        .route(
-            "/v1/chat/completions",
-            post(routes_inference::chat_completions)
-                .layer(admission())
-                .layer(fair_share()),
-        )
-        // OpenAI Responses API — adapter over /v1/chat/completions.
-        // Required by `codex` and the OpenAI agents libraries since
-        // their dropping `wire_api="chat"` (2026-05). See
-        // `routes_responses` module docs for the translation contract.
-        .route("/v1/responses", post(routes_responses::responses))
-        // FIM inline completion (INLINE_COMPLETION.md). Loopback-tokenless
-        // like the rest of :9741 — the extension talks to its own daemon.
-        .route("/v1/completions", post(routes_completions::completions))
-        // Next-edit prediction, both lanes (NEXT_EDIT.md §3). The rule
-        // lane is pure string work, but the model lane consults the
-        // resident FIM slot, so this endpoint carries the same
-        // admission gate as every other inference route — a peer must
-        // not drive local inference through it while the operator has
-        // contribution paused. Local requests (no `X-Node-Id`) are
-        // always admitted, so the editor path is untouched. The tighter
-        // body limit overrides the router-wide 8 MB frontdoor: the
-        // handler's documented caps (512 KiB text, 32 units) are a
-        // contract check, and the transport should refuse a body that
-        // could never satisfy them before serde allocates it.
-        .route(
-            "/v1/edit_predictions",
-            post(routes_edit_predictions::edit_predictions)
-                .layer(axum::extract::DefaultBodyLimit::max(
-                    routes_edit_predictions::MAX_BODY_BYTES,
-                ))
-                .layer(admission()),
-        )
-        // What the developer did with a suggestion. Deliberately NOT
-        // behind `admission()`: it is a local editor reporting on a
-        // prediction this daemon already served, it costs one appended
-        // line, and a refusal here would be an invisible telemetry
-        // failure rather than protection (decision note `09599af1`).
-        .route(
-            "/v1/edit_predictions/outcome",
-            post(crate::next_edit_journal::edit_prediction_outcome),
-        )
-        .route("/v1/embeddings", post(routes_inference::embeddings))
-        .route("/v1/models", get(routes_inference::list_models))
-        // Knowledge search endpoint.
-        .route(
-            "/v1/knowledge/search",
-            post(routes_knowledge::knowledge_search),
-        )
-        // Status endpoint.
-        .route("/status", get(routes_status::status))
-        // The operator-only surface, mounted on the `Operator` bind and
-        // NOWHERE else. Empty on `Peer` and `Guest`, so those listeners
-        // 404 these paths rather than gating them — the distinction
-        // matters, because the gate they would otherwise carry
-        // ("is the caller loopback") is inert on a listener the iroh
-        // acceptor feeds. See [`ClientSurface`].
-        .merge(operator_routes)
-        // OICP capability manifest.
-        .route("/oicp/v1/capabilities", get(routes_oicp::capabilities))
-        // OICP v0.4 §5 ingest extension: install a corpus by recipe id,
-        // poll coarse progress, and dry-run a recipe. Protocol DTOs only
-        // (no `corpus_engine` types on the wire); advertised in the
-        // manifest's `knowledge.ingest` when a corpus engine is wired.
-        // Covered by the outer `client_auth` layer like the rest of :9741.
-        .route(
-            "/oicp/v1/corpus/install",
-            post(routes_oicp_ingest::corpus_install),
-        )
-        .route(
-            "/oicp/v1/corpus/progress",
-            get(routes_oicp_ingest::corpus_progress),
-        )
-        .route(
-            "/oicp/v1/recipe/test",
-            post(routes_oicp_ingest::recipe_test),
-        )
-        // Ollama-native /api/* compatibility shim. Pure translation over the
-        // OpenAI handlers above — no new inference/routing logic. Chat +
-        // generate carry the same peer-admission gate as /v1/chat/completions
-        // (a no-op for local Ollama clients, which don't send X-Node-Id).
-        // Same unauthenticated posture as the rest of :9741 — see
-        // `routes_ollama` module docs for the trust/CORS rationale.
-        .route("/api/version", get(routes_ollama::version))
-        .route("/api/tags", get(routes_ollama::tags))
-        .route("/api/ps", get(routes_ollama::ps))
-        .route("/api/show", post(routes_ollama::show))
-        .route("/api/chat", post(routes_ollama::chat).layer(admission()))
-        .route(
-            "/api/generate",
-            post(routes_ollama::generate).layer(admission()),
-        )
-        .route("/api/embed", post(routes_ollama::embed))
-        .route("/api/embeddings", post(routes_ollama::embeddings))
-        // App management endpoints.
-        .route("/v1/apps", get(routes_apps::list_apps))
-        .route("/v1/apps/{app_id}/install", post(routes_apps::install_app))
-        .route("/v1/apps/{app_id}/status", get(routes_apps::app_status))
-        .route("/v1/apps/{app_id}", delete(routes_apps::uninstall_app))
-        // Reverse proxy to locally running apps.
-        .route("/app/{app_id}/{*path}", any(routes_apps::proxy_app))
+    // The general client surface — inference, knowledge, status, OICP, the
+    // Ollama shim, app management. Present on `Operator`, `Peer` and
+    // `Guest`; absent entirely on `Rail`.
+    //
+    // A ring app's reach is the route set mounted on the listener it can
+    // reach, not a predicate it has to fail (§7.1). Note the consequence
+    // for `AUTH_EXEMPT_PATHS`: `/status` and `/oicp/v1/capabilities` are
+    // not mounted here either, so a probe against a rail listener 404s
+    // rather than 401s. That is deliberate — a ring app has no business
+    // probing federation health, and an exempt path that answered would be
+    // the one route it could reach without a credential.
+    let general: Router<AppState> = if surface.serves_general_client_routes() {
+        Router::new()
+            // OpenAI-compatible inference endpoints.
+            .route(
+                "/v1/chat/completions",
+                post(routes_inference::chat_completions)
+                    .layer(admission())
+                    .layer(fair_share()),
+            )
+            // OpenAI Responses API — adapter over /v1/chat/completions.
+            // Required by `codex` and the OpenAI agents libraries since
+            // their dropping `wire_api="chat"` (2026-05). See
+            // `routes_responses` module docs for the translation contract.
+            .route("/v1/responses", post(routes_responses::responses))
+            // FIM inline completion (INLINE_COMPLETION.md). Loopback-tokenless
+            // like the rest of :9741 — the extension talks to its own daemon.
+            .route("/v1/completions", post(routes_completions::completions))
+            // Next-edit prediction, both lanes (NEXT_EDIT.md §3). The rule
+            // lane is pure string work, but the model lane consults the
+            // resident FIM slot, so this endpoint carries the same
+            // admission gate as every other inference route — a peer must
+            // not drive local inference through it while the operator has
+            // contribution paused. Local requests (no `X-Node-Id`) are
+            // always admitted, so the editor path is untouched. The tighter
+            // body limit overrides the router-wide 8 MB frontdoor: the
+            // handler's documented caps (512 KiB text, 32 units) are a
+            // contract check, and the transport should refuse a body that
+            // could never satisfy them before serde allocates it.
+            .route(
+                "/v1/edit_predictions",
+                post(routes_edit_predictions::edit_predictions)
+                    .layer(axum::extract::DefaultBodyLimit::max(
+                        routes_edit_predictions::MAX_BODY_BYTES,
+                    ))
+                    .layer(admission()),
+            )
+            // What the developer did with a suggestion. Deliberately NOT
+            // behind `admission()`: it is a local editor reporting on a
+            // prediction this daemon already served, it costs one appended
+            // line, and a refusal here would be an invisible telemetry
+            // failure rather than protection (decision note `09599af1`).
+            .route(
+                "/v1/edit_predictions/outcome",
+                post(crate::next_edit_journal::edit_prediction_outcome),
+            )
+            .route("/v1/embeddings", post(routes_inference::embeddings))
+            .route("/v1/models", get(routes_inference::list_models))
+            // Knowledge search endpoint.
+            .route(
+                "/v1/knowledge/search",
+                post(routes_knowledge::knowledge_search),
+            )
+            // Status endpoint.
+            .route("/status", get(routes_status::status))
+            // The operator-only surface, mounted on the `Operator` bind and
+            // NOWHERE else. Empty on `Peer` and `Guest`, so those listeners
+            // 404 these paths rather than gating them — the distinction
+            // matters, because the gate they would otherwise carry
+            // ("is the caller loopback") is inert on a listener the iroh
+            // acceptor feeds. See [`ClientSurface`].
+            .merge(operator_routes)
+            // OICP capability manifest.
+            .route("/oicp/v1/capabilities", get(routes_oicp::capabilities))
+            // OICP v0.4 §5 ingest extension: install a corpus by recipe id,
+            // poll coarse progress, and dry-run a recipe. Protocol DTOs only
+            // (no `corpus_engine` types on the wire); advertised in the
+            // manifest's `knowledge.ingest` when a corpus engine is wired.
+            // Covered by the outer `client_auth` layer like the rest of :9741.
+            .route(
+                "/oicp/v1/corpus/install",
+                post(routes_oicp_ingest::corpus_install),
+            )
+            .route(
+                "/oicp/v1/corpus/progress",
+                get(routes_oicp_ingest::corpus_progress),
+            )
+            .route(
+                "/oicp/v1/recipe/test",
+                post(routes_oicp_ingest::recipe_test),
+            )
+            // Ollama-native /api/* compatibility shim. Pure translation over the
+            // OpenAI handlers above — no new inference/routing logic. Chat +
+            // generate carry the same peer-admission gate as /v1/chat/completions
+            // (a no-op for local Ollama clients, which don't send X-Node-Id).
+            // Same unauthenticated posture as the rest of :9741 — see
+            // `routes_ollama` module docs for the trust/CORS rationale.
+            .route("/api/version", get(routes_ollama::version))
+            .route("/api/tags", get(routes_ollama::tags))
+            .route("/api/ps", get(routes_ollama::ps))
+            .route("/api/show", post(routes_ollama::show))
+            .route("/api/chat", post(routes_ollama::chat).layer(admission()))
+            .route(
+                "/api/generate",
+                post(routes_ollama::generate).layer(admission()),
+            )
+            .route("/api/embed", post(routes_ollama::embed))
+            .route("/api/embeddings", post(routes_ollama::embeddings))
+            // App management endpoints.
+            .route("/v1/apps", get(routes_apps::list_apps))
+            .route("/v1/apps/{app_id}/install", post(routes_apps::install_app))
+            .route("/v1/apps/{app_id}/status", get(routes_apps::app_status))
+            .route("/v1/apps/{app_id}", delete(routes_apps::uninstall_app))
+            // Reverse proxy to locally running apps.
+            .route("/app/{app_id}/{*path}", any(routes_apps::proxy_app))
+    } else {
+        Router::new()
+    };
+
+    // The ring-app rail. Present on `Rail` (where it is the ONLY thing
+    // served) and on `Operator` (a local caller already reaches everything,
+    // and `svrn ring` has to be able to read its own ledger). Absent on
+    // `Peer` and `Guest`: a ring rail is loopback-only in M0.
+    let rail: Router<AppState> = if surface.serves_rail_routes() {
+        Router::new()
+            .route("/v1/rail/append", post(routes_rail::append))
+            .route("/v1/rail/log", get(routes_rail::log))
+    } else {
+        Router::new()
+    };
+
+    general
+        .merge(rail)
         // OUTERMOST layer: bearer-token auth for non-loopback callers.
         // Wraps the whole client surface (including the per-route
         // admission gates), so authentication runs BEFORE load-shedding
@@ -466,6 +443,11 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/app/state",
             post(routes_app_internal::recv_app_state),
         )
+        // Ring-ledger anti-entropy. Its OWN route on its own cadence rather
+        // than a namespace riding `/internal/app/state`: that push ships a
+        // full snapshot to every online peer every 10s, which for a ledger
+        // that only grows is a bandwidth bill that never stops climbing.
+        .route("/internal/ring/sync", post(routes_internal::ring_sync))
         .route(
             "/internal/app/registry",
             post(routes_app_internal::recv_app_registry),
@@ -1034,26 +1016,29 @@ mod tests {
             );
         }
 
-        // `Guest` does not trust loopback, so it needs the daemon token to get
-        // past auth. Once past it, the same routes are simply absent.
-        for path in OPERATOR_ONLY {
-            let state = test_app_state();
-            state.install_client_token(Some(TOKEN.into()));
-            let response = mock_router_for(state, ClientSurface::Guest)
-                .oneshot(
-                    Request::post(*path)
-                        .header("content-type", "application/json")
-                        .header(axum::http::header::AUTHORIZATION, format!("Bearer {TOKEN}"))
-                        .body(Body::from("{}"))
-                        .unwrap(),
-                )
-                .await
-                .unwrap();
-            assert_eq!(
-                response.status(),
-                StatusCode::NOT_FOUND,
-                "guest surface must not serve {path}"
-            );
+        // `Guest` and `Rail` do not trust loopback, so they need the daemon
+        // token to get past auth. Once past it, the same routes are simply
+        // absent.
+        for surface in [ClientSurface::Guest, ClientSurface::Rail] {
+            for path in OPERATOR_ONLY {
+                let state = test_app_state();
+                state.install_client_token(Some(TOKEN.into()));
+                let response = mock_router_for(state, surface)
+                    .oneshot(
+                        Request::post(*path)
+                            .header("content-type", "application/json")
+                            .header(axum::http::header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                            .body(Body::from("{}"))
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    response.status(),
+                    StatusCode::NOT_FOUND,
+                    "{surface:?} surface must not serve {path}"
+                );
+            }
         }
 
         // And the control: the SAME request on the operator surface is served,
@@ -1071,6 +1056,64 @@ mod tests {
             StatusCode::OK,
             "the operator surface must still serve what the others refuse"
         );
+    }
+
+    /// The `Rail` surface serves the ring-app rail and NOTHING else.
+    ///
+    /// A deployed ring app is a guest that happens to run on this machine.
+    /// It must not be able to drive inference, search the operator's
+    /// corpora, or manage apps — and the guarantee is that those routes are
+    /// absent from the listener it can reach, not that a predicate refuses
+    /// them (§7.1). A 404 here is the route set, not a credential.
+    ///
+    /// Driven with a credential the surface ACCEPTS, so the only variable
+    /// left is whether the route is mounted; the control at the end proves
+    /// the probe itself is not simply broken (§18.1).
+    #[tokio::test]
+    async fn the_rail_surface_does_not_serve_the_general_client_routes() {
+        const GENERAL: &[(&str, &str)] = &[
+            ("POST", "/v1/chat/completions"),
+            ("POST", "/v1/knowledge/search"),
+            ("GET", "/v1/models"),
+            ("GET", "/v1/apps"),
+            ("POST", "/api/chat"),
+        ];
+        const TOKEN: &str = "deadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00d";
+
+        let probe = |surface: ClientSurface, method: &str, path: &str| {
+            let state = test_app_state();
+            state.install_client_token(Some(TOKEN.into()));
+            let req = Request::builder()
+                .method(method)
+                .uri(path)
+                .header("content-type", "application/json")
+                .header(axum::http::header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .body(Body::from("{}"))
+                .unwrap();
+            async move { mock_router_for(state, surface).oneshot(req).await.unwrap() }
+        };
+
+        for (method, path) in GENERAL {
+            let response = probe(ClientSurface::Rail, method, path).await;
+            assert_eq!(
+                response.status(),
+                StatusCode::NOT_FOUND,
+                "rail surface must not serve {method} {path}"
+            );
+        }
+
+        // Control: the same requests on the operator surface are routed —
+        // so the 404s above are the route set changing, not a probe that
+        // 404s everything. Any status but NOT_FOUND proves the route exists;
+        // these handlers legitimately 4xx/5xx on an empty body.
+        for (method, path) in GENERAL {
+            let response = probe(ClientSurface::Operator, method, path).await;
+            assert_ne!(
+                response.status(),
+                StatusCode::NOT_FOUND,
+                "operator surface must still serve {method} {path}"
+            );
+        }
     }
 
     #[tokio::test]

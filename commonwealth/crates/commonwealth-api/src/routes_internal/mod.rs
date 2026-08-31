@@ -41,6 +41,7 @@ mod mesh_admin;
 mod model_files;
 mod newsworthy_status;
 mod pipeline_pause;
+mod ring_sync;
 mod rpc_warm;
 
 pub use atlas_status::{atlas_status, AtlasStatusResponse};
@@ -54,6 +55,7 @@ pub use corpus_ingest::{
     ProgressSnapshotResponse,
 };
 pub use guest_grant::{guest_grant_issue, guest_grant_list, guest_grant_revoke};
+pub use ring_sync::{ring_sync, RingSyncRequest, RingSyncResponse};
 // Crate-internal: the OICP ingest routes (`routes_oicp_ingest`) reuse the
 // same progress→fraction projection so the two surfaces can't diverge.
 pub(crate) use corpus_ingest::progress_fraction;

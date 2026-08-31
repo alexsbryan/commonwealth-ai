@@ -19,6 +19,7 @@
 pub use oicp_types as oicp;
 
 pub mod data_roots;
+pub mod engine_config;
 pub mod error;
 pub mod frame;
 pub mod health;

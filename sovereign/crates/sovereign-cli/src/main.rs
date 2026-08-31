@@ -265,6 +265,10 @@ const HELP: Help = Help {
             ),
             ("mesh", "Mesh management (create / join / rotate / status)"),
             (
+                "ring",
+                "Deploy an app to a trust ring — shared, signed, converging state (roster / dev / balances)",
+            ),
+            (
                 "mobile",
                 "Serve the phone-facing API, riding on the daemon's models (serve / status / pair)",
             ),
@@ -458,6 +462,7 @@ const ALL_VERBS: &[&str] = &[
     "recipe-agent",
     "reflect",
     "refresh",
+    "ring",
     "rough-edges",
     "router-cache",
     "search-gym",
@@ -931,8 +936,8 @@ async fn async_main() {
             // execs into it without setting up a tracing subscriber —
             // the sibling's main() installs the appropriate filter for
             // each verb.
-            "mesh" | "meshapp" | "mobile" | "alignment" | "corpus" | "meta-atlas" | "mcp"
-            | "recipe" | "pipeline" | "recipe-agent" | "maintainer" => {
+            "mesh" | "meshapp" | "ring" | "mobile" | "alignment" | "corpus" | "meta-atlas"
+            | "mcp" | "recipe" | "pipeline" | "recipe-agent" | "maintainer" => {
                 let code = llm_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }

@@ -16,6 +16,15 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 bytes = { workspace = true }
 reqwest = { workspace = true }
+# The ring ledger signs every op with the node's existing Ed25519 identity key.
+# The key itself is loaded by `commonwealth-transport`; this crate only takes a
+# `&SigningKey`, so the ledger does not drag the transport stack in behind it.
+ed25519-dalek = { workspace = true }
+hex = "0.4"
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
 
 [lints]
 workspace = true

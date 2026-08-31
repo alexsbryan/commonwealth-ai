@@ -16,12 +16,53 @@
 #   * CI CONFIRMS it on a clean checkout, and gates contributions from people
 #     whose machines we do not control.
 #
-# ## Why it is affordable to run every time
+# ## The budget is ONE MINUTE, and it is a hard constraint
 #
-# It scopes to what the push actually changes, and it reuses your warm
-# `target/`. `scripts/sovereign-test.sh` runs on cargo-nextest — 59s for the
-# full workspace against 126s for serial `cargo test`. A push touching only
-# docs skips the Rust work entirely and costs about a second.
+# Operator direction 2026-08-30: "prepush has to be less than 1 minute
+# otherwise I'm skipping it always." That is not a preference, it is how
+# gates die. A gate routinely bypassed with --no-verify protects nothing
+# (ARCH §18.1: a gate you have not watched fail is not a gate), so a gate
+# that costs more than a minute is strictly worse than a cheaper one that
+# actually runs.
+#
+# So the WORKSPACE TEST RUN IS NOT HERE. It was the whole cost — ~45-60s
+# warm and several minutes cold — against ~15s for everything else combined.
+# CI runs it on a clean checkout; that is now the authority for "do the tests
+# pass", and `./scripts/sovereign-test.sh --human` is the authority for "do
+# they pass HERE", run when you mean to rather than on every push.
+#
+# What is left is the set of checks that are fast, deterministic, and cannot
+# be answered by reading the diff. Measured on this host 2026-08-30:
+#
+#   cargo check (--all-targets, real features)  14-58s   CONCURRENT
+#   ─── everything below runs while that does ─────────
+#   rustfmt                                        4s    (Rust pushes only)
+#   xtask build freshness check                    1s
+#   eight xtask gates, one binary                  5s
+#   CLI journey self-test                          3s    (harness changes)
+#   release script self-test                       2s    (release changes)
+#   desktop svelte-check + vitest                  9s    (desktop changes)
+#   ───────────────────────────────────────────────────
+#   wall clock = max(cargo check, ~21s) — NOT their sum
+#
+# The compile check is the one gate that can exceed the budget on its own, and
+# what drives that is NOT the size of the diff — it is FREE MEMORY. The script
+# derives `--jobs` from it (4GB/job), so the same workspace check measured
+# 21.5s at `jobs: 12` (48GB free) and 58.1s at `jobs: 3` (15GB free). Read the
+# `jobs:` line on its banner before concluding a run was slow for any other
+# reason.
+#
+# That is exactly why it is started first and collected last instead of run in
+# sequence. Whole-hook wall clock, measured 2026-08-30: 22s warm, 27s with
+# three of the workspace's most-depended-on crates dirtied. Serial, the
+# memory-starved worst case would be 79s and out of budget; overlapped it is
+# ~58s and inside it. Nothing after the launch point takes the cargo target
+# lock — keep it that way or the concurrency quietly becomes a queue. (The
+# xtask build above is the one that would: it ran after the launch in the
+# first draft of this and sat on the lock for the whole check.)
+#
+# The verdict line prints the elapsed total every run, so a gate that creeps
+# past the budget shows up as a number rather than as a habit of skipping.
 #
 # ## Escape hatches
 #
@@ -29,7 +70,7 @@
 #
 #   git push --no-verify           # skip every hook, one push
 #   SOVEREIGN_SKIP_PREPUSH=1 git push
-#   SOVEREIGN_PREPUSH_QUICK=1 git push   # fmt + docs only; no test run
+#   SOVEREIGN_PREPUSH_QUICK=1 git push   # skip the desktop node gates
 #
 # Use them when you mean to (pushing a WIP branch for a colleague to look at,
 # racing a hotfix). Do not use them to push red code to main — CI will catch
@@ -141,6 +182,12 @@ RELEASE=0
 # Rust — and this filter used to say otherwise, which meant a manifest-only
 # push sailed through the local gate and went red in CI. That is the precise
 # failure this hook exists to prevent, so the filters must stay in step.
+#
+# RUST now drives only rustfmt here, since the test run moved to CI — but the
+# set stays as-is deliberately. It is the CI `changes` job's filter, and its
+# job is to predict which CI gates a diff can break; narrowing it to "files
+# rustfmt cares about" would make the two lists diverge for a few seconds of
+# saving on a non-Rust push.
 match '(\.rs$|(^|/)Cargo\.toml$|^Cargo\.lock$|^rust-toolchain\.toml$|^\.cargo/|^vendor/|^scripts/sovereign-test\.sh$|^scripts/lib/|^sovereign/crates/sovereign-tools/src/code/test_adapters/|^sovereign/docs/cli-contract\.toml$|^sovereign/scripts/cli-journey-.*\.sh$|^sovereign/scripts/tests/)' && RUST=1
 match '^sovereign/crates/sovereign-desktop/' && DESKTOP=1
 # The journey harness's own negative controls: the runner SCRIPT, which no
@@ -166,7 +213,7 @@ match '(^scripts/release-.*\.sh$|^scripts/tests/|^scripts/lib/release-host\.sh$|
 
 FAILED=()        # gates that ran and said no — these block
 UNVERIFIED=()    # gates that could not run here — these warn
-BUILD_BROKE=0
+ADVISORY=()      # gates that ran and could not judge — reported, not blocking
 
 # Is a build break attributable to code in THIS repo?
 #
@@ -175,8 +222,11 @@ BUILD_BROKE=0
 # workspace is yours: block it. A third-party build script that fell over —
 # missing native header, no cmake, a libclang whose resource directory has no
 # include/ — is a property of the shell you happen to be pushing FROM, and no
-# edit to this push can fix it. Blocking there teaches people that the gate is
-# noise, and a gate people route around protects nothing.
+# edit to this push can fix it. This repo's native deps (cmake, clang, vulkan)
+# live in the dev toolbox, and a push from the Fedora host dies in
+# llama-cpp-sys-4's build script on `stdbool.h` every time. Blocking there
+# teaches people that the gate is noise, and a gate people route around
+# protects nothing.
 #
 # FAILS CLOSED: no log, or anything it cannot classify, counts as first-party.
 break_is_first_party() {
@@ -232,6 +282,19 @@ warn_gate() {
     fi
 }
 
+# One build for all eight, hoisted out of the gate function and run BEFORE
+# the lint check starts, because `cargo build` and `cargo check` contend for
+# the same target-directory lock: launched after, this would idle for the
+# whole lint run waiting on a lock it has no dependency on.
+#
+# A build failure is its own verdict — it is not "the gates passed" and it is
+# not "your code is bad" (ARCH §18.3).
+XTASK_BIN="${REPO_ROOT}/target/debug/xtask"
+XTASK_BUILT=0
+if cargo build --quiet -p xtask 2>/dev/null; then
+    XTASK_BUILT=1
+fi
+
 # ── Gate 1: rustfmt. Instant, deterministic, cannot flake. ─────────────────
 #
 # A rustfmt failure is mechanical, zero-risk, and always fixed by exactly one
@@ -266,14 +329,59 @@ if (( RUST )); then
     run_gate "rustfmt" fmt_gate
 fi
 
-# ── Gate 2: docs-gate. Every repo path cited by the narrative docs must ────
-# resolve on disk. Runs on ANY change, not just doc edits: the usual way this
-# breaks is a CODE file being renamed out from under a citation.
-run_gate "docs-gate (cited paths resolve)" cargo run --quiet -p xtask -- docs-gate
-
-# ── Gate 2b: the other seven xtask gates. BLOCKING. ────────────────────────
+# ── Gate 1b: does it COMPILE. Started here, collected last. ────────────────
 #
-# docs-gate above was ONE of ten. The rest ran only when somebody typed
+# `scripts/sovereign-lint.sh` is `cargo check --all-targets` under the repo's
+# real feature contract (corpus-engine/treesitter + sovereign-cli/dev-tools +
+# sovereign-mesh/mesh-sim), which is the coverage the workspace test run used
+# to provide incidentally and nothing replaced when it left. Its own header
+# names a pre-push hook as where the full sweep belongs.
+#
+# IT RUNS CONCURRENTLY, and that is what makes it affordable. Measured on this
+# host 2026-08-30: 11.3s when nothing needs recompiling, 58.1s right after a
+# `cargo fmt` sweep touched oicp-client, corpus-engine and sovereign-inference
+# — three crates most of the workspace depends on. Serial, that worst case put
+# the hook at 79s and straight through the budget. Overlapped with the ~21s of
+# gates that need no cargo lock, the hook costs max(lint, the rest) instead of
+# their sum, and the observed worst case lands at 58s — inside the minute.
+#
+# Ordering is load-bearing, not incidental:
+#   * the xtask build above is already done, so it never waits on this lock;
+#   * `cargo fmt` does not build, so it does not contend;
+#   * the journey and desktop gates are shell and node.
+# Nothing below this line takes the cargo target lock. Keep it that way, or
+# the concurrency silently becomes a queue.
+#
+# Scope comes from the push range rather than the working tree: what is going
+# out is the honest subject, and `SOVEREIGN_CHANGED_PATHS` is the script's
+# highest-priority discovery path. Workspace-level files escalate it to a full
+# check on their own, and a range that resolves to no crate falls back to the
+# full workspace rather than checking nothing — it fails toward more coverage.
+LINT_PID=""
+LINT_LOG=""
+if (( RUST )); then
+    LINT_LOG="$(mktemp -t prepush-lint.XXXXXX)"
+    printf '%s\n' "${C_DIM}────${C_RESET} ${C_BOLD}cargo check (sovereign-lint.sh)${C_RESET} ${C_DIM}— running alongside the gates below${C_RESET}" >&2
+    SOVEREIGN_CHANGED_PATHS="$(printf '%s\n' "$CHANGED" | tr '\n' ':')" \
+        ./scripts/sovereign-lint.sh --human >"$LINT_LOG" 2>&1 &
+    LINT_PID=$!
+    # A hook that is interrupted must not leave a cargo check holding the
+    # target lock against the next thing the developer types.
+    trap '[[ -n "${LINT_PID:-}" ]] && kill "$LINT_PID" 2>/dev/null; [[ -n "${LINT_LOG:-}" ]] && rm -f "$LINT_LOG"' EXIT INT TERM
+fi
+
+# ── Gate 2: the xtask gates. BLOCKING. ────────────────────────────────────
+#
+# docs-gate is the first of them: every repo path cited by the narrative docs
+# must resolve on disk, checked on ANY change rather than only on doc edits,
+# because the usual way it breaks is a CODE file renamed out from under a
+# citation. It used to run as its own `cargo run --quiet -p xtask -- docs-gate`
+# above this block, which re-resolved freshness over 56 workspace crates
+# before invoking a gate that finishes in 0.4s. It is the same binary as the
+# other seven; running it through the same loop costs one process, not one
+# cargo.
+#
+# docs-gate was ONE of ten. The rest ran only when somebody typed
 # `cargo xtask quality` — not in CI (ci.yml's `gates:` job has been commented
 # out since the day it was written, deliberately: docs/CI_ECONOMY.md argues
 # the real gate is local), not here, and not in AGENTS.md's definition of
@@ -307,30 +415,51 @@ run_gate "docs-gate (cited paths resolve)" cargo run --quiet -p xtask -- docs-ga
 # nightly plus `cargo install cargo-public-api` (a CI concern, and it burns
 # 15.7s failing to find the binary); lint-gate consumes a clippy JSON stream
 # and belongs to the lint script that produces one. Neither is a push gate.
-XTASK_GATES=(arch-gate boundary-gate layer-gate lock-gate layout-gate env-gate concept-gate)
+XTASK_GATES=(docs-gate arch-gate boundary-gate layer-gate lock-gate layout-gate env-gate concept-gate)
 
 xtask_gates() {
-    local g rc=0 out xtask
-    local -a failed=()
+    local g rc=0 code out xtask
+    local -a failed=() advisory=()
 
-    # One build for all seven. A build failure is its own verdict — it is not
-    # "the gates passed" and it is not "your code is bad" (ARCH §18.3).
-    if ! cargo build --quiet -p xtask 2>/dev/null; then
+    if (( ! XTASK_BUILT )); then
         printf '%s\n' "  ${C_BOLD}xtask failed to build${C_RESET} — the gates did not run" >&2
         printf '\n%s\n\n' "  ${C_BOLD}see why:${C_RESET} cargo build -p xtask" >&2
         return 1
     fi
-    xtask="${REPO_ROOT}/target/debug/xtask"
+    xtask="$XTASK_BIN"
 
     for g in "${XTASK_GATES[@]}"; do
-        # Per-gate capture: on failure show THAT gate's findings only. Seven
+        # Per-gate capture: on failure show THAT gate's findings only. Eight
         # gates' full output at every push is the crisis-wall shape the
         # rustfmt note above warns about — but zero output was worse.
-        out="$("$xtask" "$g" 2>&1)" && continue
+        out="$("$xtask" "$g" 2>&1)"; code=$?
+        (( code == 0 )) && continue
+
+        # FOUR VERDICTS, NOT TWO (ARCH §18.2). concept-gate does not count
+        # anything itself — it relays `svrn code converge status`, which
+        # answers 0 pass, 1 a duplicate was ADDED, 3 the graph cannot speak
+        # for this commit, 4 never ran. Only 1 is about this push. 3 and 4 are
+        # properties of the INDEXER (it lags HEAD by design; here it was 59
+        # source files behind), and concept_gate.rs's own module doc calls
+        # itself advisory in a habit-run for exactly this reason: "failing a
+        # pre-push run for an indexer that is eight minutes behind is the
+        # false-positive machine that gets a gate switched off inside a week."
+        # Report it, name the re-index, do not block. CI and the landing
+        # verdict call converge directly, where the graph IS authoritative.
+        if [[ "$g" == "concept-gate" ]] && (( code == 3 || code == 4 )); then
+            advisory+=("$g")
+            printf '\n%s\n' "  ${C_BOLD}${g}${C_RESET} ${C_DIM}(advisory — the graph cannot judge this commit)${C_RESET}" >&2
+            printf '%s\n' "$out" | grep -E 'COULD-NOT-JUDGE|NEVER-RAN|re-index:|indexed ' | head -3 | sed 's/^/    /' >&2
+            continue
+        fi
+
         failed+=("$g"); rc=1
         printf '\n%s\n' "  ${C_BOLD}${g}${C_RESET}" >&2
-        printf '%s\n' "$out" | grep -E '✗|FAILED|^error' | head -6 | sed 's/^/    /' >&2
+        printf '%s\n' "$out" | grep -E '✗|FAIL|^error' | head -6 | sed 's/^/    /' >&2
     done
+    if (( ${#advisory[@]} )); then
+        ADVISORY+=("${advisory[@]}")
+    fi
     if (( rc )); then
         printf '\n%s\n' "  ${C_BOLD}${#failed[@]} of ${#XTASK_GATES[@]} failing:${C_RESET} ${failed[*]}" >&2
         printf '\n%s\n\n' "  ${C_BOLD}full output:${C_RESET} cargo xtask quality   ${C_DIM}(each gate's output ends with its own fix command)${C_RESET}" >&2
@@ -338,53 +467,25 @@ xtask_gates() {
     return $rc
 }
 
-run_gate "xtask gates (arch/boundary/layer/lock/layout/env/concept)" xtask_gates
+run_gate "xtask gates (docs/arch/boundary/layer/lock/layout/env/concept)" xtask_gates
 
-# ── Gate 3: the workspace test suite. The expensive one. ───────────────────
-if (( RUST )); then
-    if [[ -n "$QUICK" ]]; then
-        warn "SKIPPING workspace tests (SOVEREIGN_PREPUSH_QUICK set) — CI will run them"
-    else
-        run_gate "workspace tests (sovereign-test.sh)" ./scripts/sovereign-test.sh --human
-
-        # "The tests ran and some failed" and "nothing ran because the
-        # workspace did not compile" are different problems with different
-        # fixes, and the second one is very often not about your code at all —
-        # a toolbox that lost a dnf package, a stale bindgen, a linker that
-        # moved. Reporting it as a TEST failure sends you hunting through test
-        # code for a missing header. sovereign-test.sh already knows the
-        # difference (cargo exited non-zero, zero tests parsed); read it.
-        counts="target/sovereign-test/latest/counts.env"
-        cargo_exit="target/sovereign-test/latest/cargo.exit"
-        if [[ -f "$counts" && -f "$cargo_exit" ]]; then
-            tp="$(sed -n 's/^total_pass=//p' "$counts")"
-            tf="$(sed -n 's/^total_fail=//p' "$counts")"
-            ce="$(tr -d '[:space:]' < "$cargo_exit")"
-            if [[ "${tp:-0}" == "0" && "${tf:-0}" == "0" && "${ce:-0}" != "0" ]]; then
-                if break_is_first_party "target/sovereign-test/latest/cargo.raw.log"; then
-                    BUILD_BROKE=1
-                else
-                    # Not this push's fault, and not fixable by editing this
-                    # push. Downgrade to a warning and let it through — CI
-                    # compiles on a clean checkout and is the right authority
-                    # for "does this build somewhere that isn't your laptop."
-                    unset 'FAILED[-1]'
-                    warn "${C_BOLD}workspace tests could not RUN in this shell${C_RESET} — a third-party build"
-                    warn "script failed and no first-party diagnostic was emitted. Not blocking:"
-                    warn "nothing in this push can fix a native toolchain that isn't installed here."
-                    warn "  what broke:  $(sed -n 's/^error: failed to run custom build command for `\(.*\)`.*/\1/p' \
-                        target/sovereign-test/latest/cargo.raw.log 2>/dev/null | head -1 || true)"
-                    warn "  full log:    target/sovereign-test/latest/cargo.raw.log"
-                    warn "  this repo's native deps (cmake, clang, vulkan) live in the dev toolbox —"
-                    warn "  push from there, or run ./scripts/sovereign-test.sh inside it, to gate for real."
-                    UNVERIFIED+=("workspace tests")
-                fi
-            fi
-        fi
-    fi
-else
-    say "no Rust changes — skipping workspace tests"
-fi
+# ── Gate 3: NOT HERE. The workspace test suite runs in CI, not at the push. ─
+#
+# Removed 2026-08-30 on operator direction, and the reasoning is the header's:
+# a one-minute budget with a 45-60s warm test run in it is a budget that is
+# always over, and a gate that is always over is a gate you always skip. The
+# tests did not get weaker — they moved to the authority that can afford them.
+#
+#   here          the checks a diff cannot answer, every push
+#   ./scripts/sovereign-test.sh --human   when you mean to, before a push
+#   CI            every push, clean checkout, no warm target to flatter it
+#
+# "Does it COMPILE" did not go with it. That coverage was incidental to the
+# test run rather than the point of it, and losing it would mean a push could
+# leave this machine without building — so Gate 1b above runs
+# `scripts/sovereign-lint.sh` (cargo check --all-targets under the repo's real
+# feature contract) concurrently for a fraction of the cost. What is genuinely
+# gone is behaviour: nothing here now runs a single test.
 
 # ── Gate 4: the journey harness's own negative controls. ───────────────────
 #
@@ -459,42 +560,78 @@ else
     say "no desktop changes — skipping svelte-check / vitest"
 fi
 
+# ── Collect Gate 1b, started before everything above. ──────────────────────
+if [[ -n "$LINT_PID" ]]; then
+    wait "$LINT_PID"; lint_rc=$?
+    LINT_PID=""
+    printf '%s\n' "${C_DIM}────${C_RESET} ${C_BOLD}cargo check (sovereign-lint.sh)${C_RESET}" >&2
+    if (( lint_rc == 0 )); then
+        # The banner names the scope it actually checked, so a scoped clean run
+        # cannot be read as a workspace-wide guarantee. Show it either way.
+        grep -E '^ (scope|features|jobs|errors|warnings|elapsed):' "$LINT_LOG" >&2 || true
+        say "${C_GREEN}ok${C_RESET} cargo check"
+    elif break_is_first_party "${REPO_ROOT}/target/sovereign-lint/latest/cargo.raw.log"; then
+        cat "$LINT_LOG" >&2
+        fail "cargo check FAILED"
+        FAILED+=("cargo check (sovereign-lint.sh)")
+    else
+        # Not this push's fault, and not fixable by editing this push: a
+        # dependency's build script died with no first-party diagnostic. CI
+        # compiles on a clean checkout and is the right authority for "does
+        # this build somewhere that isn't your laptop." (ARCH §18.3 — the
+        # absence of a verdict is REPORTED, never defaulted to a pass.)
+        warn "${C_BOLD}cargo check could not RUN in this shell${C_RESET} — a third-party build"
+        warn "script failed and no first-party diagnostic was emitted. Not blocking:"
+        warn "nothing in this push can fix a native toolchain that isn't installed here."
+        warn "  what broke:  $(sed -n 's/^error: failed to run custom build command for `\(.*\)`.*/\1/p' \
+            "${REPO_ROOT}/target/sovereign-lint/latest/cargo.raw.log" 2>/dev/null | head -1 || true)"
+        warn "  full log:    target/sovereign-lint/latest/cargo.raw.log"
+        warn "  this repo's native deps (cmake, clang, vulkan) live in the dev toolbox —"
+        warn "  push from there, or run ./scripts/sovereign-lint.sh inside it, to gate for real."
+        UNVERIFIED+=("cargo check")
+    fi
+    rm -f "$LINT_LOG"; LINT_LOG=""
+fi
+
 # ── Verdict ───────────────────────────────────────────────────────────────
 echo >&2
 if (( ${#FAILED[@]} )); then
-    fail "PUSH BLOCKED — ${#FAILED[@]} gate(s) failed:"
+    fail "PUSH BLOCKED — ${#FAILED[@]} gate(s) failed in ${SECONDS}s:"
     for g in "${FAILED[@]}"; do printf '           - %s\n' "$g" >&2; done
-    if (( BUILD_BROKE )); then
-        cat >&2 <<EOF
+    cat >&2 <<EOF
 
-  ${C_BOLD}The workspace did not COMPILE — zero tests ran.${C_RESET} That is a build
-  problem, not a test failure, and the diagnostic points at source in this
-  repo, so it is this push's to fix. The compiler error is the last thing in:
-
-      target/sovereign-test/latest/cargo.raw.log
-
-  (A build break coming from a DEPENDENCY's build script is treated as
-  environmental and only warns — see break_is_first_party in this script.)
-EOF
-    else
-        cat >&2 <<EOF
-
-  Failures are listed above; adapter logs for triage are under
-  target/sovereign-test/latest/ (cargo.jsonl, cargo.raw.log).
+  Each gate's findings are above, and each ends with its own fix command.
 
   To push anyway:  git push --no-verify
 EOF
-    fi
     exit 1
 fi
 
+# Honest bookkeeping: neither of these is the claim "all gates passed", and
+# saying so would be the sort of green light that makes a gate worthless
+# (ARCH §18.2 — four verdicts, not two).
+if (( ${#ADVISORY[@]} )); then
+    warn "${C_YELLOW}${#ADVISORY[@]} gate(s) COULD NOT JUDGE this commit${C_RESET} — reported, not blocking:"
+    for g in "${ADVISORY[@]}"; do printf '           - %s\n' "$g" >&2; done
+fi
+
+# "All gates passed" is a stronger claim than "nothing failed", and printing
+# the first one directly under a COULD-NOT-JUDGE line would unsay the warning.
+VERDICT="all gates passed"
+(( ${#ADVISORY[@]} + ${#UNVERIFIED[@]} )) && VERDICT="no gate failed"
+
 if (( ${#UNVERIFIED[@]} )); then
-    # Honest bookkeeping: this is NOT the same claim as "all gates passed", and
-    # saying so would be the sort of green light that makes a gate worthless.
     warn "${C_YELLOW}pushing with ${#UNVERIFIED[@]} gate(s) UNVERIFIED here${C_RESET} — CI is the authority for:"
     for g in "${UNVERIFIED[@]}"; do printf '           - %s\n' "$g" >&2; done
+    say "${C_GREEN}${VERDICT}${C_RESET} — pushing (${SECONDS}s)"
     exit 0
 fi
 
-say "${C_GREEN}all gates passed${C_RESET} — pushing"
+# The budget is the header's, and it is checkable here rather than remembered.
+if (( SECONDS > 60 )); then
+    warn "${C_YELLOW}this run took ${SECONDS}s — over the 60s budget.${C_RESET} A gate that costs"
+    warn "more than a minute gets skipped, which is worse than a cheaper one. Trim it."
+fi
+
+say "${C_GREEN}${VERDICT}${C_RESET} — pushing (${SECONDS}s)"
 exit 0

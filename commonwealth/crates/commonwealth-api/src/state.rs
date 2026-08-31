@@ -718,6 +718,16 @@ pub struct AppStateInner {
             >,
         >,
     >,
+    /// The ring rail's storage: where each ring namespace's journal lives,
+    /// and how this node signs the ops it writes. `None` until the daemon
+    /// installs it — a daemon with no data directory has nowhere to put a
+    /// ledger, and the rail then REFUSES rather than inventing a location or
+    /// answering from an empty in-memory one (ARCH §18.3).
+    ///
+    /// The signer is a closure-shaped seam for the same reason
+    /// [`AppStateInner::self_dial_signer`] is: `AppState` never holds raw key
+    /// material and this crate needs no crypto dependency.
+    pub ring_rail: std::sync::RwLock<Option<Arc<commonwealth_knowledge::rail::RingRail>>>,
     /// Bearer token required of non-loopback callers on the client API
     /// (`:9741`). `None` (the default) means "no token configured" —
     /// the [`crate::client_auth`] layer then admits ONLY loopback
@@ -1381,6 +1391,25 @@ impl AppState {
         ))
     }
 
+    /// The ring rail's storage, or `None` if the daemon never installed one.
+    pub fn ring_rail(&self) -> Option<Arc<commonwealth_knowledge::rail::RingRail>> {
+        self.inner
+            .ring_rail
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Install the ring rail's storage. The daemon calls this at startup with
+    /// its data directory and a signer built from the node `SigningKey`.
+    pub fn install_ring_rail(&self, rail: Arc<commonwealth_knowledge::rail::RingRail>) {
+        *self
+            .inner
+            .ring_rail
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(rail);
+    }
+
     /// Install the provider yielding this node's live iroh dial info.
     /// The daemon calls this after binding its iroh endpoint (W2), so
     /// gossip can stamp relay_url + iroh_direct_addrs into our own
@@ -1663,6 +1692,7 @@ impl AppState {
                 self_node_pubkey: std::sync::RwLock::new(None),
                 self_iroh_dialinfo: std::sync::RwLock::new(None),
                 self_dial_signer: std::sync::RwLock::new(None),
+                ring_rail: std::sync::RwLock::new(None),
                 client_token: std::sync::RwLock::new(None),
                 peer_transport: std::sync::RwLock::new(Arc::new(
                     commonwealth_transport::IpTransport::default(),

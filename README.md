@@ -55,6 +55,24 @@ svrn mesh join <key>    # on each machine you're pooling in
 
 [Run a model bigger than your machine](./docs/RUN_A_BIGGER_MODEL.md) walks it through. Pooling **knowledge** instead of compute works the same way — the [two-node quickstart](./docs/TWO_NODE_QUICKSTART.md) gets one machine a cited answer from a corpus that never leaves the other. (Already ran `svrn setup`? You quietly founded a solo mesh — read its key with `svrn mesh status`.)
 
+## Bring your own inference server
+
+Sovereign runs models itself, with llama.cpp built in. If you already have a
+serving stack — vLLM, SGLang, TGI, or one you tuned — point Sovereign at it and
+keep everything above the model: corpora, citations, the mesh, editor
+completion.
+
+```toml
+[engine]
+kind = "remote"
+endpoint = "http://localhost:8000/v1"
+model_id = "Qwen/Qwen3.5-35B-A3B"
+```
+
+[Use your own inference server](./docs/USE_YOUR_OWN_INFERENCE_SERVER.md) covers
+the whole change, including the second server you need for embeddings if you
+use corpora, and what you give up by not holding the weights.
+
 ## Code completion that explains itself
 
 Ghost-text completion and repeated-edit suggestions, served by your own

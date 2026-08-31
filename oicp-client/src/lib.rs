@@ -1622,6 +1622,71 @@ impl SplitInferenceProvider {
         }
     }
 
+    /// Chat and embeddings on SEPARATE servers.
+    ///
+    /// [`Self::new_with_bearer`] points both halves at one base URL, which is
+    /// right for a Sovereign daemon (it serves both from one `/v1`). It is the
+    /// wrong shape for the usual third-party deployment: vLLM, SGLang and TGI
+    /// each serve ONE model per process, so a node that both chats and
+    /// retrieves is talking to two of them on two ports.
+    ///
+    /// The `/status` probe resolves from the CHAT endpoint — that is the host
+    /// whose slot residency `primary_slot_status` is asking about — and is
+    /// derived on demand from that provider's `daemon_root()` rather than
+    /// stored, so there is one derivation of "the daemon root" rather than
+    /// two (§10.6). A third-party server has no `/status`, so that probe
+    /// simply returns `None`, which is the documented "cannot answer" and not
+    /// an error.
+    ///
+    /// The serving LOCUS likewise follows the chat endpoint: a turn runs where
+    /// chat goes, and the embed half may sit elsewhere without changing
+    /// whether a prompt left this machine.
+    pub fn new_split_endpoints(
+        chat_endpoint_v1: &str,
+        embed_endpoint_v1: &str,
+        bearer: Option<String>,
+        chat_model_id: String,
+        embed_model_id: String,
+        context_size: u32,
+        embed_query_instruction: String,
+    ) -> Self {
+        // Both halves wait out sheds for the same reason as the single-endpoint
+        // constructor: this provider owns no weights, so the far end is the
+        // only holder and there is nowhere else to route.
+        let chat = std::sync::Arc::new(
+            RemoteApiProvider::new(
+                chat_endpoint_v1,
+                bearer.clone(),
+                &chat_model_id,
+                context_size,
+            )
+            .waiting_out_sheds(),
+        );
+        let embed = std::sync::Arc::new(
+            RemoteApiProvider::new(embed_endpoint_v1, bearer, &embed_model_id, context_size)
+                .with_query_instruction(embed_query_instruction)
+                .waiting_out_sheds(),
+        );
+        Self {
+            chat,
+            embed,
+            chat_model_id,
+            embed_model_id,
+            context_size,
+            // The CHAT endpoint decides, because that is where a turn runs —
+            // the embed half can sit elsewhere without changing whether a
+            // prompt left this machine. Address-derived like the other
+            // operator-named constructors: whoever typed `127.0.0.1` named
+            // this box. See the `locus` field for why the resolved-binding
+            // constructor is told instead of asked.
+            locus: if endpoint_is_loopback(chat_endpoint_v1) {
+                sovereign_contracts::traits::ServingLocus::ForwardsOnBox
+            } else {
+                sovereign_contracts::traits::ServingLocus::ForwardsOffBox
+            },
+        }
+    }
+
     /// Build from an OICP manifest (v0.4 §7 context discoverability): resolve
     /// the chat slot's context window from the advertised
     /// [`ProviderModel::context_tokens`] rather than a hardcoded default, so a

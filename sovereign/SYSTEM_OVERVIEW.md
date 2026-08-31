@@ -129,14 +129,25 @@ Major modules under `corpus-engine/src/`:
   rather than being wrapped. The ratchet that keeps it from growing back is
   `cargo xtask layout-gate` (baseline `quality/baselines/corpus_layout.txt`).
 - `oplog.rs` — **`Op<K>` + `Oplog<K>`**, one append-only JSONL journal with
-  three tenants declaring `Journaled`: `enrichment::governance`,
-  `enrichment::reconciliation` and `meta_atlas::bridge`. Until 2026-08-20 each
-  carried its own copy of the envelope and the file IO (7 types); the two
+  four tenants declaring `Journaled`: `enrichment::governance`,
+  `enrichment::reconciliation`, `meta_atlas::bridge` and — since 2026-08-30 —
+  `commonwealth-knowledge::rail` (the ring rail). Until 2026-08-20
+  each carried its own copy of the envelope and the file IO (7 types); the two
   younger logs had no op id, no actor and no version gate, which is why
   reconciliation's documented reversible `Split` — "walk backwards finding the
   matching `Merge`" — was unimplementable. The envelope carries provenance
   only (`id`, `v`, `ts_unix`, `actor`); the act is the tenant's `K`, flattened,
   so each log keeps its wire form.
+  **The rail tenant made two gaps in the journal load-bearing** and both are
+  fixed for every tenant. It was not durable: no `sync_all`/`sync_data`
+  anywhere, so a lid-slam lost ops the caller had been told succeeded — appends
+  now `sync_data()` — and a logical line was written in two `write_all` calls,
+  so `O_APPEND`'s per-write atomicity did not cover it; it is one buffer now.
+  And `read_all` skipped malformed and newer-`v` lines with a `warn!`, so a
+  corrupt log and a clean one returned the identical value and no caller could
+  tell. `read_all_with_skips` returns those as `SkippedLine`s (§18.3);
+  `read_all` still drops them, which is right for a tenant re-deriving a
+  summary and wrong for one reporting a number a person acts on.
 - `engine/` — `CorpusEngine` façade (`ingest`, `expand`, `reindex`)
 - `acquirers/`, `extractors/`, `chunkers/`, `filters/` — pipeline stages
 - `asset_store/` — content-addressed filesystem store for binary
@@ -2329,6 +2340,64 @@ management, sibling pool, decode paths, MTP, OICP scoring, harness
 adapters, cutoff legibility, conversation-history compaction — in
 [`docs/inference.md`](./docs/inference.md).
 
+**Which engine serves this node — `[engine]` (2026-08-30).** llama.cpp is the
+default engine, not the only one, and the choice is config rather than code.
+`sovereign_inference::engine_factory::build_engine(&SetupConfig)` is the ONE
+place that turns `[engine] kind` into an `Arc<dyn InferenceProvider>`; before
+it, five construction sites named `EmbeddedLlamaCpp` literally and `SetupConfig`
+had no key that could say otherwise.
+
+- **The vocabulary is one layer down.** `EngineKind` / `EngineSection` live in
+  `sovereign-contracts/src/engine_config.rs` — an out-of-tree engine must be
+  able to name the selection without naming any engine's implementation. The
+  factory sits in `sovereign-inference` because it alone can name both
+  `EmbeddedLlamaCpp` (its own) and `oicp-client`'s `RemoteApiProvider` (a
+  dependency since the `remote.rs` extraction). No new dependency edges.
+- **Closed set as an enum, open set as a registry** (§2, §4). `llama` and
+  `remote` are typed variants; anything else is `EngineKind::Custom(name)`
+  resolved through `register_engine`. Rust has no safe cross-crate ABI for
+  `dyn Trait`, so an in-process third-party engine is always compiled into a
+  binary the operator controls — registration in `main()` is the mechanism.
+  Worked example: `sovereign-inference/examples/custom_engine.rs`.
+  An unknown id refuses and lists what IS registered; it never falls back to
+  llama (§18.3).
+- **`BuiltEngine.llama` is `None` for every non-llama engine**, and the daemon's
+  llama-only configuration (extras, edit slot, rerank, idle monitors) is guarded
+  on it. The RPC-worker auto-reload path is what that handle exists for.
+- **The VRAM preflight is llama's own question and is skipped for engines that
+  hold no weights.** Found live, not in review: the first `kind = "remote"` boot
+  died in `build/preflight.rs` because it stat'd `[models]` GGUF paths a remote
+  engine never opens. Regression test:
+  `a_weightless_engine_skips_the_vram_preflight_entirely`.
+- **The contracts are executable.** `sovereign_inference::engine_conformance`
+  — `check_sync` (no I/O, runs against any engine) and `check_serving` — checks
+  the honesty invariants a new engine breaks silently: the terminal `Finish`
+  frame, `embed_batch` length, `rerank_batch` refusing rather than fabricating,
+  `"unknown"` rather than `""`. Note that the terminal-frame contract is
+  UNVIOLATABLE by an engine that implements only the four required methods (the
+  trait's default synthesises the frame); it binds exactly the engines that
+  override `complete_stream_with_finish` for real finish reasons.
+- **Chat and embeddings split, because third-party servers serve one model per
+  process.** `RemoteApiProvider` carries ONE `model_id` for both
+  `/chat/completions` and `/embeddings`, which is right against a Sovereign
+  daemon (it routes embeddings to its own embed slot whatever id it gets) and
+  wrong against vLLM / SGLang / TGI, where a chat model on the embeddings route
+  returns a non-embedding shape. `[engine] embed_model_id` / `embed_endpoint`
+  opt into `SplitInferenceProvider::new_split_endpoints` (added for this — the
+  struct already held two independent clients, only the one-endpoint
+  constructor was missing). `embed_endpoint` without `embed_model_id` is
+  refused, not guessed. Operator-facing walkthrough:
+  [`docs/USE_YOUR_OWN_INFERENCE_SERVER.md`](../docs/USE_YOUR_OWN_INFERENCE_SERVER.md).
+- **Proven live 2026-08-30**: a second daemon on `kind = "remote"` with
+  deliberately nonexistent `[models]` paths booted, served `/v1/chat/completions`
+  (streaming and not), `/v1/embeddings` and `/v1/models`, opened zero GGUF file
+  handles, and reported `loaded_models: []` on `/status`.
+- **What is NOT gated:** `llama-cpp-4` is still an unconditional dependency of
+  `sovereign-inference`, so every build compiles ggml regardless of `[engine]`.
+  Making it optional is a build-time win only, and measured 2026-08-30 it would
+  need `#[cfg]` at 65 downstream sites across 8 crates that name
+  `sovereign_inference::embedded` concretely. Deliberately not done.
+
 **Serving a model bigger than the GPU can hold — `qwen4exp` / Qwen3.8-Flash-Next
 (2026-08-27).** 176B total / ~6B active: a 125B transformer plus a **51.2B n-gram
 engram**, 103.7 GiB across four GGUF parts, on a 128 GB unified-memory box. Three
@@ -3840,6 +3909,166 @@ A guest is not a mesh member — no `mesh_secret`, no gossip, no invite key
 `GuestGrant::permits_path` and inserts the grant, so a future scope is a
 variant plus its `paths()` arm and touches neither auth nor the wire.
 
+**The ring rail is the second scope, and the first deployment target**
+(`commonwealth-api/src/routes_rail.rs` + `commonwealth-knowledge::rail`,
+ring-deploy S1–S6, 2026-08-30). A Commonwealth mesh had no verb for "make this
+exist for exactly my trust ring": a VPS makes it public infrastructure, a
+Discord bot puts the data at Discord, and the local-first stack syncs data but
+gives you nowhere to run anything and no idea who is asking. `Scope::Rails(ns)`
+names exactly one namespace, and `/v1/rail/{append,log}` take **no namespace
+parameter** — an app cannot reach another app's namespace because it has no way
+to *say* one (§7.1). An operator, who holds no grant, names it explicitly.
+
+**The rail carries an opaque payload, and that cut is the design.** It began
+as an expense ledger whose journal line *was* an `ExpenseOp` and whose reader
+had one thirteen-variant failure enum — and the enum split cleanly in two the
+moment anyone looked: eight variants about delivery and authenticity (torn
+line, bad signature, unknown signer, rewritten id, sequence hole, sequence
+fork, dangling correction, newer-format line), five about money. Not one of
+the first eight knows what an expense is, and a tool-lending board needs every
+one of them. So the line is now `RailAct` inside `Op<SignedOp>` —
+`Record{payload}` or `Correct{corrects, replacement?}`, a per-actor `seq`, and
+an Ed25519 signature over a domain-separated message that binds the namespace,
+so an op lifted from one ring and replayed into another fails the signature
+rather than a downstream check. **`Op.actor` is the signing public key**,
+because it is the only field on the line the writer cannot forge for someone
+else (§18.1); a `Roster` binds keys to display names, and one person with two
+laptops is two keys in one row. The daemon signs through a closure-shaped
+`RingSigner`, the same seam `self_dial_signer` uses, so `AppState` holds no
+key material.
+
+**`Payload` is a type and not a `serde_json::Value`, and the reason is a bug
+that would not have surfaced for months.** A signature covers bytes; a `Value`
+has no bytes, it has a serializer, and which bytes that serializer emits for
+an object depends on `serde_json/preserve_order` — a Cargo feature that is ON
+in this workspace and that any crate added later can turn off. Flip it and
+every signature in every ring on the mesh stops verifying at once, presenting
+not as "a feature changed" but as a journal that has become entirely
+`BadSignature`. A typed body never had this problem (serde writes struct
+fields in declaration order); making the body opaque introduces it. So a
+`Payload` is **canonical by construction** — objects rebuilt with sorted keys,
+recursively, including on deserialization, so a line off the journal and a
+body off the wire are canonical too. Floats are refused outright for the same
+reason one level down: `1e2`, `100.0` and `100` are one value with three
+spellings and the choice is the library's, so a payload carries whole numbers
+and the refusal names the fix (use cents, grams, milliseconds).
+
+`admit(ops, skipped, roster, namespace) -> (acts in ONE order, gaps)` is **a
+function of the op SET, not of arrival order** — nineteen laptops gossip in
+nineteen orders, and admission that depended on order would have two housemates
+reading different answers off the same journal. That is pinned exhaustively
+over all 720 orderings of a six-op fixture; asserting it at this layer rather
+than over balances made it both stronger and true for every app that will ever
+sit on the rail. It buys the property with: dedupe by re-derived `OpId`; a
+content-derived total order `(ts_unix, actor, id)`; a void set built from every
+correction at once (so a correction arriving before its target pre-emptively
+voids it) that **never resurrects** — correcting a correction cancels its
+replacement and leaves the original void, which is what "compensating entry,
+visible" means; and sorted gaps, so two nodes agree on the *report* and not
+merely the acts. Voided ops stay in the returned list, marked, so an app can
+render what changed.
+
+**Correction lives in the rail on purpose.** "This earlier act was wrong, and
+it never comes back" is not an expense rule — a tool-lending board needs it
+the first time somebody writes *I returned the drill* and then *no I didn't* —
+and it is the rule most easily got wrong, because the void set has to be built
+from every correction at once rather than by walking for liveness. One
+implementation, and no app author re-derives it.
+
+`gaps` is the half that refuses to fake completeness. A journal that cannot
+say "I may be missing something" lets an app state a wrong total with complete
+confidence (§18.3), so `/v1/rail/log` returns the admitted acts and the gaps
+from one read, each gap carrying `message` — the rail's own sentence, so the
+terminal, the app's page and the append door's 422 say the same words about
+the same condition (§10.6).
+
+**The money left Rust with the fold, and that is the stated cost.** The penny
+remainder (\$10 three ways is 334/333/333), settlement idempotency, and the
+five money-shaped refusals now live in `ring_cmd/templates/expenses.js` — the
+reference app, which is also what `svrn ring new` scaffolds, so the thing a
+housemate starts from is the thing the workspace gates. `expenses.test.mjs`
+pins them and runs inside `cargo test`
+(`scaffold.rs::the_reference_apps_money_rules_pass_their_own_tests` shells to
+`node --test`; a missing `node` **fails** rather than skips, because
+could-not-judge is not passed, §18.1). The app keeps the shape the rail gave
+up: one `validate` that its own door and its own reducer both call.
+`participants` is still an explicit list and the roster is still never read for
+a split — the moment it is, adding a housemate silently re-divides every past
+expense, and the test named after that moved to JS with the rest.
+
+**The SDK ships the fold, not just the transport.** `window.ring` is `log()`,
+`record()`, `correct()` and `fold(log, reducer, initial)`, and the fourth is
+why it is an SDK rather than a fetch wrapper: it walks the rail's order and
+skips voided acts and replacement-less corrections, so an author writes a
+reducer and never touches `log.ops`. Hand somebody a raw log and hope, and the
+first thing they write is `ops.filter(...).sort(...)` — and their house
+disagrees with itself about who owes what.
+
+The door is narrow now, and honestly so: it refuses a payload with no
+canonical form, and it refuses to author under a key the ring's own roster
+does not carry (which would otherwise produce ops every node reports as
+`UnknownSigner` forever, silently). It has no opinion about whether an amount
+is positive, because it cannot have one.
+
+**Replication is its own loop, because riding the gossip push would cost
+~246 GB/day per node** (`sovereign-mesh/src/ring_sync.rs` +
+`/internal/ring/sync`, ring-deploy S3). `gossip.rs` Step 4 ships a full
+mesh-store snapshot to every online peer every 10s — 8,640 rounds/day — and a
+household's ~3,500 ops/yr ≈ 1.5 MB would ride every one of them, taxing every
+other namespace on that body forever. The journal gets a **60-second cadence**
+and syncs by **digest**: `{actor → contiguous high-water mark}`, ~600 bytes
+regardless of history. *Contiguous* is load-bearing — a node holding seq 0 and
+2 that advertised `2` would be answered "nothing above 2" and seq 1 would
+never arrive, sitting as a permanent `SequenceHole` while both sides believed
+they were in sync. An actor absent from the digest asks for everything.
+
+Two idempotent calls converge both directions: `{digest, ops: []}` pulls what
+we lack and learns the peer's digest; `{digest', ops: what_they_lack}` pushes
+against it. The push is **author-blind** — a node republishes everything it
+HOLDS — which kills three failure modes at once: the author's node dying
+before anyone else came online, a peer restart wiping in-memory buffers, and a
+housemate leaving with half the journal. It is also why there is no own-origin
+skip to get wrong: `MeshStore`'s `origin` names the last *republisher*, not the
+author, and this path has no origin field because the op carries its author in
+a signature. `/internal/ring/sync` validates nothing about an incoming op on
+purpose — `admit` is the one decider, and it has to be right anyway because
+ops also arrive from disk. Watched: two-node partition drills at both levels
+(pure journals, and through the route), plus a half-delivered peer whose gap is
+named rather than silently totalled.
+
+**`svrn ring` is the verb** (`sovereign-cli-llm/src/ring_cmd/`, ring-deploy
+S4): `ring new` scaffolds an app (page, reducer, and the reducer's tests),
+`ring roster add <person> --self` binds a name to the node key it signs with,
+`ring dev <ns>` mints a `Scope::Rails` grant and serves the bundle at
+`127.0.0.1:4318`, and `ring log <ns>` prints the admitted acts and the gaps in
+the terminal — gaps rendered as sentences a housemate can act on, never a
+serde dump. There is deliberately **no `ring balances`**: a balance is an
+expense app's reading of a journal, and a terminal that printed one for the
+tenant that happens to be in front of us would be the money rules living in a
+second place (§10.6). The app renders them, because it is the only thing that
+knows what one is. The dev server holds the grant itself, so the
+browser tab never sees a credential and the page reaches one namespace's rail
+and nothing else on the daemon; the grant dies with the process.
+
+Two details are the design. **The op table is two entries** — `log` and
+`append` — where `meshapp dev`'s is twelve, because the rail is two routes and
+an app's vocabulary is built out of those rather than by growing the rail.
+**The roster is written by the CLI and is unreachable from the rail**: there is
+no roster route at all, so a deployed app cannot add a key to the ring,
+including its own. `roster add` then reads the roster back *through the running
+daemon* and fails if the daemon does not report it — the one way that command
+can look like it worked and do nothing is writing to a directory the daemon
+does not read (§18.1). `ring dev` is a foreground server, so it is the one
+declared capability no journey can drive; `cli-contract.toml` says so rather
+than listing it uncovered.
+
+Deliberately deferred with a named trigger: the namespace has **no retention
+bound** (`gc_app` cannot serve — it compares `entry.timestamp`, which for a
+write-once event is creation time, so a TTL deletes history and a partial
+restore resurrects corrected expenses). Checkpoints land when one exchange
+passes half the receiver's body limit — the sync route warns at exactly that
+line, reusing the gauge `gossip.rs` already keeps on the mesh-store snapshot.
+
 **Holding the dial string is not a credential** (`AcceptorRoutes::forward_for`,
 `sovereign-mesh/src/iroh_access.rs`, 2026-08-27). An iroh endpoint accepts
 anyone, and the dial string that reaches it is public — it rides in every
@@ -3878,6 +4107,19 @@ client router three times:
 | `Operator` | a real local caller on `:9741` | yes | yes |
 | `Peer` | a MEMBER dialling `cwth/client/0` | yes | **no** |
 | `Guest` | `cwth/guest/0`, and a downgraded stranger | no | no |
+| `Rail` | a deployed ring app, on `127.0.0.1:rail_port(client_port)` (9743 by default) | no (`UNTRUSTED_LOOPBACK`) | no — and it serves NOTHING but `/v1/rail/*` |
+
+The `Rail` bind is the only one of the three that is a real TCP listener on a
+FIXED port rather than an ephemeral loopback socket the acceptor forwards to —
+because the thing that dials it is a separate process (`svrn ring dev`) with
+only the config to go on. `commonwealth_core::config::rail_port` is the one
+derivation, so the daemon that binds it and the CLI that dials it cannot
+disagree on a non-default client port. **`UNTRUSTED_LOOPBACK` is the whole
+reason it is a separate bind**: `:9741` admits a loopback caller *before*
+reading a bearer, so a ring app pointed there would arrive as an operator with
+its grant ignored — namespace scoping would be decorative, and a guard nobody
+can watch fail is not a guard (§18.1). Watched failing:
+`rail_e2e::on_the_rail_bind_a_loopback_caller_without_a_grant_is_refused`.
 
 No address in `AcceptorRoutes` points at the operator listener at all, so the
 acceptor cannot reach that surface however it is called. Watched failing:
@@ -3911,6 +4153,8 @@ carrying `dial=` is tunnelled or it is refused (§18.3).
 | `GET  /status`                | Node / mesh / inference / knowledge summary            |
 | `GET  /oicp/v1/capabilities`  | Provider manifest + federation info                    |
 | `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | **Ollama-native compatibility shim** (`routes_ollama.rs`). Pure translation over the OpenAI handlers above — lets Ollama-native clients (Open WebUI's Ollama mode, IDE plugins) connect. `chat`/`generate` are non-streaming-backed in v1: the inner handler runs `stream:false` and the complete answer is framed as Ollama NDJSON (one content frame + terminal). No CORS layer + the same auth posture as `/v1/*` (documented in-module); incremental streaming is a tracked follow-up. |
+| `POST /internal/ring/sync` | Ring-ledger anti-entropy for one namespace: the caller sends its per-actor contiguous high-water digest (and optionally ops), the responder ingests those and answers with its own digest plus everything the caller lacks. Own route on its own 60s cadence, not a namespace on `/internal/app/state`'s 10s full-snapshot push. |
+| `POST /v1/rail/append`, `GET /v1/rail/log` | The ring rail. Appends one signed act to the caller's namespace, and reads back the admitted acts (already in the one order every node applies them) + gaps. The payload is the app's and the rail does not read inside it, so there is no balance here to return. The namespace comes from `Scope::Rails` on the grant, never from the request; an operator (no grant) passes `?namespace=`. Mounted on `Operator` and `Rail`, and on neither `Peer` nor `Guest` — a ring rail is loopback-only in M0. |
 | `/internal/guest/grant`, `…/revoke`, `…/list` | Mint / kill / list ephemeral guest grants. On the `ClientSurface::Operator` bind ONLY: `:9742` has no auth gate, so a mint route there would let any mesh peer forge guest credentials — and the peer/guest binds of the client router 404 it for the same reason. Unreachable by a guest because no `Scope` names it either. |
 | `/v1/mesh/*` `/v1/admin/*` `/mcp/*` | **Loopback-only** (router middleware + per-handler `enforce_localhost`) |
 
@@ -5156,7 +5400,7 @@ now) and the row is dropped — or trimmed to the still-open residual.
 | Item | Location | Why deferred |
 |------|----------|--------------|
 | `project_cmd.rs` split — **DONE 2026-07-13** | `sovereign-cli-dev/src/project_cmd/` (dispatcher `mod.rs` 645 lines, was 7,102) | Split into a directory module — `audit/`, `serve.rs`, `refresh.rs`, `charter_amend.rs`, `registry_watch.rs`, `hooks.rs`, `phase.rs`, `design_plan.rs` — every file under the ARCH §3.1 1,200-line ceiling. `mod.rs` keeps `run_project` dispatch + the shared daemon/git/date plumbing; each command family is one findable file. (`sovereign-cli-dev` remains feature-gated out of the public build behind `--features dev-tools` — the rationale the `atos_cmd/run.rs` row still references.) **`init/` and `scaffold.rs` left this tree 2026-08-07** for `sovereign-cli/src/project_init/`; `registry_watch.rs`'s four verbs were mirrored into `sovereign-cli/src/project_registry.rs` on 2026-08-06, and **`registry_watch.rs` itself was DELETED 2026-08-21 (nc-27)** — the mirror made the cli-dev copies unreachable (`project_registry::try_run` is consulted first and never returns `None` for those verbs), so the file was a dead fork; its one live function, `daemon_get`, moved into `mod.rs` beside `daemon_post`. |
-| `model_slot.rs` residual (was the `embedded.rs` split) | `sovereign-inference/src/embedded/model_slot.rs` (~5,860 lines) | The residual of the `embedded.rs` decomposition ([HISTORY](./HISTORY.md#embeddedrs--embedded-pr5b--2026-06-10)): the slot state machine + decode loops + MTP — one tight, unsafe-heavy (44 blocks) FFI concern whose remaining seam is an alternate inference backend at the `InferenceProvider` boundary, not a file split. |
+| `model_slot.rs` residual (was the `embedded.rs` split) | `sovereign-inference/src/embedded/model_slot.rs` (~5,860 lines) | The residual of the `embedded.rs` decomposition ([HISTORY](./HISTORY.md#embeddedrs--embedded-pr5b--2026-06-10)): the slot state machine + decode loops + MTP — one tight, unsafe-heavy (44 blocks) FFI concern whose remaining seam is an alternate inference backend at the `InferenceProvider` boundary, not a file split. That seam is now cut: `engine_factory` selects the engine from `[engine] kind`, so this file is llama's implementation rather than the system's only one. |
 | `streaming.rs` refusal-retry duplication | `sovereign-core/src/runtime/streaming.rs` (~2,900 lines) | The 2026-06-10 runtime.rs decomposition moved the streaming dispatch here intact. Its KQ and Deep/Simple synthesis loops carry two NEAR-duplicate refusal-retry state machines that genuinely differ (error-frame + finish-reason handling) — unifying them is a measured behavior change, not a move. Same deferral class for the streaming-vs-non-streaming setup duplication (turn.rs). |
 | `state.rs` decomposition (desktop) | `sovereign-desktop/src-tauri/src/state.rs` (~1,730 lines, was 2,347) | Contiguous phases are extracted ([HISTORY](./HISTORY.md#staters-desktop--extraction-of-the-contiguous-phases-2026-06-09)). The `tools` registry stays inline *by necessity, not omission*: it is **interleaved** across the whole bootstrap (tools registered before AND after `corpus_engine`), so it cannot be a pure-relocation builder without reordering a GGUF-gated startup path. The `EmbeddedDaemon` wiring no longer is: daemon-convergence Phase 2 (2026-08-24) replaced the four `mesh.set_*` sites with ONE commissioning site just before `try_resume`, and the daemon's services arrive as a single `sovereign_mesh::DaemonServices::Desktop` value assembled from what bootstrap already built. Keep `AppState` fields flat (~295 call sites borrow `state.<field>`). |
 | `DesktopError` burn-down (desktop) | `sovereign-desktop/src-tauri/src/error.rs` + `src/lib/errors.ts` | The structured error + frontend mirror + zero-per-caller-edit migration enabler are in place ([HISTORY](./HISTORY.md#desktoperror--first-pr--the-burn-down-enabler-2026-06-09)). **Remaining (incremental, ~140 command modules):** flip each handler's `-> Result<_, String>` → `DesktopError` (the `?`-sites auto-convert via `From<String>`; explicit `return Err` / tail `map_err` take `.into()` or a semantic `DesktopError::upstream`/`invalid_request`) + repoint its api.ts wrapper at `invokeChecked`. `AppState::store()` landed 2026-08-24 with daemon-convergence Phase 0 (see the `Runtime` surface row below); `corpus_engine()` and the `require_runtime!` retirement still wait on the first chat-path module that needs them (deferred — chat is the live, higher-traffic path). |

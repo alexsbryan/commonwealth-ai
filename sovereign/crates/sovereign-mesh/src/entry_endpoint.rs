@@ -208,7 +208,11 @@ mod tests {
         let entry = NodeId::generate();
         let squatter = NodeId::generate();
         let ep = EntryNodeEndpoint::new(
-            source(vec![peer(squatter, "someone-else", &["http://192.168.1.5:9741/v1"])]),
+            source(vec![peer(
+                squatter,
+                "someone-else",
+                &["http://192.168.1.5:9741/v1"],
+            )]),
             entry,
         );
         assert_eq!(
@@ -225,7 +229,11 @@ mod tests {
         let entry = NodeId::generate();
         let other = NodeId::generate();
         let ep = EntryNodeEndpoint::new(
-            source(vec![peer(other, "unrelated", &["http://192.168.1.9:9741/v1"])]),
+            source(vec![peer(
+                other,
+                "unrelated",
+                &["http://192.168.1.9:9741/v1"],
+            )]),
             entry,
         );
         assert_eq!(ep.base_url().await, None);

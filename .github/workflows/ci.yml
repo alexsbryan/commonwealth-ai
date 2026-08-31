@@ -38,11 +38,19 @@
 #      that invalidates it (llama-cpp-sys-4's version + the toolchain), not on
 #      an unrelated hash that churns weekly.
 #   4. ONE DEFINITION OF "TESTS PASS". The compile gate runs
-#      `scripts/sovereign-test.sh` — the same script the pre-push hook and the
-#      daemon's `test_status` watcher run. CI previously ran a bare
+#      `scripts/sovereign-test.sh` — the same script a developer runs by hand
+#      and the daemon's `test_status` watcher runs. CI previously ran a bare
 #      `cargo test --workspace`, which resolves a DIFFERENT feature set than
 #      the local gate (no `sovereign-cli/dev-tools`), so the dev-verb suites
 #      had never been tested in CI at all.
+#
+#      Since 2026-08-30 CI is also the FIRST place that suite runs: the
+#      pre-push hook dropped it to stay inside a one-minute budget (a gate
+#      that costs more than a minute is a gate that gets skipped). The hook
+#      still owns fmt, the eight xtask gates, and the desktop and shell
+#      self-tests. This job is now the only automatic "does it compile and do
+#      the tests pass" — treat a red `test` here as a first-class signal, not
+#      a confirmation of something already known green.
 #
 # Blocking gates: `fmt`, `test`, `desktop`. `ci-ok` aggregates them into a
 # single check — make THAT the required status check if branch protection is

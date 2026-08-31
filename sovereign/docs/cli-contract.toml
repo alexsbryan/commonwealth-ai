@@ -1097,6 +1097,17 @@ path = "meshapp"
 probe = "no-args"  # rejects `--help` (exit 2, prints its own usage). Verified 2026-07-28.
 binary = "llm"
 hidden = true
+
+# `svrn ring` — the mesh as a deployment target whose unit is a GROUP. Scaffold
+# a ring app, bind people to the node keys they sign with, serve it against the
+# ring rail, and read the journal back. Public because the whole point is that
+# a builder has a verb to reach for; the alternative was documenting
+# `meshapp dev` and hoping.
+[[command]]
+path = "ring"
+probe = "no-args"  # like `meshapp`: rejects `--help`, prints its own usage, exit 2.
+binary = "llm"
+visibility = "public"
 [[command]]
 # Step·Artifact·Runner workflows (run / list / copy / new). The dispatcher
 # arm was missing until 2026-07-02 while the llm sibling implemented the
@@ -1311,6 +1322,17 @@ id = "tool-interop"
 title = "Reach another tool's MCP surface, and expose yours to it"
 doc = "docs/INTEROP.md"
 capabilities = ["mcp add", "mcp list", "mcp tools"]
+
+# `ring dev` is deliberately NOT in this list. It is a foreground server: it
+# binds a port and serves until Ctrl-C, so no journey step can drive it and a
+# capability nothing exercises is a promise nobody checks. Declaring it here
+# would turn this experience's coverage into a claim rather than a result. The
+# three below are the ones a lane actually runs.
+[[experience]]
+id = "ring-deploy"
+title = "Deploy an app to exactly your trust ring, and have its state converge"
+doc = "sovereign/docs/MESHAPP_AUTHORING.md"
+capabilities = ["ring new", "ring roster add", "ring log"]
 
 [[experience]]
 id = "publish-to-others"
@@ -1544,6 +1566,83 @@ exit = 0
 stdout_contains = "updated"
 
 # ── Arc A — get it running ───────────────────────────────────────────────
+
+[[journey]]
+id = "ring-scaffold"
+title = "Scaffold a ring app, and have the second attempt refuse to overwrite it"
+persona = "operator"
+experience = "ring-deploy"
+tier = 3
+visibility = "public"
+doc = "sovereign/docs/MESHAPP_AUTHORING.md"
+[[journey.step]]
+run = "ring new {ring_app_dir}"
+mutates = true
+note = """Runs entirely OFFLINE and touches no daemon: `ring new` writes the \
+app's four files and returns. That is deliberate — the parts of `ring` that \
+need a daemon (dev / log / roster list) need a RING, i.e. a second node, and a \
+journey that pretended one node was a ring would be proving nothing about the \
+thing the verb exists for."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "Scaffolded"
+[[journey.step]]
+run = "ring new {ring_app_dir}"
+note = """The proof of step [1], in one assertion: this line prints ONLY when an \
+index.html is actually on disk, so a scaffold that reported success without \
+writing anything reddens here. Same shape as backlog-intake's `updated`."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "already a ring app"
+
+[[journey]]
+id = "ring-journal"
+title = "Bind a name to this node's key, and read the ring's journal back"
+persona = "operator"
+experience = "ring-deploy"
+tier = 3
+visibility = "public"
+doc = "sovereign/docs/MESHAPP_AUTHORING.md"
+[[journey.step]]
+run = "daemon start"
+mutates = true
+note = """exit code only: `daemon start` narrates on STDERR (lifecycle.rs), and \
+stdout assertions read stdout alone. The proof is [1], which cannot pass unless \
+a daemon is answering."""
+[journey.step.expect]
+exit = 0
+[[journey.step]]
+run = "ring roster add journeybot --self --ring journey-ring"
+mutates = true
+note = """The strongest assertion available on this verb, and it is not about \
+the file. `the daemon has it.` prints ONLY after reading the roster back \
+through the running daemon's own rail and finding this entry — so it fails if \
+the CLI wrote to a directory the daemon does not read, which is the one way \
+this command can look like it worked and do nothing (ARCH §18.1: assert on what \
+the subject cannot echo back)."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "the daemon has it."
+[[journey.step]]
+run = "ring roster list --ring journey-ring"
+note = "the read side of [1]: the daemon lists the person the previous step bound"
+[journey.step.expect]
+exit = 0
+stdout_contains = "journeybot"
+[[journey.step]]
+run = "ring log journey-ring"
+note = """A ring with a roster and no acts yet. `complete` is the load-bearing \
+word: an empty journal that could not say whether it was empty or merely \
+unreachable would be the failure the gap report exists to prevent."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "complete"
+[[journey.step]]
+run = "daemon stop"
+mutates = true
+note = "leaves the lane's HOME with no daemon running, as it found it"
+[journey.step.expect]
+exit = 0
 
 [[journey]]
 id = "first-run"

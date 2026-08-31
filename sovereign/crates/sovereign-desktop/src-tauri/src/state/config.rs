@@ -613,6 +613,7 @@ impl DesktopConfig {
         }
 
         let mut setup = existing.unwrap_or_else(|| SetupConfig {
+            engine: Default::default(),
             compute: Default::default(),
             search: Default::default(),
             models: Some(ModelsSection {

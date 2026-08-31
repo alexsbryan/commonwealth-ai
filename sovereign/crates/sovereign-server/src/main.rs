@@ -33,6 +33,7 @@ use axum::routing::{delete, get, post};
 use axum::Extension;
 use tower_http::cors::CorsLayer;
 
+use sovereign_core::setup_config::EngineKind;
 use sovereign_core::traits::StateStore;
 use sovereign_core::SkillRegistry;
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
@@ -51,6 +52,20 @@ fn print_usage() {
     eprintln!();
     eprintln!("Options:");
     eprintln!("  --config <path>   Server configuration file (required)");
+}
+
+/// `[[inference.backends]] type = "..."` → the workspace's engine vocabulary.
+///
+/// `"embedded"` is this host's original spelling for the in-process llama
+/// engine and configs in the wild still carry it. Kept local rather than
+/// taught to [`EngineKind`]: that is the daemon's `[engine] kind` contract
+/// and has no such legacy, and one engine with two names everywhere to
+/// serve one host's history is exactly the §10.6 drift.
+fn backend_engine_kind(raw: &str) -> EngineKind {
+    match raw {
+        "embedded" => EngineKind::Llama,
+        other => EngineKind::from(other.to_string()),
+    }
 }
 
 #[tokio::main]
@@ -154,8 +169,8 @@ async fn main() {
             )> = Vec::new();
 
             for bc in &config.inference.backends {
-                match bc.backend_type.as_str() {
-                    "embedded" => {
+                match backend_engine_kind(&bc.backend_type) {
+                    EngineKind::Llama => {
                         let model = bc.model.as_ref().unwrap_or(&config.inference.model);
                         tracing::info!("  Backend {}: embedded ({})", bc.name, model.display());
                         match EmbeddedLlamaCpp::load_full(
@@ -182,7 +197,7 @@ async fn main() {
                             }
                         }
                     }
-                    "remote" => {
+                    EngineKind::Remote => {
                         let endpoint = bc.endpoint.as_deref().unwrap_or("http://localhost:8000/v1");
                         let model_id = bc.model_id.as_deref().unwrap_or("default");
                         tracing::info!("  Backend {}: remote ({})", bc.name, endpoint);
@@ -200,8 +215,17 @@ async fn main() {
                         );
                         backends.push((provider, entry));
                     }
-                    other => {
-                        tracing::warn!("  Unknown backend type: {other}");
+                    // An unrecognised backend type is REFUSED, not skipped.
+                    // A warn-and-continue here silently served the operator a
+                    // fleet one backend smaller than the one they configured,
+                    // and the only symptom was capacity (ARCH §18.3).
+                    EngineKind::Custom(other) => {
+                        eprintln!(
+                            "error: backend `{}` has unknown type `{other}`. \
+                             sovereign-server understands: llama (alias: embedded), remote.",
+                            bc.name
+                        );
+                        sovereign_inference::fast_exit_skip_destructors(1);
                     }
                 }
             }

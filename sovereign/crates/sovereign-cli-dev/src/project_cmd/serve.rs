@@ -513,16 +513,23 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         });
     let atlas_broadcaster: Arc<dyn sovereign_work_atlas::tools::ClaimBroadcaster> =
         Arc::new(sovereign_work_atlas::tools::NullBroadcaster);
-    let (atlas_repo_root, atlas_repo_id) = match sovereign_work_atlas::resolve_repo_id(&repo_root) {
-        Ok(pair) => pair,
-        Err(e) => {
-            tracing::warn!(
-                error = %e,
-                "work_atlas:repo_id_missing — declare_scope will reject calls"
-            );
-            (repo_root.clone(), String::new())
-        }
-    };
+    let (atlas_repo_root, atlas_repo_id) =
+        match sovereign_work_atlas::resolve_repo_id_allowing_local(&repo_root) {
+            Ok((root, id, source)) => {
+                if let Some(caveat) = source.caveat() {
+                    tracing::info!(caveat, "work_atlas: using a machine-local repo id");
+                }
+                (root, id)
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "work_atlas:repo_id_missing — not inside a git repo, so claims \
+                     cannot be scoped to one"
+                );
+                (repo_root.clone(), String::new())
+            }
+        };
     let atlas_branch = crate::code_cmd::current_branch(&atlas_repo_root);
     tools.register(Box::new(
         sovereign_work_atlas::tools::DeclareScopeTool::new(

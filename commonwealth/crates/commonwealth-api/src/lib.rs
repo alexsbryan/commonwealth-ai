@@ -19,6 +19,7 @@
 pub mod admission;
 pub mod auto_recover;
 pub mod client_auth;
+pub mod client_surface;
 pub mod frontdoor;
 pub mod headers;
 pub mod middleware;
@@ -41,6 +42,7 @@ pub mod routes_knowledge;
 pub mod routes_oicp;
 pub mod routes_oicp_ingest;
 pub mod routes_ollama;
+pub mod routes_rail;
 pub mod routes_responses;
 pub mod routes_status;
 pub mod server;

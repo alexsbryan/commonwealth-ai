@@ -405,6 +405,7 @@ pub async fn set_setup_context_size(
         Err(_) => {
             let data_dir = state.config.read().await.data_dir.clone();
             SetupConfig {
+                engine: Default::default(),
                 compute: Default::default(),
                 search: Default::default(),
                 // The wizard is about to fill these in; an all-empty
@@ -524,6 +525,7 @@ pub(crate) fn write_model_slots_to_setup(
             ));
         }
         Err(_) => SetupConfig {
+            engine: Default::default(),
             compute: Default::default(),
             search: Default::default(),
             models: Some(ModelsSection {

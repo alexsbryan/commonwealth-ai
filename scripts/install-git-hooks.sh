@@ -37,8 +37,11 @@ git config core.hooksPath .githooks
 echo "install-git-hooks: core.hooksPath -> .githooks"
 echo
 echo "  The pre-push gate now runs on every push. It scopes to what you"
-echo "  changed, so a docs-only push costs about a second."
+echo "  changed, and is held to a ONE-MINUTE budget (~22s for a full push,"
+echo "  about a second for docs only). It checks that the workspace COMPILES,"
+echo "  but runs no tests — run ./scripts/sovereign-test.sh --human when you"
+echo "  mean to; CI runs it on every push."
 echo
 echo "    ./scripts/pre-push.sh            run the gate by hand, no push"
-echo "    SOVEREIGN_PREPUSH_QUICK=1 ...    fmt + docs only, skip the test run"
+echo "    SOVEREIGN_PREPUSH_QUICK=1 ...    skip the desktop node gates"
 echo "    git push --no-verify             bypass entirely, one push"

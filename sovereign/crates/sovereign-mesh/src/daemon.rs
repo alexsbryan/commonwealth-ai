@@ -187,6 +187,10 @@ enum DaemonState {
         /// for five weeks (`ec7ca66c`, 2026-07-21 — see
         /// `auto_ingest::CollaborateHandle`).
         _collaborate_handle: crate::auto_ingest::CollaborateHandle,
+        /// Aborts the ring-journal anti-entropy loop on Drop. Its own handle
+        /// and its own cadence rather than a step inside gossip — see
+        /// [`crate::ring_sync`] for the bandwidth arithmetic that forces it.
+        _ring_sync_handle: crate::ring_sync::RingSyncHandle,
         _shutdown_tx: tokio::sync::oneshot::Sender<()>,
         /// The API-server task that owns the `:9741`/`:9742` listeners.
         /// Kept (not discarded) so `stop_inner` can await its exit after
@@ -2522,6 +2526,20 @@ impl EmbeddedDaemon {
                     )
                 },
             ));
+            // The ring rail's storage. One journal directory per ring
+            // namespace under the data dir, signed with this same identity
+            // key — `RingSigner` is implemented for `SigningKey`, so the key
+            // stays here and `AppState` holds a trait object rather than key
+            // material, exactly as the dial signer above does.
+            //
+            // Installed unconditionally: a rail with no storage REFUSES
+            // (503) instead of answering an empty ledger, so leaving it out
+            // on some paths would make "this daemon cannot keep a ledger"
+            // and "your ring is empty" the same observation.
+            app_state.install_ring_rail(Arc::new(commonwealth_knowledge::rail::RingRail::new(
+                &self.data_dir,
+                Arc::new(identity_key.clone()),
+            )));
         }
 
         // ── Order is load-bearing ─────────────────────────────────
@@ -2961,6 +2979,10 @@ impl EmbeddedDaemon {
             }
         };
 
+        // The rail's own listener — `rail_bind` says why it is a separate one.
+        let rail_addr = crate::rail_bind::rail_addr(client_addr.port());
+        let rail_listener = crate::rail_bind::bind(rail_addr).await;
+
         // Spawn the API servers in the background. The JoinHandle is stored
         // in `DaemonState::Running` (not discarded) so `stop_inner` can await
         // teardown — dropping the old `:9741`/`:9742` listeners — before an
@@ -3000,8 +3022,12 @@ impl EmbeddedDaemon {
                 commonwealth_api::server::ClientSurface::Peer,
             );
             let guest_router = commonwealth_api::server::client_router_for(
-                app_state_clone,
+                app_state_clone.clone(),
                 commonwealth_api::server::ClientSurface::Guest,
+            );
+            let rail_router = commonwealth_api::server::client_router_for(
+                app_state_clone,
+                commonwealth_api::server::ClientSurface::Rail,
             );
 
             // Phase 3 takeover: a `sovereign init` invocation may have
@@ -3089,11 +3115,25 @@ impl EmbeddedDaemon {
                     None => std::future::pending::<()>().await,
                 }
             };
+            // Same `ConnectInfo` reason as the guest and peer binds: without
+            // it the auth layer cannot identify the caller and fails closed
+            // with a 500 on every request.
+            let rail_service = rail_router.into_make_service_with_connect_info::<SocketAddr>();
+            let rail_serve = async move {
+                match rail_listener {
+                    Some(l) => {
+                        info!("ring rail listening on {rail_addr}");
+                        let _ = axum::serve(l, rail_service).await;
+                    }
+                    None => std::future::pending::<()>().await,
+                }
+            };
             tokio::select! {
                 _ = axum::serve(client_listener, client_service) => {}
                 _ = axum::serve(internal_listener, internal_router) => {}
                 _ = guest_serve => {}
                 _ = peer_serve => {}
+                _ = rail_serve => {}
                 _ = shutdown_rx => {
                     info!("Commonwealth daemon shutting down");
                 }
@@ -3132,6 +3172,12 @@ impl EmbeddedDaemon {
 
         let collaborate_handle =
             crate::auto_ingest::spawn_auto_collaborate_loop(app_state.clone(), internal_port);
+
+        // Ring-ledger replication: one round immediately, then every minute.
+        let ring_sync_handle = crate::ring_sync::spawn_ring_sync_loop(
+            app_state.clone(),
+            crate::ring_sync::DEFAULT_RING_SYNC_INTERVAL,
+        );
 
         // Re-spawn any solo corpus ingest the daemon was running before
         // restart. The mesh auto-collaborate loop above only handles
@@ -3560,6 +3606,7 @@ impl EmbeddedDaemon {
             _browse_handle: browse_handle,
             _gossip_handle: gossip_handle,
             _collaborate_handle: collaborate_handle,
+            _ring_sync_handle: ring_sync_handle,
             _shutdown_tx: shutdown_tx,
             serve_handle,
             iroh_access,
@@ -4480,6 +4527,7 @@ mod tests {
             AppState::new_with_platform_and_engine(node_id, mesh, mesh_store, app_registry, None);
 
         let cfg = SetupConfig {
+            engine: Default::default(),
             compute: Default::default(),
             search: Default::default(),
             models: Some(ModelsSection {
