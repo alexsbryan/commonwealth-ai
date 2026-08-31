@@ -25,10 +25,19 @@ this harness's own affordances.
 - **Skills are invoked bare:** `/comaintainer`, `/fieldglass`, `/fleet-report`.
   (pi spells the same skills `/skill:comaintainer`.)
 - **Hooks are wired in `.claude/settings.json`** — `SessionStart`,
-  `UserPromptSubmit`, `PreToolUse`, `PreCompact`, `SessionEnd`. The scripts they
-  call under `.claude/hooks/` are harness-neutral and shared with pi's adapter at
-  `.pi/extensions/sovereign-hooks/`; fix a bug in the script, never in one
-  harness's copy.
+  `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PreCompact`, `SessionEnd`.
+  The scripts they call under `.claude/hooks/` are harness-neutral and shared
+  with pi's adapter at `.pi/extensions/sovereign-hooks/`; fix a bug in the
+  script, never in one harness's copy.
+- **`PostToolUse` runs `format-edited-file.sh` on every `Write`/`Edit`**, so a
+  `.rs` file you touch is rustfmt'd the moment you write it and formatting is
+  never something you have to think about. Do not hand-format Rust, and do not
+  add a fmt step to `sovereign-lint.sh`: `run_gate "rustfmt"` in
+  `scripts/pre-push.sh` and CI's blocking `fmt` job remain the backstop for
+  edits this hook never sees (human edits, `--no-verify`, other machines).
+  The script is harness-neutral, but pi's adapter maps only `session_start`
+  and `before_agent_start` today — pi sessions do NOT get auto-formatting until
+  someone adds a post-tool mapping there.
 - **`/context` shows what actually loaded.** If `AGENTS.md` is not listed under
   Memory files, the import above failed and you are running without the compass —
   stop and say so.

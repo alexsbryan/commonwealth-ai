@@ -102,16 +102,12 @@ async fn fetch_latest() -> Result<(String, &'static str), String> {
     if let Some(found) = best {
         return Ok(found);
     }
-    Err(first_err.unwrap_or_else(|| {
-        format!("no published cli-v* release found in {}", REPOS.join(", "))
-    }))
+    Err(first_err
+        .unwrap_or_else(|| format!("no published cli-v* release found in {}", REPOS.join(", "))))
 }
 
 /// Every non-draft `cli-v*` version published in one repo.
-async fn fetch_cli_versions(
-    client: &reqwest::Client,
-    repo: &str,
-) -> Result<Vec<String>, String> {
+async fn fetch_cli_versions(client: &reqwest::Client, repo: &str) -> Result<Vec<String>, String> {
     let url = format!("https://api.github.com/repos/{repo}/releases?per_page=30");
     let resp = client
         .get(&url)
