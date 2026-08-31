@@ -336,7 +336,8 @@ async fn status_cmd(args: &[String]) -> i32 {
 async fn affinity_cmd(args: &[String]) -> i32 {
     let mut destination: Option<String> = None;
     let mut description: Option<String> = None;
-    let mut limit = 30usize;
+    // 10, not 30: the shortlist feeds a reader with a budget. `--limit` raises it.
+    let mut limit = 10usize;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -392,29 +393,35 @@ async fn affinity_cmd(args: &[String]) -> i32 {
         return 1;
     };
 
-    let (_root, index_path, _corpus) = match resolve_workspace(None) {
+    let (root, index_path, _corpus) = match resolve_workspace(None) {
         Ok(v) => v,
         Err(c) => return c,
     };
-    let summaries = match affinity::load_summaries(&index_path) {
+    let all = match affinity::load_summaries(&index_path, &root) {
         Ok(s) => s,
         Err(u) => {
             print!("{}", affinity::render_unavailable(&u));
             return 3;
         }
     };
+    // Rank against the destination's OWN kind, deduped. Without this the
+    // shortlist is swamped by callables that merely share vocabulary with the
+    // description — measured nine of ten on a real order.
+    let summaries = affinity::narrow_to_destination_kind(&all, &destination);
     let hits = affinity::shortlist(&summaries, &description, limit);
     println!(
         "affinity audit — {} described symbols, {} shortlisted for `{destination}`",
         summaries.len(),
         hits.len()
     );
-    println!("  the shortlist is a LEXICAL PREFILTER over behaviour descriptions, not a verdict;");
-    println!("  adjudication is the model's job and is the next rung.\n");
+    println!("  lexical prefilter over behaviour descriptions — a shortlist, not a verdict\n");
     for c in &hits {
-        println!("  {:>6.2}  {}", c.score, c.qualified_name);
-        println!("          {}:{}", c.file, c.line);
-        println!("          {}", c.summary);
+        // Two lines per row, not three, and the summary is clipped. A tool an
+        // agent has to skim gets routed around; every row it prints is context
+        // the agent cannot spend on the task.
+        let name = affinity::readable(&c.qualified_name, &c.name);
+        println!("  {:>5.1}  {name}   {}:{}", c.score, c.file, c.line);
+        println!("         {}", affinity::clip(&c.summary, 120));
     }
     0
 }
@@ -549,7 +556,7 @@ async fn label_model_cmd(args: &[String]) -> i32 {
     // differ in source while agreeing in purpose — which is the judgement being
     // asked for. Coverage is printed rather than assumed: a prompt silently
     // degraded to source-only is indistinguishable from a good one downstream.
-    let sums = match affinity::load_summaries(&index_path) {
+    let sums = match affinity::load_summaries(&index_path, &root) {
         Ok(v) => {
             let idx = label_model::index_summaries(&v);
             println!(

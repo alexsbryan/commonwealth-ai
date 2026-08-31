@@ -61,6 +61,16 @@
             "statusMessage": "Validating plan alignment sections"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/prior-art-warn.py",
+            "type": "command",
+            "timeout": 15
+          }
+        ]
       }
     ],
     "PreCompact": [

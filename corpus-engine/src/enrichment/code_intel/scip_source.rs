@@ -94,34 +94,51 @@ pub fn enumerate_from_rows(
         {
             continue;
         }
-        // Precise function screen: when the call graph carries refs, enrich only
-        // symbols that appear as a CALLER (provably have a body that calls
-        // something) — the reliable "real function/method" signal that the SCIP
-        // `kind` field is not. An empty set (a graph with no refs, e.g. a test
-        // fixture) falls back to the kind screen below.
-        if !caller_set.is_empty() && !caller_set.contains(&row.qualified_name) {
-            continue;
-        }
-        if !is_enrichable_kind(&row.kind) {
-            continue;
-        }
-        // ROUTE ON THE DESCRIPTOR, which is reliable, rather than trusting the
-        // caller screen to mean "function". It does not: `#[derive(..)]`
-        // expansions emit refs whose CALLER is the type, so a struct walks
-        // straight through the screen above and is then asked a prompt that
-        // says "ONE function" six times. Measured on this graph 2026-08-24:
-        // of 61,706 symbols the old screens admitted, only 32,739 were
-        // callable — 4,945 types, 3,164 modules and 20,858 other non-callables
-        // were all being described as functions.
+        // ROUTE ON THE DESCRIPTOR FIRST. It is the one reliable signal for what
+        // a symbol IS; the two screens below are function-shaped heuristics and
+        // are therefore applied to CALLABLES ONLY.
         //
-        // Types are KEPT (with their own prompt): "what does this represent"
-        // is exactly the question a destination-first audit asks. Modules and
-        // the rest are DROPPED — a module's body is the whole file, which is
-        // the most expensive call in the run and the least useful answer.
+        // Types are KEPT (with their own prompt): "what does this represent" is
+        // exactly the question a destination-first audit asks. Modules and the
+        // rest are DROPPED — a module's body is the whole file, the most
+        // expensive call in the run and the least useful answer.
         let Some(kind) = prompt_kind_for(&row.qualified_name) else {
             skipped_kind += 1;
             continue;
         };
+        if kind == PromptKind::Callable {
+            // Precise function screen: when the call graph carries refs, enrich
+            // only symbols that appear as a CALLER (provably have a body that
+            // calls something) — the reliable "real function/method" signal the
+            // SCIP `kind` field is not. Empty set (a graph with no refs, e.g. a
+            // test fixture) = no filter.
+            //
+            // THIS MUST NOT GATE TYPES, and until 2026-08-31 it did, because it
+            // ran BEFORE the router. A type reached the type prompt only when
+            // `#[derive(..)]` expansions happened to emit refs whose CALLER was
+            // the type — so types were in the corpus BY ACCIDENT. Measured on
+            // this graph 2026-08-31: 4,366 of 9,115 type descriptors (48%)
+            // appear as a caller; the other 4,749 were dropped before the
+            // router that exists to route them ever ran. `AdmissionReason`,
+            // `IngestProgress` and `StepKind` all sit at zero caller refs and
+            // were all absent.
+            //
+            // 9,115 counts `Type` ONLY. `EnumVariant` (`Enum#Variant#`) is a
+            // separate descriptor class that `prompt_kind_for` drops; folding
+            // the two together gives 13,426 and overstates this gap by 2x.
+            if !caller_set.is_empty() && !caller_set.contains(&row.qualified_name) {
+                continue;
+            }
+            // Same reasoning: this reject list is TYPE-SHAPED
+            // ("enum" | "struct" | "class" | "type" | ...), so applying it to a
+            // descriptor-confirmed type would drop exactly what we just decided
+            // to keep. Rust types only ever passed it because rust-analyzer
+            // labels them `constructor`, which the list does not name — a
+            // coincidence, not a decision.
+            if !is_enrichable_kind(&row.kind) {
+                continue;
+            }
+        }
         enrichable += 1;
         if !seen.insert((row.file_path.clone(), row.line_start, row.name.clone())) {
             continue; // duplicate symbol row
@@ -220,6 +237,66 @@ mod tests {
         assert_eq!(
             prompt_kind_for("rust-analyzer cargo c 0.1.0 m/select_route()."),
             Some(PromptKind::Callable)
+        );
+    }
+
+    /// Routing a type correctly is useless if the type never reaches the router.
+    ///
+    /// The caller screen ran FIRST until 2026-08-31, so a type was enumerated
+    /// only when `#[derive(..)]` happened to emit a ref whose CALLER was the
+    /// type. Measured on this repo's graph 2026-08-31: 4,366 of 9,115 type
+    /// descriptors (48%) appear as a caller — the other 4,749 were dropped
+    /// before `prompt_kind_for` ran. `AdmissionReason` (0 caller refs) is a
+    /// real example that was absent from a 21,862-summary cache.
+    #[test]
+    fn a_type_with_no_caller_refs_is_still_enumerated() {
+        let dir = scratch("type_no_callers");
+        std::fs::write(
+            dir.join("a.rs"),
+            "// 0\npub enum AdmissionReason {\n    Accepted,\n    RejectedBecauseFull,\n}\n",
+        )
+        .unwrap();
+        // A non-empty caller set that does NOT name the type: exactly the
+        // production shape, where refs exist but no derive named this one.
+        let mut callers = std::collections::HashSet::new();
+        callers.insert("crate::some_unrelated_fn".to_string());
+
+        let mut r = row("AdmissionReason", "constructor", "a.rs", 1, 4);
+        r.qualified_name = "rust-analyzer cargo c 0.1.0 admission/AdmissionReason#".to_string();
+
+        let out = enumerate_from_rows(&[r], &dir, &[], &callers);
+        assert_eq!(
+            out.len(),
+            1,
+            "a type with zero caller refs must still be enumerated"
+        );
+        assert_eq!(
+            out[0].kind,
+            PromptKind::Type,
+            "and routed to the TYPE prompt"
+        );
+    }
+
+    /// The other half of the same change: the function screen still screens
+    /// FUNCTIONS. Loosening it for types must not loosen it for callables.
+    #[test]
+    fn a_callable_absent_from_the_caller_set_is_still_dropped() {
+        let dir = scratch("callable_screened");
+        std::fs::write(
+            dir.join("b.rs"),
+            "// 0\nfn select_route() {\n    decide_where_the_request_runs();\n}\n",
+        )
+        .unwrap();
+        let mut callers = std::collections::HashSet::new();
+        callers.insert("crate::some_unrelated_fn".to_string());
+
+        let mut r = row("select_route", "function", "b.rs", 1, 3);
+        r.qualified_name = "rust-analyzer cargo c 0.1.0 m/select_route().".to_string();
+
+        let out = enumerate_from_rows(&[r], &dir, &[], &callers);
+        assert!(
+            out.is_empty(),
+            "a callable that never appears as a caller is still screened out"
         );
     }
 
