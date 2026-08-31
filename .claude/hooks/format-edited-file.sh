@@ -16,6 +16,15 @@
 # as the backstop for edits this hook never sees (human edits, other machines,
 # `--no-verify`), and they should now essentially never fire.
 #
+# COVERAGE. Claude Code only, today. This script is harness-neutral, but pi's
+# adapter (.pi/extensions/sovereign-hooks/index.ts) maps just `session_start`
+# and `before_agent_start` — there is no post-tool mapping, so a pi session
+# gets no auto-formatting until someone adds one. Do NOT add a fmt step to
+# `scripts/sovereign-lint.sh` to cover the gap: that turns a fix back into a
+# gate, which is the thing this replaces. `run_gate "rustfmt"` in
+# scripts/pre-push.sh and CI's blocking `fmt` job are already the backstop for
+# every edit this hook does not see.
+#
 # CONTRACT: this hook NEVER blocks. It exits 0 whatever happens, because a
 # formatter is not a correctness check and a half-written file that rustfmt
 # cannot parse is a normal intermediate state, not an error worth interrupting
