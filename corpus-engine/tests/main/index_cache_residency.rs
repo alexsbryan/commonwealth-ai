@@ -177,3 +177,128 @@ async fn the_query_path_still_caches_and_the_sweep_reuses_its_handles() {
         "the sweep must neither evict the hot handle nor add the cold one"
     );
 }
+
+/// The same contract, reached BY CORPUS ID — the spelling walkers use.
+///
+/// `open_index_transient` existed for paths and was applied to the hourly
+/// maintenance sweep. It had no by-id sibling, so every other walker reached
+/// for `open_index_for_corpus`, which caches. Measured on the dev host
+/// 2026-08-31: the newsworthy tick opened `wikipedia` through that wrapper to
+/// stream it once, and the daemon then held 185 of its 256 file descriptors on
+/// that corpus's `chunks.lance/_indices/*` for the life of the process. A
+/// code-intel enrichment sharing the daemon died on `Too many open files
+/// (os error 24)` and still reported exit 0.
+///
+/// Twice round the loop, because a walker runs on a timer and "does it grow
+/// across ticks?" is the question that matters.
+#[tokio::test]
+async fn a_by_id_walker_admits_no_handles_to_the_query_cache() {
+    let dir = tempfile::tempdir().unwrap();
+    let (engine, _paths) = engine_with_corpora(dir.path(), 3).await;
+
+    assert_eq!(
+        engine.index_cache_len(),
+        0,
+        "precondition: nothing resident before the walker runs"
+    );
+
+    for _ in 0..2 {
+        for i in 0..3 {
+            engine
+                .open_index_for_corpus_transient(&format!("resident_{i}"))
+                .await
+                .expect("transient open by id");
+        }
+    }
+
+    assert_eq!(
+        engine.index_cache_len(),
+        0,
+        "a by-id walker must never populate the query cache"
+    );
+}
+
+/// The other half: the by-id QUERY wrapper still caches, and a walker that
+/// follows it reuses the hot handle rather than evicting or duplicating it.
+///
+/// Without this, "the walker no longer caches" could be satisfied by breaking
+/// `open_index_for_corpus` outright, which is the retrieval path for every
+/// HTTP route, desktop command and chat turn on the box.
+#[tokio::test]
+async fn the_by_id_query_wrapper_still_caches_and_the_walker_reuses_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let (engine, _paths) = engine_with_corpora(dir.path(), 2).await;
+
+    engine
+        .open_index_for_corpus("resident_0")
+        .await
+        .expect("query open by id");
+    assert_eq!(
+        engine.index_cache_len(),
+        1,
+        "a by-id query open must still admit its handle"
+    );
+
+    for i in 0..2 {
+        engine
+            .open_index_for_corpus_transient(&format!("resident_{i}"))
+            .await
+            .expect("transient open by id");
+    }
+
+    assert_eq!(
+        engine.index_cache_len(),
+        1,
+        "the walker must neither evict the hot handle nor admit the cold one"
+    );
+}
+
+/// STRUCTURAL, not remembered (ARCH §7): nothing in this crate may open a
+/// corpus through the CACHING by-id wrapper.
+///
+/// The two tests above pin the engine's contract, but they cannot catch the
+/// regression that actually happened — a walker reaching for
+/// `open_index_for_corpus` because it is the obvious name. Every by-id open
+/// inside `corpus-engine/src` today is a walker (delta application, the
+/// newsworthy fold, the atlas strategies); none of them answer a query. The
+/// query-path callers live in the crates above this one (mesh, desktop,
+/// server, tools) and are untouched by this guard.
+///
+/// If a genuine query path is ever added HERE, this test is the place to
+/// record why — add the exemption with its reason rather than deleting the
+/// guard.
+#[test]
+fn no_walker_in_this_crate_opens_a_corpus_through_the_caching_wrapper() {
+    fn walk(dir: &Path, hits: &mut Vec<String>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                walk(&p, hits);
+            } else if p.extension().is_some_and(|x| x == "rs") {
+                let Ok(text) = std::fs::read_to_string(&p) else {
+                    continue;
+                };
+                for (i, line) in text.lines().enumerate() {
+                    // The call, not the identifier: doc comments and the
+                    // definition itself name it legitimately.
+                    if line.contains(".open_index_for_corpus(") {
+                        hits.push(format!("{}:{}", p.display(), i + 1));
+                    }
+                }
+            }
+        }
+    }
+
+    let mut hits = Vec::new();
+    walk(Path::new("src"), &mut hits);
+    assert!(
+        hits.is_empty(),
+        "these call the caching by-id wrapper from inside corpus-engine; a \
+         one-shot or on-a-timer read must use `open_index_for_corpus_transient` \
+         or it pins that corpus's LanceDB handles for the life of the process:\n  {}",
+        hits.join("\n  ")
+    );
+}

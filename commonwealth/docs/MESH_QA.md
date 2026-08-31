@@ -269,6 +269,50 @@ Graceful self-`leave` now gossips a self-tombstone before shutdown
 propagates immediately instead of waiting on decay; `revoke_member` and
 offline-decay remain the fallbacks for an unannounced drop.
 
+## Layer 3b — Terminal node, two daemons on one box (`scripts/terminal-e2e.sh`)
+
+A `terminal` holds no weights and binds its entry node by **mesh identity**,
+resolved per turn through `PeerEndpointSource`. None of that is observable from
+a compile or a unit test: the binding is only exercised once a real second
+daemon is a real mesh peer. The feature shipped 2026-08-30 on unit tests alone
+and every behavioural claim about it was a claim about code — which is how two
+defects survived to be found the first time anyone ran it end to end.
+
+```
+./scripts/terminal-e2e.sh              # plaintext mesh
+./scripts/terminal-e2e.sh --encrypt    # + the iroh path — the real posture
+```
+
+**Run the `--encrypt` form.** It is the configuration the fleet actually uses,
+and it is the one the identity binding exists for: an encrypted mesh forces its
+plaintext client API loopback-only and routes peers over the iroh acceptor, so
+a terminal bound to a literal address cannot reach its entry node at all. The
+plaintext form resolves through `IpTransport` and will pass while that whole
+class of failure goes untested.
+
+| Step | Holds when |
+|---|---|
+| advertises nothing | `/oicp/v1/capabilities` lists zero models — a node holding nothing must never attract routed work |
+| local alias survives | `/v1/models` still surfaces `primary`, so an editor pointed at the terminal works |
+| class + binding reported | `/v1/mesh/status` says `node_class: terminal` and names the bound node id |
+| a turn is served | a real completion comes back from the holder |
+| **an embedding is served** | the step that exercises the binding. Chat on a JOINED terminal resolves from the holder's advertised manifest via `provider_for_peer` and never reaches `EntryNodeEndpoint`; embeddings have no such path |
+| the encrypted path was used | the resolved endpoint is an iroh bridge on loopback, not the holder's `:9751` |
+
+**Ordering that bites.** The mesh must be founded BEFORE either daemon's first
+boot: a booting daemon silently auto-founds a *plaintext* solo mesh, after which
+`mesh create` refuses and `--encrypt` is never reached. The script does this and
+asserts `require_encryption=true` plus `inference` in the iroh-`required` set,
+because a run that quietly fell back to plaintext would otherwise pass.
+
+**What it cannot prove.** Both daemons are on one host, so every forward is
+on-box. `ServingLocus::ForwardsOffBox` and the off-box `local_only` refusal need
+a second MACHINE and remain unit-tested until one exists
+(`sovereign/docs/specs/MESH_N4_TOPOLOGY.md` §4.5). This is also why no `svrn
+contract` journey covers terminal onboarding: a journey is a sequence of CLI
+calls in one hermetic `HOME`, and it cannot stand up the mesh peer the binding
+resolves against.
+
 ## Layer 4 — Live-fleet routing probe (`scripts/mesh-live-probe.py`)
 
 The three layers above test the distributed **substrate** — convergence,

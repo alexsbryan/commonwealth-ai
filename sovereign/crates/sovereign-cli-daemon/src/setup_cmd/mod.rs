@@ -56,6 +56,18 @@ use finish::finish_with_paths;
 pub(crate) use download::download_with_progress;
 
 pub async fn run_setup(args: &[String]) -> i32 {
+    // Route ggml through `tracing` BEFORE anything can touch it. Setup never
+    // constructs a `LlamaBackend`, so it could not call `LlamaLogs::install`
+    // and sat outside that module's one decision — and it still reaches ggml:
+    // the in-process daemon that joins the mesh builds a capability manifest,
+    // which calls `detect_hardware()`, which initialises the Metal device.
+    // The result was ~30 lines of `ggml_metal_library_compile_all: compiled
+    // 'fa' library in 0.036 sec` landing between "Joining the mesh..." and the
+    // next line of an onboarding flow written for someone who has never seen a
+    // GPU log. First statement in the function because the trigger is a
+    // transitive call several layers down, and anything later is a race with it.
+    let _fully_applied = sovereign_inference::llama_logs::LlamaLogs::from_env().install_global();
+
     // `--fim` is a different destination, not a modifier on the
     // wizard — dispatch BEFORE the deprecation shim below. Two
     // reasons: the shim announces "use `svrn daemon --setup-only`",

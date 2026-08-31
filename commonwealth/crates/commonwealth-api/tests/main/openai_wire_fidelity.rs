@@ -29,7 +29,7 @@ use futures::Stream;
 /// Minimal single-member mesh, the shape `AppState::new` wants. Mirrors
 /// `tests/app_state_privacy.rs` — an integration test cannot reach the
 /// crate's `#[cfg(test)]` helpers.
-fn solo_state(service: Arc<dyn LocalInferenceService>) -> AppState {
+pub(crate) fn solo_state(service: Arc<dyn LocalInferenceService>) -> AppState {
     let node = NodeId::from_u128(1);
     let mut members = std::collections::HashMap::new();
     members.insert(
@@ -90,10 +90,10 @@ fn solo_state(service: Arc<dyn LocalInferenceService>) -> AppState {
 /// HANDLER forwards is the only way to see a mutation that is
 /// otherwise invisible until sampling time.
 #[derive(Clone, Default)]
-struct CapturesRequest(Arc<Mutex<Option<ChatCompletionRequest>>>);
+pub(crate) struct CapturesRequest(pub(crate) Arc<Mutex<Option<ChatCompletionRequest>>>);
 
 impl CapturesRequest {
-    fn seen(&self) -> ChatCompletionRequest {
+    pub(crate) fn seen(&self) -> ChatCompletionRequest {
         self.0.lock().unwrap().clone().expect("service was called")
     }
 }
@@ -125,7 +125,7 @@ impl LocalInferenceService for CapturesRequest {
     }
 }
 
-fn chat_with_url_in_tool_result() -> ChatCompletionRequest {
+pub(crate) fn chat_with_url_in_tool_result() -> ChatCompletionRequest {
     serde_json::from_value(serde_json::json!({
         "model": "primary",
         "messages": [

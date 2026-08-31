@@ -931,7 +931,14 @@ impl WikipediaNewsworthyWatcher {
         // Pruning is destructive and stays the maintenance sweep's decision:
         // `None` is passed deliberately.
         for c in &committed {
-            match self.engine.open_index_for_corpus(&c.corpus_id).await {
+            // TRANSIENT: a per-tick fold over every corpus committed this
+            // tick is a walker, and the caching wrapper would make each one
+            // resident forever after a single tick.
+            match self
+                .engine
+                .open_index_for_corpus_transient(&c.corpus_id)
+                .await
+            {
                 Ok(idx) => match idx.optimize(None).await {
                     Ok(stats) => {
                         tracing::info!(

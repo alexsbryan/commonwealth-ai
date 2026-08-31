@@ -76,8 +76,50 @@ impl LlamaLogs {
     pub fn install(self, backend: &mut crate::llama::cpp::llama_backend::LlamaBackend) {
         match self {
             Self::Void => backend.void_logs(),
-            Self::ErrorsOnly => crate::llama::install_log_tracing_errors_only(),
-            Self::Full => crate::llama::install_log_tracing(),
+            // One body for the global half, so a caller who reaches it through
+            // either door lands on the same callback.
+            _ => {
+                let _ = self.install_global();
+            }
+        }
+    }
+
+    /// Apply the process-global half, for a caller that touches ggml WITHOUT
+    /// owning a [`LlamaBackend`].
+    ///
+    /// `svrn setup` is the case that forced this, and it was a sixth site
+    /// outside this module's one decision. Its in-process daemon builds a
+    /// capability manifest, which calls `detect_hardware()`
+    /// (`sovereign-mesh/src/capabilities.rs`), which initialises the Metal
+    /// device — about thirty lines of `ggml_metal_library_compile_all:
+    /// compiled 'fa' library in 0.036 sec` straight to stderr, in the middle
+    /// of an onboarding flow written for someone who has never seen a GPU log.
+    /// No backend is constructed anywhere on that path, so
+    /// [`install`](Self::install) could not be called at all.
+    ///
+    /// [`Void`](Self::Void) cannot be honoured in full here: silencing goes
+    /// through llama-cpp-2's backend-level disable and there is no backend to
+    /// disable. The tracing callback is installed regardless — that routes
+    /// ggml into `tracing`, where the process's own filter decides, which is
+    /// strictly quieter than raw stderr. The shortfall is REPORTED rather than
+    /// papered over (§18.3), which is what the return value is for.
+    ///
+    /// Returns whether the policy was applied in full.
+    #[must_use = "Void cannot be fully honoured without a backend; check or explicitly ignore"]
+    pub fn install_global(self) -> bool {
+        match self {
+            Self::Full => {
+                crate::llama::install_log_tracing();
+                true
+            }
+            Self::ErrorsOnly => {
+                crate::llama::install_log_tracing_errors_only();
+                true
+            }
+            Self::Void => {
+                crate::llama::install_log_tracing_errors_only();
+                false
+            }
         }
     }
 

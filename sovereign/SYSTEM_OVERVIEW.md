@@ -4886,7 +4886,7 @@ host the migration has run. Key members: `config.toml` (`SetupConfig` — THE
 per-user config; note the accumulating `config.toml.bak-*` experiment
 siblings. **`[models]` is OPTIONAL since 2026-08-30**: absent — or present but
 naming no primary — plus a `[node] entry`, is `NodeClass::Terminal`: a full mesh
-member that holds no weights and forwards every turn and every embedding to the
+member that holds no weights and forwards the work it cannot do to the
 named entry node over HTTP. The class is DERIVED by `SetupConfig::node_class()`,
 never stored, and judged on CONTENT via `ModelsSection::is_populated()` — a
 `[models]` table the desktop wizard wrote mid-flight names nothing and is

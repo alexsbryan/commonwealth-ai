@@ -409,8 +409,10 @@ async fn aggregate_chunks(
     workspace: &WorkspaceMap,
     cfg: &CodeWalkConfig,
 ) -> Result<ChunkGroups> {
+    // TRANSIENT: same shape as structure_first — one bulk aggregate over
+    // the source, never a query.
     let index = corpus
-        .open_index_for_corpus(&cfg.source_corpus_id)
+        .open_index_for_corpus_transient(&cfg.source_corpus_id)
         .await
         .map_err(|e| {
             Error::Database(format!(

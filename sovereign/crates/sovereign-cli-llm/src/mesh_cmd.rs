@@ -2571,14 +2571,28 @@ const HELP_MESH_CREATE: sovereign_cli_shared::help::Help = sovereign_cli_shared:
     command: "svrn mesh create",
     summary: "Promote the solo mesh to a joinable mesh and print the shareable invite.",
     sections: &[
-        sovereign_cli_shared::help::HelpSection::Usage("svrn mesh create [--name <name>]"),
-        sovereign_cli_shared::help::HelpSection::Flags(&[(
-            "--name <name>",
-            "Human-readable mesh name (default: \"<host>'s Mesh\")",
-        )]),
+        sovereign_cli_shared::help::HelpSection::Usage(
+            "svrn mesh create [--name <name>] [--encrypt]",
+        ),
+        sovereign_cli_shared::help::HelpSection::Flags(&[
+            (
+                "--name <name>",
+                "Human-readable mesh name (default: \"<host>'s Mesh\")",
+            ),
+            (
+                "--encrypt",
+                "Require encryption mesh-wide: every traffic class rides iroh with no \
+                 plaintext fallback, and the plaintext client API is closed to the network",
+            ),
+        ]),
         sovereign_cli_shared::help::HelpSection::Notes(
             "Errors if a mesh already exists (e.g. from `svrn setup`'s silent solo mesh).\n\
-             In that case, run `svrn mesh rotate` to generate a new shareable key instead.",
+             In that case, run `svrn mesh rotate` to generate a new shareable key instead.\n\
+             \n\
+             `--encrypt` is inherited: every joiner picks it up from the join snapshot and \
+             gossip, and a mesh cannot be relaxed back to plaintext afterwards. Invites \
+             become short-lived, and peers reach each other only over key-authenticated \
+             iroh — which is why an encrypted mesh's `:9741` binds loopback-only.",
         ),
     ],
 };
@@ -2627,12 +2641,17 @@ async fn cmd_create(args: &[String]) -> i32 {
         return 0;
     }
     let mut name = None;
+    let mut require_encryption = false;
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
-        if arg == "--name" {
-            if let Some(n) = iter.next() {
-                name = Some(n.clone());
+        match arg.as_str() {
+            "--name" => {
+                if let Some(n) = iter.next() {
+                    name = Some(n.clone());
+                }
             }
+            "--encrypt" => require_encryption = true,
+            _ => {}
         }
     }
 
@@ -2667,15 +2686,34 @@ async fn cmd_create(args: &[String]) -> i32 {
     // Explicit create = serve remote peers → expose the client API
     // (bind non-loopback + require a bearer token).
     daemon.expose_client_api();
-    match daemon.create_mesh(&mesh_name, &node_name).await {
+    // `create_mesh_with`, not `create_mesh`: the latter hardcodes
+    // `require_encryption = false`, so until now the CLI could not create the
+    // posture this fleet actually runs — only the desktop could pass `true`.
+    // A policy the operator cannot reach from the command line is a policy
+    // nobody can test from the command line, which is how "terminals work on
+    // an encrypted mesh" stayed an untested claim.
+    match daemon
+        .create_mesh_with(&mesh_name, &node_name, require_encryption)
+        .await
+    {
         Ok(result) => {
             print_mesh_share(
-                "Mesh created.",
+                if require_encryption {
+                    "Mesh created (encrypted)."
+                } else {
+                    "Mesh created."
+                },
                 &result.mesh_name,
                 &result.join_key,
                 result.client_token.as_deref(),
                 Some(&result.join_link),
             );
+            if require_encryption {
+                println!(
+                    "  Encryption is mesh-wide and inherited: joiners cannot opt out, \n\
+                     \x20 the plaintext client API is closed to the network, and invites expire."
+                );
+            }
             0
         }
         Err(e) => {
@@ -2787,11 +2825,20 @@ async fn cmd_join(args: &[String]) -> i32 {
     // serves gossip is the one that gets the adopted mesh.
     println!();
     println!("Joining mesh...");
-    if daemon_listening_on(9741).await {
-        return join_via_running_daemon(arg, &node_name).await;
+    // `daemon_client_port()`, never a literal. This file already had that
+    // accessor and three other call sites already used it; THIS one — the only
+    // command here that mutates mesh membership — did not. On a box whose
+    // config names another port (a second daemon, a sandboxed data dir, the
+    // fleet's own `:9744` node) the probe below answered for a DIFFERENT
+    // daemon, and the join was then POSTed to it: the wrong process adopts the
+    // mesh, parks the one it was in, and gossips the change. One accessor per
+    // path (ARCH §10.6), and the consequence of the exception was the loudest.
+    let port = daemon_client_port();
+    if daemon_listening_on(port).await {
+        return join_via_running_daemon(arg, &node_name, port).await;
     }
 
-    eprintln!("(no daemon detected on :9741 — running the join in-process)");
+    eprintln!("(no daemon detected on :{port} — running the join in-process)");
     let daemon = EmbeddedDaemon::new(
         sovereign_root(),
         one_shot_setup_config(),
@@ -2843,8 +2890,8 @@ pub(crate) async fn daemon_listening_on(port: u16) -> bool {
 /// surface the response. Mirrors the success / failure output of the
 /// in-process path so the user can't tell which one ran (and shouldn't
 /// have to).
-async fn join_via_running_daemon(arg: &str, node_name: &str) -> i32 {
-    let url = "http://127.0.0.1:9741/v1/mesh/join";
+async fn join_via_running_daemon(arg: &str, node_name: &str, port: u16) -> i32 {
+    let url = format!("http://127.0.0.1:{port}/v1/mesh/join");
     let body = serde_json::json!({
         "key_or_url": arg,
         "node_name": node_name,
@@ -2859,7 +2906,7 @@ async fn join_via_running_daemon(arg: &str, node_name: &str) -> i32 {
             return 1;
         }
     };
-    let resp = match client.post(url).json(&body).send().await {
+    let resp = match client.post(&url).json(&body).send().await {
         Ok(r) => r,
         Err(e) => {
             eprintln!("Failed to reach running daemon at {url}: {e}");

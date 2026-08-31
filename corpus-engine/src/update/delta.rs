@@ -236,7 +236,15 @@ impl CorpusUpdater {
         use crate::enrichment::atlas::writer::{read_atlas_atoms, ATLAS_DIRNAME};
         use crate::error::Error;
 
-        let index = self.engine.open_index_for_corpus(corpus_id).await?;
+        // TRANSIENT throughout this file: every phase here APPLIES a delta,
+        // it never answers a query. Opening through the caching wrapper made
+        // one newsworthy tick pin its source corpus's LanceDB handles for the
+        // life of the daemon (185 of 256 fds on `wikipedia`, measured
+        // 2026-08-31). See `open_index_for_corpus_transient`.
+        let index = self
+            .engine
+            .open_index_for_corpus_transient(corpus_id)
+            .await?;
         if !index.atlas_incremental_enabled() {
             return Ok(());
         }
@@ -529,7 +537,10 @@ impl CorpusUpdater {
         >,
     ) -> Result<()> {
         let total = diff.deleted_documents.len();
-        let index = self.engine.open_index_for_corpus(corpus_id).await?;
+        let index = self
+            .engine
+            .open_index_for_corpus_transient(corpus_id)
+            .await?;
 
         for (i, doc_id) in diff.deleted_documents.iter().enumerate() {
             if log.deleted_ids.contains(doc_id) {
@@ -562,7 +573,10 @@ impl CorpusUpdater {
     ) -> Result<()> {
         let total = diff.updated_documents.len();
         let recipe = self.engine.load_recipe(corpus_id).await?;
-        let index = self.engine.open_index_for_corpus(corpus_id).await?;
+        let index = self
+            .engine
+            .open_index_for_corpus_transient(corpus_id)
+            .await?;
 
         for (i, doc_id) in diff.updated_documents.iter().enumerate() {
             if log.updated_ids.contains(doc_id) {
@@ -611,7 +625,10 @@ impl CorpusUpdater {
     ) -> Result<()> {
         let total = diff.new_documents.len();
         let recipe = self.engine.load_recipe(corpus_id).await?;
-        let index = self.engine.open_index_for_corpus(corpus_id).await?;
+        let index = self
+            .engine
+            .open_index_for_corpus_transient(corpus_id)
+            .await?;
 
         for (i, doc_id) in diff.new_documents.iter().enumerate() {
             if log.added_ids.contains(doc_id) {

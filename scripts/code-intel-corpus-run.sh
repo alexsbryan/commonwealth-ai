@@ -86,6 +86,31 @@ say "cache on entry: $PRIOR summaries (these are reused, not regenerated)"
 export SOVEREIGN_ENRICH_SKIP_INDEX=1
 export RUST_LOG="${RUST_LOG:-info}"
 
+# CONCURRENCY 4, NOT THE BUILT-IN 8 — headroom, not the repair.
+#
+# On 2026-08-31 a run at the default 8 died with `Too many open files
+# (os error 24)`; the daemon's listener stopped accepting, it exited 104 for a
+# relaunch that never came, and the pass still reported exit 0 with 3,565 of
+# 4,454 symbols failed.
+#
+# THE FAN-OUT WAS NOT THE CAUSE and 4 is not what fixed it. Measured with the
+# enrichment stopped, the daemon alone held 244 of its 256 descriptors and 185
+# of those were ONE corpus's Lance index files — the newsworthy tick opened
+# `wikipedia` through the caching by-id wrapper, whose cache has no eviction,
+# so a single tick pinned them for the life of the process. That is fixed at
+# the source: the walkers now call
+# `CorpusEngine::open_index_for_corpus_transient`, guarded by
+# `tests/main/index_cache_residency.rs`. A daemon started on that build gets
+# those ~185 descriptors back.
+#
+# 4 stays as cheap headroom, because 256 is still launchd's default soft limit
+# (`launchctl limit maxfiles`) and com.svrnmesh.daemon.plist declares no
+# SoftResourceLimits. Raising NumberOfFiles there remains the belt to this
+# braces, and is worth doing before this corpus grows again.
+#
+# Override to measure: SOVEREIGN_CODE_INTEL_CONCURRENCY=8 ./scripts/code-intel-corpus-run.sh
+export SOVEREIGN_CODE_INTEL_CONCURRENCY="${SOVEREIGN_CODE_INTEL_CONCURRENCY:-4}"
+
 say "starting generation — checkpoints land every 200 symbols"
 START=$(date +%s)
 cd "$REPO" || exit 2

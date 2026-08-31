@@ -351,7 +351,7 @@ Run and curate corpus ingestion recipes.
 | Subcommand | Description |
 |---|---|
 | `list` | List all corpora available in the registry. `--offline` skips live registry refresh |
-| `test <path>` | Run the full test harness against a recipe file. Flags: `--sample-size N`, `--output <path>`, `--offline`, `--verbose`, `--params k=v[,...]`, `--params-file <json>` |
+| `test <path>` | Run the full test harness against a recipe file. Flags: `--sample-size N`, `--output <path>`, `--params k=v[,...]`, `--params-file <json>` |
 | `validate <path>` | Validate recipe fields without downloading data. `--offline` skips registry fetch |
 | `publish <path>` | Add a recipe to `~/.svrnmesh/recipes/registry.toml`. `--submit-pr` also drafts a community-registry PR via `gh` |
 
@@ -637,10 +637,10 @@ Feature-layer orchestration — the Agent Task Orchestration System CLI. See [AT
 | `status [<id>]` | Feature list, or detailed status + artifact checklist for one feature |
 | `promote <note-id> --to feature\|global` | Lift a note to a wider scope |
 | `diff <feature-id> [--ordinal N]` | Side-by-side per-tool activity across A/B driver runs |
-| `run-ab <feature-id> --brief <path> [--drivers claude,opencode]` | Run each driver against the same milestone, then diff |
+| `run-ab <feature-id> --brief <path> [--driver <name>]` | Run each driver against the same milestone, then diff |
 | `probe-driver [--url <endpoint>]` | Trivial tool-use sanity check against an OpenAI-compatible server |
-| `report <feature-id> [--section ...] [--out <path>]` | Render milestone / red-team / epistemic / all reports |
-| `teardown <feature-id> [--auto] [--dry-run]` | Interactive note-classification pass; writes `epistemic-report.md` |
+| `report <feature-id>` | Render milestone / red-team / epistemic / all reports |
+| `teardown <feature-id> [--dry-run]` | Interactive note-classification pass; writes `epistemic-report.md` |
 | `feature approve <id>` | Commonwealth-native approval fallback (no git commit required) |
 | `spec diff <id>` | Unified diff of current spec vs. approved content |
 | `spec accept <id> [--reason <text>]` | Accept current spec as new approved content, log a `deviation` note |

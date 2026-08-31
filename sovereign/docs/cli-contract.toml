@@ -670,7 +670,7 @@ flags = [{ name = "--ordinal", takes_value = true }]
 path = "atos run-ab"
 binary = "dev"
 feature = "dev-tools"
-flags = [{ name = "--brief", takes_value = true }, { name = "--drivers", takes_value = true }]
+flags = [{ name = "--brief", takes_value = true }, { name = "--driver", takes_value = true }]
 [[command]]
 path = "atos probe-driver"
 binary = "dev"
@@ -682,13 +682,14 @@ path = "atos report"
 binary = "dev"
 feature = "dev-tools"
 probe = "no-args"
-flags = [{ name = "--section", takes_value = true }, { name = "--out", takes_value = true }]
+# No flags: cmd_report parses positionals only (atos_cmd/status.rs). `--section`
+# and `--out` were promised here and in CLI_REFERENCE but silently ignored.
 [[command]]
 path = "atos teardown"
 binary = "dev"
 feature = "dev-tools"
 probe = "no-args"
-flags = [{ name = "--auto" }, { name = "--dry-run" }]
+flags = [{ name = "--dry-run" }]  # --auto was promised but never parsed
 [[command]]
 path = "atos feature"
 binary = "dev"
@@ -784,8 +785,6 @@ classification = "daemon"
 flags = [
   { name = "--sample-size", takes_value = true },
   { name = "--output", takes_value = true },
-  { name = "--offline" },
-  { name = "--verbose" },
   { name = "--params", takes_value = true },
   { name = "--params-file", takes_value = true },
 ]

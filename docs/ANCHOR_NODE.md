@@ -112,8 +112,12 @@ edits off the network, and the anchor still takes the heavy turns.
 
 An IoT device, a small VM, a machine you don't want carrying weights: set
 it up as a **terminal** instead. It is a full member — mesh key, gossip,
-pooled knowledge, ledger — that simply holds nothing and routes every
-turn *and every embedding* to the anchor.
+pooled knowledge, ledger — that simply holds nothing and sends the work
+it cannot do to the anchor. Embeddings always go there. Chat is routed
+by the mesh once they have joined, which lands on the anchor because
+that is who advertises the model — and forwards to the bound entry node
+before they join, which is what makes `svrn setup --terminal` enough to
+get answers on its own.
 
 Hand them the **same join link** you hand every other member — the
 `join link:` line from `svrn mesh status`. There is no second artifact

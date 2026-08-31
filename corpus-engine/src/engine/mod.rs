@@ -2498,9 +2498,38 @@ impl CorpusEngine {
 
     /// Open an index by corpus ID. Convenience wrapper for tools that
     /// don't want to construct a path manually.
+    ///
+    /// This is the QUERY path: the handle it returns is admitted to the
+    /// cache and stays resident for the life of the process. A caller
+    /// that reads a corpus once on a timer wants
+    /// [`Self::open_index_for_corpus_transient`] instead.
     pub async fn open_index_for_corpus(&self, corpus_id: &str) -> Result<CorpusIndex> {
         let path = self.index_dir.join(corpus_id);
         self.open_index(&path).await
+    }
+
+    /// Open an index by corpus ID WITHOUT admitting it to the query-path
+    /// cache — the by-id spelling of [`Self::open_index_transient`].
+    ///
+    /// The pair already existed for paths; it did not for corpus ids, and
+    /// the convenience wrapper above is what most walkers reach for. That
+    /// gap is not theoretical. Measured on this host 2026-08-31: the
+    /// newsworthy tick opened `wikipedia` through the caching wrapper to
+    /// stream it once, and the daemon then held 185 of its 256 file
+    /// descriptors on that one corpus's `chunks.lance/_indices/*` for the
+    /// rest of the process's life — 30 minutes after a fresh start, and
+    /// again on every later tick. A code-intel enrichment sharing the
+    /// daemon got `Too many open files (os error 24)`, its listener
+    /// dropped, and the pass reported exit 0 with 3,565 of 4,454 symbols
+    /// failed.
+    ///
+    /// A cache HIT is still served from the cache, exactly as in
+    /// `open_index_transient`: a corpus someone genuinely queries keeps
+    /// its hot handle, and only the INSERT is suppressed. So this is safe
+    /// to reach for whenever the read is a sweep rather than an answer.
+    pub async fn open_index_for_corpus_transient(&self, corpus_id: &str) -> Result<CorpusIndex> {
+        let path = self.index_dir.join(corpus_id);
+        self.open_index_transient(&path).await
     }
 
     /// ANN search over a corpus's derived RAPTOR summary-node table

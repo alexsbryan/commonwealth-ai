@@ -143,8 +143,11 @@ impl AtlasIngestion for StructureFirstIngestion {
                 source_corpus = %cfg.source_corpus_id,
                 "structure_first: opening source corpus"
             );
+            // TRANSIENT: this streams the source once to rebuild the
+            // atlas and never answers a query, so it must not pin the
+            // corpus's LanceDB handles for the life of the daemon.
             let index = corpus
-                .open_index_for_corpus(&cfg.source_corpus_id)
+                .open_index_for_corpus_transient(&cfg.source_corpus_id)
                 .await
                 .map_err(|e| {
                     Error::Database(format!(

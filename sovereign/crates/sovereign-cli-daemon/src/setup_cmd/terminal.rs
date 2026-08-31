@@ -244,7 +244,7 @@ async fn run_terminal_join(
     println!("  {}", "\u{2500}".repeat(54));
     println!();
     println!("  This machine will hold NO models. It joins the mesh as a full");
-    println!("  member and routes every turn and every embedding to whichever");
+    println!("  member and routes the work it cannot do to whichever");
     println!("  member holds the weights.");
     println!();
 
@@ -572,7 +572,7 @@ async fn run_terminal_address(entry_raw: &str, opts: &Opts) -> i32 {
     println!("  {}", "─".repeat(54));
     println!();
     println!("  This machine will hold NO models. It joins the mesh as a full");
-    println!("  member and routes every turn and every embedding to:");
+    println!("  member and routes the work it cannot do to:");
     println!("      {origin}");
     println!();
 

@@ -75,10 +75,33 @@ turn and re-resolves on the next. Stated in the code. Left until a real
 multi-homed terminal shows it is not enough, because the alternative is a second
 implementation of candidate ordering that `peer_inference` already owns (§10.6).
 
-**Verified.** Unit-level only at time of writing: the resolver's seven tests
-(follows a moved address, refuses an impostor at the right address, no fallback
-to another peer, empty mesh, ranking honoured, id parsing). **The two-machine
-run is NOT done** — see `MESH_N4_TOPOLOGY.md` §4.5.
+**Verified, 2026-08-31, co-located on an ENCRYPTED mesh.** Two sandboxed
+daemons, `svrn mesh create --encrypt` (`require_encryption=true`, all seven
+classes iroh-REQUIRED including `inference`, no plaintext fallback):
+
+- `svrn setup --terminal "sovereign://join/…"` joined, found the holder, wrote a
+  config carrying `entry_node` and NO address, and proved a served turn. Exit 0.
+- The resolver was observed choosing the encrypted path:
+  `terminal: resolved entry node … endpoint=http://127.0.0.1:56365/v1` — an
+  iroh BRIDGE port, which is the only ingress such a mesh has. A 1024-dim
+  embedding came back through it.
+- The terminal advertised `[]` on `/oicp/v1/capabilities`, surfaced `primary`
+  on its own `/v1/models`, and reported `node_class: terminal` with the bound
+  identity on `/v1/mesh/status`.
+
+That last bullet is also the demonstration behind the `serving_locus` change:
+the resolved address really is `127.0.0.1`, so the old string test would have
+answered `ForwardsOnBox` for a turn leaving the process.
+
+**Corrected by the same run:** the binding does NOT carry "every turn". A JOINED
+terminal's chat resolves from the holder's advertised manifest through
+`provider_for_peer` and never reaches the resolver; the binding carries
+EMBEDDINGS always, and chat only when no peer advertises the name (the un-joined
+case). Docs and the module header now say so.
+
+**Still NOT done: the two-machine run.** Everything above is co-located, so
+`ServingLocus::ForwardsOffBox` and the off-box `local_only` refusal remain
+unit-tested only — see `MESH_N4_TOPOLOGY.md` §4.5.
 
 ### `SOVEREIGN_RPC_WORKER_PROCESS` — shipped OFF (2026-08-29)
 

@@ -41,14 +41,14 @@ fn sovereign() -> Command {
     cmd
 }
 
-fn run(args: &[&str]) -> Output {
+pub(crate) fn run(args: &[&str]) -> Output {
     sovereign()
         .args(args)
         .output()
         .expect("spawn sovereign-cli")
 }
 
-fn combined(out: &Output) -> String {
+pub(crate) fn combined(out: &Output) -> String {
     format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
@@ -59,7 +59,7 @@ fn combined(out: &Output) -> String {
 /// The flat verbs exec sibling binaries (`-dev`, `-llm`, `-daemon`). A bare
 /// `cargo test` without a prior `cargo build --bins` can't exercise dispatch,
 /// so skip rather than false-fail — the same gate `aliases.rs` uses.
-fn siblings_built() -> bool {
+pub(crate) fn siblings_built() -> bool {
     let dir = std::path::Path::new(env!("CARGO_BIN_EXE_sovereign-cli"))
         .parent()
         .expect("CARGO_BIN_EXE_sovereign-cli has a parent dir");
@@ -81,15 +81,15 @@ macro_rules! require_siblings {
     };
 }
 
-fn contract() -> Contract {
+pub(crate) fn contract() -> Contract {
     Contract::load_default().expect("docs/cli-contract.toml must parse")
 }
 
 /// Verbs whose subcommands are not safe to offline-probe (see module docs).
 /// Only referenced by the dev-tools Direction-1 probe (the default build gates
 /// these before any handler runs, so they're safe to assert there).
-#[cfg(feature = "dev-tools")]
-const UNPROBED_VERBS: &[&str] = &["atos"];
+#[cfg_attr(not(feature = "dev-tools"), allow(dead_code))]
+pub(crate) const UNPROBED_VERBS: &[&str] = &["atos"];
 
 /// Distinctive prefix of the dispatcher's top-level usage banner (HELP.summary
 /// in main.rs). It appears only when a verb fell through to `print_usage` —
@@ -110,17 +110,17 @@ fn looks_like_miss(text: &str) -> bool {
         .any(|line| line.contains("unknown") && line.contains("subcommand"))
 }
 
-fn verb_of(path: &str) -> &str {
+pub(crate) fn verb_of(path: &str) -> &str {
     path.split_whitespace().next().unwrap_or("")
 }
 
-fn help_argv(path: &str) -> Vec<String> {
+pub(crate) fn help_argv(path: &str) -> Vec<String> {
     let mut a: Vec<String> = path.split_whitespace().map(String::from).collect();
     a.push("--help".to_string());
     a
 }
 
-fn refs(v: &[String]) -> Vec<&str> {
+pub(crate) fn refs(v: &[String]) -> Vec<&str> {
     v.iter().map(String::as_str).collect()
 }
 

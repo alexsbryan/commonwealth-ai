@@ -5,12 +5,16 @@
 //! a client on that route is entitled to assume the conversation it
 //! sent is the conversation the model sees. Several passes in
 //! [`crate::frontdoor`] do not hold that assumption: some APPEND a
-//! synthetic message, some REWRITE an emitted tool call, and one
-//! installs a token-level sampler constraint. Each was cut against a
-//! real failure and each is defensible — but collectively they are the
+//! synthetic message, one DELETES history and REPLACES the caller's
+//! system prompt, some REWRITE an emitted tool call, and one installs
+//! a token-level sampler constraint. Each was cut against a real
+//! failure and each is defensible — but collectively they are the
 //! difference between this daemon and bare llama.cpp, and an operator
 //! running a shared anchor node should be able to see and set that
 //! difference in one place rather than by reading a 5,800-line module.
+//!
+//! What they do to a real turn is pinned, per fixture, by
+//! `tests/main/turn_reshape_fidelity.rs`.
 //!
 //! This module is that one place. Two switches, opposite defaults,
 //! each named for what it governs.
@@ -51,10 +55,23 @@ fn opt_in(raw: Option<&str>) -> bool {
 /// ON; `SOVEREIGN_FRONTDOOR_RESHAPE=0` serves the conversation and the
 /// model's output through unmodified.
 ///
-/// Governs, on the request, the three runtime nudges — each APPENDS a
-/// synthetic message the client never sent — and, on the response, the
-/// heredoc and absolute-path canonicalizers, which REWRITE arguments of
-/// a tool call the model already emitted.
+/// Governs, on the request, the three runtime nudges, and on the
+/// response the heredoc and absolute-path canonicalizers, which REWRITE
+/// arguments of a tool call the model already emitted.
+///
+/// The nudges do more than append. Failure-recovery deletes the failed
+/// call from history before injecting its banner, and read-attractor
+/// deletes every read-classified tool_call/result pair, drops the
+/// frontdoor's own compressed-history message, and replaces the
+/// caller's system prompt with a write-mandate. Measured on the
+/// committed gym turns: fixture 007 arrives with twelve messages and
+/// reaches the model with four. Off, all five are skipped and the
+/// conversation is served through as sent.
+///
+/// The three share an idempotency gate, so exactly one fires per turn.
+/// That ordering is load-bearing rather than incidental — on the only
+/// committed turn whose tail repeats, failure-recovery claims it and
+/// anti-repetition never runs.
 ///
 /// Defaults on because all five key on the Codex/opencode contract
 /// (`exec_command` calls, the literal `Process exited with code N`

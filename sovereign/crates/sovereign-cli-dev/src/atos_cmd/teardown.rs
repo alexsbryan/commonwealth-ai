@@ -3,11 +3,15 @@
 //! pass that ends with a frozen epistemic-report.md and the feature
 //! marked `completed`.
 //!
-//! Default: interactive. `--auto`: retire everything (no promotions —
-//! promotions are cheap-but-consequential so auto-promote is
-//! deliberately absent until a future Fast-slot suggestion pass with
-//! a confirmation gate lands). `--dry-run`: print what would happen
-//! without mutating.
+//! Default: interactive. `--dry-run`: print what would happen without
+//! mutating.
+//!
+//! An `--auto` flag ("retire everything, no promotions") was described
+//! here and promised in `cli-contract.toml` and `CLI_REFERENCE.md`, but
+//! the shared parser in `super::args` never knew it: it reached
+//! `parse_args`, matched nothing, and was silently dropped. Removed
+//! from all three in favour of the behaviour that exists. If it is
+//! wanted, it has to be parsed before it is promised.
 
 use sovereign_atos::AtosOrchestrator;
 

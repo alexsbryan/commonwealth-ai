@@ -1,8 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The `terminal` node's binding to its entry node, resolved per turn.
 //!
-//! A terminal holds no weights and forwards every turn and every embedding to
-//! one bound node. Until 2026-08-31 that bind was an `http://host:9741/v1`
+//! A terminal holds no weights and forwards the work it cannot do to one bound
+//! node.
+//!
+//! **What the binding actually carries — measured 2026-08-31, not assumed.**
+//! EMBEDDINGS always: the daemon's embed fn is the provider, and on a terminal
+//! that provider IS this binding. CHAT only when no peer advertises the
+//! requested name, which is the UN-JOINED case (`peer_inference.rs:1928`).
+//! Once a terminal has joined, `locate_named_model` finds `primary` on the
+//! holder's advertised manifest and routes through `provider_for_peer`, so the
+//! hot chat path never reaches here. Both end at the same machine over the same
+//! transport, which is why "every turn and every embedding" read as true for so
+//! long; they are different code, and the loose phrasing sends the next reader
+//! to the wrong file.
+//!
+//! Until 2026-08-31 the bind was an `http://host:9741/v1`
 //! string written into `config.toml`, which ARCH §7.5 forbids for a stable
 //! thing ("the address is a mutable attribute of the thing, never its name")
 //! and which this mesh has a scar for — an iroh bridge's loopback port used as
