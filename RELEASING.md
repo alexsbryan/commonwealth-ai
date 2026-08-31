@@ -15,10 +15,22 @@ Each release is its **own** GitHub Release keyed to its tag, so `cli-v0.1.18`
 and `desktop-v0.1.18` are separate release pages with separate assets.
 Different tag prefixes mean they never fire together.
 
-**All three publish to the public shelf repo** (`alexsbryan/svrnmesh-releases`),
-not to this source repo — assets on a private repo aren't anonymously
-fetchable, which would break `install.sh`, the landing-page downloads, and the
-desktop auto-updater. Override with `RELEASES_REPO` when testing.
+**All three publish to this repo** (`alexsbryan/commonwealth-ai`). Override
+with `RELEASES_REPO` when testing.
+
+Until 2026-08-31 they published to a separate public shelf,
+`alexsbryan/svrnmesh-releases`, because a private repo's release assets aren't
+anonymously fetchable — which would have broken `install.sh`, the landing-page
+downloads, and the desktop auto-updater. The repo is open source now, so that
+indirection is retired. **The shelf still holds the newest published assets of
+every stream** (`desktop-v0.4.0`, `cli-v0.6.0`, `vscode-v0.3.0`) until the next
+release is cut here, so every consumer reads BOTH repos and takes the max
+semver across them: `landing/api/desktop/_releases.js` for the two edge
+endpoints, the `SHELF_REPO` fallback in `landing/install.sh`. This repo also
+carries stale `desktop-v0.1.19` / `cli-v0.1.19` tags from July — which is why
+the rule is max-semver-across and not first-repo-that-answers. Retire the
+fallback (delete `SHELF_REPO`, set `GITHUB_FALLBACK_REPO=""` in the Vercel
+project) once the newest release of every stream lives here.
 
 **The tag prefix is load-bearing, and every consumer must filter on its own.**
 `landing/install.sh` takes the max-semver `cli-v*`; `landing/api/desktop/*.js`
@@ -26,7 +38,7 @@ take the max-semver non-draft `desktop-v*`. Neither uses GitHub's
 `/releases/latest`, which is a single repo-global pointer shared by all three
 streams. A new artifact stream on this shelf **must** be invisible to the
 existing resolvers — verify that before publishing, and publish with
-`--latest=false` so the shelf's "Latest" badge keeps pointing humans at the
+`--latest=false` so the repo's "Latest" badge keeps pointing humans at the
 desktop app rather than following whatever shipped most recently.
 
 The CLI tarball contains all three product binaries the dispatcher needs —
@@ -300,7 +312,7 @@ mismatch. To confirm a published release by hand:
 ```sh
 v=0.3.6   # the version you just published
 curl -sL -o /tmp/a.tar.gz \
-  "https://github.com/alexsbryan/svrnmesh-releases/releases/download/desktop-v$v/svrnmesh_${v}_aarch64.app.tar.gz"
+  "https://github.com/alexsbryan/commonwealth-ai/releases/download/desktop-v$v/svrnmesh_${v}_aarch64.app.tar.gz"
 tar -xzOf /tmp/a.tar.gz '*.app/Contents/Info.plist' \
   | plutil -extract CFBundleShortVersionString raw -o - -    # MUST print $v
 ```
@@ -324,14 +336,14 @@ Repackage the published bundle instead. This is what fixed desktop-v0.3.5
 v=0.3.5
 for arch in aarch64 x64; do
   curl -sL -o "$arch.dmg" \
-    "https://github.com/alexsbryan/svrnmesh-releases/releases/download/desktop-v$v/svrnmesh_${v}_${arch}.dmg"
+    "https://github.com/alexsbryan/commonwealth-ai/releases/download/desktop-v$v/svrnmesh_${v}_${arch}.dmg"
   hdiutil attach "$arch.dmg" -nobrowse -readonly -mountpoint "mnt-$arch"
   ditto "mnt-$arch/svrnmesh.app" "stage-$arch/svrnmesh.app"   # ditto: preserves perms + signature
   hdiutil detach "mnt-$arch"
   ( cd "stage-$arch" && COPYFILE_DISABLE=1 tar -czf "../svrnmesh_${v}_${arch}.app.tar.gz" svrnmesh.app )
   cargo tauri signer sign "svrnmesh_${v}_${arch}.app.tar.gz"   # reads TAURI_SIGNING_PRIVATE_KEY{,_PASSWORD}
 done
-gh release upload "desktop-v$v" --repo alexsbryan/svrnmesh-releases --clobber \
+gh release upload "desktop-v$v" --repo alexsbryan/commonwealth-ai --clobber \
   svrnmesh_${v}_*.app.tar.gz svrnmesh_${v}_*.app.tar.gz.sig
 ```
 

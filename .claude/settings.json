@@ -73,6 +73,19 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "command": "sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/format-edited-file.sh",
+            "type": "command",
+            "timeout": 15,
+            "statusMessage": "Formatting edited file"
+          }
+        ]
+      }
+    ],
     "PreCompact": [
       {
         "hooks": [

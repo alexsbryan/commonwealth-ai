@@ -797,8 +797,8 @@ async fn verify(port: u16) -> Result<Verified, String> {
 // ─── Editor extension ──────────────────────────────────────────────
 
 /// Where a user without a source checkout gets the `.vsix`. The extension
-/// ships on the public shelf under its own `vscode-v*` tag stream (see
-/// RELEASING.md). Same shelf as `update_cmd::REPO` — keep them in step.
+/// ships from the public source repo under its own `vscode-v*` tag stream
+/// (see RELEASING.md). Same repo as `update_cmd::REPO` — keep them in step.
 ///
 /// This path matters more than it looks: anyone who installed from the CLI
 /// tarball has no `packages/vscode-sovereign` to build from, so this banner
@@ -810,7 +810,14 @@ async fn verify(port: u16) -> Result<Verified, String> {
 /// 2026-07-29), so a "helpful" filtered link is an empty page — worse than
 /// a list the reader can scan. There is no per-prefix `latest` pointer
 /// either; `/releases/latest` is repo-global and belongs to the desktop app.
-const VSIX_RELEASES_URL: &str = "https://github.com/alexsbryan/svrnmesh-releases/releases";
+const VSIX_RELEASES_URL: &str = "https://github.com/alexsbryan/commonwealth-ai/releases";
+
+/// The retired public shelf, which existed only while the source repo was
+/// private. Every `vscode-v*` release through v0.3.0 lives there and nowhere
+/// else, so the banner names it too until the next extension release is cut
+/// from the source repo. Drop this with the `SHELF_REPO` fallback in
+/// `landing/install.sh` — see RELEASING.md.
+const VSIX_SHELF_URL: &str = "https://github.com/alexsbryan/svrnmesh-releases/releases";
 
 enum EditorOutcome {
     Installed {
@@ -1109,9 +1116,10 @@ fn print_decision(plan: &Plan, v: &Verified, editor: &EditorOutcome, scip_popula
                 "            http://127.0.0.1:{}/v1/completions",
                 plan.client_port
             );
-            println!("          To get the extension: open the release shelf, pick the newest");
+            println!("          To get the extension: open the releases page, pick the newest");
             println!("          `vscode-v*` release, download its `sovereign-fim-*.vsix`, then:");
             println!("            {VSIX_RELEASES_URL}");
+            println!("            (published before 2026-08-31: {VSIX_SHELF_URL})");
             println!("            code --install-extension <downloaded>.vsix");
             println!("          From a source checkout you can build it instead:");
             println!("            cd packages/vscode-sovereign && npm install && npm run package");
@@ -1304,13 +1312,13 @@ mod tests {
     /// The no-source-checkout banner is the only install instruction a
     /// tarball user ever sees, and for months it pointed at a tag prefix
     /// (`svrn-fim-*`) that no release has ever used. Nothing failed loudly
-    /// — the text just sent people hunting. Pin the shelf so a future edit
+    /// — the text just sent people hunting. Pin the repo so a future edit
     /// can't quietly reintroduce a dead pointer.
     #[test]
-    fn vsix_releases_url_points_at_the_public_shelf() {
+    fn vsix_releases_url_points_at_the_public_release_repo() {
         assert!(
-            VSIX_RELEASES_URL.starts_with("https://github.com/alexsbryan/svrnmesh-releases"),
-            "the .vsix must be sourced from the public shelf, not the private source repo: {VSIX_RELEASES_URL}"
+            VSIX_RELEASES_URL.starts_with("https://github.com/alexsbryan/commonwealth-ai"),
+            "the .vsix must be sourced from the public release repo: {VSIX_RELEASES_URL}"
         );
         assert!(
             VSIX_RELEASES_URL.ends_with("/releases"),
@@ -1319,6 +1327,10 @@ mod tests {
         assert!(
             !VSIX_RELEASES_URL.contains("svrn-fim"),
             "`svrn-fim-*` is not a real tag stream; the extension ships under `vscode-v*`"
+        );
+        assert!(
+            VSIX_SHELF_URL.ends_with("/releases"),
+            "the shelf pointer must be the unfiltered list too: {VSIX_SHELF_URL}"
         );
     }
 

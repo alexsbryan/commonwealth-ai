@@ -30,17 +30,11 @@
 // probes, and any future build whose URL template adds `{{arch}}`), in which
 // case the manifest carries just that one arch.
 //
-// Env vars (Vercel project settings; both have working defaults):
-//   GITHUB_OWNER   -- repo owner (default "alexsbryan")
-//   GITHUB_REPO    -- repo name (default "svrnmesh-releases" — the PUBLIC
-//                     releases shelf; the source repo is invite-only during
-//                     the alpha and its assets aren't anonymously fetchable)
-//
-// Optional:
-//   GITHUB_TOKEN   -- raises the API rate limit from 60/h to 5000/h. STRONGLY
-//                     recommended: the anonymous 60/h is shared across Vercel's
-//                     egress IPs, so under any load GitHub 403s -> this endpoint
-//                     502s -> the app silently shows "up to date". Set it.
+// Which repo the assets come from, the retired-shelf fallback, and the env
+// that configures both live in `_releases.js`, shared with the download
+// endpoint — one decider, not two.
+
+import { isNewer, latestRelease } from './_releases.js';
 
 // Combined Tauri targets -> regex matching the bundle artifact name.
 // Names track productName in tauri.conf.json ("svrnmesh" since the 2026-06-29
@@ -85,62 +79,26 @@ export default async function handler(req) {
     return text(`unsupported target: ${rawTarget}`, 400);
   }
 
-  const owner = process.env.GITHUB_OWNER || 'alexsbryan';
-  const repo  = process.env.GITHUB_REPO  || 'svrnmesh-releases';
-  if (!owner || !repo) {
-    console.error('[updater] GITHUB_OWNER / GITHUB_REPO not configured');
-    return text('updater backend not configured', 500);
-  }
-
-  const headers = {
-    'accept': 'application/vnd.github+json',
-    'user-agent': 'sovereign-updater/1',
-  };
-  if (process.env.GITHUB_TOKEN) {
-    headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
-  }
-
-  // GitHub's /releases endpoint returns up to 30 most recent releases,
-  // newest first. We filter for `desktop-v*` tags (the repo also ships
-  // `cli-v*` and `daemon-v*` releases on separate cadences) and skip
-  // drafts so a partial cut doesn't accidentally roll out.
-  const releasesUrl = `https://api.github.com/repos/${owner}/${repo}/releases?per_page=30`;
-  let releases;
+  // Highest-semver non-draft `desktop-v*` across the release repos. Drafts
+  // are skipped so a partial cut doesn't roll out; prereleases are kept —
+  // the desktop stream has used them for staged cuts and the version compare
+  // below is the real gate. Why max-semver and not list order: `_releases.js`.
+  let latest;
   try {
-    const res = await fetch(releasesUrl, { headers });
-    if (!res.ok) {
-      console.error('[updater] github releases', { status: res.status });
-      return text(`github api ${res.status}`, 502);
-    }
-    releases = await res.json();
+    latest = await latestRelease({
+      tagPrefix: 'desktop-v',
+      includePrerelease: true,
+      perPage: 30,
+      userAgent: 'sovereign-updater/1',
+    });
   } catch (e) {
     console.error('[updater] github fetch failed', e);
     return text('github api unreachable', 502);
   }
-
-  // Pick the highest SEMVER among non-draft `desktop-v*` releases — do NOT
-  // trust GitHub's list order. GitHub sorts `/releases` by `created_at` desc,
-  // but every release here shares an identical created_at (it's derived from
-  // the tagged commit's date, and our release tags cluster on one commit), so
-  // the order among them is an unstable internal tiebreak. Relying on
-  // `.find(first desktop-v*)` handed an app 0.2.0 instead of 0.2.1 during the
-  // replication window right after publish (2026-07-15). Max-by-semver is
-  // deterministic regardless of ordering or eventual-consistency lag.
-  let latest = null;
-  let latestVersion = null;
-  for (const r of releases) {
-    if (r.draft || typeof r.tag_name !== 'string' || !r.tag_name.startsWith('desktop-v')) {
-      continue;
-    }
-    const v = r.tag_name.replace(/^desktop-v/, '');
-    if (latestVersion === null || isNewer(v, latestVersion)) {
-      latest = r;
-      latestVersion = v;
-    }
-  }
   if (!latest) {
     return text('no desktop release found', 404);
   }
+  const { release, version: latestVersion } = latest;
   if (!isNewer(latestVersion, currentVersion)) {
     // The plugin treats 204 as "you're up to date". This is the
     // happy-path response for every poll after the first install.
@@ -158,8 +116,8 @@ export default async function handler(req) {
   const missing = [];
   for (const t of wantedTargets) {
     const pattern = TARGET_TO_ASSET_PATTERN[t];
-    const asset = latest.assets.find(a => pattern.test(a.name));
-    const sigAsset = asset && latest.assets.find(a => a.name === `${asset.name}.sig`);
+    const asset = release.assets.find(a => pattern.test(a.name));
+    const sigAsset = asset && release.assets.find(a => a.name === `${asset.name}.sig`);
     if (!asset || !sigAsset) {
       missing.push({ target: t, assetFound: !!asset, sigFound: !!sigAsset });
       continue;
@@ -191,8 +149,8 @@ export default async function handler(req) {
 
   const manifest = {
     version: latestVersion,
-    notes: stripMarkdown(latest.body ?? ''),
-    pub_date: latest.published_at,
+    notes: stripMarkdown(release.body ?? ''),
+    pub_date: release.published_at,
     platforms,
   };
 
@@ -229,21 +187,3 @@ function stripMarkdown(s) {
     .slice(0, 2000);
 }
 
-// SemVer comparison: returns true iff `a` is strictly newer than `b`.
-// Handles pre-release tags by lexical compare on the suffix (1.0.0 > 1.0.0-rc1
-// per semver section 11; pre-release < release).
-function isNewer(a, b) {
-  const parse = v => {
-    const [main, pre = ''] = String(v).split('-');
-    const [maj, min, pat] = main.split('.').map(n => parseInt(n, 10));
-    return { maj: maj || 0, min: min || 0, pat: pat || 0, pre };
-  };
-  const A = parse(a);
-  const B = parse(b);
-  if (A.maj !== B.maj) return A.maj > B.maj;
-  if (A.min !== B.min) return A.min > B.min;
-  if (A.pat !== B.pat) return A.pat > B.pat;
-  if (!A.pre && B.pre) return true;       // 1.0.0 > 1.0.0-rc1
-  if (A.pre && !B.pre) return false;
-  return A.pre > B.pre;
-}

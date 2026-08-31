@@ -24,9 +24,9 @@ this harness's own affordances.
   `.claude/docs/MAIN_SESSION_PROTOCOL.md` §Delegation.
 - **Skills are invoked bare:** `/comaintainer`, `/fieldglass`, `/fleet-report`.
   (pi spells the same skills `/skill:comaintainer`.)
-- **Hooks are wired in `.claude/settings.json`** — `SessionStart`,
-  `UserPromptSubmit`, `PreToolUse`, `PreCompact`, `SessionEnd`. The scripts they
-  call under `.claude/hooks/` are harness-neutral and shared with pi's adapter at
+- **Hooks are wired in `.claude/settings.json`** — read it for the live set;
+  one of them rustfmts every `.rs` you write. The scripts under
+  `.claude/hooks/` are harness-neutral and shared with pi's adapter at
   `.pi/extensions/sovereign-hooks/`; fix a bug in the script, never in one
   harness's copy.
 - **`/context` shows what actually loaded.** If `AGENTS.md` is not listed under

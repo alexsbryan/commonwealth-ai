@@ -183,24 +183,24 @@ the containerized cargo-xwin leg.
 
 ```sh
 # after the usual bump + tag:
-gh release create desktop-v<ver> --repo alexsbryan/svrnmesh-releases --draft --title "desktop-v<ver>"
+gh release create desktop-v<ver> --repo alexsbryan/commonwealth-ai --draft --title "desktop-v<ver>"
 source ~/.zshrc     # provides TAURI_SIGNING_PRIVATE_KEY(+_PASSWORD)
 scripts/release-desktop-local.sh
 ```
 
-**Alpha distribution model (2026-07 → beta).** The source repo is
-invite-only, so its release assets aren't anonymously fetchable — which
-would break install.sh, the landing-page downloads, and the auto-updater.
-Releases therefore publish to the PUBLIC shelf repo
-**`alexsbryan/svrnmesh-releases`** (both drivers default to it via
-`RELEASES_REPO`; the svrnme.sh edge endpoints default to it too). Rules of
-the shelf: release notes are hand-written and sanitized — never
-auto-generated, which would leak private-repo PR titles; binaries there are
-public-by-obscurity, and the invite gate is social (you add collaborators
-to THIS repo by hand; the landing signup form is the front door). The page
-footer says "source opens with the beta" — when that day comes, flip this
-repo public, retire the shelf (or keep it), and repoint `RELEASES_REPO` +
-the endpoint defaults back here.
+**Distribution model (2026-08-31 →).** Releases publish to
+**`alexsbryan/commonwealth-ai`**, this repo, which is public — both drivers
+default to it via `RELEASES_REPO`, and so do the svrnme.sh edge endpoints.
+
+Before that the repo was invite-only, so its release assets weren't
+anonymously fetchable and everything published to a separate public shelf,
+`alexsbryan/svrnmesh-releases`. That shelf is retired but not deleted: it
+still holds the newest published assets of every stream until the next
+release is cut here, so `landing/install.sh` and the two edge endpoints read
+both repos and take the max semver across them. Retire that fallback once
+the newest release of every stream lives here — see the top-level
+[RELEASING.md](../../../RELEASING.md). Release notes are still hand-written
+rather than auto-generated; auto-generated notes are PR-title soup.
 
 That driver sequences the three legs, verifies every artifact (including
 that each `.sig` was made by the key whose pubkey is embedded in

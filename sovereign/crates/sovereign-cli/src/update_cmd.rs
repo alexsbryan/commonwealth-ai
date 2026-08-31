@@ -3,8 +3,8 @@
 //! Unlike the desktop app (which has `tauri-plugin-updater` + an in-app
 //! banner), the CLI has no background updater. This verb:
 //!   1. reports the running version (the compiled-in workspace version),
-//!   2. resolves the newest published `cli-v*` on the release shelf by MAX
-//!      SEMVER — never GitHub list order. Every release on the shelf shares
+//!   2. resolves the newest published `cli-v*` in the release repo by MAX
+//!      SEMVER — never GitHub list order. Every release here shares
 //!      an identical `created_at` (derived from the tagged commit's date), so
 //!      GitHub's ordering is an unstable tiebreak; the desktop updater
 //!      endpoint and `landing/install.sh` both hit — and fixed — this exact
@@ -19,7 +19,17 @@
 
 use std::process::Stdio;
 
-const REPO: &str = "alexsbryan/svrnmesh-releases";
+/// Where CLI tarballs live, in preference order.
+///
+/// The source repo first. `svrnmesh-releases` is the retired public shelf
+/// that existed only while the source repo was private (its release assets
+/// were not anonymously fetchable); it still carries the newest published
+/// `cli-v*` until the next release is cut here, and the source repo still
+/// carries a stale `cli-v0.1.19` from July. So the answer is MAX SEMVER
+/// ACROSS BOTH — never "the first repo that answers", which would offer
+/// 0.1.19 to someone running 0.6.0. `landing/install.sh` resolves the
+/// download the same way; drop both entries together.
+const REPOS: &[&str] = &["alexsbryan/commonwealth-ai", "alexsbryan/svrnmesh-releases"];
 const INSTALL_URL: &str = "https://svrnme.sh/install.sh";
 const CURRENT: &str = env!("CARGO_PKG_VERSION");
 
@@ -31,7 +41,7 @@ pub async fn run(args: &[String]) -> i32 {
     let check_only = args.iter().any(|a| a == "--check");
 
     println!("Installed: cli-v{CURRENT}");
-    let latest = match fetch_latest().await {
+    let (latest, from_repo) = match fetch_latest().await {
         Ok(v) => v,
         Err(e) => {
             // Surface the failure — do not pretend we're up to date (the exact
@@ -42,6 +52,10 @@ pub async fn run(args: &[String]) -> i32 {
         }
     };
     println!("Latest:    cli-v{latest}");
+    if from_repo != REPOS[0] {
+        // Never substitute silently: name the shelf when it is what answered.
+        println!("           (from the retired {from_repo} shelf)");
+    }
 
     if !is_newer(&latest, CURRENT) {
         println!("You're on the latest version.");
@@ -56,13 +70,45 @@ pub async fn run(args: &[String]) -> i32 {
     install(&latest)
 }
 
-/// Resolve the newest published `cli-v*` by max semver (NOT list order).
-async fn fetch_latest() -> Result<String, String> {
-    let url = format!("https://api.github.com/repos/{REPO}/releases?per_page=30");
+/// Resolve the newest published `cli-v*` by max semver (NOT list order),
+/// across every repo in [`REPOS`]. Returns the version and the repo it came
+/// from. A repo that fails is reported, not defaulted: the error only
+/// surfaces if EVERY repo failed, so one dead shelf cannot hide a live
+/// primary — and vice versa.
+async fn fetch_latest() -> Result<(String, &'static str), String> {
     let client = reqwest::Client::builder()
         .user_agent("svrn-updater/1")
         .build()
         .map_err(|e| e.to_string())?;
+
+    let mut best: Option<(String, &'static str)> = None;
+    let mut first_err: Option<String> = None;
+    for repo in REPOS {
+        let versions = match fetch_cli_versions(&client, repo).await {
+            Ok(v) => v,
+            Err(e) => {
+                first_err.get_or_insert(format!("{repo}: {e}"));
+                continue;
+            }
+        };
+        for v in versions {
+            // Strictly newer, so a tie keeps the earlier (preferred) repo.
+            if best.as_ref().is_none_or(|(b, _)| is_newer(&v, b)) {
+                best = Some((v, repo));
+            }
+        }
+    }
+
+    if let Some(found) = best {
+        return Ok(found);
+    }
+    Err(first_err
+        .unwrap_or_else(|| format!("no published cli-v* release found in {}", REPOS.join(", "))))
+}
+
+/// Every non-draft `cli-v*` version published in one repo.
+async fn fetch_cli_versions(client: &reqwest::Client, repo: &str) -> Result<Vec<String>, String> {
+    let url = format!("https://api.github.com/repos/{repo}/releases?per_page=30");
     let resp = client
         .get(&url)
         .header("accept", "application/vnd.github+json")
@@ -75,7 +121,7 @@ async fn fetch_latest() -> Result<String, String> {
     let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
     let arr = body.as_array().ok_or("unexpected github response shape")?;
 
-    let mut best: Option<String> = None;
+    let mut out = Vec::new();
     for r in arr {
         if r.get("draft")
             .and_then(serde_json::Value::as_bool)
@@ -87,13 +133,11 @@ async fn fetch_latest() -> Result<String, String> {
             continue;
         };
         let Some(v) = tag.strip_prefix("cli-v") else {
-            continue; // skip desktop-v* / daemon-v* on the shared shelf
+            continue; // skip desktop-v* / vscode-v* on the shared stream
         };
-        if best.as_deref().is_none_or(|b| is_newer(v, b)) {
-            best = Some(v.to_string());
-        }
+        out.push(v.to_string());
     }
-    best.ok_or_else(|| format!("no published cli-v* release found on {REPO}"))
+    Ok(out)
 }
 
 /// Re-run the canonical installer, pinned to the resolved version so we
@@ -153,7 +197,7 @@ fn print_help() {
          Usage:\n  \
          svrn update            Check, then install if a newer version exists\n  \
          svrn update --check    Report availability without installing\n\n\
-         Resolves the newest cli-v* on the public release shelf by version and\n\
+         Resolves the newest cli-v* in the public release repo by version and\n\
          re-installs via the same checksum-verified installer as `curl … | sh`,\n\
          into wherever the running binary lives. Unix only (needs sh + curl)."
     );
@@ -162,6 +206,17 @@ fn print_help() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The source repo must come FIRST: `fetch_latest` breaks ties in favour
+    /// of the earlier entry, and the shelf is the one being retired.
+    #[test]
+    fn source_repo_is_the_preferred_release_repo() {
+        assert_eq!(REPOS[0], "alexsbryan/commonwealth-ai");
+        assert!(
+            REPOS.len() <= 2,
+            "REPOS is a two-entry transition list, not a registry: {REPOS:?}"
+        );
+    }
 
     #[test]
     fn semver_core_ordering() {

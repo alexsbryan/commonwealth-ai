@@ -18,7 +18,7 @@ name: Desktop release
 # THIS IS THE FALLBACK PATH, NOT THE PRIMARY ONE (2026-07-24).
 #
 # Releases are cut LOCALLY with `scripts/release-all.sh` — one command,
-# every target, from the arm64 Mac, publishing to `alexsbryan/svrnmesh-releases`.
+# every target, from the arm64 Mac, publishing to `alexsbryan/commonwealth-ai`.
 # That path costs zero Actions minutes and is where the real release guards
 # live (version-already-published check, disk reclaim, CPU-aware per-leg stall
 # watchdog). This workflow exists for verification and disaster recovery: a
