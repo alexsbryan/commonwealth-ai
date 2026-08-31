@@ -91,6 +91,9 @@ wait_http "http://127.0.0.1:$HOLDER_PORT/status" 240 \
 # the truncated Display form (`node-a65f8cfeb45ac139`) that the binding
 # correctly refuses. The product path never types this — `setup --terminal`
 # reads `peer.node_id.to_hex()` off the mesh — but a script has to.
+# Exported: step 8 reads it inside a python3 that sits on the RIGHT of a pipe,
+# and an assignment prefix binds only the FIRST command of a pipeline.
+export HOLDER_ID
 HOLDER_ID=$(xxd -p "$SB/holder/.svrnmesh/node_id" | tr -d '\n')
 [ ${#HOLDER_ID} -eq 32 ] || fail "holder node_id is ${#HOLDER_ID} chars, expected 32"
 echo "   holder $HOLDER_ID"
@@ -149,7 +152,7 @@ print("   ",ids); raise SystemExit(0 if "primary" in ids else 1)' \
   || fail "a joined terminal must surface 'primary' to its own clients"
 
 say "8. /v1/mesh/status names the class and the binding"
-HOLDER_ID="$HOLDER_ID" curl -s "http://127.0.0.1:$TERM_PORT/v1/mesh/status" | python3 -c '
+curl -s "http://127.0.0.1:$TERM_PORT/v1/mesh/status" | python3 -c '
 import sys,json,os
 d=json.load(sys.stdin); cls=d.get("node_class"); entry=str(d.get("entry_node"))
 print("   node_class:",cls); print("   entry_node:",entry)
