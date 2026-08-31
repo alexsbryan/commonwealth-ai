@@ -235,12 +235,18 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     let atlas_cfg = sovereign_work_atlas::WorkAtlasConfig::defaults();
     let atlas_broadcaster: Arc<dyn sovereign_work_atlas::tools::ClaimBroadcaster> =
         Arc::new(sovereign_work_atlas::tools::NullBroadcaster);
-    // repo_id resolution can hard-fail (no origin remote). The CLI
-    // tools-call path still wants the tools registered so users see
-    // them in `svrn tools list`; declare_scope just rejects at
-    // execute time. work_in_flight is independent of repo_id.
-    let (atlas_repo_root, atlas_repo_id) = sovereign_work_atlas::resolve_repo_id(&repo_root)
-        .unwrap_or_else(|_| (repo_root.clone(), String::new()));
+    // A repo with no `origin` gets a machine-local id rather than the empty
+    // string this used to fall back to. The old comment here claimed
+    // `declare_scope` rejected an empty id; it does not — it stored claims
+    // under `""`, so EVERY origin-less repo on the machine shared one id and
+    // saw each other's claims. Only "not a repo at all" degrades now, and it
+    // degrades to a registered-but-unusable tool so `svrn tools list` still
+    // shows the surface.
+    let (atlas_repo_root, atlas_repo_id) =
+        match sovereign_work_atlas::resolve_repo_id_allowing_local(&repo_root) {
+            Ok((root, id, _source)) => (root, id),
+            Err(_) => (repo_root.clone(), String::new()),
+        };
     let current_branch = current_branch_for(&atlas_repo_root);
     tools.register(Box::new(
         sovereign_work_atlas::tools::DeclareScopeTool::new(

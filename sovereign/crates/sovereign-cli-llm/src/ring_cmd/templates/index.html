@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{NAME}}</title>
+    <style>
+      :root { color-scheme: light dark; --line: color-mix(in srgb, currentColor 15%, transparent); }
+      body { margin: 0; font: 15px/1.5 system-ui, sans-serif; }
+      main { max-width: 44rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+      h1 { font-size: 1.35rem; margin: 0 0 .25rem; }
+      .sub { opacity: .65; margin: 0 0 2rem; }
+      .row { display: flex; justify-content: space-between; padding: .5rem 0; border-bottom: 1px solid var(--line); }
+      .owes { color: #c2410c; } .owed { color: #15803d; }
+      .voided { opacity: .45; text-decoration: line-through; }
+      h2.section { font-size: .9rem; margin: 2rem 0 .25rem; text-transform: uppercase; letter-spacing: .04em; opacity: .6; }
+      form { display: grid; gap: .5rem; margin: 2rem 0; }
+      input, button { font: inherit; padding: .5rem .6rem; }
+      #gaps { margin-top: 2rem; padding: .75rem 1rem; border: 1px solid var(--line); border-radius: .4rem; }
+      #gaps[hidden] { display: none; }
+      #gaps h2 { font-size: .9rem; margin: 0 0 .5rem; text-transform: uppercase; letter-spacing: .04em; }
+      #gaps li { opacity: .8; }
+      #err { color: #b91c1c; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>{{NAME}}</h1>
+      <p class="sub" id="scope"></p>
+      <section id="balances"></section>
+      <form id="add">
+        <input name="payer" placeholder="who paid" required />
+        <input name="amount" placeholder="amount, e.g. 24.50" inputmode="decimal" required />
+        <input name="description" placeholder="what for" required />
+        <input name="participants" placeholder="split between (comma-separated)" required />
+        <button type="submit">Add</button>
+      </form>
+      <p id="err"></p>
+      <h2 class="section">History</h2>
+      <section id="history"></section>
+      <section id="gaps" hidden>
+        <h2>This total covers a subset</h2>
+        <ul id="gaplist"></ul>
+      </section>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

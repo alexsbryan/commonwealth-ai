@@ -214,15 +214,22 @@ impl<K: Journaled> Oplog<K> {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent).map_err(Error::Io)?;
         }
-        let line = serde_json::to_string(op)
+        let mut line = serde_json::to_string(op)
             .map_err(|e| Error::Extraction(format!("{}: serialise: {e}", K::LABEL)))?;
+        line.push('\n');
         let mut f = OpenOptions::new()
             .create(true)
             .append(true)
             .open(&self.path)
             .map_err(Error::Io)?;
+        // ONE write for the whole logical line, so `O_APPEND`'s atomicity
+        // covers it. Two calls (the body, then the newline) left a window in
+        // which a second writer could interleave and split a line in half.
         f.write_all(line.as_bytes()).map_err(Error::Io)?;
-        f.write_all(b"\n").map_err(Error::Io)?;
+        // Durability is the point of a journal. Without this a lid-slam or a
+        // power cut loses the last ops that the caller was already told
+        // succeeded — silently, which is the §18.3 shape.
+        f.sync_data().map_err(Error::Io)?;
         tracing::debug!(
             log = K::LABEL,
             id = %op.id,
@@ -247,12 +254,16 @@ impl<K: Journaled> Oplog<K> {
             .append(true)
             .open(&self.path)
             .map_err(Error::Io)?;
+        let mut buf = String::new();
         for op in ops {
             let line = serde_json::to_string(op)
                 .map_err(|e| Error::Extraction(format!("{}: serialise: {e}", K::LABEL)))?;
-            f.write_all(line.as_bytes()).map_err(Error::Io)?;
-            f.write_all(b"\n").map_err(Error::Io)?;
+            buf.push_str(&line);
+            buf.push('\n');
         }
+        // Same single-write, then-fsync rule as `append`.
+        f.write_all(buf.as_bytes()).map_err(Error::Io)?;
+        f.sync_data().map_err(Error::Io)?;
         tracing::debug!(
             log = K::LABEL,
             ops = ops.len(),
@@ -264,46 +275,85 @@ impl<K: Journaled> Oplog<K> {
 
     /// Every op in append order. A missing file is an empty log, not an error.
     ///
-    /// Two classes of line are skipped with a warning rather than defaulted
-    /// (ARCH §18.3 — absence is reported, never defaulted): a line this build
-    /// cannot parse, and a line declaring a `v` newer than `K::VERSION`. The
-    /// second is the forward-compat gate: an older reader must not crash on a
-    /// newer log, and must not silently misread it either.
+    /// Drops the skip list from [`Self::read_all_with_skips`]. That is the
+    /// right call for a tenant deriving a *summary* it can restate later
+    /// (governance, reconciliation, the meta-atlas bridge all re-run from the
+    /// whole log). It is the WRONG call for a tenant whose answer is a number
+    /// a person acts on — see the ring ledger, which reads the skips and
+    /// reports them as gaps rather than confidently totalling a subset.
     pub fn read_all(&self) -> Result<Vec<Op<K>>> {
+        self.read_all_with_skips().map(|(ops, _)| ops)
+    }
+
+    /// Every op in append order, **plus the lines this build could not use**.
+    ///
+    /// Two classes of line are skipped rather than defaulted (ARCH §18.3 —
+    /// absence is reported, never defaulted): a line this build cannot parse,
+    /// and a line declaring a `v` newer than `K::VERSION`. The second is the
+    /// forward-compat gate: an older reader must not crash on a newer log, and
+    /// must not silently misread it either.
+    ///
+    /// Both still warn. The warning was all a caller ever got, which means a
+    /// caller could not *tell* — a log with a corrupt line and a log with none
+    /// returned the identical value. Returning the skips is the difference
+    /// between "here is the total" and "here is the total, and I could not
+    /// read two lines."
+    pub fn read_all_with_skips(&self) -> Result<(Vec<Op<K>>, Vec<SkippedLine>)> {
         if !self.path.exists() {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), Vec::new()));
         }
         let file = fs::File::open(&self.path).map_err(Error::Io)?;
         let reader = BufReader::new(file);
         let mut out = Vec::new();
+        let mut skipped = Vec::new();
         for (lineno, line) in reader.lines().enumerate() {
             let line = line.map_err(Error::Io)?;
             if line.trim().is_empty() {
                 continue;
             }
+            let line_no = lineno as u64 + 1;
             match serde_json::from_str::<Op<K>>(&line) {
                 Ok(op) if op.v > K::VERSION => {
                     tracing::warn!(
                         log = K::LABEL,
                         path = %self.path.display(),
-                        line = lineno + 1,
+                        line = line_no,
                         v = op.v,
                         "oplog: skipping op from a newer format version"
                     );
+                    skipped.push(SkippedLine::NewerVersion { line: line_no, v: op.v });
                 }
                 Ok(op) => out.push(op),
                 Err(err) => {
                     tracing::warn!(
                         log = K::LABEL,
                         path = %self.path.display(),
-                        line = lineno + 1,
+                        line = line_no,
                         "oplog: malformed line skipped ({err})"
                     );
+                    skipped.push(SkippedLine::Malformed {
+                        line: line_no,
+                        error: err.to_string(),
+                    });
                 }
             }
         }
-        Ok(out)
+        Ok((out, skipped))
     }
+}
+
+/// A line present in the journal that this build did not turn into an [`Op`].
+///
+/// Not an error — the read still succeeds, and every other line is returned.
+/// It is the *reportable absence*: the caller now holds the evidence that its
+/// answer is derived from a subset, and can decide whether that matters.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SkippedLine {
+    /// This build could not parse the line at all.
+    Malformed { line: u64, error: String },
+    /// The line declares a format version newer than `K::VERSION`, so reading
+    /// it would be guessing at semantics this build does not have.
+    NewerVersion { line: u64, v: u32 },
 }
 
 #[cfg(test)]
@@ -392,6 +442,56 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let log: Oplog<Probe> = Oplog::new(dir.path().join("nope"));
         assert!(log.read_all().unwrap().is_empty());
+    }
+
+    /// The §18.3 property: a reader that skipped lines can SAY so. Before
+    /// `read_all_with_skips` a corrupt log and a clean one were indistinguishable
+    /// from the return value.
+    #[test]
+    fn the_skipped_lines_are_returned_not_only_logged() {
+        let dir = tempfile::tempdir().unwrap();
+        let log: Oplog<Probe> = Oplog::new(dir.path());
+        let mut future = Op::new(touch("x"), 7, "ingest");
+        future.v = Probe::VERSION + 1;
+        log.append(&future).unwrap();
+        log.append(&Op::new(touch("y"), 8, "ingest")).unwrap();
+        fs::write(
+            log.path(),
+            format!("{}\nnot json at all\n", fs::read_to_string(log.path()).unwrap().trim()),
+        )
+        .unwrap();
+
+        let (ops, skipped) = log.read_all_with_skips().unwrap();
+        assert_eq!(ops.len(), 1);
+        assert_eq!(skipped.len(), 2, "both classes of skip must be reported");
+        assert!(matches!(
+            skipped[0],
+            SkippedLine::NewerVersion { line: 1, v } if v == Probe::VERSION + 1
+        ));
+        assert!(matches!(skipped[1], SkippedLine::Malformed { line: 3, .. }));
+        // A clean log reports nothing, so a non-empty list is real signal.
+        let clean: Oplog<Probe> = Oplog::new(dir.path().join("clean"));
+        clean.append(&Op::new(touch("z"), 9, "ingest")).unwrap();
+        assert!(clean.read_all_with_skips().unwrap().1.is_empty());
+    }
+
+    /// `O_APPEND` guarantees one `write(2)` lands whole. Two calls per logical
+    /// line did not have that guarantee, so a concurrent writer could split a
+    /// line across another's. Pinning the shape, not the race: every byte of a
+    /// line — newline included — comes from one buffer.
+    #[test]
+    fn a_logical_line_including_its_newline_is_written_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let log: Oplog<Probe> = Oplog::new(dir.path());
+        log.append_all(&[
+            Op::new(touch("a"), 1, "ingest"),
+            Op::new(touch("b"), 2, "ingest"),
+        ])
+        .unwrap();
+        let raw = fs::read_to_string(log.path()).unwrap();
+        assert!(raw.ends_with('\n'), "every line is newline-terminated");
+        assert_eq!(raw.lines().count(), 2);
+        assert_eq!(log.read_all().unwrap().len(), 2);
     }
 
     #[test]

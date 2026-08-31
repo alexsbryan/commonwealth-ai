@@ -22,7 +22,8 @@ use uuid::Uuid;
 use sovereign_cli_shared::mcp_client::{daemon_tool_call, DaemonCallError};
 use sovereign_work_atlas::{
     model::{AgentKind, Privacy},
-    resolve_repo_id, ClaimRecord, ScopeMatch, SessionIdentity, WorkAtlasConfig, WorkAtlasStore,
+    resolve_repo_id_allowing_local, ClaimRecord, ScopeMatch, SessionIdentity, WorkAtlasConfig,
+    WorkAtlasStore,
 };
 
 /// Outcome of the daemon-first attempt for one subcommand.
@@ -787,8 +788,17 @@ fn open_atlas() -> Result<CliCtx, i32> {
             return Err(1);
         }
     };
-    let (repo_root, repo_id) = match resolve_repo_id(&cwd) {
-        Ok(pair) => pair,
+    // A repo with no `origin` used to exit here. It now gets a machine-local
+    // id and is TOLD so — the substitution is named, not silent (ARCH §18.3).
+    // Not being in a repo at all is still an error: there is nothing to
+    // identify.
+    let (repo_root, repo_id) = match resolve_repo_id_allowing_local(&cwd) {
+        Ok((root, id, source)) => {
+            if let Some(caveat) = source.caveat() {
+                eprintln!("claim: {caveat}");
+            }
+            (root, id)
+        }
         Err(e) => {
             eprintln!("claim: {e}");
             return Err(1);

@@ -125,6 +125,10 @@ default = []
 atos = ["dep:sovereign-atos", "dep:corpus-engine-atos"]
 
 [dev-dependencies]
+# `rail_e2e` installs a real ring signer, so the ops it writes
+# verify the way a daemon's would. A stub signer would prove the route
+# and not the signature.
+ed25519-dalek = { workspace = true }
 commonwealth-discovery = { workspace = true }
 tokio = { workspace = true, features = ["test-util", "macros"] }
 tower = "0.5"

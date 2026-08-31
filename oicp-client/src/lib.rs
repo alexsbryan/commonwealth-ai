@@ -1368,6 +1368,55 @@ impl SplitInferenceProvider {
         }
     }
 
+    /// Chat and embeddings on SEPARATE servers.
+    ///
+    /// [`Self::new_with_bearer`] points both halves at one base URL, which is
+    /// right for a Sovereign daemon (it serves both from one `/v1`). It is the
+    /// wrong shape for the usual third-party deployment: vLLM, SGLang and TGI
+    /// each serve ONE model per process, so a node that both chats and
+    /// retrieves is talking to two of them on two ports.
+    ///
+    /// `status_url` is derived from the CHAT endpoint — that is the host whose
+    /// slot residency `primary_slot_status` is asking about. A third-party
+    /// server has no `/status`, so that probe simply returns `None`, which is
+    /// the documented "cannot answer" and not an error.
+    pub fn new_split_endpoints(
+        chat_endpoint_v1: &str,
+        embed_endpoint_v1: &str,
+        bearer: Option<String>,
+        chat_model_id: String,
+        embed_model_id: String,
+        context_size: u32,
+        embed_query_instruction: String,
+    ) -> Self {
+        // Both halves wait out sheds for the same reason as the single-endpoint
+        // constructor: this provider owns no weights, so the far end is the
+        // only holder and there is nowhere else to route.
+        let chat = std::sync::Arc::new(
+            RemoteApiProvider::new(chat_endpoint_v1, bearer.clone(), &chat_model_id, context_size)
+                .waiting_out_sheds(),
+        );
+        let embed = std::sync::Arc::new(
+            RemoteApiProvider::new(embed_endpoint_v1, bearer, &embed_model_id, context_size)
+                .with_query_instruction(embed_query_instruction)
+                .waiting_out_sheds(),
+        );
+        Self {
+            chat,
+            embed,
+            chat_model_id,
+            embed_model_id,
+            context_size,
+            status_url: format!(
+                "{}/status",
+                chat_endpoint_v1
+                    .trim_end_matches('/')
+                    .trim_end_matches("/v1")
+                    .trim_end_matches('/')
+            ),
+        }
+    }
+
     /// Build from an OICP manifest (v0.4 §7 context discoverability): resolve
     /// the chat slot's context window from the advertised
     /// [`ProviderModel::context_tokens`] rather than a hardcoded default, so a

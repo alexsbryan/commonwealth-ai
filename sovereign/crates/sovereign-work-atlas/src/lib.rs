@@ -24,5 +24,5 @@ pub use confidence::ConfidenceGrade;
 pub use config::WorkAtlasConfig;
 pub use model::{AgentKind, ClaimRecord, ObservationRecord, Privacy, SessionRecord, SymbolRef};
 pub use observer::AtlasObserver;
-pub use repo_id::{resolve_repo_id, RepoIdError};
+pub use repo_id::{resolve_repo_id, resolve_repo_id_allowing_local, RepoIdError, RepoIdSource};
 pub use store::{ScopeMatch, SessionIdentity, WorkAtlasError, WorkAtlasStore};

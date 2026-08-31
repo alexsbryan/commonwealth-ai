@@ -73,6 +73,12 @@ pub struct SetupConfig {
     /// them, so a ggml SIGABRT kills only a child, not the daemon.
     #[serde(default)]
     pub compute: ComputeSection,
+    /// `[engine]` — WHICH inference engine serves this node. Absent
+    /// (the overwhelmingly common case) means [`EngineKind::Llama`], the
+    /// in-process llama.cpp engine this repo has always run, so an
+    /// existing `config.toml` is unaffected. See [`EngineSection`].
+    #[serde(default)]
+    pub engine: EngineSection,
     /// `[search]` — the operator's web-search provider and its key. The
     /// ONE search config surface: the deep-research loop, the desktop's
     /// chat tools and the conversation tool builder all read this, so a
@@ -94,6 +100,8 @@ pub struct SetupConfig {
     #[serde(default)]
     pub mcp_servers: Vec<crate::mcp_config::McpServerConfig>,
 }
+
+pub use crate::engine_config::{EngineKind, EngineSection};
 
 /// `[search]` — the web-search provider the operator configured.
 ///
@@ -1290,6 +1298,7 @@ impl SetupConfig {
             shared_model: SharedModelSection::default(),
             discovery: DiscoverySection::default(),
             compute: ComputeSection::default(),
+            engine: EngineSection::default(),
             // Added on main while this branch was out. `unconfigured()`'s
             // contract is "every other section at its documented default",
             // so the default is the answer here, not a judgement call.
@@ -1664,6 +1673,7 @@ embed = "/m/e.gguf"
     #[test]
     fn roundtrip_minimal_config() {
         let cfg = SetupConfig {
+            engine: Default::default(),
             compute: Default::default(),
             search: Default::default(),
             models: ModelsSection {
@@ -1705,6 +1715,7 @@ embed = "/m/e.gguf"
         // user's servers on the next desktop config save.
         use crate::mcp_config::{McpAuthConfig, McpServerConfig, McpTransportConfig};
         let cfg = SetupConfig {
+            engine: Default::default(),
             compute: Default::default(),
             search: Default::default(),
             models: ModelsSection {

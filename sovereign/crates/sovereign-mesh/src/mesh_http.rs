@@ -1119,6 +1119,7 @@ mod tests {
     /// multicast socket or binds an iroh endpoint. Everything else defaulted.
     fn hermetic_cfg() -> SetupConfig {
         SetupConfig {
+            engine: Default::default(),
             compute: Default::default(),
             search: Default::default(),
             models: ModelsSection {

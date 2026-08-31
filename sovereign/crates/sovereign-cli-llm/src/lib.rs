@@ -88,6 +88,7 @@ mod recipe_agent_cmd;
 mod recipe_agent_live_trial;
 mod recipe_cmd;
 mod remote_gguf;
+mod ring_cmd;
 mod router_cache_cmd;
 mod router_fit_cmd;
 mod search_gym_cmd;
@@ -185,6 +186,7 @@ async fn async_main() {
         "atlas" => atlas_cmd::run_atlas(rest).await,
         "meta-atlas" => meta_atlas_cmd::run_meta_atlas(rest).await,
         "meshapp" => meshapp_cmd::run(rest).await,
+        "ring" => ring_cmd::run(rest).await,
         "enrich" => enrich_cmd::run_enrich(rest).await,
         "newsworthy" => newsworthy_cmd::run(rest).await,
         "recipe" => recipe_cmd::run_recipe(rest).await,

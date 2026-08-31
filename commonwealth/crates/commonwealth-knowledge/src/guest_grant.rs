@@ -78,6 +78,14 @@ pub enum Scope {
     /// advertises them. Exact string match — no prefixes, no globs: a grant
     /// that can be widened by a cleverly-named model is not a grant.
     Models(Vec<String>),
+    /// The ring-app rail, scoped to exactly one namespace.
+    ///
+    /// The namespace lives HERE, on the grant, and never in the request:
+    /// the rail routes take no namespace parameter, so a ring app cannot
+    /// reach another app's namespace because it has no way to *say* one
+    /// (§7.1). One namespace per grant — a grant that could name two would
+    /// make its own blast radius an argument rather than a fact.
+    Rails(String),
 }
 
 impl Scope {
@@ -94,6 +102,7 @@ impl Scope {
     pub fn paths(&self) -> &'static [&'static str] {
         match self {
             Scope::Models(_) => &["/v1/models", "/v1/chat/completions"],
+            Scope::Rails(_) => &["/v1/rail/append", "/v1/rail/log"],
         }
     }
 
@@ -101,6 +110,7 @@ impl Scope {
     pub fn label(&self) -> &'static str {
         match self {
             Scope::Models(_) => "models",
+            Scope::Rails(_) => "rail",
         }
     }
 }
@@ -149,6 +159,22 @@ impl GuestGrant {
     pub fn models(&self) -> Option<&[String]> {
         self.scopes.iter().find_map(|s| match s {
             Scope::Models(ids) => Some(ids.as_slice()),
+            Scope::Rails(_) => None,
+        })
+    }
+
+    /// The rail namespace this grant may read and write, if it carries a
+    /// [`Scope::Rails`].
+    ///
+    /// **THE source of the namespace for a rail request.** The handler reads
+    /// it from here and never from the request body: `Op.actor` and a body
+    /// field are both things the caller authors, and a guard that reads what
+    /// the subject supplies is not a guard (§18.1). `None` means this grant
+    /// has no rail scope at all.
+    pub fn rail_namespace(&self) -> Option<&str> {
+        self.scopes.iter().find_map(|s| match s {
+            Scope::Rails(ns) => Some(ns.as_str()),
+            Scope::Models(_) => None,
         })
     }
 
@@ -169,6 +195,7 @@ impl GuestGrant {
             .iter()
             .map(|s| match s {
                 Scope::Models(ids) => ids.join(", "),
+                Scope::Rails(ns) => format!("rail:{ns}"),
             })
             .collect::<Vec<_>>()
             .join("; ")

@@ -30,6 +30,7 @@ use sovereign_mesh::daemon::EmbeddedDaemon;
 
 fn cfg_with_ports(client_port: u16, internal_port: u16) -> SetupConfig {
     SetupConfig {
+        engine: Default::default(),
         compute: Default::default(),
         search: Default::default(),
         models: ModelsSection {

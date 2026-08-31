@@ -303,6 +303,11 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // remain are cmd_facts' http client and cmd_watch's two.
     ("sovereign/crates/sovereign-cli-dev/src/code_cmd.rs", Class::LocalDaemon, 3),
     ("sovereign/crates/sovereign-cli-dev/src/tools_cmd/registry.rs", Class::LocalDaemon, 3),
+    // `svrn ring` talks to ONE address: `127.0.0.1:<daemon client_port>`, for
+    // the rail routes and the guest-grant mint. Nothing a ring app writes
+    // leaves the machine through this client — replication is the daemon's
+    // own peer traffic (`ring_sync`), on the mesh class.
+    ("sovereign/crates/sovereign-cli-llm/src/ring_cmd/mod.rs", Class::LocalDaemon, 1),
     // 2 -> 3 on 2026-08-21 (nc-27): `daemon_get` MOVED here from
     // `project_cmd/registry_watch.rs` when that file was deleted as an
     // unreachable fork. Same loopback client, same class — a relocation,

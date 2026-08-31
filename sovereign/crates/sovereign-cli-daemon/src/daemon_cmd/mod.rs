@@ -410,7 +410,12 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // hard-blocked). Only refuses under SOVEREIGN_STRICT_VRAM_CHECK=1 or
     // when a model file is unreadable. Full rationale on
     // `build::preflight::check_vram`.
-    if !build::preflight::check_vram(&config) {
+    // Name the config the operator actually passed, not the default one —
+    // a `--config` start used to be told to edit a file it never read.
+    let config_path_in_use = config_override
+        .clone()
+        .unwrap_or_else(sovereign_core::setup_config::SetupConfig::default_path);
+    if !build::preflight::check_vram_reporting(&config, &config_path_in_use) {
         return 1;
     }
 
@@ -466,7 +471,11 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
             Ok(t) => t,
             Err(()) => return 1,
         };
-    let engine_handle: Option<Arc<EmbeddedLlamaCpp>> = Some(raw_engine);
+    // `None` when the configured engine holds no local llama slots — the
+    // RPC-worker auto-reload path below is llama's own and simply does not
+    // arm. Already an `Option` before the engine factory existed; now the
+    // `None` is reachable.
+    let engine_handle: Option<Arc<EmbeddedLlamaCpp>> = raw_engine;
 
     // ── Note store (for MCP notes tools + ring-buffer logging) ────
     let data_dir = config.data.dir.clone();

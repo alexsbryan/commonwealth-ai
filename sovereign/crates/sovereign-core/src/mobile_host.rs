@@ -375,6 +375,7 @@ mod tests {
 
     fn setup_fixture() -> SetupConfig {
         SetupConfig {
+            engine: Default::default(),
             compute: Default::default(),
             search: Default::default(),
             models: ModelsSection {

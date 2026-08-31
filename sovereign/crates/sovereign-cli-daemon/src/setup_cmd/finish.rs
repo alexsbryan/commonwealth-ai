@@ -26,6 +26,7 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
         .unwrap_or_else(sovereign_core::rebrand::data_dir);
 
     let cfg = SetupConfig {
+        engine: Default::default(),
         compute: Default::default(),
         search: Default::default(),
         models: ModelsSection {

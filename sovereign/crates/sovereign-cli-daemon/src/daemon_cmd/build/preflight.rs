@@ -85,6 +85,36 @@ fn strict_vram_check() -> bool {
 /// Returns `true` to proceed with daemon startup, `false` to refuse
 /// (caller returns exit code 1). See the module docs for the posture.
 pub(crate) fn check_vram(config: &SetupConfig) -> bool {
+    check_vram_reporting(config, &SetupConfig::default_path())
+}
+
+/// `check_vram`, told WHICH config file to name in its refusal hints.
+///
+/// Split out because both hints hard-coded `SetupConfig::default_path()`,
+/// so a daemon started with `--config <path>` told the operator to fix a
+/// file it had not read (observed 2026-08-30 during the remote-engine
+/// bring-up).
+pub(crate) fn check_vram_reporting(config: &SetupConfig, config_path: &std::path::Path) -> bool {
+    // The preflight asks "do the GGUF slots fit in this machine's VRAM?" —
+    // a question only the llama engine can be asked. An engine that holds
+    // no local weights has no slots to size, and `[models]` is then just
+    // schema it never reads, so sizing it refuses on paths that were never
+    // going to be opened.
+    //
+    // Measured 2026-08-30 on the first live `[engine] kind = "remote"`
+    // boot: the daemon died here with "model file unreadable" before the
+    // engine was ever constructed. The factory was correct and the node
+    // still could not start — which is why this is checked against the
+    // running system and not only in a unit test (ARCH §18.1).
+    if config.engine.kind != sovereign_core::setup_config::EngineKind::Llama {
+        tracing::info!(
+            target: "engine_factory",
+            engine = %config.engine.kind,
+            "VRAM preflight: skipped — this engine holds no local weights, so \
+             `[models]` names nothing that will be loaded"
+        );
+        return true;
+    }
     let hardware = sovereign_inference::hardware::HardwareProfile::detect();
     let slots = sovereign_inference::capacity::build_slots_from_config(config);
     let report = sovereign_inference::capacity::check_fit(&slots, &hardware);
@@ -131,7 +161,7 @@ pub(crate) fn check_vram(config: &SetupConfig) -> bool {
                 "hint: a model file above is unreadable (missing or moved). Fix its \
                  path in {} and re-run. (SOVEREIGN_SKIP_VRAM_CHECK=1 bypasses at your \
                  own risk.)",
-                SetupConfig::default_path().display(),
+                config_path.display(),
             );
         }
         VramAction::RefuseStrict => {
@@ -140,7 +170,7 @@ pub(crate) fn check_vram(config: &SetupConfig) -> bool {
                 "hint: strict VRAM check is on (SOVEREIGN_STRICT_VRAM_CHECK). Unset it \
                  to start anyway with a warning, edit {}, or set \
                  SOVEREIGN_SKIP_VRAM_CHECK=1 to bypass.",
-                SetupConfig::default_path().display(),
+                config_path.display(),
             );
         }
     }
@@ -210,5 +240,46 @@ mod tests {
         let a = decide(false, true, true, false);
         assert_eq!(a, VramAction::ProceedSilenced);
         assert!(a.proceeds());
+    }
+
+    /// The bug this guards, found on the first live `[engine] kind =
+    /// "remote"` boot (2026-08-30): the daemon refused to start because
+    /// the VRAM preflight stat'd `[models]` GGUF paths that a remote
+    /// engine never opens. The engine factory was already correct; the
+    /// node still could not come up.
+    ///
+    /// Drives the REAL `check_vram` against a config whose model paths do
+    /// not exist — under `llama` that is a refusal, and it must not be one
+    /// for an engine that holds no weights.
+    #[test]
+    fn a_weightless_engine_skips_the_vram_preflight_entirely() {
+        use sovereign_core::setup_config::EngineKind;
+
+        let mut config = SetupConfig::unconfigured();
+        config.models.primary = "/nonexistent/primary.gguf".into();
+        config.models.embed = "/nonexistent/embed.gguf".into();
+
+        for kind in [EngineKind::Remote, EngineKind::Custom("hypertuned".into())] {
+            config.engine.kind = kind.clone();
+            assert!(
+                check_vram(&config),
+                "`{kind}` holds no local weights, so `[models]` names nothing that will \
+                 be loaded — sizing those paths refuses a node that would have run fine"
+            );
+        }
+    }
+
+    /// The other half: the skip is scoped to non-llama engines and must
+    /// not become a blanket bypass. Under `llama` an unreadable model file
+    /// is still a refusal — that guard is why a mistyped path fails at
+    /// boot instead of at the first request.
+    #[test]
+    fn the_llama_engine_still_refuses_an_unreadable_model() {
+        assert_eq!(
+            decide(false, true, false, false),
+            VramAction::RefuseUnreadable,
+            "the weightless-engine skip must not weaken llama's own preflight"
+        );
+        assert!(!VramAction::RefuseUnreadable.proceeds());
     }
 }

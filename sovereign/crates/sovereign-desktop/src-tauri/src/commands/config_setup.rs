@@ -405,6 +405,7 @@ pub async fn set_setup_context_size(
         Err(_) => {
             let data_dir = state.config.read().await.data_dir.clone();
             SetupConfig {
+                engine: Default::default(),
                 compute: Default::default(),
                 search: Default::default(),
                 models: sovereign_core::setup_config::ModelsSection {
@@ -519,6 +520,7 @@ pub(crate) fn write_model_slots_to_setup(
             ));
         }
         Err(_) => SetupConfig {
+            engine: Default::default(),
             compute: Default::default(),
             search: Default::default(),
             models: ModelsSection {

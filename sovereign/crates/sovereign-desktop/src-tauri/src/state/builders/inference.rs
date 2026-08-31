@@ -65,6 +65,35 @@ pub(crate) async fn load_inference(
                 *inference_slot.write().await = Some(Arc::clone(&raw));
                 return Ok((Arc::clone(&raw), raw));
             }
+
+            // ── `[engine]` — a non-llama engine short-circuits everything
+            // below. The GPU smoke test, the CPU-fallback substitution and
+            // the slot loads are all llama.cpp's own machinery, and none of
+            // them mean anything to an engine that holds no GGUF. Falls
+            // through to the llama path when `[engine]` is absent or says
+            // `llama`, which is every existing install.
+            //
+            // Loaded here rather than threaded in because `build_attach_provider`
+            // already reads `SetupConfig` at this level for the same reason —
+            // the slot struct carries paths, not the engine decision.
+            if let Ok(setup) = sovereign_core::setup_config::SetupConfig::load() {
+                if setup.engine.kind != sovereign_core::setup_config::EngineKind::Llama {
+                    tracing::info!(
+                        engine = %setup.engine.kind,
+                        "[engine] selects a non-llama engine — skipping the GPU probe \
+                         and the in-process slot loads; this process holds no weights"
+                    );
+                    let built = sovereign_inference::engine_factory::build_engine(&setup)
+                        .map_err(|e| format!("[engine] kind = \"{}\": {e}", setup.engine.kind))?;
+                    let raw = built.provider;
+                    *inference_slot.write().await = Some(Arc::clone(&raw));
+                    // NOT an early return: Local mode still wraps in
+                    // `MeshInferenceProvider` at the tail, and a remote engine
+                    // is as entitled to peer routing as a local one.
+                    return Ok(mesh_wrapped(mesh, raw));
+                }
+            }
+
             tracing::info!("Loading fast model: {}", slots.fast.display());
             // Embed slot path as an `Option<&Path>` (empty path == unset).
             let embed_opt: Option<&std::path::Path> =
@@ -256,23 +285,35 @@ pub(crate) async fn load_inference(
         }
     };
 
-    // Wrap with mesh routing only in Local mode. Attach mode (`mesh ==
-    // None`) hands the raw provider through — the CLI daemon already owns
-    // peer routing, so wrapping against a None daemon would be a no-op.
+    Ok(mesh_wrapped(mesh, raw_inference))
+}
+
+/// Pair the raw provider with its mesh-routed view — the ONE place that
+/// decides what Local mode wraps (ARCH §10.6). Called from both the llama
+/// path and the `[engine]` short-circuit above; a second copy is how the
+/// two would drift into one of them silently losing peer routing.
+///
+/// Attach mode (`mesh == None`) hands the raw provider through — the CLI
+/// daemon already owns peer routing, so wrapping against a None daemon
+/// would be a no-op.
+fn mesh_wrapped(
+    mesh: Option<&Arc<sovereign_mesh::DeferredDaemon>>,
+    raw: Arc<dyn InferenceProvider>,
+) -> (Arc<dyn InferenceProvider>, Arc<dyn InferenceProvider>) {
     let inference: Arc<dyn InferenceProvider> = match mesh {
         Some(mesh) => {
             let source: Arc<dyn sovereign_mesh::peer_inference::PeerEndpointSource> =
                 Arc::clone(mesh) as Arc<_>;
             Arc::new(
                 sovereign_mesh::peer_inference::MeshInferenceProvider::with_peer_source(
-                    Arc::clone(&raw_inference),
+                    Arc::clone(&raw),
                     source,
                 ),
             )
         }
-        None => Arc::clone(&raw_inference),
+        None => Arc::clone(&raw),
     };
-    Ok((raw_inference, inference))
+    (raw, inference)
 }
 
 /// True when the GGUF at `p` is a recurrent architecture that crashes ggml's

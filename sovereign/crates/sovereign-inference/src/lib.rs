@@ -2,6 +2,10 @@
 pub mod capacity;
 pub mod cpu_compat;
 pub mod embedded;
+/// Which inference engine serves this node — selection + construction.
+pub mod engine_factory;
+/// The contracts an engine must satisfy, as runnable checks.
+pub mod engine_conformance;
 pub mod evidence_id_constraint;
 pub mod fim;
 pub mod gguf_meta;

@@ -200,6 +200,65 @@ run via `sovereign meshapp dev <id>`.
   computed by the host and cited, no model originates a number. Uses the
   `readCorpus` / `parcelAnalytics` bridge ops over a tabular corpus.
 
+Both read a corpus. A **ring app** writes one — see below.
+
+## Ring apps — shared state instead of a shared corpus
+
+`svrn ring` is the other half of the surface. An explorer or a calculator reads
+data somebody already ingested; a ring app is state a *group* creates together —
+a shared expense ledger, a tool-lending board, a chore rota. The unit of
+deployment is the ring, not a host.
+
+```
+svrn ring new ./house-expenses            # the page, its reducer, its tests
+svrn ring roster add alex --self --ring house-expenses
+svrn ring dev house-expenses --dir ./house-expenses
+svrn ring log house-expenses              # what is on the journal, in the terminal
+```
+
+Four things are worth knowing before you write one.
+
+**The rail does not know what your app is about, and that is the deal.** It
+carries an opaque payload — your JSON object — and guarantees exactly four
+things about the acts it hands back: every one was signed by a key this ring's
+roster claims; duplicates and equivocated ops are gone; corrections have been
+applied and never resurrect; and the order is the same on every node. What an
+act *means* is yours. The scaffold's `expenses.js` is that layer for the
+reference app, with its own `node --test` suite beside it — keep the shape,
+replace the rules.
+
+**`window.ring` is three calls and a fold.** `ring.log()` returns the whole
+namespace — the admitted acts, the gaps and the roster; `ring.record(payload)`
+adds one signed act; `ring.correct(id, replacement?)` voids an earlier one,
+permanently. Then `ring.fold(log, reducer, initial)` walks the acts in the
+rail's order, skipping the ones a correction voided. **Use the fold rather
+than iterating `log.ops`.** The guarantee is in the traversal: an app that
+filters and sorts the array itself will double-count every corrected entry,
+and it will look right until somebody makes a correction.
+
+**A payload is a JSON object of whole numbers and strings.** No fractions —
+`1e2`, `100.0` and `100` are one value with three spellings, and two nodes
+have to derive identical bytes from your act in order to verify one
+signature. Pick a unit and use an integer: cents, grams, milliseconds. The
+rail refuses a fraction at the door and says so.
+
+**`log.complete === false` is not a warning you may hide.** Your reducer's
+answer is a function of the ops this node holds, and `gaps` is the honest
+account of what it could not read — an op that has not arrived, a signature
+that does not verify, a signer no roster claims. A book that shows a total
+without saying it may be partial is worse than the spreadsheet it replaces.
+The scaffold renders the gap panel for you — both the rail's gaps and your own
+reducer's — and keeping it is not optional.
+
+**The roster is not reachable from the app.** `svrn ring roster` writes it and
+there is no rail route that can, so a deployed app cannot add a key to the ring —
+including its own. Who is in the ring is a decision people make, not one an app
+makes.
+
+Two nodes converge on their own: each republishes everything it holds to every
+online peer every sixty seconds, so a housemate who was offline for a week gets
+the missing entries back, and one who leaves does not take their half with them.
+
 ## How it all fits (one source of truth)
 
 The bridge ops live in the `sovereign-meshapp` library and are served identically by

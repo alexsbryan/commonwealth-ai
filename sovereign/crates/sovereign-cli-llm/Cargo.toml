@@ -81,6 +81,12 @@ sovereign-meshapp = { workspace = true }
 sovereign-cli-shared = { workspace = true, features = ["scip", "mcp-client"] }
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
+# `svrn ring` reads and writes the ring roster, and needs the node key the
+# ledger signs with. DIRECT deps on the crates that own `Roster`/`Person`
+# and `load_or_generate_node_key`, so this crate and the daemon cannot end
+# up on two versions of one logical type (ARCH §8.3).
+commonwealth-knowledge = { path = "../../../commonwealth/crates/commonwealth-knowledge" }
+commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport" }
 bytes = { workspace = true }
 corpus-engine = { workspace = true, features = ["treesitter"] }
 corpus-engine-notes = { workspace = true }

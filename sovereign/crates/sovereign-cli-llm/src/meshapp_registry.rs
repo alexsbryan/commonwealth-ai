@@ -214,11 +214,18 @@ fn sha256_file(path: &Path) -> io::Result<String> {
 pub async fn install(args: &[String]) -> i32 {
     let mut app_id: Option<String> = None;
     let mut from: Option<String> = None;
+    // The sha a SIDELOAD is checked against. Curated installs take theirs from
+    // the registry entry; a sideload had nothing at all until this existed.
+    let mut sha: Option<String> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
             "--from" => {
                 from = args.get(i + 1).cloned();
+                i += 2;
+            }
+            "--sha" => {
+                sha = args.get(i + 1).cloned();
                 i += 2;
             }
             o if app_id.is_none() && !o.starts_with("--") => {
@@ -238,8 +245,22 @@ pub async fn install(args: &[String]) -> i32 {
 
     // Resolve the source + the expected sha + trust.
     let (source, expected_sha, trust): (Source, Option<String>, &str) = if let Some(from) = from {
-        eprintln!("meshapp install: sideloading `{app_id}` from {from} — not curated; only install apps you trust.");
-        (source_of(&from), None, "unsigned")
+        // A sideload carried NO integrity check at all: `expected_sha = None`
+        // meant the bundle was unpacked whatever the bytes turned out to be.
+        // `--sha` makes the check available; without it we say plainly that
+        // nothing was verified, rather than printing a caveat about curation
+        // that reads like it covers integrity too.
+        match &sha {
+            Some(_) => eprintln!(
+                "meshapp install: sideloading `{app_id}` from {from} — not curated, but the \
+                 bytes will be checked against the --sha you gave."
+            ),
+            None => eprintln!(
+                "meshapp install: sideloading `{app_id}` from {from} — NOT CURATED AND NOT \
+                 VERIFIED. Nothing checks these bytes; pass --sha <hex> to have them checked."
+            ),
+        }
+        (source_of(&from), sha.clone(), "unsigned")
     } else {
         match resolve_entry(&app_id) {
             Some((entry, curated)) => {

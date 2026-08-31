@@ -65,6 +65,10 @@ pub struct ScopeRequest {
     /// Exact model ids this grant may dispatch.
     #[serde(default)]
     pub models: Option<Vec<String>>,
+    /// The single rail namespace this grant may read and write. One per
+    /// grant — see [`Scope::Rails`] for why it is not a list.
+    #[serde(default)]
+    pub rail: Option<String>,
 }
 
 impl ScopeRequest {
@@ -72,6 +76,9 @@ impl ScopeRequest {
         let mut out = Vec::new();
         if let Some(models) = self.models {
             out.push(Scope::Models(models));
+        }
+        if let Some(rail) = self.rail {
+            out.push(Scope::Rails(rail));
         }
         out
     }
@@ -111,7 +118,9 @@ pub async fn guest_grant_issue(
         return Err((
             StatusCode::BAD_REQUEST,
             Json(ErrorBody {
-                error: "a grant must name at least one scope — pass `scopes.models`".into(),
+                error: "a grant must name at least one scope — pass `scopes.models` \
+                        or `scopes.rail`"
+                    .into(),
             }),
         ));
     }
@@ -123,7 +132,15 @@ pub async fn guest_grant_issue(
     // them hunting in the wrong place.
     let dispatchable = crate::routes_inference::dispatchable_ids(&state).await;
     for scope in &scopes {
-        let Scope::Models(ids) = scope;
+        let ids = match scope {
+            Scope::Models(ids) => ids,
+            // A rail scope names a namespace, not a model, so there is
+            // nothing to check against the dispatchable set. An unnamed
+            // namespace is not an error either: a rail namespace is
+            // created by its first write, so "not seen before" is the
+            // normal case for the first app deployed to a ring.
+            Scope::Rails(_) => continue,
+        };
         for id in ids {
             if !dispatchable.iter().any(|d| d == id) {
                 return Err((

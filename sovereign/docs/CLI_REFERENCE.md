@@ -150,6 +150,43 @@ It is not instant. A cold load of a large model can take minutes before the firs
 trial starts. Exit `0` valid · `1` a guard tripped · `2` bad arguments · `3` assertion
 failed · `4` nothing measurable · `5` no daemon.
 
+### `svrn ring`
+
+Deploy an app to a trust ring — a group of people, not a host. State is an
+append-only log each member keeps a copy of, signed with their node key and
+handed back in an order every node agrees on. The rail carries the log; what
+an entry *means* is the app's.
+
+| Subcommand | Description |
+|---|---|
+| `new <dir> [--name <title>]` | Scaffold a ring app — the page, its reducer, and the reducer's tests. Re-running it never overwrites |
+| `roster add <person> (--self \| --key <hex>) --ring <ns>` | Bind a name to the node key that person signs with |
+| `roster list --ring <ns>` | Who is in the ring, as the running daemon sees it |
+| `dev <ns> [--dir <d>] [--port <n>]` | Serve the app at `127.0.0.1:4318`, holding a grant scoped to this ring alone |
+| `log <ns> [--json]` | The acts on this journal, in the order every node applies them, and everything the rail could not account for |
+
+A ring namespace is created by its first write; there is nothing to provision.
+Start with `roster add`, because an op signed by a key no roster claims is a
+gap rather than an act.
+
+`ring log` always prints its **gaps**. A gap does not make the acts above it
+wrong, it makes them partial — an op that has not arrived yet, a signature that
+does not verify, a signer nobody claims. Sequence holes usually close on their
+own: every node republishes what it holds to every online peer each minute.
+
+There is no `ring balances`. A balance is an *expense app's* reading of a
+journal, and the rail does not know what a payload means — a terminal that
+printed one for whichever tenant happened to be in front of it would be the
+money rules living in a second place. Open the app with `ring dev` to see them
+rendered.
+
+The grant `ring dev` mints reaches one namespace's rail and nothing else on the
+daemon, lives in the dev server rather than in the browser tab, and dies with
+the process. There is no rail route that can change a roster, so a deployed app
+cannot add a key to the ring — including its own.
+
+Authoring guide: [MESHAPP_AUTHORING.md](./MESHAPP_AUTHORING.md).
+
 ### `svrn corpus`
 
 Manage knowledge corpora. See [KNOWLEDGE_BASES.md](KNOWLEDGE_BASES.md) for tier details.

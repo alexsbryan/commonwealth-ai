@@ -2508,13 +2508,15 @@ pub(super) fn setup_watchers_and_work_atlas(
             );
         }
 
-        // Work-atlas observer (Phase 2). Requires the workspace to
-        // resolve a `repo_id` (SHA-256 of canonical origin URL). When
-        // the repo has no origin remote, the observer becomes a
-        // no-op rather than crashing the daemon — same posture as
-        // `declare_scope`, which errors on `repo_id_missing`.
-        match sovereign_work_atlas::resolve_repo_id(ws) {
-            Ok((repo_root, repo_id)) => {
+        // Work-atlas observer (Phase 2). Needs a `repo_id` to scope
+        // observations to. An `origin` remote yields the cross-node id;
+        // without one the workspace gets a machine-local id instead of being
+        // dropped, so a housemate's own project still gets an atlas — the
+        // observations simply do not travel, which is the truth about a repo
+        // no peer can name. Only "not a git repo at all" leaves the observer
+        // unwired.
+        match sovereign_work_atlas::resolve_repo_id_allowing_local(ws) {
+            Ok((repo_root, repo_id, _source)) => {
                 let branch = sovereign_cli_shared::repo::current_branch(&repo_root);
                 let observer = Arc::new(sovereign_work_atlas::AtlasObserver::new(
                     Arc::clone(&work_atlas_store),

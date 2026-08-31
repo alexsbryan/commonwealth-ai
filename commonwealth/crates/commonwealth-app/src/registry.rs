@@ -44,19 +44,54 @@ impl AppRegistry {
         self.apps.read().await.values().cloned().collect()
     }
 
-    /// Merge a manifest received via gossip. No-op if app_id is already present
-    /// with the same or newer version (version compared lexicographically for now).
-    /// Returns true if the registry was updated.
+    /// Merge a manifest received via gossip. No-op when the app is already
+    /// present at the same or a newer version. Returns true if the registry
+    /// was updated.
+    ///
+    /// Versions compare **numerically per component**, not as strings. The
+    /// string compare this replaced said `"10.0.0" < "9.0.0"`, so the tenth
+    /// release of an app could never displace the ninth — and it failed
+    /// silently, in the direction that keeps the OLD bundle.
     pub async fn merge(&self, manifest: MeshAppManifest) -> bool {
         let mut apps = self.apps.write().await;
         match apps.get(&manifest.app_id) {
-            Some(existing) if existing.version >= manifest.version => false,
+            Some(existing) if !is_newer(&manifest.version, &existing.version) => false,
             _ => {
                 apps.insert(manifest.app_id.clone(), manifest);
                 true
             }
         }
     }
+}
+
+/// Is `candidate` a strictly newer version than `current`?
+///
+/// Dotted numeric components, compared left to right, missing components
+/// treated as zero (`1.2` and `1.2.0` are the same version). A component that
+/// is not a number sorts as zero rather than making the whole comparison
+/// error — a manifest is a peer's data, and refusing to merge on a malformed
+/// version would let one bad publish freeze an app's updates forever.
+fn is_newer(candidate: &str, current: &str) -> bool {
+    let parts = |v: &str| -> Vec<u64> {
+        v.split('.')
+            .map(|c| {
+                c.chars()
+                    .take_while(char::is_ascii_digit)
+                    .collect::<String>()
+                    .parse()
+                    .unwrap_or(0)
+            })
+            .collect()
+    };
+    let (a, b) = (parts(candidate), parts(current));
+    let len = a.len().max(b.len());
+    for i in 0..len {
+        let (x, y) = (a.get(i).copied().unwrap_or(0), b.get(i).copied().unwrap_or(0));
+        if x != y {
+            return x > y;
+        }
+    }
+    false
 }
 
 impl Default for AppRegistry {
@@ -68,6 +103,32 @@ impl Default for AppRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The defect this replaced, stated as a test: a string compare put the
+    /// tenth release BELOW the ninth, so an app could never pass version 9.
+    #[test]
+    fn ten_is_newer_than_nine() {
+        assert!(is_newer("10.0.0", "9.0.0"));
+        assert!("10.0.0" < "9.0.0", "the string compare really was backwards");
+    }
+
+    #[test]
+    fn version_comparison_is_per_component_and_not_reflexive() {
+        assert!(is_newer("1.2.1", "1.2.0"));
+        assert!(is_newer("2.0.0", "1.99.99"));
+        assert!(!is_newer("1.2.0", "1.2.0"), "same version is not newer");
+        assert!(!is_newer("1.2.0", "1.2.1"));
+        assert!(!is_newer("1.2", "1.2.0"), "missing components are zero");
+        assert!(is_newer("1.2.1", "1.2"));
+    }
+
+    /// A peer's malformed version must not freeze an app's updates.
+    #[test]
+    fn a_malformed_component_sorts_as_zero_rather_than_refusing() {
+        assert!(is_newer("1.0.1", "1.0.x"));
+        assert!(!is_newer("1.0.x", "1.0.1"));
+        assert!(is_newer("2.0.0-beta", "1.0.0"));
+    }
     use crate::manifest::MeshAppManifest;
 
     fn manifest(id: &str, version: &str) -> MeshAppManifest {

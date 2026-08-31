@@ -75,7 +75,10 @@ const PEER_TIMEOUT: Duration = Duration::from_secs(3);
 ///
 /// The build is fallible (TLS backend init), and deterministically so:
 /// caching the failure is correct, not a lost retry.
-fn gossip_client() -> Result<&'static reqwest::Client, &'static str> {
+/// `pub(crate)` so the ring-sync loop shares this exact client: one
+/// connection pool and one timeout policy for all peer HTTP, rather than a
+/// second answer to "how long do we wait on a peer" (ARCH §10.6).
+pub(crate) fn gossip_client() -> Result<&'static reqwest::Client, &'static str> {
     static CLIENT: std::sync::OnceLock<Result<reqwest::Client, String>> =
         std::sync::OnceLock::new();
     CLIENT
