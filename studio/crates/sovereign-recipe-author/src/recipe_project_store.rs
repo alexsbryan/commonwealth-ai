@@ -81,14 +81,6 @@ pub struct RecipeProjectRow {
 pub struct RecipeProjectStore {
     conn: Arc<Mutex<Connection>>,
 }
-
-fn unix_now() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
-
 fn row_from(r: &rusqlite::Row<'_>) -> rusqlite::Result<RecipeProjectRow> {
     Ok(RecipeProjectRow {
         id: r.get(0)?,
@@ -135,7 +127,7 @@ impl RecipeProjectStore {
                 "recipe project id cannot be empty".into(),
             ));
         }
-        let now = unix_now();
+        let now = sovereign_time::unix_now();
         let conn = self.conn.lock().await;
         let affected = conn.execute(
             "INSERT INTO recipe_projects

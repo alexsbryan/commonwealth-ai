@@ -819,10 +819,6 @@ fn mean(iter: impl Iterator<Item = f64>) -> f64 {
 fn chrono_format_now() -> String {
     // No chrono dep in this crate; format manually so the JSON is
     // self-describing without pulling another crate.
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+    let secs = sovereign_core::time::unix_now_u64();
     format!("unix-{secs}")
 }

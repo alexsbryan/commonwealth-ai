@@ -254,9 +254,9 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     if sub == "verb" {
         // No SCIP load: this subcommand reads the enrichment cache, and the
         // graph costs 7-11s it would never touch.
-        let opts = crate::refactor_cmd::intent::IntentOptions::default();
+        let opts = crate::intent::IntentOptions::default();
         let index_path = indexes_dir.join(&corpus_id);
-        let symbols = match crate::refactor_cmd::intent::load_intent_corpus(&index_path, &opts) {
+        let symbols = match crate::intent::load_intent_corpus(&index_path, &opts) {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("error: {e}");
@@ -271,16 +271,13 @@ pub(crate) async fn run(args: &[String]) -> i32 {
             );
             return 1;
         }
-        let clusters = crate::refactor_cmd::intent::intent_census(&symbols, &opts);
+        let clusters = crate::intent::intent_census(&symbols, &opts);
         eprintln!(
             "converge verb: {} symbols with usable intent text; settings {}",
             symbols.len(),
             opts.digest()
         );
-        print!(
-            "{}",
-            crate::refactor_cmd::intent::render_intent(&clusters, limit)
-        );
+        print!("{}", crate::intent::render_intent(&clusters, limit));
         return 0;
     }
 

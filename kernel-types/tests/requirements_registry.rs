@@ -231,8 +231,8 @@ fn assert_histogram(reg: &RequirementRegistry) {
 /// reads as coverage while resolving to nobody.
 fn assert_every_column_resolves(root: &std::path::Path, reg: &RequirementRegistry) {
     let path = root.join(ENFORCEABILITY);
-    let text = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let text =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
     let enforceability: BTreeMap<String, Enforceability> =
         toml::from_str(&text).unwrap_or_else(|e| panic!("{ENFORCEABILITY}: {e}"));
 

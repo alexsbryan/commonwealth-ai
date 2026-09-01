@@ -12,6 +12,7 @@ license.workspace = true
 # harness are reached through injected trait objects (RecipeNotes, RecipeTester),
 # whose corpus-engine-backed adapters live monolith-side in sovereign-tools.
 [dependencies]
+sovereign-time = { workspace = true }
 sovereign-contracts = { workspace = true }
 
 async-trait = { workspace = true }

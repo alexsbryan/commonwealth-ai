@@ -152,12 +152,7 @@ pub(crate) fn spawn(engine: Arc<CorpusEngine>) {
     });
 }
 
-async fn sweep_once(
-    engine: &Arc<CorpusEngine>,
-    floor: usize,
-    prune: i64,
-    keep: Option<usize>,
-) {
+async fn sweep_once(engine: &Arc<CorpusEngine>, floor: usize, prune: i64, keep: Option<usize>) {
     // `None` only when pruning is disabled outright; otherwise every corpus
     // gets the same policy and the per-corpus decision below is purely about
     // whether it has earned each phase.

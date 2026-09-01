@@ -49,15 +49,8 @@ use serde::Deserialize;
 use super::super::atlas::{
     ClaimSketch, DiscourseAct, EnrichmentDepth, EpistemicStatus, SectionExtraction,
 };
-use super::super::trait_def::Pipeline;
-use super::super::types::{
-    CanonicalConcern, ChapterInput, ChatPrompt, ChunkCluster, Phase1ChapterResult,
-    Phase3FacetParseResult, Phase3ParseResult, Phase5ParseResult, Phase6ParseResult,
-    Phase7ParseItem, Position, QuestionCluster, SketchExcerpt, Vocabulary,
-};
-use super::literary_atlas::LiteraryAtlasPipeline;
-use crate::enrichment::domain::ClusteringConfig;
-use crate::enrichment::pipeline::{AtlasCluster, Exemplar, Facet};
+use super::super::types::{ChapterInput, ChatPrompt, Phase1ChapterResult};
+use crate::enrichment::pipeline::Exemplar;
 use crate::error::{Error, Result};
 
 pub const PIPELINE_ID: &str = "engineering_atlas";
@@ -69,25 +62,18 @@ static PHASE1_SYSTEM: ::std::sync::LazyLock<&'static str> = ::std::sync::LazyLoc
     )
 });
 
-pub struct EngineeringAtlasPipeline {
-    inner: LiteraryAtlasPipeline,
-}
+/// The engineering genre: technical docs, extracted as a flat claims envelope
+/// with code anchors rather than a literary atom graph.
+///
+/// Until 2026-08-31 this was an `EngineeringAtlasPipeline` wrapper holding 17
+/// verbatim delegations to an inner `LiteraryAtlasPipeline`. Phase 1 is the
+/// only phase that genuinely differs — it emits a different SHAPE, so it
+/// brings its own body, schema and parser; everything below Phase 1 was, and
+/// still is, the shared machinery.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct EngineeringGenre;
 
-impl EngineeringAtlasPipeline {
-    pub fn new() -> Self {
-        Self {
-            inner: LiteraryAtlasPipeline::new(),
-        }
-    }
-}
-
-impl Default for EngineeringAtlasPipeline {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Pipeline for EngineeringAtlasPipeline {
+impl super::genre::AtlasGenre for EngineeringGenre {
     fn id(&self) -> &'static str {
         PIPELINE_ID
     }
@@ -96,56 +82,24 @@ impl Pipeline for EngineeringAtlasPipeline {
         "Engineering docs — claims with code anchors"
     }
 
-    fn vocabulary(&self) -> &Vocabulary {
-        self.inner.vocabulary()
-    }
-
     fn phase1_system(&self) -> &'static str {
         *PHASE1_SYSTEM
     }
 
-    fn phase3_system(&self) -> &'static str {
-        self.inner.phase3_system()
-    }
-    fn phase5_system(&self) -> &'static str {
-        self.inner.phase5_system()
-    }
-    fn phase6_system(&self) -> &'static str {
-        self.inner.phase6_system()
-    }
-    fn phase7_system(&self) -> &'static str {
-        self.inner.phase7_system()
-    }
-
-    /// Phase 1 compose: feed only the section body. Engineering
-    /// extraction does not benefit from exemplars (the prompt
-    /// encodes the schema directly; the model's task is mechanical
-    /// not stylistic) and does not use a seed strategy.
-    fn compose_phase1(&self, chapter: &ChapterInput, _exemplars: &[&Exemplar]) -> ChatPrompt {
-        let user = render_user_body(chapter);
-        ChatPrompt::new(*PHASE1_SYSTEM, user)
-            .with_response_schema("engineering_claims", phase1_engineering_schema())
-            .with_phase_id("phase1")
-    }
-
-    /// Engineering atlas has no seed strategy — the default
-    /// `compose_phase1_with_seed` delegates back to compose_phase1
-    /// which ignores the seed. Explicit override here pins the
-    /// behaviour against future trait changes.
-    fn compose_phase1_with_seed(
+    fn compose_phase1(
         &self,
         chapter: &ChapterInput,
-        exemplars: &[&Exemplar],
+        _exemplars: &[&Exemplar],
         _seed: Option<&super::super::atlas::SeedEntities>,
-    ) -> ChatPrompt {
-        self.compose_phase1(chapter, exemplars)
+    ) -> Option<ChatPrompt> {
+        let user = render_user_body(chapter);
+        Some(
+            ChatPrompt::new(*PHASE1_SYSTEM, user)
+                .with_response_schema("engineering_claims", phase1_engineering_schema())
+                .with_phase_id("phase1"),
+        )
     }
 
-    /// Terse variant — same prompt + schema, just with the explicit
-    /// "no preamble" reminder. Engineering Phase 1 is already
-    /// minimal, so the terse path mostly exists so the runner's
-    /// auto-retry has something to fall back on when a deadline-
-    /// exceeded or parse-drift failure surfaces.
     fn compose_phase1_terse(&self, chapter: &ChapterInput) -> Option<ChatPrompt> {
         let user = format!(
             "{}\n\nReminder: respond with one JSON object only. \
@@ -159,148 +113,67 @@ impl Pipeline for EngineeringAtlasPipeline {
         )
     }
 
-    // ── Phases 3, 5, 6, 7 + clustering — delegate to inner ──
-    //
-    // Engineering atlas only differs from literary at Phase 1. The
-    // cluster/name/resolve/cross-domain phases operate on
-    // SectionExtraction shapes and don't care which Phase 1 produced
-    // them — empty facets degenerate to no-ops, populated `claims[]`
-    // flow through the same logic.
-
-    fn compose_phase3(
-        &self,
-        cluster: &QuestionCluster,
-        chapter_excerpts: &[&ChapterInput],
-        exemplars: &[&Exemplar],
-    ) -> ChatPrompt {
-        self.inner
-            .compose_phase3(cluster, chapter_excerpts, exemplars)
+    fn parse_phase1(&self, response: &str) -> Option<Result<Phase1ChapterResult>> {
+        Some(parse_engineering_phase1(response))
     }
+}
 
-    fn parse_phase3(&self, response: &str) -> Result<Phase3ParseResult> {
-        self.inner.parse_phase3(response)
-    }
+/// Parse the engineering Phase-1 claims envelope. Free, because the genre hook
+/// only wraps it — the parse itself is what differs from the shared atlas.
+fn parse_engineering_phase1(response: &str) -> Result<Phase1ChapterResult> {
+    let cleaned = prepare_response(response)?;
+    let raw: RawClaimsEnvelope = serde_json::from_str(&cleaned).map_err(|e| {
+        Error::Serialization(format!(
+            "phase 1 (engineering atlas) response is not valid JSON: {e} | head: {}",
+            cleaned.chars().take(200).collect::<String>()
+        ))
+    })?;
 
-    fn compose_phase3_facet(
-        &self,
-        cluster: &AtlasCluster,
-        facet: Facet,
-        excerpts: &[SketchExcerpt],
-        exemplars: &[&Exemplar],
-    ) -> Option<ChatPrompt> {
-        self.inner
-            .compose_phase3_facet(cluster, facet, excerpts, exemplars)
-    }
-
-    fn parse_phase3_facet(&self, facet: Facet, response: &str) -> Result<Phase3FacetParseResult> {
-        self.inner.parse_phase3_facet(facet, response)
-    }
-
-    fn compose_phase5(
-        &self,
-        concern: &CanonicalConcern,
-        cluster: &ChunkCluster,
-        cluster_chunk_texts: &[(u64, String)],
-        exemplars: &[&Exemplar],
-    ) -> ChatPrompt {
-        self.inner
-            .compose_phase5(concern, cluster, cluster_chunk_texts, exemplars)
-    }
-
-    fn parse_phase5(&self, response: &str) -> Result<Phase5ParseResult> {
-        self.inner.parse_phase5(response)
-    }
-
-    fn compose_phase6(
-        &self,
-        pos_a: &Position,
-        pos_b: &Position,
-        exemplars: &[&Exemplar],
-    ) -> ChatPrompt {
-        self.inner.compose_phase6(pos_a, pos_b, exemplars)
-    }
-
-    fn parse_phase6(&self, response: &str) -> Result<Option<Phase6ParseResult>> {
-        self.inner.parse_phase6(response)
-    }
-
-    fn compose_phase7(
-        &self,
-        concerns: &[CanonicalConcern],
-        positions: &[Position],
-        chapter_titles: &[String],
-        exemplars: &[&Exemplar],
-    ) -> ChatPrompt {
-        self.inner
-            .compose_phase7(concerns, positions, chapter_titles, exemplars)
-    }
-
-    fn parse_phase7(&self, response: &str) -> Result<Vec<Phase7ParseItem>> {
-        self.inner.parse_phase7(response)
-    }
-
-    fn question_clustering_config(&self) -> ClusteringConfig {
-        self.inner.question_clustering_config()
-    }
-
-    fn chunk_clustering_config(&self) -> ClusteringConfig {
-        self.inner.chunk_clustering_config()
-    }
-
-    /// Parse the narrow `{claims: [...]}` envelope into a
-    /// SectionExtraction with only `claims[]` populated. The other
-    /// facet vecs stay empty — phases 2-5 see "no atoms in this
-    /// facet" and degenerate cleanly.
-    fn parse_phase1(&self, response: &str) -> Result<Phase1ChapterResult> {
-        let cleaned = prepare_response(response)?;
-        let raw: RawClaimsEnvelope = serde_json::from_str(&cleaned).map_err(|e| {
-            Error::Serialization(format!(
-                "phase 1 (engineering atlas) response is not valid JSON: {e} | head: {}",
-                cleaned.chars().take(200).collect::<String>()
-            ))
-        })?;
-
-        let claims: Vec<ClaimSketch> = raw
-            .claims
-            .into_iter()
-            .map(|c| {
-                // First anchor (if any) → ClaimSketch.anchor. The
-                // backtick_augment post-processor will recover the
-                // remaining anchors from the content field.
-                let anchor = c.code_anchors.into_iter().next().unwrap_or_default();
-                ClaimSketch {
-                    content: c.content,
-                    discourse_act: DiscourseAct::Assert,
-                    epistemic_status: EpistemicStatus::Confident,
-                    attributed_to: None,
-                    quotable_excerpt: c.evidence_excerpt,
-                    anchor,
-                }
-            })
-            .collect();
-
-        Ok(Phase1ChapterResult {
-            questions: Vec::new(),
-            reveals: None,
-            thematic_carriers: Vec::new(),
-            setting: None,
-            plot: None,
-            section_extraction: Some(SectionExtraction {
-                section_id: String::new(), // runner stamps this
-                enrichment_depth: EnrichmentDepth::Extracted,
-                entities_introduced: Vec::new(),
-                entities_developed: Vec::new(),
-                relations_introduced: Vec::new(),
-                relations_developed: Vec::new(),
-                events: Vec::new(),
-                claims,
-                questions_raised: Vec::new(),
-                argument_reconstructions: Vec::new(),
-                type_extension: None,
-                type_extensions: Vec::new(),
-            }),
+    let claims: Vec<ClaimSketch> = raw
+        .claims
+        .into_iter()
+        .map(|c| {
+            // First anchor (if any) → ClaimSketch.anchor. The
+            // backtick_augment post-processor will recover the
+            // remaining anchors from the content field.
+            let anchor = c.code_anchors.into_iter().next().unwrap_or_default();
+            ClaimSketch {
+                content: c.content,
+                discourse_act: DiscourseAct::Assert,
+                epistemic_status: EpistemicStatus::Confident,
+                attributed_to: None,
+                quotable_excerpt: c.evidence_excerpt,
+                anchor,
+            }
         })
-    }
+        .collect();
+
+    Ok(Phase1ChapterResult {
+        questions: Vec::new(),
+        reveals: None,
+        thematic_carriers: Vec::new(),
+        setting: None,
+        plot: None,
+        section_extraction: Some(SectionExtraction {
+            section_id: String::new(), // runner stamps this
+            enrichment_depth: EnrichmentDepth::Extracted,
+            entities_introduced: Vec::new(),
+            entities_developed: Vec::new(),
+            relations_introduced: Vec::new(),
+            relations_developed: Vec::new(),
+            events: Vec::new(),
+            claims,
+            questions_raised: Vec::new(),
+            argument_reconstructions: Vec::new(),
+            type_extension: None,
+            type_extensions: Vec::new(),
+        }),
+    })
+}
+
+/// The engineering atlas pipeline.
+pub fn pipeline() -> super::literary_atlas::LiteraryAtlasPipeline {
+    super::literary_atlas::LiteraryAtlasPipeline::with_genre(std::sync::Arc::new(EngineeringGenre))
 }
 
 /// Render the per-section user body. Just title + text — the engineering
@@ -390,18 +263,19 @@ fn prepare_response(response: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::super::trait_def::Pipeline;
     use super::*;
 
     #[test]
     fn pipeline_id_matches_constant() {
-        let p = EngineeringAtlasPipeline::new();
+        let p = pipeline();
         assert_eq!(p.id(), PIPELINE_ID);
         assert_eq!(p.id(), "engineering_atlas");
     }
 
     #[test]
     fn phase1_compose_attaches_response_schema() {
-        let p = EngineeringAtlasPipeline::new();
+        let p = pipeline();
         let chapter = ChapterInput {
             chapter_id: "sec_0001".to_string(),
             title: "Title".to_string(),
@@ -418,7 +292,7 @@ mod tests {
 
     #[test]
     fn parse_phase1_populates_only_claims_facet() {
-        let p = EngineeringAtlasPipeline::new();
+        let p = pipeline();
         let resp = r#"{
             "claims": [
                 {
@@ -453,7 +327,7 @@ mod tests {
     fn parse_phase1_tolerates_think_preamble() {
         // Even with grammar constraint the model occasionally lands
         // a think tag if the schema is loose; the parser strips it.
-        let p = EngineeringAtlasPipeline::new();
+        let p = pipeline();
         let resp = r#"<think>Considering the section...</think>
 {"claims": [{"content": "x", "code_anchors": []}]}"#;
         let res = p.parse_phase1(resp).unwrap();
@@ -463,7 +337,7 @@ mod tests {
 
     #[test]
     fn parse_phase1_no_claims_returns_empty_section() {
-        let p = EngineeringAtlasPipeline::new();
+        let p = pipeline();
         let res = p.parse_phase1(r#"{"claims": []}"#).unwrap();
         let sx = res.section_extraction.unwrap();
         assert!(sx.claims.is_empty());

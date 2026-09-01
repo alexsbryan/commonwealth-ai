@@ -1108,6 +1108,7 @@ mod tests {
     /// class scored higher. Observed for real on 2026-07-28: the
     /// archive and scope axes both fitted to margin <= -0.10 on 3-4
     /// cases, scoring perfectly and meaning nothing.
+    /// covers: RT-17
     #[test]
     fn fit_never_proposes_a_negative_margin_gate() {
         let bank = vec![

@@ -24,8 +24,6 @@ mod adversarial_read;
 mod archive_axis_live;
 #[path = "main/chunk_provenance_census.rs"]
 mod chunk_provenance_census;
-#[path = "main/conformance_tags.rs"]
-mod conformance_tags;
 #[path = "main/core_tests.rs"]
 mod core_tests;
 #[path = "main/custody_reds.rs"]

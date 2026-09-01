@@ -26,7 +26,8 @@
 //! every landing verdict call `svrn code converge status` and gate on its exit.
 
 use crate::{
-    arch_gate, boundary_gate, concept_gate, docs_gate, env_gate, layer_gate, layout_gate, lock_gate,
+    arch_gate, boundary_gate, clock_gate, concept_gate, docs_gate, env_gate, layer_gate,
+    layout_gate, lock_gate,
 };
 
 /// Whether a gate's verdict may fail this command.
@@ -63,6 +64,12 @@ pub fn run() -> i32 {
             layout_gate::run(&no_args)
         }),
         ("env-gate", Enforcement::Hard, &|| env_gate::run(&no_args)),
+        // Hard for the same reason layout-gate is: it reads the working tree,
+        // so its verdict is about the code being gated, not about the last
+        // indexed commit.
+        ("clock-gate", Enforcement::Hard, &|| {
+            clock_gate::run(&no_args)
+        }),
         ("concept-gate", Enforcement::Advisory, &|| {
             concept_gate::run(&no_args)
         }),

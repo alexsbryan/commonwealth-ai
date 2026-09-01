@@ -77,10 +77,7 @@ impl GuestLink {
 /// Unix seconds. One reader of the clock so the CLI and the daemon cannot
 /// disagree about what "now" is.
 pub fn now_secs() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+    crate::time::unix_now_u64()
 }
 
 /// Where `guest.json` lives under a sovereign root.

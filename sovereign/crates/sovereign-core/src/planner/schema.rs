@@ -547,6 +547,7 @@ mod tests {
         );
     }
 
+    /// covers: RT-32
     #[test]
     fn a_tool_whose_params_cannot_be_masked_is_refused_not_widened() {
         // The quiet-break shape: `parameters` with no `"type"` compiles

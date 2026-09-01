@@ -522,11 +522,7 @@ async fn daemon_is_listening(port: u16) -> bool {
         return false;
     };
     let base = sovereign_contracts::setup_config::client_daemon_base_for(port);
-    client
-        .get(format!("{base}/v1/models"))
-        .send()
-        .await
-        .is_ok()
+    client.get(format!("{base}/v1/models")).send().await.is_ok()
 }
 
 /// The `DaemonServices` bundle a one-shot admin action needs.

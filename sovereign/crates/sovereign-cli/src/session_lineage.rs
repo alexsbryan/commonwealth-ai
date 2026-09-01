@@ -95,15 +95,8 @@ pub(crate) struct Pointer {
 
 impl Pointer {
     pub(crate) fn age_s(&self) -> u64 {
-        now_unix().saturating_sub(self.ts)
+        sovereign_core::time::unix_now_u64().saturating_sub(self.ts)
     }
-}
-
-fn now_unix() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
 }
 
 /// FNV-1a. A hash, not a checksum — it only has to distinguish two start times
@@ -235,7 +228,7 @@ pub(crate) fn write_pointer(
         "tty": win.tty,
         "session_id": session_id,
         "kind": kind,
-        "ts": now_unix(),
+        "ts": sovereign_core::time::unix_now_u64(),
         "repo": repo,
         "branch": branch,
     });

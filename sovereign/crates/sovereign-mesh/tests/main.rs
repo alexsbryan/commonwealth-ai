@@ -18,8 +18,6 @@
 //! need process isolation, or a `.config/nextest.toml` override keys on
 //! their binary name. Do not fold those in.
 
-#[path = "main/common/mod.rs"]
-mod common;
 #[path = "main/canonical_pull_e2e.rs"]
 mod canonical_pull_e2e;
 #[path = "main/capabilities_published.rs"]
@@ -28,6 +26,8 @@ mod capabilities_published;
 mod chat_completion_e2e;
 #[path = "main/client_exposure.rs"]
 mod client_exposure;
+#[path = "main/common/mod.rs"]
+mod common;
 #[path = "main/corpus_sharing_over_iroh_e2e.rs"]
 mod corpus_sharing_over_iroh_e2e;
 #[path = "main/corpus_watch_http_e2e.rs"]

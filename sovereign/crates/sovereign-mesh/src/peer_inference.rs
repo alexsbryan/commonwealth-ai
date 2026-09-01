@@ -3076,9 +3076,7 @@ impl MeshRoutingConsent {
     /// The ONE reading of an envelope for this question.
     fn from_envelope(oicp: Option<&sovereign_contracts::oicp::InferenceRequirements>) -> Self {
         match oicp {
-            Some(o)
-                if o.sharding() == sovereign_contracts::oicp::ShardingPrivacy::MeshAllowed =>
-            {
+            Some(o) if o.sharding() == sovereign_contracts::oicp::ShardingPrivacy::MeshAllowed => {
                 Self::Granted
             }
             _ => Self::Withheld,
@@ -4678,8 +4676,10 @@ mod tests {
     async fn a_weightless_node_forwards_a_name_nobody_here_advertises() {
         for locus in [ServingLocus::ForwardsOnBox, ServingLocus::ForwardsOffBox] {
             let mip = forwarder(locus);
-            match mip.locate_named_model("primary", MeshRoutingConsent::Withheld)
-                .await {
+            match mip
+                .locate_named_model("primary", MeshRoutingConsent::Withheld)
+                .await
+            {
                 NamedModelLocation::Local => {}
                 other => panic!(
                     "a node holding no weights must hand '{}' to its forwarder; got {other:?}",
@@ -4860,8 +4860,10 @@ mod tests {
             saw_model: Arc::new(std::sync::Mutex::new(None)),
         });
         let mip = MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers));
-        match mip.locate_named_model("not-a-real-model", MeshRoutingConsent::Withheld)
-            .await {
+        match mip
+            .locate_named_model("not-a-real-model", MeshRoutingConsent::Withheld)
+            .await
+        {
             NamedModelLocation::Unknown(NamedUnknownReason::NotAdvertised) => {}
             other => panic!("a holder must still refuse an unplaceable name; got {other:?}"),
         }
@@ -4929,8 +4931,10 @@ mod tests {
     #[tokio::test]
     async fn a_load_balanced_peer_route_remembers_we_hold_the_model_too() {
         let (mip, _) = mip_with_peer("shared-model", "shared-model", true).await;
-        match mip.locate_named_model("shared-model", MeshRoutingConsent::Withheld)
-            .await {
+        match mip
+            .locate_named_model("shared-model", MeshRoutingConsent::Withheld)
+            .await
+        {
             NamedModelLocation::Peer(_, _, LocalAlternative::LocalHasIt) => {}
             other => panic!(
                 "both nodes advertise this id and we are busier, so the peer should \
@@ -4942,8 +4946,10 @@ mod tests {
     #[tokio::test]
     async fn a_sole_holder_peer_route_says_so() {
         let (mip, _) = mip_with_peer("something-else", "peer-only", false).await;
-        match mip.locate_named_model("peer-only", MeshRoutingConsent::Withheld)
-            .await {
+        match mip
+            .locate_named_model("peer-only", MeshRoutingConsent::Withheld)
+            .await
+        {
             NamedModelLocation::Peer(_, _, LocalAlternative::SoleHolder) => {}
             other => panic!("only the peer advertises this id; got {other:?}"),
         }
@@ -4972,8 +4978,10 @@ mod tests {
             mip.yield_backoff.secs_remaining("DeadPeer").is_some(),
             "the refusal must be on record, or this test passes for the wrong reason"
         );
-        match mip.locate_named_model("peer-only", MeshRoutingConsent::Withheld)
-            .await {
+        match mip
+            .locate_named_model("peer-only", MeshRoutingConsent::Withheld)
+            .await
+        {
             NamedModelLocation::Unknown(_) => {}
             other => panic!(
                 "the only advertiser is inside its own yielded_to_local window, so the \

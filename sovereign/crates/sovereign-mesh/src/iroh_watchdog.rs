@@ -34,7 +34,7 @@
 
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use commonwealth_transport::iroh::{Endpoint, RelayStatus, Watcher};
 use futures::StreamExt;
@@ -192,18 +192,11 @@ pub fn spawn(endpoint: Endpoint, rebuild: RebuildFn, cfg: WatchdogConfig) -> Wat
     }
 }
 
-fn now_unix() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
-
 async fn record_recovery(status: &Arc<RwLock<ReachabilityStatus>>, action: &str, ok: bool) {
     let mut s = status.write().await;
     s.last_recovery = Some(RecoveryEvent {
         action: action.to_string(),
-        at_unix: now_unix(),
+        at_unix: sovereign_core::time::unix_now_u64(),
         ok,
     });
 }

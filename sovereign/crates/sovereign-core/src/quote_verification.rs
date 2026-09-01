@@ -610,6 +610,7 @@ mod tests {
     /// composite — real fragments spliced with an interior ellipsis — is
     /// non-contiguous in the source under any normalisation, so passing the
     /// FULL chunks alongside the rendering leaves it demoted.
+    /// covers: GR-21
     #[test]
     fn a_composite_quote_is_still_demoted_against_the_full_chunks() {
         let chunk = "The ledger was kept in a fair hand. Many pages later, and after \

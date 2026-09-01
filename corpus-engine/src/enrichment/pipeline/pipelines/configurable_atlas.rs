@@ -83,6 +83,7 @@ pub struct CustomVocabulary {
 /// process in [`CustomOntology::build`] — the same bounded-leak pattern as
 /// `prompts::load_or_baked`. (`pub(super)` so the sibling `literary_atlas`
 /// module can read them in its branch points.)
+#[derive(Debug)]
 pub struct CustomOntology {
     pub(super) name: &'static str,
     pub(super) phase1_system: &'static str,
@@ -201,5 +202,84 @@ mod tests {
         let ont = CustomOntology::build(&spec);
         assert!(!ont.phase1_system.contains("## Domain focus"));
         assert!(ont.phase1_system.contains("seven facets"));
+    }
+}
+
+/// The recipe-driven genre. Every prebuilt genre and this one now reach the
+/// atlas machinery through the same trait, so "custom" is not a second mode
+/// with its own branch points — it is one more genre (ARCH §10.6).
+impl super::genre::AtlasGenre for CustomOntology {
+    fn id(&self) -> &'static str {
+        PIPELINE_ID
+    }
+
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn phase1_system(&self) -> &'static str {
+        self.phase1_system
+    }
+
+    /// The terse RETRY re-extracts under the SAME domain ontology (just a
+    /// lighter body), never under the literary terse prompt — a failed chapter
+    /// must not come back classified by the wrong frame.
+    fn phase1_terse_system(&self) -> &'static str {
+        self.phase1_system
+    }
+
+    fn vocabulary(&self) -> Option<&super::super::types::Vocabulary> {
+        Some(&self.vocabulary)
+    }
+
+    /// v1: a recipe ontology skips the literary-framed 1b coverage top-up.
+    fn runs_phase1b_coverage(&self) -> bool {
+        false
+    }
+
+    /// v1: skips the literary seed pass (its seed prompt is literary-specific);
+    /// Phase 1 extracts directly under the ontology.
+    fn seed_strategy(&self) -> super::super::atlas::SeedStrategy {
+        super::super::atlas::SeedStrategy::None
+    }
+
+    /// Recipe-ontology corpora (governance rule-sets, policy docs) are
+    /// cross-document with uniformly-worded rules. The graph signals miss the
+    /// real conflicts (a later decision often resolves with no `attributed_to`,
+    /// so entity-overlap cannot reach it) and over-pair claims sharing a broad
+    /// scope entity. An embedding top-K net recalls same-topic pairs and lets
+    /// the classifier judge conflict-vs-compatible. k/floor measured on the
+    /// Maple House governance fixture: planted conflicts sit at cosine
+    /// 0.60–0.76, so floor 0.5 keeps them while K bounds the per-claim fan-out.
+    fn tension_strategy(&self) -> crate::enrichment::atlas::analysis::TensionStrategy {
+        crate::enrichment::atlas::analysis::TensionStrategy::EmbeddingTopK { k: 10, floor: 0.5 }
+    }
+
+    /// Judge conflicts in the domain's own terms: fill the ontology-driven
+    /// template from the recipe's guidance + tension/position vocabulary.
+    fn compose_phase6_classifier(
+        &self,
+        content: &crate::enrichment::atlas::analysis::CandidateContent,
+    ) -> Option<super::super::types::ChatPrompt> {
+        let system = super::literary_atlas::custom_phase6_classifier_system(
+            self.guidance,
+            &self.vocabulary.tension_term,
+            &self.vocabulary.position_term,
+        );
+        Some(
+            super::super::types::ChatPrompt::new(
+                system,
+                super::literary_atlas::render_custom_phase6_classifier_user_body(
+                    content,
+                    &self.vocabulary.tension_term,
+                ),
+            )
+            .with_response_schema(
+                "phase6_classifier_response",
+                crate::enrichment::atlas::analysis::phase6_classifier_response_schema(),
+            )
+            .with_phase_id("phase6_classifier")
+            .with_max_output_tokens(256),
+        )
     }
 }

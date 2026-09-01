@@ -536,6 +536,15 @@ flags = [
 # docs/cli-contract.toml, which only a source checkout has; the views are
 # positional rather than flags because each is a different report, not a
 # different formatting of one.
+# conformance — the spec-altitude view beside `contract`'s CLI-altitude one.
+# It runs nothing: it joins quality/requirements.toml, quality/conformance/*.toml
+# and the newest target/nextest/*/junit.xml, so it needs a source checkout and a
+# test run that already happened.
+[[command]]
+path = "conformance"
+binary = "dispatcher"
+feature = "dev-tools"
+
 [[command]]
 path = "contract"
 binary = "dispatcher"
@@ -1673,6 +1682,7 @@ for it (narration, not payload), so the proof is [2]."""
 exit = 0
 [[journey.step]]
 run = "daemon status"
+requirements = ["UI-17"]
 note = "the proof of [0] and [1] both: the daemon the setup wrote is answering"
 [journey.step.expect]
 exit = 0
@@ -2326,6 +2336,7 @@ doc = "sovereign/docs/CODE_INTELLIGENCE.md#the-tools-you-get"
 # the journey failing is the correct signal that a documented answer changed.
 [[journey.step]]
 run = "tools call symbols --name={symbol}"
+requirements = ["CI-1"]
 note = """the promise CODE_INTELLIGENCE.md opens with — "every answer pointing \
 at a file and a line". Asserting the FILE is asserting that promise; asserting \
 the line would make every edit above it a false failure."""
@@ -2334,6 +2345,7 @@ exit = 0
 stdout_contains = "{symbol_file}"
 [[journey.step]]
 run = "tools call callers --symbol={function}"
+requirements = ["CI-1"]
 note = """`--symbol`, not `--name`: the call-graph tools take a different \
 parameter than `symbols`, and bare or misnamed args exit 2 with the schema \
 hint rather than answering — which is why the fixture pair moves together."""
@@ -2342,11 +2354,13 @@ exit = 0
 stdout_contains = "{caller_file}"
 [[journey.step]]
 run = "tools call callees --symbol={function}"
+requirements = ["CI-1"]
 [journey.step.expect]
 exit = 0
 stdout_contains = "{callee}"
 [[journey.step]]
 run = "tools call blast --symbol={function}"
+requirements = ["CI-1"]
 note = """the transitive impact, and the one tool here that answers in JSON — \
 so this step also proves the `--format`-free default is machine-readable, \
 which is what the pre-flight checks in .claude/CLAUDE.md consume."""
@@ -2355,6 +2369,7 @@ exit = 0
 stdout_contains = "{caller_file}"
 [[journey.step]]
 run = "tools call code_search --query={code_query}"
+requirements = ["CI-1"]
 note = """semantic search, so the assertion is a file the query should reach BY \
 MEANING with none of its words in the path. Chosen because it is stable: the \
 same three hits came back across phrasings (measured 2026-07-29). This is the \
@@ -3064,6 +3079,37 @@ is lane-independent."""
 [journey.step.expect]
 exit = 0
 stdout_contains = "drift"
+
+[[journey]]
+id = "conformance-audit"
+title = "Ask which requirements of the specification are actually proven"
+persona = "developer"
+experience = "cli-quality"
+tier = 3
+doc = "sovereign/docs/TESTING_SURFACE.md"
+# Separate from `contract-audit` on purpose, and the separation is the point:
+# `contract` is the CLI's OWN promises, `conformance` is the product
+# specification's. Conflating the two nouns destroys both — one would start
+# counting verbs as requirements. Same experience (both are quality surfaces),
+# same cost profile: pure file I/O over committed artifacts, no daemon, no
+# model, no mutation.
+[[journey.step]]
+run = "conformance --family GR"
+note = """asserts the FOUR-TUPLE renders, by naming the verdict that a two-valued \
+report cannot produce. `stdout_non_empty` would pass on a run that loaded no \
+registry at all — the banner prints regardless, which is the exact vacuity note \
+f496d39e was about."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "could-not-judge"
+[[journey.step]]
+run = "conformance"
+note = """the front door must end with how to change the number it just printed. \
+A conformance report that says 2 of 625 and not how to claim the 623rd is where a \
+quality tool starts dying."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "covers:"
 
 
 # ═════════════════════════════════════════════════════════════════════════

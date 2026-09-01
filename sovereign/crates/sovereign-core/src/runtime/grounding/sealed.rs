@@ -324,6 +324,7 @@ mod tests {
         assert_eq!(seal.unhandled(), 1);
     }
 
+    /// covers: X-PR-2
     #[test]
     fn a_summary_member_may_not_be_quoted() {
         // Belt to the leaf filter's braces: the grain rides with the row, so
@@ -385,6 +386,7 @@ mod tests {
         }
     }
 
+    /// covers: GR-17
     #[test]
     fn cite_refuses_a_quote_the_chosen_member_does_not_hold() {
         let seal = SealedEvidence::over(

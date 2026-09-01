@@ -55,7 +55,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use futures::StreamExt;
 use sovereign_core::mesh_measurements as mm;
@@ -1720,7 +1720,7 @@ async fn run_bench(args: BenchArgs) -> i32 {
         placement_human: human.clone(),
         nodes,
         hops: nodes.saturating_sub(1),
-        measured_at: now_unix(),
+        measured_at: sovereign_core::time::unix_now_u64(),
         build: env!("CARGO_PKG_VERSION").to_string(),
         backend: mesh.self_backend.clone(),
         // Still `None`, and `None` is the honest value — not zero, which would
@@ -1804,15 +1804,6 @@ pub(crate) fn peer_liveness(shards: &[mm::PlacementShard], mesh: &MeshView) -> V
             )
         })
         .collect()
-}
-
-/// Seconds since the epoch. `0` if the clock is before it, which no comparison
-/// in this module treats as meaningful.
-fn now_unix() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
 }
 
 /// GET a JSON endpoint off the local daemon.

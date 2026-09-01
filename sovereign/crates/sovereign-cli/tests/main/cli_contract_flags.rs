@@ -218,9 +218,11 @@ fn flags_missing_from_their_own_help_do_not_grow() {
         .into_iter()
         .filter(|e| {
             !e.in_help
-                && c.canonical().find(|cmd| cmd.path == e.path).is_some_and(|cmd| {
-                    help_probeable(&cmd.path, cmd.probe) && feature_compiled_in(cmd.feature)
-                })
+                && c.canonical()
+                    .find(|cmd| cmd.path == e.path)
+                    .is_some_and(|cmd| {
+                        help_probeable(&cmd.path, cmd.probe) && feature_compiled_in(cmd.feature)
+                    })
         })
         .map(|e| format!("svrn {} {}", e.path, e.flag))
         .collect();

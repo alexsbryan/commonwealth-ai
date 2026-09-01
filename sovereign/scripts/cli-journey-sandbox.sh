@@ -28,7 +28,9 @@
 #   sovereign/scripts/cli-journey-sandbox.sh --journey corpus-lifecycle
 #   JOURNEY_CORPUS=sep sovereign/scripts/cli-journey-sandbox.sh
 #
-# Env: JOURNEY_PORT (default 19741), JOURNEY_CORPUS (see the note below),
+# Env: JOURNEY_LANE_JSONL (append the per-step rows here before the sandbox
+#      HOME is deleted — what `svrn conformance` reads), JOURNEY_PORT
+#      (default 19741), JOURNEY_CORPUS (see the note below),
 #      PRIMARY_GGUF / EMBED_GGUF (default to the small soak models),
 #      READY_BUDGET_SECS (default 180), KEEP_HOME=1 to keep the sandbox.
 #
@@ -569,6 +571,18 @@ for jid in "${JOURNEY_IDS[@]}"; do
   esac
 done
 cat "$SANDBOX_HOME"/j-*.jsonl > "$JSONL" 2>/dev/null || true
+
+# Export the per-step rows before the sandbox HOME is deleted.
+#
+# The runner has always written them; they died with the throwaway HOME on
+# every green run, so the one artefact that says WHICH STEP proved what was
+# produced and discarded nightly. `svrn conformance` needs exactly that to
+# turn a step's `requirements = [...]` claim into a verdict — the lane's
+# overall summary cannot, because applying it to every claim would mark each
+# one proven on the strength of some other step.
+if [ -n "${JOURNEY_LANE_JSONL:-}" ]; then
+  cat "$JSONL" >> "$JOURNEY_LANE_JSONL" 2>/dev/null || true
+fi
 
 # Aggregate coverage across the whole lane, read back from the JSONL the runner
 # wrote rather than re-counted here — one definition of "executed", in the place

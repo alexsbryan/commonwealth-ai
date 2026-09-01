@@ -168,12 +168,12 @@ most-depended-on crates dirtied.**
 | release script self-test | a release driver / Containerfile changed | ~2s |
 | `npm run check` + `npm run test` | `sovereign-desktop/` changed | 10s |
 
-The eight are docs-gate (every path the narrative docs cite resolves — checked
+The nine are docs-gate (every path the narrative docs cite resolves — checked
 on *any* change, because a citation usually breaks when *code* is renamed),
-arch-gate, boundary-gate, layer-gate, lock-gate, layout-gate, env-gate and
-concept-gate. docs-gate used to run as its own `cargo run -p xtask --`, which
+arch-gate, boundary-gate, layer-gate, lock-gate, layout-gate, env-gate,
+clock-gate and concept-gate. docs-gate used to run as its own `cargo run -p xtask --`, which
 re-resolved freshness over 56 workspace crates to invoke a gate that finishes
-in 0.4s; it is the same binary as the other seven and now rides the same loop.
+in 0.4s; it is the same binary as the other eight and now rides the same loop.
 
 **The compile check runs concurrently, and that is what pays for it.** It is
 the only gate that can exceed the budget alone, and what drives its cost is

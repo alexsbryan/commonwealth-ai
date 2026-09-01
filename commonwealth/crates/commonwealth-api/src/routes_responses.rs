@@ -58,7 +58,6 @@ use axum::Json;
 use bytes::{Bytes, BytesMut};
 use futures::StreamExt;
 use serde::Serialize;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, warn};
@@ -1541,13 +1540,7 @@ fn sse_event(event_name: &'static str, payload: &serde_json::Value) -> Event {
 // ─── Generic helpers ────────────────────────────────────────────────
 
 fn mk_response_id() -> String {
-    format!(
-        "resp_{}",
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or(0)
-    )
+    format!("resp_{}", commonwealth_core::clock::unix_now_millis())
 }
 
 use sovereign_core::time::unix_now_u64 as now_unix_secs;

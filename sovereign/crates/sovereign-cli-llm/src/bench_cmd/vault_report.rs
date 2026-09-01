@@ -1032,7 +1032,7 @@ async fn run(opts: Opts) -> std::result::Result<VaultReportRun, String> {
     Ok(VaultReportRun {
         schema: "vault-report/v1".to_string(),
         bench_id: run_id(),
-        started_at_unix: unix_now(),
+        started_at_unix: sovereign_core::time::unix_now_u64(),
         corpus_id,
         root_path,
         mode: mode.label().to_string(),
@@ -1593,15 +1593,8 @@ fn persist_report(
     Ok(())
 }
 
-fn unix_now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
-
 fn run_id() -> String {
-    format!("{}", unix_now())
+    format!("{}", sovereign_core::time::unix_now_u64())
 }
 
 #[cfg(test)]

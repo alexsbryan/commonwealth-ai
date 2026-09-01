@@ -1097,13 +1097,6 @@ fn is_query_stopword(w: &str) -> bool {
     )
 }
 
-fn now_unix() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
-
 /// The per-run controller: state machine + artifact writes.
 struct Controller {
     config: RunConfig,
@@ -2434,7 +2427,7 @@ impl Controller {
             &mut self.decider,
             round,
             &fetch_list.queries,
-            now_unix(),
+            crate::time::unix_now(),
             &leg,
         )
         .await?;
@@ -2505,7 +2498,7 @@ impl Controller {
             &triaged.candidates,
             &already_fetched,
             &mut self.next_evidence_id,
-            now_unix(),
+            crate::time::unix_now(),
             &fetch_policy,
         )
         .await?;
@@ -2937,7 +2930,7 @@ fn build_charter(config: &RunConfig) -> Charter {
         run_id: config.run_id.clone(),
         question: config.question.clone(),
         seed_id: config.seed_id.clone(),
-        created_at_unix: now_unix(),
+        created_at_unix: crate::time::unix_now(),
         charter: CharterValues {
             max_rounds,
             evidence_window_max_chunks: config.evidence_window_max_chunks,

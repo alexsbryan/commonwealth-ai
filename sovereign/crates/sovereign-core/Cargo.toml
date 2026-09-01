@@ -85,14 +85,6 @@ tokio = { workspace = true }
 tracing-subscriber = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true }
-# The `conformance_tags` generator parses this crate's own sources for `covers:`
-# doc tags. DEV ONLY — a runtime scanner would put a Rust parser in a shipped
-# crate to answer a question that changes only when the source does. Same pair,
-# same purpose, as corpus-engine's `recipe_schema`.
-# Same version and feature set as corpus-engine's (ARCH §8.2 — one version per
-# third-party crate across the workspace).
-syn = { version = "2", features = ["full", "extra-traits"] }
-quote = "1"
 
 [lints]
 workspace = true

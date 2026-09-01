@@ -352,26 +352,45 @@ pub fn nightly_trigger() -> NightlyTrigger {
 /// report "never run" for a lane that runs every night — the exact false
 /// negative this module exists to avoid.
 pub fn nightly_candidates() -> Vec<PathBuf> {
+    nightly_candidates_for("latest.json")
+}
+
+/// The same candidate list, for any file the nightly leaves in its report
+/// directory. Factored out when `latest-steps.jsonl` became a second reader:
+/// two copies of this list would be two chances to probe only the legacy
+/// directory, and the failure is silent — a missing file reads as "the lane
+/// never ran", which is a verdict, not an error (ARCH §10.6).
+pub fn nightly_candidates_for(file: &str) -> Vec<PathBuf> {
     let mut out = Vec::new();
     if let Ok(dir) = std::env::var("JOURNEY_NIGHTLY_DIR") {
-        out.push(PathBuf::from(dir).join("latest.json"));
+        out.push(PathBuf::from(dir).join(file));
     }
     // Deliberate LEGACY-dir probe (candidate list, not a derivation): the
     // branded-root candidate below covers the post-migration layout.
     #[allow(clippy::disallowed_methods)]
     if let Some(home) = dirs::home_dir() {
-        out.push(
-            home.join(".sovereign")
-                .join("journey-nightly")
-                .join("latest.json"),
-        );
+        out.push(home.join(".sovereign").join("journey-nightly").join(file));
     }
     out.push(
         crate::dirs::sovereign_root()
             .join("journey-nightly")
-            .join("latest.json"),
+            .join(file),
     );
     out
+}
+
+/// The nightly's per-step JSONL, if a lane has left one behind.
+///
+/// One row per `(journey, step)` with the status the runner recorded, written
+/// by `cli-journey-verify.sh`. This is the file that lets a requirement
+/// claimed by a journey step resolve to a real verdict rather than to the
+/// lane's overall summary — a lane-wide "pass" applied to every claim would
+/// mark a hundred requirements proven on the strength of one step, which is
+/// the substitution ARCH §18.3 forbids.
+pub fn nightly_steps_path() -> Option<PathBuf> {
+    nightly_candidates_for("latest-steps.jsonl")
+        .into_iter()
+        .find(|p| p.exists())
 }
 
 /// Read the nightly posture from the first candidate path that exists.

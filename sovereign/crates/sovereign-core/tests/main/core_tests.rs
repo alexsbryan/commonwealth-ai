@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use futures::Stream;
@@ -14,6 +13,7 @@ use sovereign_core::registry::ToolRegistry;
 use sovereign_core::runtime::Runtime;
 use sovereign_core::skills::*;
 use sovereign_core::stubs::{NoOpPlanner, PassthroughRouter};
+use sovereign_core::time::unix_now;
 use sovereign_core::traits::*;
 use sovereign_core::types::TrustLevel;
 use sovereign_core::types::*;
@@ -82,13 +82,6 @@ impl MockStore {
     }
 }
 
-fn now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
-
 #[async_trait]
 impl ConversationStore for MockStore {
     async fn save_message(&self, msg: &Message) -> Result<()> {
@@ -109,8 +102,8 @@ impl ConversationStore for MockStore {
             id: id.to_string(),
             title: None,
             messages: conv_msgs,
-            created_at: now(),
-            updated_at: now(),
+            created_at: unix_now(),
+            updated_at: unix_now(),
             version: 0,
             deleted_at: None,
             skill_id: None,
@@ -544,7 +537,7 @@ async fn build_context_existing_conversation() {
             conversation_id: "c1".to_string(),
             role: Role::User,
             content: "hello".to_string(),
-            created_at: now(),
+            created_at: unix_now(),
             metadata: None,
             version: 0,
         })
@@ -951,8 +944,8 @@ async fn executor_linear_plan() {
         plan: plan.clone(),
         status: TaskStatus::Running,
         completed_steps: Vec::new(),
-        created_at: now(),
-        updated_at: now(),
+        created_at: unix_now(),
+        updated_at: unix_now(),
         version: 0,
     };
 
@@ -1053,8 +1046,8 @@ async fn executor_parallel_then_merge() {
         plan: plan.clone(),
         status: TaskStatus::Running,
         completed_steps: Vec::new(),
-        created_at: now(),
-        updated_at: now(),
+        created_at: unix_now(),
+        updated_at: unix_now(),
         version: 0,
     };
 
@@ -1138,8 +1131,8 @@ async fn executor_branch_skips_non_taken_path() {
         plan: plan.clone(),
         status: TaskStatus::Running,
         completed_steps: Vec::new(),
-        created_at: now(),
-        updated_at: now(),
+        created_at: unix_now(),
+        updated_at: unix_now(),
         version: 0,
     };
 
@@ -1390,8 +1383,8 @@ async fn executor_tool_step() {
         plan: plan.clone(),
         status: TaskStatus::Running,
         completed_steps: Vec::new(),
-        created_at: now(),
-        updated_at: now(),
+        created_at: unix_now(),
+        updated_at: unix_now(),
         version: 0,
     };
 
@@ -1491,8 +1484,8 @@ async fn executor_tool_denied_permission_skips() {
         plan: plan.clone(),
         status: TaskStatus::Running,
         completed_steps: Vec::new(),
-        created_at: now(),
-        updated_at: now(),
+        created_at: unix_now(),
+        updated_at: unix_now(),
         version: 0,
     };
 
@@ -1562,8 +1555,8 @@ async fn executor_user_input_step() {
         plan: plan.clone(),
         status: TaskStatus::Running,
         completed_steps: Vec::new(),
-        created_at: now(),
-        updated_at: now(),
+        created_at: unix_now(),
+        updated_at: unix_now(),
         version: 0,
     };
 
@@ -1647,8 +1640,8 @@ fn await_user_info_plan() -> (Plan, Task) {
         plan: plan.clone(),
         status: TaskStatus::Running,
         completed_steps: Vec::new(),
-        created_at: now(),
-        updated_at: now(),
+        created_at: unix_now(),
+        updated_at: unix_now(),
         version: 0,
     };
     (plan, task)

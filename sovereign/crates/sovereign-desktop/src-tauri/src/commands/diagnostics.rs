@@ -47,14 +47,6 @@ use crate::state::AppState;
 /// something a worried user clicks; it has to answer, and answering
 /// "couldn't reach the engine" quickly beats hanging on a dead socket.
 const PROBE_TIMEOUT_SECS: u64 = 3;
-
-fn now_unix() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
-
 /// Free space on the volume holding `path`, in GB.
 ///
 /// Matched by mount point with the longest-prefix rule rather than by
@@ -169,7 +161,7 @@ pub async fn gather_health_facts(state: &State<'_, Arc<AppState>>) -> HealthFact
 
     let free_disk_gb = data_dir.as_deref().and_then(free_disk_gb);
 
-    let cutoff = now_unix().saturating_sub(CRASH_WINDOW_SECS);
+    let cutoff = sovereign_core::time::unix_now_u64().saturating_sub(CRASH_WINDOW_SECS);
     let recent_crashes = crate::crash_report::list_crash_records()
         .into_iter()
         .filter(|r| r.captured_at_unix >= cutoff)
@@ -180,7 +172,7 @@ pub async fn gather_health_facts(state: &State<'_, Arc<AppState>>) -> HealthFact
         .collect();
 
     HealthFacts {
-        captured_at_unix: now_unix(),
+        captured_at_unix: sovereign_core::time::unix_now_u64(),
         daemon_running: daemon.is_some(),
         daemon,
         mesh,

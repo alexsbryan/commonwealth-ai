@@ -126,16 +126,6 @@ fn gossip_request_body_proving(
     body
 }
 
-/// Seconds the handler will see. The proof is bound to a 30s window and the
-/// verifier accepts the previous one, so a value read microseconds before the
-/// request always lands in an accepted window.
-fn now_secs() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-}
-
 /// Reads `mesh.mesh_secret` out of a gossip reply, absent counting as zeroed.
 fn replied_secret(resp: &serde_json::Value) -> Vec<u64> {
     resp["mesh"]["mesh_secret"]
@@ -182,7 +172,9 @@ async fn an_upgraded_caller_gets_no_raw_secret_back() {
     let state = AppState::new(node_a, local.clone());
 
     let incoming = mesh_with(mesh_id, hash, vec![member(caller, "Caller", 200)]);
-    let proof = local.mesh_proof(caller, now_secs()).unwrap();
+    let proof = local
+        .mesh_proof(caller, commonwealth_core::clock::unix_now_secs())
+        .unwrap();
     let (status, resp) = post_gossip(
         &state,
         gossip_request_body_proving(&incoming, caller, &proof, Some(secret)),
@@ -221,7 +213,9 @@ async fn a_proving_caller_that_withholds_its_secret_is_recorded_post_split() {
 
     // Withholding: no `mesh_secret` on the wire at all, only the proof.
     let incoming = mesh_with(mesh_id, hash, vec![member(caller, "Caller", 200)]);
-    let proof = local.mesh_proof(caller, now_secs()).unwrap();
+    let proof = local
+        .mesh_proof(caller, commonwealth_core::clock::unix_now_secs())
+        .unwrap();
     let (status, _) = post_gossip(
         &state,
         gossip_request_body_proving(&incoming, caller, &proof, None),

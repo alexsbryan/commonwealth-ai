@@ -12,24 +12,17 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use commonwealth_core::ids::NodeId;
 use commonwealth_state::{is_gossip_excluded, MeshStore};
 use uuid::Uuid;
 
+use sovereign_core::time::unix_now_u64;
 use sovereign_work_atlas::model::{
     AgentKind, ClaimRecord, ObservationRecord, ObservationSource, Privacy, SessionRecord, SymbolRef,
 };
 use sovereign_work_atlas::store::ScopeMatch;
 use sovereign_work_atlas::WorkAtlasStore;
-
-fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
 
 /// Mirror the gossip loop: take every record from `src` that the
 /// gossip layer would broadcast, merge into `dst`. Private app_ids
@@ -48,7 +41,7 @@ fn replicate(src: &MeshStore, dst: &MeshStore) {
 }
 
 fn sample_session(node_id: NodeId, privacy: Privacy, token: &str, repo_id: &str) -> SessionRecord {
-    let now = now_secs();
+    let now = unix_now_u64();
     SessionRecord {
         session_id: Uuid::new_v4(),
         node_id,
@@ -64,7 +57,7 @@ fn sample_session(node_id: NodeId, privacy: Privacy, token: &str, repo_id: &str)
 }
 
 fn sample_claim(session_id: Uuid, scope: &str, node_id: NodeId) -> ClaimRecord {
-    let now = now_secs();
+    let now = unix_now_u64();
     ClaimRecord {
         claim_id: Uuid::new_v4(),
         session_id,
@@ -150,14 +143,14 @@ fn peer_claim_gets_received_at_on_first_observation() {
 
     // After one gossip round: B's first observation stamps the receipt
     // inside the observation bracket (seconds-granular clocks).
-    let before = now_secs();
+    let before = unix_now_u64();
     replicate(&store_a, &store_b);
     let (_, peer) = atlas_b
         .get_claim(claim.claim_id)
         .unwrap()
         .expect("peer reads the claim");
     let received = peer.received_at.expect("peer receipt stamped");
-    let after = now_secs();
+    let after = unix_now_u64();
     assert!(
         (before..=after).contains(&received),
         "receipt {received} outside observation bracket [{before},{after}]"
@@ -253,8 +246,8 @@ fn public_observation_propagates_via_gossip() {
         session_id: session.session_id,
         file_path: PathBuf::from("corpus-engine/src/engine/ingest.rs"),
         source: ObservationSource::CodeWatcherEdit,
-        first_observed_at: now_secs(),
-        last_observed_at: now_secs(),
+        first_observed_at: unix_now_u64(),
+        last_observed_at: unix_now_u64(),
         event_count: 4,
         symbol_refs: vec![],
     };
@@ -286,8 +279,8 @@ fn private_observation_never_propagates() {
         session_id: session.session_id,
         file_path: PathBuf::from("Secret.rs"),
         source: ObservationSource::CodeWatcherEdit,
-        first_observed_at: now_secs(),
-        last_observed_at: now_secs(),
+        first_observed_at: unix_now_u64(),
+        last_observed_at: unix_now_u64(),
         event_count: 1,
         symbol_refs: vec![],
     };

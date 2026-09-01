@@ -350,10 +350,6 @@ fn adversarial_dir() -> PathBuf {
 fn now_utc() -> String {
     // No chrono dep in the test target — epoch + UTC render via time is
     // overkill; a readable local timestamp is enough for the record.
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+    let secs = sovereign_core::time::unix_now_u64();
     format!("unix-{secs}")
 }

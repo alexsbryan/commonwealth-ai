@@ -24,9 +24,7 @@
 //! Included with `#[path]` by `tests/requirements_registry.rs`; it is not a test
 //! target of its own.
 
-use kernel_types::conformance::{
-    AcceptanceScenario, ReqLevel, Requirement, RequirementRegistry,
-};
+use kernel_types::conformance::{AcceptanceScenario, ReqLevel, Requirement, RequirementRegistry};
 use kernel_types::ContentHash;
 
 /// The specification, relative to the repo root.
@@ -127,7 +125,9 @@ fn resolve_level(
     // `MUST, where EN-18 is implemented` / `INVARIANT, where RT-61 is implemented`
     if let Some((base, tail)) = q.split_once(", where ") {
         let antecedent = tail.strip_suffix(" is implemented").unwrap_or_else(|| {
-            panic!("{SPEC}:{line_no}: `{id}` has conditional qualifier `{q}` in an unrecognised shape")
+            panic!(
+                "{SPEC}:{line_no}: `{id}` has conditional qualifier `{q}` in an unrecognised shape"
+            )
         });
         assert!(
             is_id(antecedent),
@@ -176,7 +176,11 @@ fn collect_text(lines: &[&str], start: usize, first: &str) -> String {
         }
         parts.push(t.to_string());
     }
-    parts.join(" ").split_whitespace().collect::<Vec<_>>().join(" ")
+    parts
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// The `§4.4` alias sentence, e.g.
@@ -194,13 +198,11 @@ fn parse_alias_line(line: &str, line_no: usize) -> Vec<(String, String)> {
     let open = line[bold_end..].find('(').unwrap_or_else(|| {
         panic!("{SPEC}:{line_no}: alias line names no target list in parentheses")
     }) + bold_end;
-    let close = line[open..].find(')').unwrap_or_else(|| {
-        panic!("{SPEC}:{line_no}: alias target list is unterminated")
-    }) + open;
-    let targets: Vec<&str> = line[open + 1..close]
-        .split('…')
-        .map(str::trim)
-        .collect();
+    let close = line[open..]
+        .find(')')
+        .unwrap_or_else(|| panic!("{SPEC}:{line_no}: alias target list is unterminated"))
+        + open;
+    let targets: Vec<&str> = line[open + 1..close].split('…').map(str::trim).collect();
     assert_eq!(
         targets.len(),
         2,
@@ -364,7 +366,11 @@ pub fn parse(spec: &str) -> RequirementRegistry {
             scenarios.push((
                 AcceptanceScenario {
                     id: id.to_string(),
-                    suite: if h3.is_empty() { h2.clone() } else { h3.clone() },
+                    suite: if h3.is_empty() {
+                        h2.clone()
+                    } else {
+                        h3.clone()
+                    },
                     line: line_no as u32,
                     text: text.clone(),
                     cites: Vec::new(),
@@ -457,7 +463,10 @@ fn leading_number(heading: &str) -> String {
 /// fail loudly, which the next test asserts.
 #[test]
 fn every_declaration_form_parses() {
-    assert_eq!(declaration_head("**GR-19.** A thing."), Some(("GR-19", None)));
+    assert_eq!(
+        declaration_head("**GR-19.** A thing."),
+        Some(("GR-19", None))
+    );
     assert_eq!(
         declaration_head("**X-EH-2 (MUST).** A check."),
         Some(("X-EH-2", Some("MUST")))
@@ -492,7 +501,11 @@ fn bold_prose_is_not_a_declaration() {
         "**ST-16 through ST-20** are stated in §2.2 (X-PR-1 … X-PR-5) and apply",
         "**Workshop** (making things), **Reflect** (personal/wellbeing lane), and",
     ] {
-        assert_eq!(declaration_head(line), None, "parsed prose as a declaration: {line}");
+        assert_eq!(
+            declaration_head(line),
+            None,
+            "parsed prose as a declaration: {line}"
+        );
     }
 }
 
@@ -559,7 +572,11 @@ fn text_survives_a_bold_continuation_line() {
         "",
         "**A-2.** Next one.",
     ];
-    let text = collect_text(&lines, 0, " For every requirement in §2.1 (X-EH), the rebuild MUST demonstrate a");
+    let text = collect_text(
+        &lines,
+        0,
+        " For every requirement in §2.1 (X-EH), the rebuild MUST demonstrate a",
+    );
     assert!(
         text.ends_with("the failure must have been watched to fail."),
         "truncated at the bold continuation: {text}"
@@ -601,7 +618,11 @@ fn an_ellipsis_range_expands_to_every_id_it_covers() {
     );
     // A range whose interior ids do not exist contributes only what does.
     assert_eq!(
-        cited_ids("scored on separate red lines (EV-16 … EV-19).", &known, &fams),
+        cited_ids(
+            "scored on separate red lines (EV-16 … EV-19).",
+            &known,
+            &fams
+        ),
         vec!["EV-16", "EV-19"]
     );
 }

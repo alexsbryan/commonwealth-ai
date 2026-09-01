@@ -223,11 +223,7 @@ mod tests {
         );
 
         // PRESENT AND VALID — the ordinary path still works.
-        std::fs::write(
-            &path,
-            r#"{"host":"h","oicp_version":"0.4.0","checks":[]}"#,
-        )
-        .unwrap();
+        std::fs::write(&path, r#"{"host":"h","oicp_version":"0.4.0","checks":[]}"#).unwrap();
         assert!(
             matches!(read_report(path.to_str().unwrap()), Ok(Some(_))),
             "a valid baseline must still parse"

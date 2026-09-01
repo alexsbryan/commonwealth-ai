@@ -233,6 +233,26 @@ pub struct Journey {
     /// statically checked and dispatch-replayed.
     #[serde(default)]
     pub skip_live: Option<String>,
+    /// Acceptance scenarios from `REQUIREMENTS.md §16 "How a rebuild is
+    /// judged"` that this journey **demonstrates** — `["A-8"]`.
+    ///
+    /// Declared per JOURNEY, and the asymmetry with
+    /// [`JourneyStep::requirements`] is the whole design. A requirement is a
+    /// clause, falsified by one assertion, so it binds to the step that
+    /// carries that assertion. **A scenario is a sequence** — "kill the
+    /// numerical engine mid-decode, and the control plane MUST survive"
+    /// (A-8), "rotate the admission credential on a mixed fleet" (A-14) —
+    /// and no single step is the demonstration. Binding a scenario to a step
+    /// would let one assertion inside a sequence read as the whole scenario
+    /// having been run, which is the substitution §16 exists to prevent.
+    ///
+    /// A scenario's cited requirements being green is NOT this. §16.1's A-1
+    /// says the demonstration itself must have been watched; proving IN-10
+    /// and OP-7 by other means does not mean anyone killed the engine
+    /// mid-decode. `svrn conformance --scenarios` therefore reports the two
+    /// as separate columns and never folds them into one number.
+    #[serde(default)]
+    pub demonstrates: Vec<String>,
     /// The ordered steps. Maps the TOML `[[journey.step]]` array.
     #[serde(default, rename = "step")]
     pub steps: Vec<JourneyStep>,
@@ -397,6 +417,31 @@ pub struct JourneyStep {
     /// Free-text note rendered in the journey report.
     #[serde(default)]
     pub note: Option<String>,
+    /// Requirement ids from `research/clean-room/REQUIREMENTS.md` that THIS
+    /// STEP's assertion proves — `["FE-34", "FE-36"]`.
+    ///
+    /// The join that lets `svrn conformance` count a black-box run as
+    /// evidence. 311 of the 625 requirements are classified `cli` in
+    /// `quality/requirements-enforceability.toml`: settleable by a command
+    /// plus an assertion on its output, and by nothing else. Before this
+    /// field they had no instrument at all, and the attempt to cover them
+    /// with unit tests instead produced 35 overclaims out of 74 candidates —
+    /// tests that touched the area and asserted nothing the clause says.
+    ///
+    /// Declared per STEP and never per journey, because the journey is not
+    /// what proves anything: the `expect` block is. A journey-level field
+    /// would let a requirement be claimed by a sequence in which no single
+    /// assertion falsifies it, which is precisely the overclaim shape.
+    ///
+    /// Three rules hold it honest, all enforced in
+    /// `sovereign-cli/tests/main/cli_contract_journeys.rs` rather than
+    /// remembered: every id resolves in the registry; the requirement's
+    /// enforceability class is `cli` or `desktop` (a `structural` requirement
+    /// claimed by a journey is a category error — no command settles it); and
+    /// the step's evidence is [`AssertionStrength::Output`], never `ExitOnly`
+    /// or `None`.
+    #[serde(default)]
+    pub requirements: Vec<String>,
 }
 
 /// What a live journey step must produce. Deliberately richer than
@@ -729,6 +774,7 @@ impl PartialEq for StepBinding<'_> {
         }
     }
 }
+
 impl Eq for StepBinding<'_> {}
 
 /// The intended fate of a [`Stranded`] verb.
@@ -948,6 +994,91 @@ impl Contract {
             .collect();
         out.sort_by(|a, b| a.tier.cmp(&b.tier).then_with(|| a.id.cmp(&b.id)));
         out
+    }
+
+    /// Every `(journey, step, requirement)` the manifest claims, in manifest
+    /// order.
+    ///
+    /// The one traversal both readers share: the gates in
+    /// `cli_contract_journeys.rs` that hold a claim honest, and the join in
+    /// `svrn conformance` that turns one into a verdict. Two walks of the same
+    /// nesting would be two chances to disagree about which claims exist, and
+    /// the disagreement would surface as a requirement silently reported
+    /// `never-ran` (ARCH §10.6).
+    ///
+    /// Claims on `skip_live` journeys and steps are INCLUDED. They are real
+    /// claims and the gates must judge them; it is the conformance join's job
+    /// to render them `never-ran` rather than this traversal's job to hide
+    /// them. A denominator that can be shrunk by omission is not a
+    /// denominator.
+    pub fn requirement_claims(&self) -> Vec<JourneyClaim<'_>> {
+        let mut out = Vec::new();
+        for journey in &self.journeys {
+            for (step_index, step) in journey.steps.iter().enumerate() {
+                for requirement in &step.requirements {
+                    out.push(JourneyClaim {
+                        journey,
+                        step_index,
+                        step,
+                        requirement,
+                    });
+                }
+            }
+        }
+        out
+    }
+}
+
+impl Contract {
+    /// Every `(journey, scenario)` demonstration the manifest declares, in
+    /// manifest order. The sibling of [`Contract::requirement_claims`], and
+    /// the same rule: `skip_live` journeys are INCLUDED here and rendered
+    /// `never-ran` by the reporter, never hidden by the traversal.
+    pub fn scenario_claims(&self) -> Vec<ScenarioClaim<'_>> {
+        self.journeys
+            .iter()
+            .flat_map(|journey| {
+                journey
+                    .demonstrates
+                    .iter()
+                    .map(move |scenario| ScenarioClaim { journey, scenario })
+            })
+            .collect()
+    }
+}
+
+/// One `(journey, scenario)` demonstration, as
+/// [`Contract::scenario_claims`] yields it.
+#[derive(Debug, Clone, Copy)]
+pub struct ScenarioClaim<'a> {
+    /// The journey that runs the scenario.
+    pub journey: &'a Journey,
+    /// The scenario id (`A-1` … `A-19`), unresolved.
+    pub scenario: &'a str,
+}
+
+/// One `(journey, step, requirement)` claim, as [`Contract::requirement_claims`]
+/// yields it.
+#[derive(Debug, Clone, Copy)]
+pub struct JourneyClaim<'a> {
+    /// The journey the claiming step belongs to.
+    pub journey: &'a Journey,
+    /// 0-based index of the step within [`Journey::steps`] — what the report
+    /// prints as `[n]`, so a reader can find the step being spoken about.
+    pub step_index: usize,
+    /// The step whose `expect` block is the evidence.
+    pub step: &'a JourneyStep,
+    /// The requirement id, unresolved. Aliases are the registry's problem, not
+    /// this traversal's.
+    pub requirement: &'a str,
+}
+
+impl JourneyClaim<'_> {
+    /// Will any lane execute the step behind this claim? False when the
+    /// journey or the step is `skip_live` — a written intention, and never
+    /// evidence.
+    pub fn runs_live(&self) -> bool {
+        self.journey.runs_live() && self.step.skip_live.is_none()
     }
 }
 
@@ -1247,6 +1378,7 @@ mutates = true
             visibility: Visibility::Internal,
             doc: None,
             skip_live: None,
+            demonstrates: vec![],
             steps: vec![JourneyStep {
                 run: "tools call symbols --name={symbol}".into(),
                 command: None,
@@ -1258,6 +1390,7 @@ mutates = true
                 skip_live: None,
                 settle_secs: None,
                 note: None,
+                requirements: vec![],
             }],
         };
         assert!(j.exercises("symbols"));
@@ -1357,6 +1490,7 @@ verify = "mesh status"
             skip_live: None,
             settle_secs: None,
             note: None,
+            requirements: vec![],
         }
     }
 

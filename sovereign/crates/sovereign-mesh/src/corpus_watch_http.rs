@@ -1183,7 +1183,7 @@ async fn enrich_once_handler(
         // phase. Treating a wedged `Starting` as live would block every
         // retry, so a stale state falls through to a fresh build below.
         // Same `is_stale` the status endpoint uses to surface the stall.
-        let now = now_unix_secs();
+        let now = sovereign_core::time::unix_now();
         if !state.phase.is_terminal() && !state.is_stale(now) {
             tracing::info!(
                 corpus_id = %corpus_id, phase = ?state.phase,
@@ -1475,15 +1475,6 @@ fn service_unavailable(msg: &str) -> (StatusCode, Json<ErrorBody>) {
 
 fn error(status: StatusCode, msg: String) -> (StatusCode, Json<ErrorBody>) {
     (status, Json(ErrorBody { error: msg }))
-}
-
-/// Wall-clock seconds since the Unix epoch, as `i64` to match
-/// `EnrichmentState::last_progress_at`. Saturates to 0 before 1970.
-fn now_unix_secs() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
 }
 
 fn basename_or_unknown(p: &std::path::Path) -> String {

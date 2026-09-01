@@ -72,7 +72,7 @@ pub async fn enrichment_status(
             // died mid-run (leaving e.g. a `Starting` stamp) reads as a
             // live build indefinitely. Mirrors the enrich-once idempotency
             // guard, which supersedes the same stale state on retry.
-            let now = now_unix_secs();
+            let now = commonwealth_core::clock::unix_now_secs() as i64;
             let stalled = matches!(s.phase, EnrichmentPhase::Stalled) || s.is_stale(now);
             let frac = if stalled { 0.0 } else { derive_fraction(s) };
             (s.phase.is_terminal() || stalled, stalled, frac)
@@ -86,15 +86,6 @@ pub async fn enrichment_status(
         is_stalled,
         fraction_complete,
     }))
-}
-
-/// Wall-clock seconds since the Unix epoch, matching
-/// `EnrichmentState::last_progress_at`. Saturates to 0 before 1970.
-fn now_unix_secs() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
 }
 
 fn derive_fraction(state: &EnrichmentState) -> f32 {

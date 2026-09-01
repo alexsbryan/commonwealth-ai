@@ -847,8 +847,13 @@ mod tests {
     /// its guard refused a run that would not have collided with anything.
     #[test]
     fn parse_args_takes_a_client_port_so_a_second_node_can_onboard() {
-        let opts = parse_args(&s(&["--terminal", "http://halo:9741", "--client-port", "9771"]))
-            .unwrap();
+        let opts = parse_args(&s(&[
+            "--terminal",
+            "http://halo:9741",
+            "--client-port",
+            "9771",
+        ]))
+        .unwrap();
         assert_eq!(opts.client_port, Some(9771));
     }
 

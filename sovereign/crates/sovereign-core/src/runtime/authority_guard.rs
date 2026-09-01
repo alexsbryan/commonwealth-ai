@@ -423,6 +423,7 @@ mod tests {
     /// name: the 2026-08-16 prose-explanation-mac figures, volunteered
     /// in model prose with no tool and no verified quote. Every one
     /// must be withheld and NAMED.
+    /// covers: GR-22, GR-28
     #[test]
     fn model_originated_figures_over_an_armed_corpus_are_blocked() {
         let answer = "Mac net sales increased 12% to $33,708 million in fiscal 2025, \
@@ -454,6 +455,7 @@ mod tests {
     /// POSITIVE CONTROL (order §controls 2) — the F4 shape: the same
     /// explanation grounded in a verified verbatim quotation releases,
     /// including the figures the quotation itself states.
+    /// covers: GR-28
     #[test]
     fn figures_inside_verified_quotes_release() {
         let span = "Mac net sales increased during 2025 compared to 2024 due primarily \
@@ -519,6 +521,7 @@ mod tests {
     /// NO-OP CONTROL (order §controls 3) — arming: a pool with no
     /// declared-authority corpus never constructs an `ArmedAuthority`,
     /// and an empty pool never arms even when a domain is declared.
+    /// covers: GR-27
     #[test]
     fn arming_requires_a_declared_corpus_in_the_evidence_pool() {
         let mut reg = ToolRegistry::new();

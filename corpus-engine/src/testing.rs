@@ -14,7 +14,7 @@
 //! - Never modifies any production index.
 
 use std::path::{Path, PathBuf};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 
 use crate::acquirers::huggingface::{HuggingFaceDatasetAcquirer, HF_USER_AGENT};
 use crate::engine::{blake3_hex, chunk_doc, CorpusEngine};
@@ -1333,10 +1333,7 @@ fn check(v: bool) -> &'static str {
 
 /// Generate a rough RFC3339 timestamp using stdlib only (no chrono).
 fn rfc3339_now() -> String {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
+    let secs = corpus_engine_yield::time::unix_now_u64();
     let (y, mo, d, h, min, s) = unix_to_date_parts(secs);
     format!("{y:04}-{mo:02}-{d:02}T{h:02}:{min:02}:{s:02}Z")
 }

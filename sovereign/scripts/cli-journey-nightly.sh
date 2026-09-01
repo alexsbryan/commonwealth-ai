@@ -32,7 +32,9 @@
 #      the journeys that declare `needs` the sandbox cannot supply, which
 #      would otherwise be declared and never run
 #   5. run the mutating sandbox lane
-#   6. write a dated report + a machine-readable latest.json, and prune
+#   6. write a dated report + a machine-readable latest.json + the per-step
+#      latest-steps.jsonl that `svrn conformance` joins requirements to,
+#      and prune
 #
 # ── usage ────────────────────────────────────────────────────────────────
 #   sovereign/scripts/cli-journey-nightly.sh          # run it now, by hand
@@ -73,6 +75,21 @@ mkdir -p "$REPORT_DIR"
 
 STAMP="$(date +%Y-%m-%dT%H%M%S)"
 REPORT="$REPORT_DIR/$STAMP.log"
+# Per-step rows from BOTH lanes, concatenated. `svrn conformance` joins these
+# to the `requirements = [...]` claims in the manifest, which is the only way
+# a requirement proven by a black-box run gets a per-requirement verdict; the
+# summary in latest.json cannot do it, because one lane verdict spread across
+# every claim would mark each one proven on the strength of some other step.
+STEPS="$REPORT_DIR/$STAMP-steps.jsonl"
+: > "$STEPS"
+# The symlink is published at the END, next to latest.log — NOT here. Linking
+# it up front truncated the instrument before the lanes ran, and the two early
+# exits below (build-failed, harness-broken) write their own latest.json and
+# never reach the end, so a failed build left `svrn conformance` reading an
+# EMPTY lane report: every journey claim silently never-ran, while `svrn
+# contract nightly` correctly said "nothing is proven". Two readers, two
+# symlinks, no cross-check. Last night's real rows are still on disk as
+# <stamp>-steps.jsonl; leaving the link on them is the honest state.
 
 # ── one at a time ────────────────────────────────────────────────────────
 # A timer that fires while the previous run is still going would put two
@@ -227,10 +244,14 @@ else
     # having run nothing. Observed on this very host, twice: the daemon dies
     # under a heavy lane and comes back only when restarted by hand.
     CAP_OUT="$(mktemp)"
+    CAP_JSONL="$(mktemp)"
     SOVEREIGN_LIVE_JOURNEYS=1 SOVEREIGN_LIVE_STRICT=1 SOVEREIGN_BIN="$CLI_BIN" \
       SOVEREIGN_DAEMON_URL="$CAP_DAEMON" \
+      SOVEREIGN_JOURNEY_OUT="$CAP_JSONL" \
       "$HERE/cli-journey-verify.sh" --journey "$jid" > "$CAP_OUT" 2>&1
     CAP_RC=$?
+    cat "$CAP_JSONL" >> "$STEPS" 2>/dev/null || true
+    rm -f "$CAP_JSONL"
     grep -E '^ +[✓✗~?·]|^  [✓✗~∅⊘—]|not reachable' "$CAP_OUT"
     # ⊘ UNPROVEN IS A FAILURE OF *THIS* LANE, unlike in the runner, which exits 0
     # for it in read-only mode. That leniency is right there and wrong here: the
@@ -259,7 +280,7 @@ echo "─── mutating sandbox lane ───"
 # grep — so grepping it is a race that would intermittently report an empty
 # summary. This pipeline is closed before it is read.
 LANE_OUT="$(mktemp)"
-"$HERE/cli-journey-sandbox.sh" "$@" 2>&1 | tee "$LANE_OUT"
+JOURNEY_LANE_JSONL="$STEPS" "$HERE/cli-journey-sandbox.sh" "$@" 2>&1 | tee "$LANE_OUT"
 RC="${PIPESTATUS[0]}"
 echo
 
@@ -302,10 +323,14 @@ printf '{"stamp":"%s","commit":"%s","dirty":%s,"verdict":"%s","exit":%s,"summary
   "$CAP_VERDICT" "${#CAP_IDS[@]}" \
   > "$REPORT_DIR/latest.json"
 ln -sf "$REPORT" "$REPORT_DIR/latest.log"
+# Only now, and only on a path where a lane actually ran.
+ln -sf "$STEPS" "$REPORT_DIR/latest-steps.jsonl"
 
 # Keep the history bounded without keeping a cron entry to do it.
 find "$REPORT_DIR" -maxdepth 1 -name '20*.log' -mtime "+$KEEP_DAYS" -delete 2>/dev/null
+find "$REPORT_DIR" -maxdepth 1 -name '20*-steps.jsonl' -mtime "+$KEEP_DAYS" -delete 2>/dev/null
 
 echo
 echo "report: $REPORT   (latest: $REPORT_DIR/latest.log, $REPORT_DIR/latest.json)"
+echo "steps:  $STEPS   (read by \`svrn conformance\`)"
 exit "$RC"

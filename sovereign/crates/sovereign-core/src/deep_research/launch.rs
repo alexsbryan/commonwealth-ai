@@ -156,7 +156,7 @@ pub async fn prepare(opts: LaunchOptions) -> Result<Launch, String> {
     }
     let (endpoint, draft_model, embed_model) = daemon_targets()?;
 
-    let run_id = format!("dr-{}", now_unix());
+    let run_id = format!("dr-{}", crate::time::unix_now());
     let run_dir = opts.runs_base.join(&run_id);
 
     // The run-scoped consent grant (order deep-research-t2a): minted
@@ -172,7 +172,7 @@ pub async fn prepare(opts: LaunchOptions) -> Result<Launch, String> {
     }
     let consent: Option<ConsentGrant> = opts.consent_floor.map(|release_floor| ConsentGrant {
         run_id: run_id.clone(),
-        granted_at_unix: now_unix(),
+        granted_at_unix: crate::time::unix_now(),
         release_floor,
     });
 
@@ -567,13 +567,6 @@ fn write_race_render(report_path: &std::path::Path) -> Result<(), String> {
             race_path.display()
         )
     })
-}
-
-fn now_unix() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
 }
 
 #[cfg(test)]

@@ -20,17 +20,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use sovereign_core::observer::{SharedStateStoreObserver, StateStoreObserver};
+use sovereign_core::time::unix_now;
 use sovereign_core::traits::{ConversationStore, MemoryStore};
 use sovereign_core::types::{Memory, Message, Role};
 use sovereign_store::sqlite::SqliteStateStore;
-
-fn now() -> i64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
 
 #[derive(Default)]
 struct CountingObserver {
@@ -69,8 +62,8 @@ fn mem(id: &str) -> Memory {
         content: format!("memory content {id}"),
         source: "test".into(),
         confidence: 1.0,
-        created_at: now(),
-        last_used: now(),
+        created_at: unix_now(),
+        last_used: unix_now(),
         version: 0,
         deleted_at: None,
         source_conversation_id: None,
@@ -85,7 +78,7 @@ fn msg(id: &str, conversation_id: &str) -> Message {
         conversation_id: conversation_id.to_string(),
         role: Role::User,
         content: format!("message content {id}"),
-        created_at: now(),
+        created_at: unix_now(),
         metadata: None,
         version: 0,
     }

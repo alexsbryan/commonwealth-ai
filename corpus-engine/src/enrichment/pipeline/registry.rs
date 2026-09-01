@@ -41,7 +41,7 @@ impl PipelineRegistry {
             Arc::new(super::pipelines::referential_atlas::ReferentialAtlasPipeline::new())
         });
         r.register(super::pipelines::engineering_atlas::PIPELINE_ID, || {
-            Arc::new(super::pipelines::engineering_atlas::EngineeringAtlasPipeline::new())
+            Arc::new(super::pipelines::engineering_atlas::pipeline())
         });
         // `obsidian_atlas` removed when the vault port replaced the
         // legacy Phase-1+ pipeline with the tiered RAPTOR + GLiNER
@@ -50,7 +50,7 @@ impl PipelineRegistry {
         // who still want bench-scorable atoms.json output for a vault
         // can pass `--pipeline literary_atlas` explicitly.
         r.register(super::pipelines::conversation_atlas::PIPELINE_ID, || {
-            Arc::new(super::pipelines::conversation_atlas::ConversationAtlasPipeline::new())
+            Arc::new(super::pipelines::conversation_atlas::pipeline())
         });
         r
     }

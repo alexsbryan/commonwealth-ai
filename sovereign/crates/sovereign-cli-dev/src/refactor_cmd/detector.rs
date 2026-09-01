@@ -655,7 +655,7 @@ impl Detector for IntentDetector {
     }
 
     fn settings_digest(&self) -> String {
-        super::intent::IntentOptions::default().digest()
+        crate::intent::IntentOptions::default().digest()
     }
 
     /// Unlike [`BehaviourDetector`], this one blocks on discriminative terms
@@ -671,22 +671,24 @@ impl Detector for IntentDetector {
             // Chosen by measurement on the first live run (2026-08-31):
             // 27 jobs, 84 implementations, 23,899 symbols, 8s.
             file: "sovereign/crates/sovereign-core/src/memory.rs",
-            token: "intent:dot+magnitudes+product",
-            why: "Cosine similarity has 22 homes across 6 crates and this is \
-                  one of them. The cluster is the largest by a factor of four \
-                  and its vocabulary is mathematical rather than domain \
-                  prose, so the token is about as stable as this signal gets. \
-                  A silent control means either the 22 were converged onto \
-                  one owner (pick a new control) or the summaries stopped \
-                  describing them the same way — which would be the corpus \
-                  regressing, not the duplication ending.",
+            token: "intent:cosine",
+            why: "Cosine similarity has 22 homes across 6 crates — the \
+                  largest cluster by a factor of four — and \
+                  sovereign-core::memory is one of them. The token is the \
+                  cluster's canonical member NAME, so re-enriching the \
+                  summaries cannot move it; only the membership can. A silent \
+                  control therefore means either those 22 were converged onto \
+                  one owner (pick a new control) or the detector is broken. \
+                  It does NOT mean the model reworded a summary — that \
+                  failure mode was real on the vocabulary-keyed first draft \
+                  and is what the canonical-name token exists to rule out.",
         }
     }
 
     async fn fire(&self, ctx: &DetectorCtx<'_>) -> Result<FireReport, String> {
-        let opts = super::intent::IntentOptions::default();
-        let symbols = super::intent::load_intent_corpus(ctx.index_path, &opts)?;
-        let clusters = super::intent::intent_census(&symbols, &opts);
+        let opts = crate::intent::IntentOptions::default();
+        let symbols = crate::intent::load_intent_corpus(ctx.index_path, &opts)?;
+        let clusters = crate::intent::intent_census(&symbols, &opts);
         // Glassbox (ARCH §9): three numbers separate "no duplication" from
         // "the cache was not there", and those look identical downstream.
         tracing::debug!(
@@ -695,12 +697,6 @@ impl Detector for IntentDetector {
             clusters = clusters.len(),
             index_path = %ctx.index_path.display(),
             "intent census"
-        );
-        eprintln!(
-            "intent: {} symbols, {} clusters from {}",
-            symbols.len(),
-            clusters.len(),
-            ctx.index_path.display()
         );
 
         let mut sites = Vec::new();
@@ -729,11 +725,6 @@ impl Detector for IntentDetector {
                 });
             }
         }
-        for st in sites.iter().filter(|s| s.file.contains("memory.rs")) {
-            eprintln!("intent DEBUG site: file={:?} token={:?}", st.file, st.token);
-        }
-        let c = self.control();
-        eprintln!("intent DEBUG ctrl: file={:?} token={:?}", c.file, c.token);
         Ok(FireReport::new(
             self.id(),
             sites,
@@ -1510,7 +1501,13 @@ mod tests {
     #[test]
     fn the_intent_digest_names_every_knob_that_moves_the_number() {
         let d = IntentDetector.settings_digest();
-        for knob in ["min_score", "min_shared", "rare_df", "max_postings", "min_terms"] {
+        for knob in [
+            "min_score",
+            "min_shared",
+            "rare_df",
+            "max_postings",
+            "min_terms",
+        ] {
             assert!(d.contains(knob), "digest {d:?} omits {knob}");
         }
     }

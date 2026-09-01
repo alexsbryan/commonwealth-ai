@@ -110,20 +110,7 @@ pub async fn completions(
 
 /// Envelope ids follow the OpenAI convention (`cmpl-*` + ms epoch).
 fn completion_id() -> String {
-    format!(
-        "cmpl-{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or(0)
-    )
-}
-
-fn unix_now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+    format!("cmpl-{}", commonwealth_core::clock::unix_now_millis())
 }
 
 /// Non-streaming: consume the whole stream, aggregate the text, and
@@ -174,7 +161,7 @@ async fn serve_fim_aggregated(
     let mut body = serde_json::json!({
         "id": completion_id(),
         "object": "text_completion",
-        "created": unix_now(),
+        "created": commonwealth_core::clock::unix_now_secs(),
         "model": model_echo.unwrap_or(model_id),
         "choices": [{
             "text": text,
@@ -206,7 +193,7 @@ fn serve_fim_sse(
     model_echo: Option<String>,
 ) -> Response {
     let id = completion_id();
-    let created = unix_now();
+    let created = commonwealth_core::clock::unix_now_secs();
     let model = model_echo.unwrap_or_else(|| start.model_id.clone());
 
     let chunks = start.stream.map(move |frame| {

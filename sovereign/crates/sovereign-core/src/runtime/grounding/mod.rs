@@ -5361,6 +5361,7 @@ mod tests {
     /// experiment (§7.4) — there, unaudited regenerated prose shipped with
     /// its check removed; here nothing is regenerated at all, so there is no
     /// unaudited text to check.
+    /// covers: GR-6
     #[tokio::test]
     async fn tombstoned_repair_releases_the_audited_draft_with_its_claims_marked() {
         if std::env::var("SOVEREIGN_GATE_LONGFORM_REPAIR").is_ok() {

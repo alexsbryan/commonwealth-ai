@@ -53,14 +53,6 @@ const DEFAULT_POLL_LIMIT: u64 = 100;
 /// test `default_anchors_mirror_the_registry_file` pins this list to
 /// the file; append here when the registry gains an anchor.
 const DEFAULT_WATCH_ANCHORS: [&str; 3] = ["comaintainer-seat", "order-seat", "directive-log"];
-
-fn unix_now() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
-
 /// One seat-addressed record as the watcher surfaced it.
 struct Sighting {
     id: String,
@@ -143,7 +135,7 @@ fn print_sighting(s: &Sighting) {
         .unwrap_or_else(|| "-".into());
     let lag = s
         .received_at
-        .map(|r| format!(" lag={}s", (unix_now() - r).max(0)))
+        .map(|r| format!(" lag={}s", (sovereign_core::time::unix_now() - r).max(0)))
         .unwrap_or_default();
     say(&format!(
         "SEAT_WATCH {} kind={} anchor={} sent={} received={}{} {}",

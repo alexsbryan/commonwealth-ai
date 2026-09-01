@@ -714,6 +714,46 @@ Register the daemon with the OS service manager — launchd on macOS, systemd on
 
 Check for and install a newer CLI release. Bare `svrn update` resolves the newest release on the public shelf, verifies its checksum through the same installer as `curl … | sh`, and replaces the running binary in place; `svrn update --check` only reports. Unix only (needs `sh` + `curl`).
 
+### `svrn conformance`
+
+Which requirements of `research/clean-room/REQUIREMENTS.md` are actually proven, in **four verdicts** — `passed` / `failed` / `could-not-judge` / `never-ran`. Source checkout only, and `--features dev-tools`.
+
+It **runs nothing**. It joins five artifacts and owns no judgement of its own:
+
+| Artifact | Answers |
+|---|---|
+| `quality/requirements.toml` | what the spec obliges — 625 in scope, generated from the spec and byte-gated against it |
+| `quality/conformance/*.toml` | which TEST claims each requirement, generated from `covers:` doc tags |
+| `target/nextest/*/junit.xml` | what that test actually did, on the last run |
+| `sovereign/docs/cli-contract.toml` | which JOURNEY STEP claims each requirement |
+| `~/.svrnmesh/journey-nightly/latest-steps.jsonl` | what that step did, on the last lane |
+
+| Flag | Description |
+|---|---|
+| `--family <PREFIX>` | Restrict to one requirement family (`GR`, `X-EH`, `FE`, …) |
+| `--scenarios` | `REQUIREMENTS.md §16`'s 19 acceptance scenarios instead. Ignores `--family` and says so |
+| `--json` | Machine-readable |
+
+**Two claim routes, because the requirement's own class decides which applies.**
+`quality/requirements-enforceability.toml` classifies all 625: **260 `structural`**
+(a type, a lint, a source-scanning test — a `#[test]` is the instrument) and
+**311 `cli`** plus 11 `desktop` (a command and an assertion on its output, and
+nothing else). The rest are 9 `model` and 34 `review`.
+
+- **`structural`** — put `/// covers: GR-19` above a `#[test]` and regenerate that crate's manifest with `UPDATE_CONFORMANCE_TAGS=1 cargo test -p <crate> --test main conformance_tags`. A tag naming an unknown id, or over a body with no assertion, fails the generator rather than being counted.
+- **`cli`** — put `requirements = ["UI-17"]` on the journey step whose `expect` block falsifies the clause. Gates refuse an id the spec does not state, a requirement no command can observe, a step asserting only an exit code, and a claim on a step no lane runs.
+
+Offering only the first route is how 311 `cli`-class requirements got covered by
+unit tests asserting something *adjacent* to the clause — 35 overclaims out of 74
+audited. Pick the route the class names.
+
+`--scenarios` reports §16 in **two columns**, demonstrated and cited, never one
+number: §16.1's A-1 requires the demonstration to have been watched, so green
+cites over a scenario nobody ran is the substitution §16 exists to prevent. A
+scenario no journey declares reads `not declared`, which is not `never-ran`.
+
+Two verdicts do the work the other two usually hide. A pass recorded **before** its guard's source file was last edited reads `could-not-judge`, never `passed`. A requirement with no claim, or whose test was absent from a filtered run, reads `never-ran` — so the denominator cannot be shrunk by omission. Exit is `1` only when a claimed requirement **failed**; `never-ran` is the honest starting state of nearly all 625 and is not an error. **No headline percentage is printed** — four numbers, never one.
+
 ### `svrn contract`
 
 What this CLI promises, how much of it is proven, and when that was last checked against a running system. Reads `docs/cli-contract.toml` — a source checkout only, and `--features dev-tools`.

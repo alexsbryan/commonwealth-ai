@@ -118,8 +118,8 @@ pub struct IntentCluster {
 }
 
 const STOP: &[&str] = &[
-    "the", "and", "for", "with", "into", "from", "this", "that", "are", "was", "any", "all",
-    "not", "you", "your", "its", "which", "when", "what", "how", "does", "used", "use", "using",
+    "the", "and", "for", "with", "into", "from", "this", "that", "are", "was", "any", "all", "not",
+    "you", "your", "its", "which", "when", "what", "how", "does", "used", "use", "using",
     "returns", "return", "given", "based", "value", "values", "function", "method", "struct",
     "enum", "type", "types", "data", "code", "one", "two",
 ];
@@ -143,7 +143,9 @@ fn terms_of(text: &str) -> BTreeSet<String> {
             }
         }
     }
-    if cur.len() >= 3 && cur.starts_with(|c: char| c.is_ascii_alphabetic()) && !stop.contains(cur.as_str())
+    if cur.len() >= 3
+        && cur.starts_with(|c: char| c.is_ascii_alphabetic())
+        && !stop.contains(cur.as_str())
     {
         out.insert(cur);
     }
@@ -177,12 +179,16 @@ fn is_ours(file: &str) -> bool {
 /// one [`dry_report`] is handed. Absent cache is `Ok(vec![])` and NOT an
 /// error the caller should treat as "no duplication": the detector's control
 /// site turns that into COULD-NOT-JUDGE, which is the honest verdict.
-pub fn load_intent_corpus(index_path: &Path, opts: &IntentOptions) -> Result<Vec<IntentSymbol>, String> {
+pub fn load_intent_corpus(
+    index_path: &Path,
+    opts: &IntentOptions,
+) -> Result<Vec<IntentSymbol>, String> {
     let path = index_path.join("code_intel_cache.json");
     if !path.exists() {
         return Ok(Vec::new());
     }
-    let raw = std::fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let raw =
+        std::fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
     let entries: Vec<serde_json::Value> =
         serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", path.display()))?;
 
@@ -206,7 +212,10 @@ pub fn load_intent_corpus(index_path: &Path, opts: &IntentOptions) -> Result<Vec
         }
         out.push(IntentSymbol {
             name: meta["name"].as_str().unwrap_or_default().to_string(),
-            qualified_name: meta["qualified_name"].as_str().unwrap_or_default().to_string(),
+            qualified_name: meta["qualified_name"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string(),
             krate: crate_of(&file),
             file,
             line: meta["line_start"].as_i64().unwrap_or(0) as i32,
@@ -370,19 +379,44 @@ pub fn intent_census(symbols: &[IntentSymbol], opts: &IntentOptions) -> Vec<Inte
         .filter(|c| c.members.len() >= 2 && !c.terms.is_empty())
         .collect();
     out.sort_by(|a, b| {
-        b.members
-            .len()
-            .cmp(&a.members.len())
-            .then(b.min_score.partial_cmp(&a.min_score).unwrap_or(std::cmp::Ordering::Equal))
+        b.members.len().cmp(&a.members.len()).then(
+            b.min_score
+                .partial_cmp(&a.min_score)
+                .unwrap_or(std::cmp::Ordering::Equal),
+        )
     });
     out
 }
 
 impl IntentCluster {
-    /// The join key against the label store. Deterministic and greppable —
-    /// `Site::key`'s contract is that a human can find this in a `.jsonl`.
+    /// The join key against the label store: the cluster's canonical member
+    /// name, lexicographically smallest.
+    ///
+    /// NOT the shared vocabulary, though that is what a reader wants to see
+    /// and what [`render_intent`] prints. The token is a JOIN KEY — the
+    /// label store and the detector's control site both hang off it — and
+    /// summary wording is the one thing here guaranteed to move: it is model
+    /// output, rewritten on every `enrich code-intel`. Pinning a control to
+    /// `intent:dot+magnitudes+product` and having it come back as
+    /// `intent:angle+divided+magnitudes` is not a hypothetical; it happened
+    /// on 2026-08-31 the first time this was wired, from nothing but a
+    /// quorum-rule change over an identical corpus.
+    ///
+    /// A member NAME is a fact about the tree. It survives re-enrichment and
+    /// re-wording, and it changes when the membership changes — which is
+    /// exactly the sensitivity a duplication ratchet wants.
+    ///
+    /// Two clusters could in principle share a smallest name. The render
+    /// prints every member, so a collision is visible rather than silent, and
+    /// the label's `locus` is per-member regardless.
     pub fn token(&self) -> String {
-        format!("intent:{}", self.terms.join("+"))
+        let canon = self
+            .members
+            .iter()
+            .map(|m| m.name.as_str())
+            .min()
+            .unwrap_or("");
+        format!("intent:{canon}")
     }
 }
 
@@ -476,13 +510,7 @@ mod tests {
     fn one_job_with_many_homes_is_a_single_cluster() {
         let text = "Computes the cosine similarity between two embedding vectors.";
         let syms: Vec<_> = (0..5)
-            .map(|i| {
-                sym(
-                    &format!("cos{i}"),
-                    &format!("crate{i}/src/x.rs"),
-                    text,
-                )
-            })
+            .map(|i| sym(&format!("cos{i}"), &format!("crate{i}/src/x.rs"), text))
             .collect();
         let c = intent_census(&syms, &opts());
         assert_eq!(c.len(), 1, "one concept must be one cluster");
@@ -510,12 +538,57 @@ mod tests {
             !c[0].terms.is_empty(),
             "a quorum token must survive one differently-worded member"
         );
-        assert!(c[0].token().len() > "intent:".len());
+        assert_eq!(
+            c[0].token(),
+            "intent:cos0",
+            "canonical member names the cluster"
+        );
+    }
+
+    /// The property the whole token design exists for: summaries are model
+    /// output and get rewritten, and that must not move the join key.
+    #[test]
+    fn rewording_every_summary_does_not_move_the_token() {
+        let a = vec![
+            sym(
+                "alpha_cos",
+                "c1/src/x.rs",
+                "Computes cosine similarity between two embedding vectors.",
+            ),
+            sym(
+                "zeta_cos",
+                "c2/src/x.rs",
+                "Computes cosine similarity between two embedding vectors.",
+            ),
+        ];
+        let b = vec![
+            sym(
+                "alpha_cos",
+                "c1/src/x.rs",
+                "Returns the angle measure separating a pair of embeddings.",
+            ),
+            sym(
+                "zeta_cos",
+                "c2/src/x.rs",
+                "Returns the angle measure separating a pair of embeddings.",
+            ),
+        ];
+        let (ca, cb) = (intent_census(&a, &opts()), intent_census(&b, &opts()));
+        assert_eq!(ca.len(), 1);
+        assert_eq!(cb.len(), 1);
+        assert_eq!(
+            ca[0].token(),
+            cb[0].token(),
+            "the join key must not depend on how the model worded the summary"
+        );
     }
 
     #[test]
     fn crate_of_reads_both_workspace_layouts() {
-        assert_eq!(crate_of("corpus-engine/src/facts_check.rs"), "corpus-engine");
+        assert_eq!(
+            crate_of("corpus-engine/src/facts_check.rs"),
+            "corpus-engine"
+        );
         assert_eq!(
             crate_of("sovereign/crates/sovereign-core/src/memory.rs"),
             "sovereign-core"

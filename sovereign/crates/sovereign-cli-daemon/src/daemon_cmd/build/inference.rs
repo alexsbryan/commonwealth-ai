@@ -166,8 +166,9 @@ pub(crate) fn load_provider(
                     // holds a PEER's id — adopting that would make this terminal
                     // stamp another machine's identity onto its own traffic, which
                     // is worse than being unstamped.
-                    let node_id_hex =
-                        Some(sovereign_mesh::persist::resolve_self_node_id(&config.data.dir).to_hex());
+                    let node_id_hex = Some(
+                        sovereign_mesh::persist::resolve_self_node_id(&config.data.dir).to_hex(),
+                    );
                     Arc::new(
                         sovereign_inference::remote::SplitInferenceProvider::resolved(
                             resolver,

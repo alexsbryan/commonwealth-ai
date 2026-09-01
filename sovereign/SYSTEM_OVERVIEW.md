@@ -128,6 +128,19 @@ Major modules under `corpus-engine/src/`:
   `partition_path` DELEGATE here — the responsibility moved off the engine
   rather than being wrapped. The ratchet that keeps it from growing back is
   `cargo xtask layout-gate` (baseline `quality/baselines/corpus_layout.txt`).
+
+**The wall clock has one decider per dependency island, and a ratchet.**
+`sovereign_core::time`, `sovereign-time` (the zero-dep leaf for crates not on
+core), `corpus_engine_yield::time` and `commonwealth_core::clock` are the four;
+the islands duplicate the three-line body exactly once each because they cannot
+import across one another without a cycle. Everything else asks. This is a
+convergence that had already been undone once — `sovereign_core::time`'s module
+doc records absorbing "~40 copy-pasted" helpers, and a census on 2026-08-31
+found 35 live again under fifteen names, plus 150 direct `SystemTime::now()`
+reads. The closure loop is `cargo xtask clock-gate` (baseline
+`quality/baselines/clock_reads.txt`, shrink-only): a new hand-read clock fails
+the gate and is told which island decider to ask. Sites needing sub-second
+precision ride the baseline — no decider offers nanos.
 - `oplog.rs` — **`Op<K>` + `Oplog<K>`**, one append-only JSONL journal with
   four tenants declaring `Journaled`: `enrichment::governance`,
   `enrichment::reconciliation`, `meta_atlas::bridge` and — since 2026-08-30 —
@@ -5132,6 +5145,7 @@ of them shadow `SetupConfig` fields — declared debt via the registry's
 | `quality/source-tree.toml` | the residual "not our source" dirs a gate walk must skip — only what git's ignore rules cannot express (`vendor/` is tracked but not authored here) | humans | `common::SourceTree::discover` → arch-gate, docs-gate, env-gate |
 | `quality/requirements.toml` | the requirement registry — all 625 in-scope requirements of `research/clean-room/REQUIREMENTS.md` (591 must-class, 34 should) plus §17's 10 out-of-scope entries, §4.4's 5 aliases, and §16's 19 acceptance scenarios A-1…A-19 with the ids each cites. Carries `spec_hash` (blake3 of the spec at generation time), so a consumer can refuse to render a verdict against a document it has not read. Each row is id/family/n/level/spec_line/text — the domain and section headings are NOT copied, because the spec is tracked and `spec_line` reaches them | **machine only** (`UPDATE_REQUIREMENTS=1 cargo test -p kernel-types --test requirements_registry`) | the same test's byte gate, which rides the live `test:` CI job; types in `kernel-types/src/conformance.rs` |
 | `quality/requirements-enforceability.toml` | the ONE hand-authored column: how each of the 625 can be settled — `cli` 311 / `desktop` 11 / `model` 9 / `structural` 260 / `review` 34. Separate from the generated registry so regeneration cannot clobber a judgement no parser could make; 582 of 625 need no model at all, which is what makes a fast tier possible and is pinned rather than printed | humans | `kernel-types/tests/requirements_registry.rs` `assert_every_column_resolves` — id sets must be EQUAL, so a requirement cannot arrive unclassified and a class cannot outlive its requirement |
+| `quality/conformance/<crate>.toml` | which test claims each requirement — generated from `covers:` doc tags. A tag naming an unknown id, or sitting over a body with no assertion (`claimed-unproven`), fails the generator rather than being counted | **machine only** (`UPDATE_CONFORMANCE_TAGS=1 cargo test -p <crate> --test main conformance_tags`) | `svrn conformance`, which joins it to `quality/requirements.toml` and the newest `target/nextest/*/junit.xml` and reports four verdicts. See `docs/TESTING_SURFACE.md` §"The requirement conformance surface" |
 | `quality/campaigns/conformance.toml` | the campaign's 8 pre-registered kill bars — positive control (gates every other bar), the 625 ± 0 denominator, CI-seat membership, the 30s SMOKE budget, mutation survival | humans, BEFORE the data | `scripts/co-lineage.py` (`coverage conformance` / `measure`) — bar `status` is only open/deferred/descoped and the VERDICT is a machine-stamped row, never a hand-written one |
 | `docs/cli-contract.toml` | CLI verbs, journeys, experiences | humans | `cli_contract_journeys`, `svrn contract` |
 | `models.toml` | model selection per hardware | humans | daemon model selection |

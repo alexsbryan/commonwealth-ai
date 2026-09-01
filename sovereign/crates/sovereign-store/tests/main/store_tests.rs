@@ -1,18 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use sovereign_core::traits::*;
 use sovereign_core::types::*;
 
+use sovereign_core::time::unix_now;
 use sovereign_store::memory::InMemoryStateStore;
 use sovereign_store::sqlite::SqliteStateStore;
-
-fn now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
 
 fn make_message(id: &str, convo: &str, role: Role, content: &str) -> Message {
     Message {
@@ -20,7 +13,7 @@ fn make_message(id: &str, convo: &str, role: Role, content: &str) -> Message {
         conversation_id: convo.to_string(),
         role,
         content: content.to_string(),
-        created_at: now(),
+        created_at: unix_now(),
         metadata: None,
         version: 0,
     }
@@ -29,11 +22,11 @@ fn make_message(id: &str, convo: &str, role: Role, content: &str) -> Message {
 fn corpus_state(id: &str, visibility: CorpusVisibility) -> CorpusState {
     CorpusState {
         corpus_id: id.to_string(),
-        installed_at: now(),
+        installed_at: unix_now(),
         source_date: "test".to_string(),
         chunks_count: 1,
         index_size_mb: 0,
-        last_updated: now(),
+        last_updated: unix_now(),
         version: 0,
         deleted_at: None,
         vector_index_ready: false,
@@ -150,8 +143,8 @@ fn make_task(id: &str, convo: &str) -> Task {
         },
         status: TaskStatus::Running,
         completed_steps: vec![(0, StepOutput::Text("done".to_string()))],
-        created_at: now(),
-        updated_at: now(),
+        created_at: unix_now(),
+        updated_at: unix_now(),
         version: 0,
     }
 }
@@ -258,8 +251,8 @@ async fn test_memory_save_and_retrieve(store: &dyn StateStore) {
         content: "User prefers Rust programming".to_string(),
         source: "test".to_string(),
         confidence: 1.0,
-        created_at: now(),
-        last_used: now(),
+        created_at: unix_now(),
+        last_used: unix_now(),
         version: 0,
         deleted_at: None,
         source_conversation_id: None,
@@ -271,8 +264,8 @@ async fn test_memory_save_and_retrieve(store: &dyn StateStore) {
         content: "User lives in Portland Oregon".to_string(),
         source: "test".to_string(),
         confidence: 1.0,
-        created_at: now(),
-        last_used: now(),
+        created_at: unix_now(),
+        last_used: unix_now(),
         version: 0,
         deleted_at: None,
         source_conversation_id: None,
@@ -292,8 +285,8 @@ async fn test_memory_delete(store: &dyn StateStore) {
         content: "Temporary fact".to_string(),
         source: "test".to_string(),
         confidence: 1.0,
-        created_at: now(),
-        last_used: now(),
+        created_at: unix_now(),
+        last_used: unix_now(),
         version: 0,
         deleted_at: None,
         source_conversation_id: None,
@@ -313,8 +306,8 @@ async fn test_memory_confidence_update(store: &dyn StateStore) {
         content: "Decaying fact".to_string(),
         source: "test".to_string(),
         confidence: 1.0,
-        created_at: now(),
-        last_used: now(),
+        created_at: unix_now(),
+        last_used: unix_now(),
         version: 0,
         deleted_at: None,
         source_conversation_id: None,
@@ -520,8 +513,8 @@ async fn sqlite_memory_fts5_retrieval() {
         content: "User prefers Rust programming language".to_string(),
         source: "test".to_string(),
         confidence: 1.0,
-        created_at: now(),
-        last_used: now(),
+        created_at: unix_now(),
+        last_used: unix_now(),
         version: 0,
         deleted_at: None,
         source_conversation_id: None,
@@ -533,8 +526,8 @@ async fn sqlite_memory_fts5_retrieval() {
         content: "User lives in Portland Oregon".to_string(),
         source: "test".to_string(),
         confidence: 1.0,
-        created_at: now(),
-        last_used: now(),
+        created_at: unix_now(),
+        last_used: unix_now(),
         version: 0,
         deleted_at: None,
         source_conversation_id: None,
@@ -653,7 +646,7 @@ fn make_chunk(id: &str, source: &str, content: &str, index: usize) -> DocumentCh
         content: content.to_string(),
         chunk_index: index,
         embedding: None,
-        created_at: now(),
+        created_at: unix_now(),
         source_type: SourceType::UserDocument,
         version: 0,
         deleted_at: None,
@@ -1427,8 +1420,8 @@ async fn sqlite_memory_embedding_roundtrip() {
         content: "walked by the river".to_string(),
         source: "test".to_string(),
         confidence: 1.0,
-        created_at: now(),
-        last_used: now(),
+        created_at: unix_now(),
+        last_used: unix_now(),
         ..Default::default()
     };
     store.save_memory(&mem).await.unwrap();
@@ -1458,8 +1451,8 @@ async fn sqlite_memory_save_with_embedding() {
         content: "quiet evening".to_string(),
         source: "test".to_string(),
         confidence: 1.0,
-        created_at: now(),
-        last_used: now(),
+        created_at: unix_now(),
+        last_used: unix_now(),
         embedding: Some(vec![1.0, 2.0]),
         embedding_model: Some("m1".to_string()),
         ..Default::default()

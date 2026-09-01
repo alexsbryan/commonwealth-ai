@@ -2764,7 +2764,11 @@ mod tests {
         let _ = provider.embed("some text").await;
 
         let heads = daemon.request_heads();
-        assert_eq!(heads.len(), 2, "both slots must have dialled the entry node");
+        assert_eq!(
+            heads.len(),
+            2,
+            "both slots must have dialled the entry node"
+        );
         for (slot, head) in ["chat", "embed"].iter().zip(heads.iter()) {
             assert!(
                 head.to_ascii_lowercase().contains("x-node-id: f1f2589f"),

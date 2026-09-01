@@ -52,6 +52,7 @@ mod code_refresh;
 // init's whole job is to produce a corpus, so a build that cannot index has
 // nothing to offer it.
 #[cfg(feature = "dev-tools")]
+mod conformance_cmd;
 mod contract_cmd;
 mod daemon_bin;
 #[cfg(feature = "deep-research")]
@@ -391,6 +392,7 @@ const DEV_VERBS: &[&str] = &[
     "agent-bench",
     "claim",
     "nudge",
+    "conformance",
     "contract",
     "posture",
     // `seat watch` is the seat's notes-rail poller (order
@@ -423,6 +425,7 @@ const ALL_VERBS: &[&str] = &[
     "chat",
     "claim",
     "code",
+    "conformance",
     "contract",
     "corpus",
     "daemon",
@@ -525,6 +528,10 @@ const DEV_SUBCOMMANDS: &[(&str, &str)] = &[
     ("agent-bench", "Eight-problem agent-coding battery"),
     ("claim", "Work-atlas scope claims (mesh coordination)"),
     ("nudge", "Dismiss audit nudges"),
+    (
+        "conformance",
+        "Which spec requirements are proven — passed/failed/could-not-judge/never-ran",
+    ),
     (
         "contract",
         "What the CLI promises, how much is proven, when it last ran",
@@ -1058,6 +1065,13 @@ async fn async_main() {
             }
             "drift" => {
                 let code = drift_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            #[cfg(feature = "dev-tools")]
+            "conformance" => {
+                // Joins the requirement registry, the per-crate covers: manifests
+                // and the newest nextest JUnit report. Reads only; runs nothing.
+                let code = conformance_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             #[cfg(feature = "dev-tools")]

@@ -236,7 +236,10 @@ impl FactStore {
             Self::insert_facts(&conn, corpus_id, facts)?;
             conn.execute(
                 "INSERT OR REPLACE INTO fact_meta (key, value) VALUES (?, ?)",
-                params![format!("built_at:{corpus_id}"), now_unix().to_string()],
+                params![
+                    format!("built_at:{corpus_id}"),
+                    corpus_engine_yield::time::unix_now().to_string()
+                ],
             )?;
             Ok(())
         })();
@@ -528,13 +531,6 @@ fn finish_txn(conn: &Connection, txn: rusqlite::Result<()>, what: &str) -> Resul
             )))
         }
     }
-}
-
-fn now_unix() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
 }
 
 #[cfg(test)]

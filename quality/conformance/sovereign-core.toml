@@ -1,14 +1,21 @@
 # Conformance tags in `sovereign-core` — GENERATED. DO NOT EDIT BY HAND.
 #
-#   UPDATE_CONFORMANCE_TAGS=1 cargo test -p sovereign-core --test main conformance_tags
+#   UPDATE_CONFORMANCE_TAGS=1 cargo test -p kernel-types --test conformance_tags
 #
-# Each claim maps a requirement id from research/clean-room/REQUIREMENTS.md to
-# the test that proves it. `test` is `<junit classname>::<junit name>`, so the
-# runner can join a claim to a real per-test verdict without guessing.
+# Each claim maps a requirement id from research/clean-room/REQUIREMENTS.md
+# to the test that proves it. `test` is `<junit classname>::<junit name>`, so
+# `svrn conformance` can join a claim to a real per-test verdict without
+# guessing.
 #
-# `asserts` is the number of assertion tokens in the test body. It is never
-# zero: a `covers:` over an assertion-free body fails the generator, because a
-# claim that cannot fail is the cheap repair a coverage ratchet rewards.
+# `asserts` counts falsifiable exits in the test body. It is never zero: a
+# covers: tag over a body that cannot fail is refused by the generator.
+
+[[claim]]
+requirement = "GR-17"
+test = "sovereign-core::runtime::grounding::sealed::tests::cite_refuses_a_quote_the_chosen_member_does_not_hold"
+file = "sovereign/crates/sovereign-core/src/runtime/grounding/sealed.rs"
+line = 391
+asserts = 2
 
 [[claim]]
 requirement = "GR-19"
@@ -23,3 +30,73 @@ test = "sovereign-core::quote_verification::tests::a_quote_from_beyond_the_promp
 file = "sovereign/crates/sovereign-core/src/quote_verification.rs"
 line = 577
 asserts = 5
+
+[[claim]]
+requirement = "GR-21"
+test = "sovereign-core::quote_verification::tests::a_composite_quote_is_still_demoted_against_the_full_chunks"
+file = "sovereign/crates/sovereign-core/src/quote_verification.rs"
+line = 615
+asserts = 2
+
+[[claim]]
+requirement = "GR-22"
+test = "sovereign-core::runtime::authority_guard::tests::model_originated_figures_over_an_armed_corpus_are_blocked"
+file = "sovereign/crates/sovereign-core/src/runtime/authority_guard.rs"
+line = 428
+asserts = 8
+
+[[claim]]
+requirement = "GR-27"
+test = "sovereign-core::runtime::authority_guard::tests::arming_requires_a_declared_corpus_in_the_evidence_pool"
+file = "sovereign/crates/sovereign-core/src/runtime/authority_guard.rs"
+line = 526
+asserts = 7
+
+[[claim]]
+requirement = "GR-28"
+test = "sovereign-core::runtime::authority_guard::tests::figures_inside_verified_quotes_release"
+file = "sovereign/crates/sovereign-core/src/runtime/authority_guard.rs"
+line = 460
+asserts = 1
+
+[[claim]]
+requirement = "GR-28"
+test = "sovereign-core::runtime::authority_guard::tests::model_originated_figures_over_an_armed_corpus_are_blocked"
+file = "sovereign/crates/sovereign-core/src/runtime/authority_guard.rs"
+line = 428
+asserts = 8
+
+[[claim]]
+requirement = "GR-50"
+test = "sovereign-core::runtime::grounding::call_census::tests::no_gate_module_calls_inference_complete_behind_the_censuss_back"
+file = "sovereign/crates/sovereign-core/src/runtime/grounding/call_census.rs"
+line = 288
+asserts = 1
+
+[[claim]]
+requirement = "GR-6"
+test = "sovereign-core::runtime::grounding::tests::tombstoned_repair_releases_the_audited_draft_with_its_claims_marked"
+file = "sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs"
+line = 5366
+asserts = 9
+
+[[claim]]
+requirement = "RT-17"
+test = "sovereign-core::router_calibration::tests::fit_never_proposes_a_negative_margin_gate"
+file = "sovereign/crates/sovereign-core/src/router_calibration.rs"
+line = 1113
+asserts = 2
+
+[[claim]]
+requirement = "RT-32"
+test = "sovereign-core::planner::schema::tests::a_tool_whose_params_cannot_be_masked_is_refused_not_widened"
+file = "sovereign/crates/sovereign-core/src/planner/schema.rs"
+line = 552
+asserts = 4
+
+[[claim]]
+requirement = "X-PR-2"
+test = "sovereign-core::runtime::grounding::sealed::tests::a_summary_member_may_not_be_quoted"
+file = "sovereign/crates/sovereign-core/src/runtime/grounding/sealed.rs"
+line = 329
+asserts = 2

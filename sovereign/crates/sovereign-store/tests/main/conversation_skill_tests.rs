@@ -7,17 +7,10 @@
 //! extracted memories with the originating conversation id, those
 //! fields must persist correctly through the SQLite store.
 
+use sovereign_core::time::unix_now;
 use sovereign_core::traits::{ConversationStore, MemoryStore};
 use sovereign_core::types::{Memory, Message, Role};
 use sovereign_store::sqlite::SqliteStateStore;
-
-fn now() -> i64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
 
 fn msg(id: &str, conv_id: &str) -> Message {
     Message {
@@ -25,7 +18,7 @@ fn msg(id: &str, conv_id: &str) -> Message {
         conversation_id: conv_id.to_string(),
         role: Role::User,
         content: "hello".to_string(),
-        created_at: now(),
+        created_at: unix_now(),
         metadata: None,
         version: 0,
     }
@@ -94,8 +87,8 @@ async fn memory_source_conversation_id_round_trips() {
         content: "User keeps coming back to the question of meaningful work".into(),
         source: "conversation_extraction".into(),
         confidence: 0.9,
-        created_at: now(),
-        last_used: now(),
+        created_at: unix_now(),
+        last_used: unix_now(),
         version: 0,
         deleted_at: None,
         source_conversation_id: Some("conv-source".to_string()),
@@ -133,8 +126,8 @@ async fn legacy_memory_without_source_conversation_id_reads_as_none() {
         content: "some older fact about the user".into(),
         source: "manual".into(),
         confidence: 0.7,
-        created_at: now() - 365 * 86400,
-        last_used: now() - 365 * 86400,
+        created_at: unix_now() - 365 * 86400,
+        last_used: unix_now() - 365 * 86400,
         version: 0,
         deleted_at: None,
         source_conversation_id: None,
@@ -156,8 +149,8 @@ fn mem_with_skill(id: &str, content: &str, skill: Option<&str>) -> Memory {
         content: content.to_string(),
         source: "test".into(),
         confidence: 0.9,
-        created_at: now(),
-        last_used: now(),
+        created_at: unix_now(),
+        last_used: unix_now(),
         version: 0,
         deleted_at: None,
         source_conversation_id: None,

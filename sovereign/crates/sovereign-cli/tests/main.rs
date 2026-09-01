@@ -22,10 +22,10 @@
 mod aliases;
 #[path = "main/cli_contract_code.rs"]
 mod cli_contract_code;
-#[path = "main/cli_contract_flags.rs"]
-mod cli_contract_flags;
 #[path = "main/cli_contract_docs.rs"]
 mod cli_contract_docs;
+#[path = "main/cli_contract_flags.rs"]
+mod cli_contract_flags;
 #[path = "main/cli_contract_journeys.rs"]
 mod cli_contract_journeys;
 #[path = "main/cli_journey_dispatch.rs"]

@@ -39,7 +39,7 @@ use crate::types::{EmbedFn, InferenceFn};
 use serde::Deserialize;
 use tracing::debug;
 
-static PHASE1_ATLAS_SYSTEM: ::std::sync::LazyLock<&'static str> =
+pub(super) static PHASE1_ATLAS_SYSTEM: ::std::sync::LazyLock<&'static str> =
     ::std::sync::LazyLock::new(|| {
         crate::enrichment::pipeline::prompts::load_or_baked(
             "literary_atlas/phase1_system.md",
@@ -68,7 +68,7 @@ static PHASE1B_CONCEPT_COVERAGE: ::std::sync::LazyLock<&'static str> =
 /// example and prepends a "no reasoning trace" directive so the
 /// model emits JSON directly instead of burning its output budget
 /// on reflection.
-static PHASE1_ATLAS_SYSTEM_TERSE: ::std::sync::LazyLock<&'static str> =
+pub(super) static PHASE1_ATLAS_SYSTEM_TERSE: ::std::sync::LazyLock<&'static str> =
     ::std::sync::LazyLock::new(|| {
         crate::enrichment::pipeline::prompts::load_or_baked(
             "literary_atlas/phase1_system_terse.md",
@@ -172,32 +172,36 @@ pub const PIPELINE_ID: &str = "literary_atlas";
 /// Phase 1. Delegates Phases 3–7 to `LiteraryPipeline` unchanged.
 pub struct LiteraryAtlasPipeline {
     inner: LiteraryPipeline,
-    /// When `Some`, this atlas pipeline runs in recipe-customized mode (the
-    /// `custom_atlas` pipeline): `id`/`name`/`vocabulary` and the Phase-1
-    /// extraction prompt come from a recipe ontology instead of the baked
-    /// literary genre. Phases 3–7 are identical either way — a custom atlas is
-    /// THE SAME pipeline with a different Phase-1 ontology. `None` = the literary
-    /// genre pipeline. See [`super::configurable_atlas`].
-    custom: Option<super::configurable_atlas::CustomOntology>,
+    /// Which genre's ontology this pipeline runs. `id`/`name`/`vocabulary`, the
+    /// Phase-1 extraction prompt and a handful of strategy choices come from
+    /// here; Phases 3–7 are identical for every genre, because a genre is a
+    /// Phase-1 ontology and not a pipeline. See [`super::genre::AtlasGenre`].
+    genre: std::sync::Arc<dyn super::genre::AtlasGenre>,
 }
 
 impl LiteraryAtlasPipeline {
     pub fn new() -> Self {
+        Self::with_genre(std::sync::Arc::new(super::genre::LiteraryGenre))
+    }
+
+    /// Build the atlas pipeline for one genre. The ONE constructor every genre
+    /// goes through, prebuilt or recipe-driven — there is no second path that
+    /// could acquire a different set of downstream phases.
+    pub fn with_genre(genre: std::sync::Arc<dyn super::genre::AtlasGenre>) -> Self {
         Self {
             inner: LiteraryPipeline::new(),
-            custom: None,
+            genre,
         }
     }
 
     /// Build a recipe-customized atlas pipeline from a custom ontology spec.
     /// Reports `id() = "custom_atlas"` and extracts Phase-1 atoms under the
     /// recipe's domain guidance (a neutral base prompt + the domain focus);
-    /// downstream phases (3–7) are identical to the literary atlas.
+    /// downstream phases (3–7) are identical to every other genre.
     pub fn with_custom_ontology(spec: &super::configurable_atlas::CustomAtlasSpec) -> Self {
-        Self {
-            inner: LiteraryPipeline::new(),
-            custom: Some(super::configurable_atlas::CustomOntology::build(spec)),
-        }
+        Self::with_genre(std::sync::Arc::new(
+            super::configurable_atlas::CustomOntology::build(spec),
+        ))
     }
 }
 
@@ -209,23 +213,16 @@ impl Default for LiteraryAtlasPipeline {
 
 impl Pipeline for LiteraryAtlasPipeline {
     fn id(&self) -> &'static str {
-        if self.custom.is_some() {
-            super::configurable_atlas::PIPELINE_ID
-        } else {
-            PIPELINE_ID
-        }
+        self.genre.id()
     }
 
     fn name(&self) -> &'static str {
-        match &self.custom {
-            Some(c) => c.name,
-            None => "Literary — atlas atom graph",
-        }
+        self.genre.name()
     }
 
     fn vocabulary(&self) -> &Vocabulary {
-        match &self.custom {
-            Some(c) => &c.vocabulary,
+        match self.genre.vocabulary() {
+            Some(v) => v,
             None => self.inner.vocabulary(),
         }
     }
@@ -237,10 +234,7 @@ impl Pipeline for LiteraryAtlasPipeline {
     // those in here.
 
     fn phase1_system(&self) -> &'static str {
-        match &self.custom {
-            Some(c) => c.phase1_system,
-            None => *PHASE1_ATLAS_SYSTEM,
-        }
+        self.genre.phase1_system()
     }
 
     fn phase3_system(&self) -> &'static str {
@@ -262,6 +256,9 @@ impl Pipeline for LiteraryAtlasPipeline {
     // ── Phase 1 — atlas extraction ────────────────────────────
 
     fn compose_phase1(&self, chapter: &ChapterInput, exemplars: &[&Exemplar]) -> ChatPrompt {
+        if let Some(p) = self.genre.compose_phase1(chapter, exemplars, None) {
+            return p;
+        }
         // Delegate to the seed-aware variant with no seed so the
         // seed-aware rendering path has a single call site. When a
         // seed is available the runner calls `compose_phase1_with_seed`
@@ -285,6 +282,9 @@ impl Pipeline for LiteraryAtlasPipeline {
     /// already blew past the output budget. Parser is shared with
     /// the default variant.
     fn compose_phase1_terse(&self, chapter: &ChapterInput) -> Option<ChatPrompt> {
+        if let Some(p) = self.genre.compose_phase1_terse(chapter) {
+            return Some(p);
+        }
         let user = render_phase1_user_body(
             chapter,
             /*exemplars=*/ &[],
@@ -294,10 +294,7 @@ impl Pipeline for LiteraryAtlasPipeline {
         // Custom atlas retries with the SAME custom system prompt (just a lighter
         // body) so a failed chapter is re-extracted under the domain ontology,
         // not the literary terse prompt. Literary mode uses its terse system.
-        let system = match &self.custom {
-            Some(c) => c.phase1_system,
-            None => *PHASE1_ATLAS_SYSTEM_TERSE,
-        };
+        let system = self.genre.phase1_terse_system();
         Some(
             ChatPrompt::new(system, user)
                 .with_response_schema(
@@ -315,8 +312,9 @@ impl Pipeline for LiteraryAtlasPipeline {
         chapter: &ChapterInput,
         existing: &SectionExtraction,
     ) -> Option<ChatPrompt> {
-        // v1: custom atlas skips the literary-framed 1b coverage top-up.
-        if self.custom.is_some() {
+        // A genre whose atoms are not literary skips the literary-framed 1b
+        // coverage top-up rather than being asked about characters.
+        if !self.genre.runs_phase1b_coverage() {
             return None;
         }
         let user = render_phase1b_user_body(chapter, existing);
@@ -332,8 +330,9 @@ impl Pipeline for LiteraryAtlasPipeline {
         chapter: &ChapterInput,
         existing: &SectionExtraction,
     ) -> Option<ChatPrompt> {
-        // v1: custom atlas skips the literary-framed 1b coverage top-up.
-        if self.custom.is_some() {
+        // A genre whose atoms are not literary skips the literary-framed 1b
+        // coverage top-up rather than being asked about characters.
+        if !self.genre.runs_phase1b_coverage() {
             return None;
         }
         let user = render_phase1b_user_body(chapter, existing);
@@ -351,13 +350,7 @@ impl Pipeline for LiteraryAtlasPipeline {
     // ── Stage 1a — seed extraction ─────────────────────────────
 
     fn seed_strategy(&self) -> SeedStrategy {
-        if self.custom.is_some() {
-            // v1: custom atlas skips the literary seed pass (its seed prompt is
-            // literary-specific); Phase 1 extracts directly under the ontology.
-            SeedStrategy::None
-        } else {
-            SeedStrategy::Llm
-        }
+        self.genre.seed_strategy()
     }
 
     fn compose_seed_prompt(&self, first_section: &ChapterInput) -> Option<ChatPrompt> {
@@ -444,6 +437,9 @@ impl Pipeline for LiteraryAtlasPipeline {
         exemplars: &[&Exemplar],
         seed: Option<&SeedEntities>,
     ) -> ChatPrompt {
+        if let Some(p) = self.genre.compose_phase1(chapter, exemplars, seed) {
+            return p;
+        }
         let user =
             render_phase1_user_body(chapter, exemplars, /*include_exemplars=*/ true, seed);
         ChatPrompt::new(self.phase1_system(), user)
@@ -455,6 +451,9 @@ impl Pipeline for LiteraryAtlasPipeline {
     }
 
     fn parse_phase1(&self, response: &str) -> Result<Phase1ChapterResult> {
+        if let Some(r) = self.genre.parse_phase1(response) {
+            return r;
+        }
         let cleaned = prepare_phase_json(response, "phase 1 (atlas)")?;
 
         // Two-step deserialization: parse to `serde_json::Value`
@@ -852,54 +851,18 @@ impl Pipeline for LiteraryAtlasPipeline {
     }
 
     fn tension_strategy(&self) -> crate::enrichment::atlas::analysis::TensionStrategy {
-        use crate::enrichment::atlas::analysis::TensionStrategy;
-        if self.custom.is_some() {
-            // Recipe-ontology corpora (governance rule-sets, policy docs)
-            // are cross-document with uniformly-worded rules. The graph
-            // signals miss the real conflicts (a later decision often
-            // resolves with no `attributed_to`, so entity-overlap can't
-            // reach it) and over-pair claims sharing a broad scope entity.
-            // An embedding top-K net recalls same-topic pairs and lets the
-            // classifier judge conflict-vs-compatible. k/floor measured on
-            // the Maple House governance fixture: planted conflicts sit at
-            // cosine 0.60–0.76, so floor 0.5 keeps them while K bounds the
-            // per-claim fan-out.
-            TensionStrategy::EmbeddingTopK { k: 10, floor: 0.5 }
-        } else {
-            TensionStrategy::Graph
-        }
+        self.genre.tension_strategy()
     }
 
     fn compose_phase6_atlas_classifier(
         &self,
         content: &crate::enrichment::atlas::analysis::CandidateContent,
     ) -> Option<ChatPrompt> {
-        // Custom-ontology corpora judge conflicts in their domain's own
-        // terms: fill the ontology-driven template from the recipe's
-        // guidance + tension/position vocabulary. The literary frame
-        // (below) is the wrong unit of analysis for rule-sets / policies —
-        // it asks about narrative tension between characters.
-        if let Some(custom) = self.custom.as_ref() {
-            let system = custom_phase6_classifier_system(
-                custom.guidance,
-                &custom.vocabulary.tension_term,
-                &custom.vocabulary.position_term,
-            );
-            return Some(
-                ChatPrompt::new(
-                    system,
-                    render_custom_phase6_classifier_user_body(
-                        content,
-                        &custom.vocabulary.tension_term,
-                    ),
-                )
-                .with_response_schema(
-                    "phase6_classifier_response",
-                    crate::enrichment::atlas::analysis::phase6_classifier_response_schema(),
-                )
-                .with_phase_id("phase6_classifier")
-                .with_max_output_tokens(256),
-            );
+        // A genre may judge conflicts in its own domain terms: the literary
+        // frame below asks about narrative tension between characters, which
+        // is the wrong unit of analysis for a rule-set or a policy document.
+        if let Some(p) = self.genre.compose_phase6_classifier(content) {
+            return Some(p);
         }
         Some(
             ChatPrompt::new(
@@ -1039,7 +1002,7 @@ fn render_phase6_classifier_user_body(
 /// `position_term`. Extracted from `compose_phase6_atlas_classifier` so the
 /// "custom mode is ontology-driven, not literary" invariant is unit-testable
 /// without constructing a full candidate.
-fn custom_phase6_classifier_system(
+pub(super) fn custom_phase6_classifier_system(
     guidance: &str,
     tension_term: &str,
     position_term: &str,
@@ -1055,7 +1018,7 @@ fn custom_phase6_classifier_system(
 /// participant" framing — and asks the domain-specific question. The
 /// system message (filled from the recipe ontology) carries the meaning
 /// of a `{tension_term}`.
-fn render_custom_phase6_classifier_user_body(
+pub(super) fn render_custom_phase6_classifier_user_body(
     content: &crate::enrichment::atlas::analysis::CandidateContent,
     tension_term: &str,
 ) -> String {

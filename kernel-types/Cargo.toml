@@ -53,6 +53,11 @@ wire-fixture = ["dep:serde_json"]
 # (`tests/requirements_registry.rs`). DEV ONLY — the runtime four-dep budget
 # above still holds; consumers of the registry (xtask) bring their own toml.
 toml = { workspace = true }
+# The workspace-wide `covers:` tag scanner (`tests/conformance_tags.rs`). ONE
+# scanner, N per-crate manifests — the partitioning is about the output files,
+# not about the scanner. Same version/features as corpus-engine's (ARCH §8.2).
+syn = { version = "2", features = ["full", "extra-traits"] }
+quote = "1"
 # Wire-form assertions only. Not a runtime dep of the kernel.
 serde_json = { workspace = true }
 # The compile-fail harness for `judgement_reds` — the structural half of the

@@ -28,13 +28,13 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::common;
+use crate::common::mesh_admin_services;
 use commonwealth_core::contributions::LedgerEventKind;
 use corpus_engine::index::{CorpusIndex, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_mesh::daemon::EmbeddedDaemon;
-use crate::common;
-use crate::common::mesh_admin_services;
 
 const EMBED_DIM: usize = 8;
 

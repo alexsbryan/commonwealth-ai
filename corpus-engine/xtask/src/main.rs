@@ -21,6 +21,7 @@
 mod api_gate;
 mod arch_gate;
 mod boundary_gate;
+mod clock_gate;
 mod common;
 mod concept_gate;
 mod docs_gate;
@@ -42,6 +43,7 @@ fn main() {
         "arch-gate" => arch_gate::run(&args[1..]),
         "docs-gate" => docs_gate::run(),
         "boundary-gate" => boundary_gate::run(),
+        "clock-gate" => clock_gate::run(&args[1..]),
         "concept-gate" => concept_gate::run(&args[1..]),
         "api-gate" => api_gate::run(&args[1..]),
         "env-gate" => env_gate::run(&args[1..]),
@@ -69,6 +71,9 @@ fn print_usage() {
     eprintln!();
     eprintln!("Commands:");
     eprintln!("  quality                        Run every local gate; one summary table");
+    eprintln!(
+        "  clock-gate [--update-baseline|--tighten]  Wall-clock reads route through each island's time decider"
+    );
     eprintln!(
         "  arch-gate [--update-baseline|--tighten]   Enforce the §3.1 file-size ratchet + §1 doc-contract"
     );

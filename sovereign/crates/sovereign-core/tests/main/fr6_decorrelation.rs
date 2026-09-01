@@ -377,10 +377,7 @@ fn bank_path() -> PathBuf {
 fn now_iso() -> String {
     // No chrono import juggling in the test: UTC timestamp via std is
     // fine for a measurement stamp.
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| format!("unix-{}", d.as_secs()))
-        .unwrap_or_else(|_| "unknown".to_string())
+    format!("unix-{}", sovereign_core::time::unix_now_u64())
 }
 
 async fn preflight(_provider: &Arc<dyn InferenceProvider>) {

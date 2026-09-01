@@ -34,8 +34,7 @@ fn tauri_src() -> PathBuf {
 }
 
 fn generated_ts() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../src/lib/commands.generated.ts")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/lib/commands.generated.ts")
 }
 
 /// Parameter types Tauri INJECTS rather than reading from the JS call.
@@ -144,7 +143,9 @@ fn collect(items: &[Item], out: &mut BTreeMap<String, CommandDef>) {
                 let is_command = f.attrs.iter().any(|a| {
                     let p = a.path();
                     p.segments.last().is_some_and(|s| s.ident == "command")
-                        && p.segments.iter().any(|s| s.ident == "tauri" || s.ident == "command")
+                        && p.segments
+                            .iter()
+                            .any(|s| s.ident == "tauri" || s.ident == "command")
                 });
                 if !is_command {
                     continue;

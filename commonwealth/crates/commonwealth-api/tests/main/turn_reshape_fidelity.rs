@@ -440,7 +440,9 @@ mod falsifiers {
     async fn the_passthrough_check_catches_an_altered_turn() {
         let untouched = corpus()
             .into_iter()
-            .find(|f| turn_view(&compose(&f.request, &GATED_REQUEST_PASSES)) == turn_view(&f.request))
+            .find(|f| {
+                turn_view(&compose(&f.request, &GATED_REQUEST_PASSES)) == turn_view(&f.request)
+            })
             .expect("at least one fixture trips no pass");
 
         let mut altered = untouched.request.clone();
@@ -505,9 +507,9 @@ mod falsifiers {
 // cannot tell the model emitted a broken one; a refactor that drops
 // the repair looks identical from outside.
 
+use commonwealth_api::openai_types::StreamFrame;
 use commonwealth_api::openai_types::{ChatCompletionResponse, ChatMessage, ToolCall};
 use commonwealth_api::state::{LocalInferenceError, LocalInferenceService};
-use commonwealth_api::openai_types::StreamFrame;
 use futures::Stream;
 use http_body_util::BodyExt;
 use std::pin::Pin;
@@ -603,13 +605,7 @@ async fn served_response(
     canned: &ChatCompletionResponse,
 ) -> ChatCompletionResponse {
     let state = solo_state(Arc::new(RespondsWith(canned.clone())));
-    let resp = chat_completions(
-        State(state),
-        HeaderMap::new(),
-        None,
-        Json(request.clone()),
-    )
-    .await;
+    let resp = chat_completions(State(state), HeaderMap::new(), None, Json(request.clone())).await;
     let bytes = resp
         .into_body()
         .collect()

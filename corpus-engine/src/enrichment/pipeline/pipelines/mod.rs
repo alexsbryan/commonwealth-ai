@@ -7,6 +7,7 @@
 pub mod configurable_atlas;
 pub mod conversation_atlas;
 pub mod engineering_atlas;
+pub mod genre;
 pub mod literary;
 pub mod literary_atlas;
 // `obsidian_atlas` removed when vault corpora moved to the tiered

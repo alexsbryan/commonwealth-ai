@@ -37,6 +37,23 @@
 
 use serde::{Deserialize, Serialize};
 
+/// The generated registry, relative to the repo root.
+///
+/// Named here rather than re-typed at each reader: three surfaces already
+/// opened this file by string literal (the generator, `svrn conformance`, the
+/// tag scanner), which is three chances for a typo to read as an empty
+/// registry — and an empty registry renders every requirement `never-ran`,
+/// which is indistinguishable from honest absence (ARCH §10.6).
+pub const REGISTRY_PATH: &str = "quality/requirements.toml";
+
+/// The one hand-authored column — how each requirement can be settled — kept
+/// apart from the generated registry so regenerating cannot clobber it.
+///
+/// Parsed by the reader as `BTreeMap<String, Enforceability>`; this crate
+/// deliberately does not bring a TOML dependency to do it for them (the
+/// four-dep runtime budget in `Cargo.toml`).
+pub const ENFORCEABILITY_PATH: &str = "quality/requirements-enforceability.toml";
+
 /// The obligation level a requirement carries, per `REQUIREMENTS.md §0.3`.
 ///
 /// A closed set (ARCH §2). `Invariant` and `Bar` are MUST-class — the spec
@@ -243,6 +260,17 @@ impl RequirementRegistry {
         out.sort_by(|a, b| a.0.cmp(&b.0));
         out
     }
+
+    /// One acceptance scenario by id (`A-8`), or `None`.
+    ///
+    /// A named accessor rather than a linear scan at each reader, for the same
+    /// reason [`RequirementRegistry::resolve`] is one: the gate that refuses an
+    /// unknown scenario and the reporter that renders one must agree about
+    /// which ids exist, or an id the gate accepts renders as nothing and the
+    /// scenario silently vanishes from the report (ARCH §10.6).
+    pub fn scenario(&self, id: &str) -> Option<&AcceptanceScenario> {
+        self.scenarios.iter().find(|s| s.id == id)
+    }
 }
 
 #[cfg(test)]
@@ -289,7 +317,10 @@ mod tests {
         assert_eq!(reg.must_class().count(), 2);
         assert!(reg.get("OS-1").is_some(), "still addressable by id");
         assert_eq!(reg.resolve("ST-18").map(|r| r.id.as_str()), Some("X-PR-3"));
-        assert!(reg.resolve("ST-999").is_none(), "unknown is None, not a stub");
+        assert!(
+            reg.resolve("ST-999").is_none(),
+            "unknown is None, not a stub"
+        );
     }
 
     /// The two classes a fast tier cannot reach are named, not inferred.

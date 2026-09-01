@@ -329,6 +329,127 @@ here. The whole reason this layer exists is that its predecessor asserted
 the product *does* rather than what it *should* do is that harness again with
 extra steps. The same rule is what makes `∅` a verdict rather than a pass.
 
+### The requirement conformance surface
+
+One altitude above the CLI contract, and deliberately a different noun. The CLI
+contract asks *what does this CLI promise, and is any of it proven*.
+`svrn conformance` asks *what does the product specification oblige, and is any
+of that proven* — over the 625 requirements of
+`research/clean-room/REQUIREMENTS.md`, each of which carries the incident that
+produced it. Conflating the two would start counting verbs as requirements.
+
+Five artifacts, joined; the runner judges nothing itself:
+
+| Artifact | Answers | Kept honest by |
+|---|---|---|
+| `quality/requirements.toml` | what the spec obliges | generated from the spec and byte-gated against its hash (`kernel-types/tests/requirements_registry.rs`) |
+| `quality/conformance/<crate>.toml` | which TEST claims each requirement | generated from `covers:` doc tags (`<crate>/tests/main/conformance_tags.rs`) |
+| `target/nextest/<profile>/junit.xml` | what that test last did | written by nextest itself |
+| `sovereign/docs/cli-contract.toml` | which JOURNEY STEP claims each requirement | four gates in `sovereign-cli/tests/main/cli_contract_journeys.rs` |
+| `~/.svrnmesh/journey-nightly/latest-steps.jsonl` | what that step last did | written per step by `cli-journey-verify.sh`, persisted by the nightly |
+
+#### Two instruments, because the requirement's own class decides which one applies
+
+`quality/requirements-enforceability.toml` is the one hand-authored column and
+classifies all 625. **260 are `structural`** — a type, a lint, a source-scanning
+test — and a `#[test]` is the right instrument. **311 are `cli`** (plus 11
+`desktop`): settleable by a command plus an assertion on its output, and by
+nothing else. The remaining 43 are `model` (9, needs live weights) and `review`
+(34, no automated check settles them; never counted covered *or* failing).
+
+Until the journey join existed the 311 had no instrument at all, and covering
+them with unit tests instead produced **35 overclaims out of 74 adjudicated
+candidates** — tests that touched the area and asserted nothing the clause says.
+That is why the class is checked mechanically rather than trusted.
+
+**To claim a `structural` requirement**, put `/// covers: GR-19` above a
+`#[test]`, then regenerate that crate's manifest:
+
+```bash
+UPDATE_CONFORMANCE_TAGS=1 cargo test -p sovereign-core --test main conformance_tags
+svrn conformance --family GR
+```
+
+Two things fail the generator rather than being counted: a tag naming an id that
+is not in the registry, and a tag over a body with no assertion. The second is
+`claimed-unproven`, and it fails at **any** count — it is the cheap repair a
+coverage ratchet would otherwise reward, and it is the same rule
+`unproven_capabilities` applies one layer down.
+
+**To claim a `cli` requirement**, put `requirements = ["UI-17"]` on the journey
+step whose `expect` block falsifies the clause. Four gates hold that honest, and
+each was watched failing on its own probe before it was trusted:
+
+| Gate | Refuses |
+|---|---|
+| `every_claimed_requirement_resolves_in_the_registry` | an id the spec does not state |
+| `a_journey_only_claims_a_requirement_a_command_can_settle` | a `structural` / `model` / `review` requirement — no command observes it |
+| `a_step_claiming_a_requirement_asserts_output` | `exit = 0` as evidence: every code-intel verb exits 0 on an empty index |
+| `a_claim_is_never_parked_on_a_step_no_lane_runs` | a claim on a `skip_live` step — mapped-and-never-run reads as progress and proves nothing |
+
+**The join key is `(journey id, step index)`**, and a key that resolves to
+nothing renders `never-ran` — indistinguishable from honest absence in the
+verdict alone. So the report prints *claimed and never run* as its own block,
+naming each row and its reason. That is the `cli-contract-live-verify.sh`
+failure — a lane gated on a variable nothing set, green for its entire life —
+restated at the requirement level.
+
+#### `--scenarios` — the second axis, in two columns
+
+`REQUIREMENTS.md §16` writes 19 acceptance scenarios and opens *"a rebuild that
+reproduces the feature list and fails the following is not a rebuild of this
+system"*. They parse into the registry as `[[scenarios]]`, each citing the
+requirement ids it covers — 78 citations across the 19 — and until 2026-08-31
+nothing read them.
+
+`svrn conformance --scenarios` reports each one as **demonstrated** *and*
+**cited**, never as one number:
+
+- **demonstrated** — a journey declaring `demonstrates = ["A-8"]`, resolved
+  through the journey lane. Worst-wins across *every* live step, because a
+  scenario is the whole sequence: a lane that passed three steps and never
+  reached the fourth has not shown it, and reporting the passing prefix is the
+  partial-credit failure `cli-journey-sandbox.sh` already refuses one layer down.
+- **cited** — the roll-up over the requirements the scenario names.
+
+Folding them would let green cites stand in for a scenario nobody ran, and
+§16.1's A-1 is explicit that the demonstration must have been *watched*. Proving
+IN-10 and OP-7 by other means does not mean anyone killed the numerical engine
+mid-decode.
+
+A scenario no journey declares reads **not declared** — deliberately not
+`never-ran`, which means something claimed it and no lane executed the claim.
+Collapsing the two would hide which of the 19 nobody has taken on. **Today that
+is all 19**, and the two-column view is what makes the gap legible: several
+scenarios have partially-green cites while nothing has ever run the scenario.
+
+`demonstrates` is declared on the **journey**, not the step, and that asymmetry
+with `requirements` is the design: a requirement is a clause one assertion
+falsifies; a scenario is a sequence no single step is.
+
+**The measured reach, 2026-08-31: 9 of 322.** All 162 steps were adjudicated
+against the registry; only 82 are claimable at all (14 journeys are
+journey-level `skip_live`, and many remaining steps are exit-only), and 9
+requirements survived the clause test. The shortfall is not bad journeys — it is
+that the journeys were written to prove *the CLI's own promises*, and that most
+requirements are conjunctions a single `expect` falsifies only in part. The rule
+adopted: **claim on the requirement's primary obligation, and leave the residue
+unproven rather than unclaimed.**
+
+The report is **four numbers, never one**. A pass recorded before its guard's
+source was last edited reads `could-not-judge`; a *fail* in that state stays
+`failed`, because the asymmetry should run in the direction that cannot hide a
+defect. A requirement nothing claims, or whose test was absent from a filtered
+run, reads `never-ran` — so the denominator cannot be shrunk by omission. No
+headline percentage is printed anywhere: "91% conformant" is the artifact most
+likely to outlive its caveats.
+
+The gating discipline is the same as this section's: **a mapping is worth what
+it detects.** GR-19's was established by removing `sources.extend(chunks)` from
+`verify_answer_against_turn_evidence` and watching GR-19 move `passed → failed →
+passed` across three real runs — the mutation kills exactly one of that module's
+twenty tests. Bars live in `quality/campaigns/conformance.toml`.
+
 Most production bugs in a daemon like this live at **L2 × hard
 failure or restart recovery**. That's where the highest-leverage
 gaps below sit.

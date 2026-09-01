@@ -283,6 +283,7 @@ mod tests {
     /// resolved by the compiler relative to THIS file, so it cannot go
     /// stale against a moved module or pass vacuously in a different
     /// working directory.
+    /// covers: GR-50
     #[test]
     fn no_gate_module_calls_inference_complete_behind_the_censuss_back() {
         const SOURCES: [(&str, &str); 6] = [

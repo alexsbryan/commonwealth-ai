@@ -40,6 +40,7 @@ use corpus_engine::enrichment::skeleton::{
 use corpus_engine::recipe::AcquirerConfig;
 use corpus_engine::{CorpusEngine, EmbedFn};
 use sovereign_core::observer::SharedStateStoreObserver;
+use sovereign_core::time::unix_now;
 use sovereign_core::traits::{ConversationStore, MemoryStore};
 use sovereign_core::types::{Conversation, ConversationContext, Memory, Message, Role};
 use sovereign_store::sqlite::SqliteStateStore;
@@ -104,22 +105,14 @@ fn stub_inference() -> corpus_engine::InferenceFn {
     })
 }
 
-fn now() -> i64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
-
 fn mem(id: &str, content: &str, conv_id: Option<&str>) -> Memory {
     Memory {
         id: id.to_string(),
         content: content.to_string(),
         source: "test".to_string(),
         confidence: 0.9,
-        created_at: now(),
-        last_used: now(),
+        created_at: unix_now(),
+        last_used: unix_now(),
         version: 0,
         deleted_at: None,
         source_conversation_id: conv_id.map(|s| s.to_string()),
@@ -134,8 +127,8 @@ fn empty_context(conv_id: &str) -> ConversationContext {
             id: conv_id.to_string(),
             title: None,
             messages: vec![],
-            created_at: now(),
-            updated_at: now(),
+            created_at: unix_now(),
+            updated_at: unix_now(),
             version: 0,
             deleted_at: None,
             skill_id: None,
@@ -365,7 +358,7 @@ async fn conversational_view_excludes_local_only_skill_conversations() {
             conversation_id: inner_work_id.to_string(),
             role: Role::User,
             content: "private inner-work thoughts".into(),
-            created_at: now(),
+            created_at: unix_now(),
             metadata: None,
             version: 0,
         })
@@ -377,7 +370,7 @@ async fn conversational_view_excludes_local_only_skill_conversations() {
             conversation_id: research_id.to_string(),
             role: Role::User,
             content: "public research analysis of oil markets".into(),
-            created_at: now(),
+            created_at: unix_now(),
             metadata: None,
             version: 0,
         })
@@ -636,7 +629,7 @@ async fn cross_view_digest_surfaces_resonance_across_personal_and_conversational
             conversation_id: "c-seed".into(),
             role: Role::User,
             content: "thinking about the purpose of this project".into(),
-            created_at: now(),
+            created_at: unix_now(),
             metadata: None,
             version: 0,
         })

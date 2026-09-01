@@ -85,6 +85,11 @@ mod dry_report_cmd;
 #[cfg(feature = "workbench")]
 #[cfg(feature = "workbench")]
 mod phases;
+// UNGATED on purpose: `converge_cmd` is not behind `workbench` and reaches
+// into this. It lived under `refactor_cmd/` for one afternoon and the
+// workspace lint did not catch it — feature unification turns `workbench` on
+// there, so the break only surfaced in the sovereign-cli test build.
+mod intent;
 #[cfg(feature = "workbench")]
 mod plan_composer;
 #[cfg(feature = "workbench")]

@@ -196,7 +196,7 @@ impl FactsTool {
                 "query": query,
                 "corpora_searched": corpora,
                 "match_count": 0,
-                "freshness": freshness_block(None, false, now_unix()),
+                "freshness": freshness_block(None, false, sovereign_core::time::unix_now()),
                 "functions": [], "config": [], "literals": [],
                 "hint": hint,
             })));
@@ -208,7 +208,7 @@ impl FactsTool {
             "query": query,
             "corpora_searched": corpora,
             "match_count": match_count,
-            "freshness": freshness_block(oldest_built, any_lags_graph, now_unix()),
+            "freshness": freshness_block(oldest_built, any_lags_graph, sovereign_core::time::unix_now()),
             "functions": functions,
             "config": config,
             "literals": literals,
@@ -263,13 +263,6 @@ fn mtime_secs(path: &Path) -> Option<i64> {
     let mtime = meta.modified().ok()?;
     let dur = mtime.duration_since(std::time::UNIX_EPOCH).ok()?;
     Some(dur.as_secs() as i64)
-}
-
-fn now_unix() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
 }
 
 #[cfg(test)]

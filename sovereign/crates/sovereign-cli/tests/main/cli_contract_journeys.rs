@@ -851,6 +851,294 @@ fn steps_no_lane_runs_do_not_grow() {
     );
 }
 
+// ── requirement claims ──────────────────────────────────────────────────
+//
+// A step may name the requirement ids from `research/clean-room/REQUIREMENTS.md`
+// that its assertion proves. That join is what gives the 311 `cli`-class
+// requirements an instrument: they are settleable by a command plus an
+// assertion on its output, and by nothing else.
+//
+// The four gates below exist because the FIRST attempt to cover those
+// requirements — citing unit tests — produced 35 overclaims and 17 outright
+// wrong citations out of 74 candidates, adjudicated 2026-08-31. The dominant
+// shape was a test that touched the requirement's AREA while asserting nothing
+// its clause says. Nothing about that shape is specific to unit tests, so the
+// same failure is available here, one `requirements = [...]` line at a time.
+// These make it fail the build instead (ARCH §7 — structural, not remembered).
+
+/// The hand-authored enforceability column, keyed by requirement id.
+fn enforceability() -> BTreeMap<String, kernel_types::conformance::Enforceability> {
+    let path = repo_root().join(kernel_types::conformance::ENFORCEABILITY_PATH);
+    let text =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    toml::from_str(&text).unwrap_or_else(|e| panic!("parse {}: {e}", path.display()))
+}
+
+/// The generated requirement registry.
+fn registry() -> kernel_types::conformance::RequirementRegistry {
+    let path = repo_root().join(kernel_types::conformance::REGISTRY_PATH);
+    let text =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    // The generated file opens with a `#` header block; `toml` reads comments
+    // fine, so it parses as-is.
+    toml::from_str(&text).unwrap_or_else(|e| panic!("parse {}: {e}", path.display()))
+}
+
+#[test]
+fn every_claimed_requirement_resolves_in_the_registry() {
+    let c = contract();
+    let reg = registry();
+    let unknown: Vec<String> = c
+        .requirement_claims()
+        .iter()
+        .filter(|claim| reg.resolve(claim.requirement).is_none())
+        .map(|claim| {
+            format!(
+                "{} step [{}] claims `{}`",
+                claim.journey.id, claim.step_index, claim.requirement
+            )
+        })
+        .collect();
+    assert!(
+        unknown.is_empty(),
+        "{} journey claim(s) name a requirement that is not in {}:\n  {}\n\n\
+         An id that resolves to nobody reads as coverage on the journey side \
+         and never appears in a conformance verdict — the exact shape of a \
+         green tick nothing earned. Check the id against the registry; note \
+         that `resolve` already follows aliases, so a failure here is a typo \
+         or an id the spec does not state.",
+        unknown.len(),
+        kernel_types::conformance::REGISTRY_PATH,
+        unknown.join("\n  ")
+    );
+}
+
+#[test]
+fn a_journey_only_claims_a_requirement_a_command_can_settle() {
+    use kernel_types::conformance::Enforceability;
+    let c = contract();
+    let classes = enforceability();
+    let reg = registry();
+    let miscast: Vec<String> = c
+        .requirement_claims()
+        .iter()
+        .filter_map(|claim| {
+            // RESOLVE FIRST. `ST-18` is an alias of `X-PR-3`, and the
+            // enforceability column carries no alias rows — so looking the raw
+            // id up returns None. Skipping on None (the `?` this used to be)
+            // meant an alias walked past the whole gate: `requirements =
+            // ["ST-18"]` on any output-asserting step rendered `passed X-PR-3`,
+            // a structural requirement about constructor visibility, proven by
+            // `daemon status`. Five aliases exist; each was a free overclaim.
+            let id = reg
+                .resolve(claim.requirement)
+                .map(|r| r.id.as_str())
+                .unwrap_or(claim.requirement);
+            // And ABSENCE IS REPORTED, NEVER SKIPPED (ARCH §18.3). An id with
+            // no class cannot be judged claimable, so it fails here rather than
+            // slipping through the one gate whose job is refusing this.
+            match classes.get(id) {
+                Some(Enforceability::Cli | Enforceability::Desktop) => None,
+                Some(other) => Some(format!(
+                    "{} step [{}] claims `{}` (resolves to `{id}`), classified {other:?}",
+                    claim.journey.id, claim.step_index, claim.requirement
+                )),
+                None => Some(format!(
+                    "{} step [{}] claims `{}` (resolves to `{id}`), which has NO class",
+                    claim.journey.id, claim.step_index, claim.requirement
+                )),
+            }
+        })
+        .collect();
+    assert!(
+        miscast.is_empty(),
+        "{} journey claim(s) name a requirement no command can settle:\n  {}\n\n\
+         `structural` requirements are settled by a type, a lint, or a \
+         source-scanning test — a CLI run cannot observe them, so a journey \
+         claiming one is asserting something adjacent to the clause rather \
+         than the clause. `model` needs live weights and `review` no automated \
+         check at all. If the class is wrong, move it in {} and say why; do \
+         not widen this gate.",
+        miscast.len(),
+        miscast.join("\n  "),
+        kernel_types::conformance::ENFORCEABILITY_PATH
+    );
+}
+
+#[test]
+fn a_step_claiming_a_requirement_asserts_output() {
+    let c = contract();
+    let weak: Vec<String> = c
+        .requirement_claims()
+        .iter()
+        .filter(|claim| claim.step.evidence() != AssertionStrength::Output)
+        .map(|claim| {
+            format!(
+                "{} step [{}] (`{}`) claims {:?} on {:?} evidence",
+                claim.journey.id,
+                claim.step_index,
+                claim.step.run,
+                claim.step.requirements,
+                claim.step.evidence()
+            )
+        })
+        .collect();
+    assert!(
+        weak.is_empty(),
+        "{} step(s) claim a requirement without asserting output:\n  {}\n\n\
+         `exit = 0` is not evidence for a requirement's clause. Every \
+         code-intelligence verb in this repo exits 0 when it finds nothing, \
+         `doctor` exits 0 on a sick system by design, and `code search` \
+         printed stub text and exited 0 for a whole release — an ExitOnly \
+         step is satisfied by a wiped index. Give the step a \
+         `stdout_contains` / `stdout_absent` that the requirement's own words \
+         would falsify, or drop the claim.",
+        weak.len(),
+        weak.join("\n  ")
+    );
+}
+
+#[test]
+fn a_claim_is_never_parked_on_a_step_no_lane_runs() {
+    let c = contract();
+    let parked: Vec<String> = c
+        .requirement_claims()
+        .iter()
+        .filter(|claim| !claim.runs_live())
+        .map(|claim| {
+            format!(
+                "{} step [{}] claims {:?}",
+                claim.journey.id, claim.step_index, claim.step.requirements
+            )
+        })
+        .collect();
+    assert!(
+        parked.is_empty(),
+        "{} claim(s) sit on a step no lane executes:\n  {}\n\n\
+         A `skip_live` step cannot produce a verdict, so the claim converts a \
+         requirement from honestly unmapped into mapped-and-never-run — which \
+         reads as progress on every surface that counts claims and proves \
+         exactly as much as silence. Either make the step runnable (usually: \
+         move `skip_live` off the journey and onto the genuinely expensive \
+         steps, leaving the read-only prefix live) or leave the requirement \
+         unclaimed until a lane can reach it.",
+        parked.len(),
+        parked.join("\n  ")
+    );
+}
+
+// ── acceptance scenarios ────────────────────────────────────────────────
+//
+// `REQUIREMENTS.md §16` opens "A rebuild that reproduces the feature list and
+// fails the following is not a rebuild of this system" and then writes 19
+// scenarios. They are parsed into the registry as `[[scenarios]]` with the
+// requirement ids each one cites. A journey may declare that it DEMONSTRATES
+// one.
+//
+// The gates below are the requirement gates' siblings, minus the output-class
+// check: a scenario is not a clause and has no enforceability class.
+//
+// THERE IS DELIBERATELY NO "a journey demonstrating a scenario asserts output"
+// GATE. One was written and deleted the same hour: it cannot fail. A scenario
+// may only sit on a live journey (the gate below), and
+// `every_live_journey_asserts_output_somewhere` is an unconditional hard zero
+// over every live journey — so no input fails the third gate while passing the
+// second. A check with no failing input you can name is the smell (ARCH §18.1),
+// and a second implementation of one obligation is §10.6. The guarantee is
+// real; it is just already enforced, one gate up.
+
+#[test]
+fn every_demonstrated_scenario_resolves_in_the_registry() {
+    let c = contract();
+    let reg = registry();
+    let unknown: Vec<String> = c
+        .scenario_claims()
+        .iter()
+        .filter(|claim| reg.scenario(claim.scenario).is_none())
+        .map(|claim| format!("{} demonstrates `{}`", claim.journey.id, claim.scenario))
+        .collect();
+    assert!(
+        unknown.is_empty(),
+        "{} journey/journeys demonstrate a scenario §16 does not state:\n  {}\n\n\
+         The scenarios are A-1 … A-19 and they are generated from the \
+         specification, not invented here. An id that resolves to nobody reads \
+         as a demonstration on the journey side and appears in no report.",
+        unknown.len(),
+        unknown.join("\n  ")
+    );
+}
+
+#[test]
+fn a_scenario_is_never_demonstrated_by_a_journey_no_lane_runs() {
+    let c = contract();
+    let parked: Vec<String> = c
+        .scenario_claims()
+        .iter()
+        .filter(|claim| !claim.journey.runs_live())
+        .map(|claim| {
+            format!(
+                "{} demonstrates {:?} but is skip_live: {}",
+                claim.journey.id,
+                claim.journey.demonstrates,
+                claim.journey.skip_live.as_deref().unwrap_or("?")
+            )
+        })
+        .collect();
+    assert!(
+        parked.is_empty(),
+        "{} scenario demonstration(s) sit on a journey no lane runs:\n  {}\n\n\
+         §16.1's A-1 is explicit that the demonstration must have been WATCHED. \
+         A scenario declared on a journey nothing executes is the strongest \
+         form of the claim this whole layer refuses: it reads as \"the rebuild \
+         is judged and passes\" and nobody ever ran it.",
+        parked.len(),
+        parked.join("\n  ")
+    );
+}
+
+#[test]
+fn print_the_scenario_census() {
+    // Not an assertion — how much of §16 any journey claims to run. Expected to
+    // read 0 for a long time, and that is the point of printing it: the 19
+    // scenarios were parsed into the registry and referenced by nothing for as
+    // long as nobody rendered this line.
+    let c = contract();
+    let reg = registry();
+    let claimed: BTreeSet<&str> = c
+        .scenario_claims()
+        .iter()
+        .map(|claim| claim.scenario)
+        .collect();
+    eprintln!(
+        "acceptance scenarios: {} of {} demonstrated by a journey",
+        claimed.len(),
+        reg.scenarios.len()
+    );
+}
+
+#[test]
+fn print_the_requirement_claim_census() {
+    // Not an assertion — the answer to "how much of the specification does the
+    // journey layer actually reach?", printed every run so the ratio is
+    // visible rather than reconstructed. The denominator is the `cli` class,
+    // not 625: the other 314 are not this instrument's to prove.
+    use kernel_types::conformance::Enforceability;
+    let c = contract();
+    let classes = enforceability();
+    let claims = c.requirement_claims();
+    let claimed: BTreeSet<&str> = claims.iter().map(|claim| claim.requirement).collect();
+    let cli_class = classes
+        .values()
+        .filter(|e| **e == Enforceability::Cli)
+        .count();
+    eprintln!(
+        "journey requirement claims: {} claim(s) over {} distinct requirement(s); \
+         {cli_class} are classified `cli` and reachable by this instrument",
+        claims.len(),
+        claimed.len()
+    );
+}
+
 #[test]
 fn print_the_assertion_census() {
     // Not an assertion — the answer to "how much of this manifest can actually
