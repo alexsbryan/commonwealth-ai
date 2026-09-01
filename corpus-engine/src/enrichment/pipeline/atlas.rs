@@ -338,6 +338,12 @@ pub struct EntitySketch {
     /// passage; replaced by a `ChunkRef` during Phase 5 resolution.
     #[serde(default, skip_serializing_if = "is_empty_str")]
     pub anchor: String,
+    /// Declared-type attributes (ontology v1), keyed by the declared
+    /// attribute name and validated by family in the parser. Empty for
+    /// undeclared corpora and absent on the wire when empty, so cached
+    /// section JSON re-serialises byte-identically.
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub attributes: serde_json::Map<String, serde_json::Value>,
 }
 
 /// A state an entity occupies during this section.
@@ -368,6 +374,13 @@ pub struct RelationSketch {
     pub label: String,
     #[serde(default, skip_serializing_if = "is_empty_str")]
     pub anchor: String,
+    /// Declared relation type name (ontology v1); `None` when the corpus
+    /// declares none and classification stays deferred to Phase 5.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relation_type: Option<String>,
+    /// Declared-type attributes; see [`EntitySketch::attributes`].
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub attributes: serde_json::Map<String, serde_json::Value>,
 }
 
 /// A state a relation occupies during this section.
@@ -394,6 +407,13 @@ pub struct EventSketch {
     pub participants: Vec<String>,
     #[serde(default, skip_serializing_if = "is_empty_str")]
     pub anchor: String,
+    /// Declared event type name (ontology v1); `None` when the corpus
+    /// declares none and classification stays deferred to Phase 5.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_type: Option<String>,
+    /// Declared-type attributes; see [`EntitySketch::attributes`].
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub attributes: serde_json::Map<String, serde_json::Value>,
 }
 
 /// A knowledge-carrying act the text performs in this section.
@@ -401,7 +421,8 @@ pub struct EventSketch {
 /// `discourse_act` and `epistemic_status` are kept on the sketch
 /// (exception to the defer-classification rule — see module doc) but
 /// `scope` is deferred to Phase 5 since it's often resolvable from
-/// cluster context.
+/// cluster context — unless a declared claim type (ontology v1) fixes
+/// it, in which case the sketch carries it.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ClaimSketch {
     /// The claim in propositional form.
@@ -421,6 +442,22 @@ pub struct ClaimSketch {
     pub quotable_excerpt: Option<String>,
     #[serde(default, skip_serializing_if = "is_empty_str")]
     pub anchor: String,
+    /// Declared claim type name (ontology v1); `None` for the generic
+    /// claim of an undeclared corpus.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim_kind: Option<String>,
+    /// Name of the entity the claim is ABOUT (declared claim types with a
+    /// `subject`), resolved to an atom id in Phase 3 the way
+    /// `attributed_to` is. `attributed_to` is the voice; `subject` is the
+    /// referent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
+    /// Scope fixed by the declared claim type; `None` defers to Phase 5.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<ClaimScope>,
+    /// Declared-type attributes; see [`EntitySketch::attributes`].
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub attributes: serde_json::Map<String, serde_json::Value>,
 }
 
 /// A question this section raises. Question-type classification
@@ -1385,6 +1422,7 @@ mod tests {
             section_id: "ch_0013".into(),
             enrichment_depth: EnrichmentDepth::Extracted,
             entities_introduced: vec![EntitySketch {
+                attributes: Default::default(),
                 canonical_name: "Alyosha".into(),
                 aliases: vec!["Alyosha Karamazov".into(), "Alexei Fyodorovich".into()],
                 entity_type: EntityType::Person,
@@ -1398,6 +1436,8 @@ mod tests {
                 anchor: "could not imagine the world without Zosima".into(),
             }],
             relations_introduced: vec![RelationSketch {
+                attributes: Default::default(),
+                relation_type: None,
                 participants: vec!["Alyosha".into(), "Zosima".into()],
                 label: "Novice-elder bond — spiritual formation".into(),
                 anchor: "the elder laid his hand".into(),
@@ -1408,11 +1448,17 @@ mod tests {
                 anchor: "glared past one another".into(),
             }],
             events: vec![EventSketch {
+                attributes: Default::default(),
+                event_type: None,
                 description: "Zosima instructs Alyosha to leave the monastery.".into(),
                 participants: vec!["Zosima".into(), "Alyosha".into()],
                 anchor: "go out into the world".into(),
             }],
             claims: vec![ClaimSketch {
+                attributes: Default::default(),
+                claim_kind: None,
+                subject: None,
+                scope: None,
                 content: "Active love in reality is harder than the love one dreams of.".into(),
                 discourse_act: DiscourseAct::Argue,
                 epistemic_status: EpistemicStatus::Confident,
@@ -1434,6 +1480,66 @@ mod tests {
         assert_eq!(parsed, extraction);
         assert_eq!(parsed.atom_count(), 7);
         assert!(!parsed.has_no_atoms());
+    }
+
+    #[test]
+    fn sketches_with_empty_ontology_fields_serialise_without_new_keys() {
+        // Cached section JSON written before the ontology-v1 fields existed
+        // must re-serialise byte-identically: every new field is absent on
+        // the wire when empty.
+        let entity = EntitySketch {
+            canonical_name: "coin".into(),
+            aliases: vec![],
+            entity_type: EntityType::Concept,
+            description: String::new(),
+            defining_quote: None,
+            anchor: String::new(),
+            attributes: Default::default(),
+        };
+        let relation = RelationSketch {
+            participants: vec![],
+            label: "struck at".into(),
+            anchor: String::new(),
+            relation_type: None,
+            attributes: Default::default(),
+        };
+        let event = EventSketch {
+            description: "minted".into(),
+            participants: vec![],
+            anchor: String::new(),
+            event_type: None,
+            attributes: Default::default(),
+        };
+        let claim = ClaimSketch {
+            content: "weighs 1.29 g".into(),
+            discourse_act: DiscourseAct::Assert,
+            epistemic_status: EpistemicStatus::Confident,
+            attributed_to: None,
+            quotable_excerpt: None,
+            anchor: String::new(),
+            claim_kind: None,
+            subject: None,
+            scope: None,
+            attributes: Default::default(),
+        };
+        let keys = |v: serde_json::Value| -> Vec<String> {
+            let mut keys: Vec<String> = v.as_object().unwrap().keys().cloned().collect();
+            keys.sort();
+            keys
+        };
+        assert_eq!(
+            keys(serde_json::to_value(&entity).unwrap()),
+            ["canonical_name", "entity_type"]
+        );
+        assert_eq!(
+            keys(serde_json::to_value(&relation).unwrap()),
+            ["label", "participants"]
+        );
+        assert_eq!(keys(serde_json::to_value(&event).unwrap()), ["description"]);
+        assert_eq!(
+            keys(serde_json::to_value(&claim).unwrap()),
+            ["content", "discourse_act", "epistemic_status"]
+        );
     }
 
     #[test]

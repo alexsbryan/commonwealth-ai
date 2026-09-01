@@ -1100,6 +1100,8 @@ mod tests {
 
         // Two rule Claims → atoms.json.
         let make_claim = |n: usize, content: &str| Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(n),
             content: content.into(),
             discourse_act: DiscourseAct::Enact,

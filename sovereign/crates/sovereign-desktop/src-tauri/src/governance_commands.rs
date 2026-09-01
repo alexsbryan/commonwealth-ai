@@ -804,6 +804,8 @@ mod tests {
     fn write_atlas(dir: &Path, rules: &[Rule], conflicts: &[Conflict]) {
         let claim = |r: &Rule| {
             AtomEnvelope::Claim(Claim {
+                attributes: Default::default(),
+                subject: None,
                 id: AtomId::claim(r.idx),
                 content: r.text.into(),
                 discourse_act: DiscourseAct::Enact,

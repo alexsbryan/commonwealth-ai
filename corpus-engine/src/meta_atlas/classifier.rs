@@ -296,6 +296,8 @@ mod tests {
 
     fn claim(act: DiscourseAct) -> AtomEnvelope {
         AtomEnvelope::Claim(Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(1),
             content: "c".into(),
             discourse_act: act,
@@ -315,6 +317,7 @@ mod tests {
 
     fn event(et: EventType) -> AtomEnvelope {
         AtomEnvelope::Event(Event {
+            attributes: Default::default(),
             id: AtomId::event(1),
             description: "e".into(),
             event_type: et,
@@ -548,6 +551,7 @@ mod tests {
         );
 
         let rel = AtomEnvelope::Relation(Relation {
+            attributes: Default::default(),
             id: AtomId::relation(1),
             participants: vec![AtomId::entity(1), AtomId::entity(2)],
             label: "r".into(),

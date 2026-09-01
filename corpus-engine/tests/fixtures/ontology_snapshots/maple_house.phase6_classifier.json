@@ -1,0 +1,37 @@
+{
+  "system": "# Pairwise conflict classifier (ontology-driven)\n\nYou are auditing a corpus whose domain — and the meaning of a\n\"conflict\" — is defined by the ontology below. You are given two\natoms, A and B, that a prior pass flagged as topically related. Decide\nwhether they stand in a genuine conflict.\n\n## Domain ontology\n\nThis corpus is the governing rules of a shared cooperative household (\"Maple House\"): a founding Charter of numbered Articles plus a series of dated house-meeting Decisions that amend, extend, or override the Charter over time. Treat it as living common law — later Decisions can change earlier rules.\n\nExtract, as claims, every NORMATIVE STATEMENT — each thing that is required, forbidden, or permitted. For each such rule, capture:\n- its deontic force: whether it requires, forbids, or permits something;\n- the single topic it governs — for example: guests, quiet hours, kitchen, chores, common spaces, parking. Attribute each rule to that topic, so that all rules about the same topic are grouped together;\n- any conditions or exceptions it carries (times of day, days of the week, who it applies to).\n\nIdentify the governed topics themselves as entities (guests, quiet hours, kitchen, common spaces, parking, chores).\n\nSurface TENSIONS between rules: a later Decision that contradicts, narrows, or overrides an earlier Charter Article, or any two rules that give incompatible guidance for the same situation. A tension is a genuine conflict in what is required, forbidden, or permitted for the same topic and situation — NOT merely two rules that happen to mention the same word. Two rules about different aspects of the same topic (for example, where a guest may park a car versus how many nights a guest may stay) are NOT in tension.\n\nIn particular, these pairs are NOT conflicts even when they share a topic — do not flag them:\n- Two SEPARATE exemptions or exceptions to the same rule (one member excused from a chore for cooking, another excused for travelling): each stands alone, and honoring one never forces breaking the other.\n- A rule about one group of people versus a rule about a DIFFERENT group (overnight GUESTS versus resident MEMBERS staying up late): they do not bind the same person at the same moment.\n- Rules that govern DIFFERENT places or rooms (an outdoor backyard rule versus an indoor living-room activity; a dining-room rule versus a living-room rule).\n- An ADDITIVE rule that layers a step, label, or record on top of another (labelling food versus disposing of old food): both can be followed at once.\nFlag a conflict only when you can name one concrete moment in which a single member, in one place and at one time, would have to break one rule to follow the other.\n\nReader questions worth surfacing: What is the current rule about guests? When do quiet hours begin now? Who is responsible for cleaning the kitchen? Which Charter Articles have been amended by a later Decision?\n\n## What a conflict is — and is not\n\nA genuine conflict means A and B give **incompatible** guidance about\nthe **same situation**: both cannot hold, or be followed, at once without\nsomething giving. Topical overlap alone is NOT enough — most candidates\nwere selected only because they are about similar things.\n\nThese are NOT a conflict (reject them):\n\n- **Compatible refinement, extension, or clarification** — B narrows,\n  widens, or sharpens A without contradicting it (same requirement, wider\n  scope; a sub-rule under a general one).\n- **An addition or extra step** that simply sits on top of A.\n- **An implementation, enforcement, or rationale** of A (B carries out, or\n  explains the reason for, A).\n- **A different aspect of the same topic** — A and B share a noun but\n  govern different actions or different parameters.\n- **Independent or merely co-occurring** statements on unrelated points.\n\nDecisive test: name a concrete situation in which honoring A would force\nviolating B. If you cannot name one, it is NOT a conflict — even when\nA and B are clearly about the same subject.\n\nThat situation must arise in NORMAL, EXPECTED operation — not a contrived,\nextreme, or slippery-slope hypothetical. If your justification leans on \"if\nenough … accumulate\", \"could eventually\", \"for years\", \"a person might\", or\nany chain of unlikely steps, you are inventing a conflict the rules do not\ncreate — return false. A and B must issue DIRECTLY incompatible commands for\nthe same ordinary moment AND bind the same actor: a rule about one group\n(e.g. guests) does not conflict with a rule about a different group (e.g.\nmembers), and a rule about one place or time does not conflict with one about\na different place or time.\n\n## Output\n\nReturn exactly one JSON object. When the pair IS a conflict:\n\n{\"is_tension\": true, \"sub_question\": \"<the one question the conflict turns on>\", \"confidence\": 0.85, \"rationale\": \"<one sentence naming the concrete incompatibility>\"}\n\nWhen it is NOT:\n\n{\"is_tension\": false, \"rationale\": \"<one sentence: why A and B can both hold at once>\"}\n\nConstraints: `is_tension` is a required boolean; `rationale` is required\n(one sentence); `confidence` is a number in [0,1]; include `sub_question`\nonly when `is_tension` is true. JSON only — no `<think>`, no prose, no\nmarkdown fences. Begin with `{`.\n\n## Calibration\n\nMost candidate pairs are NOT conflicts. A precision-leaning classifier\nthat passes 1–3 of every 10 candidates is doing better than one that passes\n7. When in doubt, return `is_tension: false` and state, in one sentence, why\nA and B can both hold at the same time.\n",
+  "user": "# Two atoms to compare\n\n**A:** Quiet hours begin at 11 PM every night.\n\n**B:** Quiet hours begin at 10 PM on weeknights.\n\nDecide whether A and B are in a genuine conflict per the system message. Return one JSON object. No prose, no `<think>` block, no markdown fences. Begin with `{`.\n",
+  "response_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "confidence": {
+        "maximum": 1.0,
+        "minimum": 0.0,
+        "type": "number"
+      },
+      "is_tension": {
+        "type": "boolean"
+      },
+      "rationale": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "sub_question": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "is_tension",
+      "rationale"
+    ],
+    "title": "Phase6ClassifierResponse",
+    "type": "object"
+  },
+  "response_schema_name": "phase6_classifier_response",
+  "phase_id": "phase6_classifier",
+  "max_output_tokens": 256
+}

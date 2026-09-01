@@ -499,6 +499,11 @@ pub struct Event {
     /// transition links inferred.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub causal_antecedents: Vec<AtomId>,
+    /// Declared-type attributes (ontology v1); same contract as
+    /// [`Entity::attributes`]. Empty on undeclared corpora; absent on the
+    /// wire when empty, so pre-2.4 `atoms.json` reads and writes unchanged.
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub attributes: serde_json::Map<String, serde_json::Value>,
     pub enrichment_depth: EnrichmentDepth,
 }
 
@@ -545,6 +550,11 @@ pub struct Relation {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub evidence: Vec<ChunkRef>,
     pub section_range: SectionRange,
+    /// Declared-type attributes (ontology v1); same contract as
+    /// [`Entity::attributes`]. Empty on undeclared corpora; absent on the
+    /// wire when empty, so pre-2.4 `atoms.json` reads and writes unchanged.
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub attributes: serde_json::Map<String, serde_json::Value>,
     pub enrichment_depth: EnrichmentDepth,
 }
 
@@ -574,6 +584,17 @@ pub struct Claim {
     pub quotable_excerpt: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attributed_to: Option<AtomId>,
+    /// The entity the claim is ABOUT (ontology v1 declared claim types
+    /// with a `subject`), resolved like `attributed_to`. `attributed_to`
+    /// is the voice; `subject` is the referent. `None` on every claim of
+    /// an undeclared corpus.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject: Option<AtomId>,
+    /// Declared-type attributes (ontology v1); same contract as
+    /// [`Entity::attributes`]. The reserved keys `deontic` and `grade`
+    /// carry a declared claim type's normal form and grade.
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub attributes: serde_json::Map<String, serde_json::Value>,
     /// Extraction confidence — how clearly the system identified this
     /// claim. Distinct from `epistemic_status` which is the claim's
     /// certainty within the text.
@@ -1317,7 +1338,12 @@ impl AtomsFile {
     /// - `2.3` — added `Entity::attributes` (free-form typed column
     ///   values) for the deterministic `tabular_atoms` extractor. Old
     ///   atoms.json deserialise with a default empty map.
-    pub const SCHEMA_VERSION: &'static str = "2.3";
+    /// - `2.4` — added `attributes` to `Relation` / `Event` / `Claim`
+    ///   (same contract as `Entity::attributes`) and `Claim::subject`,
+    ///   for ontology-v1 declared types. All default; old atoms.json
+    ///   deserialise unchanged and the v2 store's lossless `payload`
+    ///   column needs no migration.
+    pub const SCHEMA_VERSION: &'static str = "2.4";
 
     pub fn new(atoms: Vec<AtomEnvelope>) -> Self {
         Self {
@@ -1381,6 +1407,7 @@ mod tests {
         let long = "x".repeat(50);
 
         let event = AtomEnvelope::Event(Event {
+            attributes: Default::default(),
             id: AtomId::event(1),
             description: long.clone(),
             event_type: EventType::Action,
@@ -1562,6 +1589,7 @@ mod tests {
     #[test]
     fn event_atom_roundtrips_with_participants() {
         let event = Event {
+            attributes: Default::default(),
             id: AtomId::event(1),
             description: "Zosima instructs Alyosha to leave the monastery.".into(),
             event_type: EventType::Decision,
@@ -1621,6 +1649,7 @@ mod tests {
     fn relation_atom_carries_participants_in_order() {
         use crate::enrichment::pipeline::atlas::RelationType;
         let relation = Relation {
+            attributes: Default::default(),
             id: AtomId::relation(3),
             label: "Jane–Rochester: employer/dependent bond becoming mutual transformation".into(),
             participants: vec![AtomId::entity(1), AtomId::entity(2)],
@@ -1648,6 +1677,8 @@ mod tests {
     fn claim_atom_carries_discourse_act_and_epistemic_status() {
         use crate::enrichment::pipeline::atlas::{ClaimScope, DiscourseAct, EpistemicStatus};
         let claim = Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(42),
             content: "Active love costs more than dreamt love.".into(),
             discourse_act: DiscourseAct::Argue,
@@ -1693,6 +1724,8 @@ mod tests {
         // rather than silently re-introducing the bug.
         use crate::enrichment::pipeline::atlas::{ClaimScope, DiscourseAct, EpistemicStatus};
         let claim = Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(7),
             content: "`open_index_for_corpus` always opens `<index_dir>/<corpus_id>`.".into(),
             discourse_act: DiscourseAct::Assert,
@@ -1744,6 +1777,8 @@ mod tests {
         // file size doesn't grow for pre-engineering-atlas pipelines
         // that never set an anchor).
         let no_anchor = Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(8),
             content: "no-anchor claim".into(),
             discourse_act: DiscourseAct::Assert,

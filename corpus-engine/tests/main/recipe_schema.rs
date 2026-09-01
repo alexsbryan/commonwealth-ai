@@ -330,7 +330,7 @@ fn render_enum(e: &syn::ItemEnum) -> String {
 }
 
 /// First differing line, for a readable failure message.
-fn first_diff(a: &str, b: &str) -> String {
+pub(crate) fn first_diff(a: &str, b: &str) -> String {
     for (i, (x, y)) in a.lines().zip(b.lines()).enumerate() {
         if x != y {
             return format!(

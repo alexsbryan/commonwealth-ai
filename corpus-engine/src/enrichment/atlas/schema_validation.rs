@@ -990,6 +990,8 @@ mod tests {
 
     fn claim_with_act(idx: usize, act: DiscourseAct, confidence: f32) -> Claim {
         Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(idx),
             content: format!("claim {idx}"),
             discourse_act: act,
@@ -1022,6 +1024,7 @@ mod tests {
 
     fn event(idx: usize) -> Event {
         Event {
+            attributes: Default::default(),
             id: AtomId::event(idx),
             description: format!("event {idx}"),
             event_type: EventType::Other("x".into()),

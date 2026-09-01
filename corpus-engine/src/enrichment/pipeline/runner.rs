@@ -3105,6 +3105,10 @@ mod tests {
             enrichment_depth: EnrichmentDepth::Extracted,
             claims: vec![
                 ClaimSketch {
+                    attributes: Default::default(),
+                    claim_kind: None,
+                    subject: None,
+                    scope: None,
                     content: "love costs".into(),
                     discourse_act: DiscourseAct::Enact,
                     epistemic_status: EpistemicStatus::Confident,
@@ -3113,6 +3117,10 @@ mod tests {
                     anchor: String::new(),
                 },
                 ClaimSketch {
+                    attributes: Default::default(),
+                    claim_kind: None,
+                    subject: None,
+                    scope: None,
                     content: "love rewards".into(),
                     discourse_act: DiscourseAct::Enact,
                     epistemic_status: EpistemicStatus::Confident,

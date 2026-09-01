@@ -87,10 +87,11 @@ fn v2_1_atoms_file_with_asset_variant_round_trips() {
 fn schema_version_constant_is_current() {
     // Phase 1 bumped from 2.0 → 2.1 (Asset variant). Phase 4 bumped
     // from 2.1 → 2.2 (Entity::provenance). The SF-LVT tabular track
-    // bumped 2.2 → 2.3 (Entity::attributes). If a later phase bumps
-    // further, update this assertion deliberately — the test is the
-    // canary.
-    assert_eq!(AtomsFile::SCHEMA_VERSION, "2.3");
+    // bumped 2.2 → 2.3 (Entity::attributes). Ontology v1 P2 bumped
+    // 2.3 → 2.4 (Relation/Event/Claim::attributes, Claim::subject). If a
+    // later phase bumps further, update this assertion deliberately —
+    // the test is the canary.
+    assert_eq!(AtomsFile::SCHEMA_VERSION, "2.4");
 }
 
 #[test]
@@ -153,5 +154,77 @@ fn v2_2_entity_without_attributes_loads_with_default() {
             assert!(e.attributes.is_empty(), "absent attributes → empty map");
         }
         other => panic!("expected Entity, got {other:?}"),
+    }
+}
+
+#[test]
+fn v2_3_claim_relation_event_without_attributes_load_with_default() {
+    // 2.4 added `attributes` to Relation / Event / Claim and `subject` to
+    // Claim. Atoms written under 2.3 carry none of them and must load with
+    // an empty map / `None`, everything else intact.
+    let json_2_3 = r#"{
+      "schema_version": "2.3",
+      "atoms": [
+        {
+          "atom_type": "Relation",
+          "data": {
+            "id": "relation-0001",
+            "label": "struck at",
+            "participants": ["entity-0001", "entity-0002"],
+            "relation_type": "association",
+            "section_range": { "start": "sec-001", "end": "sec-001" },
+            "enrichment_depth": "extracted"
+          }
+        },
+        {
+          "atom_type": "Event",
+          "data": {
+            "id": "event-0001",
+            "description": "The mint opens.",
+            "event_type": "decision",
+            "section_position": { "section_id": "sec-001" },
+            "enrichment_depth": "extracted"
+          }
+        },
+        {
+          "atom_type": "Claim",
+          "data": {
+            "id": "claim-0001",
+            "content": "The coin weighs 1.29 g.",
+            "discourse_act": "assert",
+            "epistemic_status": "confident",
+            "scope": "contextual",
+            "attributed_to": "entity-0001",
+            "enrichment_depth": "extracted"
+          }
+        }
+      ]
+    }"#;
+    let file: AtomsFile = serde_json::from_str(json_2_3).expect("parse 2.3 atoms");
+    assert_eq!(file.atoms.len(), 3);
+    match &file.atoms[0] {
+        AtomEnvelope::Relation(r) => {
+            assert_eq!(r.label, "struck at");
+            assert!(r.attributes.is_empty(), "absent attributes → empty map");
+        }
+        other => panic!("expected Relation, got {other:?}"),
+    }
+    match &file.atoms[1] {
+        AtomEnvelope::Event(e) => {
+            assert_eq!(e.description, "The mint opens.");
+            assert!(e.attributes.is_empty(), "absent attributes → empty map");
+        }
+        other => panic!("expected Event, got {other:?}"),
+    }
+    match &file.atoms[2] {
+        AtomEnvelope::Claim(c) => {
+            assert_eq!(
+                c.attributed_to.as_ref().map(|a| a.as_str()),
+                Some("entity-0001")
+            );
+            assert!(c.subject.is_none(), "absent subject → None");
+            assert!(c.attributes.is_empty(), "absent attributes → empty map");
+        }
+        other => panic!("expected Claim, got {other:?}"),
     }
 }

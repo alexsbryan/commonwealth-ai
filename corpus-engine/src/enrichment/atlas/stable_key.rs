@@ -165,12 +165,12 @@ fn first_chunk_id(refs: &[ChunkRef]) -> &str {
 mod tests {
 
     use crate::enrichment::atlas::atoms::{
-        AtomEnvelope, AtomId, ChunkRef, Claim, Entity, Event, Question, ResolutionStatus,
+        AtomEnvelope, AtomId, ChunkRef, Claim, Entity, Event, Question, Relation, ResolutionStatus,
         SectionPosition, SectionRange, State,
     };
     use crate::enrichment::pipeline::atlas::{
         ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus, EventType,
-        QuestionType, StateType,
+        QuestionType, RelationType, StateType,
     };
 
     fn sample_entity(canonical: &str, first_chunk: &str) -> AtomEnvelope {
@@ -272,6 +272,8 @@ mod tests {
         // and disambiguate by content.
         let claim = |id: usize, content: &str| {
             AtomEnvelope::Claim(Claim {
+                attributes: Default::default(),
+                subject: None,
                 id: AtomId::claim(id),
                 content: content.into(),
                 discourse_act: DiscourseAct::Assert,
@@ -295,6 +297,78 @@ mod tests {
         assert_ne!(k_a, k_b);
     }
 
+    #[test]
+    fn stable_key_ignores_attributes_and_subject() {
+        // The key reads name/content + anchor only. The ontology-v1 fields
+        // (`attributes` on Claim / Relation / Event, `Claim::subject`) must
+        // not move it, or re-extracting under a declared ontology would
+        // orphan every curation overlay keyed on it.
+        let attrs = |typed: bool| {
+            let mut m = serde_json::Map::new();
+            if typed {
+                m.insert("weight".into(), serde_json::json!(1.29));
+            }
+            m
+        };
+        let claim = |typed: bool| {
+            AtomEnvelope::Claim(Claim {
+                id: AtomId::claim(1),
+                content: "The coin weighs 1.29 g.".into(),
+                discourse_act: DiscourseAct::Assert,
+                epistemic_status: EpistemicStatus::Confident,
+                scope: ClaimScope::Contextual,
+                evidence: vec![ChunkRef::new("sec-1", None)],
+                quotable_excerpt: None,
+                attributed_to: None,
+                subject: typed.then(|| AtomId::entity(3)),
+                attributes: attrs(typed),
+                confidence: None,
+                anchor: None,
+                enrichment_depth: EnrichmentDepth::Extracted,
+                claim_kind: typed.then(|| "measurement".to_string()),
+                concession_outcome: None,
+                evidence_kind: None,
+            })
+        };
+        let event = |typed: bool| {
+            AtomEnvelope::Event(Event {
+                id: AtomId::event(1),
+                description: "the mint opens".into(),
+                event_type: EventType::Decision,
+                participants: vec![],
+                evidence: vec![],
+                section_position: SectionPosition::section("sec-1"),
+                causal_antecedents: vec![],
+                attributes: attrs(typed),
+                enrichment_depth: EnrichmentDepth::Extracted,
+            })
+        };
+        let relation = |typed: bool| {
+            AtomEnvelope::Relation(Relation {
+                id: AtomId::from_raw("relation-0001"),
+                label: "struck at".into(),
+                participants: vec![AtomId::entity(1), AtomId::entity(2)],
+                relation_type: RelationType::Interpersonal,
+                evidence: vec![],
+                section_range: SectionRange::point("sec-1"),
+                attributes: attrs(typed),
+                enrichment_depth: EnrichmentDepth::Extracted,
+            })
+        };
+        for (plain, typed) in [
+            (claim(false), claim(true)),
+            (event(false), event(true)),
+            (relation(false), relation(true)),
+        ] {
+            assert_eq!(
+                plain.stable_key("coins"),
+                typed.stable_key("coins"),
+                "{:?}: attributes / subject must not enter the stable key",
+                plain.atom_type()
+            );
+        }
+    }
+
     // ── referenced_atom_ids ──────────────────────────────────
     //
     // These live beside the stable-key tests because both accessors answer a
@@ -306,6 +380,7 @@ mod tests {
         // Event carries atom ids in TWO fields. A fan-out that reads only
         // `participants` loses the causal chain, and nothing else would notice.
         let event = AtomEnvelope::Event(Event {
+            attributes: Default::default(),
             id: AtomId::event(1),
             description: "the trial".into(),
             event_type: EventType::Decision,

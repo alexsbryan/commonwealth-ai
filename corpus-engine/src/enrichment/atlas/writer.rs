@@ -436,6 +436,7 @@ mod tests {
             concept_kind: None,
         };
         let event = Event {
+            attributes: Default::default(),
             id: AtomId::event(1),
             description: "an event".into(),
             event_type: EventType::Other("unspecified".into()),

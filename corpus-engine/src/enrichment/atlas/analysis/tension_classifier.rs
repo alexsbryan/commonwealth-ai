@@ -325,6 +325,8 @@ mod tests {
 
     fn mk_claim(id: usize, content: &str, evidence_chunk: &str) -> Claim {
         Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(id),
             content: content.to_string(),
             discourse_act: DiscourseAct::Assert,
