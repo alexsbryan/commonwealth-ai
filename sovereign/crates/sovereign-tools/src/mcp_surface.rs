@@ -40,27 +40,25 @@
 /// a deprecated mirror entry for every alias and `tools/call`
 /// rewrites old names before the registry lookup.
 pub const MCP_TOOLS_ALWAYS: &[&str] = &[
+    // `build` survived the 2026-08-31 usage cut on a coupling, not on usage:
+    // it has 0 calls in 190 sessions like its retired siblings, but
+    // `notes::patterns::ToolPatternMatcher` keys three rules on the literal
+    // id (investigate→build, build-follows-action, spec→build) and
+    // `tools/call` REFUSES an unexposed id, so retiring it would close that
+    // wire path as a side effect. Those rules are already unreachable while
+    // `[watchers] enabled = false` — nothing calls `build`, so the matcher has
+    // never observed the sequence it watches for. Retire the tool and the
+    // rules together, or revive the watchers; either is its own change.
+    "build",
     // Code intelligence (compiler-resolved, fast).
     "symbols",
     "callers",
-    "callees",
     "blast",
     // Capability map — derived "what the codebase does" from the SCIP
     // call graph (clusters of entry points + their spines). Read-only,
     // deterministic; agent-callable to get a capability-level overview
     // instead of reading files one by one.
     "capability_map",
-    // Architecture observability (quality program): the full report (god
-    // crates, coupling carriers, declared↔observed deltas, layer-map
-    // violations, temporal coupling) + the cheap persisted-posture reader.
-    "arch_report",
-    "arch_posture",
-    // Build/lint status. `build` is the canonical single-call
-    // tool; `lint_status` + `get_lint_output` remain registered
-    // for backward-compat during the alias window.
-    "build",
-    "lint_status",
-    "get_lint_output",
     // Working notes (the audit's primary input).
     "note",
     "notes",
@@ -100,51 +98,26 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     // v7 NoteStore migration left without a tool wrapping it.
     "probe_url",
     "research_finding",
-    // ATOS step verification — runs verify command + hollow/untouched gates.
-    "atos_verify",
     // Drift report query — point-of-edit narrative-side lookup.
-    // Sibling to `symbols`/`callers`/`blast` (code-side) and
-    // `drift_posture` (freshness gate). Reads the canonical drift
-    // JSON sidecar; never re-runs the LLM pipeline.
+    // Sibling to `symbols`/`callers`/`blast` (code-side). Reads the
+    // canonical drift JSON sidecar; never re-runs the LLM pipeline.
+    // Freshness is injected by the SessionStart hook, so the paired
+    // `drift_posture` tool is CLI-only (see MCP_TOOLS_RETIRED).
     "drift_findings",
-    // Session-orientation brief — the same renderer the SessionStart
-    // hook injects (working set + work-in-flight + drift posture +
-    // notes + recent activity), callable by any MCP client so peer
-    // agents and mid-session re-orientation don't depend on the
-    // `svrn code brief` CLI sibling being on PATH.
-    "briefing",
     // Encode-time session-frame upsert (SESSION_CONTINUITY write-path
     // 1 / MEMORY_MODEL E4a). Write-effectful but budget-gated and
     // per-session — the agent banks its own gist at transitions so a
     // successor can boot from it; the strong path vs. post-hoc
     // distillation (100% vs 17% graded recall).
     "session_state",
-    // Code facts — the embed-free deterministic fact base (tree-sitter
-    // fn defs / config construction-fields / string literals), cited to
-    // file:line and freshness-stamped. The structural companion to
-    // `symbols`/`callers` (call graph) and `code_search` (semantic);
-    // reading it never touches the inference slots. See
-    // docs/CHECK_CODE_AGAINST_SPEC.md.
-    "facts",
-    // `drift_posture` is wired in the in-process registry today
-    // but stayed out of MCP_TOOLS_ALWAYS because the freshness-
-    // gate use case was operator-facing. Adding it here lets an
-    // agent check freshness before relying on `drift_findings`
-    // results — the natural pair.
-    "drift_posture",
     // Work atlas — coordination layer for agents sharing a mesh repo.
     // `declare_scope` / `release_scope` are write-effectful; the audit
     // gate in `mcp_router::handle_tool_call` logs them at WARN.
     // `work_in_flight` is read-only, used to check overlapping work
-    // before starting. `resource_may_i` (order seat-resource-commons)
-    // is the shared-resource verdict surface: "is `daemon:<node>:
-    // <action>` taken right now?" — it scans INCLUDING expired claims
-    // so `expired` (taker died mid-run) is distinguishable from `free`
-    // (released = work finished). See sovereign/docs/WORK_ATLAS.md.
+    // before starting. See sovereign/docs/WORK_ATLAS.md.
     "declare_scope",
     "release_scope",
     "work_in_flight",
-    "resource_may_i",
     // Corpus / atlas plane (B:P9d). These operate on the HOST's corpora and
     // structural atlas — `corpus_search`/`corpus_store` read/write the local
     // LanceDB corpus, `atlas_gaps`/`atlas_tensions` query the structural atlas,
@@ -197,6 +170,51 @@ pub const MCP_TOOLS_SPEC_GATED: &[&str] = &["spec", "drift"];
 /// Documentation only — exposure is decided by [`is_mcp_exposed`].
 #[allow(dead_code)]
 pub const MCP_TOOLS_RETIRED: &[&str] = &[
+    // ── Retired 2026-08-31 on usage evidence ────────────────────────────
+    //
+    // Censused across 190 Claude Code transcripts in this repo: 1,314 tool
+    // calls, of which the ten below account for ZERO. They stay in the
+    // registry, so `svrn tools call <id>` still reaches every one; what they
+    // stop doing is costing a schema in every session's boot floor forever.
+    // (Same trade the alias mirrors were dropped on above, and the same
+    // reason: an advertisement nothing chooses is not free.)
+    //
+    // Cut in three kinds, because the reasons are not the same:
+    //
+    // 1. ADVERTISING A DEAD SWITCH. `.sovereign/sovereign.toml` sets
+    //    `[watchers] enabled = false` (2026-05-31, the parallel cargo fan
+    //    OOM'd the daemon). These three therefore answer every call with
+    //    "nothing to report" — a live-looking tool over a disabled
+    //    subsystem, which is the silent-green shape this repo exists to
+    //    prevent, turned on its own surface. (`build` is NOT here — see the
+    //    coupling note at the head of MCP_TOOLS_ALWAYS.)
+    "lint_status",
+    "get_lint_output",
+    //
+    // 2. ALREADY DELIVERED BY THE BOOT HOOK. `session-boot.sh` injects the
+    //    brief and the drift posture into every session prompt, so the tool
+    //    form asks a question the agent has already been handed the answer
+    //    to. Nothing called either in 190 sessions.
+    "briefing",
+    "drift_posture",
+    //
+    // 3. NOTHING IN A SESSION EVER ASKS THEIR QUESTION. The pattern behind
+    //    the whole census: the most-called tools are the ones a hook or a
+    //    protocol step demands (`session_state` 482, `notes` 101,
+    //    `work_in_flight` 59). No step of any session asks "what is this
+    //    workspace's god-crate fan-in?", so the architecture pair went
+    //    unused however good it is; `callees` sat at 0 while its sibling
+    //    `callers` took 37. Re-expose any of these the day something in the
+    //    session flow calls for it — and wire that trigger in the same
+    //    change, or it will come straight back here.
+    "callees",
+    "arch_report",
+    "arch_posture",
+    "atos_verify",
+    "resource_may_i",
+    "facts",
+    //
+    // ── Retired earlier (flat-namespace plan) ───────────────────────────
     // `code_search` was here but is back on the MCP surface (see
     // MCP_TOOLS_ALWAYS) — semantic search is the agent-facing alternative to
     // raw grep, so retiring it worked against the code-intelligence goal.
@@ -236,7 +254,10 @@ pub const MCP_TOOLS_RETIRED: &[&str] = &[
 /// be present, which is not a thing any MCP client does.
 pub const MCP_TOOL_ALIASES: &[(&str, &str)] = &[
     ("find_callers", "callers"),
-    ("find_callees", "callees"),
+    // `find_callees` retired with its target on 2026-08-31: `callees` left the
+    // MCP surface (0 calls in 190 sessions), so an alias to it would advertise
+    // a rewrite into something this surface no longer offers. Both remain
+    // reachable via `svrn tools call callees`.
     ("blast_radius", "blast"),
     ("symbol_lookup", "symbols"),
     ("write_note", "note"),
@@ -507,7 +528,11 @@ mod tests {
     #[test]
     fn resolve_alias_rewrites_legacy_ids() {
         assert_eq!(resolve_alias("find_callers"), "callers");
-        assert_eq!(resolve_alias("find_callees"), "callees");
+        // `find_callees` went with its target on 2026-08-31 — an alias may
+        // not name a tool this surface no longer exposes, which the sibling
+        // `every_alias_target_is_exposed` test enforces. Unknown ids pass
+        // through verbatim so the caller, not the rewrite, does the rejecting.
+        assert_eq!(resolve_alias("find_callees"), "find_callees");
         assert_eq!(resolve_alias("blast_radius"), "blast");
         assert_eq!(resolve_alias("symbol_lookup"), "symbols");
         assert_eq!(resolve_alias("write_note"), "note");

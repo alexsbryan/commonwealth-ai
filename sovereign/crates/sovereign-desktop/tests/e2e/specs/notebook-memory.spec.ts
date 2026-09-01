@@ -50,7 +50,7 @@ async function seed(page: Page) {
 }
 
 test.describe("Notebook conversation memory", () => {
-  test("resumes the most recent and shows the thread switcher", async ({
+  test("resumes the most recent and shows the thread switcher", { tag: ["@UI-6"] }, async ({
     sovereignPage: page,
     chat,
   }) => {

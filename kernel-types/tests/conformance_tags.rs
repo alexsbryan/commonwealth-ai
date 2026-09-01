@@ -53,6 +53,14 @@ use syn::{Attribute, Item};
 
 /// Where the per-crate manifests live, relative to the repo root.
 const OUT_DIR: &str = "quality/conformance";
+/// The marker a manifest from the OTHER generator carries in its header.
+///
+/// Matched as a substring of the file rather than parsed: the header is
+/// already required to name the command that regenerates it, so there is no
+/// second thing to keep in sync — and a manifest that stops naming its
+/// generator correctly reads as unowned and fails loudly rather than being
+/// silently deleted.
+const FOREIGN_GENERATOR: &str = "conformance-tags.mjs";
 /// The registry every tag must resolve against.
 const REGISTRY: &str = "quality/requirements.toml";
 /// The command that regenerates everything this test gates.
@@ -468,9 +476,29 @@ fn conformance_tags_are_fresh() {
     }
     // A manifest whose crate no longer has any tag is a claim that outlived its
     // test — removed, not left to rot.
+    //
+    // OWNERSHIP IS DECLARED, NOT ASSUMED. This directory has more than one
+    // writer: this scanner emits one manifest per Rust crate from `covers:`
+    // doc tags, and the desktop app's
+    // `tests/e2e/scripts/conformance-tags.mjs` emits `desktop.toml` from
+    // Playwright `@REQ-ID` tags — the instrument the `cli`/`desktop`-class
+    // requirements actually need, and one this Rust scanner cannot see.
+    //
+    // Until 2026-09-01 this reclaimed the WHOLE directory, so the first
+    // foreign manifest to land was reported as debris with no tags backing
+    // it, and the gate went red for a file that was perfectly current. Both
+    // generators believed they owned the directory; neither said so
+    // (ARCH §10.6). Each now reclaims only what it wrote, and a manifest
+    // names its generator in its own header.
     let existing: BTreeSet<String> = std::fs::read_dir(&dir)
         .map(|rd| {
             rd.filter_map(|e| e.ok())
+                .filter(|e| {
+                    let owned_by_another = std::fs::read_to_string(e.path())
+                        .map(|t| t.contains(FOREIGN_GENERATOR))
+                        .unwrap_or(false);
+                    !owned_by_another
+                })
                 .map(|e| e.file_name().to_string_lossy().to_string())
                 .filter(|n| n.ends_with(".toml"))
                 .collect()

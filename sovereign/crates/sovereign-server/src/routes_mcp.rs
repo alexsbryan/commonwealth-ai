@@ -794,10 +794,14 @@ mod tests {
     #[test]
     fn mcp_surface_exports_the_renamed_canonicals() {
         use sovereign_tools::mcp_surface::{is_mcp_exposed, resolve_alias};
-        // Renamed canonical ids are exposed.
-        for new in &["symbols", "callers", "callees", "blast", "note", "notes"] {
+        // Renamed canonical ids are exposed. `callees` is deliberately absent
+        // since 2026-08-31: it was retired from the surface on usage evidence
+        // (0 calls in 190 sessions, against 37 for its sibling `callers`) and
+        // its `find_callees` alias went with it.
+        for new in &["symbols", "callers", "blast", "note", "notes"] {
             assert!(is_mcp_exposed(new), "{new} should be MCP-exposed");
         }
+        assert!(!is_mcp_exposed("callees"), "callees is registry-only now");
         // Legacy ids alias-rewrite to the renamed canonical.
         assert_eq!(resolve_alias("find_callers"), "callers");
         assert_eq!(resolve_alias("write_note"), "note");
@@ -825,8 +829,9 @@ mod tests {
         let tools = result["tools"].as_array().expect("tools array");
         let names: Vec<&str> = tools.iter().filter_map(|t| t["name"].as_str()).collect();
 
-        // Canonical (renamed) ids appear.
-        for required in &["symbols", "callers", "callees"] {
+        // Canonical (renamed) ids appear. `callees` is retired from the
+        // surface (2026-08-31) and must NOT appear — asserted below.
+        for required in &["symbols", "callers"] {
             assert!(
                 names.contains(required),
                 "Required tool `{required}` missing from tools/list — got {names:?}"
@@ -845,7 +850,7 @@ mod tests {
         // the mirrors cost every session the full duplicate schema
         // (~2,550 tokens across all six) for entries no fresh client
         // should pick.
-        for legacy in &["symbol_lookup", "find_callers", "find_callees"] {
+        for legacy in &["symbol_lookup", "find_callers", "find_callees", "callees"] {
             assert!(
                 !names.contains(legacy),
                 "deprecated alias `{legacy}` should NOT appear in tools/list — got {names:?}"
@@ -860,7 +865,6 @@ mod tests {
         for (legacy, canonical) in &[
             ("symbol_lookup", "symbols"),
             ("find_callers", "callers"),
-            ("find_callees", "callees"),
             ("blast_radius", "blast"),
             ("write_note", "note"),
             ("read_notes", "notes"),
@@ -871,6 +875,11 @@ mod tests {
                 "alias `{legacy}` must still resolve on tools/call even though it is unlisted"
             );
         }
+        // `find_callees` is the one that went the other way (2026-08-31): its
+        // target left the surface, so the alias went with it and the id now
+        // passes through verbatim for the caller to reject. Asserted here so a
+        // future re-expose of `callees` restores BOTH halves or neither.
+        assert_eq!(resolve_alias("find_callees"), "find_callees");
 
         // Out-of-scope / unsupported tool ids never appear, even if
         // they were registered (they aren't in this minimal harness).
@@ -886,13 +895,14 @@ mod tests {
             );
         }
 
-        // 4 canonicals (symbols, callers, callees, code_search) and no
-        // mirrors. Was 7 before 2026-08-17, when the three alias
-        // entries were dropped from the listing.
+        // 3 canonicals (symbols, callers, code_search) and no mirrors. Was 7
+        // before 2026-08-17, when the three alias entries were dropped from
+        // the listing; 4 until 2026-08-31, when `callees` was retired from the
+        // surface on usage evidence (0 calls in 190 sessions).
         assert_eq!(
             tools.len(),
-            4,
-            "expected 4 canonical tools and no alias mirrors, got {names:?}"
+            3,
+            "expected 3 canonical tools and no alias mirrors, got {names:?}"
         );
     }
 

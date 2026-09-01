@@ -1,0 +1,48 @@
+# THE MUTANT BANK — declared regressions the suite must catch.
+#
+# Schema deliberately identical to the desktop's tests/e2e/sabotage-bank.mjs.
+# One noun, one shape, two adjudicators (Playwright specs there, the Rust
+# workspace here).
+#
+#   requirement  the id this mutant proves a claim for. The whole point: a
+#                claim is minted only when its named test dies under its
+#                named mutation.
+#   target       path from the repo root.
+#   find         must occur EXACTLY ONCE, or the runner reports STALE. That is
+#                the anti-rot mechanism — a mutant that silently stops applying
+#                is worse than no mutant, because the bank keeps saying CAUGHT.
+#   replace      must still COMPILE. A mutant that breaks the build proves
+#                nothing about the tests: everything fails, for the wrong reason.
+#   mustFail     the test that CLAIMS this coverage, not "the suite". A mutant
+#                caught by some unrelated test is weak evidence; a mutant caught
+#                by its own test is proof.
+#   expected     CAUGHT unless this is a control.
+
+# ── the campaign's entry bar (quality/campaigns/conformance.toml,
+#    `positive-control`): "Break the GR-19 decider and GR-19 goes failed —
+#    the instrument can see a violation at all". Open since the campaign was
+#    declared; every number below it was unearned until this goes CAUGHT.
+[[mutant]]
+id          = "gr19-evidence-pool-loses-the-chunks"
+requirement = "GR-19"
+target      = "sovereign/crates/sovereign-core/src/quote_verification.rs"
+find        = "    sources.extend(chunks.iter().cloned());\n"
+replace     = ""
+mustFail    = ["sovereign-core::quote_verification::tests::a_quote_from_beyond_the_prompt_truncation_is_no_longer_demoted"]
+breaks      = "the verification evidence pool is the turn's evidence PLUS its retrieved chunks — a quote from beyond the prompt truncation must still verify"
+userImpact  = "a correct, properly-sourced citation is demoted to unverified because the checker never looked at the chunk it came from; the answer is caveated for a reason that is an artefact of prompt rendering"
+expected    = "CAUGHT"
+
+# ── the control on the control. A real, compiling edit that the declared test
+#    CANNOT observe. If this reports CAUGHT, the runner is attributing failures
+#    it should not and every CAUGHT above it is suspect.
+[[mutant]]
+id          = "self-control-doc-comment-only"
+requirement = "GR-19"
+target      = "sovereign/crates/sovereign-core/src/quote_verification.rs"
+find        = "/// Fold text for substring comparison."
+replace     = "/// Fold the text for substring comparison."
+mustFail    = ["sovereign-core::quote_verification::tests::a_quote_from_beyond_the_prompt_truncation_is_no_longer_demoted"]
+breaks      = "NOTHING the declared test observes — this is the control, not a mutant"
+userImpact  = "none; a doc comment"
+expected    = "SURVIVED"

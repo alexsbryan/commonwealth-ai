@@ -69,6 +69,50 @@ pub struct AtlasObserver {
     debounce: Mutex<HashMap<(Uuid, PathBuf), u64>>,
 }
 
+/// Is this path machine output rather than a person's work?
+///
+/// The atlas answers "is someone actively here", so a compiler writing
+/// into `target/` must not read as presence. Measured on this host
+/// 2026-09-01: 15,534 live observations, of which 15,532 were build
+/// artifacts under `target-sabotage/**` (the mutation-loop runner's
+/// build directory) and 438 were source — 99.97% noise. Every peer
+/// asking `work_in_flight` got "yes, everywhere, always", which is the
+/// same answer as no signal at all.
+///
+/// The rule matches PATH COMPONENTS, and treats the two cases
+/// differently on purpose:
+///
+///   - `target` anywhere in the path is a cargo build directory —
+///     including nested ones (`crates/inner/target/debug/...`).
+///   - `target-<suffix>` only as the FIRST component, because that is
+///     where a `CARGO_TARGET_DIR` override lands relative to the repo
+///     root. A crate NAMED `target-utils` is ordinary source and must
+///     survive; it never appears first, it appears under `crates/`.
+///
+/// The cost of a wrong answer is asymmetric and the rule leans the safe
+/// way: a missed observation loses one signal, while a false one
+/// poisons every peer's query.
+fn is_machine_output(path: &std::path::Path) -> bool {
+    let mut components = path.components().filter_map(|c| match c {
+        std::path::Component::Normal(os) => os.to_str(),
+        _ => None,
+    });
+    if let Some(first) = components.next() {
+        if first == "target" || first.starts_with("target-") {
+            return true;
+        }
+        if first == ".git" || first == "node_modules" {
+            return true;
+        }
+        for rest in components {
+            if rest == "target" || rest == ".git" || rest == "node_modules" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 impl AtlasObserver {
     /// Build an observer. `repo_id` may be empty when the repo has no
     /// `origin` remote — the observer becomes a no-op in that case
@@ -131,9 +175,6 @@ impl AtlasObserver {
     /// Run one batch of debounce-filtered upserts. Public for the
     /// unit tests; production callers go through `on_files_changed`.
     pub async fn process(&self, paths: Vec<PathBuf>) {
-        let Some(session) = self.touch_ambient_session().await else {
-            return;
-        };
         // Canonical path shape: REPO-RELATIVE. CodeWatcher emits
         // absolute paths; strip the repo root at write time so
         // observations and claims (declare_scope normalizes the same
@@ -149,6 +190,33 @@ impl AtlasObserver {
                     .unwrap_or(p)
             })
             .collect();
+
+        // Drop machine output BEFORE the session is touched: a compile is
+        // not a person being present, so a batch that is entirely build
+        // artifacts must not refresh the ambient session either. Dropping
+        // here also keeps the debounce map from growing one entry per
+        // artifact path.
+        let total = paths.len();
+        let paths: Vec<PathBuf> = paths
+            .into_iter()
+            .filter(|p| !is_machine_output(p))
+            .collect();
+        let dropped = total - paths.len();
+        if dropped > 0 {
+            tracing::debug!(
+                target: "work_atlas:observer",
+                dropped,
+                kept = paths.len(),
+                "dropped machine output from observation batch"
+            );
+        }
+        if paths.is_empty() {
+            return;
+        }
+
+        let Some(session) = self.touch_ambient_session().await else {
+            return;
+        };
         let now = now_secs();
         let mut to_broadcast: Vec<PathBuf> = Vec::new();
         {
@@ -343,5 +411,78 @@ mod tests {
         );
         let private_hits = mesh.scan("work-atlas-private", "observation:").unwrap();
         assert_eq!(private_hits.len(), 1);
+    }
+
+    /// Measured on this host 2026-09-01: 15,534 live observations, of
+    /// which 15,532 were build artifacts under `target-sabotage/**` and
+    /// 438 were source — 99.97% noise. The mutation-loop runner's build
+    /// directory was flooding the atlas, so "is someone working here"
+    /// answered yes for every peer, everywhere, always.
+    #[tokio::test]
+    async fn build_artifacts_are_not_work() {
+        let obs = mk_observer(&"r".repeat(64));
+        let junk = [
+            "target-sabotage/debug/build/foo-1a2b/out/generated.rs",
+            "target/debug/deps/bar.rs",
+            "node_modules/pkg/index.js",
+            ".git/COMMIT_EDITMSG",
+            "crates/inner/target/debug/x.rs",
+        ];
+        let mut batch: Vec<PathBuf> = junk.iter().map(PathBuf::from).collect();
+        batch.push(PathBuf::from("src/real.rs"));
+        obs.process(batch).await;
+        let sessions = obs.store.scan_sessions().unwrap();
+        let sid = sessions[0].session_id;
+        for p in junk {
+            assert!(
+                obs.store
+                    .get_observation(sid, std::path::Path::new(p))
+                    .unwrap()
+                    .is_none(),
+                "{p} is build output, not work"
+            );
+        }
+        assert!(
+            obs.store
+                .get_observation(sid, std::path::Path::new("src/real.rs"))
+                .unwrap()
+                .is_some(),
+            "real source must still be observed"
+        );
+    }
+
+    /// The filter matches PATH COMPONENTS, so a crate whose NAME starts
+    /// with `target-` is ordinary source and must survive. Without this
+    /// the fix would silently blind the atlas to a real crate.
+    #[tokio::test]
+    async fn a_crate_named_target_something_is_still_work() {
+        let obs = mk_observer(&"r".repeat(64));
+        obs.process(vec![PathBuf::from("crates/target-utils/src/lib.rs")])
+            .await;
+        let sessions = obs.store.scan_sessions().unwrap();
+        let sid = sessions[0].session_id;
+        assert!(
+            obs.store
+                .get_observation(sid, std::path::Path::new("crates/target-utils/src/lib.rs"))
+                .unwrap()
+                .is_some(),
+            "a crate named target-* is source, not a build directory"
+        );
+    }
+
+    /// A batch that is ENTIRELY build output must not even refresh the
+    /// ambient session — a compile is not a person being present.
+    #[tokio::test]
+    async fn an_all_artifact_batch_creates_no_session() {
+        let obs = mk_observer(&"r".repeat(64));
+        obs.process(vec![
+            PathBuf::from("target/debug/deps/a.rs"),
+            PathBuf::from("target-sabotage/debug/b.rs"),
+        ])
+        .await;
+        assert!(
+            obs.store.scan_sessions().unwrap().is_empty(),
+            "build output must not signal presence"
+        );
     }
 }

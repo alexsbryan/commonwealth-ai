@@ -1,0 +1,53 @@
+# Conformance tags in the desktop app — GENERATED. DO NOT EDIT BY HAND.
+#
+#   UPDATE_CONFORMANCE_TAGS=1 node tests/e2e/scripts/conformance-tags.mjs
+#
+# Each claim maps a requirement id from research/clean-room/REQUIREMENTS.md to
+# the Playwright spec that proves it. `test` is `<file>::<title>`, matching the
+# JUnit the playwright reporter writes to test-results/junit.xml, so
+# `svrn conformance` joins a claim to a real per-test verdict without guessing.
+#
+# These are INTERACTIVE specs against the running app — the instrument the
+# desktop-class and chat-surface requirements actually need.
+
+[[claim]]
+requirement = "GR-43"
+test = "chat-placeholder.spec.ts::preparing-state placeholder › placeholder clears on message-complete"
+file = "sovereign/crates/sovereign-desktop/tests/e2e/specs/chat-placeholder.spec.ts"
+line = 118
+asserts = 1
+
+[[claim]]
+requirement = "GR-44"
+test = "epistemic-footer.spec.ts::epistemic footer › grounded turn renders the verdict receipt + source badges"
+file = "sovereign/crates/sovereign-desktop/tests/e2e/specs/epistemic-footer.spec.ts"
+line = 12
+asserts = 1
+
+[[claim]]
+requirement = "UI-5"
+test = "library.spec.ts::Library shelf › lists notebooks with kind, count, and the explorable badge"
+file = "sovereign/crates/sovereign-desktop/tests/e2e/specs/library.spec.ts"
+line = 50
+asserts = 1
+
+[[claim]]
+requirement = "UI-6"
+test = "ask-scope.spec.ts::Ask scope bar › a notebook's Ask states scope in the header, not a bar"
+file = "sovereign/crates/sovereign-desktop/tests/e2e/specs/ask-scope.spec.ts"
+line = 68
+asserts = 1
+
+[[claim]]
+requirement = "UI-6"
+test = "notebook-memory.spec.ts::Notebook conversation memory › resumes the most recent and shows the thread switcher"
+file = "sovereign/crates/sovereign-desktop/tests/e2e/specs/notebook-memory.spec.ts"
+line = 53
+asserts = 1
+
+[[claim]]
+requirement = "UI-8"
+test = "chat-orphaned-turn.spec.ts::orphaned streaming turn (navigate away & back) › returning mid-stream restores the loading affordance and partial text"
+file = "sovereign/crates/sovereign-desktop/tests/e2e/specs/chat-orphaned-turn.spec.ts"
+line = 187
+asserts = 1
