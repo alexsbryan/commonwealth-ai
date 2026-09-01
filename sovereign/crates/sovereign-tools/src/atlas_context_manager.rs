@@ -35,6 +35,12 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 
+/// The ONE `atoms.json` → embedded-bag loader (ontology-v1 P0.2). Lives in
+/// `atlas_context_loader.rs` to keep this file under the §3.1 ceiling;
+/// re-exported so `atlas_context_manager::load_atlas_context` is the name
+/// every caller — CLI wrapper, daemon hook, eval harness — uses.
+pub use crate::atlas_context_loader::load_atlas_context;
+
 /// Filename of the per-corpus query-bump map. Lives alongside
 /// `atoms.json` so it travels with the atlas (mesh transfer brings
 /// it along) and the operator can inspect it without poking inside
