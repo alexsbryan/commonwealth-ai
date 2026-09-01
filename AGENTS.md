@@ -416,14 +416,14 @@ across several machines; these keep them consistent.)
   the content genuinely is one — never as the default shape. Don't sell
   ("powerful", "seamless", "full stop"); say what a thing does. Full
   guide: `docs/internal/VOICE.md`.
-- **Don't `git commit` without an explicit ask.** "Ship it" / "land
-  this" / "commit X" mean *prepare* the change: finalize code, run
-  checks, hand back the commit message as plain text to copy-paste.
-  `git add` is fine; running `git commit` is the maintainer's call.
-  When the ask comes, commit to the CURRENT branch — do not branch
-  first. Branching is the maintainer's call too, and they will say so
-  (operator direction 2026-08-28, replacing a standing "branch first if
-  on `main`" rule that made every commit a two-step negotiation).
+- **Commit freely; never `git push` without the operator.** Operator
+  direction 2026-09-01. Finish the work, run the gates, commit it — a
+  commit is local and revisable, and asking first made every one a
+  two-step negotiation. The PUSH is the irreversible half: `origin` is
+  shared, peers clone from it, and it is the maintainer's call every
+  time. Commit to the CURRENT branch; branching is their call too and
+  they will say so (2026-08-28, replacing a "branch first if on `main`"
+  rule that had the same problem the commit rule did).
 - **Debug builds for dev, not release** — the rule and its exceptions are
   under "Code Intelligence" above. Behavioural work including CI benches
   runs from `target/debug/<sibling>`; the llama.cpp kernels are native C++
