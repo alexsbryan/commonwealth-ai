@@ -14,6 +14,7 @@ pub(super) fn parse_args(args: &[String]) -> Result<Opts, String> {
         reset: false,
         yes: false,
         data_dir: None,
+        client_port: None,
         repair: false,
         help: false,
         wizard_only: false,
@@ -72,6 +73,19 @@ pub(super) fn parse_args(args: &[String]) -> Result<Opts, String> {
                 }
                 opts.quant = Some(normalized);
             }
+            "--client-port" => {
+                i += 1;
+                let raw = args
+                    .get(i)
+                    .ok_or_else(|| "--client-port needs a port number".to_string())?;
+                let port: u16 = raw
+                    .parse()
+                    .map_err(|_| format!("--client-port '{raw}' is not a port number"))?;
+                if port == 0 {
+                    return Err("--client-port 0 is not a port".to_string());
+                }
+                opts.client_port = Some(port);
+            }
             "--data-dir" => {
                 i += 1;
                 opts.data_dir = Some(PathBuf::from(
@@ -116,7 +130,8 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
     sections: &[
         sovereign_cli_shared::help::HelpSection::Usage(
             "svrn setup [--yes] [--reset] [--data-dir <path>]\n\
-             svrn setup --terminal <entry> [--reset] [--data-dir <path>]\n\
+             svrn setup --terminal <entry> [--reset] [--data-dir <path>] \
+             [--client-port <n>]\n\
              svrn setup --fim [--quant <rung>] [--yes] [--skip-editor]",
         ),
         sovereign_cli_shared::help::HelpSection::Flags(&[
@@ -136,6 +151,14 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
             (
                 "--data-dir <p>",
                 "Override the default data root (~/.svrnmesh)",
+            ),
+            (
+                "--client-port <n>",
+                "Port the configured daemon serves its client API on (default 9741); \
+                 [daemon] internal_port follows at n+1. Needed to onboard a SECOND node \
+                 on a host that already runs one — setup refuses when a daemon already \
+                 holds the port it is about to configure, and without this it could only \
+                 ever configure 9741",
             ),
             (
                 "--fim",

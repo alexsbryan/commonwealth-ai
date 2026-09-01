@@ -345,6 +345,22 @@ struct Opts {
     reset: bool,
     yes: bool,
     data_dir: Option<PathBuf>,
+    /// `--client-port <N>`: the port the daemon this setup configures will
+    /// serve its client API on. `[daemon] internal_port` follows at `N + 1`,
+    /// the relationship every default and every harness already assumes
+    /// (9741/9742).
+    ///
+    /// Exists because setup could previously only ever produce 9741/9742, and
+    /// its "is a daemon already running" guard probed a HARDCODED 9741. On a
+    /// fresh machine those coincide and nothing is wrong; on a host that
+    /// already runs a node they do not, and the guard refuses a setup that
+    /// would not have collided with anything. That made `svrn setup
+    /// --terminal` — the entire product onboarding — unreachable on any host
+    /// with a daemon, which is why no test has ever executed it (the contract
+    /// journey for it was deleted as unrunnable, and `terminal-e2e.sh`
+    /// hand-writes the config precisely because "the product path never types
+    /// this").
+    client_port: Option<u16>,
     repair: bool,
     help: bool,
     /// Phase 4: if true, run only the hardware-detect → model-pick →
@@ -824,6 +840,43 @@ mod tests {
     fn parse_args_rejects_unknown_flag() {
         let err = parse_args(&s(&["--wat"])).unwrap_err();
         assert!(err.contains("--wat"), "error: {err}");
+    }
+
+    /// THE DEFECT. Setup could only ever configure 9741/9742, so on a host
+    /// already running a node the product onboarding had nowhere to go — and
+    /// its guard refused a run that would not have collided with anything.
+    #[test]
+    fn parse_args_takes_a_client_port_so_a_second_node_can_onboard() {
+        let opts = parse_args(&s(&["--terminal", "http://halo:9741", "--client-port", "9771"]))
+            .unwrap();
+        assert_eq!(opts.client_port, Some(9771));
+    }
+
+    /// Absent means the compiled default, which is what a fresh machine wants
+    /// and is why this bug survived: there, the hardcoded port was correct.
+    #[test]
+    fn parse_args_defaults_the_client_port_to_none() {
+        assert!(parse_args(&s(&["--terminal", "http://halo:9741"]))
+            .unwrap()
+            .client_port
+            .is_none());
+    }
+
+    /// A port that is not a number is a typo, not a request to fall back to
+    /// 9741 — falling back would silently configure the port the operator was
+    /// trying to avoid, on the one path where they said it mattered.
+    #[test]
+    fn parse_args_rejects_a_client_port_that_is_not_a_port() {
+        let err = parse_args(&s(&["--client-port", "http://nope"])).unwrap_err();
+        assert!(err.contains("--client-port"), "got: {err}");
+        let err = parse_args(&s(&["--client-port", "0"])).unwrap_err();
+        assert!(err.contains("--client-port"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_args_rejects_dangling_client_port() {
+        let err = parse_args(&s(&["--client-port"])).unwrap_err();
+        assert!(err.contains("--client-port"), "error: {err}");
     }
 
     #[test]

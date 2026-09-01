@@ -49,6 +49,10 @@ serde_json = { workspace = true, optional = true }
 wire-fixture = ["dep:serde_json"]
 
 [dev-dependencies]
+# The requirements-registry generator renders `quality/requirements.toml`
+# (`tests/requirements_registry.rs`). DEV ONLY — the runtime four-dep budget
+# above still holds; consumers of the registry (xtask) bring their own toml.
+toml = { workspace = true }
 # Wire-form assertions only. Not a runtime dep of the kernel.
 serde_json = { workspace = true }
 # The compile-fail harness for `judgement_reds` — the structural half of the

@@ -95,6 +95,7 @@
 
 pub mod answer;
 pub mod attribution;
+pub mod conformance;
 pub mod custody;
 pub mod hash;
 pub mod ids;
@@ -105,6 +106,9 @@ pub mod wire;
 
 pub use answer::{Answer, Citation, Draft, PeerAnswer, Refused, Seal, TURN_SUBJECT};
 pub use attribution::Attribution;
+pub use conformance::{
+    Enforceability, Registry, ReqLevel, Requirement, Scenario,
+};
 pub use custody::{join_custody, Custody};
 pub use hash::ContentHash;
 pub use ids::{CorpusId, NodeId};

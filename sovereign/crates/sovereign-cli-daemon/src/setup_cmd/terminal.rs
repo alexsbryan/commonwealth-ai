@@ -257,16 +257,25 @@ async fn run_terminal_join(
         return 0;
     }
 
-    // A running daemon owns :9741/:9742 and its own AppState. Joining
-    // in-process beside it updates the CLI's copy and never the one that
-    // serves gossip — the split-brain `mesh_cmd::cmd_join` documents. Setup is
-    // a bootstrap, so refuse and say what to do rather than route around it.
-    if daemon_is_listening().await {
-        eprintln!("error: a daemon is already running on :9741.");
+    // A running daemon owns the client/internal pair and its own AppState.
+    // Joining in-process beside it updates the CLI's copy and never the one
+    // that serves gossip — the split-brain `mesh_cmd::cmd_join` documents.
+    // Setup is a bootstrap, so refuse and say what to do rather than route
+    // around it.
+    //
+    // The question is about THE PORT THIS SETUP WILL CONFIGURE, not about
+    // 9741. See `daemon_is_listening`.
+    let client_port = opts
+        .client_port
+        .unwrap_or_else(sovereign_contracts::setup_config::default_client_port);
+    if daemon_is_listening(client_port).await {
+        eprintln!("error: a daemon is already running on :{client_port}.");
         eprintln!();
         eprintln!(
-            "hint: setup joins the mesh in-process, which needs those ports. Stop it \
-             first:\n      svrn daemon stop\n      svrn setup --reset --terminal \"{raw}\""
+            "hint: setup joins the mesh in-process, which needs those ports. Either stop \
+             it:\n      svrn daemon stop\n      svrn setup --reset --terminal \"{raw}\"\n\n\
+             or put this node on its own ports, which is what a second node on one host \
+             needs:\n      svrn setup --terminal \"{raw}\" --client-port 9771"
         );
         return 1;
     }
@@ -424,7 +433,14 @@ async fn run_terminal_join(
         // omitted so the file round-trips like any other config.
         engine: Default::default(),
         search: Default::default(),
-        daemon: Default::default(),
+        // The ports this setup was asked to configure — NOT the compiled
+        // default. `Default::default()` here is what made a second node on one
+        // host impossible: setup wrote 9741/9742 whatever it had been told.
+        daemon: sovereign_contracts::setup_config::DaemonSection {
+            client_port,
+            internal_port: client_port + 1,
+            ..Default::default()
+        },
         data: DataSection {
             dir: data_dir.clone(),
         },
@@ -468,26 +484,46 @@ async fn run_terminal_join(
     println!("  Next:");
     println!("    svrn daemon");
     println!();
-    println!("  Then point any OpenAI client at http://localhost:9741/v1 with model");
+    println!(
+        "  Then point any OpenAI client at {}/v1 with model",
+        sovereign_contracts::setup_config::client_daemon_base_for(client_port)
+    );
     println!("  `primary` — this node routes it onward. The bind is {entry_name}'s mesh");
     println!("  identity, so it keeps working when that machine changes address.");
     0
 }
 
-/// Is something already listening on the client port?
+/// Is something already listening on the client port THIS SETUP WILL CONFIGURE?
 ///
 /// `/v1/models` rather than `/`, for the reason `mesh_cmd::daemon_listening_on`
 /// gives: the root route answers 405 and reqwest treats that as a successful
 /// send, which is exactly the question being asked — is anything there.
-async fn daemon_is_listening() -> bool {
+///
+/// The port is a parameter because it used to be the literal `9741`, and a
+/// hardcoded port here does not fail loudly — it fails as a REFUSAL TO RUN.
+/// On a fresh machine the configured port IS 9741 and nothing is wrong; on a
+/// host already running a node, setup asked "is 9741 busy?", got yes, and
+/// declined to configure port 9771, which would have collided with nothing.
+/// That is what made `svrn setup --terminal` unreachable on any host with a
+/// daemon — the whole product onboarding, untestable, which is why its
+/// contract journey was deleted as unrunnable and why `terminal-e2e.sh`
+/// hand-writes the config with the note "the product path never types this".
+///
+/// `client_daemon_base_for` rather than `client_daemon_base`: this is a
+/// question about MANAGING a process on this host, so it must not honour
+/// `SOVEREIGN_DAEMON_URL`. A remote daemon answering that knob cannot own this
+/// machine's ports, and treating it as if it did is the success-shaped wrong
+/// answer §18.3 forbids. The accessor's own docs name this split.
+async fn daemon_is_listening(port: u16) -> bool {
     let Ok(client) = reqwest::Client::builder()
         .timeout(Duration::from_millis(500))
         .build()
     else {
         return false;
     };
+    let base = sovereign_contracts::setup_config::client_daemon_base_for(port);
     client
-        .get("http://127.0.0.1:9741/v1/models")
+        .get(format!("{base}/v1/models"))
         .send()
         .await
         .is_ok()
@@ -556,6 +592,9 @@ async fn find_holders(
 
 /// The address path — an entry node named by URL, unchanged from 2026-08-30.
 async fn run_terminal_address(entry_raw: &str, opts: &Opts) -> i32 {
+    let addr_client_port = opts
+        .client_port
+        .unwrap_or_else(sovereign_contracts::setup_config::default_client_port);
     let (origin, v1) = match normalize_entry(entry_raw) {
         Ok(pair) => pair,
         Err(msg) => {
@@ -653,7 +692,13 @@ async fn run_terminal_address(entry_raw: &str, opts: &Opts) -> i32 {
         // omitted so the file round-trips like any other config.
         engine: Default::default(),
         search: Default::default(),
-        daemon: Default::default(),
+        // Same as the join path: honour the port this setup was told to
+        // configure rather than always writing the compiled default.
+        daemon: sovereign_contracts::setup_config::DaemonSection {
+            client_port: addr_client_port,
+            internal_port: addr_client_port + 1,
+            ..Default::default()
+        },
         data: DataSection {
             dir: data_dir.clone(),
         },
@@ -703,7 +748,10 @@ async fn run_terminal_address(entry_raw: &str, opts: &Opts) -> i32 {
     println!("    svrn mesh join \"<join link from `svrn mesh status` on the entry node>\"");
     println!("    svrn daemon");
     println!();
-    println!("  Then point any OpenAI client at http://localhost:9741/v1 with model");
+    println!(
+        "  Then point any OpenAI client at {}/v1 with model",
+        sovereign_contracts::setup_config::client_daemon_base_for(addr_client_port)
+    );
     println!("  `primary` — this node routes it onward.");
     0
 }

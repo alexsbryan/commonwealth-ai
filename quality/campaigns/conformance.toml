@@ -1,0 +1,114 @@
+# Flight rules for the requirement-conformance campaign. Read raw.
+#
+# BARS EXIST BEFORE THE DATA OR THE VERDICT IS NOT HONEST. Every bar below was
+# written before the thing it measures was built. A bar added after a number is
+# known is not a bar, it is a description.
+#
+# Prose, sequencing and the Deletes ledger:
+#   /Users/alexsbryan/.claude/plans/let-s-properly-plan-this-distributed-fairy.md
+# Orders: .sovereign/features/conf-0-ci-seat … conf-4-breadth
+
+id        = "conformance"
+objective = "One runner, two tiers, reporting passed/failed/could-not-judge/never-ran over all 625 requirements, so a full internal rewrite can be judged against the same bar"
+spec      = "research/clean-room/REQUIREMENTS.md"
+declared  = "2026-08-31"
+status    = "active"
+
+# ── The premise, measured rather than assumed ───────────────────────────────
+# 625 requirements (591 must-class, 34 should), 12 capability domains, 10
+# cross-cutting families, plus 19 acceptance scenarios the spec already wrote
+# (§16 "How a rebuild is judged"). NOTHING in the codebase referenced a single
+# requirement id before this campaign.
+#
+# An earlier count in the same session said 513/479 — WRONG BY 112 — because a
+# regex matched only `**ID-N (MUST).**` and §8 (D6/GR, "the product's central
+# claim") declares its level once in a preamble. Fifty-three requirements
+# vanished and the number still read fine. That is the characteristic failure
+# of this system and of this campaign's instrument alike: a plausible,
+# well-formed, exit-0 result that is wrong.
+
+# ── THIS BAR GATES ENTRY TO EVERY OTHER BAR ─────────────────────────────────
+[[bar]]
+id           = "positive-control"
+one_line     = "Break the GR-19 decider and GR-19 goes `failed` — the instrument can see a violation at all"
+derives_from = "ARCH §18.1. Three independent green-while-blind instances were found in one session (2026-08-31): a base rate, not an anecdote. §18.1's own cautionary case is this campaign's foundation — the CLI journey verifier captured 2>&1, every svrn prints a deprecation banner on stderr, and so `stdout_non_empty` was satisfied by ANY command (note f496d39e)."
+status       = "open"
+target       = 1.0
+direction    = "higher_is_better"
+kill         = "Stays green => STOP. The instrument is blind and every number below it is unearned. Fix it before mapping requirement #2."
+instrument   = '''
+# Land in conf-2. Mutate the pure decider, run the tier, read GR-19's verdict.
+#   sovereign-core/src/quote_verification.rs:238 verify_answer_against_turn_evidence
+#   svrn conformance --tier smoke --family GR --json | jq '.checks[] | select(.id=="GR-19")'
+'''
+
+[[bar]]
+id           = "denominator-exact"
+one_line     = "The parser reproduces 625 ± 0 requirements, 591 must-class, 34 should, and the per-family histogram"
+derives_from = "The 112-requirement miscount above. A range is not a denominator."
+status       = "met"
+met_on       = "2026-08-31"
+target       = 625.0
+direction    = "exact"
+kill         = "A range instead of a number => STOP. There is nothing to measure against."
+instrument   = "cargo run -p xtask -- conformance-gate --json  # .in_scope == 625 && .must_class == 591 && .should == 34"
+notes        = "Pinned three ways: the per-family histogram in kernel-types/tests/requirements_registry.rs, the bucket totals in conformance_gate.rs, and a byte-gate on quality/requirements.toml. The parser PANICS on an unrecognised declaration form and on a bare requirement in a section with no declared default — it never defaults to MUST, which is the exact bug that lost the GR family."
+
+[[bar]]
+id           = "gate-has-a-seat"
+one_line     = "The gate runs in a job that is inside `ci-ok`'s `needs`"
+derives_from = ".github/workflows/ci.yml:604-632 — the `gates:` job is commented out and has been for a burn-in month that never ended. Adding a gate to a shelf reproduces the exact failure this campaign exists to prevent."
+status       = "met"
+met_on       = "2026-08-31"
+target       = 1.0
+direction    = "higher_is_better"
+kill         = "Lands only in a shelved job => STOP."
+instrument   = "grep -n 'conformance-gate' .github/workflows/ci.yml  # must be a step of `test:`, and ci.yml:500 must list `test` in ci-ok's needs"
+notes        = "Deliberately NOT a revived `gates:` job: that block's own comment (ci.yml:596) says each gate ran in <1s and the cost was 'two jobs paying the setup twice'. The gates were never slow — the job setup was."
+
+[[bar]]
+id           = "smoke-stays-free"
+one_line     = "SMOKE completes in <= 30s wall clock with no cargo build, no daemon, no model"
+derives_from = "Operator direction 2026-08-31: 'a gate has to earn the right to keep being run by being robust and quick'. Both `gates:` and `clippy` were shelved on cost, not on correctness."
+status       = "open"
+target       = 30.0
+direction    = "lower_is_better"
+kill         = "> 60s => cut scope, never the tier. A slow SMOKE gets shelved for the same reason its predecessors were."
+
+[[bar]]
+id           = "mapping-is-asserting"
+one_line     = ">= 7 of 10 sampled mapped requirements die under mutation of the code they claim to cover"
+derives_from = "ARCH §18.1 — a check with no failing input you can name is not a check. A mapping is worth exactly what it detects."
+status       = "open"
+target       = 0.7
+direction    = "higher_is_better"
+kill         = ">= 3 survivors => mapping is NAMING, not asserting. Stop mapping; audit what is already claimed."
+
+[[bar]]
+id           = "no-exit-only-passes"
+one_line     = "Every `passed` sourced from a CLI journey is backed by AssertionStrength::Output"
+derives_from = "sovereign-cli-shared/src/cli_contract.rs:457-467 — AssertionStrength is three-valued precisely because exit-0 is meaningless here."
+status       = "open"
+target       = 1.0
+direction    = "higher_is_better"
+kill         = "One `passed` backed by ExitOnly => the schema is gameable. Fix the promotion rule before adding a tag."
+notes        = "`claimed-unproven` — a declaration backed only by AssertionStrength::{None, ExitOnly}, or a `covers:` over an assertion-free body — is a HARD FAILURE AT ANY COUNT, never a counter. It is the cheap repair the ratchet would otherwise reward."
+
+[[bar]]
+id           = "gr-is-model-free"
+one_line     = "At least 32 of D6/GR's 53 requirements are reachable with no model at all"
+derives_from = "The premise that makes a fast tier possible: 32 pure deciders + 10 scripted-provider seams, of 53. If the premise is wrong, GR belongs in FULL and the campaign must say so."
+status       = "open"
+target       = 32.0
+direction    = "higher_is_better"
+kill         = "< 25 => the ~85% model-free premise was wrong. Re-scope GR to FULL and state it; do not discover this at case 20."
+notes        = "The coarse enforceability column already says 50 of 53 are non-model, non-review. That is a ceiling, not the bar: conf-3 must confirm the SEAM is reachable, not merely that the class is not `model`."
+
+[[bar]]
+id           = "the-number-is-not-farmed"
+one_line     = "Mapped count and mutation-survival rate do not rise together"
+derives_from = "Goodhart, and the reason no headline percentage is published anywhere. '91% conformant' is the artifact most likely to outlive its caveats."
+status       = "open"
+direction    = "lower_is_better"
+kill         = "Both rising => freeze the mapped count and spend the next slice on controls only."
+notes        = "The report is FOUR NUMBERS, NEVER ONE: passed / failed / could-not-judge / never-ran, summing to 625. never-ran starts at 342 and the report leads with it. A requirement with no manifest entry is never-ran BY CONSTRUCTION, so the denominator cannot be shrunk by omission."

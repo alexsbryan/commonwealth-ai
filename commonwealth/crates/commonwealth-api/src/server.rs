@@ -170,7 +170,29 @@ pub fn client_router_for(state: AppState, surface: ClientSurface) -> Router {
                 "/v1/edit_predictions/outcome",
                 post(crate::next_edit_journal::edit_prediction_outcome),
             )
-            .route("/v1/embeddings", post(routes_inference::embeddings))
+            // Behind `admission()` for the same reason `/v1/edit_predictions`
+            // is: it drives local inference on this box. It was the ONE
+            // inference route without the gate, and the omission carried no
+            // note explaining it — unlike `/v1/edit_predictions/outcome`,
+            // whose exemption is argued directly above. It was an oversight,
+            // and it was reachable: measured 2026-08-31 against a live daemon,
+            // one node id, one moment — `/v1/chat/completions` answered 503
+            // and `/v1/embeddings` answered 200 and SERVED. A peer could drive
+            // this host's embed slot past the ceiling, through a foreground
+            // yield, and while contribution was paused, appearing in no tally
+            // (`peer_requests` never moved). Found because a terminal node's
+            // embeddings reached their entry node and the entry node's own
+            // counters showed nothing.
+            //
+            // Safe for the caller this most affects: a `terminal` holds no
+            // embed model, and its provider is built `waiting_out_sheds()`
+            // precisely because "the node on the far end is the only holder
+            // there is" (`oicp-client`), so a 503 here is waited out, not
+            // fatal.
+            .route(
+                "/v1/embeddings",
+                post(routes_inference::embeddings).layer(admission()),
+            )
             .route("/v1/models", get(routes_inference::list_models))
             // Knowledge search endpoint.
             .route(
@@ -655,6 +677,70 @@ mod tests {
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
+
+    /// THE GAP. `/v1/embeddings` was the one inference route with no
+    /// admission layer, so a peer could drive this host's embed slot while
+    /// contribution was paused — past the ceiling, past the foreground yield,
+    /// and tallied nowhere.
+    ///
+    /// Measured against a live daemon 2026-08-31 before the fix: with one node
+    /// id at one moment, `/v1/chat/completions` answered **503** and
+    /// `/v1/embeddings` answered **200 and served**. Surfaced by a two-machine
+    /// terminal run whose embeddings reached their entry node while the entry
+    /// node's `peer_requests` stayed empty.
+    ///
+    /// Asserted as a PAIR: chat is the control. A test that only checked
+    /// embeddings would pass just as well if the whole gate stopped working.
+    #[tokio::test]
+    async fn a_paused_host_refuses_peer_embeddings_exactly_as_it_refuses_peer_chat() {
+        let state = test_app_state();
+        // Paused far enough ahead that the window cannot lapse mid-test.
+        state.set_contribution_paused_until(sovereign_core::time::unix_now() + 3600);
+        let peer = commonwealth_core::ids::NodeId::from_u128(0xBEEF).to_hex();
+
+        for path in ["/v1/chat/completions", "/v1/embeddings"] {
+            let resp = mock_router(state.clone())
+                .oneshot(
+                    Request::post(path)
+                        .header("content-type", "application/json")
+                        .header("x-node-id", &peer)
+                        .body(Body::from("{}"))
+                        .unwrap(),
+                )
+                .await
+                .expect("the gate must answer, not hang");
+            assert_eq!(
+                resp.status(),
+                StatusCode::SERVICE_UNAVAILABLE,
+                "{path}: a paused host must refuse a PEER request before the handler runs"
+            );
+        }
+    }
+
+    /// The other half, so the fix cannot be "503 everything": a LOCAL caller
+    /// carries no `X-Node-Id` and is never a peer, so a pause must not touch
+    /// the operator's own embeddings. Asserted as "not 503" rather than a
+    /// specific code — the handler's own outcome on a stub state is not this
+    /// test's business.
+    #[tokio::test]
+    async fn a_paused_host_still_serves_its_own_embeddings() {
+        let state = test_app_state();
+        state.set_contribution_paused_until(sovereign_core::time::unix_now() + 3600);
+        let resp = mock_router(state)
+            .oneshot(
+                Request::post("/v1/embeddings")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .expect("a local request must reach the handler");
+        assert_ne!(
+            resp.status(),
+            StatusCode::SERVICE_UNAVAILABLE,
+            "a pause rations PEERS; the operator's own machine is never gated"
+        );
+    }
 
     #[tokio::test]
     async fn status_endpoint() {

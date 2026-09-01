@@ -6632,6 +6632,7 @@ dependencies = [
  "hex",
  "serde",
  "serde_json",
+ "toml 0.8.2",
  "trybuild",
 ]
 
@@ -16307,6 +16308,7 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "arch-layers",
+ "kernel-types",
  "regex",
  "serde_json",
  "toml 0.8.2",
