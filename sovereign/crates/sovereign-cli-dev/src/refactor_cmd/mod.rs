@@ -28,6 +28,7 @@ mod destination;
 mod detector;
 mod discover;
 mod gate;
+mod intent;
 mod label_model;
 mod labels;
 mod ledger;

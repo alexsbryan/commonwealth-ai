@@ -21,14 +21,8 @@ arch-layers = { workspace = true }
 # `level` field (every clippy lint with a help child), so: real parser.
 serde_json = { workspace = true }
 # env-gate parses quality/env-flags.toml (registry) and censuses the
-# workspace's env-var read sites (multiline-tolerant literal patterns);
-# conformance-gate parses quality/requirements.toml.
+# workspace's env-var read sites (multiline-tolerant literal patterns).
 toml = { workspace = true }
-# conformance-gate reads the requirement registry (`kernel_types::conformance`)
-# and hashes the specification through the ONE content-hash implementation
-# (ARCH §10.6 — a second hasher here would be a second decider). kernel-types
-# is layer-0 `contract` and xtask is `hosts`, so the edge points down.
-kernel-types = { workspace = true }
 regex = { workspace = true }
 
 [lints]

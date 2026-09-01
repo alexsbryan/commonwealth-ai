@@ -7,7 +7,6 @@
 //!   cargo xtask docs-gate                          Every repo path the narrative docs cite must resolve
 //!   cargo xtask boundary-gate                      The studio package depends only on itself + shared leaves
 //!   cargo xtask concept-gate [--update-baseline|--tighten]  One noun, one owner — no NEW duplicated type name
-//!   cargo xtask conformance-gate [--json]          quality/requirements.toml still describes research/clean-room/REQUIREMENTS.md
 //!   cargo xtask layer-gate [--update-baseline|--tighten]  Cargo-declared deps obey quality/ARCH_LAYERS.toml + fan-in ratchet
 //!   cargo xtask lock-gate  [--update-baseline|--tighten]  No NEW duplicate crate versions in Cargo.lock
 //!   cargo xtask env-gate   [--update-baseline|--tighten|--update-doc]  Observed env vars obey quality/env-flags.toml
@@ -24,7 +23,6 @@ mod arch_gate;
 mod boundary_gate;
 mod common;
 mod concept_gate;
-mod conformance_gate;
 mod docs_gate;
 mod env_gate;
 mod layer_gate;
@@ -45,7 +43,6 @@ fn main() {
         "docs-gate" => docs_gate::run(),
         "boundary-gate" => boundary_gate::run(),
         "concept-gate" => concept_gate::run(&args[1..]),
-        "conformance-gate" => conformance_gate::run(&args[1..]),
         "api-gate" => api_gate::run(&args[1..]),
         "env-gate" => env_gate::run(&args[1..]),
         "layer-gate" => layer_gate::run(&args[1..]),
@@ -83,9 +80,6 @@ fn print_usage() {
     );
     eprintln!(
         "  concept-gate [--update-baseline|--tighten]  One noun, one owner — no NEW name defined as a type in 2+ crates"
-    );
-    eprintln!(
-        "  conformance-gate [--json]      The requirement registry still describes the specification (625 in scope)"
     );
     eprintln!(
         "  layer-gate [--update-baseline|--tighten]  Enforce quality/ARCH_LAYERS.toml + the fan-in ratchet"

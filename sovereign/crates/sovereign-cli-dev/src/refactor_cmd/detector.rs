@@ -54,7 +54,7 @@
 //! kept deliberately failing, and `refactor_wire.rs` pins that direction in
 //! `negative_control_node_id_fails_with_the_production_bytes`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use corpus_engine_scip::converge::{
@@ -82,6 +82,9 @@ pub enum DetectorId {
     Name,
     /// Duplicate BEHAVIOUR — exact and near function clones.
     Behaviour,
+    /// Duplicate INTENT — the same job with different code, which a name
+    /// census, a shape census and a clone search all miss by construction.
+    Intent,
     /// Hand-rolled `--flag` match loops where a derived parser would serve.
     ArgLoop,
     /// Provenance carried through an untyped `metadata` map instead of a
@@ -100,6 +103,7 @@ impl DetectorId {
             DetectorId::Shape => "shape",
             DetectorId::Name => "name",
             DetectorId::Behaviour => "behaviour",
+            DetectorId::Intent => "intent",
             DetectorId::ArgLoop => "arg-loop",
             DetectorId::ProvenanceChannel => "provenance-channel",
             DetectorId::UnownedCell => "unowned-cell",
@@ -107,11 +111,12 @@ impl DetectorId {
     }
 
     /// Every detector, in the order `status` reports them.
-    pub const ALL: [DetectorId; 7] = [
+    pub const ALL: [DetectorId; 8] = [
         DetectorId::FieldAtom,
         DetectorId::Shape,
         DetectorId::Name,
         DetectorId::Behaviour,
+        DetectorId::Intent,
         DetectorId::ArgLoop,
         DetectorId::ProvenanceChannel,
         DetectorId::UnownedCell,
@@ -572,20 +577,24 @@ impl Detector for BehaviourDetector {
 
     fn control(&self) -> ControlSite {
         ControlSite {
-            // Chosen by measurement on the first run, not by taste — see the
-            // test below, which is what keeps this honest.
-            file: "",
-            token: "",
-            why: "Not yet pinned: the behaviour control is selected from the \
-                  first live run and recorded here. Until it is, this detector \
-                  reports COULD-NOT-JUDGE by construction rather than \
-                  pretending to a proof it has not got.",
+            // Chosen by measurement, not by taste: the first live full run
+            // (2026-08-31, 185 exact groups / 356 near clusters / ~10,703
+            // redundant lines) reported this group at 5 copies x 8 lines.
+            file: "sovereign/crates/sovereign-core/src/deep_research/fetch.rs",
+            token: "2e0ac3170ee6",
+            why: "`alignment_decision` is duplicated five times — four in \
+                  deep_research/fetch.rs and once in search.rs — as a \
+                  byte-identical 8-line body. It is a plain exact clone with \
+                  no near-tier threshold in its way, so a silent control here \
+                  means the exact tier stopped seeing identical bodies, not \
+                  that a cutoff drifted. Either those five were legitimately \
+                  converged (pick a new control) or the detector is broken.",
         }
     }
 
     async fn fire(&self, ctx: &DetectorCtx<'_>) -> Result<FireReport, String> {
         use sovereign_tools::code::dry_report::{
-            build_dry_report, DryInputs, DEFAULT_MIN_LINES, DEFAULT_NEAR_THRESHOLD,
+            build_dry_report, short_hash, DryInputs, DEFAULT_MIN_LINES, DEFAULT_NEAR_THRESHOLD,
         };
         let report = build_dry_report(DryInputs {
             index_path: ctx.index_path,
@@ -605,7 +614,7 @@ impl Detector for BehaviourDetector {
                     file: m.file.clone(),
                     line: m.line_start as i32,
                     locus: m.symbol.clone(),
-                    token: clone.signature.clone(),
+                    token: short_hash(&clone.signature).to_string(),
                     note: format!(
                         "exact clone, {} lines, {} copies",
                         clone.lines,
@@ -623,6 +632,80 @@ impl Detector for BehaviourDetector {
                     locus: m.symbol.clone(),
                     token: format!("near:{:.3}", cluster.min_sim),
                     note: format!("near clone cluster of {}", cluster.members.len()),
+                });
+            }
+        }
+        Ok(FireReport::new(
+            self.id(),
+            sites,
+            self.control(),
+            self.settings_digest(),
+        ))
+    }
+}
+
+// ── 4b. Duplicate intent ─────────────────────────────────────────────────────
+
+pub struct IntentDetector;
+
+#[async_trait::async_trait]
+impl Detector for IntentDetector {
+    fn id(&self) -> DetectorId {
+        DetectorId::Intent
+    }
+
+    fn settings_digest(&self) -> String {
+        super::intent::IntentOptions::default().digest()
+    }
+
+    /// Unlike [`BehaviourDetector`], this one blocks on discriminative terms
+    /// instead of comparing every pair, so it is not the O(n²) that keeps
+    /// behaviour out of the close budget. The measurement replaces this note
+    /// on the first live run.
+    fn cost(&self) -> CostClass {
+        CostClass::Cheap
+    }
+
+    fn control(&self) -> ControlSite {
+        ControlSite {
+            file: "",
+            token: "",
+            why: "Not yet pinned: the intent control is selected from the \
+                  first live run and recorded here, the same way the \
+                  behaviour control was. Until it is, this detector reports \
+                  COULD-NOT-JUDGE by construction rather than pretending to \
+                  a proof it has not got.",
+        }
+    }
+
+    async fn fire(&self, ctx: &DetectorCtx<'_>) -> Result<FireReport, String> {
+        let opts = super::intent::IntentOptions::default();
+        let symbols = super::intent::load_intent_corpus(ctx.index_path, &opts)?;
+        let clusters = super::intent::intent_census(&symbols, &opts);
+
+        let mut sites = Vec::new();
+        for c in &clusters {
+            let token = c.token();
+            let homes = c.members.len();
+            let crates: BTreeSet<&str> = c.members.iter().map(|m| m.krate.as_str()).collect();
+            for m in &c.members {
+                sites.push(Site {
+                    detector: DetectorId::Intent,
+                    file: m.file.clone(),
+                    line: m.line,
+                    locus: if m.qualified_name.is_empty() {
+                        m.file.clone()
+                    } else {
+                        m.qualified_name.clone()
+                    },
+                    token: token.clone(),
+                    note: format!(
+                        "same job as {} other{} across {} crates ({})",
+                        homes - 1,
+                        if homes == 2 { "" } else { "s" },
+                        crates.len(),
+                        c.terms.join(", ")
+                    ),
                 });
             }
         }
@@ -1122,6 +1205,7 @@ pub fn all() -> Vec<Box<dyn Detector>> {
         Box::new(ShapeDetector),
         Box::new(NameDetector),
         Box::new(BehaviourDetector),
+        Box::new(IntentDetector),
         Box::new(ArgLoopDetector),
         Box::new(ProvenanceChannelDetector),
         Box::new(UnownedCellDetector),
@@ -1316,15 +1400,48 @@ mod tests {
         }
     }
 
-    /// The behaviour detector ships without a pinned control on purpose. This
-    /// test records that, so the day someone pins one they also delete this —
-    /// rather than the absence quietly persisting as a pass.
+    /// The behaviour control was pinned 2026-08-31 from the first live full
+    /// run. Its predecessor asserted the OPPOSITE — that no control existed —
+    /// so that the absence could not quietly persist as a pass. This is the
+    /// replacement that test asked for.
     #[test]
-    fn the_behaviour_control_is_declared_unpinned_and_therefore_cannot_pass() {
+    fn the_behaviour_control_is_pinned_and_can_therefore_pass() {
         let c = BehaviourDetector.control();
-        assert!(c.file.is_empty(), "a control was pinned — update this test");
-        let r = FireReport::new(DetectorId::Behaviour, Vec::new(), c, "t");
-        assert_eq!(r.control.verdict(), Verdict::CouldNotJudge);
+        assert!(!c.file.is_empty(), "the behaviour control lost its site");
+        assert!(!c.token.is_empty(), "the behaviour control lost its token");
+
+        // Absent its site the verdict must still be COULD-NOT-JUDGE, never a
+        // silent pass — the property the old test protected.
+        let empty = FireReport::new(DetectorId::Behaviour, Vec::new(), c, "t");
+        assert_eq!(empty.control.verdict(), Verdict::CouldNotJudge);
+
+        // Present, it goes live.
+        let hit = FireReport::new(
+            DetectorId::Behaviour,
+            vec![Site {
+                detector: DetectorId::Behaviour,
+                file: c.file.to_string(),
+                line: 677,
+                locus: "alignment_decision".into(),
+                token: c.token.to_string(),
+                note: String::new(),
+            }],
+            c,
+            "t",
+        );
+        assert_eq!(hit.control.verdict(), Verdict::Passed);
+    }
+
+    /// The token a behaviour site carries must be the spelling the report
+    /// renders, or a control pinned from the report can never match.
+    #[test]
+    fn the_behaviour_token_is_the_rendered_short_hash() {
+        let full = "2e0ac3170ee6aabbccddeeff00112233";
+        assert_eq!(
+            sovereign_tools::code::dry_report::short_hash(full),
+            BehaviourDetector.control().token,
+            "control token must be the 12-char rendered form"
+        );
     }
 
     // ── unowned cells ────────────────────────────────────────────────────────

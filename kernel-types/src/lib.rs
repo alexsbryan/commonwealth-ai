@@ -107,7 +107,7 @@ pub mod wire;
 pub use answer::{Answer, Citation, Draft, PeerAnswer, Refused, Seal, TURN_SUBJECT};
 pub use attribution::Attribution;
 pub use conformance::{
-    Enforceability, Registry, ReqLevel, Requirement, Scenario,
+    AcceptanceScenario, Enforceability, ReqLevel, Requirement, RequirementRegistry,
 };
 pub use custody::{join_custody, Custody};
 pub use hash::ContentHash;

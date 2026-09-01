@@ -61,17 +61,6 @@ pub enum ReqLevel {
 }
 
 impl ReqLevel {
-    /// The wire spelling. Stable — `quality/requirements.toml` carries it.
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            ReqLevel::Must => "must",
-            ReqLevel::Should => "should",
-            ReqLevel::Invariant => "invariant",
-            ReqLevel::Bar => "bar",
-            ReqLevel::OutOfScope => "out-of-scope",
-        }
-    }
-
     /// Does violating this make the build non-conforming? True for `Must`,
     /// `Invariant` and `Bar` — the three the spec grades as obligations.
     pub const fn is_must_class(self) -> bool {
@@ -84,8 +73,9 @@ impl ReqLevel {
 /// The one hand-authored column. It lives in
 /// `quality/requirements-enforceability.toml` rather than in the generated
 /// registry so regenerating from the spec cannot clobber a judgement no parser
-/// could make; the generator asserts the two id sets are equal, so a new
-/// requirement cannot arrive unclassified.
+/// could make. `requirements_registry.rs`'s `assert_every_column_resolves`
+/// asserts the two id sets are EQUAL, so a new requirement cannot arrive
+/// unclassified and a class cannot outlive its requirement.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Enforceability {
@@ -103,17 +93,6 @@ pub enum Enforceability {
 }
 
 impl Enforceability {
-    /// The wire spelling.
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Enforceability::Cli => "cli",
-            Enforceability::Desktop => "desktop",
-            Enforceability::Model => "model",
-            Enforceability::Structural => "structural",
-            Enforceability::Review => "review",
-        }
-    }
-
     /// Can this be settled without model weights? True for everything but
     /// [`Enforceability::Model`] and [`Enforceability::Review`] — which is the
     /// property that makes a fast tier possible at all.
@@ -138,14 +117,15 @@ pub struct Requirement {
     /// The obligation level, resolved from the declaration or — for a bare
     /// declaration — from the section's declared default.
     pub level: ReqLevel,
-    /// The `##` heading it lives under, e.g. `8. D6 — Grounding and epistemic
-    /// integrity`.
-    pub domain: String,
-    /// The `###` heading it lives under, e.g. `8.1 The grounding gate`.
-    pub section: String,
-    /// 1-indexed line of the declaration in `REQUIREMENTS.md`.
+    /// 1-indexed line of the declaration in `REQUIREMENTS.md`, which is
+    /// tracked — so the domain and section headings are reachable from here and
+    /// are deliberately NOT copied into the registry.
     pub spec_line: u32,
     /// The requirement's own words, up to but excluding its `⟨why⟩` block.
+    ///
+    /// Carried rather than looked up: a conformance report that says "GR-19
+    /// failed" without the requirement's words is unreadable, and the reporter
+    /// must not re-parse a 180KB specification to render one line.
     pub text: String,
     /// For `MUST, where X is implemented`: the requirement whose implementation
     /// is the antecedent. An unimplemented antecedent resolves the requirement
@@ -169,12 +149,17 @@ impl Requirement {
 
 /// One acceptance scenario from `REQUIREMENTS.md §16 "How a rebuild is judged"`.
 ///
+/// Named apart from the four existing `Scenario` types (`sovereign-mesh`'s
+/// mesh-sim, `bench_cmd/moral`, `voice_eval`, `awareness_cmd`) rather than
+/// colliding with them — AGENTS.md: a name already defined elsewhere is a
+/// convergence decision, not a free choice.
+///
 /// A-1 … A-19 are the suite the specification already wrote. They are not
 /// requirements — they are the functional scenarios that exercise them, each
 /// citing the ids it covers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Scenario {
+pub struct AcceptanceScenario {
     /// `A-1` … `A-19`.
     pub id: String,
     /// The `###` heading, e.g. `16.1 The honesty acceptance suite`.
@@ -189,9 +174,13 @@ pub struct Scenario {
 }
 
 /// The whole registry: one specification, parsed once.
+///
+/// Named apart from the five existing `Registry` types — including
+/// `corpus-engine/xtask/src/env_gate.rs:187`, whose crate also reads this one —
+/// so no reader has to work out which `Registry` is meant.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Registry {
+pub struct RequirementRegistry {
     /// Hex [`ContentHash`](crate::ContentHash) of `REQUIREMENTS.md` at
     /// generation time. A consumer that finds a different hash has a registry
     /// that no longer describes the spec, and must say so rather than render a
@@ -208,10 +197,10 @@ pub struct Registry {
     /// and aliases. Sorted by family then ordinal.
     pub requirements: Vec<Requirement>,
     /// A-1 … A-19, in document order.
-    pub scenarios: Vec<Scenario>,
+    pub scenarios: Vec<AcceptanceScenario>,
 }
 
-impl Registry {
+impl RequirementRegistry {
     /// The requirements that count toward a denominator — 625 of them.
     pub fn in_scope(&self) -> impl Iterator<Item = &Requirement> {
         self.requirements.iter().filter(|r| r.is_in_scope())
@@ -280,14 +269,12 @@ mod tests {
             family: "ST".into(),
             n: 1,
             level,
-            domain: "d".into(),
-            section: "s".into(),
             spec_line: 1,
             text: "t".into(),
             conditional_on: None,
             alias_of: alias.map(String::from),
         };
-        let reg = Registry {
+        let reg = RequirementRegistry {
             spec_hash: "0".into(),
             spec_lines: 1,
             requirements: vec![

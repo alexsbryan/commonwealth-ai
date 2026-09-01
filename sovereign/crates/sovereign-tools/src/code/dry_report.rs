@@ -694,7 +694,13 @@ impl UnionFind {
     }
 }
 
-fn short_hash(h: &str) -> &str {
+/// The rendered form of a signature — 12 hex chars.
+///
+/// Public because `refactor_cmd`'s behaviour control is pinned from the
+/// RENDERED report, so the detector's `Site::token` and this report have to
+/// agree on the spelling. Two truncation rules would mean a control that can
+/// never match (ARCH §10.6).
+pub fn short_hash(h: &str) -> &str {
     &h[..h.len().min(12)]
 }
 

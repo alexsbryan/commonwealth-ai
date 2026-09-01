@@ -296,7 +296,8 @@ class of failure goes untested.
 | local alias survives | `/v1/models` still surfaces `primary`, so an editor pointed at the terminal works |
 | class + binding reported | `/v1/mesh/status` says `node_class: terminal` and names the bound node id |
 | a turn is served | a real completion comes back from the holder |
-| **an embedding is served** | the step that exercises the binding. Chat on a JOINED terminal resolves from the holder's advertised manifest via `provider_for_peer` and never reaches `EntryNodeEndpoint`; embeddings have no such path |
+| **an embedding is served** | exercises the binding directly and unconditionally |
+| chat names the bound node | since 2026-08-31 chat follows the binding too (`locate_named_model`'s `bound_locus_authoritative` gate), so the response's `model` field must name the BOUND holder. Co-located, this step passes either way — see "what it cannot prove" |
 | the encrypted path was used | the resolved endpoint is an iroh bridge on loopback, not the holder's `:9751` |
 
 **Ordering that bites.** The mesh must be founded BEFORE either daemon's first
@@ -312,6 +313,25 @@ a second MACHINE and remain unit-tested until one exists
 contract` journey covers terminal onboarding: a journey is a sequence of CLI
 calls in one hermetic `HOME`, and it cannot stand up the mesh peer the binding
 resolves against.
+
+**It cannot express a LOCALITY PREFERENCE, and that is how F6 shipped.** With
+one holder, "the nearest advertiser" and "the bound node" are the same node, so
+this harness passes whether chat honours the binding or ignores it. F6 —
+measured on RuggedFox 2026-08-31, terminal `f1f2589f…` bound to MAC
+`37f17554…` serving its chat from `peer RuggedFox` at rtt 9ms while MAC sat at
+52ms — was invisible here by construction, and the module doc in
+`entry_endpoint.rs` had already recorded the split and dismissed it on the
+grounds that "both end at the same machine".
+
+The bar that needs a differing deployment: **a terminal bound to X, with Y
+advertising the same model at nearer locality, serves chat from X.** It is
+covered at the unit level
+(`peer_inference::tests::a_terminal_serves_chat_from_its_bound_node_not_the_nearest_peer`,
+plus `joining_the_mesh_does_not_change_where_a_terminals_chat_goes` for the
+§10.6 half). Closing it here needs a SECOND advertising holder on this box with
+the terminal preferring the wrong one — prefer that to a two-machine ceremony,
+because a bar only a second physical machine can run is a bar that will not be
+run.
 
 ## Layer 4 — Live-fleet routing probe (`scripts/mesh-live-probe.py`)
 

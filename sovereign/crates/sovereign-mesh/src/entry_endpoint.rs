@@ -4,16 +4,33 @@
 //! A terminal holds no weights and forwards the work it cannot do to one bound
 //! node.
 //!
-//! **What the binding actually carries — measured 2026-08-31, not assumed.**
-//! EMBEDDINGS always: the daemon's embed fn is the provider, and on a terminal
-//! that provider IS this binding. CHAT only when no peer advertises the
-//! requested name, which is the UN-JOINED case (`peer_inference.rs:1928`).
-//! Once a terminal has joined, `locate_named_model` finds `primary` on the
-//! holder's advertised manifest and routes through `provider_for_peer`, so the
-//! hot chat path never reaches here. Both end at the same machine over the same
-//! transport, which is why "every turn and every embedding" read as true for so
-//! long; they are different code, and the loose phrasing sends the next reader
-//! to the wrong file.
+//! **What the binding carries.** Both chat and embeddings, by default.
+//! EMBEDDINGS always and unconditionally: the daemon's embed fn is the
+//! provider, and on a terminal that provider IS this binding. CHAT unless the
+//! request's OICP envelope says `ShardingPrivacy::MeshAllowed`, which is the
+//! per-request opt-in to mesh-wide routing — `locate_named_model`'s
+//! `bound_locus_authoritative` gate returns `Local` for any node that owns no
+//! weights, and on a terminal `Local` means this binding.
+//!
+//! **This paragraph used to say the opposite, and the way it was wrong is the
+//! part worth keeping.** Until 2026-08-31 it recorded — correctly, as measured
+//! — that chat reached the binding "only when no peer advertises the requested
+//! name, which is the UN-JOINED case", and then accepted the split as harmless
+//! on one sentence: *"Both end at the same machine over the same transport,
+//! which is why 'every turn and every embedding' read as true for so long."*
+//!
+//! That sentence is true with ONE holder and false with two. The two-machine
+//! run falsified it the first time it was tried: terminal `f1f2589f…` bound to
+//! MAC `37f17554…` served its chat from `peer RuggedFox` (rtt 9ms, Near) while
+//! MAC sat at rtt 52ms (Far), and the embedding from the same node seconds
+//! later went to MAC. `scripts/terminal-e2e.sh` is co-located, so Near and
+//! bound are the same node there and the harness structurally could not fail
+//! that bar however many times it ran.
+//!
+//! An assumption that two paths "end up the same place" is a claim about the
+//! DEPLOYMENT, not about the code, and only a deployment that differs can
+//! falsify it. When a doc says "both end at the same machine", ask what
+//! configuration would make that false and whether anything runs it.
 //!
 //! Until 2026-08-31 the bind was an `http://host:9741/v1`
 //! string written into `config.toml`, which ARCH §7.5 forbids for a stable

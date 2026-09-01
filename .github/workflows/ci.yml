@@ -433,23 +433,6 @@ jobs:
       #   SOVEREIGN_LIVE_JOURNEYS=1 sovereign/scripts/cli-journey-verify.sh --tier 2
       - name: CLI journey harness self-test
         run: sovereign/scripts/tests/cli-journey-selftest.sh
-      # `research/clean-room/REQUIREMENTS.md` is 625 requirements, each carrying
-      # the incident that produced it. `quality/requirements.toml` is generated
-      # from it and is what every conformance tag resolves against, so a spec
-      # edited without regenerating leaves 625 line numbers pointing at a
-      # document that no longer exists.
-      #
-      # IT LIVES HERE, IN THE LIVE `test:` JOB, ON PURPOSE. The `gates:` job
-      # below is commented out and its own comment says why: the gates ran in
-      # <1s each and "used to be two jobs paying the setup twice" — they were
-      # never slow, the job setup was. `xtask` is a workspace member this job
-      # has already compiled, so this step is free. A gate that is expensive
-      # gets shelved no matter how good it is, and `test:` is inside `ci-ok`'s
-      # `needs`, which a revived side job would not be.
-      #
-      # Reads two files. Starts no process, loads no model, compiles nothing.
-      - name: Requirement registry still describes the specification
-        run: cargo run -p xtask -- conformance-gate
       # Benches are the only --all-targets class `cargo test` does not build,
       # and bench code rots silently. Incremental against the artifacts the
       # test build just produced, so this is seconds, not a second compile.

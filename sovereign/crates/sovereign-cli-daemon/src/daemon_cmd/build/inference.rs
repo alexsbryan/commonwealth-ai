@@ -136,6 +136,48 @@ pub(crate) fn load_provider(
                             return Err(());
                         }
                     };
+                    // THIS node's identity, stamped on every request the
+                    // terminal sends its entry node. Without it the entry node
+                    // admits a terminal's turns as its own local traffic:
+                    // unrationable, unaccounted, and invisible on
+                    // `/status.inference.peer_requests` — which is why the
+                    // two-machine corroboration ("fire an embedding, watch the
+                    // tally move") could not pass on 2026-08-31.
+                    //
+                    // Read from the PERSISTED identity rather than asked of the
+                    // mesh: `DeferredDaemon::self_node_id()` is async and
+                    // answers `None` until the join handshake completes, and
+                    // this provider is built before that. The persisted file is
+                    // the same source the daemon itself reads a moment later
+                    // (`daemon.rs`'s `load_or_generate_self_node_id`), so both
+                    // agree by construction.
+                    //
+                    // `load_node_id`, NOT `load_or_generate_*`: minting this
+                    // node's identity belongs to the mesh daemon, and one
+                    // decider per name (§10.6). Building an inference provider
+                    // must not be the thing that decides who this node is.
+                    let node_id_hex = match sovereign_mesh::persist::load_node_id(&config.data.dir) {
+                        Ok(Some(id)) => Some(id.to_hex()),
+                        Ok(None) => {
+                            tracing::warn!(
+                                data_dir = %config.data.dir.display(),
+                                "terminal: no persisted node identity yet — forwarding \
+                                 UNSTAMPED, so the entry node will admit these turns as \
+                                 its own local traffic (unrationed, unaccounted). \
+                                 Resolves once this node has joined a mesh."
+                            );
+                            None
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                error = %e,
+                                data_dir = %config.data.dir.display(),
+                                "terminal: could not read the persisted node identity — \
+                                 forwarding UNSTAMPED (see above for what that costs)"
+                            );
+                            None
+                        }
+                    };
                     Arc::new(
                         sovereign_inference::remote::SplitInferenceProvider::resolved(
                             resolver,
@@ -152,6 +194,7 @@ pub(crate) fn load_provider(
                             embed_model_id,
                             config.effective_context_size(),
                             String::new(),
+                            node_id_hex,
                         ),
                     )
                 }

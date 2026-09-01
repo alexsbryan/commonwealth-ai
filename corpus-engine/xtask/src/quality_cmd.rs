@@ -26,8 +26,7 @@
 //! every landing verdict call `svrn code converge status` and gate on its exit.
 
 use crate::{
-    arch_gate, boundary_gate, concept_gate, conformance_gate, docs_gate, env_gate, layer_gate,
-    layout_gate, lock_gate,
+    arch_gate, boundary_gate, concept_gate, docs_gate, env_gate, layer_gate, layout_gate, lock_gate,
 };
 
 /// Whether a gate's verdict may fail this command.
@@ -64,14 +63,6 @@ pub fn run() -> i32 {
             layout_gate::run(&no_args)
         }),
         ("env-gate", Enforcement::Hard, &|| env_gate::run(&no_args)),
-        // Hard, and free: it reads two files and starts nothing. The registry
-        // is generated from research/clean-room/REQUIREMENTS.md and byte-gated
-        // against it, so a spec edited without regenerating is caught here
-        // rather than surfacing later as 625 line numbers pointing at the
-        // wrong document.
-        ("conformance-gate", Enforcement::Hard, &|| {
-            conformance_gate::run(&no_args)
-        }),
         ("concept-gate", Enforcement::Advisory, &|| {
             concept_gate::run(&no_args)
         }),

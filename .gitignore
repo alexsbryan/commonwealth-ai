@@ -112,14 +112,11 @@ research/deep-research/drb/overall-derivation/inputs/perplexity-*.jsonl
 # child (including `harvest/`) while leaving the tree walkable.
 research/clean-room/*
 # ...except the specification itself. `quality/requirements.toml` is GENERATED
-# from this file and byte-gated against its blake3 hash, and `cargo xtask
-# conformance-gate` runs in CI — so an untracked spec makes that gate a
-# local-only check nobody else can reproduce, and leaves no peer able to
-# regenerate the registry. The other clean-room documents (PRIOR_ART.md at
-# 557KB, the BOUNDARIES/DESIGN drafts) stay ignored: they are working notes,
-# this one is a contract. Negation targets the FILE because the directory
-# above is excluded — a directory negation would be dead (same trap as the
-# step3 failure corpus above).
+# from this file and byte-gated against its blake3 hash by a test that runs in
+# CI, so an untracked spec makes that gate a local-only check nobody else can
+# reproduce and leaves no peer able to regenerate. The other clean-room
+# documents (PRIOR_ART.md at 557KB, the BOUNDARIES/DESIGN drafts) stay
+# ignored: they are working notes, this one is a contract.
 !research/clean-room/REQUIREMENTS.md
 
 # The DRB reproduction fixture: 69.7 MB, and re-downloadable from the pinned

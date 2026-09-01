@@ -1819,7 +1819,11 @@ impl MeshInferenceProvider {
     /// - `Unknown`: no node in the mesh advertises the id. Caller
     ///   surfaces this as a clear error rather than falling back to
     ///   a different model.
-    async fn locate_named_model(&self, model_id: &str) -> NamedModelLocation {
+    async fn locate_named_model(
+        &self,
+        model_id: &str,
+        consent: MeshRoutingConsent,
+    ) -> NamedModelLocation {
         let local_has = self
             .self_manifest
             .load()
@@ -1873,6 +1877,75 @@ impl MeshInferenceProvider {
                 );
                 return NamedModelLocation::Lender(lender);
             }
+        }
+
+        // ── F6: a node that owns no weights routes to the node it was BOUND
+        // to, not to whichever peer is nearest ─────────────────────────────
+        //
+        // THE DEFECT this closes. Two subsystems answered "where does this
+        // turn go" differently, and the operator was told only one answer.
+        // Embeddings resolve through `EntryNodeEndpoint` → the bound node,
+        // always. Chat resolved here, against advertised manifests, and the
+        // arm below (`local_has == false`, some peer advertises it) sent it to
+        // the nearest advertiser. `/v1/mesh/status` reported `entry_node: <id>`
+        // and `setup --terminal` promised "the bind is <entry>'s mesh
+        // identity" the whole time.
+        //
+        // Measured on RuggedFox 2026-08-31, reproduced twice, deterministic:
+        // terminal `f1f2589f…` bound to MAC `37f17554…` served its chat from
+        // `peer RuggedFox` (rtt 9ms, Near) while MAC sat at rtt 52ms (Far) —
+        // and the EMBEDDING from the same node, seconds apart, went to MAC.
+        // Two deciders observed disagreeing inside one session.
+        //
+        // Why it survived so long: `entry_endpoint.rs`'s module doc had
+        // already FOUND the split and accepted it on one sentence — "both end
+        // at the same machine over the same transport". That is true with one
+        // holder and false with two, and `scripts/terminal-e2e.sh` is
+        // co-located, so the harness structurally could not falsify it. An
+        // assumption that two paths "end up the same place" is a claim about
+        // the DEPLOYMENT, not the code.
+        //
+        // The rule (option C, operator's call 2026-08-31): the binding is
+        // authoritative unless the request explicitly opts into mesh-wide
+        // routing. `ShardingPrivacy::MeshAllowed` already means exactly "you
+        // may distribute this beyond my trusted locus", so consent reuses that
+        // vocabulary rather than minting a knob.
+        //
+        // Placed HERE, above `gather_peer_candidates`, for three reasons:
+        // it is a name-RESOLUTION fact and this is the resolver (§10.6); it
+        // skips the peer probes entirely on the path that can never use them;
+        // and it leaves `resolve_named_dispatch`'s budget and privacy arms to
+        // run on top of the rewritten value unchanged — which is what keeps
+        // `local_only` on an off-box forwarder refusing rather than silently
+        // becoming a network hop.
+        //
+        // `serving_locus() != OwnWeights` is deliberately the SAME predicate
+        // the un-joined arm below uses. One test for "this node holds
+        // nothing", not two that can drift apart.
+        //
+        // **A GUEST LINK STILL WINS, and that is a named exception rather than
+        // an oversight.** The `lender_for` check sits ABOVE this gate, so a
+        // terminal with a live `svrn mesh use` link sends that model id to the
+        // lender without an `mesh_allowed` envelope. Both are explicit
+        // operator acts; the link is the later and narrower one (it names a
+        // model id, the binding names a node), so explicit-and-specific beats
+        // explicit-and-general. It does mean a terminal's turn can leave its
+        // bound node without per-request consent — reachable only by having
+        // run `svrn mesh use`, and visible because the lender arm logs at INFO
+        // for exactly this reason. If that trade is wrong, the fix is to move
+        // the guest check below this gate, not to widen this condition.
+        if consent == MeshRoutingConsent::Withheld
+            && self.local.serving_locus() != ServingLocus::OwnWeights
+        {
+            tracing::info!(
+                model = %model_id,
+                locus = ?self.local.serving_locus(),
+                gate = "bound_locus_authoritative",
+                "mesh-inference: this node owns no weights and the request did not \
+                 opt into mesh-wide routing — the turn goes to the BOUND target, \
+                 not to the nearest advertiser"
+            );
+            return NamedModelLocation::Local;
         }
 
         // First pass — honour the manifest cache. Normal traffic
@@ -2372,7 +2445,16 @@ impl MeshInferenceProvider {
             DecisionPath::NamedModel,
             Self::request_facts(request),
         );
-        let located = self.locate_named_model(model_id).await;
+        // Read the envelope ONCE for the consent question; `privacy_permits_peer`
+        // below answers a DIFFERENT question from the same field. See
+        // `MeshRoutingConsent` for why an absent envelope withholds consent
+        // here while it permits a peer there.
+        let located = self
+            .locate_named_model(
+                model_id,
+                MeshRoutingConsent::from_envelope(request.oicp.as_ref()),
+            )
+            .await;
 
         // THE NAMED PATH'S ONLY HOP BOUND. Named dispatch never reaches
         // `offload_verdict` — it is name resolution, not the OICP scorer —
@@ -2962,6 +3044,46 @@ enum RouteDecision {
     /// Local fallback — total-counter guard (no per-model accounting
     /// because the request didn't name a model).
     LocalFallback { total: LocalTotalGuard },
+}
+
+/// Did this request EXPLICITLY consent to leaving its bound locus?
+///
+/// Distinct from `resolve_named_dispatch`'s `privacy_permits_peer`, and the
+/// difference is the whole point — so they are two names, not one (§10.6 cuts
+/// both ways: one decider per QUESTION, and these are two questions).
+///
+/// - `privacy_permits_peer` asks "may this request cross a trust boundary?"
+///   An absent envelope permits it, because forcing local would 503 every
+///   thin-client request for a peer-only model.
+/// - This asks "did the operator say this turn may leave the node they bound?"
+///   An absent envelope does NOT grant that. A terminal's binding is the
+///   operator's standing answer to "where does my inference happen"; silence
+///   from a client does not override it.
+///
+/// On a node that owns weights this changes nothing: `Withheld` still routes
+/// to a peer, because such a node has no binding to be pinned to and its
+/// `Local` means its own slots. It only bites where `Local` means "the node
+/// the operator bound".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MeshRoutingConsent {
+    /// The envelope said `mesh_allowed` — route mesh-wide.
+    Granted,
+    /// No envelope, or one that did not say so.
+    Withheld,
+}
+
+impl MeshRoutingConsent {
+    /// The ONE reading of an envelope for this question.
+    fn from_envelope(oicp: Option<&sovereign_contracts::oicp::InferenceRequirements>) -> Self {
+        match oicp {
+            Some(o)
+                if o.sharding() == sovereign_contracts::oicp::ShardingPrivacy::MeshAllowed =>
+            {
+                Self::Granted
+            }
+            _ => Self::Withheld,
+        }
+    }
 }
 
 /// Returned by [`MeshInferenceProvider::locate_named_model`]; see
@@ -4556,13 +4678,172 @@ mod tests {
     async fn a_weightless_node_forwards_a_name_nobody_here_advertises() {
         for locus in [ServingLocus::ForwardsOnBox, ServingLocus::ForwardsOffBox] {
             let mip = forwarder(locus);
-            match mip.locate_named_model("primary").await {
+            match mip.locate_named_model("primary", MeshRoutingConsent::Withheld)
+                .await {
                 NamedModelLocation::Local => {}
                 other => panic!(
                     "a node holding no weights must hand '{}' to its forwarder; got {other:?}",
                     "primary"
                 ),
             }
+        }
+    }
+
+    /// A weightless node whose peer DOES advertise the name — the shape
+    /// `forwarder()` cannot express, because `NoPeers` is the un-joined case.
+    ///
+    /// `rtt_ms: 1` is the point: this peer is as Near as a peer gets, which is
+    /// precisely the configuration that beat the bound node on RuggedFox.
+    async fn terminal_with_an_advertising_peer(locus: ServingLocus) -> MeshInferenceProvider {
+        let peer = dead_peer();
+        let mip = MeshInferenceProvider::with_peer_source(
+            Arc::new(Forwarder(locus)),
+            Arc::new(OnePeer(peer.clone())),
+        );
+        mip.peer_cache.write().await.insert(
+            peer.node_id.to_hex(),
+            CachedManifest {
+                manifest: peer_manifest_for("primary"),
+                fetched_at: Instant::now(),
+                rtt_ms: 1,
+            },
+        );
+        mip
+    }
+
+    /// **F6, and the bar a co-located harness structurally cannot run.**
+    ///
+    /// A terminal bound to node X, with node Y advertising the same model at
+    /// nearer locality, must serve chat from X. FAILS on HEAD before the
+    /// `bound_locus_authoritative` gate: `local_has` is false for a node that
+    /// advertises nothing, so `(false, Some(peer))` fell straight through to
+    /// `Peer(.., SoleHolder)` and the turn left for the nearest advertiser.
+    ///
+    /// Measured on RuggedFox 2026-08-31: `served_by=peer:RuggedFox` on a
+    /// terminal bound to MAC, while the embedding from the same node in the
+    /// same session went to MAC.
+    #[tokio::test]
+    async fn a_terminal_serves_chat_from_its_bound_node_not_the_nearest_peer() {
+        for locus in [ServingLocus::ForwardsOnBox, ServingLocus::ForwardsOffBox] {
+            let mip = terminal_with_an_advertising_peer(locus).await;
+            match mip
+                .locate_named_model("primary", MeshRoutingConsent::Withheld)
+                .await
+            {
+                NamedModelLocation::Local => {}
+                other => panic!(
+                    "a bound weightless node ({locus:?}) must route chat to its BOUND \
+                     target even when a nearer peer advertises the name; got {other:?}"
+                ),
+            }
+        }
+    }
+
+    /// The consent half of option C: `mesh_allowed` DOES let the turn leave.
+    ///
+    /// Without this the fix above is indistinguishable from option A, and the
+    /// gate would be a compulsion rather than a default. The envelope already
+    /// means "you may distribute this beyond my trusted locus", so it is the
+    /// vocabulary rather than a new knob.
+    #[tokio::test]
+    async fn mesh_allowed_lets_a_terminals_turn_leave_its_bound_node() {
+        let mip = terminal_with_an_advertising_peer(ServingLocus::ForwardsOffBox).await;
+        match mip
+            .locate_named_model("primary", MeshRoutingConsent::Granted)
+            .await
+        {
+            NamedModelLocation::Peer(..) => {}
+            other => panic!(
+                "an explicit mesh_allowed envelope must permit mesh-wide routing, \
+                 or the binding is a compulsion and not a default; got {other:?}"
+            ),
+        }
+    }
+
+    /// **The §10.6 bar: joining the mesh must not move a terminal's chat.**
+    ///
+    /// This is the one that names what was actually wrong. The un-joined path
+    /// (`NoPeers`) forwarded to the binding and the joined path routed to a
+    /// peer, so the same node answered "where does my chat go" differently
+    /// depending on gossip state — while its embeddings answered the same way
+    /// throughout. Two deciders for one question.
+    ///
+    /// Asserted as an EQUALITY between the two states rather than two separate
+    /// `Local` checks, so a future change that moves both together still
+    /// passes and a change that separates them cannot.
+    #[tokio::test]
+    async fn joining_the_mesh_does_not_change_where_a_terminals_chat_goes() {
+        for locus in [ServingLocus::ForwardsOnBox, ServingLocus::ForwardsOffBox] {
+            let un_joined = forwarder(locus)
+                .locate_named_model("primary", MeshRoutingConsent::Withheld)
+                .await;
+            let joined = terminal_with_an_advertising_peer(locus)
+                .await
+                .locate_named_model("primary", MeshRoutingConsent::Withheld)
+                .await;
+            assert!(
+                matches!(un_joined, NamedModelLocation::Local)
+                    && matches!(joined, NamedModelLocation::Local),
+                "a terminal ({locus:?}) must resolve chat the same way before and \
+                 after it joins; un-joined={un_joined:?} joined={joined:?}"
+            );
+        }
+    }
+
+    /// `local_only` on a bound terminal still REFUSES — and now says why more
+    /// precisely.
+    ///
+    /// The gate rewrote this path's `located` from `Peer` to `Local`, so the
+    /// refusal moves from the `privacy_local_only` arm to the
+    /// `forwarder_cannot_serve_local_only` arm. Both are 503; the second is
+    /// the truer reason (nothing runs here, so there is no second way to
+    /// honour the envelope) and its `refusal()` names `mesh_allowed` as the
+    /// one thing that works.
+    ///
+    /// **Deliberately NOT liberalised.** Option C notes that a terminal's
+    /// bound node is its operator-chosen locus, so `local_only` could be
+    /// honoured by routing there. That turns a privacy refusal into an
+    /// off-box network hop and needs `ShardingPrivacy` semantics written down
+    /// for a node whose "local" is another machine — a separate change, not a
+    /// side effect of a routing fix.
+    #[tokio::test]
+    async fn local_only_on_a_bound_terminal_still_refuses_with_the_forwarder_reason() {
+        let mip = terminal_with_an_advertising_peer(ServingLocus::ForwardsOffBox).await;
+        let req = CompletionRequest {
+            model_id: Some("primary".to_string()),
+            ..CompletionRequest::new("hi").with_oicp(InferenceRequirements::new())
+        };
+        match mip.resolve_named_dispatch(&req, "primary").await.located {
+            NamedModelLocation::Unknown(NamedUnknownReason::ForwarderCannotServeLocalOnly) => {}
+            other => panic!(
+                "local_only on a bound terminal must refuse, and for the forwarder \
+                 reason rather than the peer-privacy one; got {other:?}"
+            ),
+        }
+    }
+
+    /// The consent path is still privacy-gated end to end.
+    ///
+    /// `mesh_allowed` grants BOTH questions at once — it is the same field —
+    /// so this pins that granting consent does not accidentally route a turn
+    /// the budget arm should have stopped. A peer route survives the full
+    /// `resolve_named_dispatch` match only when the envelope says so.
+    #[tokio::test]
+    async fn a_consenting_terminal_reaches_the_peer_through_the_full_dispatch() {
+        let mip = terminal_with_an_advertising_peer(ServingLocus::ForwardsOffBox).await;
+        let req = CompletionRequest {
+            model_id: Some("primary".to_string()),
+            ..CompletionRequest::new("hi").with_oicp(
+                InferenceRequirements::new()
+                    .with_sharding(sovereign_contracts::oicp::ShardingPrivacy::MeshAllowed),
+            )
+        };
+        match mip.resolve_named_dispatch(&req, "primary").await.located {
+            NamedModelLocation::Peer(..) => {}
+            other => panic!(
+                "mesh_allowed must survive the budget and privacy arms and reach \
+                 the peer; got {other:?}"
+            ),
         }
     }
 
@@ -4579,7 +4860,8 @@ mod tests {
             saw_model: Arc::new(std::sync::Mutex::new(None)),
         });
         let mip = MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers));
-        match mip.locate_named_model("not-a-real-model").await {
+        match mip.locate_named_model("not-a-real-model", MeshRoutingConsent::Withheld)
+            .await {
             NamedModelLocation::Unknown(NamedUnknownReason::NotAdvertised) => {}
             other => panic!("a holder must still refuse an unplaceable name; got {other:?}"),
         }
@@ -4647,7 +4929,8 @@ mod tests {
     #[tokio::test]
     async fn a_load_balanced_peer_route_remembers_we_hold_the_model_too() {
         let (mip, _) = mip_with_peer("shared-model", "shared-model", true).await;
-        match mip.locate_named_model("shared-model").await {
+        match mip.locate_named_model("shared-model", MeshRoutingConsent::Withheld)
+            .await {
             NamedModelLocation::Peer(_, _, LocalAlternative::LocalHasIt) => {}
             other => panic!(
                 "both nodes advertise this id and we are busier, so the peer should \
@@ -4659,7 +4942,8 @@ mod tests {
     #[tokio::test]
     async fn a_sole_holder_peer_route_says_so() {
         let (mip, _) = mip_with_peer("something-else", "peer-only", false).await;
-        match mip.locate_named_model("peer-only").await {
+        match mip.locate_named_model("peer-only", MeshRoutingConsent::Withheld)
+            .await {
             NamedModelLocation::Peer(_, _, LocalAlternative::SoleHolder) => {}
             other => panic!("only the peer advertises this id; got {other:?}"),
         }
@@ -4688,7 +4972,8 @@ mod tests {
             mip.yield_backoff.secs_remaining("DeadPeer").is_some(),
             "the refusal must be on record, or this test passes for the wrong reason"
         );
-        match mip.locate_named_model("peer-only").await {
+        match mip.locate_named_model("peer-only", MeshRoutingConsent::Withheld)
+            .await {
             NamedModelLocation::Unknown(_) => {}
             other => panic!(
                 "the only advertiser is inside its own yielded_to_local window, so the \

@@ -1587,6 +1587,27 @@ impl SplitInferenceProvider {
     /// says. A terminal always passes [`ServingLocus::ForwardsOffBox`].
     ///
     /// [`ServingLocus::ForwardsOffBox`]: sovereign_contracts::traits::ServingLocus::ForwardsOffBox
+    /// `node_id_hex` is THIS node's mesh identity, stamped as `X-Node-Id` on
+    /// every request both slots send. Without it the entry node admits a
+    /// terminal's traffic as its OWN LOCAL traffic, with three consequences:
+    /// it cannot ration the terminal at all (the ceiling, the foreground yield
+    /// and the contribution pause are all keyed on that header), the
+    /// terminal's usage never appears on the entry node's
+    /// `/status.inference.peer_requests` so a fleet cannot see what its
+    /// weightless nodes cost, and the obvious two-machine corroboration —
+    /// fire an embedding on the terminal, watch the entry node's tally move —
+    /// cannot pass. Measured 2026-08-31: RuggedFox's embeddings reached MAC
+    /// and left no trace there beyond the terminal's own log line.
+    ///
+    /// `None` is honest rather than defaulted (§18.3): the caller could not
+    /// determine this node's identity, the request goes out unstamped, and the
+    /// caller logs it. Do not synthesise a placeholder — `parse_x_node_id`
+    /// buckets an unparseable value under the zero node and still gates it,
+    /// so a fake id would ration every terminal in the fleet as one peer.
+    ///
+    /// Safe for a terminal specifically because both slots are built
+    /// `waiting_out_sheds()`: being newly rationable cannot strand a node
+    /// whose far end is the only holder there is.
     pub fn resolved(
         resolver: std::sync::Arc<dyn EndpointResolver>,
         locus: sovereign_contracts::traits::ServingLocus,
@@ -1594,11 +1615,20 @@ impl SplitInferenceProvider {
         embed_model_id: String,
         context_size: u32,
         embed_query_instruction: String,
+        node_id_hex: Option<String>,
     ) -> Self {
+        // One helper for both slots, so a future third slot cannot acquire the
+        // stamp on one path and forget it on the other (§10.6).
+        fn stamp(p: RemoteApiProvider, node_id_hex: &Option<String>) -> RemoteApiProvider {
+            match node_id_hex {
+                Some(hex) => p.with_node_id(hex.clone()),
+                None => p,
+            }
+        }
         // Both slots wait out a shed for the reason given in `new_with_bearer`:
         // this provider owns no weights, so the node on the far end is the only
         // holder there is and there is nowhere to route a refusal.
-        let chat = std::sync::Arc::new(
+        let chat = std::sync::Arc::new(stamp(
             RemoteApiProvider::dynamic(
                 std::sync::Arc::clone(&resolver),
                 None,
@@ -1606,12 +1636,14 @@ impl SplitInferenceProvider {
                 context_size,
             )
             .waiting_out_sheds(),
-        );
-        let embed = std::sync::Arc::new(
+            &node_id_hex,
+        ));
+        let embed = std::sync::Arc::new(stamp(
             RemoteApiProvider::dynamic(resolver, None, &embed_model_id, context_size)
                 .with_query_instruction(embed_query_instruction)
                 .waiting_out_sheds(),
-        );
+            &node_id_hex,
+        ));
         Self {
             chat,
             embed,
@@ -2668,6 +2700,104 @@ mod tests {
         assert!(
             head.contains("x-node-id: 00c0ffee"),
             "the chat completion must carry the node id; head was:\n{head}"
+        );
+    }
+
+    /// A resolver pointed at a fixed base — the mock stand-in for
+    /// `EntryNodeEndpoint`, which resolves a bound node's identity through the
+    /// mesh on every call.
+    #[derive(Debug)]
+    struct FixedResolver(String);
+
+    #[async_trait::async_trait]
+    impl EndpointResolver for FixedResolver {
+        async fn base_url(&self) -> Option<String> {
+            Some(self.0.clone())
+        }
+        fn describe(&self) -> String {
+            "test-binding".to_string()
+        }
+    }
+
+    fn terminal_provider(port: u16, node_id: Option<String>) -> SplitInferenceProvider {
+        SplitInferenceProvider::resolved(
+            std::sync::Arc::new(FixedResolver(format!("http://127.0.0.1:{port}/v1"))),
+            sovereign_contracts::traits::ServingLocus::ForwardsOffBox,
+            "primary".to_string(),
+            "embed-model".to_string(),
+            8192,
+            String::new(),
+            node_id,
+        )
+    }
+
+    /// **A terminal identifies itself to its entry node — on BOTH slots.**
+    ///
+    /// `with_node_id` had exactly one call site in the tree
+    /// (`provider_for_peer`), and `SplitInferenceProvider::resolved` — the
+    /// terminal's own provider — never called it. So every request a terminal
+    /// sent its entry node arrived unstamped and was admitted as the entry
+    /// node's OWN LOCAL traffic: unrationable (the ceiling, the foreground
+    /// yield and the contribution pause are all keyed on the header) and
+    /// unaccounted (invisible on `/status.inference.peer_requests`).
+    ///
+    /// Measured 2026-08-31: RuggedFox's embeddings reached MAC and left no
+    /// trace there beyond the terminal's own log line, which is why the
+    /// obvious two-machine corroboration could not pass.
+    ///
+    /// Both slots asserted in ONE test because they are one decision. The
+    /// embed slot is the one that matters most here — a terminal's ingest is
+    /// embeddings, so a chat-only stamp would leave the bulk of its cost
+    /// invisible.
+    #[tokio::test]
+    async fn a_terminal_stamps_its_identity_on_chat_and_embeddings_alike() {
+        let daemon = MockDaemon::serving(vec![
+            http_ok(
+                "application/json",
+                r#"{"choices":[{"message":{"content":"hi"},"finish_reason":"stop"}]}"#,
+            ),
+            http_ok("application/json", r#"{"data":[{"embedding":[0.5]}]}"#),
+        ]);
+        let provider = terminal_provider(daemon.port, Some("f1f2589f".to_string()));
+
+        let _ = provider.complete(&a_request()).await;
+        let _ = provider.embed("some text").await;
+
+        let heads = daemon.request_heads();
+        assert_eq!(heads.len(), 2, "both slots must have dialled the entry node");
+        for (slot, head) in ["chat", "embed"].iter().zip(heads.iter()) {
+            assert!(
+                head.to_ascii_lowercase().contains("x-node-id: f1f2589f"),
+                "the {slot} slot must identify this node to its entry node, or the \
+                 entry node admits the turn as its own local traffic; head was:\n{head}"
+            );
+        }
+    }
+
+    /// The control, and the reason the test above is a gate rather than a
+    /// tautology: `None` really does send nothing.
+    ///
+    /// `None` is the honest "this node's identity is unknown" — a terminal
+    /// booting before it has ever joined a mesh has no persisted node id yet.
+    /// Synthesising a placeholder instead would be worse than unstamped:
+    /// `parse_x_node_id` buckets an unparseable value under the zero node and
+    /// STILL gates it, so every terminal in a fleet would ration as one peer.
+    #[tokio::test]
+    async fn a_terminal_that_cannot_name_itself_sends_no_identity() {
+        let daemon = MockDaemon::serving(vec![http_ok(
+            "application/json",
+            r#"{"choices":[{"message":{"content":"hi"},"finish_reason":"stop"}]}"#,
+        )]);
+
+        let _ = terminal_provider(daemon.port, None)
+            .complete(&a_request())
+            .await;
+
+        let head = daemon.request_heads().remove(0).to_ascii_lowercase();
+        assert!(
+            !head.contains("x-node-id"),
+            "an unknown identity must be reported as absent, never defaulted; \
+             head was:\n{head}"
         );
     }
 
