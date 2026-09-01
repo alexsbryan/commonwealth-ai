@@ -32,6 +32,10 @@ gym/comaintainer/PREREG_arch_probes_20260817.md are cleared (§18.5 — one
 run is not a measurement).
 
   scripts/co-arch.py <sha>          audit one commit (invoked by co-sweep.sh)
+  scripts/co-arch.py --staged [-m MSG]
+                                    gate only, on the INDEX: what would fire on
+                                    the commit about to be made. No model. The
+                                    engine behind .claude/hooks/commit-smells.py
   scripts/co-arch.py --self-test    offline, model-free: exit 0 behaved / 4 not
   scripts/co-arch.py --self-test-live  planted-B + planted-A through the
                                     daemon; exit 5 = engine unusable, which
@@ -155,15 +159,23 @@ def load_profile(path=None) -> dict:
         })
     deciders = []
     for d in raw.get("decider", []):
-        if d.get("kind") != "count":
+        kind = d.get("kind")
+        if kind == "count":
+            deciders.append({
+                "id": d["id"], "sec": d["anchor"], "kind": "count",
+                "rx": _compile_all([d["pattern"]], f"decider {d['id']}")[0],
+                "max": int(d.get("max", 0)), "per": d.get("per", "file"),
+                "message": d.get("message", "matches"),
+            })
+        elif kind == "message_symbols":
+            deciders.append({
+                "id": d["id"], "sec": d["anchor"], "kind": "message_symbols",
+                "max_symbols": int(d.get("max_symbols", 12)),
+                "message": d.get("message", "named in the message, absent from the tree"),
+            })
+        else:
             raise ProfileError(f"decider {d.get('id', '?')}: unknown kind "
-                               f"{d.get('kind')!r} (known: count)")
-        deciders.append({
-            "id": d["id"], "sec": d["anchor"], "kind": "count",
-            "rx": _compile_all([d["pattern"]], f"decider {d['id']}")[0],
-            "max": int(d.get("max", 0)), "per": d.get("per", "file"),
-            "message": d.get("message", "matches"),
-        })
+                               f"{kind!r} (known: count, message_symbols)")
     ids = [r["id"] for r in rules] + [d["id"] for d in deciders]
     if len(ids) != len(set(ids)):
         raise ProfileError(f"duplicate rule ids in {path}: {ids}")
@@ -200,9 +212,70 @@ def gate_rule(rule: dict, added, files) -> list[str]:
     return hits
 
 
-def run_decider(dec: dict, added, files) -> tuple:
+# A backticked token in a commit message that has the SHAPE of a code
+# symbol. CLI verbs (`mesh join`), files (`AGENTS.md`), flags and TOML
+# fragments are backticked in this repo's messages too (measured over the
+# last 8 commits, 2026-09-01) and none of those is a claim about code, so
+# the shapes are deliberately narrow: a `::` path, CamelCase with two humps,
+# snake_case with an underscore, SCREAMING_CASE, a call `f()` or macro `m!`.
+_TICK = re.compile(r"`([^`\n]{2,80})`")
+_SYMBOL_SHAPES = [
+    re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_<>]*)+(?:\(\))?!?$"),
+    re.compile(r"^[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+$"),
+    re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+(?:\(\))?!?$"),
+    re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$"),
+]
+
+
+def symbol_needles(msg: str) -> list[tuple[str, str]]:
+    """-> [(as written, grep needle)] for the code symbols a message names.
+    The needle is the last path segment, bare of generics, `()` and `!`."""
+    out: list[tuple[str, str]] = []
+    for tok in _TICK.findall(msg or ""):
+        tok = tok.strip()
+        if not any(rx.match(tok) for rx in _SYMBOL_SHAPES):
+            continue
+        needle = re.sub(r"<[^>]*>", "", tok).rstrip("!").removesuffix("()")
+        needle = needle.split("::")[-1]
+        if len(needle) >= 3 and (tok, needle) not in out:
+            out.append((tok, needle))
+    return out
+
+
+def _in_tree(needle: str, tree: str):
+    """True/False = found/absent in `tree` (a ref, or "--cached" for the
+    index); None = git could not answer (no such ref), which the caller
+    treats as absent-but-unproven rather than as found."""
+    args = ["grep", "-q", "-w", "-F", "-e", needle]
+    args += ["--cached"] if tree == "--cached" else [tree]
+    rc = _git_rc(*args)
+    return {0: True, 1: False}.get(rc)
+
+
+def _decide_message_symbols(dec: dict, files: dict, msg: str) -> tuple:
+    """ARCH SS11.1, cite-don't-recall, at the one place code can check it: a
+    symbol the message names in backticks must exist in the tree the commit
+    produces OR the tree it started from (a removed or renamed name is a
+    legitimate thing to cite). Absent from both, it was recalled, not cited.
+    `files["trees"]` = (after, before); collect()/collect_staged() set it."""
+    trees = files.get("trees")
+    if not trees:
+        return "C", ["no tree refs supplied; message symbols not checked"]
+    after, before = trees
+    cites = []
+    for tok, needle in symbol_needles(msg)[: dec["max_symbols"]]:
+        if _in_tree(needle, after) or _in_tree(needle, before):
+            continue
+        cites.append(f"message names `{tok}` — {dec['message']}")
+    return ("B", cites) if cites else ("A", [])
+
+
+def run_decider(dec: dict, added, files, msg: str = "") -> tuple:
     """Code decides; the model is never consulted (ARCH SS7.6). Counting is
-    arithmetic, and a model asked to count gives a worse answer slower."""
+    arithmetic, and a model asked to count gives a worse answer slower.
+    `msg` is only read by message-shaped deciders; line-shaped ones ignore it."""
+    if dec["kind"] == "message_symbols":
+        return _decide_message_symbols(dec, files, msg)
     groups: dict = {}
     for path, line in added:
         if dec["rx"].search(line):
@@ -224,6 +297,30 @@ def _git(*args: str) -> str:
     return r.stdout
 
 
+def _git_rc(*args: str) -> int:
+    return subprocess.run(["git", "-C", str(REPO), *args],
+                          capture_output=True, text=True).returncode
+
+
+def _added_from_diff(raw: str) -> list[tuple[str, str]]:
+    """(path, line) for every added line in a unified diff, the one parse
+    both the commit and the staged collectors use."""
+    added: list[tuple[str, str]] = []
+    path = "?"
+    for ln in raw.splitlines():
+        if ln.startswith("diff --git"):
+            path = ln.split(" b/")[-1].strip()
+        elif ln.startswith("+") and not ln.startswith("+++"):
+            added.append((path, ln[1:]))
+    return added
+
+
+def _files_from_status(status: str) -> dict:
+    rows = [l for l in status.splitlines() if l.strip()]
+    return {"added_files": [l.split("\t")[-1] for l in rows if l.startswith("A")],
+            "all_files": [l.split("\t")[-1] for l in rows]}
+
+
 def collect(sha: str, globs=None) -> tuple[list[tuple[str, str]], dict, str]:
     """-> (added_lines, files, commit_message).
 
@@ -232,19 +329,46 @@ def collect(sha: str, globs=None) -> tuple[list[tuple[str, str]], dict, str]:
     matches by build_bundle(), after gating."""
     raw = _git("show", "--format=", "--no-color", sha, "--",
                *(globs or ["*"]))
-    added: list[tuple[str, str]] = []
-    path = "?"
-    for ln in raw.splitlines():
-        if ln.startswith("diff --git"):
-            path = ln.split(" b/")[-1].strip()
-        elif ln.startswith("+") and not ln.startswith("+++"):
-            added.append((path, ln[1:]))
+    added = _added_from_diff(raw)
     status = _git("diff-tree", "-r", "--no-commit-id", "--name-status", sha)
-    files = {"added_files": [l.split("\t")[-1] for l in status.splitlines()
-                            if l.startswith("A")],
-             "all_files": [l.split("\t")[-1] for l in status.splitlines() if l.strip()]}
+    files = _files_from_status(status)
+    files["trees"] = (sha, sha + "^")
     msg = _git("log", "-1", "--format=%s%n%n%b", sha).strip()
     return added, files, msg
+
+
+def collect_staged(globs=None) -> tuple[list[tuple[str, str]], dict]:
+    """-> (added_lines, files) for the INDEX: what `git commit` would record
+    right now. Honours GIT_INDEX_FILE, so a caller can replay a pending
+    `git add` into a temporary index first and audit THAT (the commit-smells
+    hook does, because `git add X && git commit` is one Bash call and the
+    real index has not seen X when the hook runs)."""
+    raw = _git("diff", "--cached", "--no-color", "--", *(globs or ["*"]))
+    files = _files_from_status(_git("diff", "--cached", "--name-status"))
+    files["trees"] = ("--cached", "HEAD")
+    return _added_from_diff(raw), files
+
+
+def findings(added, files, msg: str, prof: dict) -> list[dict]:
+    """The model-free layer's answer for one diff, in reading order: code-
+    decided B verdicts, then the gated questions with their sites. This is
+    what --staged prints and what the commit-smells hook hands the agent;
+    the nightly path (rows_for) is the same gate with a model as judge."""
+    out: list[dict] = []
+    for d in prof["deciders"]:
+        v, cites = run_decider(d, added, files, msg)
+        if v == "B":
+            out.append({"id": d["id"], "sec": d["sec"], "kind": "decided",
+                        "text": d["message"], "cites": cites})
+        elif v == "C":
+            out.append({"id": d["id"], "sec": d["sec"], "kind": "unjudged",
+                        "text": "; ".join(cites), "cites": []})
+    for r in prof["rules"]:
+        cites = gate_rule(r, added, files)
+        if cites:
+            out.append({"id": r["id"], "sec": r["sec"], "kind": "question",
+                        "text": r["q"], "cites": cites})
+    return out
 
 
 def build_bundle(added, files, fired, msg: str, profile: dict = None) -> str:
@@ -410,7 +534,7 @@ def rows_for(sha: str, added, files, msg, engine_on: bool,
     rows: list[dict] = []
 
     for d in profile["deciders"]:                     # model-free, always
-        verdict, cites = run_decider(d, added, files)
+        verdict, cites = run_decider(d, added, files, msg)
         rows.append({**base, "rule": d["id"], "sec": d["sec"],
                      "verdict": verdict, "citation": cites,
                      "decided_by": "code"})
@@ -545,6 +669,34 @@ def self_test(profile_path=None) -> int:
     if has("additive-bias") and not gate_rule(
             gate_of("additive-bias"), [], {"added_files": ["scripts/new_store.py"]}):
         bad.append("additive gate missed a new store script")
+    if has("uncited-symbol"):
+        dec = next(d for d in prof["deciders"] if d["id"] == "uncited-symbol")
+        trees = {"trees": ("HEAD", "HEAD^")}
+        # Spelled in two halves so this source file is not itself the
+        # tree hit that would make the planted-B pass vacuously.
+        ghost = "NoSuch" + "SymbolZq9"
+        v, cites = run_decider(dec, [], trees, f"wire `{ghost}::frob` in")
+        if v != "B" or not cites:
+            bad.append(f"uncited-symbol missed a symbol absent from both trees: {v} {cites}")
+        v, _ = run_decider(dec, [], trees, "extend `run_decider` and `ProfileError`")
+        if v != "A":
+            bad.append(f"uncited-symbol flagged symbols that exist at HEAD: {v}")
+        v, _ = run_decider(dec, [], trees, "run `mesh join`, edit `AGENTS.md`, pass `--tighten`")
+        if v != "A":
+            bad.append(f"uncited-symbol treated a CLI verb / file / flag as a symbol: {v}")
+        v, _ = run_decider(dec, [], {}, f"`{ghost}`")
+        if v != "C":
+            bad.append(f"uncited-symbol with no tree refs must say so (C), got {v}")
+        if symbol_needles("`Foo::bar()` `baz_qux!` `HTTP_PORT` `x`") != [
+                ("Foo::bar()", "bar"), ("baz_qux!", "baz_qux"), ("HTTP_PORT", "HTTP_PORT")]:
+            bad.append(f"symbol_needles shape/needle mismatch: "
+                       f"{symbol_needles('`Foo::bar()` `baz_qux!` `HTTP_PORT` `x`')}")
+    try:
+        st_added, st_files = collect_staged(prof["globs"])
+        if st_files.get("trees") != ("--cached", "HEAD"):
+            bad.append(f"collect_staged did not name its trees: {st_files.get('trees')}")
+    except Exception as e:   # noqa: BLE001 — a self-test reports, never raises
+        bad.append(f"collect_staged raised: {e}")
 
     for n, text, want in [
         (3, '{"v":["A","B","C"]}', ["A", "B", "C"]),
@@ -657,6 +809,12 @@ def main() -> int:
                          "or $CO_ARCH_PROFILE)")
     ap.add_argument("--dry-run", action="store_true",
                     help="gate only; name the rules that would fire, no call")
+    ap.add_argument("--staged", action="store_true",
+                    help="gate only, on the index: what would fire on the "
+                         "commit about to be made (no model call)")
+    ap.add_argument("-m", "--message", default="",
+                    help="with --staged: the intended commit message, so "
+                         "message-shaped deciders (uncited-symbol) can run")
     a = ap.parse_args()
     if a.self_test:
         return self_test(a.profile)
@@ -664,14 +822,26 @@ def main() -> int:
         return self_test_live(a.profile)
     if a.rollup:
         return rollup(a.hours)
-    if not a.sha:
-        ap.error("a commit sha is required")
+    if not a.sha and not a.staged:
+        ap.error("a commit sha or --staged is required")
 
     try:
         prof = load_profile(a.profile)
     except ProfileError as e:
         # Refused, named, and NOT replaced by a second copy of the rules.
         print(f"co-arch: {e}", file=sys.stderr)
+        return 0
+
+    if a.staged:
+        added, files = collect_staged(prof["globs"])
+        found = findings(added, files, a.message, prof)
+        print(f"co-arch --staged (profile {prof['id']}): added_lines={len(added)} "
+              f"finding(s)={len(found)}")
+        mark = {"decided": "B", "question": "?", "unjudged": "C"}
+        for f in found:
+            head = f["cites"][0][:90] if f["cites"] else f["text"][:90]
+            print(f"  {mark[f['kind']]} {f['id']:18} {f['sec']:12} "
+                  f"{len(f['cites'])} site(s)  {head}")
         return 0
 
     sha = _git("rev-parse", a.sha).strip()

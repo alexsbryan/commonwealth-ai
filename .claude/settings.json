@@ -71,6 +71,17 @@
             "timeout": 15
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/commit-smells.py",
+            "type": "command",
+            "timeout": 15,
+            "statusMessage": "Checking the staged diff against the ARCH §15 smell rows"
+          }
+        ]
       }
     ],
     "PostToolUse": [
