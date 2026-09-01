@@ -451,6 +451,22 @@ pub async fn run_typed_extension(
         ExtractionStatus::Wrote
     };
 
+    // ontology-v1 P0.3 — a freshly written atlas grounds without an operator
+    // command. The daemon holds the embed provider, so the seed table is built
+    // here, right after `atoms.json`, through the ONE writer every other
+    // surface uses. Best-effort: the atoms are on disk either way, so a
+    // failure is a warning naming the fix, never a failed extraction (and
+    // this whole pass runs detached after `Complete` — see
+    // `conv_tiered_provider::post_finalize_corpus`).
+    if status == ExtractionStatus::Wrote {
+        seed_ann_after_write(corpus_id, inference.as_ref(), atlas_dir).await;
+    } else {
+        tracing::debug!(
+            corpus = corpus_id,
+            "typed_extension: atlas written empty; ANN seed table not built"
+        );
+    }
+
     tracing::info!(
         corpus = corpus_id,
         pass_a_calls,
@@ -468,6 +484,48 @@ pub async fn run_typed_extension(
         atoms_per_kind,
         soft_failures,
     })
+}
+
+/// Build `atlas/atoms_ann.lance` for an atlas this pass just wrote, under the
+/// production grounding filter — `sovereign_tools::atlas_context_manager::
+/// backfill_ann`, the same call `svrn atlas backfill-ann` and `enrich build`'s
+/// Backfill step make (ARCH §19, §10.6). Skipped when the table is already at
+/// least as new as `atoms.json`. Every branch traces its reason (§9).
+async fn seed_ann_after_write(
+    corpus_id: &str,
+    inference: &dyn InferenceProvider,
+    atlas_dir: &Path,
+) {
+    use crate::atlas_context_manager::{backfill_ann, AtlasContextFilter, BackfillOutcome};
+    use corpus_engine::enrichment::atlas::ann_store::ann_table_is_fresh;
+
+    if ann_table_is_fresh(atlas_dir) {
+        tracing::debug!(
+            corpus = corpus_id,
+            "typed_extension: ANN seed table already fresh; backfill skipped"
+        );
+        return;
+    }
+    match backfill_ann(inference, atlas_dir, corpus_id, &AtlasContextFilter::default()).await {
+        Ok(BackfillOutcome::Built(stats)) => tracing::info!(
+            corpus = corpus_id,
+            resolved = stats.resolved,
+            total = stats.total,
+            "typed_extension: ANN seed table written; this atlas now grounds"
+        ),
+        Ok(BackfillOutcome::NoSeedableAtoms {
+            min_description_chars,
+        }) => tracing::info!(
+            corpus = corpus_id,
+            min_description_chars,
+            "typed_extension: no seedable atoms under the grounding filter; ANN seed table not written"
+        ),
+        Err(e) => tracing::warn!(
+            corpus = corpus_id,
+            error = %e,
+            "typed_extension: ANN backfill failed; grounding for this corpus waits for `svrn atlas backfill-ann {corpus_id}`"
+        ),
+    }
 }
 
 /// Walk `resolved` and rewrite every atom + edge id from the

@@ -547,3 +547,127 @@ pub async fn load_atlas_context(
         top_k,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use corpus_engine::enrichment::atlas::ann_store::{ann_table_is_fresh, ann_table_present};
+    use sovereign_core::types::{
+        CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed,
+    };
+    use std::pin::Pin;
+
+    /// Embeds deterministically and never completes: the writer's only
+    /// inference need is `embed_query`, so a `complete()` call is a wiring
+    /// bug and panics.
+    struct UnitEmbed;
+
+    #[async_trait::async_trait]
+    impl InferenceProvider for UnitEmbed {
+        async fn complete(
+            &self,
+            _: &CompletionRequest,
+        ) -> sovereign_core::Result<CompletionResponse> {
+            unreachable!("backfill must not call complete()")
+        }
+        async fn complete_stream(
+            &self,
+            _: &CompletionRequest,
+        ) -> sovereign_core::Result<
+            Pin<Box<dyn futures::Stream<Item = sovereign_core::Result<String>> + Send>>,
+        > {
+            unreachable!("backfill must not stream")
+        }
+        async fn embed(&self, text: &str) -> sovereign_core::Result<Vec<f32>> {
+            Ok(vec![text.len() as f32, 1.0, 0.0, 0.0])
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 8192,
+                supports_structured_output: false,
+                relative_speed: Speed::Fast,
+                relative_reasoning: Depth::Shallow,
+            }
+        }
+    }
+
+    /// The production grounding filter, spelled out so the test does not
+    /// depend on the `SOVEREIGN_ATLAS_*` env knobs `Default` reads.
+    fn grounding_filter() -> AtlasContextFilter {
+        AtlasContextFilter {
+            min_description_chars: 10,
+            depth_allowlist: vec!["extracted".into()],
+            max_entries: None,
+            top_k: 3,
+            include_claims: false,
+            include_tensions: false,
+            include_configurations: false,
+        }
+    }
+
+    /// One Entity envelope in the on-disk `atoms.json` shape (copied from a
+    /// real maple-house atlas), at the given enrichment depth.
+    fn atoms_json(depth: &str) -> String {
+        format!(
+            r#"{{"schema_version":"2","atoms":[{{"atom_type":"Entity","data":{{"id":"entity-0001","canonical_name":"guest logbook","entity_type":"work","first_appearance":{{"chunk_id":"sec_00001","passage_preview":"signed into the guest logbook"}},"description":"A physical record kept by the front door to track overnight guests.","salience":0.33,"enrichment_depth":"{depth}","provenance":{{"signal_kind":"llm_batch"}}}}}}]}}"#
+        )
+    }
+
+    #[tokio::test]
+    async fn backfill_ann_writes_a_fresh_table_for_an_extracted_entity() {
+        let tmp = tempfile::tempdir().unwrap();
+        let atlas = tmp.path().join("atlas");
+        std::fs::create_dir_all(&atlas).unwrap();
+        std::fs::write(atlas.join("atoms.json"), atoms_json("extracted")).unwrap();
+
+        let out = backfill_ann(&UnitEmbed, &atlas, "t", &grounding_filter())
+            .await
+            .expect("backfill succeeds");
+        assert_eq!(
+            out,
+            BackfillOutcome::Built(AnnBuildStats {
+                resolved: 1,
+                total: 1
+            })
+        );
+        assert!(ann_table_present(&atlas));
+        assert!(
+            ann_table_is_fresh(&atlas),
+            "a table written after atoms.json must read as fresh"
+        );
+    }
+
+    /// The typed skip: an atlas whose atoms all sit outside the grounding
+    /// filter's depth allowlist (structural-only) writes no table and says
+    /// so, distinguishable from a failure without matching message text.
+    #[tokio::test]
+    async fn backfill_ann_reports_no_seedable_atoms_when_the_filter_admits_nothing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let atlas = tmp.path().join("atlas");
+        std::fs::create_dir_all(&atlas).unwrap();
+        std::fs::write(atlas.join("atoms.json"), atoms_json("structural")).unwrap();
+
+        let out = backfill_ann(&UnitEmbed, &atlas, "t", &grounding_filter())
+            .await
+            .expect("an admitted-nothing filter is an outcome, not an error");
+        assert_eq!(
+            out,
+            BackfillOutcome::NoSeedableAtoms {
+                min_description_chars: 10
+            }
+        );
+        assert!(!ann_table_present(&atlas), "no table may be written");
+    }
+
+    #[tokio::test]
+    async fn load_atlas_context_missing_atlas_is_a_typed_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        let atlas = tmp.path().join("nope").join("atlas");
+        let err = load_atlas_context(&UnitEmbed, &atlas, "t", 3, &grounding_filter())
+            .await
+            .err()
+            .expect("missing atlas dir must be an error");
+        assert!(matches!(err, LoadAtlasError::NoAtlas { .. }), "got {err:?}");
+        assert!(err.to_string().contains("no atlas at"));
+    }
+}

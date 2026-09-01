@@ -360,8 +360,37 @@ impl AtlasContextManager {
         if let Ok(mut dirs) = self.graph_dirs.write() {
             dirs.insert(corpus_id.to_string(), atlas_dir.to_path_buf());
         }
-        if !corpus_engine::enrichment::atlas::ann_store::ann_table_present(atlas_dir) {
+        // ontology-v1 P0.3 — a silent `false` here was the whole failure:
+        // a corpus with resolved atoms and no seed table simply never
+        // grounded, and nothing said so. Warn — with the fix — when the v2
+        // atom store is present (so the corpus COULD ground) and the table is
+        // missing or older than `atoms.json`. Never embed here: `init()` walks
+        // every installed atlas (1,770 SEP articles) at boot.
+        use corpus_engine::enrichment::atlas::ann_store::{ann_table_is_fresh, ann_table_present};
+        use corpus_engine::enrichment::atlas::store::ATOMS_LANCE_DIRNAME;
+        if !ann_table_present(atlas_dir) {
+            if atlas_dir.join(ATOMS_LANCE_DIRNAME).is_dir() {
+                tracing::warn!(
+                    corpus = corpus_id,
+                    atlas = %atlas_dir.display(),
+                    "atlas-context: atom store present but no ANN seed table — this corpus cannot ground; \
+                     run `svrn atlas backfill-ann {corpus_id}` (or `svrn enrich build {corpus_id}`)"
+                );
+            } else {
+                tracing::debug!(
+                    corpus = corpus_id,
+                    "atlas-context: no atom store and no ANN seed table; nothing to ground from"
+                );
+            }
             return false;
+        }
+        if !ann_table_is_fresh(atlas_dir) {
+            tracing::warn!(
+                corpus = corpus_id,
+                atlas = %atlas_dir.display(),
+                "atlas-context: ANN seed table is older than atoms.json — grounding seeds from a stale atom set; \
+                 run `svrn atlas backfill-ann {corpus_id}`"
+            );
         }
         let load_started = std::time::Instant::now();
         // Load the v2 store (atoms.lance + edges.csr). A corpus without one
