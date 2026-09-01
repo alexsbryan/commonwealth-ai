@@ -22,6 +22,7 @@
 //!      table, atlas subtree, meta file).
 
 use corpus_engine::snapshot::restore_snapshot_archive;
+use corpus_engine::Corpus;
 use std::path::PathBuf;
 
 const WIKIPEDIA_PREBUILT_SHA256: &str =
@@ -76,7 +77,7 @@ fn restore_real_wikipedia_snapshot_as_sibling() {
     );
 
     // ── Expected on-disk layout ───────────────────────────────
-    assert!(outcome.index_dir.join("_corpus_meta.json").is_file());
+    assert!(Corpus::meta_in(&outcome.index_dir).is_file());
     assert!(
         outcome.index_dir.join("chunks.lance").is_dir(),
         "LanceDB chunks table missing"
@@ -87,10 +88,9 @@ fn restore_real_wikipedia_snapshot_as_sibling() {
     );
 
     // ── _corpus_meta.json patched to target id ────────────────
-    let meta: serde_json::Value = serde_json::from_slice(
-        &std::fs::read(outcome.index_dir.join("_corpus_meta.json")).unwrap(),
-    )
-    .unwrap();
+    let meta: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(Corpus::meta_in(&outcome.index_dir)).unwrap())
+            .unwrap();
     assert_eq!(
         meta.get("corpus_id").and_then(|v| v.as_str()),
         Some(TARGET_CORPUS_ID),

@@ -77,7 +77,7 @@ asserts = 1
 requirement = "GR-6"
 test = "sovereign-core::runtime::grounding::tests::tombstoned_repair_releases_the_audited_draft_with_its_claims_marked"
 file = "sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs"
-line = 5366
+line = 5364
 asserts = 8
 
 [[claim]]

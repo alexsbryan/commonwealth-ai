@@ -29,7 +29,7 @@ use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
 use corpus_engine::index::{CorpusIndex, EmbeddedChunk, InsertChunk};
-use corpus_engine::{CorpusEngine, EmbedFn};
+use corpus_engine::{Corpus, CorpusEngine, EmbedFn};
 use sovereign_mesh::canonical_pull::{pull_canonical_from_peer, PullError};
 use tempfile::tempdir;
 
@@ -154,7 +154,7 @@ async fn canonical_pull_round_trip_via_internal_router() {
     assert_eq!(report.fingerprint, expected_fp);
     assert!(report.bytes_uncompressed > 0);
     assert_eq!(report.canonical_path, client_index_dir.join("wiki-mini"));
-    assert!(report.canonical_path.join("_corpus_meta.json").is_file());
+    assert!(Corpus::meta_in(&report.canonical_path).is_file());
 
     // The pulled canonical must reproduce the same fingerprint
     // when reopened — proves the on-disk state is byte-faithful.

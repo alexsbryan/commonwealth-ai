@@ -27,9 +27,7 @@ use serde::{Deserialize, Serialize};
 use crate::slot_policy::Workload;
 use crate::title::strip_think_blocks;
 use crate::traits::{ApprovalChannel, InferenceProvider, RoutingEventSink};
-use crate::types::{
-    LessonProposedPayload, NarrationEvent, NarrationPhase, TurnNarration,
-};
+use crate::types::{LessonProposedPayload, NarrationEvent, NarrationPhase, TurnNarration};
 
 /// Note kind for the lesson lane (`corpus-engine-notes` MIGRATION_V11).
 pub const LESSON_KIND: &str = "lesson";

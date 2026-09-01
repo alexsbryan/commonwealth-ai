@@ -273,7 +273,7 @@ The lint script reports the host build failure as a build failure and names the 
 
 **"Do tests pass?"** — `./scripts/sovereign-test.sh --human`. Warm full workspace ~45s (~8.4k tests). `--package <crate>` / `--changed` / `--filter <test-name>` scope it down; `--filter` matches the TEST NAME, not the file name.
 
-**`--filter` sets the BUILD scope too, so a vague pattern costs minutes.** The script derives which crates to compile by `git grep`-ing the literal filter string through `*.rs`; a broad substring selects broadly and degrades — silently, and by design — to a full-workspace build. Measured 2026-08-31 on this host, the same single test three ways: `--filter ring` matched nearly every crate (`ring` is inside `string`, `ordering`, `during`) and cost **280s, 275s of it build across 96 test binaries**; `--filter the_scaffolded_door_runs_the_validator_before_writing` scoped to one crate and cost **37.5s**. Bare `cargo test -p <crate> --lib <name>` is NOT the escape hatch — 43.3s, slightly worse, because the ~40s both pay is the rebuild of the crate you just edited. So: **pass the whole test function name, or scope explicitly with `--package`.** Since 2026-08-31 the script says so itself: it prints `--filter '<p>' scoped to N crate(s)` and, when N reaches a third of the workspace, a loud block naming the cost and both escapes — all on stderr, all **before** the build starts. It is a hint, not a refusal (a deliberate sweep is legitimate), so read it and decide: killing the run to narrow the pattern is cheaper than waiting one out.
+**`--filter` sets the BUILD scope too, so a vague pattern costs minutes.** The script picks crates by `git grep`-ing the literal filter through `*.rs`, so a broad substring degrades — silently, by design — to a full-workspace build (measured 2026-08-31: `--filter ring` 280s, 275s of it build; the whole test name 37.5s; bare `cargo test -p` no better — note `db026a90`). Pass the whole test function name, or scope with `--package`. The script prints the crate count it resolved and, past a third of the workspace, the cost — on stderr, before the build starts. It is a hint, not a refusal: a deliberate sweep is legitimate.
 
 Both exit non-zero on failure and both write a raw cargo log for triage, so a failure never needs a second run to diagnose. Gate on the exit code.
 
@@ -285,14 +285,30 @@ Both exit non-zero on failure and both write a raw cargo log for triage, so a fa
 
 ### Definition of done — every feature push
 
-Before declaring a feature complete, **both must exit 0**, run in the `sovereign-vulkan` toolbox (drop the prefix if the boot hook says you are already inside it — see "Compilation and test feedback"):
+**Start with `./scripts/pre-push.sh` — it is the gate `git push` runs, and a
+feature that has not passed it is not done.** Install it once
+(`scripts/install-git-hooks.sh` → `core.hooksPath=.githooks`). Held to a
+ONE-MINUTE budget (~22s warm), it scopes to the diff and runs rustfmt, the
+workspace compile, the eight xtask ratchets
+(docs/arch/boundary/layer/lock/layout/env/concept) and the desktop node gates
+concurrently. The ratchets are the half no test run speaks to; each failure
+names its own fix command. Two rules:
+
+- **A ratchet failure is not fixed by `--update-baseline` on your working
+  tree** — that absorbs your own growth along with everything else. Re-pin at
+  `origin/main` (a worktree, then copy `quality/baselines/` back) so what is
+  already public is separated from what this push adds, and ledger the
+  acceptance in `SYSTEM_OVERVIEW.md §10` (§10.1c/§10.1d are worked examples).
+- **`--tighten` is always safe** — it banks a real cut and never raises.
+
+Then **both of these must exit 0**, in the `sovereign-vulkan` toolbox (drop the prefix if the boot hook says you are already inside it):
 
 ```bash
 toolbox run -c sovereign-vulkan ./scripts/sovereign-lint.sh --human --full
 toolbox run -c sovereign-vulkan ./scripts/sovereign-test.sh --human
 ```
 
-Gate on the **exit code**, not on the summary line you read. Both cover every member of the monorepo Cargo workspace and resolve the repo's real feature contract (`corpus-engine/treesitter` + `sovereign-cli/dev-tools`, plus `sovereign-mesh/mesh-sim` on the lint side). Warm cost: lint ~22s (~26.7s now that it compiles test code, measured on this host 2026-08-07), tests ~45s. Cold, from an empty target dir, the workspace check is ~3m30s and the wrapper adds under a second — the scripts are not what makes a cold build slow.
+Gate on the **exit code**, not on the summary line you read. Both cover every member of the monorepo Cargo workspace and resolve the repo's real feature contract (named once under "## Architecture"). Warm: lint ~27s, tests ~45s; cold ~3m30s, of which the wrapper is under a second.
 
 **If you touched retrieval, routing, synthesis, enrichment or inference, add the quality gate: `./scripts/sovereign-ci-bench.sh --quick` (~35-40m).** The two scripts above are the *build* gate — neither runs a model against a question bank, so both stay green straight through an answer-quality regression. Gate on the suite's VERDICT line, and read lane KIND before you read a number (see `.claude/docs/MAIN_SESSION_PROTOCOL.md` §"Measuring quality"): a HARD lane breaks the build, a SOFT synth lane never does. If your change is scoped to retrieval, the lane that speaks to it is `retrieval-prod`, not the synth lane.
 
@@ -408,11 +424,10 @@ across several machines; these keep them consistent.)
   first. Branching is the maintainer's call too, and they will say so
   (operator direction 2026-08-28, replacing a standing "branch first if
   on `main`" rule that made every commit a two-step negotiation).
-- **Debug builds for dev, not release.** `cargo build` → `target/debug/`
-  for all behavioral work including CI benches (the llama.cpp kernels are
-  native C++ either way). Release is ~5× slower to compile — reserve it
-  for a named perf need (e.g. OCR). Run e2e via `target/debug/<sibling>`
-  directly; the `sovereign` symlink may point at release.
+- **Debug builds for dev, not release** — the rule and its exceptions are
+  under "Code Intelligence" above. Behavioural work including CI benches
+  runs from `target/debug/<sibling>`; the llama.cpp kernels are native C++
+  either way.
 - **Rebuild the WHOLE workspace, not one binary.** After editing a shared
   crate (esp. `sovereign-core`), run a plain full `cargo build --workspace
   --features corpus-engine/treesitter` so every binary is fresh. A scoped

@@ -23,7 +23,7 @@ use corpus_engine::index::{InsertChunk, InsertCodeMeta};
 use corpus_engine::{
     append_partition_to_canonical, merge_partitions_into_canonical,
     sharding::{extract_shard, index_stats, merge_shards},
-    ChunkRange, CorpusIndex,
+    ChunkRange, Corpus, CorpusIndex,
 };
 
 const EMBED_DIM: usize = 8;
@@ -212,7 +212,9 @@ async fn merge_partitions_happy_path() {
     .into_iter()
     .enumerate()
     {
-        let p = index_dir.join(format!("legal-partition-{i}"));
+        let p = Corpus::named(index_dir, "legal")
+            .expect("non-empty corpus id")
+            .partition(&i.to_string());
         build_index(&p, "legal", &rows).await;
     }
 

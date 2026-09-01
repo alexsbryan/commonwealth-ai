@@ -5520,6 +5520,36 @@ stabilises, same contract as every other row in this section.
 | corpus-engine index search | `corpus-engine/src/index/search.rs` (1,213) | 13 lines over the ceiling; trims naturally when the ANN-refine retrieval fix migrates the legacy search path. |
 | Iroh transport (cmnwlth) | `commonwealth/crates/commonwealth-transport/src/iroh.rs` (1,280) | No-VPN mesh arc (invite/join/gossip over iroh) landed as one transport module; splits dialer/acceptor/relay once the relay-floor characterization settles. |
 
+### 10.1d Size-debt acceptance — 2026-09-01 re-freeze at `origin/main`
+
+The pre-push gate was not installed while the 2026-08 arcs landed, so the
+ratchets drifted from what had already been pushed: `arch-gate` reported 22
+size failures and `layout-gate` 8, of which **three** were caused by the push
+in front of it and the rest were already public. Re-running the gate on a
+worktree at `origin/main` (b7b6892c) separated the two, and the baselines were
+re-pinned to THAT tree — not to the working tree — so this push's own growth
+still had to answer for itself. It did: `deep_research_commands.rs` (1,346 →
+1,604) was carved into `mod`/`live`/`report`/`runs`/`tests` (598/143/308/132/467),
+`setup_cmd/terminal.rs` came back under the 800 approach floor, and its new
+`SystemTime::now()` was routed to `sovereign_core::time`. The gate is now in
+the initiative DoD (`AGENTS.md`), which is the actual fix — a ratchet nothing
+runs is not a ratchet (ARCH §18.1).
+
+What the re-freeze accepted, all of it already on `origin/main`:
+
+| Item | Location | Why deferred |
+|------|----------|--------------|
+| Path re-key, no debt | 7 rows under `tests/main/` | The `tests/{ => main}/` consolidation moved every integration test one directory down. The baseline is keyed by path, so each looked like a NEW oversized file at an unchanged line count. Re-keyed, not re-priced. |
+| Setup-config surface | `sovereign-contracts/src/setup_config.rs` (2,189 → 2,944) | The terminal/FIM/opencode onboarding arc grew the config model and its round-trip tests together; splits per onboarding target once the terminal journey stops moving. |
+| Peer inference + scheduler | `sovereign-mesh/src/peer_inference.rs` (4,832 → 5,385), `sovereign-cli-llm/src/mesh_cmd.rs` (5,224 → 5,291) | Both already carried §10.1c rows for the same reason — the allocation surface is still the hottest iteration. The rows stand; only the numbers moved. |
+| OICP studio extraction | `oicp-client/src/lib.rs` (2,483 → 2,904) | The §10.1c row predicted this ("splits into transport/session/structured-output modules on next growth"). The growth happened; the split is now due and is the first thing this row buys. |
+| RPC distribution | `sovereign-inference/src/embedded/rpc_distribution.rs` (3,154 → 3,388) | ggml-RPC-over-iroh is still open (§10.1c, 122B row); the seam moves with it. |
+| Refactor detector | `sovereign-cli-dev/src/refactor_cmd/detector.rs` (1,485 → 1,682) | Detector families (size/fan-in/duplication) grew as one pass; splits per family once the detector set stops growing. |
+| CLI-contract machinery | `sovereign-cli-shared/src/cli_contract.rs` (1,473 → 1,607) | Existing §10.1c row; the experience-axis work (`needs`/`--lacks` partition) is mid-flight. |
+| Daemon bootstrap | `sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs` (2,672 → 2,786) | Child-process supervision + RPC-worker spawn + manifest refresh cohere as one startup state machine; splits when the compute-child boundary takes the worker half. |
+| corpus-engine engine | `corpus-engine/src/engine/mod.rs` (3,804 → 3,879) | Under the 10-crate decomposition (`corpus-engine/DECOMPOSITION.md`); this file shrinks by carve-out, not by a local split. |
+| Newly oversized, no prior row | `commonwealth-api/src/server.rs` (1,253), `sovereign-cli-daemon/src/setup_cmd/mod.rs` (1,287), `sovereign-mesh/src/oicp_synthesis.rs` (1,266), `sovereign-cli/tests/main/cli_contract_journeys.rs` (1,201) | Four files crossed 1,200 during the 2026-08 arcs. All are within 90 lines of the ceiling and each splits along an obvious seam (route families, setup targets, synthesis stages, journey families) — first candidates when the queue is worked. |
+
 ### 10.2 cmnwlth deferrals
 
 | Item | Location | Why deferred |

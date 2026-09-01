@@ -44,7 +44,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn, Error};
+use corpus_engine::{Corpus, CorpusEngine, CorpusSpec, EmbedFn, Error};
 
 // ─── Fixtures ────────────────────────────────────────────────
 
@@ -131,7 +131,7 @@ fn meta_flag_on_disk(indexes_dir: &Path) -> (PathBuf, serde_json::Value) {
         .unwrap_or_else(|e| panic!("indexes dir {} unreadable: {e}", indexes_dir.display()))
         .flatten()
     {
-        let meta = entry.path().join("_corpus_meta.json");
+        let meta = Corpus::meta_in(entry.path());
         if meta.exists() {
             found.push(meta);
         }

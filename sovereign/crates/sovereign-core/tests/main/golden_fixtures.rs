@@ -9,9 +9,7 @@
 
 use sovereign_core::deep_research::audit::{split_claims, ClaimAudit};
 use sovereign_core::deep_research::containment::strip_citation_spans;
-use sovereign_core::deep_research::icd::{
-    Artifact, GateAction, Verdict,
-};
+use sovereign_core::deep_research::icd::{Artifact, GateAction, Verdict};
 use sovereign_core::deep_research::render::{final_claims, render_report};
 
 const GOLDEN: &str = "tests/golden";

@@ -16,7 +16,6 @@
 //! `retrieved_chunks[].url` field is always `null` and no custody field
 //! exists anywhere in the release.
 
-
 use crate::harness::TestHarness;
 
 /// Canonical custody classes (design note §1 — the enum is design-only at

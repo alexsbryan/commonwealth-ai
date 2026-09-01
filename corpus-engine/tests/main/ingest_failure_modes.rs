@@ -25,7 +25,7 @@ use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use parquet::arrow::ArrowWriter;
 
-use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn, Error};
+use corpus_engine::{Corpus, CorpusEngine, CorpusSpec, EmbedFn, Error};
 
 // ─── Fixtures ────────────────────────────────────────────────
 
@@ -283,7 +283,7 @@ async fn ingest_promotes_into_a_canonical_dir_another_subsystem_owns() {
 
     // The corpus landed in canonical, not just its sidecars.
     assert!(
-        canonical.join("_corpus_meta.json").exists(),
+        Corpus::meta_in(&canonical).exists(),
         "promotion must materialise the canonical meta",
     );
     assert!(canonical.join("chunks.lance").exists());
@@ -496,7 +496,7 @@ async fn a_stopped_ingest_is_listed_but_not_usable() {
     );
 
     // Now reproduce the stranded state: chunks committed, indexes never built.
-    let meta_path = indexes_dir.join("test_corpus").join("_corpus_meta.json");
+    let meta_path = Corpus::meta_in(indexes_dir.join("test_corpus"));
     let raw = std::fs::read_to_string(&meta_path).unwrap();
     let mut meta: serde_json::Value = serde_json::from_str(&raw).unwrap();
     meta["ingestion_in_progress"] = serde_json::json!(false);
@@ -567,7 +567,7 @@ async fn ensure_empty_index_succeeds_when_dir_exists_without_metadata() {
     assert_eq!(result.chunks_created, 0);
 
     // The index is now valid on disk and visible to the rest of the system.
-    assert!(index_path.join("_corpus_meta.json").exists());
+    assert!(Corpus::meta_in(&index_path).exists());
     let installed = engine.installed_indexes().await.unwrap();
     assert!(
         installed.iter().any(|i| i.corpus_id == "test_corpus"),

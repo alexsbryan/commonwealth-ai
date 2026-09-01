@@ -3,5 +3,5 @@
 #   cargo run -p xtask -- arch-gate --update-baseline
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- arch-gate --tighten
-1768	.claude/CLAUDE.md
-40919	AGENTS.md
+1750	.claude/CLAUDE.md
+42893	AGENTS.md

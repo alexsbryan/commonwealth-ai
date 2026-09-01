@@ -163,7 +163,7 @@ fn first_chunk_id(refs: &[ChunkRef]) -> &str {
 
 #[cfg(test)]
 mod tests {
-    
+
     use crate::enrichment::atlas::atoms::{
         AtomEnvelope, AtomId, ChunkRef, Claim, Entity, Event, Question, ResolutionStatus,
         SectionPosition, SectionRange, State,

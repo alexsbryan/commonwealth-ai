@@ -2854,7 +2854,7 @@ direction: ship the deliverable to end users in the desktop app. Campaign
 sits behind — `SOVEREIGN_DR_REPORT_OUTLINE`, `..._ARCHITECTURE`,
 `..._RESEARCH_NOTES`, `..._REPORT_SECTION_EVIDENCE` all require it. With it off
 a user reached NONE of them: the desktop app (`src-tauri/
-deep_research_commands.rs`) calls `launch::prepare` with no DR flags and
+deep_research_commands/mod.rs`) calls `launch::prepare` with no DR flags and
 inherits process env, so every end user received the claim-ledger render while
 every measurement taken since drb1 was of the composed path. The desktop reads
 `report.md` either way, so this changes that file's CONTENT, not the UI

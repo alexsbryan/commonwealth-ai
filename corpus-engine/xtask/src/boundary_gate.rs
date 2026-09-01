@@ -42,6 +42,15 @@ pub const SHARED_LEAVES: &[&str] = &[
     // studio `SectionTool` and corpus-engine's own chunker reach ONE
     // implementation downward instead of parking it in the layer above.
     "corpus-engine-sections",
+    // The wall clock. Admitted 2026-09-01, when clock-gate started routing
+    // every non-core sovereign crate at `sovereign_time::` and
+    // `sovereign-recipe-author` followed that instruction into a boundary
+    // violation — two gates pointing opposite ways, which is a defect in the
+    // allowlist and not in the crate that obeyed. It qualifies more strongly
+    // than any other leaf here: `[dependencies]` is EMPTY — not "no in-repo
+    // deps", no deps at all — so admitting it widens the package's closure by
+    // exactly three functions and zero crates.
+    "sovereign-time",
 ];
 
 /// The internal (in-repo) deps each SHARED_LEAF is allowed. `None` for a package
@@ -58,6 +67,10 @@ fn allowed_leaf_deps(crate_name: &str) -> Option<&'static [&'static str]> {
         // whole reason this leaf may cross the boundary is that its closure is
         // provably tiny, and a single internal dep would make that untrue.
         "corpus-engine-sections" => Some(&[]),
+        // Zero dependencies at all — see the SHARED_LEAVES note. Empty BY
+        // CONTRACT for the same reason as `corpus-engine-sections`: the whole
+        // basis for crossing the boundary is a provably empty closure.
+        "sovereign-time" => Some(&[]),
         "sovereign-contracts" => Some(&["oicp-types", "kernel-types"]),
         "oicp-client" => Some(&["sovereign-contracts", "oicp-types"]),
         _ => None,
@@ -185,6 +198,7 @@ mod tests {
         // Same contract, same reason: the section leaf is admitted across the
         // boundary only because its closure is `regex` + `tracing`.
         assert_eq!(allowed_leaf_deps("corpus-engine-sections"), Some(&[][..]));
+        assert_eq!(allowed_leaf_deps("sovereign-time"), Some(&[][..]));
         assert_eq!(
             allowed_leaf_deps("sovereign-contracts"),
             Some(&["oicp-types", "kernel-types"][..])

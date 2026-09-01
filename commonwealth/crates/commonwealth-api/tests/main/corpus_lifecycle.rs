@@ -355,11 +355,9 @@ async fn install_cancel_reinstall_lifecycle() {
 
     // ── Phase 1: install with slow embed so cancel has room to land ──
     let state = test_state(&tmp, slow_mock_embed_fn());
-    let partition_dir = tmp
-        .path()
-        .join("indexes")
-        .join(format!("{corpus_id}-partition-node-test"));
-    let canonical_dir = tmp.path().join("indexes").join(corpus_id);
+    let corpus = Corpus::named(tmp.path().join("indexes"), corpus_id).expect("non-empty corpus id");
+    let partition_dir = corpus.partition("node-test");
+    let canonical_dir = corpus.root();
 
     let (status, body) = post_json(
         internal_router(state.clone()),
@@ -564,11 +562,9 @@ async fn install_pause_resume_lifecycle() {
 
     // ── Phase 1: install with slow embed so pause has room to land ──
     let state = test_state(&tmp, slow_mock_embed_fn());
-    let partition_dir = tmp
-        .path()
-        .join("indexes")
-        .join(format!("{corpus_id}-partition-node-test"));
-    let canonical_dir = tmp.path().join("indexes").join(corpus_id);
+    let corpus = Corpus::named(tmp.path().join("indexes"), corpus_id).expect("non-empty corpus id");
+    let partition_dir = corpus.partition("node-test");
+    let canonical_dir = corpus.root();
 
     let (status, _body) = post_json(
         internal_router(state.clone()),

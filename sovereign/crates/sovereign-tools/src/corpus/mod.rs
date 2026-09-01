@@ -220,7 +220,7 @@ pub fn inference_to_inference_fn(
     inference: Arc<dyn InferenceProvider>,
 ) -> corpus_engine::InferenceFn {
     use sovereign_core::slot_policy::Workload;
-    
+
     Arc::new(move |prompt: &str, schema: Option<&serde_json::Value>| {
         let inf = Arc::clone(&inference);
         // Schema (when the caller passes one) gates llama-cpp's

@@ -19,7 +19,11 @@ document is the contract; `cargo run -p xtask -- boundary-gate` enforces it in C
 | `sovereign-recipe-author` | The recipe-authoring tool bundle + `RecipeProject` model + its rusqlite project store. |
 | `sovereign-studio` | *(arrives in B:P9e)* the headless authoring/run CLI. |
 
-**Shared leaves** (repo root, siblings of `oicp-types`):
+**Shared leaves** — crates outside `studio/` a package crate may still take.
+What qualifies one is the CLOSURE, not the directory: most sit at the repo
+root beside `oicp-types`, and `sovereign-time` lives under `sovereign/crates/`
+with an empty dependency list, which is the same argument made by location
+rather than by convention.
 
 | Crate | Allowed internal deps |
 |---|---|
@@ -28,6 +32,7 @@ document is the contract; `cargo run -p xtask -- boundary-gate` enforces it in C
 | `corpus-engine-sections` | *(none)* — the section detectors. Third-party budget is `regex` + `tracing`, which is why it may cross at all. |
 | `sovereign-contracts` | `oicp-types`, `kernel-types`. |
 | `oicp-client` | `sovereign-contracts`, `oicp-types`. |
+| `sovereign-time` | *(none)* — three wall-clock functions and an EMPTY `[dependencies]`. Admitted so `clock-gate`'s "one decider per island" rule and this boundary point the same way.  |
 
 ## The rules
 
