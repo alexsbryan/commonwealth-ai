@@ -658,6 +658,7 @@ fn entity_sketches_from_developed<'a>(
 ) -> impl Iterator<Item = EntitySketch> + 'a {
     use crate::enrichment::pipeline::atlas::EntityType;
     section.entities_developed.iter().map(|s| EntitySketch {
+        attributes: Default::default(),
         canonical_name: s.entity_name.clone(),
         aliases: Vec::new(),
         // Same rationale as
@@ -960,6 +961,7 @@ async fn resolve_events(
                 None => {
                     let new_id = AtomId::event(events.len() + 1);
                     let ev = Event {
+                        attributes: Default::default(),
                         id: new_id.clone(),
                         description: sketch.description.trim().to_string(),
                         // Event-type classification is deferred to
@@ -1248,6 +1250,7 @@ pub fn resolve_step_3b(
             let rel_id = super::atoms::AtomId::relation(relations.len() + 1);
             relation_key_to_id.insert(key, rel_id.clone());
             relations.push(super::atoms::Relation {
+                attributes: Default::default(),
                 id: rel_id.clone(),
                 label: sketch.label.trim().to_string(),
                 participants: participant_ids.clone(),
@@ -1312,6 +1315,7 @@ pub fn resolve_step_3b(
                     let new_id = super::atoms::AtomId::relation(relations.len() + 1);
                     relation_key_to_id.insert(key.clone(), new_id.clone());
                     relations.push(super::atoms::Relation {
+                        attributes: Default::default(),
                         id: new_id.clone(),
                         label: format!(
                             "Unnamed relation between {}",
@@ -1419,6 +1423,8 @@ pub fn resolve_step_3b(
                 }
             };
             claims.push(super::atoms::Claim {
+                attributes: Default::default(),
+                subject: None,
                 id: claim_id.clone(),
                 content: sketch.content.trim().to_string(),
                 discourse_act: sketch.discourse_act.clone(),
@@ -2678,6 +2684,8 @@ pub fn resolve_type_extensions(
                 claim_idx += 1;
                 let claim_content = format!("{label}: {content}");
                 out.new_claims.push(Claim {
+                    attributes: Default::default(),
+                    subject: None,
                     id: new_claim_id.clone(),
                     content: claim_content,
                     discourse_act: crate::enrichment::pipeline::atlas::DiscourseAct::Assert,
@@ -2794,6 +2802,8 @@ pub fn resolve_type_extensions(
                 let new_claim_id = AtomId::claim(claim_idx);
                 claim_idx += 1;
                 out.new_claims.push(Claim {
+                    attributes: Default::default(),
+                    subject: None,
                     id: new_claim_id.clone(),
                     content: content.to_string(),
                     discourse_act: crate::enrichment::pipeline::atlas::DiscourseAct::Object,
@@ -2900,6 +2910,7 @@ mod tests {
 
     fn entity(name: &str, aliases: &[&str], description: &str) -> EntitySketch {
         EntitySketch {
+            attributes: Default::default(),
             canonical_name: name.into(),
             aliases: aliases.iter().map(|s| s.to_string()).collect(),
             entity_type: EntityType::Person,
@@ -2911,6 +2922,8 @@ mod tests {
 
     fn event(desc: &str, participants: &[&str]) -> EventSketch {
         EventSketch {
+            attributes: Default::default(),
+            event_type: None,
             description: desc.into(),
             participants: participants.iter().map(|s| s.to_string()).collect(),
             anchor: String::new(),
@@ -3567,6 +3580,7 @@ mod tests {
                 section_id: "sec_0001".into(),
                 enrichment_depth: EnrichmentDepth::Extracted,
                 entities_introduced: vec![EntitySketch {
+                    attributes: Default::default(),
                     canonical_name: "Alyosha".into(),
                     aliases: vec![],
                     entity_type: EntityType::Person,
@@ -3580,6 +3594,8 @@ mod tests {
                     anchor: "knelt at Zossima's feet".into(),
                 }],
                 relations_introduced: vec![RelationSketch {
+                    attributes: Default::default(),
+                    relation_type: None,
                     participants: vec!["Alyosha".into(), "Zossima".into()],
                     label: "Novice-elder bond".into(),
                     anchor: "laid his hand on Alyosha's head".into(),
@@ -3591,6 +3607,10 @@ mod tests {
                 }],
                 events: vec![],
                 claims: vec![ClaimSketch {
+                    attributes: Default::default(),
+                    claim_kind: None,
+                    subject: None,
+                    scope: None,
                     content: "Active love costs more than dreamt love.".into(),
                     discourse_act: DiscourseAct::Argue,
                     epistemic_status: EpistemicStatus::Confident,
@@ -4339,6 +4359,8 @@ mod tests {
                 section_id: "sec_0001".into(),
                 enrichment_depth: EnrichmentDepth::Extracted,
                 relations_introduced: vec![RelationSketch {
+                    attributes: Default::default(),
+                    relation_type: None,
                     participants: vec!["Alyosha".into(), "Zossima".into()],
                     label: "Novice-elder bond".into(),
                     anchor: "knelt at the elder's feet".into(),
@@ -4349,6 +4371,8 @@ mod tests {
                 section_id: "sec_0002".into(),
                 enrichment_depth: EnrichmentDepth::Extracted,
                 relations_introduced: vec![RelationSketch {
+                    attributes: Default::default(),
+                    relation_type: None,
                     participants: vec!["Alyosha".into(), "Zossima".into()],
                     label: "Spiritual father-son".into(),
                     anchor: "blessed the novice".into(),
@@ -4403,6 +4427,7 @@ mod tests {
         use super::super::atoms::{AtomId, SectionPosition};
         use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EventType};
         super::super::atoms::Event {
+            attributes: Default::default(),
             id: AtomId::event(idx),
             description: format!("event {idx}"),
             event_type: EventType::Other("x".into()),
@@ -4554,6 +4579,8 @@ mod tests {
                 anchor: String::new(),
             }],
             relations_introduced: vec![RelationSketch {
+                attributes: Default::default(),
+                relation_type: None,
                 participants: vec!["Alyosha".into(), "Unknown Person".into()], // (2) one unresolved
                 label: "doomed partnership".into(),
                 anchor: String::new(),
@@ -4564,6 +4591,10 @@ mod tests {
                 anchor: String::new(),
             }],
             claims: vec![ClaimSketch {
+                attributes: Default::default(),
+                claim_kind: None,
+                subject: None,
+                scope: None,
                 content: "Faith is hard-won.".into(),
                 discourse_act: DiscourseAct::Assert,
                 epistemic_status: EpistemicStatus::Confident,
@@ -4651,6 +4682,10 @@ mod tests {
                 anchor: String::new(),
             }],
             claims: vec![ClaimSketch {
+                attributes: Default::default(),
+                claim_kind: None,
+                subject: None,
+                scope: None,
                 content: "Active love is harder than dreamt love.".into(),
                 discourse_act: DiscourseAct::Argue,
                 epistemic_status: EpistemicStatus::Confident,
@@ -4822,6 +4857,7 @@ mod tests {
         ty: crate::enrichment::pipeline::atlas::EntityType,
     ) -> EntitySketch {
         EntitySketch {
+            attributes: Default::default(),
             canonical_name: name.into(),
             aliases: Vec::new(),
             entity_type: ty,

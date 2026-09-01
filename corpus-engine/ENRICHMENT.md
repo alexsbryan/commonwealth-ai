@@ -106,7 +106,8 @@ system by what the corpus is *for*, not by recency.
   Cross-corpus **Grounding** edges bridge two atlases.
 - **On disk:** `<corpus>/atlas/{atoms.json, edges.json, trajectories.json,
   gaps.json, tensions.json, cross_corpus_edges.json, configurations.json}`
-  (`SCHEMA_VERSION 2.2`).
+  (`SCHEMA_VERSION 2.4`; since 2.4 Relation / Event / Claim carry
+  `attributes` and Claim a `subject`, all default-empty).
 - **CLI:** `sovereign enrich {init,seed,extract,cluster,resolve,tensions,
   gaps,configure,build,query,report,review,bridge}` —
   `sovereign-cli-llm/src/enrich_cmd/`. `query` is a **zero-LLM** traversal

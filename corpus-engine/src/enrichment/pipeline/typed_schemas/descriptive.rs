@@ -177,6 +177,8 @@ pub fn parse_phase1_descriptive(response: &str) -> Result<DescriptiveExtension> 
                         return None;
                     }
                     Some(RelationSketch {
+                        attributes: Default::default(),
+                        relation_type: None,
                         participants,
                         label: required_str(e, "label")?,
                         anchor: str_field(e, "anchor"),

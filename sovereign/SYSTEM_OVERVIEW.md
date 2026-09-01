@@ -764,7 +764,7 @@ identical schema for a full index or a shard.
     │   ├── <hh>/<sha256>                # raw bytes, sharded by leading 2 hex
     │   └── parsed/<sha256>.<ext>        # typed parsed cache (parquet/ical/…)
     └── atlas/
-        ├── atoms.json                   # AtomsFile SCHEMA_VERSION 2.3 (canonical export)
+        ├── atoms.json                   # AtomsFile SCHEMA_VERSION 2.4 (canonical export)
         ├── atoms.lance/                 # ATLAS_STORAGE_V2 columnar atom store — the
         │                                # query-path reader (hot scalar columns + a
         │                                # lossless payload). Replaced atoms.rkyv; the

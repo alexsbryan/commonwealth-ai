@@ -1276,6 +1276,7 @@ pub(super) fn parse_phase1b_coverage_response(response: &str) -> Result<Vec<Enti
             Some(et) => et,
         };
         out.push(EntitySketch {
+            attributes: Default::default(),
             canonical_name: name,
             aliases: Vec::new(),
             entity_type,
@@ -1290,6 +1291,7 @@ pub(super) fn parse_phase1b_coverage_response(response: &str) -> Result<Vec<Enti
             continue;
         }
         out.push(EntitySketch {
+            attributes: Default::default(),
             canonical_name: name,
             aliases: Vec::new(),
             entity_type: EntityType::Concept,
@@ -1491,6 +1493,7 @@ impl RawEntitySketch {
             None
         };
         Some(EntitySketch {
+            attributes: Default::default(),
             canonical_name: name,
             aliases: vec_of_some(self.aliases),
             entity_type,
@@ -1571,6 +1574,8 @@ impl RawRelationSketch {
             return None;
         }
         Some(RelationSketch {
+            attributes: Default::default(),
+            relation_type: None,
             participants,
             label,
             anchor: self.anchor,
@@ -1624,6 +1629,8 @@ impl RawEventSketch {
             return None;
         }
         Some(EventSketch {
+            attributes: Default::default(),
+            event_type: None,
             description,
             participants: vec_of_some(self.participants),
             anchor: self.anchor,
@@ -1678,6 +1685,10 @@ impl RawClaimSketch {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
         Some(ClaimSketch {
+            attributes: Default::default(),
+            claim_kind: None,
+            subject: None,
+            scope: None,
             content,
             discourse_act,
             epistemic_status,
@@ -2831,6 +2842,28 @@ mod tests {
         let c = &parsed.section_extraction.unwrap().claims[0];
         assert_eq!(c.discourse_act, DiscourseAct::Enact);
         assert_eq!(c.epistemic_status, EpistemicStatus::Confident);
+    }
+
+    #[test]
+    fn sanitize_phase1_object_arrays_keeps_object_valued_fields() {
+        // Ontology-v1 sketches carry an `attributes` OBJECT. The sanitizer
+        // drops non-object ITEMS from the sketch arrays and must leave a
+        // sketch's own object-valued fields intact.
+        let mut value = serde_json::json!({
+            "entities_introduced": [
+                {
+                    "canonical_name": "coin",
+                    "entity_type": "coin",
+                    "attributes": { "weight": 1.29, "mint": "London" }
+                },
+                "// stray comment string"
+            ]
+        });
+        sanitize_phase1_object_arrays(&mut value);
+        let items = value["entities_introduced"].as_array().unwrap();
+        assert_eq!(items.len(), 1, "the stray string is dropped");
+        assert_eq!(items[0]["attributes"]["weight"], 1.29);
+        assert_eq!(items[0]["attributes"]["mint"], "London");
     }
 
     #[test]

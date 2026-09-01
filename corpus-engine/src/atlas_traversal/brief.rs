@@ -554,6 +554,8 @@ mod tests {
         let mut e = extracted_entity("Alyosha");
         e.salience = 1.0;
         let low_conf_claim = crate::enrichment::atlas::atoms::Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(1),
             content: "Faith is a habit".into(),
             discourse_act: crate::enrichment::pipeline::atlas::DiscourseAct::Assert,
