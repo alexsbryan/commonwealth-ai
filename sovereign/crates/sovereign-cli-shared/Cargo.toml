@@ -28,11 +28,11 @@ sovereign-time = { workspace = true, optional = true }
 # `observation` probes PATH for the SCIP exporters (scip-go, scip-typescript,
 # …) so init can name a missing one instead of leaving an empty call graph.
 # Pinned at 7 to match all four sovereign-cli-* binaries (ARCH §8.2).
-which = { version = "7", optional = true }
+which = { version = "8", optional = true }
 # Only for `mcp_client` (feature-gated) — the daemon-first path for
 # the work-atlas coordination tools.
 reqwest = { workspace = true, optional = true }
-dirs = "5"
+dirs = "6"
 # The flag-surface derive. Every `sovereign-cli-*` binary that declares its
 # flags as a struct reaches `flag_surface::parse` through here, so the seam has
 # ONE home rather than one per CLI crate (§10.6). ~11 transitive crates against

@@ -123,16 +123,16 @@ tracing-subscriber = { workspace = true }
 reqwest = { workspace = true }
 uuid = { workspace = true }
 arc-swap = { workspace = true }
-dirs = "5"
+dirs = "6"
 chrono = { workspace = true }
 sha2 = { workspace = true }
 regex = { workspace = true }
 tempfile = { workspace = true }
-which = "7"
+which = "8"
 hostname = { workspace = true }
 # `atos_cmd::run` reads SQLite directly for one query (open-feature
 # replay extraction). Same dep as sovereign-cli's `awareness` path.
-rusqlite = { version = "0.35", features = ["bundled"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
 
 # daemon_cmd uses libc::kill / setsid for unix process lifecycle.
 [target.'cfg(unix)'.dependencies]

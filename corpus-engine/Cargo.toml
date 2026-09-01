@@ -85,9 +85,9 @@ lancedb = { workspace = true }
 # compaction — empirically dropped 9/3021 fragments on the first
 # wikipedia publish. See `project_snapshot_publish_consistency.md`.
 # `lance` itself stays inline — corpus-engine is the only consumer.
-lance = "4"
-lance-index = "4"
-lance-table = "4"
+lance = "10"
+lance-index = "10"
+lance-table = "10"
 
 # Arrow (version driven by lancedb)
 arrow = { workspace = true }
@@ -95,19 +95,19 @@ arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
 
 # XML
-quick-xml = "0.36"
+quick-xml = "0.41"
 
 # HTML
-scraper = "0.20"
+scraper = "0.27"
 
 # JSON
-jsonpath-rust = "0.7"
+jsonpath-rust = "1.0"
 
 # Directed-multigraph cycle detection — used by the investigation
 # enrichment pipeline's `circular_flow` pattern detector. Pinned at
 # 0.6 (current stable as of 2026-04). Default features include the
 # graph algorithms we need (Tarjan SCC + simple cycle enumeration).
-petgraph = "0.6"
+petgraph = "0.8"
 
 # Data formats
 parquet = { workspace = true }
@@ -122,7 +122,7 @@ mailparse = { workspace = true }
 
 # Compression
 flate2 = "1"
-bzip2 = "0.5"
+bzip2 = "0.6"
 zip = { version = "8", default-features = false, features = ["deflate"] }
 # 7z used by the Internet Archive Stack Exchange dump (one .7z per
 # community). Default features are heavier than we need (aes256, ppmd,
@@ -130,7 +130,7 @@ zip = { version = "8", default-features = false, features = ["deflate"] }
 # available via the lzma-rust2 hard dep) + occasional bzip2 entries.
 # `util` exposes the `decompress_file` convenience used by the SE
 # extractor's lazy-extract step.
-sevenz-rust2 = { version = "0.21", default-features = false, features = ["bzip2", "util"] }
+sevenz-rust2 = { version = "0.22", default-features = false, features = ["bzip2", "util"] }
 
 # Text
 regex = { workspace = true }
@@ -189,12 +189,12 @@ notify                 = { version = "8",    optional = true }
 # rusqlite stays here for the non-scip stores (NoteStore, FeatureStore,
 # wikipedia_graph, lint/test results, plan_items, project_docs, notes_sync).
 # Scip's own rusqlite usage now lives in corpus-engine-scip.
-rusqlite               = { version = "0.35", features = ["bundled"], optional = true }
+rusqlite               = { version = "0.40", features = ["bundled"], optional = true }
 # Markdown AST. Used by `extractors/markdown.rs` (and used to be used
 # by design_signals.rs, which moved to corpus-engine-atos 2026-05-23).
 # Same version sovereign-atos and corpus-engine-atos use — one version
 # per workspace, per ARCH_PRINCIPLES.md §8.1.
-pulldown-cmark         = { version = "0.12", default-features = false, features = ["simd"], optional = true }
+pulldown-cmark         = { version = "0.13", default-features = false, features = ["simd"], optional = true }
 
 # SCIP call graph + exporter dispatch — moved to its own crate
 # (2026-05-23, ARCH §3.1/§3.3 carve-out). corpus-engine still uses
@@ -267,11 +267,11 @@ leiden-rs = "0.8"
 wiremock = "0.6"
 # Encoder side is `compress` — only needed in tests, so pulled in
 # additively here to keep the library binary lean.
-sevenz-rust2 = { version = "0.21", default-features = false, features = ["bzip2", "util", "compress"] }
+sevenz-rust2 = { version = "0.22", default-features = false, features = ["bzip2", "util", "compress"] }
 # Write-side xlsx generator used to build fixture spreadsheets in
 # unit tests. Read-side `calamine` is already a runtime dep; the
 # writer is dev-only so the production binary stays lean.
-rust_xlsxwriter = "0.83"
+rust_xlsxwriter = "0.99"
 # Compile-fail proofs for `Evidence`'s one-door invariant
 # (`tests/evidence_reds.rs`, noun-convergence rung nc-4-evidence). The bar
 # `nc-thesis` asks for "compile-fail tests, one per illegal construction",
@@ -282,7 +282,7 @@ trybuild = "1"
 # Dev-only: the `recipe_schema` test parses recipe.rs's AST to generate
 # sovereign-recipes/SCHEMA.md and gate it against drift. No runtime dep —
 # the recipe types stay free of doc-gen derives.
-syn = { version = "2", features = ["full", "extra-traits"] }
+syn = { version = "3", features = ["full", "extra-traits"] }
 quote = "1"
 
 
