@@ -39,7 +39,9 @@ use tokio::task::JoinHandle;
 /// `atlas_context_loader.rs` to keep this file under the §3.1 ceiling;
 /// re-exported so `atlas_context_manager::load_atlas_context` is the name
 /// every caller — CLI wrapper, daemon hook, eval harness — uses.
-pub use crate::atlas_context_loader::load_atlas_context;
+pub use crate::atlas_context_loader::{
+    backfill_ann, load_atlas_context, BackfillOutcome, LoadAtlasError,
+};
 
 /// Filename of the per-corpus query-bump map. Lives alongside
 /// `atoms.json` so it travels with the atlas (mesh transfer brings

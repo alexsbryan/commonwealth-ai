@@ -45,6 +45,10 @@ pub enum BuildStep {
     Gaps,
     Configure,
     Report,
+    /// Embed the resolved atoms into the persistent ANN seed table
+    /// (`atlas/atoms_ann.lance`) so the corpus grounds without an operator
+    /// command. Last: it reads the atlas every other step wrote.
+    Backfill,
 }
 
 impl BuildStep {
@@ -59,6 +63,7 @@ impl BuildStep {
             Self::Gaps => "gaps",
             Self::Configure => "configure",
             Self::Report => "report",
+            Self::Backfill => "backfill",
         }
     }
 
@@ -74,6 +79,7 @@ impl BuildStep {
             Self::Gaps => "Detect structural gaps (Phase 7)",
             Self::Configure => "Identify interpretive configurations (Phase 8)",
             Self::Report => "§12 schema validation",
+            Self::Backfill => "Embed atoms into the ANN seed table (grounding)",
         }
     }
 
@@ -94,6 +100,7 @@ impl BuildStep {
             Self::Gaps => Some(PipelinePhase::Gaps),
             Self::Configure => None,
             Self::Report => None,
+            Self::Backfill => None,
         }
     }
 }
@@ -381,6 +388,7 @@ mod tests {
             BuildStep::Gaps,
             BuildStep::Configure,
             BuildStep::Report,
+            BuildStep::Backfill,
         ]
         .iter()
         .map(|s| s.id())

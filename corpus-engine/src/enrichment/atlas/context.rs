@@ -1248,7 +1248,7 @@ const ATLAS_ENTRY_CHAR_LIMIT: usize = 3000;
 /// glassbox number the 3b go/no-go watches: `resolved` of `total` bag entries
 /// became ANN rows (the rest had no embedding or didn't resolve to an atom-id,
 /// which the v1 cosine path also drops, so the seedable set matches).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AnnBuildStats {
     pub resolved: usize,
     pub total: usize,

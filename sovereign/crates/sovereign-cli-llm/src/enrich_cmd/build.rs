@@ -16,6 +16,8 @@
 //!   7. gaps               — Phase 7 deterministic gap detection
 //!   8. configure          — Phase 8 (LLM, opt-in per pipeline)
 //!   9. report             — §12 schema validation table
+//!  10. backfill           — embed the resolved atoms into the ANN seed
+//!      table (`atlas/atoms_ann.lance`) so the corpus grounds at once
 //!
 //! Each step invokes the same underlying `cmd_*` function used by
 //! the standalone CLI verbs, so orchestrated behaviour matches a
@@ -26,10 +28,16 @@ use super::{
     atlas_configuration, atlas_gaps, atlas_phase_cmd, atlas_resolve, atlas_tensions,
     atlas_tensions_classify, config::EnrichConfig, extract, paths, schema_review, seed_cmd,
 };
+use crate::chat_cmd::bootstrap::{build_session, ChatSession};
+use crate::chat_cmd::config::parse_globals;
+use corpus_engine::enrichment::atlas::ann_store::{ann_table_is_fresh, ANN_TABLE_DIRNAME};
+use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 use corpus_engine::enrichment::pipeline::{
     progress::wire, BuildStep, EnrichProgress, EnrichProgressFn, PipelineRegistry, SeedStrategy,
 };
 use sovereign_cli_shared::help::{self, Help, HelpSection};
+use sovereign_core::traits::InferenceProvider;
+use sovereign_tools::atlas_context_manager::{backfill_ann, AtlasContextFilter, BackfillOutcome};
 use std::sync::Arc;
 
 const HELP: Help = Help {
@@ -54,7 +62,7 @@ const HELP: Help = Help {
             (
                 "--skip <step>",
                 "Skip a step by name. Accepts: seed, extract, cluster, name, resolve, \
-                 tensions, gaps, configure, report. Repeatable.",
+                 tensions, gaps, configure, report, backfill. Repeatable.",
             ),
             (
                 "--dry-run",
@@ -79,7 +87,11 @@ const HELP: Help = Help {
             "Requires `svrn enrich init <corpus>` first. Phase 8 (configure) is \
              skipped automatically if the pipeline hasn't opted in via \
              `runs_configuration_phase()`. Any step failure stops the flow with that \
-             step's exit code.",
+             step's exit code. The last step, `backfill`, embeds the resolved atoms \
+             into `atlas/atoms_ann.lance` through the daemon's embed model so the \
+             corpus grounds immediately; it is probed before the first step runs, \
+             and `--skip backfill` builds without grounding (`svrn atlas backfill-ann \
+             <corpus>` seeds it later).",
         ),
     ],
 };
@@ -161,6 +173,24 @@ pub async fn build_with_progress(parsed: &ParsedBuild, progress: Option<EnrichPr
         return 0;
     }
 
+    // Fail fast for the LAST step. Backfill needs the daemon's embed slot;
+    // proving it answers costs one embed call here, and discovering it does
+    // not after thirty minutes of extraction would waste the run. The same
+    // session is the step's provider, so the daemon is resolved once.
+    let backfill_session = if plan.enabled.contains(&Step::Backfill) {
+        match probe_backfill_session().await {
+            Ok(s) => Some(s),
+            Err(msg) => {
+                eprintln!("error: {msg}");
+                return 1;
+            }
+        }
+    } else {
+        None
+    };
+    let embedder: Option<&Arc<dyn InferenceProvider>> =
+        backfill_session.as_ref().map(|s| &s.inference);
+
     emit(EnrichProgress::BuildStart {
         corpus_id: parsed.corpus_id.clone(),
         pipeline_id: capabilities.pipeline_id.clone(),
@@ -182,7 +212,7 @@ pub async fn build_with_progress(parsed: &ParsedBuild, progress: Option<EnrichPr
             ordinal,
             total,
         });
-        let outcome = match run_step(step, parsed).await {
+        let outcome = match run_step(step, parsed, embedder).await {
             Ok(o) => o,
             Err(failure) => {
                 let code = failure.exit_code;
@@ -330,6 +360,11 @@ fn step_canonical_output(step: Step, corpus_id: &str) -> Option<std::path::PathB
                 .join("atlas")
                 .join("schema_validation.json"),
         ),
+        Step::Backfill => Some(
+            paths::index_root(corpus_id)
+                .join(ATLAS_DIRNAME)
+                .join(ANN_TABLE_DIRNAME),
+        ),
         Step::Seed | Step::Configure => None,
     }
 }
@@ -459,7 +494,11 @@ impl StepFailure {
     }
 }
 
-async fn run_step(step: Step, parsed: &ParsedBuild) -> Result<StepOutcome, StepFailure> {
+async fn run_step(
+    step: Step,
+    parsed: &ParsedBuild,
+    embedder: Option<&Arc<dyn InferenceProvider>>,
+) -> Result<StepOutcome, StepFailure> {
     let corpus = parsed.corpus_id.as_str();
 
     // ── Idempotency gate ───────────────────────────────────────
@@ -508,6 +547,13 @@ async fn run_step(step: Step, parsed: &ParsedBuild) -> Result<StepOutcome, StepF
                     && resolve_cache_is_structural_placeholder(&cache_path)
                 {
                     Some("an empty post-install structural placeholder (no resolved atoms)")
+                } else if matches!(step, Step::Backfill)
+                    && !ann_table_is_fresh(&paths::index_root(corpus).join(ATLAS_DIRNAME))
+                {
+                    // - Backfill: the table is keyed on atom-id, so one that
+                    // predates the atoms.json this run (or a later resolve)
+                    // wrote seeds grounding from atoms that no longer exist.
+                    Some("older than atlas/atoms.json (the atlas was re-resolved since it was embedded)")
                 } else {
                     None
                 };
@@ -517,7 +563,14 @@ async fn run_step(step: Step, parsed: &ParsedBuild) -> Result<StepOutcome, StepF
                         step.label(),
                         cache_path.display()
                     );
-                    if let Err(e) = std::fs::remove_file(&cache_path) {
+                    // The ANN table is a Lance DIRECTORY; every other
+                    // canonical output is a file.
+                    let removed = if cache_path.is_dir() {
+                        std::fs::remove_dir_all(&cache_path)
+                    } else {
+                        std::fs::remove_file(&cache_path)
+                    };
+                    if let Err(e) = removed {
                         eprintln!(
                             "  warning: could not remove stale cache {}: {}",
                             cache_path.display(),
@@ -676,6 +729,90 @@ async fn run_step(step: Step, parsed: &ParsedBuild) -> Result<StepOutcome, StepF
                 Err(message) => Err(StepFailure::new(message, 1)),
             }
         }
+        Step::Backfill => run_backfill_step(corpus, embedder).await,
+    }
+}
+
+/// Build the daemon-backed session the Backfill step embeds through, and
+/// prove its embed slot answers (`embed_query("probe")`). `parse_globals(&[])`
+/// resolves the daemon exactly as `svrn atlas backfill-ann` does — the same
+/// bootstrap, not a second one (ARCH §19).
+async fn probe_backfill_session() -> Result<ChatSession, String> {
+    let (globals, _) = parse_globals(&[])?;
+    let session = build_session(&globals).await.map_err(|e| {
+        format!(
+            "backfill: could not reach the daemon ({e}); start it, or pass \
+             `--skip backfill` to build without grounding"
+        )
+    })?;
+    session.inference.embed_query("probe").await.map_err(|e| {
+        format!(
+            "backfill: the daemon's embed slot did not answer ({e}); load an embed \
+             model, or pass `--skip backfill` to build without grounding"
+        )
+    })?;
+    Ok(session)
+}
+
+/// The Backfill step: `atlas/atoms.json` → `atlas/atoms_ann.lance` through
+/// the ONE writer, `sovereign_tools::atlas_context_manager::backfill_ann`,
+/// under the production grounding filter (`AtlasContextFilter::default()` —
+/// the universe the daemon seeds `atlas_navigate_ann` from; `backfill_ann.rs`
+/// says why no other filter may be used here, and `migrate_all`'s relaxed-
+/// floor retry is deliberately NOT copied: one filter, the one grounding uses).
+///
+/// Three outcomes, each in its own words (§18.3): wrote N/M; skipped because
+/// the filter admitted nothing (an atlas of Claims-only or structural atoms);
+/// or a failure naming the recovery command. `embedder` is the provider the
+/// probe verified — its absence is a wiring error and is reported, not
+/// defaulted.
+async fn run_backfill_step(
+    corpus: &str,
+    embedder: Option<&Arc<dyn InferenceProvider>>,
+) -> Result<StepOutcome, StepFailure> {
+    let Some(embedder) = embedder else {
+        return Err(StepFailure::new(
+            format!(
+                "backfill: no embed provider was wired for this build; run \
+                 `svrn atlas backfill-ann {corpus}`"
+            ),
+            1,
+        ));
+    };
+    let atlas_dir = paths::index_root(corpus).join(ATLAS_DIRNAME);
+    let filter = AtlasContextFilter::default();
+    match backfill_ann(embedder.as_ref(), &atlas_dir, corpus, &filter).await {
+        Ok(BackfillOutcome::Built(stats)) => {
+            println!(
+                "  · wrote {} — {}/{} entries resolved to atom-ids",
+                atlas_dir.join(ANN_TABLE_DIRNAME).display(),
+                stats.resolved,
+                stats.total
+            );
+            Ok(StepOutcome::did(format!(
+                "wrote atlas/{ANN_TABLE_DIRNAME} — {}/{} entries resolved to atom-ids",
+                stats.resolved, stats.total
+            )))
+        }
+        Ok(BackfillOutcome::NoSeedableAtoms {
+            min_description_chars,
+        }) => {
+            println!(
+                "  · no seedable atoms under the grounding filter \
+                 (min_chars={min_description_chars}); table not written"
+            );
+            Ok(StepOutcome::did(format!(
+                "skipped — no seedable atoms under the grounding filter \
+                 (min_chars={min_description_chars})"
+            )))
+        }
+        Err(e) => Err(StepFailure::new(
+            format!(
+                "backfill: {e}; once the daemon's embed model is up, run \
+                 `svrn atlas backfill-ann {corpus}`"
+            ),
+            1,
+        )),
     }
 }
 
@@ -935,6 +1072,8 @@ pub enum Step {
     Gaps,
     Configure,
     Report,
+    /// Last, always: it reads the atlas every step before it wrote.
+    Backfill,
 }
 
 impl Step {
@@ -953,6 +1092,7 @@ impl Step {
             Step::Gaps => BuildStep::Gaps,
             Step::Configure => BuildStep::Configure,
             Step::Report => BuildStep::Report,
+            Step::Backfill => BuildStep::Backfill,
         }
     }
 
@@ -967,7 +1107,20 @@ impl Step {
             Step::Gaps => "gaps",
             Step::Configure => "configure",
             Step::Report => "report",
+            Step::Backfill => "backfill",
         }
+    }
+
+    /// The `--skip` vocabulary, rendered from `all()` so the parser error and
+    /// the desktop constructor cannot list different steps than the plan runs.
+    /// (`HELP` is a `const` and repeats the list as a literal; a test below
+    /// holds the two together.)
+    fn valid_labels() -> String {
+        Self::all()
+            .iter()
+            .map(|s| s.label())
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 
     fn from_label(s: &str) -> Option<Step> {
@@ -981,6 +1134,7 @@ impl Step {
             "gaps" => Some(Step::Gaps),
             "configure" => Some(Step::Configure),
             "report" => Some(Step::Report),
+            "backfill" => Some(Step::Backfill),
             _ => None,
         }
     }
@@ -996,6 +1150,7 @@ impl Step {
             Step::Gaps,
             Step::Configure,
             Step::Report,
+            Step::Backfill,
         ]
     }
 }
@@ -1154,10 +1309,7 @@ impl ParsedBuild {
         let mut skipped: Vec<Step> = Vec::new();
         for id in skip_step_ids {
             let step = Step::from_label(id).ok_or_else(|| {
-                format!(
-                    "unknown skip step `{id}` (valid: seed, extract, cluster, \
-                     name, resolve, tensions, gaps, configure, report)"
-                )
+                format!("unknown skip step `{id}` (valid: {})", Step::valid_labels())
             })?;
             if !skipped.contains(&step) {
                 skipped.push(step);
@@ -1203,8 +1355,8 @@ fn parse_args(args: &[String]) -> Result<ParsedBuild, String> {
                     .ok_or_else(|| "--skip requires a step name".to_string())?;
                 let step = Step::from_label(raw).ok_or_else(|| {
                     format!(
-                        "unknown step `{raw}` for --skip (valid: seed, extract, cluster, \
-                         name, resolve, tensions, gaps, configure, report)"
+                        "unknown step `{raw}` for --skip (valid: {})",
+                        Step::valid_labels()
                     )
                 })?;
                 if !skipped.contains(&step) {
@@ -1457,6 +1609,7 @@ mod tests {
             Step::Tensions,
             Step::Gaps,
             Step::Report,
+            Step::Backfill,
         ] {
             let path = step_canonical_output(step, corpus)
                 .unwrap_or_else(|| panic!("step {step:?} must declare a canonical output"));
@@ -1472,6 +1625,83 @@ mod tests {
             assert!(
                 step_canonical_output(step, corpus).is_none(),
                 "step {step:?} should not be cache-gated (no canonical output)"
+            );
+        }
+    }
+
+    /// `--skip <label>` must accept exactly the labels the plan runs, in
+    /// both directions, for every step — a variant added to `all()` without
+    /// a `from_label` arm would be un-skippable and this catches it.
+    #[test]
+    fn from_label_round_trips_every_step() {
+        for step in Step::all() {
+            assert_eq!(
+                Step::from_label(step.label()),
+                Some(*step),
+                "label `{}` must parse back to {step:?}",
+                step.label()
+            );
+        }
+        assert_eq!(Step::from_label("backfill"), Some(Step::Backfill));
+    }
+
+    /// Backfill reads the atlas every other step wrote, so it is last in
+    /// `all()` and last in every plan — including one whose pipeline
+    /// auto-skips Seed and Configure — and `--skip backfill` removes it.
+    #[test]
+    fn backfill_is_the_last_step_in_every_plan() {
+        assert_eq!(Step::all().last(), Some(&Step::Backfill));
+        let caps = PipelineCapabilities {
+            pipeline_id: "custom_atlas".into(),
+            seed_strategy_none: true,
+            runs_configuration_phase: false,
+        };
+        let parsed = ParsedBuild::from_inputs("bk", None, &[], false).unwrap();
+        let plan = Plan::new(&parsed, &caps);
+        assert_eq!(plan.enabled.last(), Some(&Step::Backfill));
+        assert_eq!(plan.enabled.len(), Step::all().len() - 2);
+
+        let skipped = ParsedBuild::from_inputs("bk", None, &["backfill".into()], false).unwrap();
+        let plan = Plan::new(&skipped, &caps);
+        assert!(!plan.enabled.contains(&Step::Backfill));
+        assert_eq!(plan.enabled.last(), Some(&Step::Report));
+    }
+
+    /// The Backfill cache gate keys on the ANN table directory under the
+    /// corpus's atlas dir — the same path `ann_table_present` /
+    /// `ann_table_is_fresh` read, via the shared constants, so the gate and
+    /// the reader cannot name different directories.
+    #[test]
+    fn step_canonical_output_backfill_is_the_ann_table_dir() {
+        let path = step_canonical_output(Step::Backfill, "my-corpus").unwrap();
+        assert!(
+            path.ends_with(format!("my-corpus/{ATLAS_DIRNAME}/{ANN_TABLE_DIRNAME}")),
+            "got {path:?}"
+        );
+        assert_eq!(ANN_TABLE_DIRNAME, "atoms_ann.lance");
+    }
+
+    /// `HELP` is a `const`, so it repeats the `--skip` vocabulary as a
+    /// literal; this holds that literal to `Step::all()`.
+    #[test]
+    fn help_names_every_skippable_step() {
+        let flags = HELP
+            .sections
+            .iter()
+            .find_map(|s| match s {
+                HelpSection::Flags(entries) => Some(entries),
+                _ => None,
+            })
+            .expect("HELP has a Flags section");
+        let (_, skip_text) = flags
+            .iter()
+            .find(|(flag, _)| flag.starts_with("--skip"))
+            .expect("HELP documents --skip");
+        for step in Step::all() {
+            assert!(
+                skip_text.contains(step.label()),
+                "HELP --skip text omits `{}`: {skip_text}",
+                step.label()
             );
         }
     }

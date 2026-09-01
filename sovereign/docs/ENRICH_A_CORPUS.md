@@ -28,10 +28,20 @@ svrn enrich build <corpus> --full
 ```
 
 One shot, every phase in order: seed → extract → cluster → name → resolve
-→ tensions → gaps → configure → report. The LLM phases (`seed`,
+→ tensions → gaps → configure → report → backfill. The LLM phases (`seed`,
 `extract`, `name`, `configure`) need the daemon; the structural phases are
 pure Rust and run offline. Any phase failure stops the flow with that
 phase's exit code — nothing downstream runs on half-built input.
+
+The last phase, `backfill`, embeds the resolved atoms into
+`atlas/atoms_ann.lance` through the daemon's embed model — the table the
+daemon seeds atlas grounding from — so a freshly built corpus grounds
+without a further command. It needs the daemon's embed slot, which the
+build probes before the first phase runs (a build that cannot embed fails
+there, not thirty minutes later). `--skip backfill` builds without
+grounding; `svrn atlas backfill-ann <corpus>` seeds it afterwards. A
+re-run skips `backfill` when the table is newer than `atoms.json` and
+rebuilds it when a resolve has made it stale.
 
 ## 3 — Check what you have
 

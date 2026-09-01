@@ -16,16 +16,130 @@
 //! ARCH §10.6, one decider). Diagnostics are `tracing` events, not stderr:
 //! the same function now runs inside the daemon.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use corpus_engine::enrichment::atlas::ann_store::ANN_TABLE_DIRNAME;
 use corpus_engine::enrichment::atlas::{
     read_atlas_atoms, read_atlas_edges, AtomEnvelope, EdgeType,
 };
-use sovereign_core::atlas_context::{AtlasContext, AtlasEntry};
+use sovereign_core::atlas_context::{
+    build_persistent_ann_seed_table, AnnBuildStats, AtlasContext, AtlasEntry,
+};
 use sovereign_core::traits::InferenceProvider;
 
 use crate::atlas_context_manager::AtlasContextFilter;
+
+/// Why [`load_atlas_context`] produced no bag. Typed so a caller can tell
+/// "this corpus has nothing seedable" (a legitimate outcome for an atlas that
+/// carries only non-Entity surfaces) from "reading it failed" without
+/// matching on message text (ARCH §18.3). `Display` renders the operator
+/// messages the CLI printed before this type existed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LoadAtlasError {
+    /// No `atlas/` directory at all.
+    NoAtlas {
+        corpus_id: String,
+        atlas_dir: PathBuf,
+    },
+    /// `atoms.json` read, but the filter admitted nothing.
+    FilterExcludedAll {
+        corpus_id: String,
+        min_description_chars: usize,
+    },
+    /// `atoms.json` unreadable or unparseable.
+    Read(String),
+}
+
+impl std::fmt::Display for LoadAtlasError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoAtlas {
+                corpus_id,
+                atlas_dir,
+            } => write!(
+                f,
+                "no atlas at {} — `svrn enrich ingest {corpus_id} \
+                 --strategy structure_first --source-corpus <id>` first",
+                atlas_dir.display()
+            ),
+            Self::FilterExcludedAll {
+                corpus_id,
+                min_description_chars,
+            } => write!(
+                f,
+                "atlas-context: filter excluded every atom in `{corpus_id}`. \
+                 Lower --atlas-min-description-chars (currently {min_description_chars}) \
+                 or check --atlas-depth, or pass --atlas-include claim,tension if the \
+                 atlas only carries non-Entity surfaces."
+            ),
+            Self::Read(e) => write!(f, "read atlas atoms.json: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for LoadAtlasError {}
+
+/// What [`backfill_ann`] did for one corpus.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BackfillOutcome {
+    /// The table at `atlas/atoms_ann.lance` was (re)written.
+    Built(AnnBuildStats),
+    /// The production grounding filter admitted no atom, so there is nothing
+    /// to seed from — the table is not written and grounding for this corpus
+    /// stays where it was. Not a failure: an atlas of Claims-only or
+    /// structural atoms is a real shape (mirrors `migrate_all`'s `"none"`
+    /// state, WITHOUT its relaxed-floor retry — one filter, the one the daemon
+    /// seeds with).
+    NoSeedableAtoms { min_description_chars: usize },
+}
+
+/// Build (or rebuild) one corpus's persistent ANN seed table from its
+/// `atoms.json`: [`load_atlas_context`] under `filter`, then
+/// `build_persistent_ann_seed_table`. The one writer behind `svrn atlas
+/// backfill-ann`, the `enrich build` Backfill step, and the daemon's
+/// post-write hook (ontology-v1 P0) — lifted from `backfill_ann.rs`'s
+/// per-corpus loop rather than written again (ARCH §19). `filter.top_k`
+/// rides into the bag unchanged; the table does not use it.
+///
+/// `Err` is a real failure (unreadable atlas, embed provider down, Lance
+/// write failed) and carries the underlying message; callers name the
+/// recovery command (`svrn atlas backfill-ann <id>`) at their own surface.
+pub async fn backfill_ann(
+    inference: &dyn InferenceProvider,
+    atlas_dir: &Path,
+    corpus_id: &str,
+    filter: &AtlasContextFilter,
+) -> Result<BackfillOutcome, String> {
+    let ctx = match load_atlas_context(inference, atlas_dir, corpus_id, filter.top_k, filter).await
+    {
+        Ok(ctx) => ctx,
+        Err(LoadAtlasError::FilterExcludedAll {
+            min_description_chars,
+            ..
+        }) => {
+            tracing::info!(
+                corpus = corpus_id,
+                min_description_chars,
+                depth_allowlist = ?filter.depth_allowlist,
+                "backfill-ann: no seedable atoms under the grounding filter; table not written"
+            );
+            return Ok(BackfillOutcome::NoSeedableAtoms {
+                min_description_chars,
+            });
+        }
+        Err(e) => return Err(e.to_string()),
+    };
+    let stats = build_persistent_ann_seed_table(atlas_dir, &ctx).await?;
+    tracing::info!(
+        corpus = corpus_id,
+        resolved = stats.resolved,
+        total = stats.total,
+        table = %atlas_dir.join(ANN_TABLE_DIRNAME).display(),
+        "backfill-ann: wrote ANN seed table"
+    );
+    Ok(BackfillOutcome::Built(stats))
+}
 
 /// Truncate atlas-entity text for embedding. Embed models cap context
 /// somewhere around 8K tokens; entities with augmented descriptions
@@ -88,16 +202,15 @@ pub async fn load_atlas_context(
     atlas_corpus_id: &str,
     top_k: usize,
     filter: &AtlasContextFilter,
-) -> Result<AtlasContext, String> {
+) -> Result<AtlasContext, LoadAtlasError> {
     if !atlas_dir.exists() {
-        return Err(format!(
-            "no atlas at {} — `svrn enrich ingest {atlas_corpus_id} \
-             --strategy structure_first --source-corpus <id>` first",
-            atlas_dir.display()
-        ));
+        return Err(LoadAtlasError::NoAtlas {
+            corpus_id: atlas_corpus_id.to_string(),
+            atlas_dir: atlas_dir.to_path_buf(),
+        });
     }
 
-    let atoms = read_atlas_atoms(atlas_dir).map_err(|e| format!("read atlas atoms.json: {e}"))?;
+    let atoms = read_atlas_atoms(atlas_dir).map_err(|e| LoadAtlasError::Read(e.to_string()))?;
 
     // Build embed-text per Entity, applying filters. Counters track
     // why each entity was kept or dropped so the pre-embed log is
@@ -395,12 +508,10 @@ pub async fn load_atlas_context(
         "atlas-context: filtered atoms.json (pre-embed)"
     );
     if payloads.is_empty() {
-        return Err(format!(
-            "atlas-context: filter excluded every atom in `{atlas_corpus_id}`. \
-             Lower --atlas-min-description-chars (currently {}) or check --atlas-depth, \
-             or pass --atlas-include claim,tension if the atlas only carries non-Entity surfaces.",
-            filter.min_description_chars
-        ));
+        return Err(LoadAtlasError::FilterExcludedAll {
+            corpus_id: atlas_corpus_id.to_string(),
+            min_description_chars: filter.min_description_chars,
+        });
     }
 
     let mut entries: Vec<AtlasEntry> = Vec::with_capacity(payloads.len());

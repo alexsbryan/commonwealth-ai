@@ -770,9 +770,12 @@ identical schema for a full index or a shard.
         │                                # lossless payload). Replaced atoms.rkyv; the
         │                                # sole atom backend. See docs/specs/ATLAS_STORAGE_V2.md
         ├── edges.csr                    # mmap'd CSR adjacency — sync, paged BFS
-        ├── atoms_ann.lance/             # ANN seed table (atom_id → embedding), built at
-        │                                # enrich/backfill; seeds atlas grounding (only
-        │                                # on embedding-bearing corpora)
+        ├── atoms_ann.lance/             # ANN seed table (atom_id → embedding); seeds atlas
+        │                                # grounding. Written by ONE function,
+        │                                # `sovereign_tools::atlas_context_manager::backfill_ann`,
+        │                                # from `enrich build`'s last step (`backfill`, skipped
+        │                                # while `ann_table_is_fresh` — table mtime ≥ atoms.json)
+        │                                # or `svrn atlas backfill-ann <id>`
         ├── asset_atoms.jsonl            # AD-2 Asset envelopes (sidecar union'd
         │                                # into atoms.json on next atlas write)
         ├── asset_edges.jsonl            # EdgeType::Attaches edges

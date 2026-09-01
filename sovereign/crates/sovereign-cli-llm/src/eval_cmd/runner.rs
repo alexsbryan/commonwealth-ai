@@ -601,6 +601,7 @@ pub async fn load_atlas_context(
         filter,
     )
     .await
+    .map_err(|e| e.to_string())
 }
 
 /// Run an entire bank, sequentially. Sequential is fine — the daemon's

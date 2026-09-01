@@ -23,8 +23,7 @@ use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
 use crate::enrich_cmd::paths;
-use crate::eval_cmd::runner::{self, AtlasContextFilter};
-use sovereign_core::atlas_context::build_persistent_ann_seed_table;
+use sovereign_tools::atlas_context_manager::{backfill_ann, AtlasContextFilter, BackfillOutcome};
 
 pub async fn run(args: &[String]) -> i32 {
     let (globals, rest) = match parse_globals(args) {
@@ -171,18 +170,13 @@ pub async fn run(args: &[String]) -> i32 {
 
     let mut built = 0usize;
     let mut failed = 0usize;
+    // One writer for every surface that seeds a corpus — this verb, the
+    // `enrich build` Backfill step, and the daemon's post-write hook all call
+    // `sovereign_tools::atlas_context_manager::backfill_ann` (ontology-v1 P0).
     for corpus_id in &corpora {
         let atlas_dir = paths::index_root(corpus_id).join(ATLAS_DIRNAME);
-        let ctx = match runner::load_atlas_context(&session, corpus_id, 3, &filter).await {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("backfill-ann {corpus_id}: load atlas context: {e}");
-                failed += 1;
-                continue;
-            }
-        };
-        match build_persistent_ann_seed_table(&atlas_dir, &ctx).await {
-            Ok(stats) => {
+        match backfill_ann(session.inference.as_ref(), &atlas_dir, corpus_id, &filter).await {
+            Ok(BackfillOutcome::Built(stats)) => {
                 println!(
                     "backfill-ann {corpus_id}: wrote {} — {}/{} bag entries resolved to atom-ids",
                     atlas_dir.join(ANN_TABLE_DIRNAME).display(),
@@ -191,8 +185,21 @@ pub async fn run(args: &[String]) -> i32 {
                 );
                 built += 1;
             }
+            Ok(BackfillOutcome::NoSeedableAtoms {
+                min_description_chars,
+            }) => {
+                // The operator asked for a table and got none: a failure at
+                // this surface, with the knobs that widen the filter named.
+                eprintln!(
+                    "backfill-ann {corpus_id}: filter excluded every atom \
+                     (min_chars={min_description_chars}, depth={:?}) — nothing to index; \
+                     see --atlas-min-description-chars / --atlas-depth / --atlas-include",
+                    filter.depth_allowlist
+                );
+                failed += 1;
+            }
             Err(e) => {
-                eprintln!("backfill-ann {corpus_id}: build ANN table: {e}");
+                eprintln!("backfill-ann {corpus_id}: {e}");
                 failed += 1;
             }
         }
