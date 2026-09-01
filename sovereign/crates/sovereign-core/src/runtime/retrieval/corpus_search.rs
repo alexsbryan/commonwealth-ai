@@ -142,7 +142,14 @@ impl Runtime {
                 };
             }
         };
-        let indexes = match engine.usable_indexes().await {
+        // `installed_indexes()`, NOT `usable_indexes()`. The latter pre-filters
+        // on `indexes_built`, which makes `corpus_unavailability`'s
+        // `!info.indexes_built` arm — and with it the user-facing "hasn't
+        // finished building yet" disclosure — unreachable: the corpus is
+        // dropped before the classifier that exists to explain the drop ever
+        // sees it, leaving only a `debug!` the shipped daemon never emits.
+        // One decider, and it is the one that can report (§10.6, §18.3).
+        let indexes = match engine.installed_indexes().await {
             Ok(ix) => ix,
             Err(e) => {
                 tracing::warn!(error = %e, "{label}: installed_indexes() failed");

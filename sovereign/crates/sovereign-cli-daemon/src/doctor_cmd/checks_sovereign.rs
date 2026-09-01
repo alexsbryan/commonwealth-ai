@@ -171,7 +171,25 @@ pub(super) async fn check_entry_node_identity() -> CheckResult {
             repair: Repair::None,
         };
     };
-    let seen = body.get("node_id").and_then(|n| n.as_str()).unwrap_or("");
+    // A body with no `node_id` is a COULD-NOT-JUDGE, not a moved node. The
+    // `unwrap_or("")` this replaces made every such answer compare unequal to
+    // `recorded` and fall into the `Failed` arm below, which then accused a
+    // reachable, unmoved entry node of being a different machine ("now answers
+    // as node ") and offered a `--reset`. A reverse proxy, a plain
+    // OpenAI-compatible endpoint or an older build all produce it. Four
+    // verdicts, not two (§18.2).
+    let Some(seen) = body.get("node_id").and_then(|n| n.as_str()) else {
+        return CheckResult {
+            name: NAME,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Skipped,
+            message: format!(
+                "entry node {origin} answered but named no node_id — cannot tell a \
+                 moved address from an endpoint that does not report one"
+            ),
+            repair: Repair::None,
+        };
+    };
     if seen == recorded {
         return CheckResult {
             name: NAME,

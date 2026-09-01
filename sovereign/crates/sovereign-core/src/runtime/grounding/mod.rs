@@ -1268,7 +1268,7 @@ fn record_gate_decision(
     #[cfg(not(test))]
     use sovereign_contracts::types::{grounding_journal_append, journal_dir};
     use sovereign_contracts::types::{
-        EvidenceRef, GateJudgeVerdict, GroundingDecisionLine, GroundingLine,
+        EvidenceRef, GroundingDecisionLine, GroundingLine,
     };
     let mut d = GroundingDecisionLine::new(profile.surface.id(), profile.tau, gate_ms);
     // The per-call census (D0). The journal line below is the exact join for

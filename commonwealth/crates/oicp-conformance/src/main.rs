@@ -106,10 +106,16 @@ async fn main() -> ExitCode {
     // 2 is "could not judge" throughout this binary (see the usage-error arm
     // above), and it must be distinguishable from 1: a corrupt baseline needs
     // a human to re-mint it, a regression needs a human to read a diff.
-    if baseline_unreadable {
-        ExitCode::from(2)
-    } else if !report.is_conformant() || regressed || should_failed {
+    // A REAL FAILURE OUTRANKS COULD-NOT-JUDGE, and the order matters. When a
+    // run is both non-conformant AND has a corrupt baseline, reporting 2 hides
+    // the harder fact behind the softer one: a CI step that treats 2 as an
+    // infra flake and retries would never surface the conformance failure at
+    // all. The unreadable baseline still costs the ratchet, and still gets its
+    // own code — but only when there is nothing worse to report.
+    if !report.is_conformant() || regressed || should_failed {
         ExitCode::FAILURE
+    } else if baseline_unreadable {
+        ExitCode::from(2)
     } else {
         ExitCode::SUCCESS
     }

@@ -31,11 +31,11 @@
 //! Rebuild, we run the whole pipeline. Disabling tears down the
 //! atlas dir cleanly via `corpus_engine::atlas_teardown`.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::types::AssetState;
 use tokio::sync::{Mutex, OwnedSemaphorePermit, RwLock, Semaphore};

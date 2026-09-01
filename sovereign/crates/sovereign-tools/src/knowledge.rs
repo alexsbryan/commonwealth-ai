@@ -53,7 +53,7 @@ impl KnowledgeTool {
     }
 
     /// The executable half of `knowledge`.
-    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())

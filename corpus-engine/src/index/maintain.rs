@@ -178,11 +178,24 @@ impl CorpusIndex {
     /// routes to "nothing to reclaim". Never used to claim a corpus IS
     /// healthy, only to decline unnecessary work.
     pub async fn version_count(&self) -> usize {
-        self.table
-            .list_versions()
-            .await
-            .map(|v| v.len())
-            .unwrap_or(0)
+        match self.table.list_versions().await {
+            Ok(v) => v.len(),
+            Err(e) => {
+                // The 0 is the documented best-effort contract above, but it
+                // must not be SILENT. 0 routes to "nothing to reclaim", so a
+                // corpus whose metadata listing keeps failing is a corpus the
+                // reclaimer keeps declining — the same shape as the leak this
+                // sweep exists to close, and previously invisible because the
+                // only other signal is a `debug!` the shipped daemon does not
+                // emit (§9.1, §18.3).
+                tracing::warn!(
+                    error = %e,
+                    "version_count: listing versions failed — reporting 0, so this \
+                     corpus will not be reclaimed this cycle"
+                );
+                0
+            }
+        }
     }
 
     /// Delete superseded manifest versions and the fragments they alone hold.

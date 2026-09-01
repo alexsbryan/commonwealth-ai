@@ -16,7 +16,6 @@
 //! `retrieved_chunks[].url` field is always `null` and no custody field
 //! exists anywhere in the release.
 
-use crate::harness;
 
 use crate::harness::TestHarness;
 

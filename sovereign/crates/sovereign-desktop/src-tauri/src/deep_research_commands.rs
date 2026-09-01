@@ -277,6 +277,34 @@ fn live_runs() -> &'static Mutex<HashMap<String, LiveRun>> {
     LIVE_RUNS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+/// Clears a run from [`LIVE_RUNS`] and stops its poller HOWEVER the driving
+/// task ends — including an unwind.
+///
+/// The happy path still does both explicitly, so the ordering around the
+/// terminal event is unchanged; this is the backstop for the path that has no
+/// code. `LIVE_RUNS` is the one decider for "is a run alive", and a panic
+/// anywhere in the deep-research loop used to leave it permanently answering
+/// YES: `dr_start` refuses every later run, the close handler keeps blocking
+/// quit, `dr_abort` returns `Ok(())` on a corpse, and the Start button stays
+/// disabled — with the panic itself swallowed by the dropped `JoinHandle`.
+/// A registry that can only be wrong in the direction of "stuck forever" needs
+/// its cleanup to be structural, not remembered (§7).
+struct RunCleanup {
+    job_id: String,
+    done: Arc<AtomicBool>,
+}
+
+impl Drop for RunCleanup {
+    fn drop(&mut self) {
+        self.done.store(true, Ordering::Relaxed);
+        // Never `expect` here: a panic inside Drop during an unwind aborts the
+        // process, turning a recoverable run failure into a dead app.
+        if let Ok(mut runs) = live_runs().lock() {
+            runs.remove(&self.job_id);
+        }
+    }
+}
+
 /// The event the window's close handler emits when it refuses to quit
 /// because research is in flight. The frontend owns the conversation that
 /// follows; the backend only declines to disappear silently.
@@ -441,6 +469,12 @@ pub async fn dr_start(
         // in-process changes who writes it, not what reads it.
         let poller = RunDirPoller::new(run_dir_runner.clone());
         let done = Arc::new(AtomicBool::new(false));
+        // Held for the life of the task: if `run`/`resume` unwinds, this is
+        // what still clears the registry and stops the poller.
+        let _cleanup = RunCleanup {
+            job_id: job_runner.clone(),
+            done: Arc::clone(&done),
+        };
         let done_poll = Arc::clone(&done);
         let app_poll = app_runner.clone();
         let channel_poll = channel_runner.clone();
@@ -449,8 +483,16 @@ pub async fn dr_start(
             let mut last_change_unix = started_at_unix;
             while !done_poll.load(Ordering::Relaxed) {
                 let snapshot = poller.snapshot();
+                // Fall back to the LAST KNOWN stage, not to "planning".
+                // `snapshot()` returns `None` whenever `charter.json` is
+                // briefly unreadable or mid-rewrite, and the store applies
+                // `event.stage || a.stage` — so fabricating "planning" rewound
+                // a round-3 run to "Planning the search" on a transient read
+                // failure. Absence is not a state (§18.3); "planning" is only
+                // honest before anything has ever been observed.
                 let stage = snapshot
                     .as_ref()
+                    .or(last.as_ref())
                     .map(|s| s.stage.clone())
                     .unwrap_or_else(|| "planning".to_string());
                 if emit_if_changed(&app_poll, &channel_poll, snapshot, &mut last) {

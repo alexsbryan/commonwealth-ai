@@ -28,7 +28,7 @@ use crate::slot_policy::Workload;
 use crate::title::strip_think_blocks;
 use crate::traits::{ApprovalChannel, InferenceProvider, RoutingEventSink};
 use crate::types::{
-    CompletionRequest, LessonProposedPayload, NarrationEvent, NarrationPhase, TurnNarration,
+    LessonProposedPayload, NarrationEvent, NarrationPhase, TurnNarration,
 };
 
 /// Note kind for the lesson lane (`corpus-engine-notes` MIGRATION_V11).

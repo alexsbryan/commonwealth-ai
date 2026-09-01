@@ -1518,14 +1518,28 @@ impl MeshInferenceProvider {
             // what the caller actually sent. `as_ref()` rather than an
             // `expect`: a panic here would trade a routing bug for an
             // outage, and the gate name alone still identifies the reason.
+            // `locus` is on this event because "staying local" is not the whole
+            // truth on every node. The privacy arms that refuse a `local_only`
+            // envelope rather than cross with it all live on the NAMED path
+            // (`locate_named_model` / `resolve_named_dispatch`); this is the
+            // ranked path, and it reaches `LocalFallback`. On a node whose
+            // `local` is a forwarding provider (`ForwardsOffBox` — a terminal
+            // holds no weights of its own) that fallback is an HTTP call to
+            // another machine, so this line read "staying local" for a turn
+            // that left the host. Whether a terminal's forward to its own
+            // entry node should be refused is a policy question and is NOT
+            // settled here; what is settled is that the trace no longer
+            // asserts something it cannot know (§9.1).
             tracing::debug!(
                 oicp_request_id = %oicp_request_id,
                 gate = verdict.gate(),
+                locus = ?self.local.serving_locus(),
                 sharding = ?request.oicp.as_ref().map(|o| o.sharding()),
                 latency = ?request.oicp.as_ref().map(|o| o.effective_latency_class()),
                 forward_budget = ?request.oicp.as_ref().map(|o| o.effective_forward_budget()),
-                "mesh-inference: staying local (SLOT_POLICY §5: offload iff \
-                 MeshAllowed AND latency != Fast AND forward budget remains)"
+                "mesh-inference: not offloading to a peer (SLOT_POLICY §5: offload iff \
+                 MeshAllowed AND latency != Fast AND forward budget remains) — \
+                 `locus` says whether serving it locally still leaves this machine"
             );
             return self.gated(rec, verdict.gate());
         }

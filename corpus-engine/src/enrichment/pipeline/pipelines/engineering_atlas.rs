@@ -47,7 +47,7 @@
 use serde::Deserialize;
 
 use super::super::atlas::{
-    ClaimSketch, DiscourseAct, EnrichmentDepth, EpistemicStatus, SectionExtraction,
+    ClaimSketch, DiscourseAct, EnrichmentDepth, EpistemicStatus, SectionExtraction, SeedStrategy,
 };
 use super::super::types::{ChapterInput, ChatPrompt, Phase1ChapterResult};
 use crate::enrichment::pipeline::Exemplar;
@@ -115,6 +115,22 @@ impl super::genre::AtlasGenre for EngineeringGenre {
 
     fn parse_phase1(&self, response: &str) -> Option<Result<Phase1ChapterResult>> {
         Some(parse_engineering_phase1(response))
+    }
+
+    // The two hooks below restate what the pre-genre `EngineeringAtlasPipeline`
+    // got from `Pipeline`'s defaults (`SeedStrategy::None`, no
+    // `compose_phase1b_*`). `AtlasGenre` defaults the other way — `Llm` and
+    // `true`, which is right for a literary genre and wrong here — so leaving
+    // them off would silently add a literary seed call plus two
+    // "characters/entities coverage" calls per section to a pipeline whose
+    // whole point is a single claims facet. That is a change to the bytes sent
+    // to a model, which this refactor promised not to make.
+    fn seed_strategy(&self) -> SeedStrategy {
+        SeedStrategy::None
+    }
+
+    fn runs_phase1b_coverage(&self) -> bool {
+        false
     }
 }
 

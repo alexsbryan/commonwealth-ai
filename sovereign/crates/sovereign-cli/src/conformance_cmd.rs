@@ -370,7 +370,7 @@ pub async fn run(args: &[String]) -> i32 {
         // to the clause.
         println!(
             "\n  Claim a `structural` one:  /// covers: <ID>  above a #[test], then\n    \
-             UPDATE_CONFORMANCE_TAGS=1 cargo test -p <crate> --test main conformance_tags\n\
+             UPDATE_CONFORMANCE_TAGS=1 cargo test -p kernel-types --test conformance_tags\n\
              \n  Claim a `cli` one:  requirements = [\"<ID>\"]  on the journey step whose\n    \
              expect block falsifies the clause, in {MANIFEST}\n    \
              (the step must assert OUTPUT, not just an exit code — the gates refuse the rest)"
@@ -468,7 +468,9 @@ fn render_scenarios(
                 let cites: Vec<String> = r
                     .cited
                     .iter()
-                    .map(|(id, v)| format!("{{\"id\":{},\"verdict\":{}}}", esc(id), esc(v.as_str())))
+                    .map(|(id, v)| {
+                        format!("{{\"id\":{},\"verdict\":{}}}", esc(id), esc(v.as_str()))
+                    })
                     .collect();
                 format!(
                     "{{\"id\":{},\"suite\":{},\"demonstrated\":{},\"detail\":{},\"cites\":[{}]}}",
@@ -505,13 +507,20 @@ fn render_scenarios(
              requires the demonstration to have been watched, so green cites over a scenario\n  \
              nobody ran is exactly the substitution §16 exists to prevent.\n"
         );
-        println!("  {:<6} {:<18} {:<34} {}", "id", "demonstrated", "cited requirements", "suite");
+        println!(
+            "  {:<6} {:<18} {:<34} {}",
+            "id", "demonstrated", "cited requirements", "suite"
+        );
         for r in &out {
             let demo = match &r.demonstrated {
                 Some((v, _)) => v.as_str(),
                 None => "not declared",
             };
-            let passed = r.cited.iter().filter(|(_, v)| *v == Verdict::Passed).count();
+            let passed = r
+                .cited
+                .iter()
+                .filter(|(_, v)| *v == Verdict::Passed)
+                .count();
             let worst = r
                 .cited
                 .iter()
@@ -521,7 +530,11 @@ fn render_scenarios(
             let cited = if r.cited.is_empty() {
                 "— names none".to_string()
             } else {
-                format!("{passed}/{} passed · worst {}", r.cited.len(), worst.as_str())
+                format!(
+                    "{passed}/{} passed · worst {}",
+                    r.cited.len(),
+                    worst.as_str()
+                )
             };
             println!("  {:<6} {demo:<18} {cited:<34} {}", r.id, r.suite);
         }
@@ -573,7 +586,10 @@ fn journey_sequence_verdict(
     for (i, _step) in journey.live_steps() {
         any = true;
         let v = match steps.status.get(&(journey.id.clone(), i)) {
-            None => (Verdict::NeverRan, format!("step [{i}] not in the last lane")),
+            None => (
+                Verdict::NeverRan,
+                format!("step [{i}] not in the last lane"),
+            ),
             Some(st) => match st.as_str() {
                 "pass" => continue,
                 "fail" => (Verdict::Failed, format!("step [{i}] failed")),

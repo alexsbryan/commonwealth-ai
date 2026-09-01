@@ -1592,7 +1592,6 @@ mod tests {
         );
     }
 
-    #[test]
     /// RED before `blank_out_heading_lines`. The deliverable's H1 is
     /// `# {question}`; a question ends in `?`, so the splitter emitted the
     /// user's own question as a claim and `render.rs` stamped a verdict on
@@ -1644,6 +1643,7 @@ mod tests {
         assert!(claims[0].contains("issue #42"), "got: {}", claims[0]);
     }
 
+    #[test]
     fn sentence_splitter_attaches_spans() {
         let draft = "The Meridian Bridge was completed in 1873 [Source: https://example.com/a]. Its span is 240 meters [Source: https://example.com/b]. A final sentence with no citation.";
         let claims = split_claims(draft);
@@ -2356,6 +2356,7 @@ mod tests {
         );
     }
 
+    #[tokio::test]
     async fn contradicted_negative_records_its_reason_in_the_audit() {
         // Ref-required amendment (order deep-research-t4a,
         // pre-registered): the fixture claim gains its citation handle

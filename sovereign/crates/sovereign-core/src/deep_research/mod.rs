@@ -35,7 +35,7 @@ use containment::{strip_citation_spans, ContainmentConfig};
 use fetch::fetch_round;
 use icd::{
     AcquisitionPlan, AlignmentRecord, BudgetTotals, Charter, CharterValues, CustodyPolicy, Draft,
-    EmptyRound, EmptyRoundReason, EvidenceWindow, FailedSource, FetchFailure, FetchList,
+    EmptyRound, EvidenceWindow, FailedSource, FetchFailure,
     FetchedSource, Gap, GapList, LockRecord, Manifest, Plan, ReframeInput, ReframeRecord,
     ResidueRow, RoundRow, SourceLedger, Survey, TriageConfig, UrlConstraintPolicy, WindowChunk,
 };
@@ -1263,7 +1263,7 @@ impl Controller {
             ),
             Err(_) => None,
         };
-        let mut ctl = Controller {
+        let ctl = Controller {
             config,
             port,
             provider,
@@ -2139,7 +2139,7 @@ impl Controller {
             }
             self.write_artifact(&format!("draft-{round}.json"), &draft)?;
 
-            let (audits, gap_list) = self.audit_pass(&draft, &window).await?;
+            let (_audits, gap_list) = self.audit_pass(&draft, &window).await?;
             let gaps_before = self.prior_gap_texts.len();
             self.write_artifact(&format!("gap-list-{round}.json"), &gap_list)?;
             self.prior_gap_texts = gap_list.gaps.iter().map(|g| g.text.clone()).collect();
@@ -3078,7 +3078,6 @@ mod tests {
         );
     }
 
-    #[test]
     /// THE SHIPPED DEFAULT, pinned. All three report-shape switches ship ON as
     /// of 2026-08-27 and the desktop app sets none of them — it calls
     /// `launch::prepare` and inherits process env — so an accidental revert to
@@ -3110,6 +3109,7 @@ mod tests {
         }
     }
 
+    #[test]
     fn a_repeated_evidence_handle_is_reported_not_silently_resolved() {
         // The failure this catches is silent BY CONSTRUCTION: `number_citations`
         // resolves a handle with `.find(|c| c.id == id)`, so a repeated id binds

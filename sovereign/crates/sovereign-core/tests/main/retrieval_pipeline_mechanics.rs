@@ -9,7 +9,6 @@
 //! the pipeline is degenerate. Behavior = live benches
 //! (`bench all --synth`), per the pipeline-collapse plan.
 
-use crate::harness;
 
 use crate::harness::TestHarness;
 use sovereign_core::runtime::retrieval_pipeline::{

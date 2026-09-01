@@ -32,7 +32,6 @@ use sovereign_core::skills::SkillRegistry;
 use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_store::sqlite::SqliteStateStore;
 
-use crate::harness;
 use crate::harness::DeterministicInference;
 
 fn inference() -> Arc<dyn InferenceProvider> {

@@ -2651,7 +2651,21 @@ async fn cmd_create(args: &[String]) -> i32 {
                 }
             }
             "--encrypt" => require_encryption = true,
-            _ => {}
+            // REFUSED, not ignored. `--encrypt` is the one flag here whose
+            // absence cannot be corrected afterwards — the help says the
+            // posture is fixed for the life of the mesh — so a typo that fell
+            // into a catch-all arm founded a PLAINTEXT mesh and exited 0
+            // reporting success. Absence is reported, never defaulted (§18.3).
+            other => {
+                eprintln!("error: unknown argument for `mesh create`: {other}");
+                eprintln!();
+                eprintln!(
+                    "hint: a mesh's encryption posture is fixed when it is created, so a \
+                     misspelled flag is refused rather than ignored. Run `svrn mesh create \
+                     --help` for the accepted flags."
+                );
+                return 2;
+            }
         }
     }
 

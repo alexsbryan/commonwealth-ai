@@ -88,7 +88,7 @@ impl ResearchPort for DaemonPort {
     }
     async fn draft(
         &self,
-        leg: DraftLeg,
+        _leg: DraftLeg,
         prompt: &str,
         system_message: Option<&str>,
         allowed_urls: &[String],

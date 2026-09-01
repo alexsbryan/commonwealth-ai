@@ -306,7 +306,7 @@ pub(crate) fn build_demands(
         text: message.to_string(),
         covered: CoverageLevel::Absent,
     }];
-    let mut push_unique = |demands: &mut Vec<Demand>, facet: DemandFacet, text: &str| {
+    let push_unique = |demands: &mut Vec<Demand>, facet: DemandFacet, text: &str| {
         let text = text.trim();
         if text.is_empty() || text.eq_ignore_ascii_case(message) {
             return;

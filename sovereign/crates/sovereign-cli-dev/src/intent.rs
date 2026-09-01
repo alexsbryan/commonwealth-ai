@@ -240,9 +240,29 @@ pub fn intent_census(symbols: &[IntentSymbol], opts: &IntentOptions) -> Vec<Inte
             *df.entry(t.as_str()).or_insert(0) += 1;
         }
     }
+    // SMOOTHED, and the smoothing is load-bearing rather than cosmetic.
+    //
+    // This was `ln(n / (1 + df))`, which goes NEGATIVE as soon as a term
+    // appears in most symbols (`df >= n` gives `ln(<1) < 0`). `norm` below
+    // takes the `sqrt` of the sum, so a symbol whose terms are all common
+    // produced **NaN** — and NaN then defeated the `min_score` floor in
+    // silence, because `NaN < threshold` is FALSE and the pair was admitted.
+    // The threshold read as if it had run while admitting everything that
+    // reached it; the five-identical-summaries fixture below is enough to
+    // trigger it (`df = n = 5`).
+    //
+    // `+1` on the numerator and `+1` on the result is the standard smoothed
+    // form. It is never negative (so `sqrt` is never NaN) and never zero for a
+    // term that occurs (so `norm` is zero only for a symbol with no terms,
+    // which the guard below already handles). It also makes the scorer answer
+    // correctly at the boundary that matters here: two IDENTICAL summaries
+    // share every term, so `inter == Σ idf` and the score is
+    // `S / (√S · √S) = 1.0` — a perfect cosine, which is the right answer and
+    // is what the plain clamp-at-zero alternative could not give (it drove
+    // every idf to 0 and the norm with it, scoring 0/0).
     let idf = |t: &str| -> f64 {
         let c = *df.get(t).unwrap_or(&0);
-        (n / (1.0 + c as f64)).ln()
+        ((1.0 + n) / (1.0 + c as f64)).ln() + 1.0
     };
     let norm: Vec<f64> = symbols
         .iter()

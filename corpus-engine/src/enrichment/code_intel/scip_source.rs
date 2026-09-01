@@ -171,6 +171,7 @@ pub fn enumerate_from_rows(
         enrichable,
         emitted,
         skipped_short,
+        skipped_kind,
         unreadable,
         "code_intel: enumerated symbol sources from SCIP",
     );
@@ -224,7 +225,6 @@ mod tests {
         d
     }
 
-    #[test]
     /// A struct walks straight through the caller screen, because
     /// `#[derive(..)]` expansions emit refs whose CALLER is the type. It must
     /// be routed to the TYPE prompt, not asked "what does this function do".

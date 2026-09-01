@@ -403,7 +403,7 @@ pub async fn containment_witness(
     claim: &str,
     chunks: &[String],
     config: &ContainmentConfig,
-    posture: ShardingPrivacy,
+    _posture: ShardingPrivacy,
 ) -> WitnessOutcome {
     if claim.trim().is_empty() || chunks.is_empty() {
         return WitnessOutcome::not_witnessable("trigger not met: empty claim or evidence window");

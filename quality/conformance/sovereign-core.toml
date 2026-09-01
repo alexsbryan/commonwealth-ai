@@ -50,7 +50,7 @@ requirement = "GR-27"
 test = "sovereign-core::runtime::authority_guard::tests::arming_requires_a_declared_corpus_in_the_evidence_pool"
 file = "sovereign/crates/sovereign-core/src/runtime/authority_guard.rs"
 line = 526
-asserts = 7
+asserts = 6
 
 [[claim]]
 requirement = "GR-28"
@@ -78,7 +78,7 @@ requirement = "GR-6"
 test = "sovereign-core::runtime::grounding::tests::tombstoned_repair_releases_the_audited_draft_with_its_claims_marked"
 file = "sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs"
 line = 5366
-asserts = 9
+asserts = 8
 
 [[claim]]
 requirement = "RT-17"

@@ -130,7 +130,7 @@ impl SpendDecider {
         allowance: HashMap<String, u32>,
         journal_path: &Path,
     ) -> Result<SpendDecider, String> {
-        let mut d = SpendDecider {
+        let d = SpendDecider {
             run_id: run_id.to_string(),
             charter_hash: charter_hash.to_string(),
             initial_allowance: allowance.clone(),

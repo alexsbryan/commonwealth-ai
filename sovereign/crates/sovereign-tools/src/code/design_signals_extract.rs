@@ -116,7 +116,7 @@ impl DesignSignalsExtractTool {
         Ok(StepOutput::Json(render_signals_json(&resolved, &signals)))
     }
 
-    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+    fn validate_extra(&self, _params: &serde_json::Value) -> Result<()> {
         // All params are optional; the tool defaults to `DESIGN.md`
         // under the project root. Validation happens at `execute`
         // time where we can surface a file-not-found message

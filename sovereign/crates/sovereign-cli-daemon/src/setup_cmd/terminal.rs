@@ -268,6 +268,15 @@ async fn run_terminal_join(
     let client_port = opts
         .client_port
         .unwrap_or_else(sovereign_contracts::setup_config::default_client_port);
+    // `internal_port` is `client_port + 1` everywhere below, so the last port
+    // has no pair. Refused here rather than saturated: saturating would hand
+    // both roles the same port and the collision would surface later as an
+    // unexplained bind failure.
+    if client_port == u16::MAX {
+        eprintln!("error: --client-port {client_port} leaves no port for the internal listener.");
+        eprintln!("hint: pick a port below {}.", u16::MAX);
+        return 1;
+    }
     if daemon_is_listening(client_port).await {
         eprintln!("error: a daemon is already running on :{client_port}.");
         eprintln!();
@@ -293,9 +302,30 @@ async fn run_terminal_join(
         .ok()
         .and_then(|h| h.into_string().ok())
         .unwrap_or_else(|| "sovereign-terminal".to_string());
+    // THE SAME data dir and ports the config below records, not the compiled
+    // defaults. This daemon is what actually persists the mesh key, `mesh.json`
+    // and the node id, and what actually binds the listener — so handing it
+    // `svrnmesh_root()` + `unconfigured()` while writing something else to disk
+    // gives one setup two answers to "where does this node live" and "which
+    // port does it own". With `--data-dir` the identity landed in `~/.svrnmesh`
+    // and the daemon later minted a fresh one at the configured dir, joining a
+    // mesh the entry node had never seen; with `--client-port` the collision
+    // guard checked the requested port and the bind then failed on 9741,
+    // reported as an expired invite.
+    let data_dir = opts
+        .data_dir
+        .clone()
+        .unwrap_or_else(sovereign_core::rebrand::data_dir);
     let daemon = std::sync::Arc::new(sovereign_mesh::daemon::EmbeddedDaemon::new(
-        sovereign_core::rebrand::svrnmesh_root(),
-        SetupConfig::unconfigured(),
+        data_dir.clone(),
+        SetupConfig {
+            daemon: sovereign_contracts::setup_config::DaemonSection {
+                client_port,
+                internal_port: client_port + 1,
+                ..Default::default()
+            },
+            ..SetupConfig::unconfigured()
+        },
         match admin_services() {
             Ok(s) => s,
             Err(e) => {
@@ -411,10 +441,6 @@ async fn run_terminal_join(
              as absent rather than guessed."
         ),
     }
-    let data_dir = opts
-        .data_dir
-        .clone()
-        .unwrap_or_else(sovereign_core::rebrand::data_dir);
     let cfg = SetupConfig {
         models: None,
         node: NodeSection {

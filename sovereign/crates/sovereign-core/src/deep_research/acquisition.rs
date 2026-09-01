@@ -934,8 +934,8 @@ mod tests {
     /// the admission assertion fails.
     #[test]
     fn triage_favors_figure_bearing_hits() {
-        let mut figureless_hit = |id: &str| hit(id, 0.9);
-        let mut figure_bearing_hit = |id: &str| SearchHit {
+        let figureless_hit = |id: &str| hit(id, 0.9);
+        let figure_bearing_hit = |id: &str| SearchHit {
             snippet: "The Gini index reached 0.485 in 2018.".to_string(),
             ..hit(id, 0.9)
         };

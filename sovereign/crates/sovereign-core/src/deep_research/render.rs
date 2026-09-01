@@ -19,7 +19,7 @@ use super::containment::strip_citation_spans;
 use super::icd::{
     AlignmentRecord, BudgetTotals, ClaimCitation, EmptyRound, EmptyRoundReason, EvidenceWindow,
     FinalClaim, GateAction, LockRecord, Manifest, ReframeRecord, ResidueRow, RoundRow,
-    SourceLedger, Verdict, VerdictSet,
+    SourceLedger, Verdict,
 };
 
 // ---------------------------------------------------------------------

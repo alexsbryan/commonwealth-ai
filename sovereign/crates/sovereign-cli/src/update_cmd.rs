@@ -100,6 +100,15 @@ async fn fetch_latest() -> Result<(String, &'static str), String> {
     }
 
     if let Some(found) = best {
+        // A partial failure is still a failure to SEE, and swallowing it turns
+        // "we could not read the primary" into "you are up to date". GitHub's
+        // unauthenticated rate limit trips the primary while the retired shelf
+        // still answers with an older tag; without this line the user is told
+        // they are current against a shelf that stopped moving.
+        if let Some(err) = &first_err {
+            eprintln!("note: could not read every release shelf, so this answer may be stale.");
+            eprintln!("      {err}");
+        }
         return Ok(found);
     }
     Err(first_err

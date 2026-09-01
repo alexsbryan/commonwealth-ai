@@ -204,7 +204,16 @@ fn assertion_count(body: &str, should_panic: bool) -> usize {
         "assert_matches !",
         "panic !",
         "unreachable !",
-        ". expect (",
+        // `.unwrap_err(` stays: it panics when the subject returned `Ok`, so it
+        // is an assertion ABOUT the subject.
+        //
+        // `.expect(` was here and is deliberately gone. It is falsifiable in
+        // the narrow sense, but in practice it is SETUP —
+        // `tempdir().expect("tmp")`, `serde_json::from_str(..).expect(..)` —
+        // so counting it let a body that asserts nothing about the requirement
+        // satisfy this gate on its fixtures alone. That is precisely "the cheap
+        // repair a coverage ratchet rewards" that the failure message below
+        // names, and the gate was rewarding it (§18.1).
         ". unwrap_err (",
     ] {
         n += body.matches(token).count();
@@ -219,6 +228,58 @@ fn line_of(text: &str, ident: &str) -> usize {
         .position(|l| l.contains(&needle))
         .map(|i| i + 1)
         .unwrap_or(0)
+}
+
+/// Record one `covers:`-tagged function as claims, wherever it was found.
+///
+/// Shared by the free-function and `impl`-method arms of [`collect`] so the
+/// three guards below — must be a `#[test]`, must name a requirement, must
+/// contain something falsifiable — cannot hold on one traversal path and not
+/// the other. One decider (§10.6).
+#[allow(clippy::too_many_arguments)]
+fn record_fn(
+    attrs: &[Attribute],
+    ident: &syn::Ident,
+    block: &syn::Block,
+    module: &[String],
+    binary: &str,
+    rel_file: &str,
+    text: &str,
+    out: &mut Vec<Claim>,
+) {
+    let Some(ids) = covers(attrs) else {
+        return;
+    };
+    assert!(
+        is_test_attr(attrs),
+        "{rel_file}: `{ident}` carries a covers: tag but is not a #[test]. \
+         A claim no test runner executes proves nothing."
+    );
+    assert!(
+        !ids.is_empty(),
+        "{rel_file}: `{ident}` has an empty covers: tag"
+    );
+    let body = format!("{}", quote::ToTokens::to_token_stream(block));
+    let asserts = assertion_count(&body, has_attr(attrs, "should_panic"));
+    assert!(
+        asserts > 0,
+        "CLAIMED-UNPROVEN — {rel_file}: `{ident}` claims {ids:?} but its body contains \
+         nothing falsifiable. A claim that cannot fail is worse than no claim: it is \
+         the cheap repair a coverage ratchet rewards. Assert something, or remove \
+         the tag."
+    );
+    let mut path = module.to_vec();
+    path.push(ident.to_string());
+    let line = line_of(text, &ident.to_string());
+    for id in ids {
+        out.push(Claim {
+            requirement: id,
+            test: format!("{binary}::{}", path.join("::")),
+            file: rel_file.to_string(),
+            line,
+            asserts,
+        });
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -239,42 +300,38 @@ fn collect(
                     collect(inner, &nested, binary, rel_file, text, out);
                 }
             }
-            Item::Fn(f) => {
-                let Some(ids) = covers(&f.attrs) else {
-                    continue;
-                };
-                assert!(
-                    is_test_attr(&f.attrs),
-                    "{rel_file}: `{}` carries a covers: tag but is not a #[test]. \
-                     A claim no test runner executes proves nothing.",
-                    f.sig.ident
-                );
-                assert!(
-                    !ids.is_empty(),
-                    "{rel_file}: `{}` has an empty covers: tag",
-                    f.sig.ident
-                );
-                let body = format!("{}", quote::ToTokens::to_token_stream(&*f.block));
-                let asserts = assertion_count(&body, has_attr(&f.attrs, "should_panic"));
-                assert!(
-                    asserts > 0,
-                    "CLAIMED-UNPROVEN — {rel_file}: `{}` claims {ids:?} but its body contains \
-                     nothing falsifiable. A claim that cannot fail is worse than no claim: it is \
-                     the cheap repair a coverage ratchet rewards. Assert something, or remove \
-                     the tag.",
-                    f.sig.ident,
-                );
-                let mut path = module.to_vec();
-                path.push(f.sig.ident.to_string());
-                let line = line_of(text, &f.sig.ident.to_string());
-                for id in ids {
-                    out.push(Claim {
-                        requirement: id,
-                        test: format!("{binary}::{}", path.join("::")),
-                        file: rel_file.to_string(),
-                        line,
-                        asserts,
-                    });
+            Item::Fn(f) => record_fn(
+                &f.attrs,
+                &f.sig.ident,
+                &f.block,
+                module,
+                binary,
+                rel_file,
+                text,
+                out,
+            ),
+            // A `covers:` tag inside an `impl` block used to hit the catch-all
+            // below and vanish: the file passed the `contains("covers:")`
+            // prefilter, syn parsed it, and zero claims came out — no error, no
+            // manifest row, no diagnostic. The author reads a green build and
+            // believes the requirement is covered. A scanner that silently sees
+            // less than it claims to is the same defect class it exists to
+            // catch, so the traversal has to reach every place a `#[test]` can
+            // legally live.
+            Item::Impl(i) => {
+                for sub in &i.items {
+                    if let syn::ImplItem::Fn(f) = sub {
+                        record_fn(
+                            &f.attrs,
+                            &f.sig.ident,
+                            &f.block,
+                            module,
+                            binary,
+                            rel_file,
+                            text,
+                            out,
+                        );
+                    }
                 }
             }
             _ => {}

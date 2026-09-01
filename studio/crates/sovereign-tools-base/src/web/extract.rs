@@ -413,7 +413,6 @@ mod tests {
         assert_eq!(text, "İstanbul");
     }
 
-    #[test]
     /// The guard against this subsystem's recurring bug shape: a cap that
     /// eats capacity WITHOUT SAYING SO.
     ///

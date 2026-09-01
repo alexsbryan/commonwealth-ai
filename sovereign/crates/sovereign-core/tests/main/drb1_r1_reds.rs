@@ -9,12 +9,11 @@
 //! Each test fails at HEAD (before the fix) and passes after.
 
 use sovereign_core::deep_research::budget::{
-    SpendDecider, FAMILY_WEB_FETCH, FAMILY_WEB_SEARCH, KEY_FETCH_PAGES,
+    SpendDecider, FAMILY_WEB_FETCH, KEY_FETCH_PAGES,
 };
-use sovereign_core::deep_research::fetch::{self, fetch_round, CHUNK_CONTENT_CAP};
-use sovereign_core::deep_research::gym::{MockBackendImpl, MockDraftSurface};
+use sovereign_core::deep_research::fetch::{self, fetch_round};
 use sovereign_core::deep_research::icd::{
-    EmptyRoundReason, FetchList, SearchHit, TriageOutcome, ICD_VERSION,
+    FetchList, SearchHit, TriageOutcome, ICD_VERSION,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -249,7 +248,7 @@ async fn stop_rule_condition_evaluated_correctly() {
 #[tokio::test]
 async fn caller_tightens_ceilings_downward_only() {
     use sovereign_core::deep_research::{RunConfig, SearchSource};
-    use std::path::PathBuf;
+    
 
     let tmp = tempfile::tempdir().unwrap();
 

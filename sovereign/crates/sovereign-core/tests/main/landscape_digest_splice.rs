@@ -34,7 +34,6 @@ use sovereign_core::SkillRegistry;
 use sovereign_core::ToolRegistry;
 use sovereign_store::sqlite::SqliteStateStore;
 
-use crate::harness;
 use crate::harness::DeterministicInference;
 
 /// Minimal provider that satisfies the invariant the way the real

@@ -19,7 +19,7 @@
 use crate::error::Result;
 use crate::slot_policy::Workload;
 use crate::traits::{InferenceProvider, StateStore};
-use crate::types::{CompletionRequest, Message, Role};
+use crate::types::{Message, Role};
 
 /// Hard cap on the characters we include from a single message so the prompt
 /// stays small — title prompts run on the Fast slot and must be cheap.
