@@ -332,12 +332,28 @@ pub fn intent_census(symbols: &[IntentSymbol], opts: &IntentOptions) -> Vec<Inte
                     .cmp(&symbols[*b].file)
                     .then(symbols[*a].line.cmp(&symbols[*b].line))
             });
-            // The cluster's name: the discriminative terms every member shares.
-            let mut common: BTreeSet<String> = symbols[ids[0]].terms.clone();
-            for k in &ids[1..] {
-                common = common.intersection(&symbols[*k].terms).cloned().collect();
+            // The cluster's name: terms carried by at least half the members,
+            // ranked by IDF.
+            //
+            // NOT the intersection of all of them. `token()` is the control's
+            // join key, and a strict intersection over a 22-member cluster is
+            // emptied by ONE member whose summary words it differently — the
+            // control would then go quiet because the vocabulary drifted, not
+            // because the duplication was converged. That is precisely the
+            // false COULD-NOT-JUDGE the control mechanism exists to avoid
+            // (detector.rs, "The negative control").
+            let mut freq: BTreeMap<&str, usize> = BTreeMap::new();
+            for k in &ids {
+                for t in &symbols[*k].terms {
+                    *freq.entry(t.as_str()).or_insert(0) += 1;
+                }
             }
-            let mut terms: Vec<String> = common.into_iter().collect();
+            let quorum = ids.len().div_ceil(2);
+            let mut terms: Vec<String> = freq
+                .into_iter()
+                .filter(|(_, c)| *c >= quorum)
+                .map(|(t, _)| t.to_string())
+                .collect();
             terms.sort_by(|a, b| {
                 idf(b)
                     .partial_cmp(&idf(a))
@@ -473,6 +489,30 @@ mod tests {
         assert_eq!(c[0].members.len(), 5);
     }
 
+    /// One member wording it differently must not erase the cluster's name.
+    /// The token is the control's join key, so an empty or shifting token is a
+    /// control that goes quiet for the wrong reason.
+    #[test]
+    fn one_odd_member_does_not_empty_the_cluster_token() {
+        let text = "Computes the cosine similarity between two embedding vectors.";
+        let mut syms: Vec<_> = (0..4)
+            .map(|i| sym(&format!("cos{i}"), &format!("crate{i}/src/x.rs"), text))
+            .collect();
+        // Shares enough to join, words the rest of it completely differently.
+        syms.push(sym(
+            "odd_one",
+            "crateX/src/x.rs",
+            "Cosine similarity over vectors, expressed with wholly different prose.",
+        ));
+        let c = intent_census(&syms, &opts());
+        assert_eq!(c.len(), 1, "expected one cluster, got {c:?}");
+        assert!(
+            !c[0].terms.is_empty(),
+            "a quorum token must survive one differently-worded member"
+        );
+        assert!(c[0].token().len() > "intent:".len());
+    }
+
     #[test]
     fn crate_of_reads_both_workspace_layouts() {
         assert_eq!(crate_of("corpus-engine/src/facts_check.rs"), "corpus-engine");
@@ -489,4 +529,56 @@ mod tests {
         assert!(!is_ours("corpus-engine/target/debug/build/x.rs"));
         assert!(is_ours("corpus-engine/src/lib.rs"));
     }
+}
+
+/// Render for `svrn code converge verb`.
+///
+/// Deliberately shaped like a `converge` dossier and not like a diff: the
+/// worker's question is "which of these homes should own this job", so the
+/// crates are the headline and the bodies are not shown at all.
+pub fn render_intent(clusters: &[IntentCluster], limit: usize) -> String {
+    let mut out = String::new();
+    let shown = if limit == 0 {
+        clusters.len()
+    } else {
+        limit.min(clusters.len())
+    };
+    let homes: usize = clusters.iter().map(|c| c.members.len()).sum();
+    out.push_str(&format!(
+        "# converge verb — duplicated INTENT\n\n\
+         **{}** job(s) with more than one home, **{}** implementations total.\n\n\
+         Same job, different name, different crate. A name census cannot see \
+         these (the names differ) and a clone search cannot (the code does). \
+         Advisory: the ranker is lexical over behaviour descriptions, so this \
+         is a shortlist for adjudication, never a verdict.\n\n",
+        clusters.len(),
+        homes
+    ));
+    if clusters.is_empty() {
+        out.push_str("Nothing above the score floor.\n");
+        return out;
+    }
+    for c in clusters.iter().take(shown) {
+        let crates: BTreeSet<&str> = c.members.iter().map(|m| m.krate.as_str()).collect();
+        out.push_str(&format!(
+            "- **{} homes across {} crates** · `{}` · min {:.3}\n",
+            c.members.len(),
+            crates.len(),
+            c.token(),
+            c.min_score
+        ));
+        for m in &c.members {
+            out.push_str(&format!(
+                "  - `{}` — {}:{}  [{}]\n",
+                m.name, m.file, m.line, m.krate
+            ));
+        }
+    }
+    if shown < clusters.len() {
+        out.push_str(&format!(
+            "\n… and {} more (--limit 0 for all)\n",
+            clusters.len() - shown
+        ));
+    }
+    out
 }

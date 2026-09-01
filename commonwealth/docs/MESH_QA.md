@@ -323,15 +323,30 @@ measured on RuggedFox 2026-08-31, terminal `f1f2589f…` bound to MAC
 `entry_endpoint.rs` had already recorded the split and dismissed it on the
 grounds that "both end at the same machine".
 
-The bar that needs a differing deployment: **a terminal bound to X, with Y
-advertising the same model at nearer locality, serves chat from X.** It is
-covered at the unit level
-(`peer_inference::tests::a_terminal_serves_chat_from_its_bound_node_not_the_nearest_peer`,
-plus `joining_the_mesh_does_not_change_where_a_terminals_chat_goes` for the
-§10.6 half). Closing it here needs a SECOND advertising holder on this box with
-the terminal preferring the wrong one — prefer that to a two-machine ceremony,
-because a bar only a second physical machine can run is a bar that will not be
-run.
+**Closed 2026-08-31 by the decoy.** The script now stands up a THIRD daemon
+advertising the same `primary` alias on a small model, so the terminal has a
+rival to its binding and the bar becomes expressible on one box. It runs by
+default; `--no-decoy` skips it, and that flag exists only to save the model
+load. Two assertions, because they fail differently — the terminal's log must
+carry `gate=bound_locus_authoritative` (deterministic; pre-fix code cannot emit
+it), and the rival's peer tally for this terminal must not move (the half that
+was inexpressible before, since without a rival there was nothing for the turn
+to go wrong towards). Also unit-covered:
+`peer_inference::tests::a_terminal_serves_chat_from_its_bound_node_not_the_nearest_peer`
+and `joining_the_mesh_does_not_change_where_a_terminals_chat_goes`.
+
+**The peer TALLY never needed a second machine, and thinking it did is why it
+went unchecked.** The tn-2 order recorded "an embedding fired on a terminal
+appears in its entry node's `/status.inference.peer_requests`" as a two-machine
+bar. It is not: the tally keys on the `X-Node-Id` header, not on locality, so it
+is one curl against a co-located holder. Step 12 asserts the delta, and it is
+what catches an unstamped terminal — the defect where
+`SplitInferenceProvider::resolved` never called `with_node_id`, so an entry node
+admitted a terminal's turns as its own local traffic: unrationable, since the
+ceiling, the foreground yield and the contribution pause are all keyed on that
+header, and unaccounted. Read the field at `inference.peer_requests`; the
+2026-08-31 baseline used a top-level `peer_requests`, got nothing, and read it as
+"the tally never moved".
 
 ## Layer 4 — Live-fleet routing probe (`scripts/mesh-live-probe.py`)
 

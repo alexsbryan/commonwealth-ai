@@ -7,9 +7,16 @@
 //! read-only, and prints. Never writes, never calls a model, never builds.
 //!
 //! Sibling verbs answer adjacent questions and this one defers to them
-//! rather than reimplementing (ARCH §19): duplicated BEHAVIOUR is
-//! `dry-report`, oversized FILES are `suggest-seams`, crate coupling is
-//! `arch-report`. This verb owns duplicated IDENTITY only.
+//! rather than reimplementing (ARCH §19): duplicated BEHAVIOUR — the same
+//! CODE twice — is `dry-report`, oversized FILES are `suggest-seams`, crate
+//! coupling is `arch-report`.
+//!
+//! This command owns duplicated IDENTITY (`census`/`noun`), duplicated SHAPE
+//! (`shape`), and since 2026-08-31 duplicated INTENT (`verb`) — the same JOB
+//! under a different name in a different crate, which identity and shape both
+//! miss because neither the name nor the field set is shared. `verb` reads the
+//! code-intel summaries rather than the SCIP graph; it is the one subcommand
+//! here that needs the enrichment cache.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
@@ -23,7 +30,7 @@ use corpus_engine_scip::shape::{field_signatures, render_shape, shape_census, Sh
 use corpus_engine_scip::ScipGraph;
 
 const HELP: &str = "\
-svrn code converge <census|roles|shape|noun|status> [options]
+svrn code converge <census|roles|shape|verb|noun|status> [options]
 
 Duplicated concept IDENTITY over the SCIP graph. Read-only; no daemon, no
 model, no build.
@@ -53,6 +60,17 @@ model, no build.
                           instead of 669 — 42% MORE to adjudicate, same
                           recall on the positive control.
     --limit N             groups to print (0 = all; default 40)
+
+  verb                    what JOB is duplicated — the reimplementation that
+                          identity and shape both miss. `cosine_sim`,
+                          `probe_cosine` and `cosine_similarity` share no name
+                          and no field set; they share a one-line description
+                          of what they do. Reads code-intel summaries, so it
+                          needs `svrn enrich code-intel` to have run.
+                          Different-name AND cross-crate is the whole filter:
+                          measured 2026-08-31, the top 200 intent-similar
+                          pairs were 100% same-name, i.e. already `dry-report`'s.
+    --limit N             clusters to print (0 = all; default 40)
 
   roles                   what each ROLE costs and who reuses it — population
                           and adoption share per role, plus the three concept
@@ -231,6 +249,39 @@ pub(crate) async fn run(args: &[String]) -> i32 {
             db_path.display()
         );
         return 1;
+    }
+
+    if sub == "verb" {
+        // No SCIP load: this subcommand reads the enrichment cache, and the
+        // graph costs 7-11s it would never touch.
+        let opts = crate::refactor_cmd::intent::IntentOptions::default();
+        let index_path = indexes_dir.join(&corpus_id);
+        let symbols = match crate::refactor_cmd::intent::load_intent_corpus(&index_path, &opts) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("error: {e}");
+                return 1;
+            }
+        };
+        if symbols.is_empty() {
+            eprintln!(
+                "error: no code-intel summaries at {}/code_intel_cache.json — \
+                 run `svrn enrich code-intel {corpus_id}` first",
+                index_path.display()
+            );
+            return 1;
+        }
+        let clusters = crate::refactor_cmd::intent::intent_census(&symbols, &opts);
+        eprintln!(
+            "converge verb: {} symbols with usable intent text; settings {}",
+            symbols.len(),
+            opts.digest()
+        );
+        print!(
+            "{}",
+            crate::refactor_cmd::intent::render_intent(&clusters, limit)
+        );
+        return 0;
     }
 
     let graph = match ScipGraph::open(&db_path, &corpus_id) {

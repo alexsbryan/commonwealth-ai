@@ -298,6 +298,22 @@ four cheap detectors and FAILED for the behaviour detector, whose near tier is
 O(n²) over 24,823 reps and measured 156s. That detector is now opt-in behind
 `--all` and renders as SKIPPED, never omitted.
 
+Re-measured 2026-08-31 with the `intent` detector added, and the affordability
+result is not a property of duplicate-finding in general — it is a property of
+comparing every pair. `intent` asks a strictly harder question than `behaviour`
+(same JOB, not same code) over a comparable population, and blocks on
+discriminative terms instead of scoring all pairs: **23,899 symbols, 27 jobs
+with more than one home, 84 implementations, 8.0s wall** — inside the close
+budget by a factor of nearly four, against behaviour's 156s. The lesson for the
+next detector is the access pattern, not the ambition.
+
+`behaviour`'s control was also pinned that day, from its first live full run
+(185 exact groups / 356 near clusters / ~10,703 redundant lines). Until then it
+had shipped with an empty control and therefore reported COULD-NOT-JUDGE by
+construction — so the one detector that finds duplicated code was dead twice
+over: too expensive to run by default, and unable to pass if it did. Both
+halves had to be fixed before it could contribute a single site.
+
 **L2 — THE ORDER IS SUFFICIENT.** An agent burning a record makes no exploratory
 tool calls outside the order's file set.
 *Predict:* median exploratory reads per order = 0.

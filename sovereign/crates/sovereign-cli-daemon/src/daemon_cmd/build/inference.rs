@@ -144,40 +144,30 @@ pub(crate) fn load_provider(
                     // two-machine corroboration ("fire an embedding, watch the
                     // tally move") could not pass on 2026-08-31.
                     //
-                    // Read from the PERSISTED identity rather than asked of the
-                    // mesh: `DeferredDaemon::self_node_id()` is async and
-                    // answers `None` until the join handshake completes, and
-                    // this provider is built before that. The persisted file is
-                    // the same source the daemon itself reads a moment later
-                    // (`daemon.rs`'s `load_or_generate_self_node_id`), so both
-                    // agree by construction.
+                    // Resolved with `persist::resolve_self_node_id`, THE canonical
+                    // answer to "who is this node" — the same function the daemon
+                    // itself calls later in this boot (`daemon_cmd/mod.rs`, the
+                    // `resolve_self_node_id` beside the note store). Two calls to
+                    // one implementation, so they cannot disagree.
                     //
-                    // `load_node_id`, NOT `load_or_generate_*`: minting this
-                    // node's identity belongs to the mesh daemon, and one
-                    // decider per name (§10.6). Building an inference provider
-                    // must not be the thing that decides who this node is.
-                    let node_id_hex = match sovereign_mesh::persist::load_node_id(&config.data.dir) {
-                        Ok(Some(id)) => Some(id.to_hex()),
-                        Ok(None) => {
-                            tracing::warn!(
-                                data_dir = %config.data.dir.display(),
-                                "terminal: no persisted node identity yet — forwarding \
-                                 UNSTAMPED, so the entry node will admit these turns as \
-                                 its own local traffic (unrationed, unaccounted). \
-                                 Resolves once this node has joined a mesh."
-                            );
-                            None
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                error = %e,
-                                data_dir = %config.data.dir.display(),
-                                "terminal: could not read the persisted node identity — \
-                                 forwarding UNSTAMPED (see above for what that costs)"
-                            );
-                            None
-                        }
-                    };
+                    // Not `DeferredDaemon::self_node_id()`: that is async and
+                    // answers `None` until the join handshake, and this provider is
+                    // built before it. Not `load_node_id` either — that reads ONLY
+                    // `<data_dir>/node_id`, and an existing mesh commonly carries
+                    // the id inside `mesh.json` with the standalone file never
+                    // materialised. A terminal that joined a mesh is exactly that
+                    // case, so the narrow read left it unstamped on the boot right
+                    // after `mesh join` and the tally stayed empty. Not
+                    // `load_or_generate_self_node_id` either: the comment at the
+                    // daemon's own call site says it "would ignore (2)", the
+                    // mesh.json id, "which is exactly the bug we're fixing".
+                    //
+                    // `resolve_self_node_id` also repairs the case where the file
+                    // holds a PEER's id — adopting that would make this terminal
+                    // stamp another machine's identity onto its own traffic, which
+                    // is worse than being unstamped.
+                    let node_id_hex =
+                        Some(sovereign_mesh::persist::resolve_self_node_id(&config.data.dir).to_hex());
                     Arc::new(
                         sovereign_inference::remote::SplitInferenceProvider::resolved(
                             resolver,

@@ -572,6 +572,7 @@ mod tests {
     ///
     /// Built from the REAL `truncate_chunk_content`, so this cannot drift if
     /// `MAX_CHUNK_CHARS` moves — it tests the relationship, not the number.
+    /// covers: GR-19, GR-20
     #[test]
     fn a_quote_from_beyond_the_prompt_truncation_is_no_longer_demoted() {
         let filler = "The ledger was kept in a fair hand, and the entries ran on \

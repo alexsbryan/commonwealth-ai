@@ -1,0 +1,25 @@
+# Conformance tags in `sovereign-core` — GENERATED. DO NOT EDIT BY HAND.
+#
+#   UPDATE_CONFORMANCE_TAGS=1 cargo test -p sovereign-core --test main conformance_tags
+#
+# Each claim maps a requirement id from research/clean-room/REQUIREMENTS.md to
+# the test that proves it. `test` is `<junit classname>::<junit name>`, so the
+# runner can join a claim to a real per-test verdict without guessing.
+#
+# `asserts` is the number of assertion tokens in the test body. It is never
+# zero: a `covers:` over an assertion-free body fails the generator, because a
+# claim that cannot fail is the cheap repair a coverage ratchet rewards.
+
+[[claim]]
+requirement = "GR-19"
+test = "sovereign-core::quote_verification::tests::a_quote_from_beyond_the_prompt_truncation_is_no_longer_demoted"
+file = "sovereign/crates/sovereign-core/src/quote_verification.rs"
+line = 577
+asserts = 5
+
+[[claim]]
+requirement = "GR-20"
+test = "sovereign-core::quote_verification::tests::a_quote_from_beyond_the_prompt_truncation_is_no_longer_demoted"
+file = "sovereign/crates/sovereign-core/src/quote_verification.rs"
+line = 577
+asserts = 5
