@@ -268,6 +268,19 @@ fn main() -> ExitCode {
         // inside `warmup_primary_slot` itself so this handler
         // returns without blocking the UI thread.
         .on_window_event(|window, event| {
+            // Closing the window kills the deep-research loop's task. That
+            // is the one remaining way for a run to end that the operator
+            // did not choose — and the least visible, because nothing on
+            // screen has to be showing the run for the quit to take it.
+            // So: refuse the close, hand the decision to the frontend, and
+            // let `dr_quit_anyway` finish the job once they have answered.
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if deep_research_commands::has_live_run() {
+                    api.prevent_close();
+                    let _ = window.emit(deep_research_commands::QUIT_BLOCKED_EVENT, ());
+                    return;
+                }
+            }
             if let tauri::WindowEvent::Focused(true) = event {
                 let app = window.app_handle().clone();
                 tauri::async_runtime::spawn(async move {
@@ -739,6 +752,8 @@ fn main() -> ExitCode {
                 deep_research_commands::dr_start,
                 deep_research_commands::dr_abort,
                 deep_research_commands::dr_list_runs,
+                deep_research_commands::dr_active_runs,
+                deep_research_commands::dr_quit_anyway,
                 deep_research_commands::dr_open_report,
                 mesh_commands::mesh_create,
                 mesh_commands::mesh_join,

@@ -10,6 +10,7 @@ import type {
   DrStartOptions,
   DrRunHandle,
   DrRunSummary,
+  DrActiveRun,
   DrReport,
 } from "./types";
 import type {
@@ -1994,15 +1995,34 @@ export async function drStart(
   return invoke("dr_start", { question, options });
 }
 
-/** Kill a running deep-research child. The run dir keeps its artifacts;
- *  the resume affordance picks up from there when the verb supports it. */
+/** Ask a running loop to stop. Not a kill: the flag is polled at every
+ *  state entry, so the run lands on a truncated report with the truncation
+ *  DECLARED and everything gathered so far kept. */
 export async function drAbort(jobId: string): Promise<void> {
   return invoke("dr_abort", { jobId });
 }
 
-/** List prior runs under the run-dir base, newest first. */
+/** List prior runs under the run-dir base, newest first. Entries carry
+ *  `live` from the backend's live-run registry — read it alongside
+ *  `terminal_state`, which is `null` for a run with no manifest yet. */
 export async function drListRuns(): Promise<DrRunSummary[]> {
   return invoke("dr_list_runs");
+}
+
+/** The runs the backend is driving right now, with the channel to listen
+ *  on. This is how a view that was unmounted when the run began — or a
+ *  webview that reloaded — recovers a run in flight instead of showing an
+ *  empty composer while work is happening. */
+export async function drActiveRuns(): Promise<DrActiveRun[]> {
+  return invoke("dr_active_runs");
+}
+
+/** Quit with a run still in flight. Only called after the operator has been
+ *  shown what is running and chosen to go — the window's close handler
+ *  refuses on its own until then. The run dir keeps its artifacts, so the
+ *  run comes back resumable rather than lost. */
+export async function drQuitAnyway(): Promise<void> {
+  return invoke("dr_quit_anyway");
 }
 
 /** Open the checked report of a completed run (the verb's artifacts are the

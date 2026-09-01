@@ -64,6 +64,7 @@ const RUNS: DrRunSummary[] = [
     question: "When did Apollo 11 land on the Moon?",
     created_at_unix: 100,
     terminal_state: "completed",
+    live: false,
     rounds: 1,
     report_present: true,
     consent: { release_floor: "public-web", granted_at_unix: 100 },
@@ -72,7 +73,10 @@ const RUNS: DrRunSummary[] = [
     run_id: "dr-99",
     question: "Interrupted run",
     created_at_unix: 99,
-    terminal_state: "interrupted",
+    // No manifest and nobody driving it: genuinely interrupted, and the
+    // label is derived from the pair rather than defaulted into this field.
+    terminal_state: null,
+    live: false,
     rounds: 0,
     report_present: false,
     consent: null,
@@ -86,6 +90,7 @@ function stubDr(page: import("@playwright/test").Page, overrides: Record<string,
       t.setHandler("dr_capabilities", () => caps);
       t.setHandler("list_corpora", () => corpora);
       t.setHandler("dr_list_runs", () => runs);
+      t.setHandler("dr_active_runs", () => []);
       t.setHandler("dr_start", (args: unknown) => {
         (t as unknown as { _lastDrStart: unknown })._lastDrStart = args;
         return { job_id: "job-1", channel: "deep-research://progress/job-1" };
@@ -162,6 +167,7 @@ test.describe("deep research — scene 1", () => {
     await emitDr(page, {
       kind: "live",
       round: 1,
+      max_rounds: 3,
       stage: "rounding",
       gaps: [
         { id: "g1", text: "the landing date needs a second origin" },
@@ -170,8 +176,8 @@ test.describe("deep research — scene 1", () => {
       budget: { spent: { web: 2 }, remaining: { web: 2 } },
       consent: null,
     });
-    await expect(page.getByTestId("dr-stage")).toHaveText("rounding");
-    await expect(page.getByTestId("dr-round")).toHaveText("round 1");
+    await expect(page.getByTestId("dr-stage")).toHaveAttribute("data-stage", "rounding");
+    await expect(page.getByTestId("dr-round")).toContainText("round 1 of 3");
     await expect(page.getByTestId("dr-gap-g1")).toContainText("second origin");
     await expect(page.getByTestId("dr-gap-g2")).toContainText("crew manifest");
     await expect(page.getByTestId("dr-meter-web")).toContainText("2 spent");
@@ -199,6 +205,7 @@ test.describe("deep research — scene 1", () => {
     await emitDr(page, {
       kind: "live",
       round: 0,
+      max_rounds: 3,
       stage: "planning",
       gaps: [],
       budget: { spent: {}, remaining: { web: 4 } },
@@ -349,6 +356,7 @@ test.describe("deep research — scene 1", () => {
     const live: DeepResearchRunProgress = {
       kind: "live",
       round: 1,
+      max_rounds: 3,
       stage: "rounding",
       gaps: [{ id: "g1", text: "a gap" }],
       budget: { spent: { web: 1 }, remaining: { web: 3 } },
@@ -357,7 +365,7 @@ test.describe("deep research — scene 1", () => {
     await emitDr(page, live);
     await emitDr(page, live);
     await expect(page.getByTestId("dr-gap-g1")).toHaveCount(1);
-    await expect(page.getByTestId("dr-stage")).toHaveText("rounding");
+    await expect(page.getByTestId("dr-stage")).toHaveAttribute("data-stage", "rounding");
     // No uncaught exceptions (auto-enforced by the fixture), and the abort
     // affordance is still live.
     await expect(page.getByTestId("dr-abort")).toBeVisible();

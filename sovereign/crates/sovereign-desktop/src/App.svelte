@@ -24,6 +24,7 @@
   import ConversationList from "./lib/components/ConversationList.svelte";
   import ChatView from "./lib/components/ChatView.svelte";
   import DeepResearchView from "./lib/components/deep_research/DeepResearchView.svelte";
+  import DeepResearchPresence from "./lib/components/deep_research/DeepResearchPresence.svelte";
   import WorkshopView from "./lib/components/workshop/WorkshopView.svelte";
   import InnerWorkSurface from "./lib/components/inner_work/InnerWorkSurface.svelte";
   import SettingsPanel from "./lib/components/SettingsPanel.svelte";
@@ -706,6 +707,15 @@
      Informational + dismissible — the graceful alternative to a first-query
      crash on an incompatible architecture. -->
 <ModelNoticeBanner />
+
+<!-- A deep-research run outlives the view that started it, so it needs a
+     presence the rest of the app can see: a pill while it runs, and a
+     notice when it lands that survives until acknowledged. Hidden on the
+     deep-research surface itself, where the run is already fully rendered. -->
+<DeepResearchPresence
+  hidden={view === "deep_research"}
+  onOpen={() => (view = "deep_research")}
+/>
 
 {#if attachedToDaemon}
   <!-- Pill anchored top-right; shows briefly on startup then fades out.

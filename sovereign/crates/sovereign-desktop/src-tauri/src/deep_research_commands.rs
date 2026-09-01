@@ -193,10 +193,25 @@ pub enum DeepResearchRunEvent {
     /// charter.json — live, not the close-time manifest).
     Live {
         round: Option<u32>,
+        /// The charter's `max_rounds` — what the round number is OUT OF.
+        /// `None` before the charter is readable; the view says "round 2"
+        /// rather than inventing a denominator.
+        max_rounds: Option<u32>,
         stage: String,
         gaps: Vec<DrGap>,
         budget: DrBudget,
         consent: Option<DrConsent>,
+    },
+    /// The run is still being driven. Emitted every poll tick regardless of
+    /// whether anything changed, because `Live` is deliberately quiet and a
+    /// round spends minutes inside one model call with no artifact moving —
+    /// so silence on this channel is the NORMAL case, and a view holding
+    /// only change events cannot tell a healthy run from a dead one. The
+    /// tick says: still here, this long in, this long since anything moved.
+    Heartbeat {
+        elapsed_secs: i64,
+        quiet_secs: i64,
+        stage: String,
     },
     /// Terminal: the verb exited and `report.md` exists — the checked report
     /// with its verdict dimensions, read from the verb's artifacts.
@@ -228,14 +243,79 @@ pub struct DrConsent {
     pub granted_at_unix: i64,
 }
 
-/// One live run's abort flag, kept so `dr_abort` can raise it. The loop
-/// polls it at every state entry and lands on a truncated report with the
-/// truncation declared — where killing a child process left the run dir
-/// mid-write, with no record that it had been cut short.
-static ABORTS: OnceLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = OnceLock::new();
+/// One run this process is driving right now.
+struct LiveRun {
+    /// Raised by `dr_abort`. The loop polls it at every state entry and
+    /// lands on a truncated report with the truncation declared — where
+    /// killing a child process left the run dir mid-write, with no record
+    /// that it had been cut short.
+    abort: Arc<AtomicBool>,
+    /// When THIS leg started. A resumed run's charter still carries the
+    /// original birth, which is not the elapsed the operator is watching.
+    started_at_unix: i64,
+    /// The job-scoped progress channel, so a webview that reloaded
+    /// mid-run can re-attach to a run it no longer holds a handle for.
+    channel: String,
+    run_dir: PathBuf,
+}
 
-fn aborts() -> &'static Mutex<HashMap<String, Arc<AtomicBool>>> {
-    ABORTS.get_or_init(|| Mutex::new(HashMap::new()))
+/// The live-run registry, keyed by run id. It is the ONE decider for "is
+/// this run alive" (§8: one decider, one name) — the shelf's `live` flag,
+/// `dr_active_runs`'s re-attach list, the resume guard and `dr_abort` all
+/// read this same map, so a run cannot be alive for one surface and
+/// finished for another.
+///
+/// It exists because the absence of a `manifest.json` used to be DEFAULTED
+/// to `interrupted`: a run that was actively turning showed on the shelf as
+/// interrupted, with a Resume button next to it, and pressing it re-entered
+/// a run dir another task was mid-write on. The registry makes that state
+/// nameable instead of guessed (§18.3 — absence is reported, never
+/// defaulted).
+static LIVE_RUNS: OnceLock<Mutex<HashMap<String, LiveRun>>> = OnceLock::new();
+
+fn live_runs() -> &'static Mutex<HashMap<String, LiveRun>> {
+    LIVE_RUNS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// The event the window's close handler emits when it refuses to quit
+/// because research is in flight. The frontend owns the conversation that
+/// follows; the backend only declines to disappear silently.
+pub const QUIT_BLOCKED_EVENT: &str = "deep-research://quit-blocked";
+
+/// Is any run in flight? Read by the window's `CloseRequested` handler:
+/// closing the app kills the loop's task, and doing that without asking is
+/// the one way left for a run to end that the operator did not choose.
+pub fn has_live_run() -> bool {
+    !live_runs().lock().expect("live runs mutex").is_empty()
+}
+
+/// The run this process is driving, if any. `dr_start` reads it to refuse a
+/// second concurrent run; see the refusal there for why one at a time.
+fn first_live_run_id() -> Option<String> {
+    live_runs()
+        .lock()
+        .expect("live runs mutex")
+        .keys()
+        .next()
+        .cloned()
+}
+
+/// Is this process driving that run right now? Every surface that needs
+/// to distinguish "still working" from "died" asks through here.
+fn is_live(run_id: &str) -> bool {
+    live_runs()
+        .lock()
+        .expect("live runs mutex")
+        .contains_key(run_id)
+}
+
+/// Seconds since the epoch, for the elapsed/quiet clocks the live view
+/// renders. A clock that cannot be read is `0`, never a fabricated time.
+fn now_unix() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
 }
 
 /// Start a deep-research run in-process. Returns as soon as the run dir
@@ -258,6 +338,34 @@ pub async fn dr_start(
     }
     let base = runs_base();
     std::fs::create_dir_all(&base).map_err(|e| format!("run dir base {base:?}: {e}"))?;
+
+    // A run this process is already driving must not be re-entered. The
+    // resume path would hand a second loop the same run dir the first is
+    // mid-write on — and the shelf used to OFFER exactly that, because a
+    // live run with no manifest yet read as `interrupted`. The registry is
+    // the decider; the refusal is named, not silent.
+    if let Some(run_id) = options.resume_run_id.as_deref() {
+        if is_live(run_id) {
+            return Err(format!(
+                "{run_id} is still running — open it rather than resuming it"
+            ));
+        }
+    }
+
+    // ONE RUN AT A TIME, and the refusal lives here rather than in the UI
+    // that happens to know it (§7: make it structural, not remembered).
+    // Two reasons, and the first is the load-bearing one: the desktop can
+    // represent exactly one run in flight, so a second start would leave
+    // the first with no surface, no listener, and no way to report that it
+    // finished — the precise failure this whole change set exists to
+    // remove. The second is that two concurrent runs contend for the same
+    // local inference slot and make each other slower.
+    if let Some(existing) = first_live_run_id() {
+        return Err(format!(
+            "a run is already going ({existing}) — stop it or wait for it to \
+             finish before starting another"
+        ));
+    }
 
     // Resume restores its identity from the checkpoint; a fresh launch
     // assembles one. Either way `launch` is the ONE assembly — this
@@ -302,11 +410,17 @@ pub async fn dr_start(
     let job_id = launch.run_id.clone();
     let run_dir = launch.run_dir.clone();
     let abort = Arc::new(AtomicBool::new(false));
-    aborts()
-        .lock()
-        .expect("aborts mutex")
-        .insert(job_id.clone(), Arc::clone(&abort));
     let channel = progress_channel(&job_id);
+    let started_at_unix = now_unix();
+    live_runs().lock().expect("live runs mutex").insert(
+        job_id.clone(),
+        LiveRun {
+            abort: Arc::clone(&abort),
+            started_at_unix,
+            channel: channel.clone(),
+            run_dir: run_dir.clone(),
+        },
+    );
 
     let app_runner = app.clone();
     let channel_runner = channel.clone();
@@ -332,8 +446,28 @@ pub async fn dr_start(
         let channel_poll = channel_runner.clone();
         let poll = tokio::spawn(async move {
             let mut last: Option<DrLiveSnapshot> = None;
+            let mut last_change_unix = started_at_unix;
             while !done_poll.load(Ordering::Relaxed) {
-                emit_if_changed(&app_poll, &channel_poll, poller.snapshot(), &mut last);
+                let snapshot = poller.snapshot();
+                let stage = snapshot
+                    .as_ref()
+                    .map(|s| s.stage.clone())
+                    .unwrap_or_else(|| "planning".to_string());
+                if emit_if_changed(&app_poll, &channel_poll, snapshot, &mut last) {
+                    last_change_unix = now_unix();
+                }
+                // Then the tick, changed or not. This is the difference
+                // between "working" and "hung" on a surface whose other
+                // events are silent by design.
+                let now = now_unix();
+                let _ = app_poll.emit(
+                    &channel_poll,
+                    DeepResearchRunEvent::Heartbeat {
+                        elapsed_secs: (now - started_at_unix).max(0),
+                        quiet_secs: (now - last_change_unix).max(0),
+                        stage,
+                    },
+                );
                 tokio::time::sleep(Duration::from_millis(1000)).await;
             }
         });
@@ -348,7 +482,10 @@ pub async fn dr_start(
         };
         done.store(true, Ordering::Relaxed);
         let _ = poll.await;
-        aborts().lock().expect("aborts mutex").remove(&job_runner);
+        live_runs()
+            .lock()
+            .expect("live runs mutex")
+            .remove(&job_runner);
 
         let event = match outcome {
             Ok(mut outcome) => {
@@ -388,9 +525,9 @@ pub async fn dr_start(
 /// hold. The resume affordance picks up from the last checkpoint.
 #[tauri::command]
 pub async fn dr_abort(job_id: String) -> Result<(), String> {
-    match aborts().lock().expect("aborts mutex").get(&job_id) {
-        Some(flag) => {
-            flag.store(true, Ordering::Relaxed);
+    match live_runs().lock().expect("live runs mutex").get(&job_id) {
+        Some(run) => {
+            run.abort.store(true, Ordering::Relaxed);
             Ok(())
         }
         None => Err(format!("no active run {job_id}")),
@@ -404,6 +541,7 @@ pub async fn dr_abort(job_id: String) -> Result<(), String> {
 #[derive(Debug, Clone, PartialEq)]
 struct DrLiveSnapshot {
     round: Option<u32>,
+    max_rounds: Option<u32>,
     stage: String,
     gaps: Vec<DrGap>,
     budget: DrBudget,
@@ -488,6 +626,7 @@ impl RunDirPoller {
         }
 
         // Consent-grant status from the charter (live, not close-time).
+        let max_rounds = charter.charter.max_rounds;
         let consent = charter.charter.consent.map(|c| DrConsent {
             release_floor: c.release_floor.as_str().to_string(),
             granted_at_unix: c.granted_at_unix,
@@ -495,6 +634,7 @@ impl RunDirPoller {
 
         Some(DrLiveSnapshot {
             round,
+            max_rounds: Some(max_rounds),
             stage,
             gaps,
             budget,
@@ -503,14 +643,18 @@ impl RunDirPoller {
     }
 }
 
+/// Emit a `Live` event only when the run dir actually moved. Returns
+/// whether it did, which is what the heartbeat's quiet clock counts from —
+/// so "nothing has changed for 4 minutes" is a measured fact rather than
+/// an inference from an absent event.
 fn emit_if_changed(
     app: &AppHandle,
     channel: &str,
     snapshot: Option<DrLiveSnapshot>,
     last: &mut Option<DrLiveSnapshot>,
-) {
+) -> bool {
     if snapshot.is_none() || *last == snapshot {
-        return;
+        return false;
     }
     *last = snapshot.clone();
     if let Some(s) = snapshot {
@@ -518,6 +662,7 @@ fn emit_if_changed(
             channel,
             DeepResearchRunEvent::Live {
                 round: s.round,
+                max_rounds: s.max_rounds,
                 stage: s.stage,
                 gaps: s.gaps,
                 budget: s.budget,
@@ -525,6 +670,7 @@ fn emit_if_changed(
             },
         );
     }
+    true
 }
 
 // ── Past runs ──────────────────────────────────────────────────────────────
@@ -537,7 +683,16 @@ pub struct DrRunSummary {
     pub run_id: String,
     pub question: Option<String>,
     pub created_at_unix: Option<i64>,
-    pub terminal_state: String,
+    /// The manifest's close-time state, or `None` when there is no
+    /// manifest. ABSENCE IS REPORTED, NEVER DEFAULTED (§18.3): this field
+    /// used to read `interrupted` whenever the manifest was missing, which
+    /// made a run that was actively turning indistinguishable from one that
+    /// had died — and put a Resume button next to it. Read it WITH `live`:
+    /// live is "running", absent-and-not-live is genuinely interrupted.
+    pub terminal_state: Option<String>,
+    /// Is this process driving the run right now? From the live-run
+    /// registry — the one decider.
+    pub live: bool,
     pub rounds: usize,
     pub report_present: bool,
     pub consent: Option<DrConsent>,
@@ -564,14 +719,13 @@ pub async fn dr_list_runs() -> Result<Vec<DrRunSummary>, String> {
             let manifest = std::fs::read(dir.join("manifest.json"))
                 .ok()
                 .and_then(|raw| serde_json::from_slice::<Manifest>(&raw).ok());
+            let live = is_live(&run_id);
             out.push(DrRunSummary {
                 run_id,
                 question: charter.as_ref().map(|c| c.question.clone()),
                 created_at_unix: charter.as_ref().map(|c| c.created_at_unix),
-                terminal_state: manifest
-                    .as_ref()
-                    .map(|m| m.terminal_state.clone())
-                    .unwrap_or_else(|| "interrupted".to_string()),
+                terminal_state: manifest.as_ref().map(|m| m.terminal_state.clone()),
+                live,
                 rounds: manifest.as_ref().map(|m| m.rounds.len()).unwrap_or(0),
                 report_present: dir.join("report.md").is_file(),
                 consent: charter.and_then(|c| c.charter.consent).map(|c| DrConsent {
@@ -583,6 +737,68 @@ pub async fn dr_list_runs() -> Result<Vec<DrRunSummary>, String> {
     }
     out.sort_by(|a, b| b.run_id.cmp(&a.run_id));
     Ok(out)
+}
+
+/// One run this process is driving right now, with everything a view that
+/// holds no handle needs to re-attach: the channel to listen on and when
+/// this leg started.
+#[derive(Debug, Serialize, Clone)]
+pub struct DrActiveRun {
+    pub run_id: String,
+    pub channel: String,
+    pub question: Option<String>,
+    pub started_at_unix: i64,
+}
+
+/// Quit anyway, with research still running. Called only after the operator
+/// has been told what is in flight and said to go ahead — the close handler
+/// refuses on its own until then. The run dir keeps every artifact written
+/// so far, so the run comes back as resumable rather than lost.
+#[tauri::command]
+pub async fn dr_quit_anyway(app: AppHandle) {
+    tracing::info!(
+        live_run = ?first_live_run_id(),
+        "deep-research: operator chose to quit with a run in flight"
+    );
+    app.exit(0);
+}
+
+/// The runs this process is driving. A view that was unmounted when the
+/// run began — or a webview that reloaded and lost its listener — recovers
+/// the live run from here, instead of showing an empty composer while work
+/// is in flight.
+#[tauri::command]
+pub async fn dr_active_runs() -> Vec<DrActiveRun> {
+    let entries: Vec<(String, String, i64, PathBuf)> = {
+        let guard = live_runs().lock().expect("live runs mutex");
+        guard
+            .iter()
+            .map(|(id, r)| {
+                (
+                    id.clone(),
+                    r.channel.clone(),
+                    r.started_at_unix,
+                    r.run_dir.clone(),
+                )
+            })
+            .collect()
+    };
+    let mut out: Vec<DrActiveRun> = entries
+        .into_iter()
+        .map(|(run_id, channel, started_at_unix, run_dir)| DrActiveRun {
+            run_id,
+            channel,
+            // The question is the charter's, read at call time: a resumed
+            // leg was started with no question text of its own.
+            question: std::fs::read(run_dir.join("charter.json"))
+                .ok()
+                .and_then(|raw| serde_json::from_slice::<Charter>(&raw).ok())
+                .map(|c| c.question),
+            started_at_unix,
+        })
+        .collect();
+    out.sort_by(|a, b| b.started_at_unix.cmp(&a.started_at_unix));
+    out
 }
 
 // ── The checked report ─────────────────────────────────────────────────────

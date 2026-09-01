@@ -2121,11 +2121,21 @@ export type DeepResearchRunProgress =
   | {
       kind: "live";
       round: number | null;
+      /** The charter's max_rounds — what `round` is OUT OF. `null` before
+       *  the charter is readable; the view says "round 2" rather than
+       *  inventing a denominator. */
+      max_rounds: number | null;
       stage: string;
       gaps: DrGap[];
       budget: DrBudget;
       consent: DrConsent | null;
     }
+  /** The run is still being driven. Emitted every poll tick whether or not
+   *  anything changed — `live` is deliberately quiet, and a round spends
+   *  minutes inside one model call with no artifact moving, so silence is
+   *  the normal case and a view holding only change events cannot tell a
+   *  healthy run from a dead one. */
+  | { kind: "heartbeat"; elapsed_secs: number; quiet_secs: number; stage: string }
   | { kind: "report_ready"; report: DrReport }
   | { kind: "failed"; error: string };
 
@@ -2158,16 +2168,33 @@ export interface DrStartOptions {
   resumeRunId?: string | null;
 }
 
-/// One prior run on the shelf. A run without a manifest is `interrupted`
-/// (the resume affordance's raw material).
+/// One run on the shelf. Read `terminal_state` WITH `live`: a live run has
+/// no manifest yet, and defaulting that absence to `interrupted` is what
+/// made a running run indistinguishable from a dead one — with a Resume
+/// button next to it. Use `runStateLabel` rather than either field alone.
 export interface DrRunSummary {
   run_id: string;
   question: string | null;
   created_at_unix: number | null;
-  terminal_state: string;
+  /** The manifest's close-time state, or `null` when there is no manifest.
+   *  Absence is reported, never defaulted. */
+  terminal_state: string | null;
+  /** Is the backend driving this run right now? The live-run registry is
+   *  the one decider. */
+  live: boolean;
   rounds: number;
   report_present: boolean;
   consent: DrConsent | null;
+}
+
+/// One run the backend is driving right now — everything a view that holds
+/// no handle needs to re-attach after it was unmounted or the webview
+/// reloaded.
+export interface DrActiveRun {
+  run_id: string;
+  channel: string;
+  question: string | null;
+  started_at_unix: number;
 }
 
 /// The checked report + its verdict dimensions — rendered from the verb's

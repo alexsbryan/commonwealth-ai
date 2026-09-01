@@ -33,6 +33,10 @@
     // see specs/onboarding.spec.ts for the scripted-progress helpers.
     complete_setup_auto: () => undefined,
     start_default_corpus_install: () => undefined,
+    // The deep-research presence pill mounts app-wide and asks, on every
+    // boot, whether a run is already in flight. Default: none. Specs that
+    // exercise recovery override this.
+    dr_active_runs: () => [],
     // Consent-first setup-plan reads (SetupPlan.svelte + SetupFlow
     // provenance). The plan screen renders BEFORE any mutation and
     // derives its recommended pick via `catalog.find(...)`; without

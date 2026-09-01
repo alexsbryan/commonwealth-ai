@@ -121,11 +121,13 @@ export interface CommandArgs {
   dr_abort: {
     jobId: unknown;
   };
+  dr_active_runs: Record<string, never>;
   dr_capabilities: Record<string, never>;
   dr_list_runs: Record<string, never>;
   dr_open_report: {
     runId: unknown;
   };
+  dr_quit_anyway: Record<string, never>;
   dr_start: {
     question: unknown;
     options: unknown;

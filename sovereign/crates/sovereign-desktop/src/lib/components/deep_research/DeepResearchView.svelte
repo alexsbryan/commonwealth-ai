@@ -20,7 +20,6 @@
 -->
 <script lang="ts">
   import { onMount } from "svelte";
-  import { listen } from "@tauri-apps/api/event";
   import {
     drCapabilities,
     drStart,
@@ -31,14 +30,16 @@
   } from "../../api";
   import type {
     CorpusEntry,
-    DeepResearchRunProgress,
     DrBudget,
     DrCapabilities,
-    DrConsent,
-    DrGap,
     DrReport,
     DrRunSummary,
   } from "../../types";
+  import {
+    deepResearchStore,
+    formatElapsed,
+    runStateLabel,
+  } from "../../stores/deepResearch.svelte";
   import { renderMarkdown } from "../../utils/markdown";
 
   let {
@@ -47,12 +48,15 @@
   }: { onExit: () => void; onOpenLibrary: () => void } = $props();
 
   // ── State tiers ─────────────────────────────────────────────
-  // UI state is $state; Tauri events are INPUTS that update it in the
-  // listen handler — never a second source of truth.
+  // THE RUN IS NOT HELD HERE. It lives in `stores/deepResearch.svelte.ts`,
+  // at module scope, because this component is mounted under an `{#if}` and
+  // vanishes the moment the operator clicks anything else — which used to
+  // take the listener and every fact about the run with it. What is local
+  // here is what is genuinely local: which face is showing, and the
+  // composer's unsent input.
 
   type Face = "ask" | "run" | "report";
   let face = $state<Face>("ask");
-  let running = $state(false);
 
   // Composer
   let question = $state("");
@@ -67,17 +71,15 @@
   let caps = $state<DrCapabilities | null>(null);
   let capsError = $state<string | null>(null);
   let startError = $state<string | null>(null);
+  let stopError = $state<string | null>(null);
+  let stopConfirming = $state(false);
 
-  // Run view
-  let jobId = $state<string | null>(null);
-  let runId = $state<string | null>(null);
-  let liveRound = $state<number | null>(null);
-  let liveStage = $state<string>("");
-  let liveGaps = $state<DrGap[]>([]);
-  let liveBudget = $state<DrBudget>({ spent: {}, remaining: {} });
-  let liveConsent = $state<DrConsent | null>(null);
-  let runFailed = $state<string | null>(null);
-  let unlisten: (() => void) | null = null;
+  // The run in flight, read from the store.
+  let active = $derived(deepResearchStore.active);
+  let running = $derived(active !== null);
+  let liveness = $derived(deepResearchStore.liveness);
+  let signalAge = $derived(deepResearchStore.signalAgeSecs);
+  let finished = $derived(deepResearchStore.finished);
 
   // Report view
   let report = $state<DrReport | null>(null);
@@ -93,7 +95,35 @@
     void loadCapabilities();
     void loadCorpora();
     void loadRuns();
-    return () => unlisten?.();
+    // A run may already be turning — started before this view existed, or
+    // still going from the last time it was closed. Find it rather than
+    // laying an empty composer over the top of it.
+    void adoptRunInFlight();
+  });
+
+  async function adoptRunInFlight() {
+    await deepResearchStore.recover();
+    if (deepResearchStore.active) face = "run";
+  }
+
+  /// A run that lands while this view is open shows its report at once; one
+  /// that lands while the view is closed is held by the store and shown on
+  /// the next open (the banner announces it meanwhile). Either way the
+  /// finished work is surfaced — it used to be dropped on the floor,
+  /// because the terminal event arrived at a listener this component had
+  /// already torn down.
+  $effect(() => {
+    const f = deepResearchStore.finished;
+    if (!f || f.seen) return;
+    deepResearchStore.markFinishedSeen();
+    stopConfirming = false;
+    if (f.report) {
+      report = f.report;
+      face = "report";
+    } else {
+      face = "run";
+    }
+    void loadRuns();
   });
 
   async function loadCapabilities() {
@@ -126,8 +156,12 @@
 
   async function startRun(resumeRunId?: string) {
     startError = null;
-    runFailed = null;
+    stopError = null;
     report = null;
+    deepResearchStore.clearFinished();
+    const asked = resumeRunId
+      ? (runs.find((r) => r.run_id === resumeRunId)?.question ?? resumeRunId)
+      : question.trim();
     try {
       const handle = await drStart(question, {
         maxRounds,
@@ -137,46 +171,37 @@
         consent: consent === "" ? null : consent,
         resumeRunId: resumeRunId ?? null,
       });
-      jobId = handle.job_id;
-      running = true;
+      // Hand the run to the store immediately: from here it belongs to the
+      // app, not to this component's lifetime.
+      await deepResearchStore.attach(handle, asked);
       face = "run";
-      unlisten?.();
-      unlisten = await listen<DeepResearchRunProgress>(handle.channel, (ev) => {
-        const e = ev.payload;
-        if (e.kind === "started") {
-          runId = e.run_id;
-        } else if (e.kind === "live") {
-          liveRound = e.round;
-          liveStage = e.stage;
-          liveGaps = e.gaps;
-          liveBudget = e.budget;
-          liveConsent = e.consent;
-        } else if (e.kind === "report_ready") {
-          running = false;
-          report = e.report;
-          face = "report";
-        } else if (e.kind === "failed") {
-          running = false;
-          runFailed = e.error;
-        }
-      });
+      void loadRuns();
     } catch (e) {
-      running = false;
       startError = typeof e === "string" ? e : String(e);
     }
   }
 
-  /// Kill the child; the run dir keeps its artifacts and the driver's
-  /// failed event carries the truthful terminal message (resume is
-  /// available when the verb supports it).
-  async function abortRun() {
-    if (!running || !jobId) return;
+  // ── Stopping — the operator's call, and only theirs ──────────
+
+  /// Stopping is confirmed, because a run may be twenty minutes deep and
+  /// the click is next to nothing else. It is also not a kill: the backend
+  /// polls the flag at every state entry and lands a truncated report with
+  /// the truncation declared, so the honest promise is "keep what we have",
+  /// not "abort".
+  function requestStop() {
+    stopConfirming = true;
+  }
+
+  async function confirmStop() {
+    stopConfirming = false;
+    const a = deepResearchStore.active;
+    if (!a) return;
+    deepResearchStore.markStopRequested();
     try {
-      await drAbort(jobId);
-      running = false;
+      await drAbort(a.jobId);
       void loadRuns();
     } catch (e) {
-      runFailed = typeof e === "string" ? e : String(e);
+      stopError = typeof e === "string" ? e : String(e);
     }
   }
 
@@ -204,17 +229,36 @@
     face = "ask";
   }
 
-  // ── Budget rendering helpers ────────────────────────────────
+  // ── Rendering helpers ───────────────────────────────────────
 
-  function meterRows(budget: DrBudget): { key: string; spent: number; remaining: number }[] {
+  /// The stage vocabulary is the backend's closed set (`planning` /
+  /// `rounding` / `checking` / `done`, derived from which artifacts exist).
+  /// This maps it to something a person can act on. An unknown stage is
+  /// shown VERBATIM rather than flattened to a generic "working" — a label
+  /// we cannot explain is still information, and hiding it would be the
+  /// silent substitution this whole surface is trying to stop making.
+  const STAGE_LABEL: Record<string, string> = {
+    planning: "Planning the search",
+    rounding: "Gathering and checking evidence",
+    checking: "Checking the draft against its evidence",
+    done: "Finishing up",
+  };
+
+  function stageLabel(stage: string): string {
+    if (!stage) return "Starting up";
+    return STAGE_LABEL[stage] ?? stage;
+  }
+
+  function meterRows(
+    budget: DrBudget,
+  ): { key: string; spent: number; remaining: number; total: number; pct: number }[] {
     const keys = new Set([...Object.keys(budget.spent), ...Object.keys(budget.remaining)]);
-    return [...keys]
-      .sort()
-      .map((key) => ({
-        key,
-        spent: budget.spent[key] ?? 0,
-        remaining: budget.remaining[key] ?? 0,
-      }));
+    return [...keys].sort().map((key) => {
+      const spent = budget.spent[key] ?? 0;
+      const remaining = budget.remaining[key] ?? 0;
+      const total = spent + remaining;
+      return { key, spent, remaining, total, pct: total > 0 ? (spent / total) * 100 : 0 };
+    });
   }
 </script>
 
@@ -236,6 +280,30 @@
 
   {#if face === "ask"}
     <section class="dr-composer" data-testid="dr-composer">
+      {#if active}
+        <!-- Reached the composer with a run in flight (via "Leave it
+             running", or the shelf). Say so, and offer the way back —
+             an empty composer over a live run is what made people think
+             their research had been thrown away. -->
+        <div class="dr-running-notice" data-testid="dr-running-notice">
+          <span>
+            A run is still going{active.round !== null
+              ? ` — round ${active.round}${active.maxRounds ? ` of ${active.maxRounds}` : ""}`
+              : ""}{active.lastBeatMs !== null
+              ? `, ${formatElapsed(active.elapsedSecs)} in`
+              : ""}. One runs at a time, so this asks again once it
+            finishes — or stop it from the run view.
+          </span>
+          <button
+            type="button"
+            class="dr-linkish"
+            onclick={() => (face = "run")}
+            data-testid="dr-back-to-run"
+          >
+            Back to the run
+          </button>
+        </div>
+      {/if}
       <label class="dr-field dr-question">
         <span class="dr-label">The question</span>
         <textarea
@@ -362,38 +430,115 @@
         <p class="dr-error" data-testid="dr-start-error">{startError}</p>
       {/if}
 
+      <!-- Disabled while something is in flight. The backend refuses a
+           second concurrent run too (that is where the invariant lives);
+           this stops the operator walking into the refusal. -->
       <button
         type="button"
         class="dr-primary"
         onclick={() => void startRun()}
-        disabled={question.trim() === "" && !hasResume()}
+        disabled={running || (question.trim() === "" && !hasResume())}
         data-testid="dr-start"
       >
-        Start the run
+        {running ? "A run is already going" : "Start the run"}
       </button>
     </section>
 
   {:else if face === "run"}
     <section class="dr-run" data-testid="dr-run-view">
-      <div class="dr-run-head">
-        <span class="dr-stage" data-testid="dr-stage">{liveStage}</span>
-        {#if liveRound !== null}
-          <span class="dr-round" data-testid="dr-round">round {liveRound}</span>
-        {/if}
-        {#if runId}
-          <span class="dr-run-id" data-testid="dr-run-id">{runId}</span>
+      {#if active}
+        <!-- The pulse. Three facts a waiting person actually wants: what it
+             is doing, how long it has been doing it, and whether the run is
+             still talking to us at all. -->
+        <div class="dr-pulse" data-testid="dr-pulse" data-liveness={liveness}>
+          <span
+            class="dr-beat"
+            class:stalled={liveness === "no-signal"}
+            aria-hidden="true"
+          ></span>
+          <span class="dr-stage" data-testid="dr-stage" data-stage={active.stage}>
+            {stageLabel(active.stage)}
+          </span>
+          <span class="dr-elapsed" data-testid="dr-elapsed">
+            {active.lastBeatMs === null ? "—" : formatElapsed(active.elapsedSecs)}
+          </span>
+          {#if active.round !== null}
+            <span class="dr-round" data-testid="dr-round">
+              round {active.round}{active.maxRounds ? ` of ${active.maxRounds}` : ""}
+            </span>
+          {/if}
+          {#if active.runId}
+            <span class="dr-run-id" data-testid="dr-run-id">{active.runId}</span>
+          {/if}
+        </div>
+
+        <!-- The liveness verdict, named rather than inferred. A run that has
+             gone silent is a DIFFERENT state from a run that is thinking,
+             and both look identical on a panel that only redraws when
+             something changes. -->
+        <p class="dr-liveness" data-testid="dr-liveness" data-state={liveness}>
+          {#if liveness === "starting"}
+            Waiting for the run's first signal…
+          {:else if liveness === "no-signal"}
+            No signal from the run for {signalAge}s. It may be stuck. Nothing
+            gathered so far is lost, and stopping is safe.
+          {:else if liveness === "quiet"}
+            Working. Nothing has changed on disk for {formatElapsed(active.quietSecs)} —
+            normal while a round is reading or waiting on a model.
+          {:else}
+            Working — last change {formatElapsed(active.quietSecs)} ago.
+          {/if}
+        </p>
+
+        <!-- The promise the operator asked for, stated where they are
+             deciding whether to wait. -->
+        <p class="dr-detach-note" data-testid="dr-detach-note">
+          This run keeps going if you leave this screen or use the rest of the
+          app. It stops when you stop it, or when it finishes on its own.
+        </p>
+      {/if}
+
+      {#if finished?.error}
+        <p class="dr-error" data-testid="dr-run-failed">{finished.error}</p>
+      {/if}
+      {#if stopError}
+        <p class="dr-error" data-testid="dr-stop-error">{stopError}</p>
+      {/if}
+
+      <div class="dr-panel">
+        <h2>What it has done</h2>
+        {#if !active || active.trail.length === 0}
+          <p class="dr-muted" data-testid="dr-trail-empty">
+            No round has reported yet.
+          </p>
+        {:else}
+          <ol class="dr-trail" data-testid="dr-trail">
+            {#each active.trail as t (t.round)}
+              <li class="dr-trail-row" data-testid={`dr-trail-${t.round}`}>
+                <span class="dr-trail-head">
+                  <span class="dr-trail-round">round {t.round}</span>
+                  <span class="dr-muted">at {formatElapsed(t.atSecs)}</span>
+                </span>
+                <ul class="dr-trail-gaps">
+                  {#each t.gaps as g (g.id)}
+                    <li>{g.text}</li>
+                  {/each}
+                </ul>
+              </li>
+            {/each}
+          </ol>
         {/if}
       </div>
 
       <div class="dr-panel">
         <h2>The gate's named gaps</h2>
-        {#if liveGaps.length === 0}
+        {#if !active || active.gaps.length === 0}
           <p class="dr-muted" data-testid="dr-gaps-empty">
             No gaps named yet — the compass speaks after a round completes.
           </p>
         {:else}
           <ul class="dr-gaps" data-testid="dr-gaps">
-            {#each liveGaps as g (g.id)}
+            {#each active.gaps as g (g.id)}
               <li class="dr-gap" data-testid={`dr-gap-${g.id}`}>
                 <span class="dr-gap-id">{g.id}</span>
                 {g.text}
@@ -405,15 +550,19 @@
 
       <div class="dr-panel">
         <h2>Budget ledger</h2>
-        {#if meterRows(liveBudget).length === 0}
+        {#if !active || meterRows(active.budget).length === 0}
           <p class="dr-muted">No spend yet.</p>
         {:else}
           <ul class="dr-meters" data-testid="dr-meters">
-            {#each meterRows(liveBudget) as m (m.key)}
+            {#each meterRows(active.budget) as m (m.key)}
               <li class="dr-meter" data-testid={`dr-meter-${m.key}`}>
                 <span class="dr-meter-key">{m.key}</span>
-                <span class="dr-meter-spent">{m.spent} spent</span>
-                <span class="dr-meter-remaining">{m.remaining} remaining</span>
+                <span class="dr-meter-bar" aria-hidden="true">
+                  <span class="dr-meter-fill" style={`width:${m.pct}%`}></span>
+                </span>
+                <span class="dr-meter-num">
+                  {m.spent} spent · {m.remaining} remaining
+                </span>
               </li>
             {/each}
           </ul>
@@ -422,10 +571,12 @@
 
       <div class="dr-panel">
         <h2>Consent status</h2>
-        {#if liveConsent}
+        {#if active?.consent}
           <p class="dr-consent-live" data-testid="dr-consent-live">
-            Granted: {liveConsent.release_floor}
-            <span class="dr-muted">at {new Date(liveConsent.granted_at_unix * 1000).toLocaleString()}</span>
+            Granted: {active.consent.release_floor}
+            <span class="dr-muted"
+              >at {new Date(active.consent.granted_at_unix * 1000).toLocaleString()}</span
+            >
           </p>
         {:else}
           <p class="dr-consent-deny-live" data-testid="dr-consent-deny-live">
@@ -435,19 +586,54 @@
         {/if}
       </div>
 
-      {#if runFailed}
-        <p class="dr-error" data-testid="dr-run-failed">{runFailed}</p>
-      {/if}
-
       <div class="dr-run-actions">
+        {#if stopConfirming}
+          <div class="dr-stop-confirm" data-testid="dr-stop-confirm">
+            <p>
+              Stop this run and keep what it has gathered? The report is
+              written from the evidence in hand, with the early stop declared
+              in it.{#if hasResume()}
+                You can resume from the last checkpoint afterwards.{/if}
+            </p>
+            <div class="dr-stop-buttons">
+              <button
+                type="button"
+                class="dr-secondary"
+                onclick={() => void confirmStop()}
+                data-testid="dr-stop-confirm-yes"
+              >
+                Stop and keep the findings
+              </button>
+              <button
+                type="button"
+                class="dr-primary"
+                onclick={() => (stopConfirming = false)}
+                data-testid="dr-stop-cancel"
+              >
+                Keep running
+              </button>
+            </div>
+          </div>
+        {:else}
+          <button
+            type="button"
+            class="dr-secondary"
+            onclick={requestStop}
+            disabled={!running || active?.stopRequested}
+            data-testid="dr-abort"
+          >
+            {active?.stopRequested
+              ? "Stopping — writing the report…"
+              : "Stop and keep the findings"}
+          </button>
+        {/if}
         <button
           type="button"
-          class="dr-secondary"
-          onclick={() => void abortRun()}
-          disabled={!running}
-          data-testid="dr-abort"
+          class="dr-linkish"
+          onclick={() => (face = "ask")}
+          data-testid="dr-run-to-ask"
         >
-          Abort the run
+          Leave it running
         </button>
       </div>
     </section>
@@ -592,7 +778,7 @@
   {/if}
 
   <section class="dr-shelf" data-testid="dr-shelf">
-    <h2>Previous runs</h2>
+    <h2>Runs</h2>
     {#if runsError}
       <p class="dr-error">{runsError}</p>
     {:else if runs.length === 0}
@@ -602,16 +788,41 @@
     {:else}
       <ul class="dr-runs">
         {#each runs as r (r.run_id)}
-          <li class="dr-run-row" data-testid={`dr-run-${r.run_id}`}>
+          <li
+            class="dr-run-row"
+            class:live={r.live}
+            data-testid={`dr-run-${r.run_id}`}
+          >
             <div class="dr-run-meta">
               <span class="dr-run-question">{r.question ?? r.run_id}</span>
               <span class="dr-muted">
-                {r.run_id} · {r.terminal_state} · {r.rounds} rounds
+                {r.run_id} ·
+                <span
+                  class="dr-run-state"
+                  class:live={r.live}
+                  data-testid={`dr-run-state-${r.run_id}`}>{runStateLabel(r)}</span
+                >
+                · {r.rounds} rounds
                 {r.consent ? ` · release: ${r.consent.release_floor}` : " · default-deny"}
               </span>
             </div>
             <div class="dr-run-actions">
-              {#if r.report_present}
+              <!-- A run being driven right now is neither resumable nor
+                   openable: resuming it would hand a second loop the run dir
+                   the first is mid-write on, and the shelf used to offer
+                   exactly that because an absent manifest was defaulted to
+                   `interrupted`. The only thing to do with a live run is
+                   watch it. -->
+              {#if r.live}
+                <button
+                  type="button"
+                  class="dr-secondary"
+                  onclick={() => (face = "run")}
+                  data-testid={`dr-watch-${r.run_id}`}
+                >
+                  Watch it run
+                </button>
+              {:else if r.report_present}
                 <button
                   type="button"
                   class="dr-secondary"
@@ -620,8 +831,7 @@
                 >
                   Open report
                 </button>
-              {/if}
-              {#if hasResume() && !r.report_present}
+              {:else if hasResume()}
                 <button
                   type="button"
                   class="dr-secondary"
@@ -768,7 +978,11 @@
     align-items: center;
   }
   .dr-stage {
-    text-transform: capitalize;
+    /* No `capitalize`: the label is a sentence-cased phrase now, and
+       title-casing it produced "Gathering And Checking Evidence". An
+       unknown stage arrives verbatim from the backend and is shown that
+       way, lowercase and all — it is the raw value, and dressing it up
+       would misrepresent how much we know about it. */
     background: var(--accent, #4a9eff);
     color: #fff;
     border-radius: 999px;
@@ -836,11 +1050,25 @@
     min-width: 90px;
     font-weight: 600;
   }
-  .dr-meter-spent {
-    color: var(--accent, #4a9eff);
+  .dr-meter-bar {
+    flex: 1;
+    min-width: 60px;
+    height: 6px;
+    align-self: center;
+    border-radius: 999px;
+    background: var(--border, #333);
+    overflow: hidden;
   }
-  .dr-meter-remaining {
+  .dr-meter-fill {
+    display: block;
+    height: 100%;
+    background: var(--accent, #4a9eff);
+    transition: width 240ms ease-out;
+  }
+  .dr-meter-num {
     color: var(--muted, #888);
+    font-size: 13px;
+    white-space: nowrap;
   }
   .dr-consent-deny-live {
     color: #c9a227;
@@ -900,6 +1128,8 @@
   .dr-run-actions {
     display: flex;
     gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
   }
   .dr-shelf {
     border-top: 1px solid var(--border, #333);
@@ -928,5 +1158,144 @@
   }
   .dr-run-question {
     font-weight: 600;
+  }
+  /* ── The pulse, and the liveness verdict ──────────────────────────── */
+  .dr-pulse {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  /* A beat that keeps time with the backend's heartbeat. It stops moving
+     when the signal does — the animation IS the signal, so a frozen dot
+     and a frozen run are the same picture on purpose. */
+  .dr-beat {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent, #4a9eff);
+    animation: dr-beat 2s ease-in-out infinite;
+  }
+  .dr-beat.stalled {
+    background: #c9a227;
+    animation: none;
+  }
+  @keyframes dr-beat {
+    0%,
+    100% {
+      opacity: 0.25;
+      transform: scale(0.8);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.15);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dr-beat {
+      animation: none;
+      opacity: 1;
+    }
+  }
+  .dr-elapsed {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+  .dr-liveness {
+    margin: 0;
+    font-size: 13px;
+    color: var(--muted, #888);
+  }
+  .dr-liveness[data-state="no-signal"] {
+    color: #c9a227;
+    font-weight: 600;
+  }
+  .dr-pulse[data-liveness="no-signal"] .dr-stage {
+    background: #c9a227;
+    color: #1a1a1a;
+  }
+  .dr-detach-note {
+    margin: 0;
+    font-size: 13px;
+    color: var(--muted, #888);
+    border-left: 2px solid var(--border, #333);
+    padding-left: 10px;
+  }
+
+  /* ── The trail: what it has already done ──────────────────────────── */
+  .dr-trail {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .dr-trail-head {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+  }
+  .dr-trail-round {
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .dr-trail-gaps {
+    margin: 4px 0 0;
+    padding-left: 18px;
+    font-size: 13px;
+    color: var(--muted, #888);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  /* ── Stopping is the operator's call, and it is confirmed ──────────── */
+  .dr-stop-confirm {
+    border: 1px solid #c9a227;
+    background: rgba(201, 162, 39, 0.08);
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-size: 13px;
+  }
+  .dr-stop-confirm p {
+    margin: 0;
+  }
+  .dr-stop-buttons {
+    display: flex;
+    gap: 10px;
+  }
+  .dr-linkish {
+    background: none;
+    border: none;
+    color: var(--accent, #4a9eff);
+    cursor: pointer;
+    padding: 0;
+    font-size: 13px;
+  }
+
+  /* ── A run in flight, seen from the composer and the shelf ─────────── */
+  .dr-running-notice {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    border: 1px solid var(--accent, #4a9eff);
+    background: color-mix(in srgb, var(--accent, #4a9eff) 8%, transparent);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+  .dr-run-state.live {
+    color: var(--accent, #4a9eff);
+    font-weight: 600;
+  }
+  .dr-run-row.live {
+    border-left: 2px solid var(--accent, #4a9eff);
+    padding-left: 10px;
   }
 </style>
