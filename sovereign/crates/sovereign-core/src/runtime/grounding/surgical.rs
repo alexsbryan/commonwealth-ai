@@ -346,7 +346,7 @@ pub(super) async fn surgical_rewrite(
                 && sentences
                     .get(idx + 1)
                     .is_some_and(|n| !n.starts_with(char::is_whitespace));
-            sentences[idx] = format!("{body} ");
+            sentences[idx] = format!("{lead}{body}{trail}{}", if needs_gap { " " } else { "" });
         }
     }
 
