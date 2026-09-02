@@ -1291,6 +1291,69 @@ pub async fn atlas_navigate_ann(
     requests
 }
 
+/// DARK (ontology-v1 P5, default **OFF**) — `SOVEREIGN_ATLAS_EMBED_ATTRIBUTES`.
+///
+/// When on, a declared atom's `attributes` are appended to its embed text, so
+/// "which coins are silver" has something to match on: today the metal lives
+/// in a JSON map the embedder never sees. Read once (the renderer runs per
+/// atom over million-atom atlases).
+///
+/// Off by default because it changes what every atom embeds to, and the cache
+/// signature does not key on it — see the `DEFAULTS_LEDGER.md` row for the
+/// flip conditions.
+static EMBED_ATTRIBUTES: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+    let on = std::env::var("SOVEREIGN_ATLAS_EMBED_ATTRIBUTES")
+        .ok()
+        .map(|v| {
+            let v = v.trim().to_string();
+            v == "1" || v.eq_ignore_ascii_case("true")
+        })
+        .unwrap_or(false);
+    tracing::debug!(
+        enabled = on,
+        "atlas render: SOVEREIGN_ATLAS_EMBED_ATTRIBUTES"
+    );
+    on
+});
+
+/// The `\nattr: k=v; k2=v2` suffix an atom's declared attributes contribute to
+/// its embed text, or `""`.
+///
+/// Empty when the knob is off AND when the atom has no attributes — which is
+/// every atom of every undeclared corpus, so SEP / Wikipedia / Enron render
+/// identically whichever way the knob is set. Keys are already sorted
+/// (`serde_json::Map` is a BTreeMap under the default feature), so the suffix
+/// is deterministic.
+///
+/// ONE decider: both the ANN-backfill renderer ([`render_atom_entry`]) and the
+/// daemon's bag loader call this, so an entry's `embed_text` stays stable
+/// across the build and read paths — the invariant [`ATLAS_ENTRY_CHAR_LIMIT`]
+/// documents.
+pub fn atom_attributes_suffix(attrs: &serde_json::Map<String, serde_json::Value>) -> String {
+    if !*EMBED_ATTRIBUTES {
+        return String::new();
+    }
+    render_attributes(attrs)
+}
+
+/// The rendering itself, independent of the knob — the half a unit test can
+/// exercise (a `LazyLock` env read is decided once per process, so the gate
+/// above is proven by its default, not by flipping it mid-run).
+fn render_attributes(attrs: &serde_json::Map<String, serde_json::Value>) -> String {
+    if attrs.is_empty() {
+        return String::new();
+    }
+    let rendered = attrs
+        .iter()
+        .map(|(k, v)| match v {
+            serde_json::Value::String(s) => format!("{k}={s}"),
+            other => format!("{k}={other}"),
+        })
+        .collect::<Vec<_>>()
+        .join("; ");
+    format!("\nattr: {rendered}")
+}
+
 /// Max chars of rendered atom text fed to the embedder — the cap
 /// [`render_atom_entry`] truncates to. The loaders share the renderer, so an
 /// entry's `embed_text` is stable across the build (embed) and read (bag) paths.
@@ -1406,6 +1469,7 @@ pub fn render_atom_entry(atom: &AtomEnvelope, article_slug: &str) -> Option<(Str
                 text.push('\n');
             }
             text.push_str(&e.description);
+            text.push_str(&atom_attributes_suffix(&e.attributes));
             if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
                 text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
             }
@@ -1421,6 +1485,7 @@ pub fn render_atom_entry(atom: &AtomEnvelope, article_slug: &str) -> Option<(Str
                 .trim_matches('"')
                 .to_string();
             let mut text = format!("[Claim: {act}, {status}] {content}", content = c.content);
+            text.push_str(&atom_attributes_suffix(&c.attributes));
             if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
                 text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
             }
@@ -1882,6 +1947,38 @@ mod store_io_tests {
         }
 
         assert!(graph.atom("no-such-id").is_none());
+    }
+
+    /// The DARK attribute suffix (`SOVEREIGN_ATLAS_EMBED_ATTRIBUTES`).
+    ///
+    /// Two facts, separately checked: the rendering is deterministic and
+    /// key-sorted, and the knob is OFF by default so nothing renders today.
+    #[test]
+    fn attribute_suffix_is_dark_and_key_sorted() {
+        let mut attrs = serde_json::Map::new();
+        attrs.insert("metal".into(), serde_json::Value::String("silver".into()));
+        attrs.insert("weight".into(), serde_json::json!(1.21));
+        attrs.insert("mint".into(), serde_json::Value::String("Eoforwic".into()));
+
+        // `serde_json::Map` is a BTreeMap here (no `preserve_order` feature in
+        // this workspace), so the suffix is stable across runs.
+        assert_eq!(
+            super::render_attributes(&attrs),
+            "\nattr: metal=silver; mint=Eoforwic; weight=1.21"
+        );
+        assert_eq!(super::render_attributes(&serde_json::Map::new()), "");
+
+        // Default OFF. An explicit override in the environment makes this
+        // assertion measure the override rather than the default, so say so.
+        assert!(
+            std::env::var("SOVEREIGN_ATLAS_EMBED_ATTRIBUTES").is_err(),
+            "this test asserts the DEFAULT; unset SOVEREIGN_ATLAS_EMBED_ATTRIBUTES to run it"
+        );
+        assert_eq!(atom_attributes_suffix(&attrs), "");
+
+        // And an atom with no attributes renders identically either way —
+        // which is every atom of every undeclared corpus (I5).
+        assert_eq!(atom_attributes_suffix(&serde_json::Map::new()), "");
     }
 
     /// The vocabulary carrier (ontology-v1 P5). A graph loaded from an atlas

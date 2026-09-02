@@ -85,6 +85,17 @@ pub struct AtlasContextFilter {
     /// Should lift `argument_depth` on essay-readiness — Configurations
     /// articulate the interpretive shape the article enacts as a whole.
     pub include_configurations: bool,
+    /// DARK (ontology-v1 P5, default **OFF**) —
+    /// `SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS`. Narrower than
+    /// [`Self::include_claims`]: it admits only Claim atoms whose `claim_kind`
+    /// names a type the corpus DECLARED, so an undeclared corpus admits
+    /// nothing new however it is set. The declared claim is where a
+    /// numismatics corpus keeps "who dated this coin to when, on what
+    /// evidence" — content the entity bag cannot carry.
+    ///
+    /// Baked into [`Self::signature`], so a cache built with it off is
+    /// correctly ignored when it flips on.
+    pub include_declared_claim_types: bool,
 }
 
 impl Default for AtlasContextFilter {
@@ -137,6 +148,16 @@ impl Default for AtlasContextFilter {
                 v == "1" || v.eq_ignore_ascii_case("true")
             })
             .unwrap_or(false);
+        // DARK: declared-type claims as virtual chunks (ontology-v1 P5).
+        // Off by default; see the `DEFAULTS_LEDGER.md` row for the flip
+        // conditions.
+        let include_declared_claim_types = std::env::var("SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS")
+            .ok()
+            .map(|v| {
+                let v = v.trim();
+                v == "1" || v.eq_ignore_ascii_case("true")
+            })
+            .unwrap_or(false);
         Self {
             min_description_chars: min_chars,
             depth_allowlist,
@@ -145,6 +166,7 @@ impl Default for AtlasContextFilter {
             include_claims,
             include_tensions: false,
             include_configurations: false,
+            include_declared_claim_types,
         }
     }
 }
@@ -157,7 +179,7 @@ impl AtlasContextFilter {
         let mut depths = self.depth_allowlist.clone();
         depths.sort();
         format!(
-            "min_chars={};depth=[{}];max={};claims={};tensions={};configs={}",
+            "min_chars={};depth=[{}];max={};claims={};tensions={};configs={};declared_claims={}",
             self.min_description_chars,
             depths.join(","),
             self.max_entries
@@ -166,6 +188,7 @@ impl AtlasContextFilter {
             self.include_claims,
             self.include_tensions,
             self.include_configurations,
+            self.include_declared_claim_types,
         )
     }
 }
@@ -759,6 +782,24 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(a.signature(), b.signature());
+    }
+
+    /// DARK (`SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS`). Off by default, and
+    /// baked into the cache key — a bag built without declared claims must not
+    /// be served when the knob flips on.
+    #[test]
+    fn declared_claim_types_are_dark_and_keyed_into_the_signature() {
+        assert!(
+            std::env::var("SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS").is_err(),
+            "this test asserts the DEFAULT; unset SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS to run it"
+        );
+        let off = AtlasContextFilter::default();
+        assert!(!off.include_declared_claim_types);
+        let on = AtlasContextFilter {
+            include_declared_claim_types: true,
+            ..Default::default()
+        };
+        assert_ne!(off.signature(), on.signature());
     }
 
     #[test]

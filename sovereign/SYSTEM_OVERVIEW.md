@@ -1226,6 +1226,11 @@ means one thing.
   ontology parser already validated; and `meta_atlas`'s
   `classify_articulation_with` places a declared `EntityType::Other(name)` by
   the generic kind it descends from instead of guessing from the chunk preview.
+  Two levers ship DARK with `DEFAULTS_LEDGER.md` rows and no measurement:
+  `SOVEREIGN_ATLAS_EMBED_ATTRIBUTES` (attributes appended to embed text, in
+  `atom_attributes_suffix` — called by BOTH renderers, since the daemon's bag
+  loader forks `render_atom_entry`) and `SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS`
+  (`AtlasContextFilter.include_declared_claim_types`, keyed into `signature()`).
   Design:
   `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md`, `ONTOLOGY_MIGRATION.md`.
   State at `~/.svrnmesh/indexes/<corpus>/atlas/`. Deep-dive:
