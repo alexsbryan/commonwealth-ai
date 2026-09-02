@@ -67,7 +67,13 @@ attributes = [
   { name = "metal",        type = "text",     values = ["gold", "silver", "billon", "copper"] },
   { name = "weight",       type = "quantity", unit = "g" },
   { name = "struck",       type = "time",     range = true },
+  { name = "catalogue_ref", type = "text" },
 ]
+# The external identifier a numismatic catalogue actually uses. Two mentions
+# carrying the same reference are one coin however differently they are named
+# ("Coenwulf mancus" in the catalogue, "the gold mancus of Coenwulf" in the
+# article) — which is what an external key merges strictly on.
+identity = ["catalogue_ref"]
 
 [[enrichment.ontology.types]]
 name = "sceatta"

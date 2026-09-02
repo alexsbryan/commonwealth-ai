@@ -5726,51 +5726,6 @@ What the re-freeze accepted, all of it already on `origin/main`:
 | corpus-engine engine | `corpus-engine/src/engine/mod.rs` (3,804 → 3,879) | Under the 10-crate decomposition (`corpus-engine/DECOMPOSITION.md`); this file shrinks by carve-out, not by a local split. |
 | Newly oversized, no prior row | `commonwealth-api/src/server.rs` (1,253), `sovereign-cli-daemon/src/setup_cmd/mod.rs` (1,287), `sovereign-mesh/src/oicp_synthesis.rs` (1,266), `sovereign-cli/tests/main/cli_contract_journeys.rs` (1,201) | Four files crossed 1,200 during the 2026-08 arcs. All are within 90 lines of the ceiling and each splits along an obvious seam (route families, setup targets, synthesis stages, journey families) — first candidates when the queue is worked. |
 
-### 10.1f Size — 2026-09-02 `resolution.rs` is +217 over its baseline, and P3 could not buy that back (ontology-v1 P3)
-
-**The number.** `arch-gate` reports
-`corpus-engine/src/enrichment/atlas/resolution.rs 5173 → 5390 (+217, slack
-50)`. Split three ways: the baseline snapshot is 5173, the file was **5217** at
-P3's branch point `cf160813f` (P0-P2 spent 44 of the 50-line slack before P3
-started), and P3's own net is **+173**.
-
-**What was tried, and what it bought.** P3 moved everything it could out of the
-file rather than growing it and asking for the baseline:
-
-| move | out of `resolution.rs` | into |
-|---|---|---|
-| the four declared-resolution behaviour tests | −343 | `tests/main/ontology_resolution_e2e.rs` (418) |
-| `emit_role_states` (the State + Involves + Grounds emission) | −31 | `atlas/resolution_ontology.rs` (711) |
-
-Two more cuts were taken in the same phase for the same reason, and they
-cleared the OTHER arch-gate failure outright — the 800-1200 approach band went
-from `157588` (+313 over baseline) back to **155760**, its value at the branch
-point and 1,515 lines *below* the baseline:
-
-| move | out of | into |
-|---|---|---|
-| the two declared-identity signals | `reconciliation/signals.rs` 875 → 720 | `reconciliation/identity_signals.rs` (164) |
-| `reify_merges` | `reconciliation/multi_origin.rs` 950 → 654 | `reconciliation/reified.rs` (137) |
-| the three identity behaviour tests | (same file) | `tests/main/ontology_identity_e2e.rs` (228) |
-| the ninth schema dimension | `atlas/schema_validation.rs` 1666 → 1488 | `atlas/ontology_coverage.rs` (186) |
-
-**Why the residual stands.** What is left in `resolution.rs` is the
-declared-ontology logic that is INSIDE `resolve_step_3b_with`'s existing loops
-— the claim `subject` resolution, the relation endpoint check, the ref-snap
-call — plus the doc comments on the two `_with` entry points. Moving those
-would push `resolution_ontology.rs` from 711 to ~792, one line under the
-approach band's floor, trading a named overage for an unnamed one. And even a
-P3 that added ZERO lines would leave the file at 5217, six lines inside slack:
-the honest fix is not a smaller P3, it is a split of a 5,390-line file that has
-been 4.5x ARCH §3.1's ceiling since before this program began.
-
-**The decision this row asks for.** Accept the +217 with `arch-gate
---update-baseline` and schedule the `resolution.rs` split as its own order —
-the same disposition §10 already carries for `pipeline/atlas.rs`, and for the
-same reason: the gate's approach band rejects any residual that lands inside
-it, so the file has to go from >1200 to <800 in one move and cannot be taken
-in steps while ontology-v1's waves are in flight.
-
 ### 10.1e Placement — 2026-09-01 the orchestrator moved below the hosts (ontology-v1 P0.4 → P0.5)
 
 **History, one line, because the cheaper option was tried and named rather
@@ -5860,7 +5815,7 @@ the weight they mean to shed is actually dead before making it a bar. This one
 was assumed severable by the coordinator and by the worker, and the
 measurement said otherwise.
 
-### 10.1f Size debt OWED, not yet accepted — ontology-v1 P5 (2026-09-02)
+### 10.1f Size debt owed, measured on the P5 branch — ontology-v1 P5 (2026-09-02; ACCEPTED in §10.1h)
 
 P5 grew eight files and the arch-gate baselines are **not** re-pinned in the
 P5 branch. That is deliberate: three ontology-v1 phases (P3, P4, P5) were in
@@ -5894,6 +5849,98 @@ count would be teaching to the test. The real seam, when the phase settles, is
 `atlas_traversal/engine.rs` → the six pre-ontology walks and the two
 declared-type walks as peers; that split is due when P6 stops moving the
 traversal surface.
+
+### 10.1g Size — `resolution.rs` is +217 and P3 could not buy that back (ontology-v1 P3, 2026-09-02; ACCEPTED in §10.1h)
+
+**The number.** `arch-gate` reports
+`corpus-engine/src/enrichment/atlas/resolution.rs 5173 → 5390 (+217, slack
+50)`. Split three ways: the baseline snapshot is 5173, the file was **5217** at
+P3's branch point `cf160813f` (P0-P2 spent 44 of the 50-line slack before P3
+started), and P3's own net is **+173**.
+
+**What was tried, and what it bought.** P3 moved everything it could out of the
+file rather than growing it and asking for the baseline:
+
+| move | out of `resolution.rs` | into |
+|---|---|---|
+| the four declared-resolution behaviour tests | −343 | `tests/main/ontology_resolution_e2e.rs` (418) |
+| `emit_role_states` (the State + Involves + Grounds emission) | −31 | `atlas/resolution_ontology.rs` (711) |
+
+Two more cuts were taken in the same phase for the same reason, and they
+cleared the OTHER arch-gate failure outright — the 800-1200 approach band went
+from `157588` (+313 over baseline) back to **155760**, its value at the branch
+point and 1,515 lines *below* the baseline:
+
+| move | out of | into |
+|---|---|---|
+| the two declared-identity signals | `reconciliation/signals.rs` 875 → 720 | `reconciliation/identity_signals.rs` (164) |
+| `reify_merges` | `reconciliation/multi_origin.rs` 950 → 654 | `reconciliation/reified.rs` (137) |
+| the three identity behaviour tests | (same file) | `tests/main/ontology_identity_e2e.rs` (228) |
+| the ninth schema dimension | `atlas/schema_validation.rs` 1666 → 1488 | `atlas/ontology_coverage.rs` (186) |
+
+**Why the residual stands.** What is left in `resolution.rs` is the
+declared-ontology logic that is INSIDE `resolve_step_3b_with`'s existing loops
+— the claim `subject` resolution, the relation endpoint check, the ref-snap
+call — plus the doc comments on the two `_with` entry points. Moving those
+would push `resolution_ontology.rs` from 711 to ~792, one line under the
+approach band's floor, trading a named overage for an unnamed one. And even a
+P3 that added ZERO lines would leave the file at 5217, six lines inside slack:
+the honest fix is not a smaller P3, it is a split of a 5,390-line file that has
+been 4.5x ARCH §3.1's ceiling since before this program began.
+
+**The decision this row asks for.** Accept the +217 with `arch-gate
+--update-baseline` and schedule the `resolution.rs` split as its own order —
+the same disposition §10 already carries for `pipeline/atlas.rs`, and for the
+same reason: the gate's approach band rejects any residual that lands inside
+it, so the file has to go from >1200 to <800 in one move and cannot be taken
+in steps while ontology-v1's waves are in flight.
+
+
+### 10.1h Size ACCEPTED at the wave merge — 2026-09-02 (ontology-v1 P3 · P4 · P5)
+
+§10.1f and §10.1g are the two workers' halves of one bill, each measured on
+its own branch and each deliberately left un-repinned so three worktrees
+sharing `quality/baselines/` could not clobber one another. This row is the
+decision they asked for, taken once over the merged tree, with the gate's own
+numbers rather than either worker's arithmetic:
+
+| File | Baseline | Merged | Δ | Slack |
+|------|----------|--------|---|-------|
+| `corpus-engine/src/enrichment/atlas/resolution.rs` | 5,173 | 5,390 | +217 | 50 |
+| `corpus-engine/src/enrichment/atlas/context.rs` | 1,989 | 2,211 | +222 | 50 |
+| `sovereign-core/src/runtime/retrieval/atom_enum.rs` | 1,605 | 1,791 | +186 | 50 |
+| `corpus-engine/src/enrichment/governance_view.rs` | 1,249 | 1,380 | +131 | 50 |
+
+Approach band: **files 159 → 162 (+3), lines 154,564 → 157,600 (+3,036)**.
+Tracked oversized files went 171 → **170**, banked with `--tighten` earlier in
+the same merge, so this acceptance is measured against a baseline that already
+absorbed every real cut on offer.
+
+**Accepted rather than split, for one reason stated once.** Every one of the
+four was ALREADY over 1,200 before this wave; none crossed the ceiling here.
+The gate's approach band refuses a residual that lands between 800 and 1,200,
+so each of these has to go from >1,200 to <800 in a single move — a split
+cannot be taken in steps while the waves that keep reshaping these files are
+in flight. §10 already carries that exact disposition for `pipeline/atlas.rs`.
+Roughly half of every delta is test code that tests the module's PRIVATE
+surface (`render_attributes`, `project_claim`, `enumerable_types`,
+`emit_role_states`), and moving it to `tests/main/` to shrink a line count
+would be teaching to the test, not a cut.
+
+**What was actually paid before asking.** P3 moved 343 lines of behaviour
+tests and `emit_role_states` out of `resolution.rs`, and took four further
+cuts that cleared the approach-band failure outright on its own branch
+(157,588 → 155,760, 1,515 BELOW baseline). The residual is the declared-
+ontology logic living inside `resolve_step_3b_with`'s existing loops, which
+cannot leave without taking the loops with it. §10.1g has the table.
+
+**The splits this schedules**, each as its own order once ontology-v1 stops
+moving these files: `resolution.rs` (the largest and the one §10.1g argues
+for first); `atlas_traversal/engine.rs` — six pre-ontology walks and two
+declared-type walks as peers, due when P6 stops moving the traversal surface;
+`context.rs`, which splits with the ATLAS_STORAGE_V2 read path rather than
+locally.
+
 
 ### 10.2 cmnwlth deferrals
 
