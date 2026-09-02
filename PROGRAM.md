@@ -1,35 +1,40 @@
 # Where we are — ontology-v1
 
-**~45%** `████▌░░░░░` · `318dd5281` · 11574 tests / 0 fail · arch-gate clean · 2026-09-02
+**The point:** a domain expert writes TOML, and their own nouns come out the other end.
+No Rust. That is the whole objective, and the chain below is how we know it's true.
 
-Declare an ontology in a recipe's TOML and have it survive end to end — extraction,
-resolution, retrieval, desktop — with no Rust written by the author.
+## The chain — 0 of 6 links proven end to end
 
-## Landed
+```
+recipe new --ontology numismatics   ~  works in tests
+  → validate                        ~  works in tests
+  → install → init                  ?  never run
+  → build (ends with backfill)      ~  unit-proven; never run on a real corpus
+  → chat enumerates coins           ✗  NEVER RUN — no model has touched this program
+  → desktop shows the author's nouns ?  never run
+```
 
-- **P1** — `[enrichment.ontology] version = 1` → policies, language registry, `recipe new` / `recipe migrate`
-- **P2 · P2b** — prompt-byte pins; policy-aware parser, schema generator, `CustomOntology`, projection
-- **P7** — refs resolve against base kinds; eight templates; content-judged descriptor; interview; validation card
+**Nothing above has been run end to end, once.** 11574 passing tests prove the parts
+fit together; they say nothing about whether the thing works. The single most
+valuable next action is not a phase — it is running that chain and finding out.
 
-## In flight
+## Phases
 
-- **P0** — crate split, so the daemon stops depending on the whole CLI crate. Structurally landed; lint red on 4 crate-boundary visibility errors.
+Landed: **P1** ontology block → policies · **P2 · P2b** parser, schema generator,
+`CustomOntology`, projection · **P7** base-kind refs, eight templates, interview, card
+In flight: **P0** crate split (daemon stops depending on the CLI crate)
+Ahead: **P3** derivation, then **P4 · P5 · P6** · `--quick` bench once, at the very end
 
-## Ahead
-
-- **P3** — derivation. Blocks P4/P5/P6. Inherits a known `TypeIndex`-vs-`validate` inconsistency.
-- **Stop-rule measurement** — the first time a real model runs against a declared ontology. Bar and three-arm design pre-registered.
-- **P4 · P5 · P6** — the rest of wave 3.
-- **`--quick` bench** — once, at the very end of the program.
+`318dd5281` · 11574 tests / 0 fail · arch-gate clean · 2026-09-02
 
 ## Watch
 
-- The stop rule is **unmeasured**. Everything so far proves the *pipeline*, not the model.
+- The stop rule is **unmeasured** — and it is the link marked ✗ above.
 - `resolution.rs` is at 5217 lines against a 5223 ceiling.
-- P0.4b — no daemon route reaches `enrich_now` for an installed recipe corpus without folder ingest.
+- P0.4b — no daemon route reaches `enrich_now` for an installed recipe corpus.
 
 ---
 
-*Hand-maintained. Update the percentage and move one bullet when something lands —
-if an update takes longer than that, it belongs in the commit message, not here.
-Orders live in `.sovereign/features/ontology-v1-p*/order.md` (local, gitignored).*
+*Hand-maintained; update it in the merge commit when a link or a phase moves.
+The chain is the point of this file: phase progress can look healthy while every
+link stays unproven, which is the failure this board exists to make visible.*
