@@ -27,24 +27,24 @@ pub(super) enum SelectionArg {
 /// one across the crate boundary; fields stay PRIVATE — a caller may hold and
 /// pass one, not inspect it.
 pub struct ParsedExtract {
-    corpus_id: String,
-    selection: SelectionArg,
+    pub(super) corpus_id: String,
+    pub(super) selection: SelectionArg,
     /// Set by `--terse`. Requests the terse Phase 1 prompt variant
     /// + an optional `max_output_tokens` bump. Combinable with
     /// `--chapters` or `--retry-failed` but not with `--full` — a
     /// terse pass is by design a recovery run, not a full-corpus
     /// run.
-    terse: bool,
+    pub(super) terse: bool,
     /// Set by `--resume`. Reads the per-chapter checkpoint and skips
     /// chapter ids already recorded there. Compatible with `--full`,
     /// `--chapters`, and `--retry-failed`; the resume filter applies
     /// to whichever selection mode is in effect.
-    resume: bool,
+    pub(super) resume: bool,
     /// Set by `--finalize`. Read-only mode: reconstructs a run-file
     /// (and updates the cache when --full-equivalent semantics
     /// apply) from the checkpoint. Mutually exclusive with the
     /// selection flags.
-    finalize: bool,
+    pub(super) finalize: bool,
 }
 
 pub fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {

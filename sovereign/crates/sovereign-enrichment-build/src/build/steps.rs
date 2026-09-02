@@ -165,12 +165,12 @@ fn resolve_cache_is_structural_placeholder(cache_path: &std::path::Path) -> bool
 pub(super) struct StepOutcome(String);
 
 impl StepOutcome {
-    fn did(summary: impl Into<String>) -> Self {
+    pub(super) fn did(summary: impl Into<String>) -> Self {
         Self(summary.into())
     }
 
     /// The line for `StepDone.summary`, verbatim.
-    fn summary(&self) -> String {
+    pub(super) fn summary(&self) -> String {
         self.0.clone()
     }
 }
@@ -179,13 +179,13 @@ impl StepOutcome {
 #[derive(Debug, Clone)]
 pub(super) struct StepFailure {
     /// What went wrong, in the step's own words.
-    message: String,
+    pub(super) message: String,
     /// The code `enrich build` exits with.
-    exit_code: i32,
+    pub(super) exit_code: i32,
 }
 
 impl StepFailure {
-    fn new(message: impl Into<String>, exit_code: i32) -> Self {
+    pub(super) fn new(message: impl Into<String>, exit_code: i32) -> Self {
         Self {
             message: message.into(),
             exit_code,

@@ -25,6 +25,16 @@ use super::providers::{
     local_daemon_base, parse_model_spec, ProviderKind, ProviderRegistry, ResolvedProvider,
 };
 
+mod discovery;
+mod wire;
+
+// `discovery`'s two probes are free functions every caller runs BEFORE it
+// has a client, so they surface here rather than as methods. `wire` holds the
+// two provider dialects as a second `impl DaemonInferenceClient` block and
+// exports nothing: its methods are `pub(super)`, reachable from this module
+// and no further.
+pub use discovery::{probe_daemon, resolve_default_models};
+
 /// Default chat request timeout. Phase 1 extract on a 27B-Q6 model
 /// emitting up to 16k tokens of structured JSON can run 5–15 minutes
 /// on M2 hardware. The previous 180s ceiling silently killed real

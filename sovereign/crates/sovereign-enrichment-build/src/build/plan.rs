@@ -164,17 +164,17 @@ pub(super) fn load_pipeline_capabilities(
 }
 
 pub(super) struct Plan {
-    enabled: Vec<Step>,
+    pub(super) enabled: Vec<Step>,
     /// Steps dropped because the pipeline explicitly opts out —
     /// e.g. a seed-less atlas variant, or a pipeline that doesn't
     /// run Phase 8. Surfaced in the banner so an operator sees
     /// the pipeline-driven subset without thinking the
     /// orchestrator silently lost steps.
-    auto_skipped: Vec<Step>,
+    pub(super) auto_skipped: Vec<Step>,
 }
 
 impl Plan {
-    fn new(parsed: &ParsedBuild, caps: &PipelineCapabilities) -> Self {
+    pub(super) fn new(parsed: &ParsedBuild, caps: &PipelineCapabilities) -> Self {
         let mut auto_skipped: Vec<Step> = Vec::new();
         if caps.seed_strategy_none {
             auto_skipped.push(Step::Seed);
@@ -193,11 +193,11 @@ impl Plan {
         }
     }
 
-    fn enabled_steps(&self) -> impl Iterator<Item = Step> + '_ {
+    pub(super) fn enabled_steps(&self) -> impl Iterator<Item = Step> + '_ {
         self.enabled.iter().copied()
     }
 
-    fn print_dry_run(&self) {
+    pub(super) fn print_dry_run(&self) {
         if !self.auto_skipped.is_empty() {
             println!(
                 "  auto-skipped (pipeline opts out): {}",
