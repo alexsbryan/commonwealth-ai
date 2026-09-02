@@ -637,7 +637,7 @@ impl Pipeline for LiteraryAtlasPipeline {
     // ── Phase 8 (Configuration) — opt in ──────────────────────
 
     fn runs_configuration_phase(&self) -> bool {
-        true
+        self.genre.runs_configuration_phase()
     }
 
     fn compose_phase8_configuration(
@@ -747,6 +747,13 @@ impl Pipeline for LiteraryAtlasPipeline {
 
     fn tension_strategy(&self) -> crate::enrichment::atlas::analysis::TensionStrategy {
         self.genre.tension_strategy()
+    }
+
+    fn derive_tension_strategy(
+        &self,
+        shape: &crate::enrichment::atlas::analysis::CorpusShape,
+    ) -> crate::enrichment::atlas::analysis::TensionStrategy {
+        self.genre.derive_tension_strategy(shape)
     }
 
     fn compose_phase6_atlas_classifier(
@@ -893,16 +900,25 @@ fn render_phase6_classifier_user_body(
 }
 
 /// Fill the ontology-driven Phase-6 classifier template from a custom
-/// atlas's recipe data: the domain `guidance`, the `tension_term`, and the
-/// `position_term`. Extracted from `compose_phase6_atlas_classifier` so the
+/// atlas's recipe data: the domain `guidance`, the `tension_term`, the
+/// `position_term`, and `ontology_extras` — what the DECLARED ontology adds
+/// (`ontology_schema::render_phase6_extras`), empty for every corpus that
+/// declares nothing. Extracted from `compose_phase6_atlas_classifier` so the
 /// "custom mode is ontology-driven, not literary" invariant is unit-testable
 /// without constructing a full candidate.
 pub(super) fn custom_phase6_classifier_system(
     guidance: &str,
     tension_term: &str,
     position_term: &str,
+    ontology_extras: &str,
 ) -> String {
+    // `{ontology_extras}` goes in FIRST so the term placeholders inside it
+    // are filled by the two replacements that follow; `{guidance}` stays
+    // last so an author's prose is never re-scanned for placeholders.
+    // Empty extras leave the template byte-identical, which is invariant I1
+    // for this prompt (`maple_house.phase6_classifier`).
     CUSTOM_PHASE6_CLASSIFIER_TEMPLATE
+        .replace("{ontology_extras}", ontology_extras)
         .replace("{tension_term}", tension_term)
         .replace("{position_term}", position_term)
         .replace("{guidance}", guidance)
@@ -1700,6 +1716,7 @@ mod tests {
             "Rules about overnight guests, quiet hours, and chores.",
             "conflict",
             "rule",
+            "",
         );
         // The domain's own term + guidance are present…
         assert!(s.contains("conflict"), "tension_term not filled");
@@ -1710,6 +1727,7 @@ mod tests {
         // …no unfilled placeholders…
         assert!(!s.contains("{tension_term}"), "unfilled tension_term");
         assert!(!s.contains("{guidance}"), "unfilled guidance");
+        assert!(!s.contains("{ontology_extras}"), "unfilled ontology_extras");
         // …and it is NOT the literary frame.
         assert!(!s.contains("Macbeth"), "leaked the literary classifier");
         // The literary classifier system, by contrast, IS character-framed —

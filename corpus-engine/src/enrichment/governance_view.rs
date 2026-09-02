@@ -34,11 +34,12 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use super::governance::{
-    derive_active, ActiveSet, GovernanceOpKind, PairKey, RuleStatus, TensionStatus,
-};
+use super::governance::{ActiveSet, GovernanceOpKind, PairKey, RuleStatus, TensionStatus};
+use super::governance_change::{derive_active_with_policy, read_rule_facts, RuleFacts};
 use crate::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim};
 use crate::enrichment::atlas::edges::{Edge, EdgeId, EdgeType, EdgesFile};
+use crate::enrichment::atlas::read_atlas_ontology;
+use crate::enrichment::ontology::ChangePolicy;
 use crate::error::{Error, Result};
 use crate::oplog::{Op, OpId, Oplog};
 
@@ -90,6 +91,11 @@ pub struct RuleView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub citation: Option<ChunkRef>,
     pub status: RuleStatus,
+    /// Newer rules that retired this one on the DECLARED clock (axis 4).
+    /// Separate from `status` because that is what the ACTS decided and
+    /// this is what the clock infers — see [`super::governance_change`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub superseded_by_clock: Option<Vec<AtomId>>,
 }
 
 /// Whether a surfaced tension is open or how it was adjudicated. Like
@@ -206,7 +212,7 @@ impl GovernanceView {
                 matches!(
                     r.status,
                     RuleStatus::Superseded { .. } | RuleStatus::Retracted { .. }
-                )
+                ) || r.superseded_by_clock.is_some()
             })
             .filter_map(|r| r.citation.as_ref().map(|c| c.chunk_id.clone()))
             .collect()
@@ -220,7 +226,24 @@ impl GovernanceView {
         let rules = read_rule_atoms(dir)?;
         let tensions = read_tensions(dir)?;
         let ops = Oplog::<GovernanceOpKind>::new(dir).read_all()?;
-        Ok(build_view(&rules, &tensions, &ops))
+        // Axis 4: when the corpus declared which claim types supersede,
+        // the fold gains the clock pass. `atlas/ontology.json` is absent
+        // for every corpus that declared nothing and for every atlas built
+        // before ontology v1, and absence reads as "declares nothing".
+        let policies = read_atlas_ontology(dir)
+            .map(|f| f.policies)
+            .unwrap_or_default();
+        if policies.change.supersedes.is_empty() {
+            return Ok(build_view(&rules, &tensions, &ops));
+        }
+        let facts = read_rule_facts(dir, &policies)?;
+        Ok(build_view_with(
+            &rules,
+            &tensions,
+            &ops,
+            &facts,
+            &policies.change,
+        ))
     }
 }
 
@@ -445,7 +468,22 @@ pub fn build_view(
     tensions: &[RuleTension],
     ops: &[Op<GovernanceOpKind>],
 ) -> GovernanceView {
-    let active = derive_active(ops);
+    build_view_with(rules, tensions, ops, &[], &ChangePolicy::default())
+}
+
+/// [`build_view`] with axis 4's declared supersession applied. `build_view`
+/// is a shim over it, so the existing tests and the callers with no
+/// ontology are untouched (ARCH §10.2): empty `facts` plus a default
+/// [`ChangePolicy`] make `derive_active_with_policy` return exactly
+/// `derive_active`.
+pub fn build_view_with(
+    rules: &[RuleAtom],
+    tensions: &[RuleTension],
+    ops: &[Op<GovernanceOpKind>],
+    facts: &[RuleFacts],
+    change: &ChangePolicy,
+) -> GovernanceView {
+    let (active, by_clock) = derive_active_with_policy(ops, facts, change);
     let by_id: BTreeMap<&AtomId, &RuleAtom> = rules.iter().map(|r| (&r.id, r)).collect();
 
     let mut issues = Vec::new();
@@ -462,6 +500,7 @@ pub fn build_view(
                 scope: r.scope.clone(),
                 citation: r.citation.clone(),
                 status: status.clone(),
+                superseded_by_clock: by_clock.get(rid).cloned(),
             }),
             None => {
                 issues.push(GovernanceIssue::RuleHasNoAtom { rule: rid.clone() });
@@ -472,6 +511,7 @@ pub fn build_view(
                     scope: None,
                     citation: None,
                     status: status.clone(),
+                    superseded_by_clock: by_clock.get(rid).cloned(),
                 });
             }
         }

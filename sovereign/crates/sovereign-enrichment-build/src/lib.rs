@@ -52,6 +52,7 @@ pub mod atlas_phase_cmd;
 pub mod atlas_resolve;
 pub mod atlas_tensions;
 pub mod atlas_tensions_classify;
+pub mod atlas_tensions_holistic;
 pub mod extract;
 pub mod schema_review;
 pub mod seed_cmd;

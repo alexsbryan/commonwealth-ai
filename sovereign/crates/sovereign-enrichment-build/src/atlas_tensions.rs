@@ -27,12 +27,17 @@
 use std::path::PathBuf;
 
 use corpus_engine::enrichment::atlas::{
-    analysis::tensions::{
-        drop_same_named_speaker_pairs, select_candidates, select_embedding_topk,
-        CandidateSelectionInput, TensionCandidatesOutput, TensionStrategy,
+    analysis::{
+        drop_non_comparable_pairs, restrict_claims_to_types,
+        tensions::{
+            drop_same_named_speaker_pairs, select_candidates, select_embedding_topk,
+            CandidateSelectionInput, TensionCandidatesOutput, TensionStrategy,
+        },
+        BetweenOutcome, ComparabilityReport, CorpusShape,
     },
-    read_atlas_atoms, write_tension_candidates, AtomEnvelope, ATLAS_DIRNAME,
+    read_atlas_atoms, read_atlas_ontology, write_tension_candidates, AtomEnvelope, ATLAS_DIRNAME,
 };
+use corpus_engine::enrichment::ontology::OntologyPolicies;
 
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;
@@ -52,6 +57,15 @@ pub struct TensionCandidatesReport {
     /// 2026-08-26 an `unwrap_or_default()` made them indistinguishable.
     pub strategy_defaulted: bool,
     pub same_speaker_dropped: usize,
+    /// What `tension.between` did before selection — including the INERT
+    /// case, which is not the same outcome as "declared nothing" and is not
+    /// the same as "dropped nothing".
+    pub between: BetweenOutcome,
+    /// What the declared `same` criterion removed, and on what coverage.
+    /// Default (every field empty) when the corpus declares nothing.
+    pub comparability: ComparabilityReport,
+    /// The shape the selector was derived from.
+    pub shape: CorpusShape,
     pub candidates: usize,
     pub written_to: PathBuf,
 }
@@ -77,6 +91,19 @@ impl TensionCandidatesReport {
             s.push_str(&format!(
                 "; {} same-speaker pair(s) dropped",
                 self.same_speaker_dropped
+            ));
+        }
+        match self.between {
+            BetweenOutcome::Applied { dropped, .. } if dropped > 0 => {
+                s.push_str(&format!("; {dropped} claim(s) outside `tension.between`"));
+            }
+            BetweenOutcome::Inert => s.push_str("; `tension.between` inert (no claim_kind)"),
+            _ => {}
+        }
+        if self.comparability.dropped > 0 {
+            s.push_str(&format!(
+                "; {} non-comparable pair(s) dropped",
+                self.comparability.dropped
             ));
         }
         s
@@ -124,6 +151,35 @@ pub async fn run(parsed: &ParsedTensions) -> Result<TensionCandidatesReport, Str
         entities.len(),
     );
 
+    // What this corpus DECLARED. Absent for every corpus built before
+    // ontology v1 and for every corpus that declares nothing — read as
+    // "declares nothing", never as an error (`read_atlas_ontology`).
+    let policies: OntologyPolicies = read_atlas_ontology(&atlas_dir)
+        .map(|f| f.policies)
+        .unwrap_or_default();
+
+    // `tension.between` is an allow-list over claim TYPES and it runs
+    // BEFORE selection: a claim that cannot be one half of a tension
+    // should not cost an embedding, and should not be able to become
+    // somebody's nearest neighbour.
+    let between = &policies.derivation.tension.between;
+    let between_outcome = restrict_claims_to_types(&mut claims, between);
+    match between_outcome {
+        BetweenOutcome::NotDeclared => {}
+        BetweenOutcome::Inert => println!(
+            "  ⚠ tension.between = [{}] is INERT: no claim atom carries a `claim_kind`, so the \
+             allow-list has nothing to select on and was NOT applied (applying it would empty \
+             the pool). Every claim stays in scope. This is the declared type never reaching \
+             the atom — fix it upstream, in extraction and resolution.",
+            between.join(", "),
+        ),
+        BetweenOutcome::Applied { dropped, kept } => println!(
+            "  · tension.between = [{}]: {kept} claim(s) in scope ({dropped} outside the \
+             declared types)",
+            between.join(", "),
+        ),
+    }
+
     // Candidate selection is strategy-driven (glassbox: the chosen
     // strategy is logged). The literary/philosophy atlas uses the
     // deterministic graph signals; custom-ontology corpora use an
@@ -133,8 +189,16 @@ pub async fn run(parsed: &ParsedTensions) -> Result<TensionCandidatesReport, Str
     // An unresolvable pipeline still gets the Graph strategy — that is
     // the legacy behaviour and it is correct — but the SUBSTITUTION is
     // now recorded rather than erased by `unwrap_or_default()`.
+    //
+    // The strategy is DERIVED, not read off a constant: the pipeline is
+    // handed the corpus's measured shape and answers with the selector it
+    // wants (`Pipeline::derive_tension_strategy`, whose default ignores the
+    // shape and returns `tension_strategy()` — so nothing that has not
+    // opted in moves). The derivation is printed because a derived choice
+    // nobody can see is not glassbox (ARCH §9.1).
+    let shape = CorpusShape::of(&claims);
     let (strategy, strategy_defaulted) = match super::pipeline_resolve::resolve_pipeline(&cfg) {
-        Some(p) => (p.tension_strategy(), false),
+        Some(p) => (p.derive_tension_strategy(&shape), false),
         None => (TensionStrategy::Graph, true),
     };
     if strategy_defaulted {
@@ -143,6 +207,7 @@ pub async fn run(parsed: &ParsedTensions) -> Result<TensionCandidatesReport, Str
             "tension candidates: pipeline did not resolve; substituting the Graph strategy"
         );
     }
+    println!("  · corpus shape: {}", shape.describe());
 
     let mut candidates = match strategy {
         TensionStrategy::Graph => {
@@ -197,6 +262,30 @@ pub async fn run(parsed: &ParsedTensions) -> Result<TensionCandidatesReport, Str
         );
     }
 
+    // The author's own comparability criterion (`tension.same`), applied
+    // last so the operator sees what each filter cost separately. A no-op
+    // for every corpus that declares nothing.
+    let comparability = drop_non_comparable_pairs(&mut candidates, &claims, &entities, &policies);
+    if let Some(line) = comparability.summary() {
+        println!("  · {line}");
+    }
+    // A declared criterion no claim carries is doing nothing, silently.
+    // Say so: it is the difference between "the filter agreed with the
+    // author" and "the extractor never filled the field" (ARCH §18.1).
+    let inert = comparability.inert_fields();
+    if !inert.is_empty() {
+        println!(
+            "  ⚠ `same` field(s) [{}] are absent from every claim in scope — \
+             they ruled nothing out. Comparability rests on the remaining field(s).",
+            inert.join(", "),
+        );
+        tracing::warn!(
+            target: "atlas.tensions",
+            inert = ?inert,
+            "declared `same` fields carried by no claim"
+        );
+    }
+
     if candidates.is_empty() {
         println!(
             "  · no entity-overlap candidates found. Either no claim has an `attributed_to` \
@@ -216,6 +305,9 @@ pub async fn run(parsed: &ParsedTensions) -> Result<TensionCandidatesReport, Str
         strategy,
         strategy_defaulted,
         same_speaker_dropped,
+        between: between_outcome,
+        comparability,
+        shape,
         candidates: count,
         written_to,
     })

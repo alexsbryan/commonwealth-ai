@@ -25,10 +25,12 @@
 //! per-type merge policy, a resolved trajectory, an argument budget — on the
 //! axis that owns them, never a new struct.
 
+pub mod clock;
 pub mod language;
 pub mod type_index;
 mod validate;
 
+pub use clock::section_date;
 pub use language::{
     AttrDecl, AttrFamily, ChangeDecl, ClaimScopeDecl, Clock, Deontic, DeriveDecl, Force,
     OntologyLanguage, OntologyLanguageRegistry, OntologyTypeDecl, OntologyV1, SourceDecl,

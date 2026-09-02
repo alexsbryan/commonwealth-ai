@@ -289,6 +289,9 @@ impl OntologyV1 {
             terms.position_term = Some(label.clone());
         }
 
+        // Read before `self.types` moves into `ShapePolicy` below.
+        let declares_types = !self.types.is_empty();
+
         let mut identity = BTreeMap::new();
         let mut identity_fallback = BTreeMap::new();
         for t in &self.types {
@@ -317,7 +320,13 @@ impl OntologyV1 {
             derivation: DerivationPolicy {
                 tension: self.tension,
                 patterns: self.patterns,
-                configurations: self.derive.configurations.unwrap_or(true),
+                // Phase 8's prompt is written in the literary frame, so a
+                // corpus that declares its OWN types gets the rollups only
+                // when its author asked (ONTOLOGY_MIGRATION §P4: "Phase 8
+                // off for declared corpora until a neutral prompt
+                // exists"). A block that declares nothing keeps today's
+                // `true`, which is invariant I1.
+                configurations: self.derive.configurations.unwrap_or(!declares_types),
                 arguments: self.derive.arguments.unwrap_or(false),
             },
             prose: ProsePolicy {

@@ -859,6 +859,13 @@ export interface RuleView {
   scope?: string;
   citation?: ChunkRef;
   status: RuleStatus;
+  /**
+   * Newer rules that retired this one on the declared clock (ontology v1,
+   * axis 4). Separate from `status`, which is what governance ACTS
+   * decided; this is what the clock infers, and there is no op to cite.
+   * Absent unless the corpus declares `change.supersedes`.
+   */
+  superseded_by_clock?: string[];
 }
 
 /** A surfaced conflict with both rule texts attached — a meeting-agenda row. */
