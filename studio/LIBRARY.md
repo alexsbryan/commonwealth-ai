@@ -255,3 +255,53 @@ packages that drift into four products. The protocol in step 4 is the fence.
 Everything a package adds beyond the three verbs and the tool decorator is a
 smell, in the same sense `BOUNDARY.md` treats a dependency on `sovereign-core`
 as one.
+
+## The production reframing
+
+Added the same day, after the operator restated the target: not an interpreter
+beside your code, but a runtime a team at a well-funded startup deploys once
+in their own cloud, against their own OpenAI-compatible endpoints, where a
+workflow is a line of code and the durability, scaling and provider handling
+are someone else's problem. That is the Temporal and Inngest position narrowed
+to LLM work, and the sections above hold for the inventory but not for the
+thesis. Inngest's `step.ai.infer` is already one line, and Temporal already
+survives process death, so the one-thing argument has to be made against them.
+
+Three properties the engine has that those two do not have as a unit. A model
+call is idempotent by content: the cache keys a step on its resolved inputs
+plus source fingerprint, and pointed at a shared store that is the checkpoint,
+so a resumed run never re-bills a call it already made. The workflow is data:
+a decorator in the host language compiles to the file the engine runs, which
+is what lets any worker pick up any item and gives review, audit and sharing
+for free. And structured output is an artifact, enforced at the endpoint where
+the host supports it, with a parse failure as a first-class retry reason.
+
+What "handled elegantly" means in practice is mostly not orchestration. It is
+the provider layer: per-endpoint rate limits and backoff, concurrency per key,
+token and dollar budgets per run, model fallback, prompt-cache awareness, batch
+endpoints, and a ledger. None of it exists in the studio crates. The daemon
+schedules on the OICP side, which is the wrong side for a customer's endpoint.
+This layer is where the product is, and it is new work, not a lift. The runner
+is also single-process; the spec's distributed outer loop was named as P2 and
+never built, and the monorepo's prior art (the SQLite worklist pipeline, the
+mesh work queue) is Sovereign-shaped.
+
+The deployment shape: one Rust binary that is both API server and worker,
+state in the customer's Postgres, artifacts in their object store, the queue
+as Postgres `SKIP LOCKED` so there is no third piece of infrastructure. They
+run N replicas and point it at their endpoints. SDKs submit, observe and
+contribute tools over HTTP; a host-language tool is still an MCP server, now
+one the workers call back to. This is the stdio protocol of the previous
+section promoted to a network service.
+
+The sequence, each stage a real build rather than a session:
+
+1. Name and licence, now mandatory: third parties will link this.
+2. The contract cut, unchanged.
+3. A pluggable checkpoint store behind the cache trait, and a runner that
+   resumes from it.
+4. The server-and-worker binary with the Postgres queue; `for_each` fans out
+   across workers.
+5. The provider layer. This is the product; shipping 3 and 4 without it is a
+   worse Inngest.
+6. Python and TypeScript SDKs that compile decorators to the file. Go after.
