@@ -1207,7 +1207,26 @@ means one thing.
   the parser. The resolve step writes `atlas/ontology.json`
   (`writer::write_atlas_ontology`) so the atlas dir records what it was
   extracted under, and `_summary.json` (SCHEMA_VERSION 3) carries an
-  `OntologySummary` read back from it. Design:
+  `OntologySummary` read back from it. **Retrieval reads that file back
+  (P5).** `AtlasGraph::load_lance_from_disk` attaches the policies to the
+  graph, dropping a set with no declared types to `None` — so `ontology()`
+  being `Some` IS the "this corpus declared something" gate, checked once at
+  the load rather than remembered at four call sites, and
+  `AtlasGraph::is_subtype_of` (the graph-side accessor for `TypeIndex::is_a`)
+  is inert for every corpus that declared nothing. Four readers: the
+  enumeration classifier's type enum is the six generic kinds ∪ the declared
+  ENTITY types, capped at 24 (`enumerable_types`,
+  `sovereign-core/src/runtime/retrieval/atom_enum.rs`), and its atom compare
+  walks `specializes`, so "which coins" returns the sceattas too;
+  `atlas_traversal` gains `QueryPlan::Enumerate` / `Aggregate`, minted only by
+  `classify_query_with` when a vocabulary is present and refused by the engine
+  when it is not; `governance_view::project_claim` scopes a rule on the
+  claim's `subject` (what it is about) falling back to `attributed_to` (whose
+  voice it is), and takes its deontic from the reserved `deontic` attribute the
+  ontology parser already validated; and `meta_atlas`'s
+  `classify_articulation_with` places a declared `EntityType::Other(name)` by
+  the generic kind it descends from instead of guessing from the chunk preview.
+  Design:
   `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md`, `ONTOLOGY_MIGRATION.md`.
   State at `~/.svrnmesh/indexes/<corpus>/atlas/`. Deep-dive:
   [`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md). Beyond the LLM

@@ -31,6 +31,7 @@ use crate::enrichment::atlas::ann_store::AnnSeedTable;
 use crate::enrichment::atlas::projection::AtomRecord;
 use crate::enrichment::atlas::store::LancePreload;
 use crate::enrichment::atlas::{AtomEnvelope, AtomType, ChunkRef, EdgeProvenance, EdgeType};
+use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
 use crate::enrichment::pipeline::atlas::EpistemicStatus;
 use crate::ScoredChunk;
 
@@ -97,6 +98,19 @@ pub struct AtlasGraph {
     /// (`AtlasContextManager` / eval runner) via
     /// [`AtlasGraph::with_ann_seed_table`], never the sync open bridge.
     ann: Option<Arc<AnnSeedTable>>,
+    /// The ontology this atlas was extracted under, read from
+    /// `atlas/ontology.json` by [`Self::load_lance_from_disk`]. This is the
+    /// vocabulary carrier for ontology-v1 P5: every reader that needs to know
+    /// "what did the author declare" asks the graph it is already holding,
+    /// rather than re-opening the atlas dir or growing a second projection
+    /// beside `_summary.json`'s [`super::summary::OntologySummary`].
+    ///
+    /// **`None` is load-bearing.** [`Self::with_ontology`] drops a policy set
+    /// with no declared types, so `Some` means *this corpus declared types* —
+    /// the single structural gate (I5) that keeps SEP, Wikipedia and Enron off
+    /// every declared-type code path. A caller never re-checks
+    /// `has_declarations()`; the `Option` already answered.
+    ontology: Option<Arc<OntologyPolicies>>,
 }
 
 impl std::fmt::Debug for AtlasGraph {
@@ -155,6 +169,7 @@ impl AtlasGraph {
             article_slug,
             preload: Arc::new(preload),
             ann: None,
+            ontology: None,
         }
     }
 
@@ -165,7 +180,44 @@ impl AtlasGraph {
     pub fn load_lance_from_disk(atlas_corpus_id: &str, atlas_dir: &Path) -> Result<Self, String> {
         let preload = LancePreload::open_blocking(atlas_dir)
             .map_err(|e| format!("open v2 store for {atlas_corpus_id}: {e}"))?;
-        Ok(Self::from_lance_preload(atlas_corpus_id, preload))
+        let ontology = super::writer::read_atlas_ontology(atlas_dir).map(|f| f.policies);
+        Ok(Self::from_lance_preload(atlas_corpus_id, preload).with_ontology(ontology))
+    }
+
+    /// Attach the declared ontology read from `atlas/ontology.json`. Policies
+    /// that declare no types are dropped to `None` HERE, once, so no consumer
+    /// has to remember the `has_declarations()` check — see the field doc.
+    pub fn with_ontology(mut self, policies: Option<OntologyPolicies>) -> Self {
+        let declared = policies.filter(|p| p.has_declarations());
+        tracing::debug!(
+            corpus = %self.atlas_corpus_id,
+            declared_types = declared.as_ref().map(|p| p.shape.types.len()).unwrap_or(0),
+            "atlas graph: declared vocabulary attached"
+        );
+        self.ontology = declared.map(Arc::new);
+        self
+    }
+
+    /// The declared ontology, or `None` for a corpus that declared nothing.
+    pub fn ontology(&self) -> Option<&OntologyPolicies> {
+        self.ontology.as_deref()
+    }
+
+    /// Is `subtype` the declared type `target`, or a `specializes` descendant
+    /// of it? `sceatta specializes coin`, so `is_subtype_of("sceatta", "coin")`
+    /// is true and an enumeration of `coin` includes the sceattas.
+    ///
+    /// Always `false` for a corpus that declared nothing, which is what makes
+    /// an undeclared corpus's equality compare byte-identical: callers write
+    /// `a == b || graph.is_subtype_of(a, b)` and the second term is inert.
+    /// The `specializes` walk itself is [`TypeIndex::is_a`] — the ONE place the
+    /// chain is walked (§10.6); this is the graph-side accessor for it, not a
+    /// second implementation.
+    pub fn is_subtype_of(&self, subtype: &str, target: &str) -> bool {
+        match self.ontology() {
+            Some(p) => TypeIndex::from_policies(p).is_a(subtype, target),
+            None => false,
+        }
     }
 
     /// Attach a persistent ANN seed table (`atlas/atoms_ann.lance`) — the
@@ -1830,6 +1882,63 @@ mod store_io_tests {
         }
 
         assert!(graph.atom("no-such-id").is_none());
+    }
+
+    /// The vocabulary carrier (ontology-v1 P5). A graph loaded from an atlas
+    /// dir with an `ontology.json` carries the declared policies; one without
+    /// carries `None`, and `is_subtype_of` is inert there — that inertness is
+    /// what makes every `a == b || graph.is_subtype_of(a, b)` compare
+    /// byte-identical for SEP / Wikipedia / Enron (I5).
+    #[test]
+    fn graph_carries_the_declared_ontology_and_walks_specializes() {
+        use crate::enrichment::atlas::ATLAS_DIRNAME;
+        use crate::enrichment::ontology::{OntologyTypeDecl, TypeKind};
+
+        fn decl(name: &str, specializes: Option<&str>) -> OntologyTypeDecl {
+            OntologyTypeDecl {
+                name: name.to_string(),
+                kind: TypeKind::Entity,
+                specializes: specializes.map(str::to_string),
+                ..Default::default()
+            }
+        }
+
+        let tmp = tempfile::tempdir().unwrap();
+        let atlas_dir = tmp.path().join("wessex-hoard").join(ATLAS_DIRNAME);
+        std::fs::create_dir_all(&atlas_dir).unwrap();
+        let atoms = vec![AtomEnvelope::Entity(sample_entity(
+            1,
+            "Aldfrith penny",
+            0.9,
+        ))];
+        store::write_store_blocking(&atlas_dir, "wessex-hoard", &atoms, &[]).unwrap();
+
+        // No ontology.json → declared nothing, and the subtype walk is inert.
+        let undeclared = AtlasGraph::load_from_disk("wessex-hoard", &atlas_dir).unwrap();
+        assert!(undeclared.ontology().is_none());
+        assert!(!undeclared.is_subtype_of("sceatta", "coin"));
+        assert!(!undeclared.is_subtype_of("coin", "coin"));
+
+        // A policy set that declares NO types still reads as undeclared — the
+        // filter lives in `with_ontology`, so no consumer re-checks it.
+        let empty = crate::enrichment::ontology::OntologyPolicies::from_prose(
+            "some prose guidance",
+            Default::default(),
+        );
+        super::super::writer::write_atlas_ontology(&atlas_dir, 1, &empty).unwrap();
+        let prose_only = AtlasGraph::load_from_disk("wessex-hoard", &atlas_dir).unwrap();
+        assert!(prose_only.ontology().is_none());
+
+        // Declared types → the walk answers.
+        let mut declared = crate::enrichment::ontology::OntologyPolicies::default();
+        declared.shape.types = vec![decl("coin", None), decl("sceatta", Some("coin"))];
+        super::super::writer::write_atlas_ontology(&atlas_dir, 1, &declared).unwrap();
+        let g = AtlasGraph::load_from_disk("wessex-hoard", &atlas_dir).unwrap();
+        assert_eq!(g.ontology().unwrap().shape.types.len(), 2);
+        assert!(g.is_subtype_of("sceatta", "coin"));
+        assert!(g.is_subtype_of("coin", "coin"));
+        assert!(!g.is_subtype_of("coin", "sceatta"));
+        assert!(!g.is_subtype_of("ruler", "coin"));
     }
 
     /// `load_from_disk` loads the v2 store when present and errors (no

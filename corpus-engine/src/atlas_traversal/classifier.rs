@@ -27,6 +27,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::enrichment::atlas::atoms::Entity;
 use crate::enrichment::atlas::fold;
+use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
 
 /// The caller's parsed intent. Every variant that names a
 /// target entity uses the `QueryTarget` sub-enum so downstream
@@ -51,6 +52,13 @@ pub enum QueryPlan {
     ConfigurationList,
     /// "What does the novel say?" / "Summarise the atlas."
     CorpusOverview,
+    /// "Which coins are in this catalogue?" / "List the sceattas."
+    /// Only ever produced for a corpus that DECLARED `entity_type` —
+    /// the author's own noun, not one of the six generic kinds.
+    Enumerate { entity_type: String },
+    /// "How many coins by metal?" — a declared type tallied over one of
+    /// its declared attributes.
+    Aggregate { entity_type: String, over: String },
     /// Classifier couldn't match. The caller can fall back.
     Unknown { raw_query: String },
 }
@@ -75,7 +83,32 @@ pub enum QueryTarget {
 /// Classify a query against the atlas's entity vocabulary.
 /// `entities` is the resolved Entity set; the classifier uses
 /// canonical_name + aliases to match target names in the query.
+///
+/// Equivalent to [`classify_query_with`] with no declared vocabulary — the
+/// pre-ontology behaviour, kept as the name every existing caller already
+/// spells.
 pub fn classify_query(query: &str, entities: &[Entity]) -> QueryPlan {
+    classify_query_with(query, entities, None)
+}
+
+/// Classify a query, offering the corpus's DECLARED types as things the
+/// question can be about.
+///
+/// `vocab` is the atlas's `ontology.json` policies, or `None` for a corpus
+/// that declared nothing. **`None` reproduces [`classify_query`] exactly** —
+/// the declared block below is the only added code and it is skipped whole,
+/// so SEP, Wikipedia, Enron and every literary atlas classify byte-identically
+/// (I5).
+///
+/// The declared block runs BEFORE the relation/lookup passes because a
+/// declared noun is more specific evidence than a name-shaped token: "which
+/// coins are in this catalogue" would otherwise fall through to the bare-name
+/// pass and resolve on whatever entity happens to share a token with it.
+pub fn classify_query_with(
+    query: &str,
+    entities: &[Entity],
+    vocab: Option<&OntologyPolicies>,
+) -> QueryPlan {
     // Fold the query the same way entity names are indexed — NFD
     // diacritic strip + Cyrillic transliteration + lowercase. This
     // makes the query `"Who is Fyodor?"` match the entity name
@@ -118,6 +151,14 @@ pub fn classify_query(query: &str, entities: &[Entity]) -> QueryPlan {
         ],
     ) {
         return QueryPlan::CorpusOverview;
+    }
+
+    // Declared-type intents. Skipped entirely when nothing is declared.
+    if let Some(policies) = vocab {
+        if let Some(plan) = classify_declared(trimmed, entities, policies) {
+            tracing::debug!(query = %query, plan = ?plan, "atlas traversal: declared-type plan");
+            return plan;
+        }
     }
 
     // Relation-lookup — needs two targets via "between X and Y"
@@ -177,6 +218,102 @@ pub fn classify_query(query: &str, entities: &[Entity]) -> QueryPlan {
     QueryPlan::Unknown {
         raw_query: query.to_string(),
     }
+}
+
+/// Cues that a question wants a SET rather than one thing.
+const ENUMERATE_CUES: &[&str] = &[
+    "which ",
+    "what ",
+    "list ",
+    "list the",
+    "show me",
+    "enumerate",
+    "all the ",
+    "how many",
+];
+
+/// Cues that a question wants a TALLY grouped by something.
+const AGGREGATE_CUES: &[&str] = &["how many", "count of", "breakdown", "distribution of"];
+
+/// Enumerate / Aggregate over a declared type, or `None` to fall through to
+/// the pre-ontology passes.
+///
+/// The decisive test for Enumerate is the one `atom_enum`'s classifier already
+/// uses: **a question that names the entities it concerns is a lookup, not an
+/// enumeration.** "which mints struck for Offa" names Offa, so it is not an
+/// enumeration of mints — it falls through and resolves on Offa, whose
+/// relations are the answer. Without that test every "which <type> …" question
+/// would be swallowed here.
+fn classify_declared(
+    folded_query: &str,
+    entities: &[Entity],
+    policies: &OntologyPolicies,
+) -> Option<QueryPlan> {
+    let index = TypeIndex::from_policies(policies);
+    let (type_name, decl) = match_declared_type(folded_query, policies)?;
+
+    // Aggregate is the more specific read: a tally cue plus "by <attribute>"
+    // naming one of the type's EFFECTIVE attributes (inherited included, which
+    // is why this asks the index rather than the decl).
+    if matches_any(folded_query, AGGREGATE_CUES) {
+        for attr in index.effective_attributes(&decl.name) {
+            let folded_attr = fold(&attr.name);
+            if folded_attr.is_empty() {
+                continue;
+            }
+            if folded_query.contains(&format!("by {folded_attr}"))
+                || folded_query.contains(&format!("per {folded_attr}"))
+            {
+                return Some(QueryPlan::Aggregate {
+                    entity_type: type_name,
+                    over: attr.name.clone(),
+                });
+            }
+        }
+    }
+
+    if !matches_any(folded_query, ENUMERATE_CUES) {
+        return None;
+    }
+    // Names a member => a lookup about that member, not a set.
+    if match_entity_target(folded_query, entities).is_some() {
+        return None;
+    }
+    Some(QueryPlan::Enumerate {
+        entity_type: type_name,
+    })
+}
+
+/// The declared type the query mentions, by name or `label`, matched as a
+/// whole word in singular or naive-plural form. Longest surface form wins so
+/// `sceatta` beats a shorter type sharing a prefix.
+fn match_declared_type<'a>(
+    folded_query: &str,
+    policies: &'a OntologyPolicies,
+) -> Option<(String, &'a crate::enrichment::ontology::OntologyTypeDecl)> {
+    let mut best: Option<(
+        usize,
+        String,
+        &'a crate::enrichment::ontology::OntologyTypeDecl,
+    )> = None;
+    for t in &policies.shape.types {
+        for base in std::iter::once(&t.name).chain(t.label.iter()) {
+            let folded = fold(base);
+            if folded.is_empty() {
+                continue;
+            }
+            for surface in [folded.clone(), format!("{folded}s"), format!("{folded}es")] {
+                if !contains_whole_word(folded_query, &surface) {
+                    continue;
+                }
+                let len = surface.chars().count();
+                if best.as_ref().map(|(l, _, _)| len > *l).unwrap_or(true) {
+                    best = Some((len, t.name.clone(), t));
+                }
+            }
+        }
+    }
+    best.map(|(_, name, decl)| (name, decl))
 }
 
 fn matches_any(text: &str, patterns: &[&str]) -> bool {
@@ -403,6 +540,176 @@ mod tests {
             entity(2, "Fyodor Pavlovich Karamazov", &["Fyodor"]),
             entity(3, "Zossima", &["Elder Zossima", "Father Zossima"]),
         ]
+    }
+
+    // ── ontology-v1 P5: declared-type plans ──────────────────
+
+    use crate::enrichment::ontology::{
+        AttrDecl, AttrFamily, OntologyTypeDecl, ShapePolicy, TypeKind,
+    };
+
+    fn decl(name: &str, specializes: Option<&str>, attrs: &[&str]) -> OntologyTypeDecl {
+        OntologyTypeDecl {
+            name: name.to_string(),
+            kind: TypeKind::Entity,
+            specializes: specializes.map(str::to_string),
+            attributes: attrs
+                .iter()
+                .map(|a| AttrDecl {
+                    name: (*a).to_string(),
+                    family: AttrFamily::Text { values: Vec::new() },
+                    description: String::new(),
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    /// The wessex-hoard vocabulary: coin, sceatta (specializes coin), ruler,
+    /// mint, and an `attribution` claim.
+    fn numismatics() -> OntologyPolicies {
+        let mut p = OntologyPolicies {
+            shape: ShapePolicy {
+                types: vec![
+                    decl("coin", None, &["metal", "weight", "mint"]),
+                    decl("sceatta", Some("coin"), &[]),
+                    decl("ruler", None, &[]),
+                    decl("mint", None, &[]),
+                ],
+            },
+            ..Default::default()
+        };
+        p.shape.types.push(OntologyTypeDecl {
+            name: "attribution".to_string(),
+            kind: TypeKind::Claim,
+            ..Default::default()
+        });
+        p
+    }
+
+    /// The wessex-hoard enumeration probe. This is link 5 of the chain: the
+    /// question has to reach the AUTHOR'S noun, not one of the six kinds.
+    #[test]
+    fn declared_type_enumeration_probe() {
+        let plan = classify_query_with(
+            "Which coins are in this catalogue, and what metal is each?",
+            &[],
+            Some(&numismatics()),
+        );
+        assert_eq!(
+            plan,
+            QueryPlan::Enumerate {
+                entity_type: "coin".into()
+            }
+        );
+    }
+
+    /// Plural and label surface forms both reach the declared name.
+    #[test]
+    fn declared_enumeration_matches_plural_forms() {
+        for q in [
+            "Which sceattas are in the hoard?",
+            "List the sceatta.",
+            "show me all the sceattas",
+        ] {
+            assert_eq!(
+                classify_query_with(q, &[], Some(&numismatics())),
+                QueryPlan::Enumerate {
+                    entity_type: "sceatta".into()
+                },
+                "query: {q}"
+            );
+        }
+    }
+
+    /// The decisive test: a question that NAMES a member is a lookup about
+    /// that member, not an enumeration of the type. "which mints struck for
+    /// Offa" is about Offa — its answer is Offa's relations.
+    #[test]
+    fn a_named_member_defeats_enumeration() {
+        let entities = vec![entity(1, "Offa", &[])];
+        let plan = classify_query_with(
+            "Which mints struck for Offa?",
+            &entities,
+            Some(&numismatics()),
+        );
+        assert!(
+            !matches!(plan, QueryPlan::Enumerate { .. }),
+            "named member must not enumerate, got {plan:?}"
+        );
+        assert!(
+            matches!(plan, QueryPlan::EntityLookup { .. }),
+            "got {plan:?}"
+        );
+    }
+
+    /// A tally cue plus `by <declared attribute>` is an Aggregate.
+    #[test]
+    fn declared_aggregate_over_an_attribute() {
+        assert_eq!(
+            classify_query_with("How many coins by metal?", &[], Some(&numismatics())),
+            QueryPlan::Aggregate {
+                entity_type: "coin".into(),
+                over: "metal".into()
+            }
+        );
+        // Inherited attributes count: `sceatta` specializes `coin`, so
+        // `metal` is one of its effective attributes.
+        assert_eq!(
+            classify_query_with("How many sceattas by metal?", &[], Some(&numismatics())),
+            QueryPlan::Aggregate {
+                entity_type: "sceatta".into(),
+                over: "metal".into()
+            }
+        );
+    }
+
+    /// An attribute the type never declared is not an aggregate — it falls
+    /// back to enumeration rather than inventing a grouping key.
+    #[test]
+    fn undeclared_attribute_is_not_an_aggregate() {
+        assert_eq!(
+            classify_query_with("How many coins by provenance?", &[], Some(&numismatics())),
+            QueryPlan::Enumerate {
+                entity_type: "coin".into()
+            }
+        );
+    }
+
+    /// I5, at the site. Every query the pre-ontology classifier placed is
+    /// placed identically when no vocabulary is supplied — including ones a
+    /// declared vocabulary WOULD have caught.
+    #[test]
+    fn undeclared_classification_is_unchanged() {
+        for q in [
+            "Who is Alyosha?",
+            "How does Alyosha change over the novel?",
+            "What tensions does the novel raise?",
+            "What configurations does the work enact?",
+            "What was the weather in Petersburg?",
+            "Which coins are in this catalogue, and what metal is each?",
+            "How many coins by metal?",
+            "List the sceattas.",
+        ] {
+            let with_none = classify_query_with(q, &bk_fixture(), None);
+            assert_eq!(with_none, classify_query(q, &bk_fixture()), "query: {q}");
+            assert!(
+                !matches!(
+                    with_none,
+                    QueryPlan::Enumerate { .. } | QueryPlan::Aggregate { .. }
+                ),
+                "undeclared corpus must never produce a declared-type plan: {q} -> {with_none:?}"
+            );
+        }
+    }
+
+    /// A policy set with prose but no declared types is not a vocabulary —
+    /// the caller filters on `has_declarations()` and the classifier is then
+    /// byte-identical to the undeclared path.
+    #[test]
+    fn prose_only_policies_declare_nothing() {
+        let prose = OntologyPolicies::from_prose("extract the rules", Default::default());
+        assert!(!prose.has_declarations());
     }
 
     #[test]
