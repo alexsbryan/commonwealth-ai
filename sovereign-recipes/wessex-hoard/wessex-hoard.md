@@ -61,47 +61,90 @@ flan is coppery where it has worn.
 
 # The mint at Eoforwic
 
-Eoforwic, the Northumbrian mint at York, struck the royal sceatta coinage
-of the later seventh and eighth centuries. Its output is distinguished from
-the southern mints by the consistent use of an animal obverse rather than a
-bust, and by a slightly heavier weight standard.
+Eoforwic, the Northumbrian mint at York, struck the royal sceatta coinage of
+the later seventh and eighth centuries. Its output is distinguished from the
+southern mints by the consistent use of an animal obverse rather than a bust,
+and by a slightly heavier weight standard — the Eoforwic sceattas run about a
+tenth of a gram above their southern contemporaries throughout the period.
+The mint appears to have operated under direct royal control rather than
+through independent moneyers, which is why no moneyer's name is found on any
+Eoforwic issue before the ninth century. Its products travelled: examples turn
+up in southern hoards, including this one, in numbers that argue for genuine
+circulation rather than for isolated losses by travellers.
 
 # The mint at Gipeswic
 
 Gipeswic, at Ipswich in East Anglia, was the most productive of the English
 sceatta mints. It struck the Series R group over several decades and, later,
 the reformed penny coinage of Beonna. Moneyers' names appear on the Beonna
-issues but not on the earlier Series R.
+issues but not on the earlier Series R, which is the clearest sign that the
+reform brought the mint under a named administration where it had previously
+worked anonymously. The volume is considerable: Series R accounts for more
+surviving specimens than any other English sceatta group, and the die study
+underlying that count identifies well over two hundred obverse dies. The mint
+sat beside a working trading settlement, and its coins are found across the
+southern North Sea as well as inland.
 
 # The mint at Lundenwic
 
 Lundenwic, the trading settlement west of the Roman walls of London, struck
-for the Mercian kings from the eighth century. Both the Offa gold dinar and
-the Coenwulf mancus name it in their reverse legends.
+for the Mercian kings from the eighth century onward. Both the Offa gold dinar
+and the Coenwulf mancus name it in their reverse legends — the mancus does so
+explicitly, DE VICO LVNDONIAE, "from the trading place of London", which is
+the earliest unambiguous mint signature on an English gold coin. The mint's
+silver output is far larger than its gold, but the gold is what fixes its
+place in the record, since the two surviving gold issues both carry a king's
+name and a mint name together. Its moneyers are known by name from the reverse
+legends of the reformed penny coinage.
 
 # Aldfrith of Northumbria
 
-Aldfrith ruled Northumbria from 685 until his death in 704. He was the
-first English king to place his own name on a coinage, and the Series Y
-sceattas of Eoforwic are that coinage.
+Aldfrith ruled Northumbria from 685 until his death in 704. He was the first
+English king to place his own name on a coinage, and the Series Y sceattas of
+Eoforwic are that coinage — before him, English coins name mints, moneyers or
+nothing at all, but never the ruler under whose authority they were struck.
+The innovation did not immediately take: his successors reverted to anonymous
+types, and it is another two generations before a royal name appears regularly
+again. He was a scholar as well as a king, and the literary sources are
+unusually full for a Northumbrian ruler of the period, which is part of why
+his coinage can be dated at all closely.
 
 # Offa of Mercia
 
-Offa ruled Mercia from 757 until 796 and was the dominant English king of
-the later eighth century. His coinage includes the reformed broad penny
-and, exceptionally, the gold dinar imitation catalogued above.
+Offa ruled Mercia from 757 until 796 and was the dominant English king of the
+later eighth century, exercising authority well beyond Mercia itself. His
+coinage includes the reformed broad penny — a heavier, wider coin that
+replaced the sceatta across southern England and set the shape of the English
+penny for five hundred years — and, exceptionally, the gold dinar imitation
+catalogued above. The reform was administrative as well as metrological:
+moneyers are named, mints are distinguished, and the portrait work is of a
+quality without parallel in contemporary northern Europe. He is the ruler
+against whom the coinages of the smaller kingdoms, Beonna's among them, are
+conventionally measured.
 
 # Coenwulf of Mercia
 
-Coenwulf ruled Mercia from 796 until 821, succeeding Offa's short-lived
-son. His gold mancus is the only English gold coin of the period naming
-both a king and a mint.
+Coenwulf ruled Mercia from 796 until 821, succeeding Offa's short-lived son
+and holding the Mercian supremacy together for a further quarter century. His
+gold mancus is the only English gold coin of the period naming both a king and
+a mint, which makes it the fixed point around which the rest of the period's
+gold is arranged. His silver coinage is large and well organised, continuing
+Offa's reform without substantial change, and the moneyers who struck for Offa
+at Lundenwic largely continued to strike for him. The reign is well documented
+in charters, and those charters are what allow the mancus to be dated by its
+moneyer rather than by its style.
 
 # Beonna of East Anglia
 
-Beonna ruled the East Angles from about 749. His penny coinage is the
-earliest English coinage struck to a deliberately reformed weight and
-fineness standard.
+Beonna ruled the East Angles from about 749; the end of his reign is not
+recorded and is inferred from his coinage rather than from any written source.
+That coinage is the earliest English one struck to a deliberately reformed
+weight and fineness standard, and it is the reason his reign can be discussed
+in numismatic terms at all. Three moneyers are known from the surviving dies,
+of whom Efe is much the commonest. The reform anticipates Offa's by a
+generation and was probably its model, though the East Anglian coinage is far
+smaller and did not outlast the reign by long. Its silver is markedly purer
+than the debased sceattas circulating alongside it.
 
 # Halstead 2014 — the die-link case for an early Aldfrith issue
 

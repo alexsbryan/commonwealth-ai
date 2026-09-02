@@ -2214,9 +2214,16 @@ run = "recipe test {recipe} --sample-size 50"
 exit = 0
 stdout_non_empty = true
 [[journey.step]]
-run = "corpus install {corpus}"
+run = "corpus install {recipe}"
 mutates = true
-note = "exit code only for the reason given in corpus-lifecycle[1]; proven by [3]"
+note = """the PATH, not the id — this journey is the author's own recipe, and \
+installing it by id assumed a registration step the author was never told to \
+do. Running the chain on 2026-09-02 hit exactly that: `recipe validate \
+my-coins.toml` passed and `corpus install my-coins.toml` answered `No registry \
+entry for corpus 'my-coins.toml'`. The step read `{corpus}` here, so the \
+journey composed where the documentation did not and the break stayed \
+invisible. Exit code only for the reason given in corpus-lifecycle[1]; \
+proven by the next step."""
 [journey.step.expect]
 exit = 0
 [[journey.step]]
