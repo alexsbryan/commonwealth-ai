@@ -26,6 +26,7 @@
 //! axis that owns them, never a new struct.
 
 pub mod language;
+pub mod type_index;
 mod validate;
 
 pub use language::{
@@ -33,6 +34,7 @@ pub use language::{
     OntologyLanguage, OntologyLanguageRegistry, OntologyTypeDecl, OntologyV1, SourceDecl,
     TensionDecl, TypeKind, VoicesDecl,
 };
+pub use type_index::TypeIndex;
 pub use validate::{
     validate_block, OntologyValidation, MAX_ATTRS_PER_TYPE, MAX_ENUM_VALUES, MAX_TYPES_PER_KIND,
     RESERVED_CLAIM_KINDS,

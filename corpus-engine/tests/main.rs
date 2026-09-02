@@ -28,6 +28,8 @@ mod atlas_narrative_markdown;
 mod atoms_schema_back_compat;
 #[path = "main/chatgpt_real_export.rs"]
 mod chatgpt_real_export;
+#[path = "main/custom_ontology_pipeline_e2e.rs"]
+mod custom_ontology_pipeline_e2e;
 #[path = "main/described_asset_e2e.rs"]
 mod described_asset_e2e;
 #[path = "main/enrichment_requested_flag.rs"]

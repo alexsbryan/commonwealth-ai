@@ -25,7 +25,12 @@
 //!
 //! [`LiteraryAtlasPipeline`]: super::literary_atlas::LiteraryAtlasPipeline
 
-use super::super::types::Vocabulary;
+use super::super::atlas::SeedEntities;
+use super::super::exemplar_bank::Exemplar;
+use super::super::types::{ChapterInput, ChatPrompt, Phase1ChapterResult, Vocabulary};
+use super::literary_atlas::render_phase1_user_body;
+use super::ontology_parse::{parse_phase1_section_extraction, ParsePolicy};
+use super::ontology_schema::{phase1_schema_for, render_declared_types, report_added_prompt_size};
 use crate::enrichment::ontology::OntologyPolicies;
 use crate::recipe::OntologyVocabulary;
 use serde::{Deserialize, Serialize};
@@ -129,6 +134,15 @@ pub struct CustomOntology {
     /// author-written guidance. Empty when the recipe gave none.
     pub(super) guidance: &'static str,
     pub(super) vocabulary: Vocabulary,
+    /// The generated Phase-1 response schema, or `None` when the ontology
+    /// declares no types. `None` is what makes invariant I1 structural: the
+    /// three compose/parse hooks below return `None` too, the dispatcher
+    /// falls through to the shared Phase 1, and an empty version-1 block
+    /// therefore composes the version-0 bytes because it runs the same code.
+    pub(super) phase1_schema: Option<serde_json::Value>,
+    /// What the reader enforces. `ParsePolicy::default()` when nothing is
+    /// declared — the same value the generic dispatch passes.
+    pub(super) parse_policy: ParsePolicy,
 }
 
 impl CustomOntology {
@@ -158,10 +172,25 @@ impl CustomOntology {
         );
 
         let guidance = policies.prose.guidance.trim();
-        let combined = if guidance.is_empty() {
+        let mut combined = if guidance.is_empty() {
             NEUTRAL_PHASE1_SYSTEM.to_string()
         } else {
             format!("{NEUTRAL_PHASE1_SYSTEM}\n\n## Domain focus\n\n{guidance}")
+        };
+        // Empty for every undeclared ontology, so the bytes above are the
+        // whole prompt and I1 holds by construction rather than by a branch
+        // someone has to remember.
+        let declared = render_declared_types(policies);
+        if !declared.is_empty() {
+            combined.push_str("\n\n");
+            combined.push_str(&declared);
+        }
+        let (phase1_schema, parse_policy) = if policies.has_declarations() {
+            let schema = phase1_schema_for(policies);
+            report_added_prompt_size(name, &declared, &schema);
+            (Some(schema), ParsePolicy::from_policies(policies))
+        } else {
+            (None, ParsePolicy::default())
         };
         let phase1_system: &'static str = Box::leak(combined.into_boxed_str());
         let guidance_leaked: &'static str = Box::leak(guidance.to_string().into_boxed_str());
@@ -171,7 +200,30 @@ impl CustomOntology {
             phase1_system,
             guidance: guidance_leaked,
             vocabulary: policies.vocabulary(),
+            phase1_schema,
+            parse_policy,
         }
+    }
+
+    /// The Phase-1 prompt for a declared ontology, or `None` when nothing is
+    /// declared. One body renderer for both variants, exactly as the generic
+    /// dispatch does it — the terse retry differs only in dropping exemplars,
+    /// never in the ontology it re-extracts under.
+    fn declared_phase1(
+        &self,
+        chapter: &ChapterInput,
+        exemplars: &[&Exemplar],
+        seed: Option<&SeedEntities>,
+        include_exemplars: bool,
+        phase_id: &str,
+    ) -> Option<ChatPrompt> {
+        let schema = self.phase1_schema.clone()?;
+        let user = render_phase1_user_body(chapter, exemplars, include_exemplars, seed);
+        Some(
+            ChatPrompt::new(self.phase1_system, user)
+                .with_response_schema("phase1_section_extraction", schema)
+                .with_phase_id(phase_id),
+        )
     }
 }
 
@@ -297,6 +349,80 @@ mod tests {
         }
     }
 
+    /// The shipped numismatics template — the P2 fixture.
+    fn numismatics() -> OntologyPolicies {
+        let toml = crate::recipe_templates::load_builtin("numismatics")
+            .expect("numismatics is a shipped template");
+        Recipe::from_toml(toml)
+            .expect("the shipped template parses")
+            .custom_atlas_spec()
+            .expect("it declares an [enrichment.ontology] block")
+            .policies()
+    }
+
+    fn chapter() -> ChapterInput {
+        ChapterInput {
+            chapter_id: "sec_0001".into(),
+            title: "Series R".into(),
+            approx_tokens: 12,
+            text: "A Series R sceatta of 1.29 g, struck at Hamwic.".into(),
+            metadata: Default::default(),
+        }
+    }
+
+    /// I1, as control flow. An ontology that declares nothing returns `None`
+    /// from all three hooks, so the dispatcher composes and parses today's
+    /// Phase 1 — there is no second code path that could drift.
+    #[test]
+    fn undeclared_compose_and_parse_fall_through() {
+        use super::super::genre::AtlasGenre;
+        let ont = CustomOntology::from_policies(
+            "maple",
+            &OntologyPolicies::from_prose("Rules of a house.", Default::default()),
+        );
+        assert!(ont.phase1_schema.is_none());
+        assert!(ont.parse_policy.is_empty());
+        assert!(ont.compose_phase1(&chapter(), &[], None).is_none());
+        assert!(ont.compose_phase1_terse(&chapter()).is_none());
+        assert!(ont.parse_phase1("{}").is_none());
+        // …and the prompt bytes are still exactly the documented format.
+        assert!(!ont.phase1_system.contains("## Declared types"));
+    }
+
+    /// A declared ontology composes its own prompt + schema, and both
+    /// variants send the same ontology — the terse retry differs only in
+    /// dropping exemplars.
+    #[test]
+    fn declared_ontology_composes_its_own_prompt_and_schema() {
+        use super::super::genre::AtlasGenre;
+        let ont = CustomOntology::from_policies("numismatics", &numismatics());
+        assert!(ont.phase1_system.contains("## Domain focus"));
+        assert!(ont.phase1_system.contains("## Declared types"));
+        assert!(ont.phase1_system.contains("**coin**"));
+
+        let full = ont
+            .compose_phase1(&chapter(), &[], None)
+            .expect("declared ontology composes Phase 1");
+        let terse = ont
+            .compose_phase1_terse(&chapter())
+            .expect("declared ontology composes the terse retry");
+        assert_eq!(full.system, terse.system, "same ontology on the retry");
+        assert_eq!(full.response_schema, terse.response_schema);
+        assert_eq!(full.phase_id.as_deref(), Some("phase1"));
+        assert_eq!(terse.phase_id.as_deref(), Some("phase1_terse"));
+        let schema = full
+            .response_schema
+            .expect("a generated schema is attached");
+        let enum_values = schema["$defs"]["entity_sketch"]["properties"]["entity_type"]["enum"]
+            .as_array()
+            .expect("entity_type is an enum");
+        assert!(enum_values.contains(&serde_json::Value::String("coin".into())));
+        assert!(
+            ont.parse_phase1("{}").is_some(),
+            "and it reads its own output"
+        );
+    }
+
     /// Today's defaults, pinned: the five generic terms, the neutral prompt
     /// when nothing is declared, and the measured tension selector.
     #[test]
@@ -371,6 +497,36 @@ impl super::genre::AtlasGenre for CustomOntology {
 
     fn vocabulary(&self) -> Option<&super::super::types::Vocabulary> {
         Some(&self.vocabulary)
+    }
+
+    /// `None` when the ontology declares no types — the dispatcher then
+    /// composes today's Phase 1 under this genre's system prompt, which is
+    /// invariant I1 expressed as control flow.
+    fn compose_phase1(
+        &self,
+        chapter: &ChapterInput,
+        exemplars: &[&Exemplar],
+        seed: Option<&SeedEntities>,
+    ) -> Option<ChatPrompt> {
+        self.declared_phase1(chapter, exemplars, seed, true, "phase1")
+    }
+
+    fn compose_phase1_terse(&self, chapter: &ChapterInput) -> Option<ChatPrompt> {
+        self.declared_phase1(chapter, &[], None, false, "phase1_terse")
+    }
+
+    /// Overriding `compose_phase1` with a different schema obliges this
+    /// (`AtlasGenre::parse_phase1` doc). The schema differs only by the
+    /// declared slots, so the reader is the SAME one — parameterised by the
+    /// policy those slots were generated from.
+    fn parse_phase1(&self, response: &str) -> Option<crate::error::Result<Phase1ChapterResult>> {
+        if self.phase1_schema.is_none() {
+            return None;
+        }
+        Some(parse_phase1_section_extraction(
+            response,
+            &self.parse_policy,
+        ))
     }
 
     /// v1: a recipe ontology skips the literary-framed 1b coverage top-up.

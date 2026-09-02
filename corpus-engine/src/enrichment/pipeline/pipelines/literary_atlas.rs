@@ -452,7 +452,10 @@ impl Pipeline for LiteraryAtlasPipeline {
         if let Some(r) = self.genre.parse_phase1(response) {
             return r;
         }
-        super::ontology_parse::parse_phase1_section_extraction(response)
+        super::ontology_parse::parse_phase1_section_extraction(
+            response,
+            &super::ontology_parse::ParsePolicy::default(),
+        )
     }
 
     // ── Phase 3 — delegate legacy path + atlas facet override ─
@@ -1029,11 +1032,21 @@ pub(super) fn scrub_placeholder_strings(e: &mut SectionExtraction) {
             s.clear();
         }
     }
+    /// A declared attribute whose value is schema echo (`"..."`, `"<value>"`)
+    /// carries nothing; drop the key rather than store the echo. Numbers and
+    /// snapped refs are untouched — only string values can be placeholders.
+    fn scrub_attrs(attrs: &mut serde_json::Map<String, serde_json::Value>) {
+        attrs.retain(|_, v| match v.as_str() {
+            Some(s) => !is_placeholder_literal(s),
+            None => true,
+        });
+    }
     for entity in &mut e.entities_introduced {
         scrub(&mut entity.canonical_name);
         entity.aliases.retain(|a| !is_placeholder_literal(a));
         scrub(&mut entity.description);
         scrub(&mut entity.anchor);
+        scrub_attrs(&mut entity.attributes);
     }
     for state in &mut e.entities_developed {
         scrub(&mut state.entity_name);
@@ -1044,6 +1057,7 @@ pub(super) fn scrub_placeholder_strings(e: &mut SectionExtraction) {
         relation.participants.retain(|p| !is_placeholder_literal(p));
         scrub(&mut relation.label);
         scrub(&mut relation.anchor);
+        scrub_attrs(&mut relation.attributes);
     }
     for state in &mut e.relations_developed {
         state.participants.retain(|p| !is_placeholder_literal(p));
@@ -1054,6 +1068,7 @@ pub(super) fn scrub_placeholder_strings(e: &mut SectionExtraction) {
         scrub(&mut event.description);
         event.participants.retain(|p| !is_placeholder_literal(p));
         scrub(&mut event.anchor);
+        scrub_attrs(&mut event.attributes);
     }
     for claim in &mut e.claims {
         scrub(&mut claim.content);
@@ -1061,7 +1076,12 @@ pub(super) fn scrub_placeholder_strings(e: &mut SectionExtraction) {
             scrub(a);
         }
         claim.attributed_to = claim.attributed_to.take().filter(|s| !s.is_empty());
+        if let Some(s) = claim.subject.as_mut() {
+            scrub(s);
+        }
+        claim.subject = claim.subject.take().filter(|s| !s.is_empty());
         scrub(&mut claim.anchor);
+        scrub_attrs(&mut claim.attributes);
     }
     for q in &mut e.questions_raised {
         scrub(&mut q.content);

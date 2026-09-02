@@ -257,6 +257,75 @@ impl ResolutionFailuresFile {
     }
 }
 
+/// On-disk layout of `atlas/ontology.json` — the declared ontology this
+/// atlas was extracted under.
+///
+/// The atlas directory has to answer "what did this corpus declare" on its
+/// own: `corpus-engine` cannot read the enrich `config.json` (that type lives
+/// in `sovereign-enrichment-catalog`), and `_summary.json` is a derived cache
+/// that must be reproducible from the atlas dir alone. So the resolve step
+/// writes the policies down beside the atoms.
+///
+/// Absent for every corpus that declares no ontology, and for every atlas
+/// built before ontology v1 — readers treat absence as "no declaration",
+/// never as an error.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct AtlasOntologyFile {
+    pub schema_version: String,
+    /// The `[enrichment.ontology] version` the policies were parsed under.
+    #[serde(default)]
+    pub ontology_version: u32,
+    /// What the pipeline read. Same struct the recipe parses into, so a
+    /// reader never re-derives it.
+    pub policies: crate::enrichment::ontology::OntologyPolicies,
+}
+
+impl AtlasOntologyFile {
+    pub const SCHEMA_VERSION: &'static str = "1.0";
+    /// File name under `atlas/`. The ONE spelling — the writer and the
+    /// summary reader below both go through it.
+    pub const FILE: &'static str = "ontology.json";
+}
+
+/// Write `atlas/ontology.json`. Called from the resolve step after
+/// [`write_atlas_full`], which is the only place that knows both the atlas
+/// directory and the corpus's `EnrichConfig`.
+pub fn write_atlas_ontology(
+    atlas_dir: &Path,
+    ontology_version: u32,
+    policies: &crate::enrichment::ontology::OntologyPolicies,
+) -> io::Result<PathBuf> {
+    fs::create_dir_all(atlas_dir)?;
+    let path = atlas_dir.join(AtlasOntologyFile::FILE);
+    write_atomic(
+        &path,
+        &AtlasOntologyFile {
+            schema_version: AtlasOntologyFile::SCHEMA_VERSION.to_string(),
+            ontology_version,
+            policies: policies.clone(),
+        },
+    )?;
+    Ok(path)
+}
+
+/// Read `atlas/ontology.json`, or `None` when the atlas declares none or the
+/// file cannot be parsed. Companion to [`write_atlas_ontology`]; the summary
+/// reads it through this and nothing else opens the file by name.
+pub fn read_atlas_ontology(atlas_dir: &Path) -> Option<AtlasOntologyFile> {
+    let raw = fs::read(atlas_dir.join(AtlasOntologyFile::FILE)).ok()?;
+    match serde_json::from_slice(&raw) {
+        Ok(parsed) => Some(parsed),
+        Err(e) => {
+            tracing::warn!(
+                atlas_dir = %atlas_dir.display(),
+                error = %e,
+                "atlas ontology: ontology.json present but unreadable; treating as undeclared"
+            );
+            None
+        }
+    }
+}
+
 /// Write a deterministic gaps file (Phase 7) to
 /// `atlas/gaps.json`. Atomic sibling-tmp + rename, same contract as
 /// the other atlas writers.

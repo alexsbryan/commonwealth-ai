@@ -431,6 +431,31 @@ pub(crate) async fn resolve_into_dir(
 
     println!("  ✓ wrote {}", written.atoms_path.display());
     println!("  ✓ wrote {}", written.edges_path.display());
+
+    // Record what this atlas was extracted under, beside the atoms. The
+    // atlas directory has to answer that on its own — corpus-engine cannot
+    // read this config.json, and `_summary.json` is a derived cache that must
+    // be reproducible from the atlas dir alone. Only a declared ontology is
+    // written; a prose-only custom atlas leaves no file, and readers treat
+    // absence as "declares nothing".
+    if let Some(spec) = cfg.ontology.as_ref() {
+        let policies = spec.policies();
+        if policies.has_declarations() {
+            match corpus_engine::enrichment::atlas::write_atlas_ontology(
+                atlas_dir,
+                spec.ontology_version,
+                &policies,
+            ) {
+                Ok(path) => println!(
+                    "  ✓ wrote {} ({} declared type(s), ontology version {})",
+                    path.display(),
+                    policies.shape.types.len(),
+                    spec.ontology_version
+                ),
+                Err(e) => eprintln!("warning: writing ontology.json: {e}"),
+            }
+        }
+    }
     if want_3b {
         println!("  ✓ wrote {}", written.trajectories_path.display());
     } else {
