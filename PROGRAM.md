@@ -3,7 +3,7 @@
 **The point:** a domain expert writes TOML, and their own nouns come out the other end.
 No Rust. That is the whole objective, and the chain below is how we know it's true.
 
-## The chain — 5 of 6 links proven end to end
+## The chain — all 6 links proven end to end
 
 ```
 recipe new --ontology numismatics   ✔  PROVEN — scaffolds, ids filled
@@ -11,7 +11,7 @@ recipe new --ontology numismatics   ✔  PROVEN — scaffolds, ids filled
   → install → init                  ✔  PROVEN — by PATH; ontology reaches the config
   → build (ends with backfill)      ✔  PROVEN — 8/8 steps, exit 0, backfill 32/32
   → chat enumerates coins           ✔  PROVEN — 13 coin atoms, all 7 catalogue coins
-  → desktop shows the author's nouns ?  never run — needs P6
+  → desktop shows the author's nouns ✔  PROVEN — real-mode Playwright, 2 passed
 ```
 
 **Proven on `wessex-hoard`, 2026-09-02, against a live 35B model:**
@@ -33,6 +33,34 @@ the three that lost the chunk top-k to Wikipedia; enumeration has no top-k.
 
 Re-run any time: `scripts/setup-numismatics-corpus.sh` (`--assert-only` for the
 payload check alone, ~1s against the built atlas).
+
+## Link 6 — the desktop, closed 2026-09-02
+
+A corpus that declared `coin` was opening as a list of CONVERSATIONS. A folder
+of markdown gets conversation skeletons from the importer whatever else it is,
+`resolveCorpusKind` asked the conv listing first, and nothing had ever opened
+Explore in a real-mode test — so the program's own thesis was failing on its
+last screen, silently. A declared ontology now outranks the conv listing.
+
+Found by RUNNING the spec. It had been written, committed and never executed;
+both its tests failed on first execution. (On this host the whole Playwright
+command must run inside the `sovereign-vulkan` toolbox — its `global-setup`
+shells out to `cargo build` with no prefix and dies on llama-cpp before a
+single test starts.)
+
+    numismatics.real.spec.ts   2 passed
+    governance.real.spec.ts    1 passed — unchanged
+
+Three of the order's assumptions were wrong and are worth keeping written down:
+item 1 was not finished (`subject` and `ref` attributes never reached
+`referenced_atoms`, so both rendered as raw ids); Position/Opposition/Asset
+never threw a `body-render-error` — the TS union had 8 variants against the
+backend's 11, so they rendered BLANK, and the order's acceptance test would
+have passed on an untouched tree; and the pill badge disagreed with the list it
+opened, because the filter was specified as "no roll-up, ask for the family by
+name" and then given a single `Option<String>` that could not express a family.
+`AtomFilter.subtypes` is a list now, the pill names every descendant, and
+`--subtype=coin` returns 13 where `--subtype=coin,sceatta` returns 15.
 
 ## The attributes gap — closed 2026-09-02
 
@@ -140,7 +168,9 @@ Landed: **P0** crate split · **P1** ontology block → policies · **P2 · P2b*
 schema generator, `CustomOntology`, projection · **P3** resolution + identity ·
 **P4** tension + change axes · **P5** declared types reach answers · **P7** base-kind
 refs, eight templates, interview, card
-Ahead: **P6** desktop · `--quick` bench once, at the very end
+Landed: **P6** desktop — pills by declared subtype, attribute rows, the
+`about` link, bodies for Position/Opposition/Asset, the build report card
+Ahead: `--quick` bench once, at the very end · `bench enron` B³ for P3
 
 ## Watch
 
