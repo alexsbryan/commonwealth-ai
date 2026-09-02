@@ -258,6 +258,7 @@ pub fn render_declared_types(policies: &OntologyPolicies) -> String {
     }
 
     out.push_str(&render_attribute_shape(policies, &index));
+    out.push_str(&render_subject_shape(policies, &index));
 
     let voices = &policies.assertion.voices;
     if !voices.not_entities.is_empty() || !voices.attributed_to.is_empty() {
@@ -409,17 +410,7 @@ fn render_attribute_shape(policies: &OntologyPolicies, index: &TypeIndex<'_>) ->
     else {
         return String::new();
     };
-    let pairs = attrs
-        .iter()
-        .map(|a| {
-            let shape = match a.family {
-                AttrFamily::Quantity { .. } => "<number>",
-                _ => "<text>",
-            };
-            format!("\"{}\": {shape}", a.name)
-        })
-        .collect::<Vec<_>>()
-        .join(", ");
+    let pairs = attribute_pairs(&attrs);
     // An attribute named in `identity` is not one attribute among seven: it is
     // what tells two mentions of one thing from two things, so a mention that
     // omits it can never be matched to its other mentions. The declaration
@@ -439,10 +430,9 @@ fn render_attribute_shape(policies: &OntologyPolicies, index: &TypeIndex<'_>) ->
         String::new()
     } else {
         format!(
-            "\nAlways fill {} when the section states one, even in passing. \
-             Those are the keys that make two mentions of one thing one thing; \
-             a mention without them stays separate from every other mention of \
-             itself.\n",
+            "\nAlways fill {} when the section states one, even in passing: \
+             those keys are what make two mentions one thing, and a mention \
+             without them stays separate from every other mention of itself.\n",
             keys.iter()
                 .map(|k| format!("`{k}`"))
                 .collect::<Vec<_>>()
@@ -458,19 +448,12 @@ fn render_attribute_shape(policies: &OntologyPolicies, index: &TypeIndex<'_>) ->
          \x20     \"description\": <text>, \"anchor\": <text>,\n\
          \x20     \"attributes\": {{ {pairs} }} }}\n\n\
          When a type declares an attribute, the value belongs in that object \
-         and nowhere else. Do not restate it as a claim, as a relation, or as \
-         prose inside the description: \"the weight is 1.05 g\" written as a \
-         claim is a weight that no one can look up.\n\n\
-         `<text>` and `<number>` are shapes, not values. Take every value from \
-         the section's own words, use only the keys listed for that type \
-         above, and omit the `attributes` object entirely when the section \
-         states none of them. Never invent one.\n\n\
-         Leave out any single key the section does not state, the way the \
-         other keys are left out. A `0`, an empty string or a phrase like \
-         \"unknown\" put there to fill the slot reads downstream as a \
-         measurement — a coin recorded as weighing 0 is worse than a coin \
-         with no weight recorded, because only the second one is visibly \
-         missing.\n\
+         and nowhere else — never restated as a claim, a relation, or prose \
+         in the description.\n\n\
+         `<text>` and `<number>` are shapes, not values: take each from the \
+         section's own words. Leave out any key the section does not state. A \
+         `0` or an \"unknown\" put there to fill a slot reads downstream as a \
+         measurement, and only a missing key is visibly missing.\n\
          {identity}",
         name = t.name,
         slot = match t.kind {
@@ -482,9 +465,33 @@ fn render_attribute_shape(policies: &OntologyPolicies, index: &TypeIndex<'_>) ->
     )
 }
 
-/// One attribute, rendered for the prompt: name plus what the family admits.
-fn render_attr(a: &AttrDecl) -> String {
-    let shape = match &a.family {
+/// The `attributes` object's keys, rendered as shapes for a prompt example.
+///
+/// Shared by both worked examples so they cannot drift: an example that omits
+/// this object teaches the model to omit it, which is the whole defect these
+/// two sections exist to correct. Learned the hard way — the claim example
+/// shipped without it for one build and took `proposed_date` from 14 of 43
+/// claims to 0 of 41, along with every `grade`.
+///
+/// `<number>` is spelled out separately from `<text>` because a quantity is
+/// the one family whose JSON shape a model routinely gets wrong.
+fn attribute_pairs(attrs: &[&AttrDecl]) -> String {
+    attrs
+        .iter()
+        .map(|a| format!("\"{}\": <{}>", a.name, family_shape(a)))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// What one attribute's family admits, as a placeholder a model can act on.
+///
+/// The same phrase [`render_attr`] puts on the type bullet, so the example and
+/// the list cannot describe a family differently (§10.6). Descriptive rather
+/// than a bare `<text>` because the one claim slot that filled when the rest
+/// did not was `subject`, whose placeholder says what to put there
+/// (`<the canonical_name of the coin>`) — the difference worth testing.
+fn family_shape(a: &AttrDecl) -> String {
+    match &a.family {
         AttrFamily::Text { values } if !values.is_empty() => {
             format!("one of: {}", values.join(" | "))
         }
@@ -494,7 +501,64 @@ fn render_attr(a: &AttrDecl) -> String {
         AttrFamily::Time { range: true } => "date or range".to_string(),
         AttrFamily::Time { range: false } => "date".to_string(),
         AttrFamily::Ref { of } => format!("name of a {of}"),
+    }
+}
+
+/// What a declared claim type is ABOUT, shown once.
+///
+/// The same defect as [`render_attribute_shape`], in the neutral prompt's
+/// other slot. That prompt's claim field list names `content`,
+/// `discourse_act`, `epistemic_status`, `attributed_to` and `anchor` — and
+/// never `subject`, which only exists once a recipe declares one. Its worked
+/// example likewise shows a claim with an `attributed_to` and no `subject`.
+/// The wessex-hoard build filled `attributed_to` on all 49 claims and
+/// `subject` on 1: named in the prompt, filled; absent from it, empty.
+///
+/// The is-about link is the whole point of `subject = "coin"`. A claim
+/// without it cannot be reached from the thing it discusses, which is the
+/// question a declared claim type exists to answer ("who disputes this coin's
+/// dating"). Empty unless a claim type declares a subject, so a recipe that
+/// declares none pays nothing.
+fn render_subject_shape(policies: &OntologyPolicies, index: &TypeIndex<'_>) -> String {
+    let Some(t) = policies.claim_types().find(|t| t.subject.is_some()) else {
+        return String::new();
     };
+    let about = t.subject.as_deref().unwrap_or_default();
+    // The claim example carries its `attributes` object for the same reason
+    // the entity example does: an example without one is an instruction to
+    // leave it out. `grade` rides in the same bag as the declared attributes
+    // (`set_attribute_property`), so it is shown in the same bag.
+    let mut pairs = attribute_pairs(&index.effective_attributes(&t.name));
+    if !t.grades.is_empty() {
+        if !pairs.is_empty() {
+            pairs.push_str(", ");
+        }
+        pairs.push_str("\"grade\": <one of the grades above>");
+    }
+    let attributes = if pairs.is_empty() {
+        String::new()
+    } else {
+        format!("\x20     \"attributes\": {{ {pairs} }}\n")
+    };
+    format!(
+        "\n## What a claim is about\n\n\
+         `{name}` is declared as a claim about a `{about}`, so its sketch says \
+         WHICH one:\n\n\
+         \x20   {{ \"content\": <text>, \"claim_kind\": \"{name}\",\n\
+         \x20     \"subject\": <the canonical_name of the {about}>,\n\
+         \x20     \"attributed_to\": <text>, \"anchor\": <text>,\n\
+         {attributes}\
+         \x20   }}\n\n\
+         `subject` is what the claim is about; `attributed_to` is who makes \
+         it. Several claims in one section about the same {about} each name \
+         it again. Omit `subject` rather than guess it.\n",
+        name = t.name,
+    )
+}
+
+/// One attribute, rendered for the prompt: name plus what the family admits.
+fn render_attr(a: &AttrDecl) -> String {
+    let shape = family_shape(a);
     if a.description.trim().is_empty() {
         format!("{} ({shape})", a.name)
     } else {
@@ -883,15 +947,18 @@ mod tests {
             "the sketch is shown whole, in the slot the type actually fills"
         );
         assert!(
-            block.contains("Do not restate it as a claim"),
+            block.contains("never restated as a claim"),
             "the observed competing behaviour is named: the model emitted \
              `weight` as a claim rather than as the coin's attribute"
         );
-        for key in ["\"metal\": <text>", "\"denomination\": <text>"] {
+        for key in [
+            "\"metal\": <one of: gold | silver",
+            "\"denomination\": <text>",
+        ] {
             assert!(block.contains(key), "{key} shown in the author's own keys");
         }
         assert!(
-            block.contains("\"weight\": <number>"),
+            block.contains("\"weight\": <number in g>"),
             "a quantity is shown as a bare number — the family models get wrong"
         );
         assert!(
@@ -940,6 +1007,72 @@ mod tests {
         );
     }
 
+    /// The neutral prompt's claim field list names `attributed_to` and never
+    /// `subject` — and the build filled `attributed_to` on all 49 claims and
+    /// `subject` on 1. Named in the prompt, filled; absent from it, empty.
+    ///
+    /// Falsifier: drop `render_subject_shape` and the word `subject` appears
+    /// nowhere in the Phase-1 prompt for a corpus that declares one.
+    #[test]
+    fn the_block_says_what_a_declared_claim_is_about() {
+        let block = render_declared_types(&numismatics());
+        assert!(block.contains("## What a claim is about"));
+        assert!(
+            block.contains("\"subject\": <the canonical_name of the coin>"),
+            "the slot is shown, in the declared subject's own type name: {block}"
+        );
+        assert!(
+            block.contains("`attribution` is declared as a claim about a `coin`"),
+            "and named from the declaration, not hardcoded"
+        );
+        assert!(
+            block.contains("`subject` is what the claim is about; `attributed_to` is who makes it"),
+            "`subject` is separated from `attributed_to`, which the neutral \
+             prompt already asks for and the model already fills"
+        );
+
+        // A claim type declaring no subject buys none of it.
+        let mut p = numismatics();
+        for t in &mut p.shape.types {
+            t.subject = None;
+        }
+        assert!(
+            !render_declared_types(&p).contains("## What a claim is about"),
+            "nothing is said about a link the recipe never declared"
+        );
+    }
+
+    /// EVERY worked example in this block shows its `attributes` object.
+    ///
+    /// The block exists because an example that omits a slot teaches the model
+    /// to omit it — so an example in the block that omits `attributes` undoes
+    /// the block. That is not hypothetical: the claim example shipped without
+    /// one for a single build and took `attribution proposed_date` from 14 of
+    /// 43 claims to 0 of 41, and every `grade` with it.
+    ///
+    /// Falsifier: drop `attributes` from either example and the count of
+    /// `"attributes": {` falls below the count of example blocks.
+    #[test]
+    fn no_worked_example_omits_the_attributes_object() {
+        let block = render_declared_types(&numismatics());
+        let examples =
+            block.matches("\"claim_kind\":").count() + block.matches("\"entity_type\":").count();
+        assert!(examples >= 2, "both examples render: {block}");
+        assert_eq!(
+            block.matches("\"attributes\": {").count(),
+            examples,
+            "every example carries the object it is teaching: {block}"
+        );
+        assert!(
+            block.contains("\"proposed_date\": <date or range>"),
+            "the claim example uses the claim type's OWN declared attributes"
+        );
+        assert!(
+            block.contains("\"grade\": <one of the grades above>"),
+            "and the reserved key that rides in the same bag"
+        );
+    }
+
     /// A declaration with types but no attributes pays nothing for the block.
     #[test]
     fn nothing_to_fill_renders_no_shape_section() {
@@ -969,14 +1102,45 @@ mod tests {
 
     /// The fixture must fit the budget; if it ever does not, the number is
     /// the thing to read, not the pass/fail.
+    ///
+    /// The SHIPPED template is not the worst case a shipped recipe reaches.
+    /// `sovereign-recipes/wessex-hoard/recipe.toml` declares one more `coin`
+    /// attribute (`catalogue_ref`) plus an `identity`, and that recipe went
+    /// over budget on a build while this test stayed green against the
+    /// template — a gate with no input that could fail it (§18.1). So the
+    /// probe's shape is measured here too, and the assertion names which of
+    /// the two blew the budget.
     #[test]
     fn the_shipped_fixture_fits_the_prompt_budget() {
-        let p = numismatics();
-        let block = render_declared_types(&p);
-        let added = report_added_prompt_size("numismatics", &block, &phase1_schema_for(&p));
+        let measure = |label: &str, p: &OntologyPolicies| {
+            let added =
+                report_added_prompt_size(label, &render_declared_types(p), &phase1_schema_for(p));
+            assert!(
+                added <= MAX_ADDED_PROMPT_CHARS,
+                "{label} adds {added} chars, budget {MAX_ADDED_PROMPT_CHARS}"
+            );
+            added
+        };
+        let template = measure("numismatics (template)", &numismatics());
+
+        let mut probe = numismatics();
+        let coin = probe
+            .shape
+            .types
+            .iter_mut()
+            .find(|t| t.name == "coin")
+            .expect("the template declares a coin");
+        coin.attributes.push(AttrDecl {
+            name: "catalogue_ref".into(),
+            family: AttrFamily::Text { values: vec![] },
+            description: String::new(),
+        });
+        coin.identity = vec!["catalogue_ref".into()];
+        let probe_size = measure("numismatics (wessex-hoard probe)", &probe);
+
         assert!(
-            added <= MAX_ADDED_PROMPT_CHARS,
-            "numismatics adds {added} chars, budget {MAX_ADDED_PROMPT_CHARS}"
+            probe_size > template,
+            "the probe is the larger of the two, so it is the one that binds"
         );
     }
 }
