@@ -17,7 +17,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use tracing::debug;
 
-use super::super::atlas::{ClaimScope, DiscourseAct};
+use super::super::atlas::{normalise_enum_tag, ClaimScope, DiscourseAct};
 use crate::enrichment::ontology::{
     AttrDecl, AttrFamily, ClaimScopeDecl, Deontic, Force, OntologyPolicies, TypeIndex, TypeKind,
 };
@@ -102,14 +102,57 @@ pub(super) fn declared_type<V>(
     let name = raw
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())?;
-    if declared.contains_key(&name) {
-        return Some(name);
+    if let Some(canonical) = canonical_name(declared, &name) {
+        return Some(canonical);
     }
     debug!(
         atom = %kind, subject = %subject, named = %name,
         "ontology parse: leaving type unclassified — the ontology declares no such type"
     );
     None
+}
+
+/// The DECLARED spelling of the type a model named, matched the way the
+/// generic variants are matched, or `None` when nothing declares it.
+///
+/// Case and separator drift is the norm, not the exception: the schema's enum
+/// is a REQUEST, since the grammar-constrained sampler is a known no-op, so a
+/// model that writes `"Coin"` or `"trade goods"` for a declared `coin` /
+/// `trade_goods` must not lose the atom. `EntityType::from_str_repr` already
+/// forgives exactly this for the six named variants — it normalises before
+/// comparing and only then falls through to `Other`, which keeps the model's
+/// own spelling verbatim. Matching declared names by equality would therefore
+/// have made a declared type STRICTER than a generic one, which is backwards;
+/// [`normalise_enum_tag`] is the one rule both now use (§10.6).
+///
+/// Exact match wins first, so an ontology that declares two names differing
+/// only in case still resolves each to itself.
+pub(super) fn canonical_name<V>(declared: &BTreeMap<String, V>, name: &str) -> Option<String> {
+    let t = name.trim();
+    if t.is_empty() {
+        return None;
+    }
+    if declared.contains_key(t) {
+        return Some(t.to_string());
+    }
+    let norm = normalise_enum_tag(t);
+    declared
+        .keys()
+        .find(|k| normalise_enum_tag(k) == norm)
+        .cloned()
+}
+
+/// The effective declared attributes of the type a sketch landed on. Empty for
+/// a name nobody declared, which is what makes attribute validation a refusal
+/// rather than a pass-through.
+pub(super) fn declared_attributes<'a>(
+    declared: &'a BTreeMap<String, Vec<AttrDecl>>,
+    name: &str,
+) -> &'a [AttrDecl] {
+    match canonical_name(declared, name) {
+        Some(k) => declared.get(&k).map(Vec::as_slice).unwrap_or_default(),
+        None => &[],
+    }
 }
 
 /// Reserved attribute key carrying a directive claim's deontic normal form.
@@ -370,6 +413,37 @@ mod tests {
         assert!(ParsePolicy::default().is_empty());
         assert!(!ParsePolicy::from_policies(&numismatics_policies()).is_empty());
     }
+    /// The declared-name match is the SAME rule the generic variants get:
+    /// lowercase, separators folded. Exact match wins first so two names that
+    /// differ only in case each resolve to themselves.
+    #[test]
+    fn canonical_name_matches_by_the_generic_variants_rule() {
+        let declared: BTreeMap<String, ()> = [("coin", ()), ("trade_goods", ()), ("Coin", ())]
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect();
+        assert_eq!(canonical_name(&declared, "coin").as_deref(), Some("coin"));
+        assert_eq!(canonical_name(&declared, "Coin").as_deref(), Some("Coin"));
+        assert_eq!(
+            canonical_name(&declared, "trade goods").as_deref(),
+            Some("trade_goods")
+        );
+        assert_eq!(
+            canonical_name(&declared, "Trade-Goods").as_deref(),
+            Some("trade_goods")
+        );
+        assert_eq!(canonical_name(&declared, "  ").as_deref(), None);
+        assert_eq!(canonical_name(&declared, "hoard").as_deref(), None);
+    }
+
+    /// An undeclared type is unclassified, never a substituted default.
+    #[test]
+    fn declared_attributes_of_an_undeclared_name_is_empty() {
+        let p = ParsePolicy::from_policies(&numismatics_policies());
+        assert!(!declared_attributes(&p.entity_types, "coin").is_empty());
+        assert!(declared_attributes(&p.entity_types, "hoard").is_empty());
+    }
+
     #[test]
     fn force_maps_to_the_pinned_discourse_acts() {
         assert_eq!(discourse_act_for(Force::Assertive), DiscourseAct::Assert);

@@ -24,10 +24,9 @@ use super::literary_atlas::{
     sanitize_phase1_object_arrays, scrub_placeholder_strings,
 };
 use super::parse_policy::{
-    declared_type, validated_attributes, validated_choice, ClaimTypeRules, ParsePolicy,
-    ATTR_DEONTIC, ATTR_GRADE,
+    canonical_name, declared_attributes, declared_type, validated_attributes, validated_choice,
+    ClaimTypeRules, ParsePolicy, ATTR_DEONTIC, ATTR_GRADE,
 };
-use crate::enrichment::ontology::AttrDecl;
 use crate::error::{Error, Result};
 
 /// Read one Phase-1 response into a [`Phase1ChapterResult`] under `policy`.
@@ -310,17 +309,19 @@ impl RawEntitySketch {
         let entity_type = match self.entity_type {
             // A declared type reaches the atom as `Other(<declared name>)`.
             // Without this the probe fails by construction: every declared
-            // entity type is an `Other` tag, and the arm below drops those.
-            Some(EntityType::Other(s)) if policy.entity_types.contains_key(s.trim()) => {
-                EntityType::Other(s.trim().to_string())
-            }
+            // entity type is an `Other` tag, and this arm dropped those.
+            // Matched through `canonical_name`, so the atom is stored under
+            // the spelling the RECIPE declared however the model cased it.
             Some(EntityType::Other(s)) => {
-                debug!(
-                    "literary_atlas: dropping entity sketch '{name}' — \
-                     entity_type='{s}' is neither one of the 6 named variants \
-                     nor a declared type (model hedged on typing)"
-                );
-                return None;
+                let Some(declared) = canonical_name(&policy.entity_types, &s) else {
+                    debug!(
+                        "literary_atlas: dropping entity sketch '{name}' — \
+                         entity_type='{s}' is neither one of the 6 named variants \
+                         nor a declared type (model hedged on typing)"
+                    );
+                    return None;
+                };
+                EntityType::Other(declared)
             }
             None => {
                 debug!(
@@ -363,11 +364,7 @@ impl RawEntitySketch {
         // `weight`, and a generic `person` in a declared corpus accepts what
         // the recipe declared for `person`.
         let attributes = validated_attributes(
-            policy
-                .entity_types
-                .get(entity_type.as_str_repr())
-                .map(Vec::as_slice)
-                .unwrap_or_default(),
+            declared_attributes(&policy.entity_types, entity_type.as_str_repr()),
             self.attributes,
             "entity",
             &name,
@@ -463,14 +460,10 @@ impl RawRelationSketch {
             "relation",
             &label,
         );
-        let decls: &[AttrDecl] = match relation_type.as_deref() {
-            Some(t) => policy
-                .relation_types
-                .get(t)
-                .map(Vec::as_slice)
-                .unwrap_or_default(),
-            None => &[],
-        };
+        let decls = declared_attributes(
+            &policy.relation_types,
+            relation_type.as_deref().unwrap_or_default(),
+        );
         let attributes = validated_attributes(decls, self.attributes, "relation", &label);
         Some(RelationSketch {
             attributes,
@@ -532,14 +525,10 @@ impl RawEventSketch {
             return None;
         }
         let event_type = declared_type(&policy.event_types, self.event_type, "event", &description);
-        let decls: &[AttrDecl] = match event_type.as_deref() {
-            Some(t) => policy
-                .event_types
-                .get(t)
-                .map(Vec::as_slice)
-                .unwrap_or_default(),
-            None => &[],
-        };
+        let decls = declared_attributes(
+            &policy.event_types,
+            event_type.as_deref().unwrap_or_default(),
+        );
         let attributes = validated_attributes(decls, self.attributes, "event", &description);
         Some(EventSketch {
             attributes,
@@ -585,12 +574,28 @@ impl RawClaimSketch {
         }
         // Which declared claim type is this, if any? A corpus declaring
         // exactly one type answers for a model that omitted the key.
-        let claim_kind = self
+        let named = self
             .claim_kind
             .map(|k| k.trim().to_string())
-            .filter(|k| !k.is_empty())
-            .or_else(|| policy.default_claim_kind.clone())
-            .filter(|k| policy.claim_types.contains_key(k));
+            .filter(|k| !k.is_empty());
+        let claim_kind = match named {
+            // A kind the model named but nobody declared falls through to the
+            // generic claim. It does NOT take the default: the model committed
+            // to something specific and wrong, and substituting silently is
+            // exactly what §18.3 forbids.
+            Some(k) => {
+                let canonical = canonical_name(&policy.claim_types, &k);
+                if canonical.is_none() && !policy.claim_types.is_empty() {
+                    debug!(
+                        claim = %content, named = %k,
+                        "ontology parse: claim_kind names no declared claim type; \
+                         reading it as a generic claim"
+                    );
+                }
+                canonical
+            }
+            None => policy.default_claim_kind.clone(),
+        };
         // A `match` rather than `and_then`: the lookup borrows `policy`, and
         // `claim_kind` is moved into the sketch below.
         let rules: Option<&ClaimTypeRules> = match claim_kind.as_deref() {
@@ -864,6 +869,47 @@ mod tests {
             e.entities_introduced.is_empty(),
             "an undeclared corpus has no coin type to keep"
         );
+    }
+
+    /// Case and separator drift must not cost the atom, and the atom is
+    /// stored under the spelling the RECIPE declared — so the subtype column
+    /// says `coin` whatever the model wrote. `EntityType::from_str_repr`
+    /// already forgives this for the six named variants; matching declared
+    /// names by equality made a declared type stricter than a generic one.
+    #[test]
+    fn a_declared_type_survives_a_case_drifted_tag() {
+        let e = parse(
+            r#"{
+              "section_id": "s",
+              "entities_introduced": [
+                {"canonical_name": "Series R", "entity_type": "Coin", "anchor": "a",
+                 "attributes": {"weight": 1.29}},
+                {"canonical_name": "Hamwic", "entity_type": " MINT ", "anchor": "b"}
+              ],
+              "claims": [{
+                "content": "Series R was struck at Hamwic.",
+                "claim_kind": "Attribution", "anchor": "x"
+              }],
+              "questions_raised": [{"content": "q"}]
+            }"#,
+            &policy(),
+        );
+        assert_eq!(e.entities_introduced.len(), 2, "neither atom was lost");
+        assert_eq!(
+            e.entities_introduced[0].entity_type,
+            EntityType::Other("coin".into()),
+            "stored under the declared spelling, not the model's"
+        );
+        assert_eq!(
+            e.entities_introduced[0].attributes["weight"].as_f64(),
+            Some(1.29),
+            "and its attributes still validate against the declared type"
+        );
+        assert_eq!(
+            e.entities_introduced[1].entity_type,
+            EntityType::Other("mint".into())
+        );
+        assert_eq!(e.claims[0].claim_kind.as_deref(), Some("attribution"));
     }
 
     #[test]
