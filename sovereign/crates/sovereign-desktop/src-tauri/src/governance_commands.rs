@@ -112,7 +112,9 @@ fn read_vocabulary(corpus_id: &str) -> Option<VocabularyPayload> {
         .join(corpus_id)
         .join("recipe.toml");
     let recipe = corpus_engine::Recipe::from_file(&recipe_path).ok()?;
-    let vocab = recipe.enrichment?.ontology?.vocabulary?;
+    // Terms come from the parsed policies, whatever the block's version —
+    // version 0 `vocabulary` or version 1 `label`s land in the same place.
+    let vocab = recipe.custom_ontology()?.prose.terms;
     Some(VocabularyPayload {
         position_term: vocab.position_term,
         tension_term: vocab.tension_term,
@@ -1201,12 +1203,9 @@ mod tests {
             recipe.custom_ontology().is_some(),
             "recipe must resolve to the custom-ontology (governance) atlas path"
         );
+        let vocab = recipe.custom_ontology().expect("policies").prose.terms;
         let enrichment = recipe.enrichment.expect("enrichment block");
         assert_eq!(enrichment.domain.as_deref(), Some("governance"));
-        let vocab = enrichment
-            .ontology
-            .and_then(|o| o.vocabulary)
-            .expect("vocabulary block");
         assert_eq!(vocab.tension_term.as_deref(), Some("conflict"));
     }
 }

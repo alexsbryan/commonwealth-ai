@@ -1,6 +1,7 @@
 # Recipe schema reference
 
-> **Generated** from `corpus-engine/src/recipe.rs` (+ the filter config types) by
+> **Generated** from `corpus-engine/src/recipe.rs` (+ the ontology declaration
+> languages in `enrichment/ontology/language.rs` and the filter config types) by
 > the `recipe_schema` test. Do not edit by hand — regenerate with
 > `UPDATE_RECIPE_SCHEMA=1 cargo test -p corpus-engine --test main recipe_schema`.
 >
@@ -18,6 +19,8 @@ acquire → extract → filter → chunk → embed → index pipeline:
 - `[chunk]` — documents → chunks (`ChunkerConfig`, tagged by `type`)
 - `[index]` — FTS + vector index settings (`IndexConfig`)
 - `[enrichment]` — optional atlas/field-model enrichment (`EnrichmentConfig`)
+- `[enrichment.ontology]` — a versioned declared ontology (`OntologyBlock`; the
+per-version languages are described at the end of this file)
 - `[prebuilt]`, `[update]`, `[catalog]`, `[parameters]` — optional advanced blocks
 
 ---
@@ -128,7 +131,7 @@ Configures the optional enrichment pipeline. The new field model enrichment uses
 | `type` | `String` | no | `default_enrichment_type()` | Enrichment type: "field_model" (default), "atlas", "investigation". |
 | `domain` | `Option<String>` | no | type default | Domain identifier — **its meaning, and the registry it is checked against, depend on `type`.** With `type = "field_model"` the only valid values are the registered field-model domains: `philosophy`, `personal`, `conversational`, `business_email`, `institutional` (omit for `philosophy`); anything else is refused at load. With `type = "atlas"` it selects an atlas pipeline instead (`literary`, `philosophy`, `referential`), and `pipeline` overrides it. Sharing a key across two registries is what stranded two ingests on 2026-08-07 with `Unknown enrichment domain: literary`. |
 | `pipeline` | `Option<String>` | no | type default | Explicit atlas pipeline id (e.g. `"literary_atlas"`, `"philosophy_atlas"`) for `type = "atlas"` recipes. Optional override: when set, the desktop "Build & enrich" bridge (`recipe_enrich_init_from_corpus`) uses it directly instead of inferring the pipeline from `domain`. Previously this key was accepted and silently dropped (decorative); making it a real field means a recipe that pins a pipeline gets the pipeline it asked for. `None` → infer from `domain`. |
-| `ontology` | `Option<OntologyConfig>` | no | type default | Custom atlas ONTOLOGY for `type = "atlas"` recipes. This is the headline "build the ontology for your specific domain" path: instead of picking a prebuilt genre pipeline (`literary_atlas`/`philosophy_atlas`), the recipe author (with the agent) describes — in the domain's own language — what entities / relations / claims / events matter. A generic `ConfigurableAtlasPipeline` runs the universal 7-phase atlas machinery with this guidance and writes the same `atoms.json` that feeds chat. When present (with non-empty `guidance`), it takes precedence over `pipeline` and `domain`. `None` → fall back to a prebuilt atlas pipeline. |
+| `ontology` | `Option<OntologyBlock>` | no | type default | Custom atlas ONTOLOGY for `type = "atlas"` recipes. This is the headline "build the ontology for your specific domain" path: instead of picking a prebuilt genre pipeline (`literary_atlas`/`philosophy_atlas`), the recipe author (with the agent) declares — in the domain's own language — what entities / relations / claims / events matter, and the universal atlas machinery extracts to it, writing the same `atoms.json` that feeds chat. The block is versioned: `version` (absent = 0) selects the declaration language — see [`OntologyBlock`], [`OntologyConfig`] (version 0, prose) and `OntologyV1` (declared types). When active (non-empty `guidance` or any declared type) it takes precedence over `pipeline` and `domain`. `None` → fall back to a prebuilt atlas pipeline. |
 | `prompt_version` | `Option<String>` | no | type default | Prompt version tag. Recorded in `_corpus_meta.json` so the health checker can detect stale enrichment when prompts change. |
 | `clustering` | `Option<ClusteringToml>` | no | type default | HDBSCAN clustering parameters. |
 | `alignment` | `Option<AlignmentToml>` | no | type default | Alignment parameters. |
@@ -139,9 +142,18 @@ Configures the optional enrichment pipeline. The new field model enrichment uses
 | `reconciliation` | `Option<ReconciliationToml>` | no | type default | Architecture-over-Enron Phase 4: multi-origin reconciliation policy. `None` (the default) skips reconciliation entirely; pipelines that don't carry [`crate::enrichment::atlas::atoms::Provenance`] on their entity atoms produce nothing to reconcile across anyway. Recipes that enable described-asset + email extractors set this block to tune the merger. |
 | `normalization` | `Option<NormalizationConfig>` | no | type default | Corpus-specific entity-name coalescing rules for the investigation pipeline. The engine supplies the *mechanism* (alias map, prefix / suffix / qualifier stripping, identity-by-attribute); this block supplies the *vocabulary*, so domain knowledge (US states, Air Force base aliases, disposition categories) lives in the recipe as data rather than hardcoded in the abstraction layer. `None` → names fold by case/punctuation only (the engine default). Consumed by [`crate::enrichment::investigation::normalize::Normalizer`]. |
 
+## `OntologyBlock`
+
+Custom atlas ontology declared in `[enrichment.ontology]`. The headline "build the ontology for your domain" surface: `guidance` is domain-language instructions for what to extract (entities, relations, events, claims), `[enrichment.ontology]` — a versioned block. `version` (absent = 0) names the declaration language; every other key belongs to that language and is parsed by its `OntologyLanguage` impl into `OntologyPolicies`, which is all the pipeline ever reads. Version 0 is [`OntologyConfig`] (prose); version 1 is `OntologyV1` (declared types). Three load-time rules keep this honest: a later version's key in an earlier block is refused naming the version to add; an unknown version is refused naming the highest supported; a version-1 block with no declarations yields version-0 policies.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `version` | `u32` | no | type default | Declaration-language version. Absent means 0 — today's prose block. |
+| `(inline: toml::Table)` | `toml::Table` | **yes** | — | Every other key of the block, interpreted by the language `version` names. Kept as a table (not a fixed struct) so version N+1 keys are visible to the load-time rules instead of silently dropped. |
+
 ## `OntologyConfig`
 
-Custom atlas ontology declared in `[enrichment.ontology]`. The headline "build the ontology for your domain" surface: `guidance` is domain-language instructions for what to extract (entities, relations, events, claims), injected into a NEUTRAL atlas Phase-1 prompt by [`crate::enrichment::pipeline::pipelines::configurable_atlas::ConfigurableAtlasPipeline`]. The universal atom schema + open `EntityType::Other(..)` labels let a domain expert author the extraction shape in TOML without touching Rust, and the result feeds chat via the same `atoms.json` the prebuilt genre pipelines produce. Precedence: a non-empty `guidance` here beats `pipeline`/`domain`.
+injected into a NEUTRAL atlas Phase-1 prompt by [`crate::enrichment::pipeline::pipelines::configurable_atlas::ConfigurableAtlasPipeline`]. The universal atom schema + open `EntityType::Other(..)` labels let a domain expert author the extraction shape in TOML without touching Rust, and the result feeds chat via the same `atoms.json` the prebuilt genre pipelines produce. Precedence: a non-empty `guidance` here beats `pipeline`/`domain`.
 
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
@@ -792,6 +804,198 @@ _No fields._
 | `embedding_model` | `String` | no | `default_embedding_model()` |  |
 | `embedding_dimensions` | `usize` | no | `default_embedding_dimensions()` |  |
 
+## `OntologyV1`
+
+`[enrichment.ontology]` under `version = 1`: the declaration language for "your own types". Every key is optional; each defaults to today's behaviour, so a block carrying only `version = 1` (or only the version-0 `guidance` / `vocabulary` keys) is exactly a version-0 block. Declared types are predicates over the fixed atom kinds — kinds stay closed, types are declared. See `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md` §1 for the ten worked declarations and §4 for what `recipe validate` checks.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `guidance` | `String` | no | type default | Domain-language extraction guidance, appended under "Domain focus" to the neutral Phase-1 prompt. Kept from version 0 as explanation; the declarations below are what generate the schema. |
+| `vocabulary` | `Option<OntologyVocabulary>` | no | type default | Version-0 term overrides, still honoured. In version 1 prefer `label` on a type and `tension.label`; `validate` warns when both are set. |
+| `must_not` | `Vec<String>` | no | type default | Things the corpus must never be used for ("give dosing advice"). Read by the extraction prompt and the answer gate. Block-level. |
+| `types` | `Vec<OntologyTypeDecl>` | no | type default | The declared types (`[[enrichment.ontology.types]]`), each specializing one atom kind. |
+| `voices` | `VoicesDecl` | no | type default | Who speaks in the corpus, and which speakers are not subject matter. |
+| `change` | `ChangeDecl` | no | type default | What holds when: the clock and which claim types supersede. |
+| `tension` | `TensionDecl` | no | type default | Which claim types can be in tension, and what makes two comparable. |
+| `derive` | `DeriveDecl` | no | type default | Opt-in derivation passes (interpretive configurations, arguments). |
+| `patterns` | `Vec<PatternDecl>` | no | type default | Graph patterns to detect over declared relation/event types. Same shapes as `[[enrichment.patterns]]` (`PatternDecl`). |
+
+## `OntologyTypeDecl`
+
+One declared type (`[[enrichment.ontology.types]]`). `name` and `kind` are required; every other facet is optional and most apply to one kind only (`from`/`to` to relations, `participants` to events, `of` to states, `force`/`deontic`/`subject`/`grades`/`anchors`/`scope` to claims). `recipe validate` checks that every reference resolves to a declared type.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | `String` | **yes** | — | The author's noun for the type (`coin`, `rule`, `symptom`). Becomes the atom's `subtype` and the schema enum value. |
+| `kind` | `TypeKind` | **yes** | — | The atom kind this type specializes. Closed set. |
+| `description` | `String` | no | type default | What the type is, for the extraction prompt. |
+| `attributes` | `Vec<AttrDecl>` | no | type default | Typed attributes in four value families (text, quantity, time, ref). At most `MAX_ATTRS_PER_TYPE`. |
+| `specializes` | `Option<String>` | no | type default | A declared type this one is a kind of (`sceatta` specializes `coin`). The child inherits the parent's attributes and identity. |
+| `role_of` | `Option<String>` | no | type default | A declared type this one is a part something plays (`ruler` is a role of `person`). Recorded as a State on the rigid atom, never a merge. |
+| `from` | `Option<String>` | no | type default | Relations only: the declared type at the source end. |
+| `to` | `Option<String>` | no | type default | Relations only: the declared type at the target end. |
+| `participants` | `BTreeMap<String, String>` | no | type default | Events only: role name → declared type of the participant. |
+| `of` | `Option<String>` | no | type default | States only: the declared type the state is of. |
+| `source` | `Option<SourceDecl>` | no | type default | A file + column mapping to ingest this type structurally (no model call), for corpora that already hold it as a table. |
+| `label` | `Option<String>` | no | type default | What the UI calls instances of this type. Defaults to `name`. On the first claim type that sets it, this also becomes the position term. |
+| `identity` | `Vec<String>` | no | type default | External identifiers that make two mentions one thing (`rxnorm_id`). An external key merges strictly. |
+| `identity_fallback` | `Vec<String>` | no | type default | Descriptive keys used when no external identifier is present (`["name", "employer"]`). A descriptive key is judged, not trusted. |
+| `force` | `Option<Force>` | no | type default | Claims only, REQUIRED there: what a source does with the claim. |
+| `deontic` | `Vec<Deontic>` | no | type default | Claims with `force = "directive"` only: the deontic modes the type can carry. `forbid X` is stored as `require not-X`. |
+| `subject` | `Option<String>` | no | type default | Claims only: the declared entity, event or state type the claim is about (the is-about relation). |
+| `grades` | `Vec<String>` | no | type default | Claims only: an ordered evidence scale, strongest first (`["trial", "case-series", "member-report"]`). |
+| `anchors` | `Vec<String>` | no | type default | Claims only: which anchor kinds count as evidence when it matters (`["table", "figure", "text"]`). Anchors are mandatory regardless. |
+| `scope` | `Option<ClaimScopeDecl>` | no | type default | Claims only: whether the claim is about the work or inside it. Default universal. |
+
+## `TypeKind`
+
+The atom kind a declared type specializes. Closed set: a new kind is a design change to the atom model, not a recipe edit. Spellings match `AtomType::label()` (`type_kind_spelling_matches_atom_type_label`).
+
+Allowed values:
+
+- `entity` — A re-identifiable particular (things are basic).
+- `relation` — A typed link between two declared types (`from` / `to`).
+- `claim` — Content plus force, with an evidence anchor.
+- `event` — Something that happened, with `participants`.
+- `state` — A condition of a declared type (`of`), with a trajectory.
+
+## `AttrDecl`
+
+One typed attribute on a declared type. `name` and `type` are required; the remaining keys belong to the family named by `type`.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | `String` | **yes** | — | The attribute key the extractor fills (`weight`, `dose`, `valid`). |
+| `(inline: AttrFamily)` | `AttrFamily` | **yes** | — | The value family, selected with `type = "…"`, plus its family keys. |
+| `description` | `String` | no | type default | What the attribute holds, for the extraction prompt. |
+
+## `AttrFamily` (select with `type = "…"`)
+
+The four value families an attribute can take.
+
+### `type = "text"`
+
+Free text, or a closed set when `values` is given (at most `MAX_ENUM_VALUES`).
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `values` | `Vec<String>` | no | type default |  |
+
+### `type = "quantity"`
+
+A number, optionally in a `unit` (`"g"`, `"mg"`, `"K"`, `"USD"`).
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `unit` | `Option<String>` | no | type default |  |
+
+### `type = "time"`
+
+A point in time, or a span when `range = true`.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `range` | `bool` | no | type default |  |
+
+### `type = "ref"`
+
+A reference to an instance of the declared type named by `of`.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `of` | `String` | **yes** | — |  |
+
+## `Force`
+
+What a source does with a claim (Searle's forces). Required on every claim type; the parser refuses a claim type without it.
+
+Allowed values:
+
+- `assertive` — States that something is so (findings, attributions, readings).
+- `directive` — Requires, forbids, permits or requests (rules, obligations).
+- `declaration` — Makes something so by saying it (decisions, definitions).
+- `commissive` — Commits the speaker to something (promises, undertakings).
+
+## `Deontic`
+
+Deontic mode of a directive claim type.
+
+Allowed values:
+
+- `require`
+- `forbid`
+- `permit`
+- `request`
+
+## `Clock`
+
+Which clock orders supersession. Derived as `document_date` when the corpus carries document dates; declared only for narrative time.
+
+Allowed values:
+
+- `document_date` — The date of the document a claim appears in.
+- `narrative` — Order within the work (chapters, scenes).
+- `none` — No temporal ordering; nothing supersedes.
+
+## `ClaimScopeDecl`
+
+Whether a claim type speaks about the work or from inside it. Default universal; declare `about_work` for criticism of a fiction.
+
+Allowed values:
+
+- `in_work` — True inside the work (what Alyosha believes).
+- `about_work` — Said about the work (what a critic argues).
+
+## `SourceDecl`
+
+A structural source for a declared type: a file already holding it as a table, ingested without a model call. `from`/`to` name the endpoint columns of a relation; `attributes` maps attribute name → column.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `file` | `String` | **yes** | — | Path of the table (CSV or JSONL), relative to the corpus source. |
+| `from` | `Option<String>` | no | type default | Relations: the column holding the `from` endpoint's identity. |
+| `to` | `Option<String>` | no | type default | Relations: the column holding the `to` endpoint's identity. |
+| `attributes` | `BTreeMap<String, String>` | no | type default | Declared attribute name → column name. |
+
+## `VoicesDecl`
+
+`[enrichment.ontology.voices]` — who speaks, and who is not subject matter. Enforced in the Phase-1 parser, not only asked of the model.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `not_entities` | `Vec<String>` | no | type default | Speaker roles that must never become entity atoms ("the narrator", "the poster"). |
+| `self` | `Option<String>` | no | type default | The author's own voice, when the corpus is theirs (`self = "me"`). |
+| `attributed_to` | `Vec<String>` | no | type default | The kinds of speaker a claim may be attributed to ("paper", "clinician", "member"). |
+
+## `ChangeDecl`
+
+`[enrichment.ontology.change]` — what holds when.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `clock` | `Option<Clock>` | no | type default | The clock supersession folds on. Omit to derive `document_date`. |
+| `supersedes` | `BTreeMap<String, String>` | no | type default | Claim type → the clock it supersedes on: `"document_date"` or a time-family attribute of that type (`{ rule = "valid" }`). A later instance retires the earlier one for the same subject. |
+
+## `TensionDecl`
+
+`[enrichment.ontology.tension]` — which claims can conflict, and what makes two of them comparable. Replaces the Rust-side governance filter.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `label` | `Option<String>` | no | type default | What the UI calls a tension in this domain (`"conflict"`). Becomes the tension term. |
+| `between` | `Vec<String>` | no | type default | The claim types tensions are sought between. |
+| `same` | `Vec<String>` | no | type default | Fields two claims must share to be comparable: `"subject"` or a declared attribute name. Defaults to the subject plus the type's clock. |
+| `not_conflicts` | `Vec<String>` | no | type default | Pairs that look like conflicts and are not, in the author's words. Rendered into the Phase-6 classifier; never complete, so versioned with the recipe. |
+
+## `DeriveDecl`
+
+`[enrichment.ontology.derive]` — opt-in derivation passes.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `configurations` | `Option<bool>` | no | type default | Run the interpretive-configuration rollups (Phase 8). Default true. |
+| `arguments` | `Option<bool>` | no | type default | Reconstruct arguments. Default false. |
+
 ## `ComposeMode`
 
 Allowed values:
@@ -861,4 +1065,112 @@ Per-recipe configuration for the boilerplate filter. Each detection axis can be 
 | `exclude_closed` | `bool` | no | `default_true()` | Reject questions whose `closed` metadata flag is true. Stack Overflow's closed-question moderation flag is a high-precision signal that the community judged the thread off-topic / duplicate / opinion-based — even if it has multiple answers, the answer set tends not to be a coherent trade-off space. |
 | `tag_filter` | `Option<Vec<String>>` | no | type default | Optional tag whitelist — accept only questions tagged with at least one listed tag. Use to scope the cut to architecture / design discussions on Stack Overflow while letting smaller already-knowledge-dense sites pass everything. |
 | `apply_to` | `Option<Vec<String>>` | no | type default | Optional community whitelist — apply the density check only on these communities. Documents from communities not listed are accepted regardless. This is the recipe-level escape hatch that lets a single recipe combine breadth-pass sources with density-cut sources. `None` (default) applies to every community. |
+
+---
+
+# Ontology declaration languages
+
+`[enrichment.ontology] version` selects one of these. Absent means 0. The pipeline reads the policies a version parses to, never the version itself, so every shipped version keeps loading.
+
+## `version = 0`
+
+Keys: `guidance`, `vocabulary`
+
+Version 0 is the block as it has always been: a `guidance` paragraph and,
+optionally, `vocabulary` term overrides — the `OntologyConfig` table above.
+It is what a block without a `version` line means, and it keeps working
+unchanged for as long as any recipe uses it.
+
+What it yields: `prose.guidance` and `prose.terms`; every other policy stays
+at its default. A non-blank `guidance` selects the custom atlas pipeline
+(`custom_atlas`), which appends the prose under a "Domain focus" heading to
+the neutral Phase-1 prompt. Declared types are not part of this version —
+the neutral prompt invites the model to label entities freely, and nothing
+is generated into the extraction schema.
+
+```toml
+[enrichment.ontology]
+guidance = """The governing rules of a shared household: a founding Charter plus
+dated house-meeting Decisions that amend it. Extract every normative statement
+as a claim attributed to the single topic it governs."""
+
+[enrichment.ontology.vocabulary]
+position_term = "rule"
+tension_term = "conflict"
+```
+
+Keys: `guidance`, `vocabulary`. A version-1 key (`types`, `voices`, `change`,
+`tension`, `derive`, `must_not`, `patterns`) in a block without `version = 1`
+is refused at load, naming the line to add — never dropped.
+
+## `version = 1`
+
+Keys: `guidance`, `vocabulary`, `must_not`, `types`, `voices`, `change`, `tension`, `derive`, `patterns`
+
+Version 1 declares your own types. `version = 1` under `[enrichment.ontology]`
+selects it; the tables above (`OntologyV1`, `OntologyTypeDecl`, `AttrDecl`,
+`AttrFamily`, and the `voices` / `change` / `tension` / `derive` blocks) are
+its surface. Every key is optional and defaults to today's behaviour, so a
+block that carries only `version = 1` — or only the version-0 `guidance` and
+`vocabulary` keys — yields exactly the version-0 policies. Adding the version
+line is always safe; `svrn recipe migrate --ontology-version 1 <recipe>` adds
+it as a reviewable diff.
+
+Kinds are fixed, types are declared. Each `[[enrichment.ontology.types]]`
+entry names one atom kind (`entity`, `relation`, `claim`, `event`, `state`)
+and carries attributes in four value families: `text` (optionally a closed
+`values` set), `quantity` (optionally a `unit`), `time` (optionally a
+`range`), `ref` (an instance of the declared type `of`). A claim type must
+name its `force`; the parser refuses one without it.
+
+```toml
+[enrichment.ontology]
+version = 1
+
+[[enrichment.ontology.types]]
+name = "coin"
+kind = "entity"
+description = "A coin type: ruler, mint, denomination, metal."
+attributes = [
+  { name = "ruler",  type = "ref",      of = "ruler" },
+  { name = "metal",  type = "text",     values = ["gold", "silver", "billon", "copper"] },
+  { name = "weight", type = "quantity", unit = "g" },
+  { name = "struck", type = "time",     range = true },
+]
+
+[[enrichment.ontology.types]]
+name = "ruler"
+kind = "entity"
+role_of = "person"
+
+[[enrichment.ontology.types]]
+name = "person"
+kind = "entity"
+
+[[enrichment.ontology.types]]
+name = "attribution"
+kind = "claim"
+force = "assertive"
+subject = "coin"
+grades = ["die-link", "hoard-context", "stylistic", "metrological"]
+
+[enrichment.ontology.tension]
+between = ["attribution"]
+```
+
+Keys: `guidance`, `vocabulary`, `must_not`, `types`, `voices`, `change`,
+`tension`, `derive`, `patterns`. `recipe validate` checks that every
+`specializes`, `role_of`, `from`, `to`, `participants`, `of`, `subject` and
+`ref … of` names a declared type; that `tension.between` and
+`change.supersedes` name claim types and `tension.same` names `subject` or a
+declared attribute; that `deontic` appears only on directive claims; that no
+claim type takes a reserved kind name; and that the caps hold (12 types per
+kind, 8 attributes per type, 12 values per closed set). It then prints what
+was derived — the clock, the tension selector, the identity default for each
+entity type, and the question shapes the corpus will answer — so an inference
+you disagree with can be overridden in the recipe.
+
+The worked declarations for ten kinds of user are in
+`sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md` §1; `svrn recipe new --ontology
+<name>` scaffolds a complete recipe from one of them.
 

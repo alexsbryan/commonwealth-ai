@@ -51,6 +51,7 @@ pub mod recipe;
 pub mod recipe_builtin;
 mod recipe_parsing;
 pub mod recipe_schema;
+pub mod recipe_templates;
 pub mod registry;
 pub mod safety;
 pub mod sharding;

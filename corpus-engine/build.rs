@@ -64,7 +64,16 @@ fn main() {
         );
     }
 
-    vendor_recipes(&recipes_root, &out_dir);
+    vendor_recipes(&recipes_root, &out_dir.join("recipes"));
+    // Ontology-v1 recipe templates (`svrn recipe new --ontology <name>`), same
+    // shape one level down: `_templates/ontology-v1/<name>/recipe.toml`.
+    vendor_recipes(
+        &recipes_root.join("_templates").join("ontology-v1"),
+        &out_dir
+            .join("recipes")
+            .join("_templates")
+            .join("ontology-v1"),
+    );
     vendor_registry(&recipes_root, &out_dir);
     vendor_data_assets(&recipes_root, &out_dir);
 
@@ -73,12 +82,11 @@ fn main() {
     println!("cargo:rerun-if-env-changed=CORPUS_ENGINE_DATA_DIR");
 }
 
-/// Copy every `<id>/recipe.toml` under the recipes root into
-/// `OUT_DIR/recipes/<id>/recipe.toml`. `recipe_builtin.rs` `include_str!`s
-/// the bundled subset from there; extra (local-only / example) recipes are
-/// copied too but simply never referenced by the bundled-recipe enum.
-fn vendor_recipes(recipes_root: &Path, out_dir: &Path) {
-    let dest_root = out_dir.join("recipes");
+/// Copy every `<id>/recipe.toml` directly under `recipes_root` into
+/// `dest_root/<id>/recipe.toml`. `recipe_builtin.rs` and
+/// `recipe_templates.rs` `include_str!` the bundled subset from there; extra
+/// (local-only / example) recipes are copied too but simply never referenced.
+fn vendor_recipes(recipes_root: &Path, dest_root: &Path) {
     let entries = std::fs::read_dir(recipes_root)
         .unwrap_or_else(|e| panic!("read_dir {}: {e}", recipes_root.display()));
     for entry in entries {

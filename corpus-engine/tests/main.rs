@@ -48,6 +48,8 @@ mod newsworthy_integration;
 mod on_demand_guard;
 #[path = "main/ontology_prompt_snapshots.rs"]
 mod ontology_prompt_snapshots;
+#[path = "main/ontology_recipe.rs"]
+mod ontology_recipe;
 #[path = "main/parquet_ingest_e2e.rs"]
 mod parquet_ingest_e2e;
 #[path = "main/probe_index_residency.rs"]

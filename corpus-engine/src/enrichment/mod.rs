@@ -20,6 +20,7 @@ pub mod filter;
 pub mod governance;
 pub mod governance_view;
 pub mod investigation;
+pub mod ontology;
 pub mod open_questions;
 pub mod pipeline;
 pub mod reconciliation;

@@ -345,6 +345,31 @@ it was enriched:
 | **attached documents** | `tiered` (no recipe) | System 3 | T1+T2+T3 | `sovereign-tools/src/document_asset.rs` |
 | **Obsidian / watched folders** | `tiered` (no recipe) | System 3 (folder variant + `vault_themes`) | T1+T2+T3 + vault themes | `sovereign-tools/src/local_corpus/` + `tiered.rs::run_folder_tiered_enrichment` |
 | **commonwealth-ai** (code) | _(none — `enrich code-intel` verb)_ | **System 4 — Code intelligence** | LanceDB cosine + FTS, code-intel summary chunks boosted, + SCIP call-graph trace via the `CodeQuery` route | `scip_graph.db` + `sovereign enrich code-intel` |
+| **maple-house** (governance probe) | `atlas` (`custom_atlas`, ontology version 0) | System 2, recipe-declared genre | LanceDB cosine + FTS + governance step | `sovereign-recipes/maple-house/recipe.toml` |
+| `recipe new --ontology numismatics` / `governance` | `atlas` (`custom_atlas`, ontology version 1) | System 2, recipe-declared genre | as above; declared types reach the schema in P2 | `sovereign-recipes/_templates/ontology-v1/<name>/recipe.toml` |
+
+### Custom ontology (version 1)
+
+A recipe's `[enrichment.ontology]` block is versioned. `version` (absent = 0)
+selects a declaration language in `src/enrichment/ontology/language.rs`;
+every language parses to `OntologyPolicies` (`src/enrichment/ontology/mod.rs`)
+— shape, assertion, identity, change, derivation, prose — and that struct is
+all the pipeline reads. Version 0 is the prose `guidance` block every
+existing recipe uses; version 1 declares types (`[[enrichment.ontology.types]]`,
+one atom kind each, attributes in four value families) plus `voices`,
+`change`, `tension` and `derive`. Three load-time rules refuse loudly: an
+unknown version names the highest supported; a version-1 key in a block
+without `version = 1` names the line to add; a claim type without `force`
+does not load. `svrn recipe validate` resolves every reference, enforces the
+caps (12 types per kind, 8 attributes per type, 12 enum values) and prints
+the derived facets — clock, tension selector, identity default per entity
+type, question shapes. Templates: `svrn recipe new --ontology <name>`
+(`src/recipe_templates.rs`, data under `sovereign-recipes/_templates/ontology-v1/`).
+Migration: `svrn recipe migrate --ontology-version 1 <recipe>`. As of P1 the
+declarations are parsed, validated and recorded in `config.json`
+(`CustomAtlasSpec.policies`); the generated extraction schema is P2. Design
+and phase plan: `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md`,
+`ONTOLOGY_MIGRATION.md`; field reference: `sovereign-recipes/SCHEMA.md`.
 
 ---
 
