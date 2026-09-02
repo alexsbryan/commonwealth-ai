@@ -10,13 +10,18 @@
 //!
 //! P2 needs [`Self::effective_attributes`] for the parser's attribute
 //! validation, and [`Self::is_a`] because the same ancestor walk answers it
-//! in one line. P3 extends this with `descendants`, `rigid_type_of`,
-//! `effective_identity`, `endpoints` and `participants` — it does not mint a
+//! in one line. P3 adds [`Self::rigid_type_of`], [`Self::endpoints`],
+//! [`Self::participants`] and the two identity accessors — it does not mint a
 //! second index.
+//!
+//! The plan also listed `descendants`. Nothing in P3 reads it: the coverage
+//! rollup counts a type's subtypes with [`Self::is_a`] (one pass over the
+//! atoms, no reverse map), and the enumeration planner that wants the forward
+//! set is P5. It is left unwritten rather than built speculatively.
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::{AttrDecl, OntologyPolicies, OntologyTypeDecl, ShapePolicy};
+use super::{AttrDecl, IdentityPolicy, OntologyPolicies, OntologyTypeDecl, ShapePolicy};
 
 /// A borrowed view of the declared types, keyed by name.
 ///
@@ -71,14 +76,9 @@ impl<'a> TypeIndex<'a> {
     /// "validate against the declared attributes" a refusal rather than a
     /// pass-through for an undeclared type.
     pub fn effective_attributes(&self, name: &str) -> Vec<&'a AttrDecl> {
-        let Some(decl) = self.get(name) else {
-            return Vec::new();
-        };
-        let mut chain: Vec<&'a OntologyTypeDecl> = vec![decl];
-        chain.extend(self.ancestors(name).into_iter().filter_map(|p| self.get(p)));
         let mut out: Vec<&'a AttrDecl> = Vec::new();
         let mut seen: BTreeSet<&'a str> = BTreeSet::new();
-        for t in chain {
+        for t in self.chain(name) {
             for a in &t.attributes {
                 if seen.insert(a.name.as_str()) {
                     out.push(a);
@@ -86,6 +86,133 @@ impl<'a> TypeIndex<'a> {
             }
         }
         out
+    }
+
+    /// The type something declared as `role` is a role OF — `ruler` is a role
+    /// of `person`, so the atom is a person and `ruler` is a State on it
+    /// (§7.5: identity from essence, and a part played is not an essence).
+    ///
+    /// Follows a `role_of` chain, so a role of a role lands on the rigid type
+    /// at the end of it, and returns the LAST name on the chain even when
+    /// nothing declares it — `person` is one of the six generic entity kinds,
+    /// not a declared type, and that is the common case. `None` when `name` is
+    /// not declared, or is declared without `role_of` (it is rigid already).
+    pub fn rigid_type_of(&self, role: &str) -> Option<&'a str> {
+        let mut seen: BTreeSet<&str> = BTreeSet::new();
+        seen.insert(role);
+        let mut target = self.get(role)?.role_of.as_deref()?;
+        loop {
+            if !seen.insert(target) {
+                // A cycle. The name we are standing on is as rigid an answer
+                // as this recipe supports; `validate` reports the cycle.
+                return Some(target);
+            }
+            match self.get(target).and_then(|d| d.role_of.as_deref()) {
+                Some(next) => target = next,
+                None => return Some(target),
+            }
+        }
+    }
+
+    /// The declared types at a relation type's two ends, in `[from, to]`
+    /// order. Each end is independently optional (a recipe may constrain one
+    /// end and leave the other open) and each is inherited from the nearest
+    /// ancestor that declares it, so a relation specializing another is
+    /// checked against the parent's endpoints unless it narrows them.
+    pub fn endpoints(&self, rel: &str) -> [Option<&'a str>; 2] {
+        [
+            self.nearest(rel, |d| d.from.as_deref()),
+            self.nearest(rel, |d| d.to.as_deref()),
+        ]
+    }
+
+    /// An event type's declared participants as `(role, type)` pairs, own
+    /// roles first then inherited ones, one entry per role name (the child's
+    /// wins). Same shape and same shadowing rule as
+    /// [`Self::effective_attributes`], for the same reason.
+    pub fn participants(&self, event: &str) -> Vec<(&'a str, &'a str)> {
+        let mut out: Vec<(&'a str, &'a str)> = Vec::new();
+        let mut seen: BTreeSet<&'a str> = BTreeSet::new();
+        for t in self.chain(event) {
+            for (role, ty) in &t.participants {
+                if seen.insert(role.as_str()) {
+                    out.push((role.as_str(), ty.as_str()));
+                }
+            }
+        }
+        out
+    }
+
+    /// The external identifiers that make two mentions of `name` one thing.
+    ///
+    /// Inheritance is REPLACEMENT, not union: a key set is a criterion, and
+    /// unioning a child's criterion with its parent's would silently widen
+    /// what counts as the same thing. So the nearest declaration in the
+    /// chain wins outright and a child that declares none inherits its
+    /// parent's whole set.
+    pub fn effective_identity(&self, name: &str) -> &'a [String] {
+        self.nearest(name, |d| {
+            (!d.identity.is_empty()).then_some(d.identity.as_slice())
+        })
+        .unwrap_or(&[])
+    }
+
+    /// The descriptive keys used when no external identifier is present.
+    /// Same replacement rule as [`Self::effective_identity`].
+    pub fn effective_identity_fallback(&self, name: &str) -> &'a [String] {
+        self.nearest(name, |d| {
+            (!d.identity_fallback.is_empty()).then_some(d.identity_fallback.as_slice())
+        })
+        .unwrap_or(&[])
+    }
+
+    /// [`IdentityPolicy`] with every declared type's keys resolved through
+    /// `specializes`, so a reader holding only this map needs no shape and no
+    /// chain walk of its own.
+    ///
+    /// `policies.identity` carries what the AUTHOR wrote (a `sceatta` that
+    /// declares nothing is absent from it); this carries what each type
+    /// RESOLVES to. The reconciler reads this one — it is serialized into
+    /// `reconciliation.json`, so the criterion a merge ran under is on disk.
+    pub fn effective_identity_policy(&self) -> IdentityPolicy {
+        let mut identity = BTreeMap::new();
+        let mut identity_fallback = BTreeMap::new();
+        for name in self.by_name.keys() {
+            let primary = self.effective_identity(name);
+            if !primary.is_empty() {
+                identity.insert((*name).to_string(), primary.to_vec());
+            }
+            let fallback = self.effective_identity_fallback(name);
+            if !fallback.is_empty() {
+                identity_fallback.insert((*name).to_string(), fallback.to_vec());
+            }
+        }
+        IdentityPolicy {
+            identity,
+            identity_fallback,
+        }
+    }
+
+    /// `name`'s declaration followed by its ancestors, nearest first. The one
+    /// iteration order every "effective" accessor above shares.
+    fn chain(&self, name: &str) -> Vec<&'a OntologyTypeDecl> {
+        let Some(decl) = self.get(name) else {
+            return Vec::new();
+        };
+        let mut out = vec![decl];
+        out.extend(self.ancestors(name).into_iter().filter_map(|p| self.get(p)));
+        out
+    }
+
+    /// The first `Some` that `pick` yields walking [`Self::chain`] — "the
+    /// nearest declaration of this facet", the rule `from`/`to` and both
+    /// identity key sets share.
+    fn nearest<T>(
+        &self,
+        name: &str,
+        pick: impl Fn(&'a OntologyTypeDecl) -> Option<T>,
+    ) -> Option<T> {
+        self.chain(name).into_iter().find_map(pick)
     }
 
     /// The `specializes` chain above `name`, nearest first. Terminates on an
@@ -187,6 +314,108 @@ mod tests {
         assert!(idx.is_a("coin", "coin"));
         assert!(idx.is_a("series_r", "coin"));
         assert!(!idx.is_a("coin", "sceatta"));
+    }
+
+    #[test]
+    fn a_role_resolves_to_its_rigid_type_even_when_undeclared() {
+        // `ruler role_of person` is the shipped numismatics declaration, and
+        // `person` is a generic entity kind, not a declared type. The rigid
+        // answer has to survive that.
+        let s = shape(vec![
+            OntologyTypeDecl {
+                name: "ruler".into(),
+                kind: TypeKind::Entity,
+                role_of: Some("person".into()),
+                ..Default::default()
+            },
+            decl("coin", None, &[]),
+        ]);
+        let idx = TypeIndex::new(&s);
+        assert_eq!(idx.rigid_type_of("ruler"), Some("person"));
+        assert_eq!(
+            idx.rigid_type_of("coin"),
+            None,
+            "a rigid type plays no role"
+        );
+        assert_eq!(idx.rigid_type_of("hoard"), None, "undeclared is not a role");
+    }
+
+    #[test]
+    fn a_role_of_chain_lands_on_the_last_link_and_a_cycle_terminates() {
+        let role_of = |name: &str, of: &str| OntologyTypeDecl {
+            name: name.into(),
+            kind: TypeKind::Entity,
+            role_of: Some(of.into()),
+            ..Default::default()
+        };
+        let s = shape(vec![role_of("regent", "ruler"), role_of("ruler", "person")]);
+        let idx = TypeIndex::new(&s);
+        assert_eq!(idx.rigid_type_of("regent"), Some("person"));
+
+        let cyclic = shape(vec![role_of("a", "b"), role_of("b", "a")]);
+        assert_eq!(TypeIndex::new(&cyclic).rigid_type_of("a"), Some("a"));
+    }
+
+    #[test]
+    fn endpoints_and_participants_inherit_from_the_nearest_declaration() {
+        let mut struck_by = OntologyTypeDecl {
+            name: "struck_by".into(),
+            kind: TypeKind::Relation,
+            from: Some("coin".into()),
+            to: Some("mint".into()),
+            ..Default::default()
+        };
+        struck_by
+            .participants
+            .insert("agent".into(), "ruler".into());
+        let narrowed = OntologyTypeDecl {
+            name: "struck_by_gold".into(),
+            kind: TypeKind::Relation,
+            specializes: Some("struck_by".into()),
+            from: Some("sceatta".into()),
+            ..Default::default()
+        };
+        let s = shape(vec![struck_by, narrowed]);
+        let idx = TypeIndex::new(&s);
+        assert_eq!(idx.endpoints("struck_by"), [Some("coin"), Some("mint")]);
+        assert_eq!(
+            idx.endpoints("struck_by_gold"),
+            [Some("sceatta"), Some("mint")],
+            "the child narrows `from` and inherits `to`"
+        );
+        assert_eq!(idx.endpoints("nothing"), [None, None]);
+        assert_eq!(idx.participants("struck_by_gold"), vec![("agent", "ruler")]);
+    }
+
+    #[test]
+    fn identity_is_replaced_by_the_nearest_declaration_never_unioned() {
+        let with_identity = |name: &str, parent: Option<&str>, keys: &[&str]| OntologyTypeDecl {
+            name: name.into(),
+            kind: TypeKind::Entity,
+            specializes: parent.map(str::to_string),
+            identity: keys.iter().map(|k| k.to_string()).collect(),
+            ..Default::default()
+        };
+        let s = shape(vec![
+            with_identity("coin", None, &["find_id"]),
+            with_identity("sceatta", Some("coin"), &[]),
+            with_identity("series_r", Some("sceatta"), &["die_id"]),
+        ]);
+        let idx = TypeIndex::new(&s);
+        assert_eq!(idx.effective_identity("sceatta"), ["find_id"], "inherited");
+        assert_eq!(
+            idx.effective_identity("series_r"),
+            ["die_id"],
+            "a criterion is replaced, not widened"
+        );
+        assert!(idx.effective_identity("hoard").is_empty());
+
+        // The flattened map every reconciler reads: `sceatta` is present with
+        // the key it inherited, even though the author never wrote it there.
+        let flat = idx.effective_identity_policy();
+        assert_eq!(flat.identity["sceatta"], vec!["find_id".to_string()]);
+        assert_eq!(flat.identity["series_r"], vec!["die_id".to_string()]);
+        assert!(flat.identity_fallback.is_empty());
     }
 
     #[test]
