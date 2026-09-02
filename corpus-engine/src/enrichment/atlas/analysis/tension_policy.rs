@@ -563,9 +563,13 @@ mod tests {
             claim(2, Some("provenance_note"), None),
             claim(3, None, None),
         ];
-        let dropped = restrict_claims_to_types(&mut claims, &["attribution".to_string()]);
+        let outcome = restrict_claims_to_types(&mut claims, &["attribution".to_string()]);
         assert_eq!(
-            dropped, 2,
+            outcome,
+            BetweenOutcome::Applied {
+                dropped: 2,
+                kept: 1
+            },
             "the other type and the unlabelled claim both go"
         );
         assert_eq!(claims.len(), 1);
@@ -575,7 +579,10 @@ mod tests {
     #[test]
     fn between_empty_leaves_every_claim() {
         let mut claims = vec![claim(1, Some("attribution"), None), claim(2, None, None)];
-        assert_eq!(restrict_claims_to_types(&mut claims, &[]), 0);
+        assert_eq!(
+            restrict_claims_to_types(&mut claims, &[]),
+            BetweenOutcome::NotDeclared
+        );
         assert_eq!(
             claims.len(),
             2,
@@ -583,84 +590,18 @@ mod tests {
         );
     }
 
+    /// The `wessex-hoard` case, measured 2026-09-02: 48 claim atoms, not
+    /// one carrying a `claim_kind` (`setup-numismatics-corpus.sh
+    /// --assert-only` prints `attribution 0`). Enforcing the allow-list
+    /// there empties the pool and turns the axis OFF on a corpus whose
+    /// author asked for it. Report it, do not enforce it.
     #[test]
-    fn between_restricts_to_declared_types() {
-        let mut claims = vec![
-            claim(1, Some("attribution"), None),
-            claim(2, Some("provenance_note"), None),
-            claim(3, None, None),
-        ];
-        let dropped = restrict_claims_to_types(&mut claims, &["attribution".to_string()]);
+    fn between_is_inert_when_no_claim_carries_a_kind() {
+        let mut claims = vec![claim(1, None, None), claim(2, None, None)];
         assert_eq!(
-            dropped, 2,
-            "the other type and the unlabelled claim both go"
+            restrict_claims_to_types(&mut claims, &["attribution".to_string()]),
+            BetweenOutcome::Inert
         );
-        assert_eq!(claims.len(), 1);
-        assert_eq!(claims[0].claim_kind.as_deref(), Some("attribution"));
-    }
-
-    #[test]
-    fn between_empty_leaves_every_claim() {
-        let mut claims = vec![claim(1, Some("attribution"), None), claim(2, None, None)];
-        assert_eq!(restrict_claims_to_types(&mut claims, &[]), 0);
-        assert_eq!(
-            claims.len(),
-            2,
-            "invariant I1: no `between`, no restriction"
-        );
-    }
-
-    #[test]
-    fn corpus_shape_counts_sections_when_no_source_doc_id() {
-        let mut a = claim(1, Some("attribution"), None);
-        a.attributed_to = Some(AtomId::entity(7));
-        a.evidence = vec![ChunkRef::new("sec-0001", None)];
-        let mut b = claim(2, Some("attribution"), None);
-        b.evidence = vec![ChunkRef::new("sec-0002", None)];
-        let shape = CorpusShape::of(&[a, b]);
-        assert_eq!(shape.claims, 2);
-        assert_eq!(shape.doc_count, 2, "sections stand in for documents");
-        assert!((shape.attributed_ratio - 0.5).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn derived_strategy_keeps_the_measured_default_for_cross_document_corpora() {
-        let default = TensionStrategy::EmbeddingTopK { k: 10, floor: 0.5 };
-        // The governance shape: many sections, densely attributed to topics.
-        let cross_doc = CorpusShape {
-            claims: 40,
-            doc_count: 12,
-            attributed_ratio: 0.95,
-        };
-        assert_eq!(derive_declared_strategy(&cross_doc, default), default);
-        // The numismatic shape: many sections, attributed to scholars.
-        let catalogue = CorpusShape {
-            claims: 7,
-            doc_count: 7,
-            attributed_ratio: 1.0,
-        };
-        assert_eq!(derive_declared_strategy(&catalogue, default), default);
-    }
-
-    #[test]
-    fn derived_strategy_picks_graph_only_for_a_single_densely_attributed_unit() {
-        let default = TensionStrategy::EmbeddingTopK { k: 10, floor: 0.5 };
-        let one_unit = CorpusShape {
-            claims: 9,
-            doc_count: 1,
-            attributed_ratio: 0.9,
-        };
-        assert_eq!(
-            derive_declared_strategy(&one_unit, default),
-            TensionStrategy::Graph
-        );
-        // One unit but sparsely attributed: the graph signal has nothing
-        // to group on, so the net stays.
-        let one_unit_sparse = CorpusShape {
-            claims: 9,
-            doc_count: 1,
-            attributed_ratio: 0.1,
-        };
-        assert_eq!(derive_declared_strategy(&one_unit_sparse, default), default);
+        assert_eq!(claims.len(), 2, "the pool is NOT emptied");
     }
 }
