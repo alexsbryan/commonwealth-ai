@@ -473,8 +473,32 @@ mod tests {
         for declared in ["coin", "sceatta", "ruler", "mint"] {
             assert!(names.contains(&declared.to_string()), "{declared} offered");
         }
-        // `person` is declared AND generic — it appears once, not twice.
-        assert_eq!(names.iter().filter(|n| *n == "person").count(), 1);
+    }
+
+    /// A declared type may reuse a base kind's name (to give `person`
+    /// attributes); the enum must offer it ONCE.
+    ///
+    /// This assertion used to ride on the numismatics template, which declared
+    /// `person` until P7 dropped it — legal now that `validate` resolves
+    /// references against the base kinds too. That silently left the check
+    /// with no input that could fail it (§18.1), so it declares its own.
+    #[test]
+    fn a_declared_type_reusing_a_base_kind_name_appears_once() {
+        use crate::enrichment::ontology::{OntologyTypeDecl, TypeKind};
+        let mut p = numismatics();
+        p.shape.types.push(OntologyTypeDecl {
+            name: "person".into(),
+            kind: TypeKind::Entity,
+            description: "A named individual: a ruler, a moneyer, an author.".into(),
+            ..Default::default()
+        });
+        let schema = phase1_schema_for(&p);
+        let names = strings(&sketch(&schema, "entity_sketch")["properties"]["entity_type"]["enum"]);
+        assert_eq!(
+            names.iter().filter(|n| *n == "person").count(),
+            1,
+            "declared `person` must not double the generic one: {names:?}"
+        );
     }
 
     #[test]
