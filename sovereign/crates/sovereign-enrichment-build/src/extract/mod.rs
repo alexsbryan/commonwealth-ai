@@ -434,8 +434,20 @@ pub async fn run_extract(args: &[String]) -> i32 {
         Phase1Progress::ChapterDone {
             chapter_id: _,
             question_count,
+            entity_count,
+            declared_types,
         } => {
-            println!("{question_count} q");
+            // The declared types go first because they are the answer to the
+            // only question an author with a declared ontology has while this
+            // runs. A corpus that declares nothing prints the counts alone.
+            if declared_types.is_empty() {
+                println!("{entity_count} e, {question_count} q");
+            } else {
+                println!(
+                    "{entity_count} e [{}], {question_count} q",
+                    declared_types.join(", ")
+                );
+            }
         }
         Phase1Progress::ChapterFailed {
             chapter_id: _,

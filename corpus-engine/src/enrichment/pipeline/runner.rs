@@ -213,6 +213,17 @@ pub enum Phase1Progress<'a> {
     ChapterDone {
         chapter_id: &'a str,
         question_count: usize,
+        entity_count: usize,
+        /// The entity type names this chapter produced that are NOT one of
+        /// the six base kinds — i.e. the ones the recipe declared — deduped
+        /// in first-seen order. Empty for a corpus that declares nothing.
+        ///
+        /// Carried because it is the only question the author of a declared
+        /// ontology is actually asking while a build runs: did MY nouns come
+        /// out? Answering it needed the checkpoint jsonl opened by hand
+        /// (observed 2026-09-02: twenty chapters reported as `1 q`, and the
+        /// `sceatta` and `mint` atoms behind them were invisible).
+        declared_types: &'a [String],
     },
     ChapterFailed {
         chapter_id: &'a str,
@@ -1066,9 +1077,28 @@ impl PhaseRunner {
                 }
             };
 
+            // `EntityType` is a closed set of six plus `Other(String)`, so a
+            // type the parser did not recognise as a base kind IS a declared
+            // one — no second list of names to keep in step (§10.6).
+            let sketches = parsed
+                .section_extraction
+                .as_ref()
+                .map_or(&[][..], |se| se.entities_introduced.as_slice());
+            let mut declared_types: Vec<String> = Vec::new();
+            for sketch in sketches {
+                if let crate::enrichment::pipeline::atlas::EntityType::Other(name) =
+                    &sketch.entity_type
+                {
+                    if !declared_types.iter().any(|seen| seen == name) {
+                        declared_types.push(name.clone());
+                    }
+                }
+            }
             progress(Phase1Progress::ChapterDone {
                 chapter_id: &chapter.chapter_id,
                 question_count: parsed.questions.len(),
+                entity_count: sketches.len(),
+                declared_types: &declared_types,
             });
 
             // Move 6 P4: persist the raw response under the cache
