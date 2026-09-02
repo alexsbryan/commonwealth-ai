@@ -28,7 +28,7 @@ use super::{
     atlas_configuration, atlas_gaps, atlas_phase_cmd, atlas_resolve, atlas_tensions,
     atlas_tensions_classify, config::EnrichConfig, extract, paths, schema_review, seed_cmd,
 };
-use crate::chat_cmd::bootstrap::{build_session, ChatSession};
+use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
 use corpus_engine::enrichment::atlas::ann_store::{ann_table_is_fresh, ANN_TABLE_DIRNAME};
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
@@ -151,10 +151,27 @@ pub async fn cmd_build(args: &[String]) -> i32 {
 /// build (ontology-v1 P0.4). Adding a per-step side effect means editing
 /// here once rather than across frontends.
 ///
-/// The Backfill step's embed provider is resolved the CLI way: a daemon
-/// session built and probed before step 1 (`probe_backfill_session`).
+/// The Backfill step's embed provider is resolved the CLI way — a daemon
+/// session — and ONLY when the plan actually runs that step
+/// ([`ParsedBuild::needs_backfill_embedder`]). `--skip backfill` exists so a
+/// build can run with no daemon at all; resolving eagerly here would take
+/// that away.
 pub async fn build_with_progress(parsed: &ParsedBuild, progress: Option<EnrichProgressFn>) -> i32 {
-    build_with_progress_with_embedder(parsed, progress, None, None).await
+    let embedder = match parsed.needs_backfill_embedder() {
+        Ok(false) => None,
+        Ok(true) => match backfill_session_embedder().await {
+            Ok(e) => Some(e),
+            Err(msg) => {
+                eprintln!("error: {msg}");
+                return 1;
+            }
+        },
+        Err((code, msg)) => {
+            eprintln!("error: {msg}");
+            return code;
+        }
+    };
+    build_with_progress_with_embedder(parsed, progress, embedder, None).await
 }
 
 /// [`build_with_progress`] with the Backfill step's embed provider supplied
@@ -205,11 +222,18 @@ pub async fn build_with_progress_with_embedder(
     // session is the step's provider, so the daemon is resolved once.
     let backfill_embedder: Option<Arc<dyn InferenceProvider>> =
         if plan.enabled.contains(&Step::Backfill) {
-            let probed = match embedder {
-                Some(e) => probe_embedder(e).await,
-                None => probe_backfill_session().await.map(|s| s.inference),
+            let Some(e) = embedder else {
+                // Fail fast rather than thirty minutes later inside the step:
+                // no provider reached a build that plans Backfill is a wiring
+                // error, and it is reported, never defaulted (ARCH §18.3).
+                eprintln!(
+                    "error: backfill: no embed provider was wired for this build; run \
+                     `svrn atlas backfill-ann {}`",
+                    parsed.corpus_id
+                );
+                return 1;
             };
-            match probed {
+            match probe_embedder(e).await {
                 Ok(e) => Some(e),
                 Err(msg) => {
                     eprintln!("error: {msg}");
@@ -778,11 +802,14 @@ async fn run_step(
     }
 }
 
-/// Build the daemon-backed session the Backfill step embeds through, and
-/// prove its embed slot answers (`embed_query("probe")`). `parse_globals(&[])`
-/// resolves the daemon exactly as `svrn atlas backfill-ann` does — the same
-/// bootstrap, not a second one (ARCH §19).
-async fn probe_backfill_session() -> Result<ChatSession, String> {
+/// The CLI's embed provider for the Backfill step: a daemon-backed session.
+/// `parse_globals(&[])` resolves the daemon exactly as `svrn atlas
+/// backfill-ann` does — the same bootstrap, not a second one (ARCH §19).
+///
+/// It does NOT probe. The one `embed_query("probe")` lives in
+/// [`probe_embedder`], on the path both callers share, so the CLI and the
+/// daemon spend exactly one probe each and neither spends two.
+async fn backfill_session_embedder() -> Result<Arc<dyn InferenceProvider>, String> {
     let (globals, _) = parse_globals(&[])?;
     let session = build_session(&globals).await.map_err(|e| {
         format!(
@@ -790,8 +817,7 @@ async fn probe_backfill_session() -> Result<ChatSession, String> {
              `--skip backfill` to build without grounding"
         )
     })?;
-    probe_embedder(session.inference.clone()).await?;
-    Ok(session)
+    Ok(session.inference)
 }
 
 /// One `embed_query("probe")` against a caller-supplied provider — the
@@ -1375,6 +1401,23 @@ impl ParsedBuild {
             skipped,
             dry_run,
         })
+    }
+
+    /// Does this invocation need an embed provider in hand before step 1?
+    ///
+    /// The ONE decider for that question (ARCH §10.6), so the CLI wrapper and
+    /// the orchestrator cannot disagree about it. `false` for a dry run — no
+    /// step executes — and `false` whenever Backfill is not in the plan,
+    /// whether the operator skipped it (`--skip backfill`) or the pipeline
+    /// opted out. Both cases must build with no daemon reachable at all.
+    ///
+    /// The daemon never asks: it always holds its own provider.
+    pub fn needs_backfill_embedder(&self) -> Result<bool, (i32, String)> {
+        if self.dry_run {
+            return Ok(false);
+        }
+        let caps = load_pipeline_capabilities(&self.corpus_id)?;
+        Ok(Plan::new(self, &caps).enabled.contains(&Step::Backfill))
     }
 }
 
