@@ -47,6 +47,46 @@ pub struct AtlasCorpusSummary {
     /// to a generic glyph.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_icon: Option<String>,
+    /// The author's own nouns and how many atoms carry each — the declared
+    /// subtype census from `_summary.json` v4, copied through unchanged.
+    /// Empty for every corpus that declares nothing, which is the common case
+    /// and is why it is a plain map rather than an `Option`.
+    ///
+    /// Counts are OWN, not rolled up: a consumer showing "coin" for a corpus
+    /// that also declares `sceatta specializes coin` adds the two itself,
+    /// using [`Self::declared_types`]'s `specializes`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub subtype_counts: BTreeMap<String, u64>,
+    /// What this corpus declared, in declaration-independent form: one row per
+    /// declared type with its atom kind and its parent, if it has one. Empty
+    /// when nothing is declared — which is what tells a viewer to fall back to
+    /// the generic atom kinds rather than render an empty ontology.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub declared_types: Vec<DeclaredTypeRow>,
+}
+
+/// One declared type, as a viewer needs it: what to call it, which atom kind
+/// it belongs to, and what it specializes.
+///
+/// A flat row rather than the nested `OntologySummary` maps because every
+/// consumer so far wants to iterate types, and joining three maps by name at
+/// each call site is the shape that invites them to disagree (§10.6).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DeclaredTypeRow {
+    /// The author's noun, exactly as declared — also the key into
+    /// [`AtlasCorpusSummary::subtype_counts`].
+    pub name: String,
+    /// The atom kind this type specializes (`entity`, `claim`, …), so a
+    /// viewer can colour or group it like the generic kind it refines.
+    pub kind: String,
+    /// The declared type this one `specializes`, when it declares one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub specializes: Option<String>,
+    /// How two mentions of this type are judged the same thing
+    /// (`external:<keys>` / `fallback:<keys>`), or `None` when it resolves on
+    /// its canonical name — the reported default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_criterion: Option<String>,
 }
 
 /// One row in a **collection** notebook's member picker.
@@ -398,6 +438,8 @@ fn summarise_corpus(
                 last_extracted_unix: None,
                 display_category,
                 display_icon,
+                subtype_counts: BTreeMap::new(),
+                declared_types: Vec::new(),
             });
         }
     };
@@ -410,6 +452,25 @@ fn summarise_corpus(
         None
     };
 
+    // The declared block was read and thrown away until ontology-v1 P6: the
+    // desktop could show how many Entities a corpus has but not how many
+    // COINS, which is the whole point of declaring the type.
+    let declared_types = summary
+        .ontology
+        .as_ref()
+        .map(|o| {
+            o.declared
+                .iter()
+                .map(|(name, kind)| DeclaredTypeRow {
+                    name: name.clone(),
+                    kind: kind.clone(),
+                    specializes: o.specializes.get(name).cloned(),
+                    identity_criterion: o.identity_criteria.get(name).cloned(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
     Ok(AtlasCorpusSummary {
         corpus_id: corpus_id.to_string(),
         // Phase 1: display_name == corpus_id. Hydrate from
@@ -421,6 +482,8 @@ fn summarise_corpus(
         last_extracted_unix,
         display_category,
         display_icon,
+        subtype_counts: summary.subtype_counts,
+        declared_types,
     })
 }
 
@@ -711,13 +774,68 @@ mod tests {
             last_extracted_unix: Some(1_700_000_000),
             display_category: Some("reference".into()),
             display_icon: Some("book".into()),
+            subtype_counts: BTreeMap::new(),
+            declared_types: Vec::new(),
         };
         let json = serde_json::to_string(&summary).unwrap();
         assert!(json.contains("\"corpus_id\":\"wikipedia\""));
         assert!(json.contains("\"total_atoms\":3"));
         assert!(json.contains("\"display_category\":\"reference\""));
+        // A corpus that declares nothing puts NOTHING on the wire — wikipedia
+        // is one of the three prebuilt genres, and its row must stay byte-
+        // identical to what the desktop already parses.
+        assert!(!json.contains("subtype_counts"), "{json}");
+        assert!(!json.contains("declared_types"), "{json}");
         let back: AtlasCorpusSummary = serde_json::from_str(&json).unwrap();
         assert_eq!(back, summary);
+    }
+
+    /// A declared corpus carries its nouns, their hierarchy and their identity
+    /// criterion across the IPC boundary — the three things the viewer needs
+    /// to render "coin 13" instead of "Entity 32" and to roll `sceatta` into
+    /// `coin`.
+    ///
+    /// Falsifier: drop `specializes` from the row and a viewer has counts with
+    /// no way to know that `sceatta` is a kind of `coin`.
+    #[test]
+    fn a_declared_corpus_carries_its_nouns_across_the_wire() {
+        let summary = AtlasCorpusSummary {
+            corpus_id: "wessex-hoard".into(),
+            display_name: "wessex-hoard".into(),
+            total_atoms: 100,
+            atom_counts: BTreeMap::from([(AtomType::Entity, 40)]),
+            last_extracted_unix: None,
+            display_category: None,
+            display_icon: None,
+            subtype_counts: BTreeMap::from([("coin".into(), 13), ("sceatta".into(), 2)]),
+            declared_types: vec![
+                DeclaredTypeRow {
+                    name: "coin".into(),
+                    kind: "entity".into(),
+                    specializes: None,
+                    identity_criterion: Some("external:catalogue_ref".into()),
+                },
+                DeclaredTypeRow {
+                    name: "sceatta".into(),
+                    kind: "entity".into(),
+                    specializes: Some("coin".into()),
+                    identity_criterion: Some("external:catalogue_ref".into()),
+                },
+            ],
+        };
+        let json = serde_json::to_string(&summary).unwrap();
+        let back: AtlasCorpusSummary = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, summary);
+
+        // The roll-up a viewer has to do, done here so the shape is proven to
+        // support it: coin = its own 13 plus the 2 sceattas that specialize it.
+        let family: u64 = back
+            .declared_types
+            .iter()
+            .filter(|t| t.name == "coin" || t.specializes.as_deref() == Some("coin"))
+            .filter_map(|t| back.subtype_counts.get(&t.name))
+            .sum();
+        assert_eq!(family, 15);
     }
 
     #[test]

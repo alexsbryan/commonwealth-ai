@@ -33,6 +33,18 @@ pub struct AtomFilter {
     /// Inclusive lower bound. `None` = no minimum.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min_salience: Option<f32>,
+    /// The author's own noun — a declared subtype name, matched EXACTLY
+    /// against `projection::subtype_of` (ontology-v1 P6). Independent of
+    /// `atom_type` like every other field here: a `role_of` type lands as a
+    /// State on a person atom, so requiring the caller to also pick the right
+    /// kind would make `ruler` unfindable.
+    ///
+    /// Own only, no roll-up: `subtype = "coin"` does not return `sceatta`
+    /// atoms. A caller that wants the family asks for each name, using the
+    /// `specializes` edges the corpus summary carries — one decider for the
+    /// hierarchy, and it is not this filter (§10.6).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subtype: Option<String>,
 }
 
 /// Pagination cursor. Phase 1: simple offset+limit. Future-proof for
@@ -84,6 +96,16 @@ pub struct AtomSummary {
     pub atom_id: AtomId,
     pub stable_key: StableAtomKey,
     pub atom_type: AtomType,
+    /// The author's own noun for this atom, when it has one — the value a
+    /// declared corpus's rows are labelled and filtered by.
+    ///
+    /// An ENTITY always has one: a declared name (`coin`), or one of the
+    /// generic six (`person`, `concept`, …), which is what the kind-based UI
+    /// already shows. `None` means the atom genuinely carries no subtype —
+    /// an unclassified Relation, Event or State — so a viewer falls back to
+    /// `atom_type` rather than rendering a blank chip.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subtype: Option<String>,
     /// Best human-facing label for the row — `canonical_name` /
     /// `label` / `name` depending on type; `content` (truncated) for
     /// Claim and Question which lack a short name.
@@ -271,6 +293,11 @@ fn filter_and_page(
                 _ => continue,
             }
         }
+        if let Some(want) = filter.subtype.as_deref().filter(|s| !s.is_empty()) {
+            if corpus_engine::enrichment::atlas::projection::subtype_of(atom) != want {
+                continue;
+            }
+        }
         if let Some(needle) = &name_needle {
             if !atom
                 .display_name(Some(DISPLAY_NAME_TRUNCATION))
@@ -325,6 +352,13 @@ fn build_summary(
         atom_id: atom.id().clone(),
         stable_key: atom.stable_key(corpus_id),
         atom_type: atom.atom_type(),
+        subtype: {
+            // Empty means "this atom has no subtype", which is not the same as
+            // a subtype spelled "" — the row carries `None` so a viewer can
+            // fall back to the kind rather than render a blank chip.
+            let s = corpus_engine::enrichment::atlas::projection::subtype_of(atom);
+            (!s.is_empty()).then_some(s)
+        },
         display_name: atom.display_name(Some(DISPLAY_NAME_TRUNCATION)),
         salience: atom.salience(),
         enrichment_depth: atom.enrichment_depth(),
@@ -462,6 +496,85 @@ mod tests {
         for item in &only_entities.items {
             assert_eq!(item.atom_type, AtomType::Entity);
         }
+    }
+
+    /// The author's noun is findable, and it is not the atom kind.
+    ///
+    /// `coin` and `sceatta` are both Entities, so a kind filter cannot tell
+    /// them apart; `subtype` can. The roll-up is deliberately NOT here — a
+    /// caller wanting the family asks for each name.
+    ///
+    /// Falsifier: drop the `subtype` arm from the filter loop and this returns
+    /// all four atoms instead of two.
+    #[tokio::test]
+    async fn list_atoms_filters_by_declared_subtype() {
+        let tmp = tempfile::tempdir().unwrap();
+        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        let typed = |id: usize, name: &str, t: &str| match entity(id, name, 0.5) {
+            AtomEnvelope::Entity(mut e) => {
+                e.entity_type = EntityType::Other(t.into());
+                AtomEnvelope::Entity(e)
+            }
+            other => other,
+        };
+        write_atoms(
+            &tmp.path().join("wiki").join("atlas"),
+            vec![
+                typed(1, "Beonna penny", "coin"),
+                typed(2, "Offa gold dinar", "coin"),
+                typed(3, "Series R sceatta", "sceatta"),
+                entity(4, "Aldfrith", 0.5),
+            ],
+        );
+
+        let coins = reader
+            .list_atoms(
+                "wiki",
+                AtomFilter {
+                    subtype: Some("coin".into()),
+                    ..Default::default()
+                },
+                PageCursor::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            coins.total_matching, 2,
+            "own only — `sceatta` is not a coin here"
+        );
+        for item in &coins.items {
+            assert_eq!(item.atom_type, AtomType::Entity, "same KIND as the sceatta");
+            assert_eq!(item.subtype.as_deref(), Some("coin"));
+        }
+
+        // An undeclared entity is not subtype-less: it carries its generic
+        // kind, which is the same word the kind-based UI already shows. Only
+        // an unclassified Relation/Event/State has no subtype at all.
+        let all = reader
+            .list_atoms("wiki", AtomFilter::default(), PageCursor::default())
+            .await
+            .unwrap();
+        let generic = all
+            .items
+            .iter()
+            .find(|i| i.display_name == "Aldfrith")
+            .expect("the generic entity is listed");
+        assert_eq!(generic.subtype.as_deref(), Some("concept"));
+        let claims_have_none = reader
+            .list_atoms(
+                "wiki",
+                AtomFilter {
+                    subtype: Some("concept".into()),
+                    ..Default::default()
+                },
+                PageCursor::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            claims_have_none.total_matching, 1,
+            "the generic six are filterable too, by the same field"
+        );
     }
 
     #[tokio::test]
