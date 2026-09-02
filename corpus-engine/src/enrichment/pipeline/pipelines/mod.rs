@@ -18,6 +18,7 @@ pub mod ontology_schema;
 pub mod parse_policy;
 pub mod philosophy_atlas;
 pub mod referential_atlas;
+pub mod sketch_parse;
 
 /// Test-only fixture: the shipped `numismatics` ontology template, parsed into
 /// policies. One definition for every ontology test in this module tree, so a
