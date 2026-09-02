@@ -18,6 +18,7 @@
 use std::path::{Path, PathBuf};
 
 /// What [`register`] did, so the caller can report it and then install `id`.
+#[derive(Debug)]
 pub(super) struct Registered {
     /// The `[corpus] id` read out of the recipe — what the daemon installs.
     pub id: String,
