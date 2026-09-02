@@ -707,40 +707,7 @@ subject = "topic""#,
     assert_eq!(r.source_reachable, None);
 }
 
-// ── Templates ───────────────────────────────────────────────────────────────
-
-#[test]
-fn every_builtin_template_is_a_valid_v1_recipe() {
-    let names = recipe_templates::list_builtin_names();
-    assert!(names.contains(&"numismatics") && names.contains(&"governance"));
-    for name in names {
-        let toml = recipe_templates::load_builtin(name).unwrap();
-        let recipe = Recipe::from_toml(toml).unwrap_or_else(|e| panic!("{name}: {e}"));
-        assert_eq!(recipe.ontology_block().unwrap().version, 1, "{name}");
-        let p = recipe
-            .custom_ontology()
-            .unwrap_or_else(|| panic!("{name}: not active"));
-        assert!(p.has_declarations(), "{name}");
-        let r = validate_recipe_offline(&recipe);
-        assert!(r.errors.is_empty(), "{name}: {:?}", r.errors);
-        assert!(!r.notes.is_empty(), "{name}: derived facets printed");
-        assert!(
-            toml.contains("version = 1"),
-            "{name}: the contract journey asserts this line"
-        );
-
-        let instantiated = recipe_templates::instantiate(toml, Some("my-corpus"));
-        let inst = Recipe::from_toml(&instantiated).unwrap();
-        assert_eq!(inst.corpus.id, "my-corpus");
-        assert_eq!(inst.corpus.name, "my-corpus");
-        assert!(!instantiated.contains(&format!("id = \"{}\"", recipe_templates::PLACEHOLDER)));
-    }
-    let e = recipe_templates::load_builtin("nope")
-        .err()
-        .unwrap()
-        .to_string();
-    assert!(e.contains("numismatics") && e.contains("governance"), "{e}");
-}
+// ── Templates (the ten are exercised whole in `recipe_templates.rs`) ────────
 
 #[test]
 fn governance_template_labels_reach_the_vocabulary() {

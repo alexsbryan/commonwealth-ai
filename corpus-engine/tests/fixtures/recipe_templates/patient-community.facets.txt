@@ -1,0 +1,5 @@
+clock: document_date — supersession folds on document dates (the default; set `change.clock = "narrative"` for order within a work)
+identity: treatment → canonical name (default; declare `identity = [...]` for an external key)
+identity: drug → rxnorm_id (external key, strict merge)
+identity: symptom → canonical name (default; declare `identity = [...]` for an external key)
+question shapes: enumerate [treatment, drug, symptom]; relations [affects]; events [(none)]; aggregate [(none — a claim type with a `ref` attribute can be counted by it)]

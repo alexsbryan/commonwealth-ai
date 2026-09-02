@@ -217,6 +217,10 @@ specializes = "treatment"
 identity = ["rxnorm_id"]
 
 [[enrichment.ontology.types]]
+name = "symptom"
+kind = "entity"
+
+[[enrichment.ontology.types]]
 name = "affects"
 kind = "relation"
 from = "treatment"
@@ -246,9 +250,17 @@ authority has been distinguished since.
 
 ```toml
 [[enrichment.ontology.types]]
+name = "organization"
+kind = "entity"
+
+[[enrichment.ontology.types]]
 name = "party"
 kind = "entity"
 role_of = "organization"
+
+[[enrichment.ontology.types]]
+name = "agreement"
+kind = "entity"
 
 [[enrichment.ontology.types]]
 name = "defined_term"
@@ -262,6 +274,10 @@ force = "directive"
 deontic = ["require", "forbid", "permit"]
 subject = "party"
 attributes = [{ name = "valid", type = "time", range = true }, { name = "deadline", type = "time" }]
+
+[[enrichment.ontology.types]]
+name = "case"
+kind = "entity"
 
 [[enrichment.ontology.types]]
 name = "cites"
@@ -281,6 +297,10 @@ against gRPC internally, and is it still in force; what depends on the
 billing service; which incidents were caused by a config change.
 
 ```toml
+[[enrichment.ontology.types]]
+name = "team"
+kind = "entity"
+
 [[enrichment.ontology.types]]
 name = "component"
 kind = "entity"
@@ -431,6 +451,10 @@ kind = "entity"
 specializes = "material"
 
 [[enrichment.ontology.types]]
+name = "method"
+kind = "entity"
+
+[[enrichment.ontology.types]]
 name = "measurement"
 kind = "claim"
 force = "assertive"
@@ -457,10 +481,18 @@ resolve.
 
 ```toml
 [[enrichment.ontology.types]]
+name = "organization"
+kind = "entity"
+
+[[enrichment.ontology.types]]
 name = "customer"
 kind = "entity"
 role_of = "organization"
 identity = ["account_id"]
+
+[[enrichment.ontology.types]]
+name = "feature"
+kind = "entity"
 
 [[enrichment.ontology.types]]
 name = "ticket"

@@ -1,0 +1,91 @@
+# Patient community — an ontology-v1 recipe template.
+#
+# A moderated forum plus the twenty papers everyone cites. The questions it
+# is built to answer: what has helped people with a symptom; what should not
+# be combined with the standard treatment; what the evidence says versus what
+# members report. The declaration is ONTOLOGY_PRIMITIVES.md §1.3 verbatim,
+# plus the `symptom` type its `affects` relation points at.
+#
+# Scaffold:  svrn recipe new --ontology patient-community --id my-forum --out my-forum.toml
+# Then fill the REPLACE_ME fields, and:
+#   svrn recipe validate my-forum.toml       # prints what the ontology derives
+#   svrn corpus install my-forum.toml
+#   svrn enrich init my-forum --from-corpus my-forum
+#   svrn enrich build my-forum --full
+
+[corpus]
+# REQUIRED: a stable, repo-scoped id.
+id = "REPLACE_ME"
+# REQUIRED: human-readable name.
+name = "REPLACE_ME"
+description = "A patient forum and the papers it cites, extracted as treatments, symptoms, what affects what, and graded findings."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# One markdown file: each forum thread and each paper as a `## ` section.
+[acquire]
+type = "local_file"
+# REQUIRED: absolute path to the markdown file.
+path = "REPLACE_ME"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "patient-community"
+
+[enrichment.ontology]
+version = 1
+must_not = ["give dosing advice", "present a member report as a trial result"]
+guidance = """
+This corpus is a rare-disease patient community: a moderated forum and the clinical
+papers its members cite. Treatments (drugs among them) act on symptoms — improving,
+worsening, or contraindicated together — and every finding is graded by where it
+comes from: a trial, a case series, or a member's own report. Keep those apart.
+Members and moderators speak; they are not the subject matter.
+"""
+
+[[enrichment.ontology.types]]
+name = "treatment"
+kind = "entity"
+attributes = [{ name = "dose", type = "quantity", unit = "mg" }]
+
+[[enrichment.ontology.types]]
+name = "drug"
+kind = "entity"
+specializes = "treatment"
+identity = ["rxnorm_id"]
+
+[[enrichment.ontology.types]]
+name = "symptom"
+kind = "entity"
+description = "A symptom or sign members report: joint pain, fatigue, a lab value."
+
+[[enrichment.ontology.types]]
+name = "affects"
+kind = "relation"
+from = "treatment"
+to = "symptom"
+attributes = [{ name = "effect", type = "text", values = ["improves", "worsens", "contraindicated"] }]
+
+[[enrichment.ontology.types]]
+name = "finding"
+kind = "claim"
+force = "assertive"
+grades = ["trial", "case-series", "member-report"]
+
+[enrichment.ontology.voices]
+not_entities = ["the poster", "the moderator"]
+attributed_to = ["paper", "clinician", "member"]

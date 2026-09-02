@@ -1,0 +1,98 @@
+# Engineering org — an ontology-v1 recipe template.
+#
+# Design docs, ADRs, incident reviews, runbooks. The questions it is built to
+# answer: which ADR decided against a technology, and is it still in force;
+# what depends on a service; which incidents were caused by a config change.
+# The declaration is ONTOLOGY_PRIMITIVES.md §1.5 verbatim, plus the `team`
+# type a component's `owner` points at.
+#
+# Scaffold:  svrn recipe new --ontology engineering-org --id my-eng --out my-eng.toml
+# Then fill the REPLACE_ME fields, and:
+#   svrn recipe validate my-eng.toml         # prints what the ontology derives
+#   svrn corpus install my-eng.toml
+#   svrn enrich init my-eng --from-corpus my-eng
+#   svrn enrich build my-eng --full
+
+[corpus]
+# REQUIRED: a stable, repo-scoped id.
+id = "REPLACE_ME"
+# REQUIRED: human-readable name.
+name = "REPLACE_ME"
+description = "Design docs, ADRs, incident reviews and runbooks, extracted as components, incidents, decisions in force and root causes."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# One markdown file: each ADR, design doc and incident review as a `## `
+# section (dates in the headings let supersession order the decisions).
+[acquire]
+type = "local_file"
+# REQUIRED: absolute path to the markdown file.
+path = "REPLACE_ME"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "engineering-org"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is an engineering organisation's record: design documents, architecture
+decision records, incident reviews and runbooks. Components (services among them) have
+a path in the repository and an owning team. A decision makes something so for a
+component until a later decision replaces it; two decisions in force about the same
+component can contradict each other, and that is worth surfacing. An incident has a
+severity and an opening time; a root cause is what a review says caused it.
+"""
+
+[[enrichment.ontology.types]]
+name = "team"
+kind = "entity"
+description = "An owning team."
+
+[[enrichment.ontology.types]]
+name = "component"
+kind = "entity"
+identity = ["path"]
+attributes = [{ name = "path", type = "text" }, { name = "owner", type = "ref", of = "team" }]
+
+[[enrichment.ontology.types]]
+name = "service"
+kind = "entity"
+specializes = "component"
+
+[[enrichment.ontology.types]]
+name = "incident"
+kind = "event"
+attributes = [{ name = "severity", type = "text", values = ["sev1", "sev2", "sev3"] }, { name = "opened", type = "time" }]
+
+[[enrichment.ontology.types]]
+name = "decision"
+kind = "claim"
+force = "declaration"
+subject = "component"
+
+[[enrichment.ontology.types]]
+name = "root_cause"
+kind = "claim"
+force = "assertive"
+subject = "incident"
+
+[enrichment.ontology.change]
+supersedes = { decision = "document_date" }
+
+[enrichment.ontology.tension]
+between = ["decision"]

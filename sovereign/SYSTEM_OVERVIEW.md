@@ -1179,8 +1179,10 @@ means one thing.
   `OntologyConfig`; version 1 declares types with typed attributes
   (`OntologyTypeDecl`, `AttrDecl`) plus `voices`/`change`/`tension`/`derive`.
   `recipe validate` resolves every reference and prints the derived facets;
-  `recipe new --ontology <name>` scaffolds from
-  `sovereign-recipes/_templates/ontology-v1/` (`recipe_templates.rs`);
+  `recipe new --ontology <name>` scaffolds one of the ten PRIMITIVES §1
+  templates from `sovereign-recipes/_templates/ontology-v1/`
+  (`recipe_templates.rs`; each template's derived facets are pinned under
+  `corpus-engine/tests/fixtures/recipe_templates/`);
   `recipe migrate --ontology-version 1` adds the version line as a diff.
   `CustomAtlasSpec.policies` carries the parsed policies into `config.json`;
   `CustomOntology::from_policies` composes the Phase-1 prompt (I1: a

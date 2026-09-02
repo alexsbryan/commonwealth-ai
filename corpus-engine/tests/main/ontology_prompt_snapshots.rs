@@ -25,7 +25,7 @@
 //! ```
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use corpus_engine::enrichment::atlas::analysis::{CandidateContent, TensionSide};
 use corpus_engine::enrichment::atlas::atoms::{AtomId, ChunkRef};
@@ -64,26 +64,35 @@ fn assert_snapshot(stem: &str, prompt: &ChatPrompt) {
     let path = fixtures_dir().join(format!("{stem}.json"));
     let mut rendered = serde_json::to_string_pretty(prompt).expect("serialise ChatPrompt");
     rendered.push('\n');
+    // A byte that moves here is a leak: the bytes sent to a model changed.
+    assert_golden(&path, &rendered, "ontology_prompt_snapshots");
+}
 
+/// Byte-compare `rendered` against the golden at `path`, or rewrite it under
+/// `UPDATE_ONTOLOGY_SNAPSHOTS=1`. A missing golden is a mismatch, never a
+/// pass. `module` is the test module the re-bless hint names. Shared with
+/// `recipe_templates.rs` (derived-facet goldens): one bless convention.
+pub(crate) fn assert_golden(path: &Path, rendered: &str, module: &str) {
     if std::env::var(UPDATE_ENV).is_ok() {
-        std::fs::create_dir_all(fixtures_dir()).expect("create fixtures dir");
-        std::fs::write(&path, &rendered)
-            .unwrap_or_else(|e| panic!("write {}: {e}", path.display()));
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).expect("create fixtures dir");
+        }
+        std::fs::write(path, rendered).unwrap_or_else(|e| panic!("write {}: {e}", path.display()));
         eprintln!("wrote {}", path.display());
         return;
     }
 
-    let committed = std::fs::read_to_string(&path).unwrap_or_default();
+    let committed = std::fs::read_to_string(path).unwrap_or_default();
     if committed != rendered {
         panic!(
-            "prompt snapshot `{stem}` differs from {} ({} committed bytes vs {} rendered).\n\
-             The bytes sent to a model changed. If that is intended, re-bless with:\n  \
-             {UPDATE_ENV}=1 cargo test -p corpus-engine --test main ontology_prompt_snapshots\n\
+            "golden {} differs ({} committed bytes vs {} rendered).\n\
+             If the change is intended, re-bless with:\n  \
+             {UPDATE_ENV}=1 cargo test -p corpus-engine --test main {module}\n\
              and read the change with `git diff --word-diff` on the fixture.\n{}",
             path.display(),
             committed.len(),
             rendered.len(),
-            crate::recipe_schema::first_diff(&committed, &rendered)
+            crate::recipe_schema::first_diff(&committed, rendered)
         );
     }
 }
