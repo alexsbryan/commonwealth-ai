@@ -665,7 +665,8 @@ block with no types yields the same policies as version 0, so adding
 the version line is always safe.
 
 The interview is one question per axis, in the user's words. The agent
-already asks the first (`sovereign/modes/recipe-author/skill.toml:333-338`).
+asks all five — `sovereign/modes/recipe-author/skill.toml`, under
+"Eliciting the ontology" — and skips any the charter already answers.
 
 | Axis | The agent asks | It writes |
 |---|---|---|

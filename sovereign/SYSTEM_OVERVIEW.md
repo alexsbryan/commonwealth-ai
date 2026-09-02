@@ -1299,7 +1299,11 @@ it. Generic primitives:
   (project model), `situated_context.rs` (per-turn renderer),
   `svrn recipe-agent {new,show,list,live-trial}` CLI. Skill
   manifest at `sovereign/modes/recipe-author/skill.toml`
-  (privacy = `local_only`). The project model carries an
+  (privacy = `local_only`); its interview is the five
+  `ONTOLOGY_PRIMITIVES.md` §4 questions (shape, assertion, identity,
+  change, derivation), asked only where the charter is silent, and it
+  points at `recipe new --ontology <name>` rather than a blank block.
+  The project model carries an
   `ArtifactKind` (recipe | workflow), so the same checkpoints /
   decision log / desktop workspace back **workflow** authoring too
   (checkpoints snapshot `recipe.toml` or `workflow.toml` by kind) —
