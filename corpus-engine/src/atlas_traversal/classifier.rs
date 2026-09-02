@@ -239,18 +239,26 @@ const AGGREGATE_CUES: &[&str] = &["how many", "count of", "breakdown", "distribu
 /// the pre-ontology passes.
 ///
 /// The decisive test for Enumerate is the one `atom_enum`'s classifier already
-/// uses: **a question that names the entities it concerns is a lookup, not an
-/// enumeration.** "which mints struck for Offa" names Offa, so it is not an
-/// enumeration of mints — it falls through and resolves on Offa, whose
-/// relations are the answer. Without that test every "which <type> …" question
-/// would be swallowed here.
+/// uses — **a question that names the entities it concerns is a lookup, not an
+/// enumeration** — with one correction the built wessex-hoard atlas forced.
+///
+/// A named entity is sometimes the CONTAINER the question scopes to rather
+/// than a filter on the set. The probe question is "which coins are in the
+/// Wessex Down hoard catalogue", and `Wessex Down hoard` is a real `place`
+/// atom in that atlas, so the bare rule refused to enumerate the very question
+/// the phase exists to answer. But the hoard is not a coin — it is the corpus,
+/// and every coin in the atlas is in it, so naming it restricts nothing.
+/// "which mints struck for Offa" is the other shape: Offa FILTERS the mints,
+/// an unfiltered enumeration of every mint would be a wrong answer, and the
+/// question is better served by falling through to the lookup that walks
+/// Offa's relations. [`names_the_container`] is the distinction.
 fn classify_declared(
     folded_query: &str,
     entities: &[Entity],
     policies: &OntologyPolicies,
 ) -> Option<QueryPlan> {
     let index = TypeIndex::from_policies(policies);
-    let (type_name, decl) = match_declared_type(folded_query, policies)?;
+    let (type_name, decl, type_surface) = match_declared_type(folded_query, policies)?;
 
     // Aggregate is the more specific read: a tally cue plus "by <attribute>"
     // naming one of the type's EFFECTIVE attributes (inherited included, which
@@ -275,27 +283,89 @@ fn classify_declared(
     if !matches_any(folded_query, ENUMERATE_CUES) {
         return None;
     }
-    // Names a member => a lookup about that member, not a set.
-    if match_entity_target(folded_query, entities).is_some() {
-        return None;
+    // The type word is SPENT. It named the TYPE, and it must not also be read
+    // as naming a member — which it otherwise does, routinely: the built
+    // wessex-hoard atlas holds entities called "Series Y sceattas", "English
+    // coins" and "silver coinage", so the fuzzy token pass resolves the bare
+    // word `sceattas` or `coins` to an atom and the enumeration is defeated by
+    // the very noun that asked for it (observed at debug:
+    // `named=sceattas entity_type=sceatta`). Strip it before asking what ELSE
+    // the question names. A member named "Series Y sceattas" in full still
+    // matches — the full form survives the strip and pass 1 sees it.
+    let residue = folded_query.replacen(&type_surface, " ", 1);
+
+    // Names something => a lookup about it, UNLESS what it names is the
+    // container the question scopes to.
+    if let Some(target) = match_entity_target(&residue, entities) {
+        let named = match &target {
+            QueryTarget::Resolved { matched_form, .. } => matched_form.clone(),
+            QueryTarget::Unresolved { raw_name } => raw_name.clone(),
+        };
+        if !names_the_container(&residue, &named) {
+            tracing::debug!(
+                named = %named,
+                entity_type = %type_name,
+                "atlas traversal: named entity filters the set; not an enumeration"
+            );
+            return None;
+        }
     }
     Some(QueryPlan::Enumerate {
         entity_type: type_name,
     })
 }
 
+/// Prepositions that introduce the thing a set is drawn FROM rather than a
+/// property it is filtered BY.
+const CONTAINMENT_PREPOSITIONS: &[&str] =
+    &["in", "within", "inside", "from", "across", "throughout"];
+
+/// Determiners that may sit between the preposition and the name. The empty
+/// string covers "in Wessex Down hoard".
+const CONTAINER_DETERMINERS: &[&str] = &["the ", "this ", "that ", "these ", "our ", ""];
+
+/// Does `named` appear as the CONTAINER the question draws its set from
+/// ("coins **in the** Wessex Down hoard") rather than as a filter on it
+/// ("mints struck **for** Offa")?
+///
+/// Deliberately a preposition test and not a type test. The type test — "the
+/// named entity is not itself of the enumerated type" — passes the hoard case
+/// and FAILS the Offa case, because Offa is a `person` atom and a mint is not a
+/// person either. What actually separates the two is the grammatical role the
+/// name plays, and this classifier is a keyword + known-name matcher by design
+/// (see the module doc); a preposition is the same kind of evidence it already
+/// runs on.
+fn names_the_container(folded_query: &str, named: &str) -> bool {
+    let name = fold(named);
+    if name.is_empty() {
+        return false;
+    }
+    CONTAINMENT_PREPOSITIONS.iter().any(|prep| {
+        CONTAINER_DETERMINERS
+            .iter()
+            .any(|det| folded_query.contains(&format!("{prep} {det}{name}")))
+    })
+}
+
 /// The declared type the query mentions, by name or `label`, matched as a
 /// whole word in singular or naive-plural form. Longest surface form wins so
 /// `sceatta` beats a shorter type sharing a prefix.
+type DeclaredMatch<'a> = (
+    usize,
+    String,
+    &'a crate::enrichment::ontology::OntologyTypeDecl,
+    String,
+);
+
 fn match_declared_type<'a>(
     folded_query: &str,
     policies: &'a OntologyPolicies,
-) -> Option<(String, &'a crate::enrichment::ontology::OntologyTypeDecl)> {
-    let mut best: Option<(
-        usize,
-        String,
-        &'a crate::enrichment::ontology::OntologyTypeDecl,
-    )> = None;
+) -> Option<(
+    String,
+    &'a crate::enrichment::ontology::OntologyTypeDecl,
+    String,
+)> {
+    let mut best: Option<DeclaredMatch<'a>> = None;
     for t in &policies.shape.types {
         for base in std::iter::once(&t.name).chain(t.label.iter()) {
             let folded = fold(base);
@@ -307,13 +377,13 @@ fn match_declared_type<'a>(
                     continue;
                 }
                 let len = surface.chars().count();
-                if best.as_ref().map(|(l, _, _)| len > *l).unwrap_or(true) {
-                    best = Some((len, t.name.clone(), t));
+                if best.as_ref().map(|(l, _, _, _)| len > *l).unwrap_or(true) {
+                    best = Some((len, t.name.clone(), t, surface));
                 }
             }
         }
     }
-    best.map(|(_, name, decl)| (name, decl))
+    best.map(|(_, name, decl, surface)| (name, decl, surface))
 }
 
 fn matches_any(text: &str, patterns: &[&str]) -> bool {
@@ -622,11 +692,12 @@ mod tests {
         }
     }
 
-    /// The decisive test: a question that NAMES a member is a lookup about
-    /// that member, not an enumeration of the type. "which mints struck for
-    /// Offa" is about Offa — its answer is Offa's relations.
+    /// A named entity that FILTERS the set is a lookup about that entity, not
+    /// an enumeration of the type. "which mints struck for Offa" is about
+    /// Offa — an unfiltered list of every mint would be a wrong answer, and
+    /// Offa's relations are the right one.
     #[test]
-    fn a_named_member_defeats_enumeration() {
+    fn a_named_filter_defeats_enumeration() {
         let entities = vec![entity(1, "Offa", &[])];
         let plan = classify_query_with(
             "Which mints struck for Offa?",
@@ -641,6 +712,88 @@ mod tests {
             matches!(plan, QueryPlan::EntityLookup { .. }),
             "got {plan:?}"
         );
+    }
+
+    /// …but a named CONTAINER does not. This is the exact question the phase
+    /// exists to answer, against the exact atom that broke the first cut of
+    /// the rule: `Wessex Down hoard` is a real `place` entity in the BUILT
+    /// wessex-hoard atlas, so "which coins are in the Wessex Down hoard
+    /// catalogue" names it — and refusing to enumerate there refused the
+    /// probe itself. The hoard is the corpus, not a coin.
+    #[test]
+    fn a_named_container_does_not_defeat_enumeration() {
+        let mut hoard = entity(1, "Wessex Down hoard", &[]);
+        hoard.entity_type = EntityType::Place;
+        let entities = vec![hoard, entity(2, "Offa", &[])];
+        for q in [
+            "Which coins are in the Wessex Down hoard catalogue, and what metal is each?",
+            "Which sceattas are in the Wessex Down hoard?",
+            "List the coins from the Wessex Down hoard.",
+        ] {
+            let plan = classify_query_with(q, &entities, Some(&numismatics()));
+            assert!(
+                matches!(plan, QueryPlan::Enumerate { .. }),
+                "a container must not defeat enumeration: {q} -> {plan:?}"
+            );
+        }
+        // The filter case still defeats it, with the same entity set.
+        assert!(!matches!(
+            classify_query_with(
+                "Which mints struck for Offa?",
+                &entities,
+                Some(&numismatics())
+            ),
+            QueryPlan::Enumerate { .. }
+        ));
+    }
+
+    /// The type word is spent on the TYPE and must not also read as a member.
+    ///
+    /// Named inputs from the BUILT wessex-hoard atlas, where this was found:
+    /// its coin set includes entities literally called "Series Y sceattas" and
+    /// "English coins". Before the strip, "which sceattas are in the hoard"
+    /// resolved `sceattas` to the first of those and refused to enumerate —
+    /// the enumeration defeated by the very noun that asked for it.
+    #[test]
+    fn the_type_word_does_not_also_name_a_member() {
+        let mut plural_named = entity(1, "Series Y sceattas", &["Series R", "sceatta"]);
+        plural_named.entity_type = EntityType::Other("sceatta".into());
+        let mut english_coins = entity(2, "English coins", &[]);
+        english_coins.entity_type = EntityType::Other("coin".into());
+        let mut hoard = entity(3, "Wessex Down hoard", &[]);
+        hoard.entity_type = EntityType::Place;
+        let entities = vec![plural_named, english_coins, hoard];
+
+        assert_eq!(
+            classify_query_with(
+                "Which sceattas are in the hoard?",
+                &entities,
+                Some(&numismatics())
+            ),
+            QueryPlan::Enumerate {
+                entity_type: "sceatta".into()
+            }
+        );
+        assert_eq!(
+            classify_query_with(
+                "Which coins are in the hoard?",
+                &entities,
+                Some(&numismatics())
+            ),
+            QueryPlan::Enumerate {
+                entity_type: "coin".into()
+            }
+        );
+        // A member named IN FULL still defeats it — the full form survives the
+        // strip, so this is not a licence to ignore real names.
+        assert!(!matches!(
+            classify_query_with(
+                "Which coins relate to the English coins group?",
+                &entities,
+                Some(&numismatics())
+            ),
+            QueryPlan::Enumerate { .. }
+        ));
     }
 
     /// A tally cue plus `by <declared attribute>` is an Aggregate.
