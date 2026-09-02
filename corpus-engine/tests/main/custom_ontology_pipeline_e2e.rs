@@ -178,7 +178,7 @@ fn phase1_prompt_carries_the_declared_types_and_a_generated_schema() {
 #[test]
 fn declared_entities_survive_extraction_with_typed_attributes() {
     let e = extraction();
-    let by_name: HashMap<&str, &_> = e
+    let by_name: HashMap<&str, _> = e
         .entities_introduced
         .iter()
         .map(|x| (x.canonical_name.as_str(), x))

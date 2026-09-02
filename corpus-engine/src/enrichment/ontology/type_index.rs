@@ -98,7 +98,9 @@ impl<'a> TypeIndex<'a> {
         seen.insert(name);
         let mut cursor = self.get(name).and_then(|t| t.specializes.as_deref());
         while let Some(parent) = cursor {
-            let Some(decl) = self.by_name.get(parent) else {
+            // Through `get`, not `by_name.get`: the accessor's return type is
+            // `&'a`, so the walk is not tied to this `&self` borrow.
+            let Some(decl) = self.get(parent) else {
                 break;
             };
             if !seen.insert(decl.name.as_str()) {

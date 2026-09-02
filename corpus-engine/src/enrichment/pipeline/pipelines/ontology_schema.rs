@@ -421,17 +421,17 @@ fn attach_attributes(
 /// the reserved claim keys (`deontic`, `grade`), which are not declared
 /// attributes but land in the same bag.
 fn set_attribute_property(defs: &mut Defs, sketch: &str, key: &str, value: Value) {
-    let props = properties_of(defs, sketch);
-    let Some(props) = props else { return };
-    let attrs = props.entry("attributes".to_string()).or_insert_with(|| {
-        json!({
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {},
-        })
-    });
-    if let Some(inner) = attrs.get_mut("properties").and_then(Value::as_object_mut) {
-        inner.insert(key.to_string(), value);
+    if let Some(props) = properties_of(defs, sketch) {
+        let attrs = props.entry("attributes".to_string()).or_insert_with(|| {
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {},
+            })
+        });
+        if let Some(inner) = attrs.get_mut("properties").and_then(Value::as_object_mut) {
+            inner.insert(key.to_string(), value);
+        }
     }
 }
 

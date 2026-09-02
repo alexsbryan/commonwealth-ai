@@ -24,7 +24,7 @@ use super::super::atlas::{
 use super::super::exemplar_bank::{Exemplar, ExemplarKind};
 use super::super::trait_def::Pipeline;
 use super::super::types::*;
-use super::literary::{prepare_phase_json, sanitize_optional_string, LiteraryPipeline};
+use super::literary::{prepare_phase_json, LiteraryPipeline};
 use super::ontology_parse::null_or_empty_vec;
 use crate::engine::CorpusEngine;
 use crate::enrichment::atlas::{
@@ -454,7 +454,7 @@ impl Pipeline for LiteraryAtlasPipeline {
         }
         super::ontology_parse::parse_phase1_section_extraction(
             response,
-            &super::ontology_parse::ParsePolicy::default(),
+            &super::parse_policy::ParsePolicy::default(),
         )
     }
 
