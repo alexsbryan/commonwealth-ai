@@ -236,7 +236,7 @@ Money / influence flows in a cycle: A→B→C→A. Powered by petgraph's Tarjan 
 
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `name` | `String` | **yes** | — |  |
+| `name` | `String` | no | `default_name_circular_flow()` |  |
 | `description` | `String` | no | type default |  |
 | `min_entities` | `u32` | no | `default_circular_flow_min_entities()` |  |
 | `edge_types` | `Vec<String>` | **yes** | — |  |
@@ -247,7 +247,7 @@ Same pair of entities connected by two edge types that represent distinct roles.
 
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `name` | `String` | **yes** | — |  |
+| `name` | `String` | no | `default_name_role_overlap()` |  |
 | `description` | `String` | no | type default |  |
 | `entity_roles` | `BTreeMap<String, String>` | **yes** | — |  |
 
@@ -257,7 +257,7 @@ Numeric-attribute threshold over edges of a single type. E.g. "revenue concentra
 
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `name` | `String` | **yes** | — |  |
+| `name` | `String` | no | `default_name_threshold()` |  |
 | `description` | `String` | no | type default |  |
 | `edge_type` | `String` | **yes** | — |  |
 | `attribute` | `String` | **yes** | — |  |
@@ -270,7 +270,7 @@ Numeric-attribute threshold over edges of a single type. E.g. "revenue concentra
 
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `name` | `String` | **yes** | — |  |
+| `name` | `String` | no | `default_name_custom_sql()` |  |
 | `description` | `String` | no | type default |  |
 | `query` | `String` | **yes** | — | SQL query against `entities` / `relationships` / `pattern_findings` tables. Validation is parse-only today; execution arrives in a follow-up PR. |
 
@@ -1144,10 +1144,6 @@ kind = "entity"
 role_of = "person"
 
 [[enrichment.ontology.types]]
-name = "person"
-kind = "entity"
-
-[[enrichment.ontology.types]]
 name = "attribution"
 kind = "claim"
 force = "assertive"
@@ -1161,7 +1157,9 @@ between = ["attribution"]
 Keys: `guidance`, `vocabulary`, `must_not`, `types`, `voices`, `change`,
 `tension`, `derive`, `patterns`. `recipe validate` checks that every
 `specializes`, `role_of`, `from`, `to`, `participants`, `of`, `subject` and
-`ref … of` names a declared type; that `tension.between` and
+`ref … of` names a declared type or one of the base entity kinds the atlas
+already emits (`person`, `concept`, `institution`, `work`, `place`,
+`initiative`); that `tension.between` and
 `change.supersedes` name claim types and `tension.same` names `subject` or a
 declared attribute; that `deontic` appears only on directive claims; that no
 claim type takes a reserved kind name; and that the caps hold (12 types per

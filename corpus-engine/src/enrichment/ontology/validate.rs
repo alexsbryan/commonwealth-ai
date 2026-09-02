@@ -9,13 +9,15 @@
 //! author can see what the system inferred and override it (§6 "inference
 //! that is wrong"). Every rule has a red input in `tests/main/ontology_recipe.rs`.
 //!
-//! One generic resolver (`ref_error`) over the declared-name set serves every
+//! One generic resolver (`ref_error`) over the declared names plus the base
+//! entity kinds the atlas already emits (`EntityType::NAMED`) serves every
 //! reference facet; nothing is checked twice in two spellings.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{AttrFamily, Clock, Force, OntologyLanguageRegistry, OntologyPolicies, TypeKind};
 use crate::enrichment::atlas::analysis::TensionStrategy;
+use crate::enrichment::pipeline::atlas::EntityType;
 use crate::recipe::OntologyBlock;
 
 /// Most declared types per atom kind. Bounds the extraction-schema enum the
@@ -117,7 +119,8 @@ fn kind_key(kind: TypeKind) -> &'static str {
 fn ref_error(type_name: &str, field: &str, value: &str, declared: &str) -> String {
     format!(
         "ontology type `{type_name}`: `{field} = \"{value}\"` does not name a declared \
-         type (declared: {declared})"
+         type (declared: {declared}; base kinds: {})",
+        EntityType::NAMED.join(", ")
     )
 }
 
@@ -134,6 +137,15 @@ fn check_declarations(p: &OntologyPolicies, errors: &mut Vec<String>) {
     let types = &p.shape.types;
     let names: BTreeSet<&str> = types.iter().map(|t| t.name.as_str()).collect();
     let declared = join_or_none(names.iter().copied());
+    // A reference resolves to a declared name or to one of the base entity
+    // kinds the atlas already emits: `role_of = "person"` needs no `person`
+    // declaration (declaring one stays legal, to add attributes); a name
+    // outside both sets (`mint`, `topic`) must be declared.
+    let resolvable: BTreeSet<&str> = names
+        .iter()
+        .copied()
+        .chain(EntityType::NAMED.iter().copied())
+        .collect();
     let claim_names: BTreeSet<&str> = p.claim_types().map(|t| t.name.as_str()).collect();
     let claims = join_or_none(claim_names.iter().copied());
 
@@ -169,13 +181,13 @@ fn check_declarations(p: &OntologyPolicies, errors: &mut Vec<String>) {
         ];
         for (field, value) in refs {
             if let Some(v) = value {
-                if !names.contains(v) {
+                if !resolvable.contains(v) {
                     errors.push(ref_error(&t.name, field, v, &declared));
                 }
             }
         }
         for (role, v) in &t.participants {
-            if !names.contains(v.as_str()) {
+            if !resolvable.contains(v.as_str()) {
                 errors.push(ref_error(
                     &t.name,
                     &format!("participants.{role}"),
@@ -203,7 +215,7 @@ fn check_declarations(p: &OntologyPolicies, errors: &mut Vec<String>) {
                 ));
             }
             match &a.family {
-                AttrFamily::Ref { of } if !names.contains(of.as_str()) => {
+                AttrFamily::Ref { of } if !resolvable.contains(of.as_str()) => {
                     errors.push(ref_error(
                         &t.name,
                         &format!("attributes.{}.of", a.name),

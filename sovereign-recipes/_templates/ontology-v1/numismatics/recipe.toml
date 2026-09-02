@@ -80,11 +80,6 @@ kind = "entity"
 role_of = "person"
 
 [[enrichment.ontology.types]]
-name = "person"
-kind = "entity"
-description = "A named individual: a ruler, a moneyer, an author."
-
-[[enrichment.ontology.types]]
 name = "mint"
 kind = "entity"
 description = "A place where coins were struck."

@@ -142,10 +142,6 @@ kind = "entity"
 role_of = "person"
 
 [[enrichment.ontology.types]]
-name = "person"
-kind = "entity"
-
-[[enrichment.ontology.types]]
 name = "mint"
 kind = "entity"
 
@@ -648,10 +644,14 @@ already asks the first (`sovereign/modes/recipe-author/skill.toml:333-338`).
 | Derivation | What should it notice that no single document says — contradictions, patterns, larger structures? What looks like a contradiction but isn't? | `tension`, `patterns`, `derive` |
 
 `recipe validate` checks every `ref`, `specializes`, `role_of`, `from`,
-`to` and `subject` resolves to a declared type (so a declaration must name
-every type it points at — §1.1 declares `person` and `mint`, §1.2 `topic`),
-every `same` names a declared attribute or `subject`, and prints the
-question shapes the corpus will answer. The build report counts atoms per declared type,
+`to` and `subject` resolves to a declared type or to one of the base
+entity kinds the atlas already emits (`person`, `concept`, `institution`,
+`work`, `place`, `initiative` — read from `EntityType`, not a copy), so
+`role_of = "person"` needs no `person` declaration while §1.1 must declare
+`mint`, §1.2 `topic`, §1.4 `organization` (the base kind is `institution`);
+declaring a base kind stays legal and adds attributes to it. It checks every `same` names a declared attribute or
+`subject`, and prints the question shapes the corpus will answer. The build
+report counts atoms per declared type,
 names the zero-coverage ones, shows the identity criterion each type
 resolved to, and lists reified merges. The inspector filters by
 declared type. The Conflicts panel already speaks the labels.
