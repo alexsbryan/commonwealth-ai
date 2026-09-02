@@ -558,6 +558,72 @@ mod tests {
         assert_eq!(outcome.oplog_entries.len(), 1);
     }
 
+    /// A declared external key merges two mentions that share NO name token.
+    ///
+    /// This is what `identity = ["catalogue_ref"]` is for and the thing the
+    /// four name/email/org signals structurally cannot do: "Coenwulf mancus"
+    /// in the catalogue and "the gold mancus of Coenwulf" in a later article
+    /// fold to different names, and only the shared reference says they are
+    /// one coin. It merges across origins on the key alone, where
+    /// `cross_origin_signal_gate_blocks_weak_merge` above shows a name match
+    /// is not enough.
+    ///
+    /// Falsifier: give the two atoms different `catalogue_ref` values, or drop
+    /// `coin` from the policy's `identity` map, and the outcome is two
+    /// entities.
+    #[test]
+    fn a_declared_external_key_merges_two_mentions_with_no_shared_name() {
+        let coin = |name: &str, id: &str, sk: SignalKind, doc: &str, cat: &str| {
+            let mut e = ent(name, id, sk, doc);
+            e.entity_type = EntityType::Other("coin".into());
+            e.attributes
+                .insert("catalogue_ref".into(), serde_json::json!(cat));
+            e
+        };
+        let mut policy = ReconciliationPolicy::default();
+        policy
+            .identity
+            .identity
+            .insert("coin".to_string(), vec!["catalogue_ref".to_string()]);
+
+        let same_key = vec![
+            coin(
+                "Coenwulf mancus",
+                "entity-001",
+                SignalKind::LlmBatch,
+                "sec-005",
+                "Wessex Down 5",
+            ),
+            coin(
+                "the gold mancus of Coenwulf",
+                "entity-002",
+                SignalKind::ColumnHeader,
+                "sec-019",
+                "Wessex Down 5",
+            ),
+        ];
+        let outcome = reconcile(same_key.clone(), &policy);
+        assert_eq!(
+            outcome.entities.len(),
+            1,
+            "one shared catalogue reference is one coin"
+        );
+        assert_eq!(outcome.entities[0].surface_forms.len(), 2);
+        assert_eq!(outcome.oplog_entries.len(), 1);
+
+        // Same two atoms, different references — the key is what merged them,
+        // not their type or their co-occurrence.
+        let mut different_key = same_key;
+        different_key[1]
+            .attributes
+            .insert("catalogue_ref".into(), serde_json::json!("Wessex Down 6"));
+        assert_eq!(
+            reconcile(different_key, &policy).entities.len(),
+            2,
+            "two references are two coins"
+        );
+    }
+
     #[test]
     fn cross_origin_signal_gate_blocks_weak_merge() {
         let entities = vec![

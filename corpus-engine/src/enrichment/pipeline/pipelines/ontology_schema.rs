@@ -420,6 +420,35 @@ fn render_attribute_shape(policies: &OntologyPolicies, index: &TypeIndex<'_>) ->
         })
         .collect::<Vec<_>>()
         .join(", ");
+    // An attribute named in `identity` is not one attribute among seven: it is
+    // what tells two mentions of one thing from two things, so a mention that
+    // omits it can never be matched to its other mentions. The declaration
+    // already knows which those are; without this the prompt flattened them
+    // into the same list as `denomination` and the wessex-hoard probe filled
+    // `catalogue_ref` on 3 of 14 coins — with the article and the catalogue
+    // entry both stating it, and the merge they exist for firing zero times.
+    let mut keys: Vec<String> = Vec::new();
+    for t in &policies.shape.types {
+        for k in index.effective_identity(&t.name) {
+            if !keys.iter().any(|seen| seen == k) {
+                keys.push(k.to_string());
+            }
+        }
+    }
+    let identity = if keys.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "\nAlways fill {} when the section states one, even in passing. \
+             Those are the keys that make two mentions of one thing one thing; \
+             a mention without them stays separate from every other mention of \
+             itself.\n",
+            keys.iter()
+                .map(|k| format!("`{k}`"))
+                .collect::<Vec<_>>()
+                .join(" and "),
+        )
+    };
     format!(
         "\n## Where attributes go\n\n\
          A declared attribute is a field of the sketch object itself. The \
@@ -435,7 +464,8 @@ fn render_attribute_shape(policies: &OntologyPolicies, index: &TypeIndex<'_>) ->
          `<text>` and `<number>` are shapes, not values. Take every value from \
          the section's own words, use only the keys listed for that type \
          above, and omit the `attributes` object entirely when the section \
-         states none of them. Never invent one.\n",
+         states none of them. Never invent one.\n\
+         {identity}",
         name = t.name,
         slot = match t.kind {
             TypeKind::Relation => "relation_type",
@@ -863,6 +893,44 @@ mod tests {
             "the example must not carry a copyable value: a copied value is a \
              fabricated one, and it would read as a filled attribute in the \
              coverage report"
+        );
+    }
+
+    /// An attribute named in `identity` decides whether two mentions merge, so
+    /// it cannot read as one of seven interchangeable keys. `catalogue_ref`
+    /// reached 3 of 14 coins while the corpus stated it on both the catalogue
+    /// entry and the article, and the merge it exists for fired zero times.
+    ///
+    /// Falsifier: drop the identity sentence and `catalogue_ref` is named
+    /// nowhere except in the same list as `denomination`.
+    #[test]
+    fn the_identity_keys_are_singled_out() {
+        // The SHIPPED template declares no `identity` — the wessex-hoard probe
+        // recipe is where P3 added `catalogue_ref` — so the negative case is
+        // the fixture as it stands and the positive case declares a key.
+        assert!(
+            !render_declared_types(&numismatics()).contains("Always fill"),
+            "nothing is claimed about identity when the recipe declares no key"
+        );
+
+        let mut p = numismatics();
+        let coin = p
+            .shape
+            .types
+            .iter_mut()
+            .find(|t| t.name == "coin")
+            .expect("the template declares a coin");
+        coin.attributes.push(AttrDecl {
+            name: "catalogue_ref".into(),
+            family: AttrFamily::Text { values: vec![] },
+            description: String::new(),
+        });
+        coin.identity = vec!["catalogue_ref".into()];
+
+        let block = render_declared_types(&p);
+        assert!(
+            block.contains("Always fill `catalogue_ref`"),
+            "the declared identity key is named as one: {block}"
         );
     }
 
