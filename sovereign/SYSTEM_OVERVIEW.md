@@ -5687,6 +5687,39 @@ the weight they mean to shed is actually dead before making it a bar. This one
 was assumed severable by the coordinator and by the worker, and the
 measurement said otherwise.
 
+### 10.1f Size debt OWED, not yet accepted — ontology-v1 P5 (2026-09-02)
+
+P5 grew eight files and the arch-gate baselines are **not** re-pinned in the
+P5 branch. That is deliberate: three ontology-v1 phases (P3, P4, P5) were in
+flight in separate worktrees at the same time, and `quality/baselines/` is one
+set of files. Three workers each running `arch-gate --update-baseline` on their
+own tree produces three divergent freezes whose merge silently reverts whichever
+lands first — the exact failure mode `--update-baseline` on a working tree is
+warned against in `AGENTS.md`. The re-pin belongs to whoever merges the wave,
+run ONCE over the merged tree. What P5 owes, measured (`wc -l`, HEAD of
+`ontology-v1-p5`):
+
+| File | Baseline | After P5 | Why |
+|------|----------|----------|-----|
+| `corpus-engine/src/enrichment/atlas/context.rs` | 1,989 | 2,195 | The vocabulary carrier on `AtlasGraph` + the `EMBED_ATTRIBUTES` renderer and their two tests. Already an oversized row; splits with the ATLAS_STORAGE_V2 read path, not locally. |
+| `sovereign-core/src/runtime/retrieval/atom_enum.rs` | 1,605 | 1,791 | `enumerable_types` + its five tests + the hoisted scope/graph/vocabulary block. Already oversized; the enumerate and overview paths are the obvious seam and neither is settled. |
+| `corpus-engine/src/enrichment/governance_view.rs` | 1,249 | 1,340 | `project_claim` reading `subject` + the declared deontic, and one test. Already oversized. |
+
+Three files entered the 800–1200 approach band that were under it
+(`atlas_traversal/engine.rs` 772 → 1,072; `atlas_traversal/classifier.rs`
+574 → 881; `meta_atlas/classifier.rs` 696 → 867), and two already in it grew
+(`meta_atlas/builder.rs` → 833, `sovereign-tools/src/atlas_context_manager.rs`
+→ 993). Net against the band baseline: **+3 files, +2,889 lines.**
+
+Roughly half of every one of those numbers is test code, and it stays in the
+module rather than moving to `tests/main/` to make a ratchet green: three of
+the five test the module's PRIVATE surface (`render_attributes`,
+`project_claim`, `enumerable_types`), and moving the rest out to shrink a line
+count would be teaching to the test. The real seam, when the phase settles, is
+`atlas_traversal/engine.rs` → the six pre-ontology walks and the two
+declared-type walks as peers; that split is due when P6 stops moving the
+traversal surface.
+
 ### 10.2 cmnwlth deferrals
 
 | Item | Location | Why deferred |
