@@ -1168,8 +1168,25 @@ means one thing.
   ArgumentReconstruction, Configuration, Asset). `Pipeline` trait +
   registry + `ExemplarBank` + `PhaseCache`. Pipelines: `literary`,
   `literary_atlas`, `philosophy_atlas`, `referential_atlas`,
-  `engineering_atlas`, `conversation_atlas`. State at
-  `~/.svrnmesh/indexes/<corpus>/atlas/`. Deep-dive:
+  `engineering_atlas`, `conversation_atlas`, and `custom_atlas` — the
+  recipe-declared genre (`pipelines/configurable_atlas.rs`), built from a
+  recipe's versioned `[enrichment.ontology]` block. `version` (absent = 0)
+  selects an `OntologyLanguage` in `enrichment/ontology/language.rs`
+  (registry keyed by the integer; unknown version refuses naming the max; a
+  later version's key without its version line refuses naming the fix); every
+  version parses to `enrichment::ontology::OntologyPolicies` (five axes +
+  prose), which is all the pipeline reads. Version 0 is the prose
+  `OntologyConfig`; version 1 declares types with typed attributes
+  (`OntologyTypeDecl`, `AttrDecl`) plus `voices`/`change`/`tension`/`derive`.
+  `recipe validate` resolves every reference and prints the derived facets;
+  `recipe new --ontology <name>` scaffolds from
+  `sovereign-recipes/_templates/ontology-v1/` (`recipe_templates.rs`);
+  `recipe migrate --ontology-version 1` adds the version line as a diff.
+  `CustomAtlasSpec.policies` carries the parsed policies into `config.json`;
+  `CustomOntology::from_policies` composes the Phase-1 prompt (I1: a
+  version-1 block with no declarations composes version-0 bytes). Design:
+  `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md`, `ONTOLOGY_MIGRATION.md`.
+  State at `~/.svrnmesh/indexes/<corpus>/atlas/`. Deep-dive:
   [`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md). Beyond the LLM
   pipelines, the deterministic **`structure_first`** strategy lifts a SCIP-indexed
   **code** corpus into this same typed-atom graph (content-hash atoms, code-intel

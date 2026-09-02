@@ -806,6 +806,23 @@ flags = [{ name = "--offline" }]
 path = "recipe publish"
 binary = "llm"
 flags = [{ name = "--submit-pr" }]
+[[command]]
+path = "recipe new"
+probe = "no-args"  # usage + template list on stderr, exit 2; `--help` prints usage, exit 0. Added 2026-09-01 (ontology v1 P1).
+binary = "llm"
+flags = [
+  { name = "--ontology", takes_value = true },
+  { name = "--id", takes_value = true },
+  { name = "--out", takes_value = true },
+]
+[[command]]
+path = "recipe migrate"
+probe = "no-args"  # usage on stderr, exit 2; `--help` prints usage, exit 0. Added 2026-09-01 (ontology v1 P1).
+binary = "llm"
+flags = [
+  { name = "--ontology-version", takes_value = true },
+  { name = "--dry-run" },
+]
 
 # pipeline — internal ingestion driver, default build.
 [[command]]
@@ -2174,6 +2191,14 @@ persona = "author"
 experience = "publish-to-others"
 tier = 3
 doc = "sovereign-recipes/GETTING_STARTED.md"
+[[journey.step]]
+run = "recipe new --ontology numismatics"
+note = """the scaffold is the payload, so it goes to stdout; the assertion is the \
+version line every ontology-v1 template carries (recipe_templates.rs, 2026-09-01). \
+A template that lost it would still exit 0 and silently scaffold a version-0 block."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "version = 1"
 [[journey.step]]
 run = "recipe validate {recipe}"
 note = """the verdict moved from stderr to STDOUT to make this assertable \
