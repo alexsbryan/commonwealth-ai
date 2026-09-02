@@ -47,7 +47,45 @@ fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ontology_snapshots")
 }
 
-/// Byte-compare `prompt` against `<stem>.json`, or rewrite the golden under
+/// Rebuild a JSON value with every object's keys in sorted order and render
+/// it pretty with a trailing newline. `None` when `text` is not JSON (a
+/// missing or corrupt golden), which the caller treats as a mismatch.
+///
+/// Key ORDER follows Cargo feature unification, not the prompt: a scoped
+/// `-p corpus-engine` build resolves `serde_json` without `preserve_order`
+/// (objects are `BTreeMap`s, rendered sorted) while the full workspace
+/// unifies `preserve_order` on (insertion order — the `$defs` block of a
+/// response schema renders where the const wrote it). The pin is therefore
+/// content-not-order: both sides are canonicalised before the compare, and
+/// re-blessing writes the canonical form so the committed bytes stay sorted
+/// whichever feature set blessed them. Inserting into a fresh `Map` in sorted
+/// key order yields the same bytes under either map type.
+fn canonical_json(text: &str) -> Option<String> {
+    fn sort_keys(v: serde_json::Value) -> serde_json::Value {
+        match v {
+            serde_json::Value::Object(map) => {
+                let mut entries: Vec<(String, serde_json::Value)> = map.into_iter().collect();
+                entries.sort_by(|a, b| a.0.cmp(&b.0));
+                let mut out = serde_json::Map::new();
+                for (k, v) in entries {
+                    out.insert(k, sort_keys(v));
+                }
+                serde_json::Value::Object(out)
+            }
+            serde_json::Value::Array(items) => {
+                serde_json::Value::Array(items.into_iter().map(sort_keys).collect())
+            }
+            other => other,
+        }
+    }
+    let value: serde_json::Value = serde_json::from_str(text).ok()?;
+    let mut rendered = serde_json::to_string_pretty(&sort_keys(value)).ok()?;
+    rendered.push('\n');
+    Some(rendered)
+}
+
+/// Compare `prompt` against `<stem>.json` as canonical JSON (sorted keys —
+/// see [`canonical_json`]), or rewrite the golden under
 /// `UPDATE_ONTOLOGY_SNAPSHOTS=1`. A missing golden is a mismatch, never a
 /// pass.
 fn assert_snapshot(stem: &str, prompt: &ChatPrompt) {
@@ -62,8 +100,8 @@ fn assert_snapshot(stem: &str, prompt: &ChatPrompt) {
     }
 
     let path = fixtures_dir().join(format!("{stem}.json"));
-    let mut rendered = serde_json::to_string_pretty(prompt).expect("serialise ChatPrompt");
-    rendered.push('\n');
+    let serialised = serde_json::to_string(prompt).expect("serialise ChatPrompt");
+    let rendered = canonical_json(&serialised).expect("a serialised ChatPrompt is JSON");
 
     if std::env::var(UPDATE_ENV).is_ok() {
         std::fs::create_dir_all(fixtures_dir()).expect("create fixtures dir");
@@ -73,7 +111,10 @@ fn assert_snapshot(stem: &str, prompt: &ChatPrompt) {
         return;
     }
 
-    let committed = std::fs::read_to_string(&path).unwrap_or_default();
+    let committed_raw = std::fs::read_to_string(&path).unwrap_or_default();
+    // A golden that is not JSON (missing, truncated) compares as its raw
+    // bytes and therefore mismatches — never silently passes.
+    let committed = canonical_json(&committed_raw).unwrap_or(committed_raw);
     if committed != rendered {
         panic!(
             "prompt snapshot `{stem}` differs from {} ({} committed bytes vs {} rendered).\n\
