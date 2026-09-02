@@ -489,6 +489,20 @@ async fn cmd_validate(args: &[String]) -> i32 {
                 // be gated on its exit code — which is exactly the class of
                 // assertion this repo has learned not to trust.
                 println!("✓ Validation passed");
+                // The derived facets are the POINT of validating a declared
+                // ontology, not a footnote: the numismatics template tells the
+                // author this command "prints what the ontology derives", and
+                // the recipe-author skill tells the model to read them back and
+                // re-declare when an inference is wrong. Printing only a tick
+                // made both promises false. Not a warning — the recipe is fine;
+                // this is what it will do.
+                if !report.validation.notes.is_empty() {
+                    println!();
+                    println!("Derived from your declarations:");
+                    for n in &report.validation.notes {
+                        println!("  {n}");
+                    }
+                }
                 if !report.validation.warnings.is_empty() {
                     for w in &report.validation.warnings {
                         eprintln!("  ⚠  {w}");

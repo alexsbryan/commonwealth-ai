@@ -3,11 +3,11 @@
 **The point:** a domain expert writes TOML, and their own nouns come out the other end.
 No Rust. That is the whole objective, and the chain below is how we know it's true.
 
-## The chain — 0 of 6 links proven end to end
+## The chain — 1 of 6 links proven end to end
 
 ```
 recipe new --ontology numismatics   ~  works in tests
-  → validate                        ~  works in tests
+  → validate                        ✔  PROVEN — prints the derived facets
   → install → init                  ?  never run
   → build (ends with backfill)      ~  unit-proven; never run on a real corpus
   → chat enumerates coins           ✗  NEVER RUN — no model has touched this program
