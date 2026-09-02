@@ -158,9 +158,12 @@ impl CustomOntology {
     /// `format!("{NEUTRAL}\n\n## Domain focus\n\n{guidance}")` for any
     /// non-blank guidance and exactly the neutral base otherwise — a
     /// version-1 block with no declarations composes the same bytes as
-    /// version 0 (`i1_from_policies_matches_legacy_build_bytes`). P2's
-    /// generated schema hangs off `policies.shape` and returns `None` when it
-    /// is empty; nothing here reads it.
+    /// version 0 (`i1_from_policies_matches_legacy_build_bytes`).
+    ///
+    /// When types ARE declared, the `## Declared types` block is appended and
+    /// the generated schema + [`ParsePolicy`] are cached. Both hang off
+    /// `policies.shape`, so an empty shape leaves this function exactly where
+    /// it was before P2.
     pub fn from_policies(name: &str, policies: &OntologyPolicies) -> Self {
         let name: &'static str = Box::leak(
             if name.trim().is_empty() {
