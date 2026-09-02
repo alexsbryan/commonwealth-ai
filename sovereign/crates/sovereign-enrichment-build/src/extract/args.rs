@@ -217,7 +217,7 @@ pub(super) fn read_failures_for_retry(
 /// Returns `Ok(None)` when there's nothing to retry; `Err` on I/O or
 /// deserialization problems (which signal a broken run-output file).
 ///
-/// `pub(super)` because the `build` orchestration reads this to
+/// `pub(crate)` because the `build` orchestration reads this to
 /// decide whether to auto-retry after an Extract step fails.
 /// What the newest run file records. One reader, not two: finding "the
 /// newest `questions-*.json`" is a single decision and lives in one
@@ -231,7 +231,7 @@ pub(super) struct LatestRun {
     pub failures: Vec<(String, PhaseFailureKind)>,
 }
 
-pub(super) fn read_latest_run(runs_dir: &std::path::Path) -> Result<Option<LatestRun>, String> {
+pub(crate) fn read_latest_run(runs_dir: &std::path::Path) -> Result<Option<LatestRun>, String> {
     if !runs_dir.exists() {
         return Ok(None);
     }

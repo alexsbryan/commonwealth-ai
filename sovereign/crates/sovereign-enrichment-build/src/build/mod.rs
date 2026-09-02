@@ -30,7 +30,7 @@ pub use plan::{parse_args, ParsedBuild, Selection, Step};
 // would both widen them past their declaration (E0365) and put the plan's
 // internals on a surface no caller needs.
 use plan::{load_pipeline_capabilities, PipelineCapabilities, Plan};
-use steps::{run_step, StepFailure, StepOutcome};
+use steps::{probe_embedder, run_step, StepFailure, StepOutcome};
 
 /// [`build_with_progress`] with the Backfill step's embed provider supplied
 /// by the caller. The daemon passes its own `InferenceProvider` so an

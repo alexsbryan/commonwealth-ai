@@ -6,6 +6,7 @@
 //! dispatch itself. `run_step` is the only place that knows how a step id maps
 //! to the driver that performs it.
 
+use super::extract_step::run_extract_step;
 use super::plan::{ParsedBuild, PipelineCapabilities, Selection, Step};
 use crate::{
     atlas_configuration, atlas_gaps, atlas_phase_cmd, atlas_resolve, atlas_tensions,
