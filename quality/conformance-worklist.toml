@@ -1,0 +1,444 @@
+# GENERATED worklist — the unprobed CLI surface, ranked by PRODUCT TIER.
+# Operator direction 2026-09-01: rank by what is used, useful and connected,
+# not by what is easy. Tier 1 = mesh, inference, setup, desktop, ingest,
+# enrich, bench, PLUS grounding + reasoning (the answer path). Tier 3 = code
+# intelligence, which is dev tooling and is already the best-covered domain.
+#
+# METHOD (produced the first 13, 2026-09-01):
+#   1. run the command, capture its REAL output
+#   2. find unclaimed requirements whose observable is in that output
+#   3. the assertion IS the observable — never exit-only
+#   4. verify with cli-journey-verify.sh, then in the LANE. Hand-verify is not enough.
+#
+# FOUR FAILURE MODES, all of them mine on day one:
+#   operator-HOME-dependent output -> needs = ["operator-home"]
+#   dev-tools gated command        -> visibility = "internal"
+#   exits non-zero when unhealthy  -> do NOT assert exit
+#   asserts a string that never appears -> vacuous; drop the claim
+#
+# RETRACTED 2026-09-01 — "mesh is a WRITING job" was an instrument artifact.
+# That conclusion rested on 65 of 85 rejections reading `no-such-coverage`, and
+# the stage producing it ended its prompt with "if the test's assertion is not
+# this requirement, answer exactly: NO" — a 35B model comparing clause PROSE to
+# test PROSE, which is the one judgement it is worst at and the one the
+# mutation makes unnecessary. Same 20 requirements, prompt asking whether the
+# test exercises the BEHAVIOUR: 65 no-such-coverage -> 16 model-declined,
+# candidates 15 -> 40, requirements reached 10 -> 17 of 20. A decline is an
+# OPINION; only a SURVIVED mutation is evidence that coverage is absent.
+#
+# Three further instrument defects found the same day, each of which had been
+# suppressing mesh yield on its own:
+#   - sabotage.py resolved a NARROWER feature set than the gate it certifies,
+#     so `sovereign-mesh/dst` and `mesh-sim` were never built. Baseline 11,335
+#     -> 11,491 tests: 156 tests, including the whole DST invariant pack, were
+#     invisible to adjudication and would have read "not a test in this
+#     workspace". Now derived from scripts/lib/cargo-scope.sh (ARCH §10.6).
+#   - `--wide` batching derived every write from the pristine file, so two
+#     mutants sharing a target file silently clobbered each other and the loser
+#     was adjudicated against unmutated code — a FALSE SURVIVED, the one
+#     verdict phase 2 cannot repair. 17 of 40 FE candidates sit in same-file
+#     collisions.
+#   - the generator's `bad-json` bucket was not malformed output: all 9 were
+#     exactly 2000 chars, i.e. `max_tokens: 600` cutting the model off
+#     mid-string.
+#
+# So the mesh CLAIM is unproven in both directions, and the honest statement is
+# that nothing about mesh coverage is known until sabotage.py adjudicates with
+# the fixed instrument. What IS established: the DST invariant pack
+# (sovereign-mesh/src/dst.rs) has six invariants each already carrying a
+# falsifier test. Of the ~12 FE clauses previously mapped to them, five were
+# word-collisions on "split" (FE-60 is replay scorer-vs-policy agreement;
+# FE-72, FE-135, FE-86, FE-23 likewise unrelated). The defensible mappings are
+# FE-137 (its text names the no-split-brain invariant outright), FE-19,
+# FE-138, FE-96 and FE-80 — the last three partial, and marked so in
+# quality/sabotage/dst.toml. `no_ghost_members` has NO FE clause at all.
+
+[[probe]]
+tier = 1
+domain = "EN"
+command = "atlas budget"
+
+[[probe]]
+tier = 1
+domain = "EN"
+command = "atlas wikipedia"
+
+[[probe]]
+tier = 1
+domain = "EN"
+command = "enrich bridge"
+
+[[probe]]
+tier = 1
+domain = "EN"
+command = "enrich cluster"
+
+[[probe]]
+tier = 1
+domain = "EN"
+command = "enrich configure"
+
+[[probe]]
+tier = 1
+domain = "EN"
+command = "enrich exemplars"
+
+[[probe]]
+tier = 1
+domain = "EN"
+command = "enrich extract"
+
+[[probe]]
+tier = 1
+domain = "EN"
+command = "enrich gaps"
+
+[[probe]]
+tier = 1
+domain = "EN"
+command = "enrich name"
+
+[[probe]]
+tier = 1
+domain = "EN"
+command = "enrich report"
+
+[[probe]]
+tier = 1
+domain = "EN"
+command = "enrich reset"
+
+[[probe]]
+tier = 1
+domain = "EN"
+command = "enrich resolve"
+
+[[probe]]
+tier = 1
+domain = "EN"
+command = "enrich review"
+
+[[probe]]
+tier = 1
+domain = "EN"
+command = "enrich seed"
+
+[[probe]]
+tier = 1
+domain = "EN"
+command = "enrich show"
+
+[[probe]]
+tier = 1
+domain = "EN"
+command = "enrich tensions"
+
+[[probe]]
+tier = 1
+domain = "EV"
+command = "agent-bench"
+
+[[probe]]
+tier = 1
+domain = "FE"
+command = "mesh bench"
+
+[[probe]]
+tier = 1
+domain = "FE"
+command = "mesh fetch-model"
+
+[[probe]]
+tier = 1
+domain = "FE"
+command = "mesh forget"
+
+[[probe]]
+tier = 1
+domain = "FE"
+command = "mesh logs"
+
+[[probe]]
+tier = 1
+domain = "FE"
+command = "mesh rotate"
+
+[[probe]]
+tier = 1
+domain = "FE"
+command = "mesh switch"
+
+[[probe]]
+tier = 1
+domain = "FE"
+command = "mesh warm-cache"
+
+[[probe]]
+tier = 1
+domain = "FE"
+command = "proxy"
+
+[[probe]]
+tier = 1
+domain = "GR"
+command = "audit"
+
+[[probe]]
+tier = 1
+domain = "GR"
+command = "charter"
+
+[[probe]]
+tier = 1
+domain = "GR"
+command = "deep-research"
+
+[[probe]]
+tier = 1
+domain = "GR"
+command = "reading-diag"
+
+[[probe]]
+tier = 1
+domain = "KA"
+command = "corpus reconstruct-manifest"
+
+[[probe]]
+tier = 1
+domain = "KA"
+command = "pipeline list"
+
+[[probe]]
+tier = 1
+domain = "KA"
+command = "recipe list"
+
+[[probe]]
+tier = 1
+domain = "KA"
+command = "recipe-agent"
+
+[[probe]]
+tier = 1
+domain = "OP"
+command = "daemon"
+
+[[probe]]
+tier = 1
+domain = "OP"
+command = "daemon reload"
+
+[[probe]]
+tier = 1
+domain = "OP"
+command = "daemon run"
+
+[[probe]]
+tier = 1
+domain = "OP"
+command = "init"
+
+[[probe]]
+tier = 1
+domain = "OP"
+command = "maintainer"
+
+[[probe]]
+tier = 1
+domain = "OP"
+command = "nudge"
+
+[[probe]]
+tier = 1
+domain = "OP"
+command = "project amend"
+
+[[probe]]
+tier = 1
+domain = "OP"
+command = "project install-hooks"
+
+[[probe]]
+tier = 1
+domain = "OP"
+command = "project serve"
+
+[[probe]]
+tier = 1
+domain = "OP"
+command = "project unregister"
+
+[[probe]]
+tier = 1
+domain = "OP"
+command = "project watch"
+
+[[probe]]
+tier = 1
+domain = "OP"
+command = "refresh"
+
+[[probe]]
+tier = 1
+domain = "RT"
+command = "chat list"
+
+[[probe]]
+tier = 1
+domain = "RT"
+command = "chat session"
+
+[[probe]]
+tier = 1
+domain = "RT"
+command = "chat show"
+
+[[probe]]
+tier = 1
+domain = "RT"
+command = "memory"
+
+[[probe]]
+tier = 1
+domain = "RT"
+command = "router-cache"
+
+[[probe]]
+tier = 1
+domain = "UI"
+command = "mobile pair"
+
+[[probe]]
+tier = 1
+domain = "UI"
+command = "mobile serve"
+
+[[probe]]
+tier = 1
+domain = "UI"
+command = "mobile status"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "amend"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "atos archive"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "atos diff"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "atos doctor"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "atos feature"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "atos install-plugin"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "atos next"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "atos probe-driver"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "atos promote"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "atos report"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "atos run-ab"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "awareness"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "code index"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "code mcp-status"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "code search"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "code watch"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "design"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "drift"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "drift accept"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "meta-atlas"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "milestone"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "newsworthy"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "plan"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "portfolio"
+
+[[probe]]
+tier = 3
+domain = "CI"
+command = "rough-edges"
