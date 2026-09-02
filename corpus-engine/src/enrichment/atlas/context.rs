@@ -1343,8 +1343,20 @@ fn render_attributes(attrs: &serde_json::Map<String, serde_json::Value>) -> Stri
     if attrs.is_empty() {
         return String::new();
     }
-    let rendered = attrs
-        .iter()
+    // Sorted HERE, not inherited from the map. `serde_json::Map` is a
+    // `BTreeMap` or an insertion-ordered `IndexMap` depending on whether
+    // anything in the build enables `serde_json/preserve_order` — and
+    // something in this workspace does, so cargo's feature unification
+    // decides the order for every crate at once. This string is EMBEDDED
+    // (`SOVEREIGN_ATLAS_EMBED_ATTRIBUTES`), so inheriting that order would
+    // make an atom's vector depend on the order the extractor happened to
+    // emit its keys, and on which crates were in the build. Caught 2026-09-02
+    // by `attribute_suffix_is_dark_and_key_sorted` failing in the full
+    // workspace and passing under `-p corpus-engine`.
+    let mut pairs: Vec<(&String, &serde_json::Value)> = attrs.iter().collect();
+    pairs.sort_by(|(a, _), (b, _)| a.cmp(b));
+    let rendered = pairs
+        .into_iter()
         .map(|(k, v)| match v {
             serde_json::Value::String(s) => format!("{k}={s}"),
             other => format!("{k}={other}"),
@@ -1960,8 +1972,12 @@ mod store_io_tests {
         attrs.insert("weight".into(), serde_json::json!(1.21));
         attrs.insert("mint".into(), serde_json::Value::String("Eoforwic".into()));
 
-        // `serde_json::Map` is a BTreeMap here (no `preserve_order` feature in
-        // this workspace), so the suffix is stable across runs.
+        // Inserted metal, weight, mint — deliberately NOT alphabetical, so
+        // this asserts the renderer sorts rather than that the map happens
+        // to. It does not: something in this workspace enables
+        // `serde_json/preserve_order`, so `Map` is insertion-ordered here and
+        // this same assertion passed under `-p corpus-engine` while failing
+        // in the full build until `render_attributes` sorted for itself.
         assert_eq!(
             super::render_attributes(&attrs),
             "\nattr: metal=silver; mint=Eoforwic; weight=1.21"
