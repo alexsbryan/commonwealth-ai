@@ -20,6 +20,14 @@ pub struct ManagedProcess {
     child: Option<Child>,
     /// The OS PID, cached after spawn.
     pub pid: Option<u32>,
+    /// How long SIGTERM is given before SIGKILL, from the
+    /// [`SpawnConfig`] this process was spawned with.
+    ///
+    /// Carried per-process rather than read from config at stop time
+    /// because `stop()` is called from paths that no longer hold the
+    /// config — and a graceful window that silently reverts to a
+    /// hard-coded constant is the shape this field replaces.
+    stop_timeout: Duration,
 }
 
 /// State of a managed process.
@@ -78,31 +86,71 @@ impl ManagedProcess {
         }
     }
 
-    /// Stop the process gracefully, then force-kill if needed.
+    /// Stop the process gracefully, then force-kill if it does not go.
+    ///
+    /// **SIGTERM first, THEN the timeout, THEN SIGKILL.** Until 2026-09-02
+    /// this reached straight for `Child::start_kill`, which on unix is
+    /// SIGKILL — so the "brief window then force-kill" its own comment
+    /// described could not happen: the process was already gone before the
+    /// timeout started, and llama-server's own signal handler never ran. A
+    /// llama-server killed mid-decode drops every in-flight completion and
+    /// leaves its RPC workers holding shards for a peer that will not come
+    /// back, which is exactly what the graceful-departure countdown exists to
+    /// avoid.
+    ///
+    /// The window is [`SpawnConfig::stop_timeout`] (default 10s), not a
+    /// literal. On non-unix there is no SIGTERM equivalent, so the platform
+    /// terminate is the only step and the timeout still bounds the wait.
     pub async fn stop(&mut self) -> Result<(), Error> {
         self.state = ProcessState::Stopped;
 
         if let Some(mut child) = self.child.take() {
-            // Start an async kill (sends SIGKILL on unix, TerminateProcess on Windows).
-            // For a more graceful approach, the llama-server should handle SIGTERM via
-            // its own signal handler; here we give it a brief window then force-kill.
-            let _ = child.start_kill();
+            #[cfg(unix)]
+            let asked_politely = match child.id() {
+                Some(pid) => {
+                    // SAFETY: `kill(2)` with a pid tokio still owns. A pid that
+                    // has already exited returns ESRCH, which the timeout below
+                    // handles like any other non-exit.
+                    unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) == 0 }
+                }
+                None => false,
+            };
+            #[cfg(not(unix))]
+            let asked_politely = false;
 
-            // Wait briefly for exit.
-            match tokio::time::timeout(Duration::from_secs(5), child.wait()).await {
+            if !asked_politely {
+                // No pid, SIGTERM refused, or a platform without one: fall
+                // back to the platform terminate immediately rather than
+                // waiting out a window nobody was asked to honour.
+                let _ = child.start_kill();
+            }
+
+            match tokio::time::timeout(self.stop_timeout, child.wait()).await {
                 Ok(Ok(_)) => {
-                    info!(id = %self.id, "process stopped gracefully");
+                    info!(
+                        id = %self.id,
+                        sigterm = asked_politely,
+                        "process stopped gracefully"
+                    );
                 }
                 _ => {
-                    // Force kill.
                     let _ = child.kill().await;
                     let _ = child.wait().await;
-                    warn!(id = %self.id, "process force-killed");
+                    warn!(
+                        id = %self.id,
+                        timeout_secs = self.stop_timeout.as_secs(),
+                        "process did not exit within its graceful window — force-killed"
+                    );
                 }
             }
         }
 
         Ok(())
+    }
+
+    /// The graceful window this process was spawned with.
+    pub fn stop_timeout(&self) -> Duration {
+        self.stop_timeout
     }
 
     /// Get the OS PID if available.
@@ -170,6 +218,7 @@ pub async fn spawn_rpc_server(
         spawned_at: now_secs(),
         pid,
         child: Some(child),
+        stop_timeout: config.stop_timeout,
     })
 }
 
@@ -238,6 +287,7 @@ pub async fn spawn_llama_server(
         spawned_at: now_secs(),
         pid,
         child: Some(child),
+        stop_timeout: config.stop_timeout,
     })
 }
 
@@ -252,6 +302,7 @@ pub fn mock_process(kind: ProcessKind, addr: SocketAddr) -> ManagedProcess {
         spawned_at: now_secs(),
         pid: Some(99999),
         child: None,
+        stop_timeout: SpawnConfig::default().stop_timeout,
     }
 }
 

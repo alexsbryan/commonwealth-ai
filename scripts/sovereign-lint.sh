@@ -372,7 +372,10 @@ else
             features+=",sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-cli/awareness"
         fi
         if [[ "$c" == "sovereign-mesh" ]]; then
-            features+=",sovereign-mesh/mesh-sim,sovereign-mesh/dst"
+            # `treesitter` too — kept in step with scripts/lib/cargo-scope.sh
+            # (see its note): a scoped mesh run without it compiles the
+            # crate's treesitter-gated integration files to nothing.
+            features+=",sovereign-mesh/mesh-sim,sovereign-mesh/dst,sovereign-mesh/treesitter"
         fi
     done
 fi

@@ -2014,6 +2014,7 @@ dependencies = [
  "commonwealth-core",
  "commonwealth-state",
  "corpus-engine",
+ "libc",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -2063,6 +2064,7 @@ version = "0.6.0"
 dependencies = [
  "async-trait",
  "commonwealth-agent-tools",
+ "kernel-types",
  "regex",
  "reqwest 0.12.28",
  "serde",
@@ -12864,6 +12866,7 @@ name = "sovereign-workflow-host"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "axum",
  "oicp-client",
  "reqwest 0.12.28",
  "serde_json",

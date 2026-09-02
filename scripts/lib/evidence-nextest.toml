@@ -1,0 +1,21 @@
+# nextest config for scripts/evidence-verdict.py, passed with --config-file.
+#
+# The repo's .config/nextest.toml cannot serve here: its profiles carry
+# `binary(evidence_reds) + ...` overrides, and nextest refuses the whole file
+# when a `binary()` predicate matches nothing — which is every `-p <crate>`
+# selection that does not include those suites, and every commit that predates
+# them. Measured 2026-09-01 on 1c5de2d52: "operator didn't match any binary
+# names", exit 96, before any build.
+#
+# Junit on (the verdict is read from it), retries OFF (a retry lets a flake mask
+# a mutant the test genuinely failed to catch), fail-fast off.
+[profile.evidence]
+fail-fast = false
+slow-timeout = { period = "120s", terminate-after = 3 }
+failure-output = "never"
+success-output = "never"
+status-level = "fail"
+final-status-level = "fail"
+
+[profile.evidence.junit]
+path = "junit.xml"

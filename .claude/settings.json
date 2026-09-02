@@ -69,6 +69,11 @@
             "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/prior-art-warn.py",
             "type": "command",
             "timeout": 15
+          },
+          {
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/intent-warn.py",
+            "type": "command",
+            "timeout": 10
           }
         ]
       }

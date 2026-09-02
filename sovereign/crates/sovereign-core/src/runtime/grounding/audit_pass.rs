@@ -804,6 +804,11 @@ impl AuditPass<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::Result;
+    use crate::types::{CompletionResponse, Depth, ProviderCapabilities, Speed};
+    use futures::Stream;
+    use std::pin::Pin;
+    use std::sync::Mutex;
 
     /// The per-claim plan, one row per variant, using the judge module's own
     /// fixtures: a decline is exempt, an in-world artifact attribution by a
@@ -849,6 +854,218 @@ mod tests {
         assert_eq!(
             dispositions(&claim, "betty alexander sent an email about the schedule")[0],
             ClaimDisposition::Judge
+        );
+    }
+
+    /// The three registers one audit pass issues, told apart at the REQUEST
+    /// boundary rather than by matching prompt prose — the same discipline
+    /// `judge.rs`'s family tests use, and the reason this fixture does not
+    /// go stale when a prompt is reworded.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Register {
+        /// Claim extraction: its own system turn, generative.
+        ClaimList,
+        /// The calibrated per-claim judge: the only forced choice, one token.
+        ForcedChoice,
+        /// The holistic specifics scan: the judges' system turn, generative.
+        SpecificsScan,
+    }
+
+    fn register_of(r: &CompletionRequest) -> Register {
+        if r.max_tokens == Some(1) && r.structured_output.is_some() {
+            return Register::ForcedChoice;
+        }
+        match r.system_message.as_deref() {
+            Some(s) if s.contains("extract claims") => Register::ClaimList,
+            _ => Register::SpecificsScan,
+        }
+    }
+
+    /// A gate-shaped provider: it answers each register with a scripted reply
+    /// and records which registers actually ran, so a test can assert on the
+    /// SHAPE of the pass and not only on its result.
+    struct ScriptedAudit {
+        /// Claim extraction's reply — one claim per line.
+        claims: String,
+        /// p(A) every forced choice reports. `support`, not violation:
+        /// `claim_violation_joint` returns `1 - a/(a+b)`.
+        support: f64,
+        /// The specifics scan's reply — verbatim spans of the answer.
+        scan: String,
+        seen: Mutex<Vec<Register>>,
+    }
+
+    #[async_trait::async_trait]
+    impl InferenceProvider for ScriptedAudit {
+        async fn complete(&self, r: &CompletionRequest) -> Result<CompletionResponse> {
+            let reg = register_of(r);
+            self.seen.lock().unwrap().push(reg);
+            let text = match reg {
+                Register::ClaimList => self.claims.clone(),
+                Register::ForcedChoice => {
+                    format!(r#"{{"A": {}, "B": {}}}"#, self.support, 1.0 - self.support)
+                }
+                Register::SpecificsScan => self.scan.clone(),
+            };
+            Ok(CompletionResponse {
+                text,
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "scripted".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+        async fn complete_stream(
+            &self,
+            _r: &CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            unimplemented!("the audit pass never streams")
+        }
+        async fn embed(&self, _t: &str) -> Result<Vec<f32>> {
+            unimplemented!("the audit pass never embeds")
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 32_768,
+                supports_structured_output: true,
+                relative_speed: Speed::Slow,
+                relative_reasoning: Depth::Deep,
+            }
+        }
+    }
+
+    /// **GR-08 — the holistic specifics scan is NOT conditioned on the
+    /// per-claim verdicts, and that independence is what holds the line the
+    /// truncation lift gave up.**
+    ///
+    /// Note 95b82f97 (2026-08-13) established with a watched specimen that A
+    /// CUT CHUNK MANUFACTURES ABSENCES — "The Luck Objection" flagged as a
+    /// fabricated specific while sitting verbatim at offset 1,497 of a chunk
+    /// cut at 1,500 — and land B removed the per-chunk cap for the per-claim
+    /// judge on that argument. Note 1aeadf1a records the symmetric hazard the
+    /// same change bought: A RESTORED CHUNK MANUFACTURES PRESENCES. On
+    /// `longneg-distract-evidence-chain`, chunk[9] is 2,040 chars, so land B
+    /// surfaced a 540-char tail reading "the boat-hook had been standing
+    /// against his own barrow of salvage gear by the door" — and the per-claim
+    /// judge then CLEARED "a heavy salvage-pattern boat-hook", a phrase with
+    /// ZERO hits in the evidence on either arm. Restoring the tail did not
+    /// restore support; it supplied a confusor.
+    ///
+    /// The seat ruled land B stands (1aeadf1a): re-truncating re-buys
+    /// accidental catches at the price of systematic false failures, which is
+    /// the judge-gaming direction ARCH §18.6 exists to block. The ruling rests
+    /// on the flip needing TWO defects — the confusor, and a composite claim
+    /// clearing while carrying an unsupported specific — and on the second one
+    /// having an INDEPENDENT reader. The specifics scan is that reader.
+    ///
+    /// So the property under test is not "the judge gets it right". It is that
+    /// a turn whose every extracted claim the calibrated judge SUPPORTED is
+    /// still scanned holistically, and that the scan's findings still become
+    /// failures. Condition the scan on the per-claim audit having already
+    /// found something and the seat's ruling loses its second defect, silently.
+    #[tokio::test]
+    async fn the_specifics_scan_runs_when_every_claim_cleared() {
+        // The reader of this test needs to know the scan was ON, not assume
+        // it: with `SOVEREIGN_SPECIFICS_SCAN=0` in the environment the pass
+        // below legitimately produces no finding and this test would be
+        // reporting the flag, not the invariant (ARCH §18.1, four verdicts).
+        assert!(
+            specifics_scan_enabled(),
+            "SOVEREIGN_SPECIFICS_SCAN is off in this environment — this test \
+             cannot judge the invariant, it can only report the flag"
+        );
+
+        // The specimen, reduced to its two moving parts. The evidence carries
+        // the confusor vocabulary ("boat-hook", "salvage gear") one clause
+        // apart; the answer asserts a specific ("salvage-pattern") the
+        // evidence never states.
+        const ANSWER: &str = "A heavy salvage-pattern boat-hook stood by the door.";
+        const FABRICATED: &str = "heavy salvage-pattern boat-hook";
+        let leaf = vec![
+            "The boat-hook had been standing against his own barrow of salvage gear \
+             by the door."
+                .to_string(),
+        ];
+        assert!(
+            !leaf[0].to_lowercase().contains("salvage-pattern"),
+            "the fixture's fabricated specific must be absent from the evidence \
+             or there is nothing for the scan to catch"
+        );
+
+        let provider = Arc::new(ScriptedAudit {
+            claims: ANSWER.to_string(),
+            // The judge CLEARS the composite claim — the measured behaviour
+            // this test exists because of. vp = 1 - 0.99 = 0.01, well under tau.
+            support: 0.99,
+            scan: FABRICATED.to_string(),
+            seen: Mutex::new(Vec::new()),
+        });
+        let inference: Arc<dyn InferenceProvider> = provider.clone();
+        let pass = AuditPass {
+            inference,
+            searcher: None,
+            question: "What stood by the door?",
+            leaf_chunks: &leaf,
+            summary_chunks: &[],
+            evidence_labels: Vec::new(),
+            per_claim_chunks: 8,
+            min_claims: 1,
+            tau: 0.9,
+            posture: sovereign_contracts::oicp::ShardingPrivacy::LocalOnly,
+            progress: None,
+        };
+
+        let AuditPassOutcome::Judged {
+            audited,
+            failed,
+            unjudged,
+            ..
+        } = pass.run(ANSWER.to_string(), PassKind::Draft).await
+        else {
+            panic!("claim extraction was scripted to succeed — the pass must reach Judged");
+        };
+
+        // The premise, asserted rather than assumed: the per-claim ladder
+        // found NOTHING. Without this the test below could pass because the
+        // judge flagged the claim, which is the opposite of the specimen.
+        assert_eq!(audited.len(), 1, "one claim was extracted and audited");
+        assert!(
+            unjudged.is_empty(),
+            "the scripted judge returned a verdict for every claim; an unjudged \
+             claim means this test measured a parse gap, not the invariant"
+        );
+        let registers = provider.seen.lock().unwrap().clone();
+        assert!(
+            registers.contains(&Register::ForcedChoice),
+            "the calibrated per-claim judge never ran, so 'every claim cleared' \
+             is vacuous here: {registers:?}"
+        );
+
+        // THE INVARIANT. The only producer of this failure is the holistic
+        // scan — the per-claim judge said supported.
+        assert!(
+            registers.contains(&Register::SpecificsScan),
+            "the holistic specifics scan did not run on a turn whose claims all \
+             cleared. That is the exact condition note 1aeadf1a's seat ruling \
+             depends on: land B's confusor only flips an answer when a composite \
+             claim clears AND nothing independent reads its specifics. \
+             Registers: {registers:?}"
+        );
+        assert_eq!(
+            failed.len(),
+            1,
+            "the scan's finding did not become a failure. The per-claim judge \
+             cleared the composite claim (vp 0.01 < tau 0.9); the fabricated \
+             specific {FABRICATED:?} is absent from the evidence and the scan \
+             flagged it, so the pass must carry exactly one failure. Got: {:?}",
+            failed.iter().map(|f| &f.claim).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            failed[0].claim, FABRICATED,
+            "the failure must be the scan's span, verbatim from the answer"
         );
     }
 }

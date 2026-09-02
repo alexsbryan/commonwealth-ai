@@ -25,6 +25,13 @@ line = 12
 asserts = 1
 
 [[claim]]
+requirement = "UI-4"
+test = "nav-rail-intent.spec.ts::nav rail › is the five intent surfaces, in order, and lands on Ask"
+file = "sovereign/crates/sovereign-desktop/tests/e2e/specs/nav-rail-intent.spec.ts"
+line = 20
+asserts = 1
+
+[[claim]]
 requirement = "UI-5"
 test = "library.spec.ts::Library shelf › lists notebooks with kind, count, and the explorable badge"
 file = "sovereign/crates/sovereign-desktop/tests/e2e/specs/library.spec.ts"

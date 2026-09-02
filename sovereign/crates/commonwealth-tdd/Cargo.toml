@@ -28,6 +28,9 @@ path = "src/lib.rs"
 # how an EditAction maps to a write.
 commonwealth-agent-tools = { workspace = true }
 
+# The four verdicts + rank(), for the rec-1 explicit-stack driver fold.
+kernel-types = { workspace = true }
+
 # Wire types + async glue
 serde = { workspace = true }
 serde_json = { workspace = true }

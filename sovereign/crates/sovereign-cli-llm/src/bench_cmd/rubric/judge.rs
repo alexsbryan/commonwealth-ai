@@ -538,6 +538,138 @@ pub fn print_calibration(rep: &CalibrationReport, judge_model: &str) -> i32 {
 mod tests {
     use super::*;
 
+    fn tier(true_pos: usize, false_neg: usize, true_neg: usize, false_pos: usize) -> TierScore {
+        let mut t = TierScore {
+            items: true_pos + false_neg + true_neg + false_pos,
+            true_pos,
+            false_neg,
+            true_neg,
+            false_pos,
+            ..Default::default()
+        };
+        t.finish();
+        t
+    }
+
+    /// covers: EV-11
+    ///
+    /// The calibration gate is the thing that stands between a judge and
+    /// every score it produces, and nothing computed the floor comparison.
+    /// A judge model or prompt swap that dropped below 0.85 would be accepted
+    /// into production scoring on a number nobody compared.
+    #[test]
+    fn a_tier_below_either_stated_floor_does_not_clear() {
+        // Both floors are 0.85 and both are stated, not implied.
+        assert!((CALIBRATION_SENSITIVITY_FLOOR - 0.85).abs() < f64::EPSILON);
+        assert!((CALIBRATION_SPECIFICITY_FLOOR - 0.85).abs() < f64::EPSILON);
+
+        // Comfortably above both.
+        let good = tier(19, 1, 19, 1);
+        assert!((good.sensitivity - 0.95).abs() < 1e-9);
+        assert!((good.specificity - 0.95).abs() < 1e-9);
+        assert!(good.clears_floors());
+
+        // Sensitivity 0.80 — the judge misses one violation in five. The
+        // specificity is untouched, so a gate that only read one number
+        // would certify this.
+        let blind = tier(16, 4, 20, 0);
+        assert!((blind.sensitivity - 0.80).abs() < 1e-9);
+        assert!((blind.specificity - 1.0).abs() < 1e-9);
+        assert!(
+            !blind.clears_floors(),
+            "a judge that misses a fifth of the violations must not clear"
+        );
+
+        // Specificity 0.80 — the mirror failure: it flags compliant
+        // responses. Sensitivity perfect.
+        let jumpy = tier(20, 0, 16, 4);
+        assert!((jumpy.specificity - 0.80).abs() < 1e-9);
+        assert!(!jumpy.clears_floors());
+
+        // Exactly ON the floor clears — `>=`. Stated so a change to either
+        // comparison is a failure rather than a silent shift in what
+        // "calibrated" means.
+        let boundary = tier(17, 3, 17, 3);
+        assert!((boundary.sensitivity - 0.85).abs() < 1e-9);
+        assert!((boundary.specificity - 0.85).abs() < 1e-9);
+        assert!(boundary.clears_floors());
+
+        // And just under it does not.
+        let under = tier(84, 16, 100, 0);
+        assert!(under.sensitivity < CALIBRATION_SENSITIVITY_FLOOR);
+        assert!(!under.clears_floors());
+    }
+
+    /// covers: EV-11
+    ///
+    /// A class with no items is NOT-UNDER-TEST, and must stay
+    /// distinguishable from a measured pass (ARCH §18.1: four verdicts, not
+    /// two). `0/0` computed as `1.0` would certify a judge on a class it was
+    /// never shown, which is the most flattering possible arithmetic error.
+    #[test]
+    fn a_class_with_no_items_reads_as_not_under_test_never_as_a_measured_pass() {
+        // Only negative-class items: sensitivity is unmeasured.
+        let no_positives = tier(0, 0, 10, 0);
+        assert!(
+            no_positives.sensitivity.is_nan(),
+            "no positive-class items must not produce a number a report can print as a rate"
+        );
+        assert!((no_positives.specificity - 1.0).abs() < 1e-9);
+
+        // The mirror.
+        let no_negatives = tier(10, 0, 0, 0);
+        assert!(no_negatives.specificity.is_nan());
+
+        // An empty tier measures nothing at all.
+        let empty = tier(0, 0, 0, 0);
+        assert!(empty.sensitivity.is_nan() && empty.specificity.is_nan());
+        assert_eq!(empty.items, 0);
+    }
+
+    /// covers: EV-11
+    ///
+    /// The floors are only meaningful against a bank big and balanced enough
+    /// to estimate a rate from. A ten-item bank of nine yeses gives a
+    /// specificity computed from ONE observation — a number that looks like a
+    /// measurement and is not one, which is the failure §18.5 names.
+    #[test]
+    fn the_bank_itself_must_be_large_and_balanced_enough_to_estimate_a_rate() {
+        use std::io::Write;
+
+        fn bank_toml(yes: usize, no: usize) -> String {
+            let mut s = String::new();
+            for (i, expected) in std::iter::repeat("yes")
+                .take(yes)
+                .chain(std::iter::repeat("no").take(no))
+                .enumerate()
+            {
+                s.push_str(&format!(
+                    "[[items]]\nid = \"i{i}\"\ncriterion = \"names the tension\"\n\
+                     response = \"r{i}\"\nexpected = \"{expected}\"\n\n"
+                ));
+            }
+            s
+        }
+        fn load(toml: &str) -> Result<CalibrationBank, String> {
+            let mut f = tempfile::NamedTempFile::new().unwrap();
+            f.write_all(toml.as_bytes()).unwrap();
+            load_calibration(f.path())
+        }
+
+        // Big enough and balanced: accepted.
+        let ok = load(&bank_toml(10, 10)).expect("a balanced 20-item bank must load");
+        assert_eq!(ok.items.len(), 20);
+
+        // Too few items overall to estimate anything.
+        let err = load(&bank_toml(5, 4)).expect_err("a 9-item bank must be refused");
+        assert!(err.contains("too few"), "got: {err}");
+
+        // Big enough, but one class has three items — a specificity of
+        // "0.67" off three observations is not a rate.
+        let err = load(&bank_toml(17, 3)).expect_err("a 3-item class must be refused");
+        assert!(err.contains("at least 4 items of each class"), "got: {err}");
+    }
+
     #[test]
     fn parses_schema_conformant_json() {
         let t = parse_trial(r#"{"judgement": "yes", "evidence": "names the tension"}"#).unwrap();

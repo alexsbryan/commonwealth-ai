@@ -9,7 +9,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/svelte";
 import AtlasSurface from "./AtlasSurface.svelte";
-import type { AtlasMemberSummary, AtomListPage } from "../../types";
+import type {
+  AtlasMemberSummary,
+  AtomListPage,
+  ConvCorpusSummary,
+  ConvListPage,
+} from "../../types";
 
 vi.mock("../../api", () => ({
   atlasListMembers: vi.fn(),
@@ -32,6 +37,18 @@ const MEMBERS: AtlasMemberSummary[] = [
 ];
 const EMPTY_PAGE: AtomListPage = { items: [], total_matching: 0 };
 
+// The SEP shape after a partial tiered-enrichment run: the parent id
+// answers YES to both signals at once.
+const SEP_AS_CONV: ConvCorpusSummary[] = [
+  {
+    corpus_id: "sep",
+    display_name: "sep",
+    conv_count: 14,
+    state_counts: { Ready: 14 },
+  },
+];
+const CONV_PAGE: ConvListPage = { conversations: [], total_matching: 0 };
+
 describe("AtlasSurface — collection routing", () => {
   beforeEach(() => {
     vi.mocked(api.atlasListConvCorpora).mockReset().mockResolvedValue([]);
@@ -42,6 +59,10 @@ describe("AtlasSurface — collection routing", () => {
     // a crash inside the index, not a signal about this surface.
     vi.mocked(api.atlasListCorpora).mockReset().mockResolvedValue([]);
     vi.mocked(api.atlasGetChunkEntityProgress).mockReset().mockResolvedValue(null);
+    // Defaulted so a routing REGRESSION renders the conv view for real
+    // rather than dying on an unhandled rejection — the failure we
+    // want to see is "wrong surface", not "crashed".
+    vi.mocked(api.atlasListConversations).mockReset().mockResolvedValue(CONV_PAGE);
   });
 
   it("opens a collection notebook on the article picker, not the empty atom list", async () => {
@@ -65,6 +86,38 @@ describe("AtlasSurface — collection routing", () => {
     // is a scoped notebook mount with no global index behind it.
     await fireEvent.click(screen.getByRole("button", { name: /back to articles/i }));
     await screen.findByText("Abduction");
+  });
+
+  // The two signals are NOT exclusive, and the router must not treat
+  // them as if they were. A partial tiered-enrichment run over a
+  // collection writes `conv_skeletons` rows under the PARENT id, so
+  // SEP answers yes to both. `resolveCorpusKind` asked conv first and
+  // returned on the first match, so 14 hollow rows (no RAPTOR nodes,
+  // no entities, overview = the URL slug) hid 1,770 member atlases
+  // behind a "14 conversations" list. Every other case in this file
+  // mocks the conv listing empty, which is exactly why nothing caught
+  // it — this is the failing input that was missing.
+  it("prefers the article picker when a collection is ALSO conv-listed", async () => {
+    vi.mocked(api.atlasListConvCorpora).mockResolvedValue(SEP_AS_CONV);
+
+    render(AtlasSurface, { props: { startingCorpusId: "sep" } });
+
+    await screen.findByText("Abduction");
+    expect(api.atlasListConversations).not.toHaveBeenCalled();
+  });
+
+  // The other half of the same rule: reordering must not strand a
+  // genuine conv corpus on the atom browser. No members → conv wins.
+  it("still routes a conv corpus with no member atlases to the conv view", async () => {
+    vi.mocked(api.atlasListMembers).mockResolvedValue([]);
+    vi.mocked(api.atlasListConvCorpora).mockResolvedValue([
+      { ...SEP_AS_CONV[0], corpus_id: "conversations-anthropic" },
+    ]);
+
+    render(AtlasSurface, { props: { startingCorpusId: "conversations-anthropic" } });
+
+    await vi.waitFor(() => expect(api.atlasListConversations).toHaveBeenCalled());
+    expect(api.atlasListAtoms).not.toHaveBeenCalled();
   });
 
   it("leaves an ordinary corpus on the atom browser", async () => {

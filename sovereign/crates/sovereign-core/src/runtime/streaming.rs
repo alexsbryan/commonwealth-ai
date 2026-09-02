@@ -1827,127 +1827,6 @@ impl Runtime {
             let mut grounding_gate_meta = gate_result.map(|(m, _)| m);
             let mut general_knowledge = general_knowledge;
 
-            // NATIVE_GROUNDING.md §6 — per-segment provenance of the
-            // released text, DISPLAY ONLY.
-            //
-            // Computed HERE, and the position is the guarantee: the gate
-            // has returned, `full_text` is the final released string, and
-            // every decision this turn makes is already made. A segment
-            // cannot inform a decision because no decision remains. See
-            // `native_grounding::segments` for why that has to be
-            // structural — the resolver certifies at 0.7429 precision
-            // against the incumbent judge
-            // (`bench/calibration/resolver-precision/`), so a segment is
-            // an honest statement about WHERE TEXT APPEARS and is not
-            // evidence that a proposition is supported.
-            //
-            // `None` when the native path did not run — every flag-off
-            // turn. The wire field is then absent rather than empty, so
-            // "not computed" and "computed, found nothing" stay
-            // distinguishable (ARCH §18.3).
-            // G4 — the native stack's post-gate stage: display segmentation
-            // plus span resolution. Clocked across BOTH (the segment map and
-            // the claim addresses below), because they are one mechanism
-            // from the reader's side.
-            let segments_started = std::time::Instant::now();
-            let answer_segments = gate_evidence.native_verdict.as_ref().map(|_| {
-                let mut segs = crate::runtime::native_grounding::segments::segments_for_display(
-                    &full_text,
-                    &gate_evidence.chunks,
-                );
-                // Give each Grounded badge somewhere to send the reader.
-                //
-                // `segments_for_display` is handed chunk TEXTS, so the
-                // best address it can name is the chunk's index in that
-                // pool — which no UI can open. `chunk_targets` is built
-                // parallel to the same pool by the evidence builder and
-                // carries the `(corpus_id, chunk_id)` handle the reading
-                // surface takes. Resolving here, at the one place that
-                // holds both, keeps the resolver pure and keeps the
-                // alignment where it is maintained (a target read from a
-                // slipped index opens a DIFFERENT passage under a
-                // correct-looking badge). A pool slot with no handle
-                // stays `None` — reported, not guessed (ARCH §18.3).
-                let mut grounded = 0usize;
-                let mut addressed = 0usize;
-                for s in segs.iter_mut() {
-                    if let crate::types::SegmentKind::Grounded {
-                        chunk_id, address, ..
-                    } = &mut s.kind
-                    {
-                        grounded += 1;
-                        *address = chunk_id
-                            .parse::<usize>()
-                            .ok()
-                            .and_then(|i| gate_evidence.chunk_targets.get(i).cloned().flatten());
-                        addressed += usize::from(address.is_some());
-                    }
-                }
-                tracing::debug!(
-                    segments = segs.len(),
-                    grounded,
-                    // The P1 citability bar counts THIS, not `grounded`:
-                    // a badge without an address does not resolve.
-                    grounded_addressed = addressed,
-                    unverified = segs
-                        .iter()
-                        .filter(|s| matches!(s.kind, crate::types::SegmentKind::Unverified))
-                        .count(),
-                    "native-grounding: answer segmented for display"
-                );
-                segs
-            });
-
-            // §6, the other half: "GateOutcome.claims is fed from
-            // segments — a grounded segment is a holding with a real
-            // address." Fed with an ADDRESS ONLY.
-            //
-            // What this deliberately does not do is touch `supported`.
-            // The judge decided that, and the resolver disagrees with the
-            // judge often enough (0.7429 precision, D2) that letting it
-            // adjust a verdict would be the wrong-badge failure the
-            // measurement priced. So a claim can gain a place to look;
-            // it can never gain or lose its standing here.
-            if let Some(claims) = gate_claims
-                .as_mut()
-                .filter(|_| gate_evidence.native_verdict.is_some())
-            {
-                for c in claims.iter_mut() {
-                    if let crate::runtime::native_grounding::span_resolver::SpanResolution::Verbatim {
-                        chunk,
-                        start,
-                        end,
-                    } = crate::runtime::native_grounding::span_resolver::resolve_span(
-                        &c.text,
-                        &gate_evidence.chunks,
-                    ) {
-                        c.address = Some(crate::runtime::grounding::ClaimAddress {
-                            chunk,
-                            start,
-                            end,
-                        });
-                    }
-                }
-                tracing::debug!(
-                    claims = claims.len(),
-                    addressed = claims.iter().filter(|c| c.address.is_some()).count(),
-                    "native-grounding: holdings given evidence addresses (display only)"
-                );
-            }
-            // Recorded ONLY when the native path actually produced a
-            // verdict — `answer_segments` is `None` on every turn where H1
-            // had no instrument, and on those turns this stage did not run.
-            // A row here on such a turn would claim the new stack served
-            // part of a turn it sat out (ARCH §18.3).
-            if gate_evidence.native_verdict.is_some() {
-                crate::runtime::stage_ledger::Stage::new(
-                    sovereign_contracts::types::StageId::Segments,
-                    sovereign_contracts::types::StackOwner::Native,
-                )
-                .mechanism(sovereign_contracts::types::StageMechanism::Deterministic)
-                .cause(sovereign_contracts::types::StageCause::EveryTurn)
-                .record(segments_started.elapsed().as_millis() as u64);
-            }
 
             // Coverage probe, HOISTED above the held release (was inside
             // the ledger block): the OOD rescue below needs the verdict
@@ -2114,6 +1993,147 @@ impl Runtime {
             } else {
                 full_text
             };
+
+            // NATIVE_GROUNDING.md §6 — per-segment provenance of the
+            // released text, DISPLAY ONLY.
+            //
+            // Computed HERE, and the position is the guarantee — TWICE
+            // over. The second half was a claim this comment made while
+            // standing somewhere it was not true (note 531b513c; moved
+            // 2026-09-02).
+            //
+            // 1. Nothing downstream decides. The gate has returned and
+            //    every decision this turn makes is already made, so a
+            //    segment cannot inform one.
+            // 2. `full_text` IS the released string. Until this block
+            //    moved, it sat ABOVE four later rewrites of that very
+            //    binding — the quote guardrail's `[unverified excerpt:]`
+            //    demotion, the unavailability marker, the lesson
+            //    term-avoid pass, and the authority guard. Each changes
+            //    the string's LENGTH, and a segment's `text_range` is a
+            //    byte range into the string it was computed over, so the
+            //    UI would highlight the wrong bytes of a text the strip
+            //    had never seen. `segments_for_display` documents its
+            //    input as "the FINAL released text"; this is where that
+            //    stops being a description and becomes the case, and
+            //    `segments::tests::the_strip_reads_the_released_string`
+            //    fails if anything rebinds `full_text` after this point.
+            //
+            // See
+            // `native_grounding::segments` for why that has to be
+            // structural — the resolver certifies at 0.7429 precision
+            // against the incumbent judge
+            // (`bench/calibration/resolver-precision/`), so a segment is
+            // an honest statement about WHERE TEXT APPEARS and is not
+            // evidence that a proposition is supported.
+            //
+            // `None` when the native path did not run — every flag-off
+            // turn. The wire field is then absent rather than empty, so
+            // "not computed" and "computed, found nothing" stay
+            // distinguishable (ARCH §18.3).
+            // G4 — the native stack's post-gate stage: display segmentation
+            // plus span resolution. Clocked across BOTH (the segment map and
+            // the claim addresses below), because they are one mechanism
+            // from the reader's side.
+            let segments_started = std::time::Instant::now();
+            let answer_segments = gate_evidence.native_verdict.as_ref().map(|_| {
+                let mut segs = crate::runtime::native_grounding::segments::segments_for_display(
+                    &full_text,
+                    &gate_evidence.chunks,
+                );
+                // Give each Grounded badge somewhere to send the reader.
+                //
+                // `segments_for_display` is handed chunk TEXTS, so the
+                // best address it can name is the chunk's index in that
+                // pool — which no UI can open. `chunk_targets` is built
+                // parallel to the same pool by the evidence builder and
+                // carries the `(corpus_id, chunk_id)` handle the reading
+                // surface takes. Resolving here, at the one place that
+                // holds both, keeps the resolver pure and keeps the
+                // alignment where it is maintained (a target read from a
+                // slipped index opens a DIFFERENT passage under a
+                // correct-looking badge). A pool slot with no handle
+                // stays `None` — reported, not guessed (ARCH §18.3).
+                let mut grounded = 0usize;
+                let mut addressed = 0usize;
+                for s in segs.iter_mut() {
+                    if let crate::types::SegmentKind::Grounded {
+                        chunk_id, address, ..
+                    } = &mut s.kind
+                    {
+                        grounded += 1;
+                        *address = chunk_id
+                            .parse::<usize>()
+                            .ok()
+                            .and_then(|i| gate_evidence.chunk_targets.get(i).cloned().flatten());
+                        addressed += usize::from(address.is_some());
+                    }
+                }
+                tracing::debug!(
+                    segments = segs.len(),
+                    grounded,
+                    // The P1 citability bar counts THIS, not `grounded`:
+                    // a badge without an address does not resolve.
+                    grounded_addressed = addressed,
+                    unverified = segs
+                        .iter()
+                        .filter(|s| matches!(s.kind, crate::types::SegmentKind::Unverified))
+                        .count(),
+                    "native-grounding: answer segmented for display"
+                );
+                segs
+            });
+
+            // §6, the other half: "GateOutcome.claims is fed from
+            // segments — a grounded segment is a holding with a real
+            // address." Fed with an ADDRESS ONLY.
+            //
+            // What this deliberately does not do is touch `supported`.
+            // The judge decided that, and the resolver disagrees with the
+            // judge often enough (0.7429 precision, D2) that letting it
+            // adjust a verdict would be the wrong-badge failure the
+            // measurement priced. So a claim can gain a place to look;
+            // it can never gain or lose its standing here.
+            if let Some(claims) = gate_claims
+                .as_mut()
+                .filter(|_| gate_evidence.native_verdict.is_some())
+            {
+                for c in claims.iter_mut() {
+                    if let crate::runtime::native_grounding::span_resolver::SpanResolution::Verbatim {
+                        chunk,
+                        start,
+                        end,
+                    } = crate::runtime::native_grounding::span_resolver::resolve_span(
+                        &c.text,
+                        &gate_evidence.chunks,
+                    ) {
+                        c.address = Some(crate::runtime::grounding::ClaimAddress {
+                            chunk,
+                            start,
+                            end,
+                        });
+                    }
+                }
+                tracing::debug!(
+                    claims = claims.len(),
+                    addressed = claims.iter().filter(|c| c.address.is_some()).count(),
+                    "native-grounding: holdings given evidence addresses (display only)"
+                );
+            }
+            // Recorded ONLY when the native path actually produced a
+            // verdict — `answer_segments` is `None` on every turn where H1
+            // had no instrument, and on those turns this stage did not run.
+            // A row here on such a turn would claim the new stack served
+            // part of a turn it sat out (ARCH §18.3).
+            if gate_evidence.native_verdict.is_some() {
+                crate::runtime::stage_ledger::Stage::new(
+                    sovereign_contracts::types::StageId::Segments,
+                    sovereign_contracts::types::StackOwner::Native,
+                )
+                .mechanism(sovereign_contracts::types::StageMechanism::Deterministic)
+                .cause(sovereign_contracts::types::StageCause::EveryTurn)
+                .record(segments_started.elapsed().as_millis() as u64);
+            }
 
             // Hold mode (gate or armed guard) held every token — release
             // the final (gated, quote-verified, guard-audited) text as

@@ -380,36 +380,24 @@ async fn run_enrich_and_verify(
         .map_err(|e| e.to_string())
 }
 
-/// Resolve the daemon's loaded chat + embed model ids from `/v1/models` (the
-/// SSOT for what's actually serving): the embed model's id contains "embed",
-/// the chat model is the other.
+/// Resolve the daemon's chat + embed model ids through the ONE decider
+/// (`sovereign_workflow_host::daemon_models`, ARCH §10.6): the chat id off
+/// `/v1/models`, the embed id by the configured-stem → advertised ladder
+/// PROVED with a `/v1/embeddings` probe. This used to be a third copy of an
+/// `embed`-substring scan over the listing, and refused a daemon that
+/// embedded fine but advertised only chat ids.
 async fn resolve_daemon_models(v1: &str) -> Result<(String, String), String> {
-    let body: serde_json::Value = reqwest::Client::new()
-        .get(format!("{v1}/models"))
-        .send()
+    let models = sovereign_workflow_host::discover_models(v1)
         .await
-        .map_err(|e| format!("daemon /v1/models unreachable ({e}); is the daemon running?"))?
-        .json()
-        .await
-        .map_err(|e| format!("parse /v1/models: {e}"))?;
-    let ids: Vec<String> = body["data"]
-        .as_array()
-        .map(|a| {
-            a.iter()
-                .filter_map(|m| m["id"].as_str().map(String::from))
-                .collect()
-        })
-        .unwrap_or_default();
-    let embed = ids
-        .iter()
-        .find(|id| id.to_lowercase().contains("embed"))
-        .cloned()
-        .ok_or_else(|| "daemon advertises no embedding model".to_string())?;
-    let chat = ids
-        .iter()
-        .find(|id| !id.to_lowercase().contains("embed"))
-        .cloned()
-        .ok_or_else(|| "daemon advertises no chat model".to_string())?;
+        .map_err(|e| {
+            format!("daemon /v1/models at {v1} unreachable ({e}); is the daemon running?")
+        })?;
+    let chat = models
+        .chat
+        .ok_or_else(|| format!("daemon at {v1} advertises no chat model"))?;
+    let embed = sovereign_workflow_host::resolve_embed_model(v1, None)
+        .await?
+        .id;
     Ok((chat, embed))
 }
 

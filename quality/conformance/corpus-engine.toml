@@ -32,8 +32,29 @@ line = 354
 asserts = 3
 
 [[claim]]
+requirement = "EN-5"
+test = "corpus-engine::main::tiered_entity_extractor_seam::ner_runs_before_the_provider_so_a_provider_failure_still_leaves_entities"
+file = "corpus-engine/tests/main/tiered_entity_extractor_seam.rs"
+line = 206
+asserts = 3
+
+[[claim]]
+requirement = "EN-5"
+test = "corpus-engine::main::tiered_entity_extractor_seam::the_injected_entity_extractor_is_called_once_per_conversation_with_its_own_chunks"
+file = "corpus-engine/tests/main/tiered_entity_extractor_seam.rs"
+line = 139
+asserts = 10
+
+[[claim]]
 requirement = "EN-9"
 test = "corpus-engine::enrichment::domains::tests::a_large_corpus_domain_and_a_small_one_do_not_share_clustering_caps"
 file = "corpus-engine/src/enrichment/domains/mod.rs"
 line = 33
 asserts = 10
+
+[[claim]]
+requirement = "ST-41"
+test = "corpus-engine::main::reindex_stamps_freshness::reindexing_a_document_stamps_its_recency_at_the_shared_convergence_point"
+file = "corpus-engine/tests/main/reindex_stamps_freshness.rs"
+line = 67
+asserts = 11

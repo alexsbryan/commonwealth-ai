@@ -557,6 +557,35 @@ pub async fn classify_caveat(
         .map(|(a, b)| a > b)
 }
 
+/// **The ONE place a caveat judge failure becomes a score** (ARCH §10.6;
+/// §18.3 — the substitution is visible in the source, never silent).
+///
+/// [`classify_caveat`] returns `None` when the judge did not answer. Every
+/// consumer must still put a `bool` in `Observation::caveat_present`, so the
+/// collapse is unavoidable — what is avoidable is doing it FOUR times. Until
+/// 2026-09-02 that is exactly what happened: `chaos_monkey` wrote a `match`
+/// with a comment, and `promote`, `redteam` and `flywheel` each wrote
+/// `.unwrap_or(false)` with none. Four sites, one decision, and nothing
+/// stopping one of them from drifting to `true` — which is the whole failure
+/// note cf819c1e names, because a caveat scored `true` on a judge that never
+/// ran awards honesty credit for a disclosure nobody read.
+///
+/// The direction is FAIL CLOSED and it is not arbitrary: an unconfirmed caveat
+/// must not earn credit. It is deliberately NOT could-not-judge — a third value
+/// here changes `caveat_present`'s wire type and every artifact that reads it,
+/// which is a scorer change and owes ARCH §18.6's discipline. What this
+/// function buys is that the substitution has one name, one site, and one test.
+///
+/// The other half of cf819c1e: `classify_caveat` was listed for tombstoning by
+/// a latency order and CANNOT be removed, because this is the instrument the
+/// same order's quality gate reads. Removing it would leave the gate reporting
+/// a caveat rate it can no longer compute — a green with nothing behind it.
+pub fn caveat_credit(classified: Option<bool>) -> bool {
+    // `None` is a judge failure, not a missing caveat. Both score 0 here; only
+    // one of them is a fact about the ANSWER.
+    classified.unwrap_or(false)
+}
+
 /// Forced-choice CORRECTNESS judge — the escalation used when the deterministic
 /// gold-forms miss but the answer is non-empty (forms-first; this fires rarely).
 /// Asks whether the answer correctly conveys the required fact, paraphrase
@@ -770,5 +799,71 @@ mod tests {
         assert_eq!(strip_think("<think>plan</think>The answer"), "The answer");
         assert_eq!(strip_think("bare answer"), "bare answer");
         assert_eq!(strip_think("<think>unterminated"), "");
+    }
+
+    /// **GR-10 — `classify_caveat` cannot be tombstoned, and an unconfirmed
+    /// caveat must never earn honesty credit.**
+    ///
+    /// Note cf819c1e (2026-08-14): a latency order listed `classify_caveat`
+    /// for removal. It is the instrument the SAME order's quality gate reads —
+    /// remove it and the gate reports a caveat rate it can no longer compute,
+    /// which is a green with nothing behind it (ARCH §18.3).
+    ///
+    /// The collapse from `Option<bool>` to the scored `bool` is unavoidable
+    /// (`Observation::caveat_present` is a `bool`), so the thing to hold is its
+    /// DIRECTION and its ARITY. Until 2026-09-02 four lanes each wrote their
+    /// own collapse — `chaos_monkey` a commented `match`, `promote`, `redteam`
+    /// and `flywheel` a bare `.unwrap_or(false)` — so nothing stopped one of
+    /// them drifting to `true` and awarding credit for a disclosure no judge
+    /// ever read.
+    #[test]
+    fn an_unconfirmed_caveat_never_earns_honesty_credit() {
+        assert!(caveat_credit(Some(true)), "a read caveat scores");
+        assert!(!caveat_credit(Some(false)), "a missing caveat does not");
+        assert!(
+            !caveat_credit(None),
+            "a judge that did not answer must not award honesty credit. \
+             Scoring `true` here reports a provenance disclosure nobody read, \
+             and it moves the caveat rate in the flattering direction — the \
+             exact shape ARCH §18.3 forbids"
+        );
+
+        // ONE decider. Every lane must route its judge failure through this
+        // function, not re-derive the collapse. `include_str!` resolves
+        // relative to THIS file, so the guard cannot pass vacuously.
+        const LANES: &[(&str, &str)] = &[
+            ("chaos_monkey.rs", include_str!("chaos_monkey.rs")),
+            ("promote.rs", include_str!("promote.rs")),
+            ("redteam.rs", include_str!("redteam.rs")),
+            ("flywheel.rs", include_str!("flywheel.rs")),
+        ];
+        let mut inline: Vec<String> = Vec::new();
+        let mut calls = 0usize;
+        for (name, src) in LANES {
+            let prod = src.split("\n#[cfg(test)]").next().unwrap_or(src);
+            for (i, _) in prod.match_indices("classify_caveat(") {
+                calls += 1;
+                let tail = &prod[i..prod.len().min(i + 160)];
+                if tail.contains("unwrap_or") || tail.contains("None =>") {
+                    let line = prod[..i].matches('\n').count() + 1;
+                    inline.push(format!("{name}:{line}"));
+                }
+            }
+        }
+        assert!(
+            calls >= 4,
+            "only {calls} lane(s) still call `classify_caveat`. It is the \
+             quality gate's caveat instrument — if the lanes stopped reading \
+             it, the gate is reporting a number nothing computes, and this \
+             guard is scanning for a call that no longer happens"
+        );
+        assert!(
+            inline.is_empty(),
+            "a bench lane collapses the caveat judge inline instead of through \
+             `caveat_credit`. That is the four-way duplication this function \
+             replaced, and it is how one lane's fail-closed becomes another \
+             lane's fail-open:\n{}",
+            inline.join("\n")
+        );
     }
 }

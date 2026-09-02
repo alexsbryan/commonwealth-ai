@@ -602,4 +602,108 @@ mod tests {
              point was chosen under; D5's competence bar rests on it"
         );
     }
+
+    /// **GR-16 — `SOVEREIGN_NATIVE_GROUNDING=1` is a DISPLAY flag, asserted
+    /// rather than described.**
+    ///
+    /// Under P1 this stage scores answerability, records `enforced = false`,
+    /// and routes nothing; the withhold decision belongs to the incumbent
+    /// cosine floor on both arms. The module header above and the call site
+    /// in `knowledge_query.rs` both say so in prose — which is the shape
+    /// ARCH §7 exists to forbid, because the guarantee here is an ABSENCE
+    /// (the native decline arm was DELETED, not guarded) and an absence with
+    /// no reader comes back silently.
+    ///
+    /// This is a correctness test, not tidiness. A reader who assumes the
+    /// flag enforces misattributes every quality result taken under it: the
+    /// flag-on and flag-off arms differ only in what is DISPLAYED, so a
+    /// competence delta measured across them is a display artefact
+    /// (note 4b1a3d92, 2026-08-10).
+    ///
+    /// Three rules, each with a failing input you can name (ARCH §18.1):
+    /// the typed decision never crosses into the turn; the verdict is never
+    /// a branch condition there; and the admission event's `enforced` field
+    /// is the literal `false`, not a variable that could one day be `true`.
+    #[test]
+    fn the_admission_verdict_decides_nothing_in_the_turn() {
+        // `include_str!` resolves relative to THIS file, so the guard cannot
+        // go stale against a moved module or pass vacuously from elsewhere.
+        const KQ: &str = include_str!("../../handlers/knowledge_query.rs");
+        let prod = KQ.split("\n#[cfg(test)]").next().unwrap_or(KQ);
+
+        // Vacuity guard first: if the verdict stopped riding the turn under
+        // this name, every scan below would pass by describing nothing.
+        assert!(
+            prod.contains("native_verdict"),
+            "`native_verdict` is gone from knowledge_query.rs — this guard is \
+             scanning for a name that no longer exists, so it proves nothing. \
+             Re-point it at whatever carries H1's verdict now."
+        );
+
+        // RULE 1. The admission's typed decision is not a name the turn
+        // knows. `GroundingDecision` is how a re-enforcement spells itself:
+        // to route on the score you must first match on its variants.
+        let decision_sites: Vec<String> = prod
+            .lines()
+            .enumerate()
+            .filter(|(_, l)| {
+                let t = l.trim_start();
+                !t.starts_with("//") && l.contains("GroundingDecision")
+            })
+            .map(|(i, l)| format!("knowledge_query.rs:{}: {}", i + 1, l.trim()))
+            .collect();
+        assert!(
+            decision_sites.is_empty(),
+            "H1's typed decision reached the turn. P1 keeps the withhold \
+             decision with `evidence_early_decline` on BOTH arms; a turn that \
+             can name `GroundingDecision` can route on it, and the flag stops \
+             being a display flag:\n{}",
+            decision_sites.join("\n")
+        );
+
+        // RULE 2. The verdict is never a branch condition. Naming it in a
+        // struct field or a tracing event is display and telemetry; naming
+        // it in an `if`/`match`/`matches!` is a decision.
+        let mut branches: Vec<String> = Vec::new();
+        for (i, line) in prod.lines().enumerate() {
+            let t = line.trim_start();
+            if t.starts_with("//") || t.starts_with("///") {
+                continue;
+            }
+            if !(line.contains("native_verdict") || line.contains(".answerability")) {
+                continue;
+            }
+            let is_branch = t.starts_with("if ")
+                || t.starts_with("} else if ")
+                || t.starts_with("else if ")
+                || t.starts_with("match ")
+                || t.starts_with("while ")
+                || t.contains("matches!(");
+            if is_branch {
+                branches.push(format!("knowledge_query.rs:{}: {}", i + 1, t));
+            }
+        }
+        assert!(
+            branches.is_empty(),
+            "H1's answerability is deciding something in the turn. The native \
+             decline arm was deleted rather than guarded precisely so that \
+             re-enforcing it requires re-adding a branch — this is that \
+             branch:\n{}",
+            branches.join("\n")
+        );
+
+        // RULE 3. The event's own field is the literal. `enforced = false`
+        // is what a transcript diff reads to prove the arm identity (A1); a
+        // variable there could report `true` while the prose above still
+        // says the stage is telemetry.
+        const SELF: &str = include_str!("admission.rs");
+        let mine = SELF.split("\n#[cfg(test)]").next().unwrap_or(SELF);
+        assert_eq!(
+            mine.matches("enforced = false,").count(),
+            1,
+            "the admission event must carry `enforced = false` as a literal, \
+             exactly once — a variable, or a second site, is how a stage that \
+             says it decides nothing starts reporting that it does"
+        );
+    }
 }

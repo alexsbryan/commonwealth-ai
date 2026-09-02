@@ -255,6 +255,87 @@ describe("chatMachine — streaming lifecycle", () => {
   });
 });
 
+describe("chatMachine — single-flight dispatch", () => {
+  // covers: UI-9
+  //
+  // Dispatch is single-flight because `SEND_INITIATED` is accepted ONLY in
+  // `turn.idle`. Nothing in the UI enforces that — the send button's disabled
+  // state is a courtesy, and a fast double-click, an Enter keypress landing on
+  // the same frame, or an automation driving the input all arrive before the
+  // bridge has answered. The machine is the only place the guarantee lives.
+  //
+  // A refactor of the nested turn region that hoisted `SEND_INITIATED` to the
+  // machine's top-level `on:` block would compile, pass every other test in
+  // this file, and start two turns from one click — two user bubbles, two
+  // assistant placeholders, and a `streamingMessageId` pointing at whichever
+  // stream answered last.
+  function send(actor: ReturnType<typeof startActor>, id: string, text: string) {
+    actor.send({ type: "SEND_INITIATED", userMessage: userMsg(id, text) });
+  }
+
+  it("a second SEND_INITIATED during preparing appends nothing and starts no turn", () => {
+    const actor = startActor();
+    send(actor, "u1", "first");
+    send(actor, "u2", "double-click");
+
+    const s = actor.getSnapshot();
+    expect(s.matches({ turn: "preparing" })).toBe(true);
+    expect(s.context.messages).toHaveLength(1);
+    expect(s.context.messages[0].id).toBe("u1");
+    expect(s.context.streamingMessageId).toBeNull();
+  });
+
+  it("a second SEND_INITIATED during streaming appends nothing and starts no turn", () => {
+    const actor = startActor();
+    send(actor, "u1", "first");
+    actor.send({ type: "SEND_START", assistantMessageId: "a1" });
+    send(actor, "u2", "impatient");
+
+    const s = actor.getSnapshot();
+    expect(s.matches({ turn: "streaming" })).toBe(true);
+    // The user bubble and the ONE assistant placeholder, nothing else.
+    expect(s.context.messages.map((m) => m.id)).toEqual(["u1", "a1"]);
+    expect(s.context.streamingMessageId).toBe("a1");
+  });
+
+  it("the in-flight user message survives a binding that lands between the two sends", () => {
+    // The real sequence on a first turn in a new conversation: the user's
+    // bubble is optimistic, `ensureConversation` resolves mid-flight, and a
+    // second click arrives while the machine is still preparing.
+    const actor = startActor();
+    send(actor, "u1", "first");
+    actor.send({ type: "CONVERSATION_BOUND", conversationId: "conv-new" });
+    send(actor, "u2", "double-click");
+
+    const s = actor.getSnapshot();
+    expect(s.context.conversationId).toBe("conv-new");
+    expect(s.context.messages).toHaveLength(1);
+    expect(s.context.messages[0].content).toBe("first");
+    expect(s.matches({ turn: "preparing" })).toBe(true);
+  });
+
+  it("the machine accepts the NEXT turn once the first one lands", () => {
+    // The control: single-flight must not be a permanent lock. Without this,
+    // a machine that dropped SEND_INITIATED everywhere would pass all three
+    // assertions above.
+    const actor = startActor();
+    send(actor, "u1", "first");
+    actor.send({ type: "SEND_START", assistantMessageId: "a1" });
+    actor.send({
+      type: "MESSAGE_COMPLETE",
+      messageId: "a1",
+      fullText: "done",
+      pendingText: "",
+    });
+    expect(actor.getSnapshot().matches({ turn: "idle" })).toBe(true);
+
+    send(actor, "u2", "second");
+    const s = actor.getSnapshot();
+    expect(s.matches({ turn: "preparing" })).toBe(true);
+    expect(s.context.messages.map((m) => m.id)).toEqual(["u1", "a1", "u2"]);
+  });
+});
+
 describe("chatMachine — conversation binding", () => {
   it("CONVERSATION_BOUND sets conversationId without touching messages", () => {
     // Lock-down: when ensureConversation creates a conversation

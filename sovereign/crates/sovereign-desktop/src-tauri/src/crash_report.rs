@@ -312,6 +312,57 @@ mod tests {
         out
     }
 
+    /// covers: IN-19
+    ///
+    /// The export is the one crash surface the user is INVITED to send
+    /// somewhere — it opens a GitHub issue form next to it. Local-first is
+    /// only half of X-PV-6; the other half is that what the user is invited
+    /// to hand over does not carry their identity. An absolute model path
+    /// under `/Users/<name>` or `/home/<name>` names them.
+    #[test]
+    fn a_shared_crash_report_carries_the_model_name_not_the_users_home_path() {
+        let mut rec = CrashRecord::new(CrashKind::NativeCrash, "abort during decode");
+        rec.model_path =
+            Some("/Users/mairead.nicgriogair/Library/svrnmesh/models/qwen35-30b-q4.gguf".into());
+        rec.model_arch = Some("qwen35".into());
+        rec.gpu_layers = Some(48);
+        rec.signal = Some(6);
+
+        let md = render_shareable_markdown(&rec);
+
+        // The report is still worth sending: the model is named.
+        assert!(
+            md.contains("qwen35-30b-q4.gguf"),
+            "the basename is the diagnostic half and must survive: {md}"
+        );
+        // And it does not name the person.
+        assert!(
+            !md.contains("mairead.nicgriogair"),
+            "the username reached a report the user is invited to attach to an issue: {md}"
+        );
+        assert!(
+            !md.contains("/Users/"),
+            "an absolute home path reached the shareable report: {md}"
+        );
+        assert!(
+            !md.contains("/Library/svrnmesh/models"),
+            "the directory prefix reached the shareable report: {md}"
+        );
+
+        // The rest of the diagnosis is intact — a renderer that redacted by
+        // emitting nothing would pass every assertion above.
+        assert!(md.contains("qwen35"), "model_arch missing: {md}");
+        assert!(md.contains("gpu_layers: 48"), "gpu_layers missing: {md}");
+        assert!(md.contains("signal: 6"), "signal missing: {md}");
+        assert!(md.contains("abort during decode"), "summary missing: {md}");
+
+        // A relative path has no directory to strip and must render unchanged
+        // rather than being mangled into something that names no model at all.
+        let mut bare = CrashRecord::new(CrashKind::NativeCrash, "abort");
+        bare.model_path = Some("qwen35-30b-q4.gguf".into());
+        assert!(render_shareable_markdown(&bare).contains("model: qwen35-30b-q4.gguf"));
+    }
+
     #[test]
     fn write_list_read_delete_roundtrip() {
         let tmp = tempfile::tempdir().unwrap();

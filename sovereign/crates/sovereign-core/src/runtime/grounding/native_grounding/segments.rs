@@ -275,4 +275,188 @@ mod tests {
         uniq.dedup();
         assert_eq!(uniq.len(), labels.len(), "two kinds render the same words");
     }
+
+    /// **GR-09 — the provenance strip reads the RELEASED string, and the two
+    /// honesty layers therefore agree by construction.**
+    ///
+    /// Witnessed live on the desktop 2026-08-10
+    /// (`test-artifacts/p1-desktop-on-grounded.json`, note 531b513c): a turn
+    /// asked to copy one sentence word-for-word produced 29 segments and 0
+    /// grounded, and the first reading of that — a segmentation failure — was
+    /// wrong and had to be retracted. The real chain: the 2B fixture model
+    /// mangled its own "verbatim" quote (the source reads "47 meters tall from
+    /// base to lantern gallery"; it emitted "47 mètrest all from base to
+    /// lantenns gallery"), the incumbent quote guardrail failed the substring
+    /// check and demoted the span to `[unverified excerpt: …]` before release,
+    /// and the strip then segmented that released text and honestly said
+    /// Unverified.
+    ///
+    /// So `grounded = 0` on a paraphrasing model is the CORRECT reading, not
+    /// an instrument defect, and the layers are consistent rather than
+    /// redundant: a genuinely verbatim span is never rewritten, survives
+    /// unwrapped and resolves; only an unverified span carries the wrapper,
+    /// and it was already going to segment Unverified.
+    ///
+    /// The last assertion is the one with teeth. A segment's `text_range` is a
+    /// byte range into whichever string the strip was handed, so handing it
+    /// the pre-guardrail draft does not merely describe different text — it
+    /// hands the UI offsets that address the released string wrongly.
+    #[test]
+    fn a_demoted_quote_segments_unverified_and_the_ranges_follow_the_release() {
+        use crate::quote_verification::{verify_quotes, DEFAULT_MIN_QUOTE_CHARS};
+
+        const SOURCE: &str = "The tower is 47 meters tall from base to lantern gallery";
+        let chunks = vec![format!(
+            "Meridian lighthouse survey, 1874. {SOURCE}. The lamp was lit that autumn."
+        )];
+
+        // (1) THE MODEL THAT COPIES. The guardrail finds the span verbatim in
+        // the evidence and leaves the text exactly as written.
+        let faithful = format!("The survey gives the height. \"{SOURCE}\"");
+        let kept = verify_quotes(&faithful, &chunks, &[], DEFAULT_MIN_QUOTE_CHARS);
+        assert_eq!(
+            kept.demoted_count, 0,
+            "a verbatim quote must survive the guardrail untouched, or the \
+             contrast this test draws is not the one the desktop turn drew"
+        );
+        assert_eq!(kept.rewritten, faithful, "a kept quote is not rewritten");
+        let kept_segs = segments_for_display(&kept.rewritten, &chunks);
+        assert!(
+            kept_segs
+                .iter()
+                .any(|s| !matches!(s.kind, SegmentKind::Unverified)),
+            "the copied sentence resolved against its own source and must not \
+             segment Unverified: {kept_segs:?}"
+        );
+
+        // (2) THE MODEL THAT MANGLES its own "verbatim" quote — the desktop
+        // specimen, reduced.
+        const MANGLED: &str = "The survey gives the height. \
+                               \"The tower is 47 mètrest all from base to lantenns gallery\"";
+        let demoted = verify_quotes(MANGLED, &chunks, &[], DEFAULT_MIN_QUOTE_CHARS);
+        assert_eq!(
+            demoted.demoted_count, 1,
+            "the guardrail must catch the mangled quote — it is the first \
+             honesty layer and the reason the second one reports zero"
+        );
+        assert!(
+            demoted.rewritten.contains("[unverified excerpt:"),
+            "the released text carries the runtime's OWN wrapper, not model \
+             prose: {:?}",
+            demoted.rewritten
+        );
+
+        let released_segs = segments_for_display(&demoted.rewritten, &chunks);
+        assert!(
+            !released_segs
+                .iter()
+                .any(|s| matches!(s.kind, SegmentKind::Grounded { .. })),
+            "a demoted span must never carry a sourced badge — grounded = 0 \
+             here is the honest answer, not a segmentation failure: \
+             {released_segs:?}"
+        );
+        for s in &released_segs {
+            assert!(
+                demoted.rewritten.get(s.text_range.clone()).is_some(),
+                "every range must index the string the strip was handed"
+            );
+        }
+
+        // (3) WHY THE ORDER IS LOAD-BEARING. The guardrail changes the string's
+        // LENGTH (it drops the quote marks and inserts a wrapper), so the same
+        // answer segmented before and after release does not merely describe
+        // different words — it yields different byte ranges. Compute the strip
+        // over the draft and the UI highlights bytes of a text nobody saw.
+        let draft_segs = segments_for_display(MANGLED, &chunks);
+        let ranges = |v: &[AnswerSegment]| {
+            v.iter()
+                .map(|s| s.text_range.clone())
+                .collect::<Vec<std::ops::Range<usize>>>()
+        };
+        assert_ne!(
+            ranges(&draft_segs),
+            ranges(&released_segs),
+            "the guardrail rewrote the text but the segment ranges did not \
+             move, so this test cannot tell the two inputs apart and proves \
+             nothing about the ordering"
+        );
+    }
+
+    /// **GR-09, the structural half: nothing may rewrite the released text
+    /// after the strip has described it.**
+    ///
+    /// `segments_for_display` documents its input as "the FINAL released
+    /// text", and the guarantee in `streaming.rs` is positional — there is no
+    /// type that says "this `String` is finished". Until 2026-09-02 the call
+    /// sat ABOVE four later rebindings of the very binding it reads: the quote
+    /// guardrail's demotion, the unavailability marker, the lesson term-avoid
+    /// pass and the authority guard. Each changes the string's length, and the
+    /// sibling test above shows that moves every range.
+    ///
+    /// So this is the reader that absence needs (ARCH §7 — make it structural,
+    /// not remembered). The region is found from the call site outward rather
+    /// than by line number, so the guard cannot go stale against a moved
+    /// block, and `include_str!` resolves relative to THIS file so it cannot
+    /// pass vacuously from another directory.
+    #[test]
+    fn the_strip_reads_the_released_string() {
+        const STREAMING: &str = include_str!("../../streaming.rs");
+        let prod = STREAMING
+            .split("\n#[cfg(test)]")
+            .next()
+            .unwrap_or(STREAMING);
+
+        let call = prod
+            .find("segments_for_display(")
+            .expect("streaming.rs no longer calls segments_for_display — re-point this guard");
+        // The turn that owns this call, bounded by the `full_text` buffers of
+        // its neighbours: back to this function's own declaration, forward to
+        // the next one.
+        const DECL: &str = "let mut full_text = String::new();";
+        let start = prod[..call]
+            .rfind(DECL)
+            .expect("the strip is not inside a turn that owns a `full_text` buffer");
+        let end = prod[call..].find(DECL).map_or(prod.len(), |o| call + o);
+
+        let mut offenders: Vec<String> = Vec::new();
+        let mut offset = start;
+        for line in prod[start..end].lines() {
+            let t = line.trim_start();
+            let rebinds = t.starts_with("full_text =")
+                || t.starts_with("let full_text")
+                || t.starts_with("let (full_text")
+                || t.starts_with("let mut full_text")
+                || t.contains("&mut full_text");
+            if offset > call && rebinds && !t.starts_with("//") {
+                let line_no = prod[..offset].matches('\n').count() + 1;
+                offenders.push(format!("streaming.rs:{line_no}: {t}"));
+            }
+            offset += line.len() + 1;
+        }
+        assert!(
+            offenders.is_empty(),
+            "the released text is rewritten AFTER the provenance strip described \
+             it. A segment's `text_range` is a byte range into the string the \
+             strip was handed, so every one of these rewrites hands the UI \
+             offsets into a text the reader never saw (note 531b513c):\n{}",
+            offenders.join("\n")
+        );
+
+        // Vacuity guard: the region must actually contain the rewrites this
+        // test exists to order. If they all moved elsewhere, an empty
+        // `offenders` means "found nothing to check", not "checked and clean".
+        let rewrites = prod[start..end]
+            .lines()
+            .filter(|l| {
+                let t = l.trim_start();
+                t.starts_with("let full_text") || t.starts_with("let (full_text")
+            })
+            .count();
+        assert!(
+            rewrites >= 3,
+            "only {rewrites} post-synthesis rewrite(s) of `full_text` found in \
+             this turn — the guard is scanning a region that no longer carries \
+             them and would pass by describing nothing"
+        );
+    }
 }

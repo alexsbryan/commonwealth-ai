@@ -313,13 +313,40 @@ pub(super) async fn surgical_rewrite(
         if new.eq_ignore_ascii_case("remove") || new.is_empty() {
             sentences[idx] = String::new();
         } else {
-            repaired.insert(idx, new.trim().to_string());
-            // keep a trailing space so the following sentence doesn't fuse.
-            sentences[idx] = if new.ends_with(char::is_whitespace) {
-                new
-            } else {
-                format!("{new} ")
+            // A replacement is new CONTENT, not new STRUCTURE.
+            //
+            // `split_sentences` is lossless, which means the whitespace that
+            // separated a sentence from its predecessor lives on the FOLLOWING
+            // element: "A.\n\nB." splits to ["A.", "\n", "\nB."]. Overwriting
+            // the whole element therefore throws away that leading break, and a
+            // repaired paragraph silently merges into the one above it — on
+            // every multi-paragraph answer, which is the only kind surgery ever
+            // runs on. (Deletions never showed it: the standalone "\n" element
+            // survives them, so the break holds.) Re-attach the original's own
+            // leading and trailing whitespace; the module's promise is to touch
+            // the failed span and nothing else, and a paragraph break the reader
+            // already had is not part of the span.
+            let original = &sentences[idx];
+            let lead: String = original.chars().take_while(|c| c.is_whitespace()).collect();
+            let trail: String = {
+                let t: Vec<char> = original
+                    .chars()
+                    .rev()
+                    .take_while(|c| c.is_whitespace())
+                    .collect();
+                t.into_iter().rev().collect()
             };
+            let body = new.trim();
+            repaired.insert(idx, body.to_string());
+            // The fusion guard, now scoped to the case that can actually fuse:
+            // the original ended flush AND the next element does not open with
+            // whitespace of its own. Adding a space unconditionally put one
+            // before the paragraph break instead.
+            let needs_gap = trail.is_empty()
+                && sentences
+                    .get(idx + 1)
+                    .is_some_and(|n| !n.starts_with(char::is_whitespace));
+            sentences[idx] = format!("{body} ");
         }
     }
 
@@ -355,6 +382,7 @@ pub(super) async fn surgical_rewrite(
 mod tests {
     use super::*;
     use crate::error::Result;
+    use crate::oicp::ShardingPrivacy;
     use crate::traits::InferenceProvider;
     use crate::types::{CompletionRequest, CompletionResponse, Depth, ProviderCapabilities};
     use futures::Stream;
@@ -543,6 +571,7 @@ mod tests {
             .is_none());
     }
 
+<<<<<<< HEAD
     /// **The wrong-span hazard: a recurring subject must not pull an edit onto
     /// the wrong sentence.**
     ///
@@ -610,6 +639,495 @@ mod tests {
             .is_none(),
             "a claim that shares no content with any sentence must abandon \
              surgery rather than settle for the least-bad match"
+=======
+    // ─────────────────────────────────────────────────────────────────────
+    // The rewrite mechanics. Everything above proves surgery WORKS on the
+    // happy path; these prove it fails SAFELY, which is the property that
+    // matters — a half-corrected answer ships to a reader who has no way to
+    // tell it from a whole one.
+    // ─────────────────────────────────────────────────────────────────────
+
+    /// A fast-slot stand-in scripted BY CONTENT, not by call order.
+    ///
+    /// The fix path runs its edits through `join_all`, so call order is a
+    /// scheduling detail; a queue-based fixture would encode that detail as if
+    /// it were a contract. Each entry matches the first marker found in the
+    /// prompt — `edit_sentence` interpolates the sentence verbatim — so a test
+    /// says "this sentence gets that reply" and stays true however the edits
+    /// interleave. A `None` reply is an inference error, the input the
+    /// fall-back-to-full-rewrite arm needs.
+    struct ScriptedEditor {
+        script: Vec<(&'static str, Option<&'static str>)>,
+        seen: std::sync::Mutex<Vec<CompletionRequest>>,
+    }
+
+    impl ScriptedEditor {
+        fn new(script: Vec<(&'static str, Option<&'static str>)>) -> Arc<Self> {
+            Arc::new(Self {
+                script,
+                seen: std::sync::Mutex::new(Vec::new()),
+            })
+        }
+        fn calls(&self) -> Vec<CompletionRequest> {
+            self.seen.lock().unwrap().clone()
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl InferenceProvider for ScriptedEditor {
+        async fn complete(&self, r: &CompletionRequest) -> Result<CompletionResponse> {
+            self.seen.lock().unwrap().push(r.clone());
+            let (_, reply) = self
+                .script
+                .iter()
+                .find(|(marker, _)| r.prompt.contains(marker))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "unscripted surgical edit — no marker matched this prompt:\n{}",
+                        r.prompt.chars().take(400).collect::<String>()
+                    )
+                });
+            match reply {
+                Some(text) => Ok(CompletionResponse {
+                    text: (*text).to_string(),
+                    tokens_used: 0,
+                    prompt_tokens: 0,
+                    model_id: "scripted-editor".into(),
+                    latency_ms: 0,
+                    oicp_meta: None,
+                    finish_reason: None,
+                    completion_tokens: None,
+                }),
+                None => Err(crate::error::Error::Inference("edit slot shed".into())),
+            }
+        }
+        async fn complete_stream(
+            &self,
+            _r: &CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            unimplemented!("surgery never streams")
+        }
+        async fn embed(&self, _t: &str) -> Result<Vec<f32>> {
+            unimplemented!("surgery never embeds")
+        }
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: false,
+                relative_speed: Speed::Fast,
+                relative_reasoning: Depth::Moderate,
+            }
+        }
+    }
+
+    /// Three paragraphs; the middle one is the fabrication. Sized so deleting
+    /// it clears BOTH over-deletion arms, which keeps these tests measuring
+    /// what they claim to and not the guard.
+    const P1: &str =
+        "Alyosha Karamazov is the gentle youngest brother and a novice at the monastery.";
+    const P2: &str =
+        "Smerdyakov piloted an experimental hovercraft across the whole province at night.";
+    const P3: &str =
+        "Dmitri is passionate and reckless in every one of his dealings with money.";
+
+    fn three_paragraph_draft() -> String {
+        format!("{P1}\n\n{P2}\n\n{P3}")
+    }
+
+    /// **The module's central promise, asserted byte-for-byte rather than by
+    /// `contains`.**
+    ///
+    /// "Keep every verified sentence VERBATIM and touch only the failed spans"
+    /// is the entire argument for surgery over a full re-synthesis — it is why
+    /// the result can be trusted without re-reading the whole answer. A
+    /// `contains` check cannot see the ways that breaks in practice: a
+    /// tidy-up that rebuilds from trimmed sentences, a join that flattens the
+    /// paragraph structure of a longform answer, a normalizer that reaches
+    /// past the deletion gap it was meant to close.
+    ///
+    /// So this pins the exact output string, paragraph breaks included.
+    #[tokio::test]
+    async fn untouched_prose_survives_byte_for_byte_including_paragraph_breaks() {
+        let inf: Arc<dyn InferenceProvider> = Arc::new(NoCallProvider);
+        let base = CompletionRequest::default();
+        let draft = three_paragraph_draft();
+        let failed = vec![(
+            "Smerdyakov piloted an experimental hovercraft across the province".to_string(),
+            Vec::<String>::new(),
+        )];
+        let out = surgical_rewrite(&inf, &base, &draft, &failed)
+            .await
+            .expect("one deletion of three paragraphs clears both over-deletion arms");
+        assert_eq!(
+            out.text,
+            format!("{P1}\n\n{P3}"),
+            "surgery must return the surviving prose UNCHANGED, paragraph \
+             structure included. Anything that rebuilds the answer from \
+             trimmed or re-joined sentences silently reformats text the \
+             reader already had, and the verbatim promise is the only reason \
+             a surgical result needs no full re-read"
+        );
+    }
+
+    /// **Delete beats Fix when two failed claims land on the same sentence,
+    /// in EITHER arrival order.**
+    ///
+    /// Two claims can map to one sentence — the claim extractor emits
+    /// paraphrases, and a padded sentence carries more than one assertion.
+    /// If one of them has no corrective passage, the sources cannot support
+    /// that sentence at all, and "fix" it becomes an instruction to the fast
+    /// slot to write something supported-looking about a point the evidence
+    /// does not make. Deletion is the only safe resolution, and it has to win
+    /// regardless of which claim the audit happened to list first.
+    ///
+    /// `NoCallProvider` is the assertion: it panics if any edit call is made,
+    /// so a precedence regression fails loudly rather than by a subtle diff.
+    #[tokio::test]
+    async fn delete_beats_fix_when_two_claims_land_on_one_sentence() {
+        let inf: Arc<dyn InferenceProvider> = Arc::new(NoCallProvider);
+        let base = CompletionRequest::default();
+        let draft = three_paragraph_draft();
+
+        let fixable = (
+            "Smerdyakov piloted an experimental hovercraft across the province".to_string(),
+            vec!["Smerdyakov was the household's cook.".to_string()],
+        );
+        let unsupportable = (
+            "Smerdyakov piloted a hovercraft over the whole province at night".to_string(),
+            Vec::<String>::new(),
+        );
+
+        for (label, failed) in [
+            ("fix listed first", vec![fixable.clone(), unsupportable.clone()]),
+            ("delete listed first", vec![unsupportable, fixable]),
+        ] {
+            // Precondition: both claims really do land on the same sentence.
+            // Without this the test could pass by mapping them apart, which
+            // exercises no precedence at all.
+            let sentences = split_sentences(&draft);
+            let a = best_match(&failed[0].0, &sentences).expect("claim 0 maps").0;
+            let b = best_match(&failed[1].0, &sentences).expect("claim 1 maps").0;
+            assert_eq!(a, b, "{label}: both claims must target one sentence");
+
+            let out = surgical_rewrite(&inf, &base, &draft, &failed)
+                .await
+                .unwrap_or_else(|| panic!("{label}: deletion of one of three paragraphs \
+                                           must not trip the over-deletion guard"));
+            assert_eq!(
+                out.text,
+                format!("{P1}\n\n{P3}"),
+                "{label}: a sentence carrying an unsupportable claim must be \
+                 DELETED, not handed to the fast slot to be reworded"
+            );
+            assert!(
+                out.repaired_spans.is_empty(),
+                "{label}: a deletion produces no new prose, so the incremental \
+                 re-audit is owed no span"
+            );
+        }
+    }
+
+    /// **The `REMOVE` sentinel deletes, and owes the re-audit no span.**
+    ///
+    /// The edit prompt tells the fast slot to reply `REMOVE` when the passages
+    /// do not support the point at all — it is the model's own escape hatch
+    /// from writing a correction that cannot be grounded. Two things must
+    /// follow, and both are silent when broken: the sentence goes (rather than
+    /// the literal word `REMOVE` shipping as prose to the reader), and no
+    /// repaired span is reported, because a deletion creates no new text for
+    /// the incremental re-audit to judge. A span reported here would send the
+    /// re-audit to verify a sentence that no longer exists.
+    ///
+    /// Case and surrounding whitespace must not matter: this is a small model
+    /// on the fast slot, and `edit_sentence` trims before comparing.
+    #[tokio::test]
+    async fn the_remove_sentinel_deletes_and_reports_no_repaired_span() {
+        let base = CompletionRequest::default();
+        let draft = three_paragraph_draft();
+        for reply in ["REMOVE", "remove", "  Remove\n"] {
+            let provider = ScriptedEditor::new(vec![("hovercraft", Some(reply))]);
+            let inf: Arc<dyn InferenceProvider> = provider.clone();
+            let failed = vec![(
+                "Smerdyakov piloted an experimental hovercraft across the province".to_string(),
+                // Evidence present → the FIX path, so the model is actually asked.
+                vec!["Smerdyakov was the household's cook.".to_string()],
+            )];
+            let out = surgical_rewrite(&inf, &base, &draft, &failed)
+                .await
+                .unwrap_or_else(|| panic!("reply {reply:?}: must not fall back"));
+            assert_eq!(provider.calls().len(), 1, "reply {reply:?}: one edit ran");
+            assert_eq!(
+                out.text,
+                format!("{P1}\n\n{P3}"),
+                "reply {reply:?}: the sentinel must delete the sentence, never \
+                 ship as prose"
+            );
+            assert!(
+                out.repaired_spans.is_empty(),
+                "reply {reply:?}: a removal is not new prose — reporting a span \
+                 would send the incremental re-audit after a sentence that is gone"
+            );
+        }
+    }
+
+    /// **One failed edit abandons the WHOLE surgery.**
+    ///
+    /// The edits run concurrently, so a shed or errored fast slot can land on
+    /// any one of them while its siblings succeed. Keeping the successful ones
+    /// would release an answer in which some failed claims were corrected and
+    /// others still stand — and nothing downstream can tell the difference,
+    /// because the released text looks like an ordinary surgical result. The
+    /// only safe answer is `None`: hand the whole draft to the full
+    /// re-synthesis, which the caller then re-audits in full.
+    #[tokio::test]
+    async fn one_failed_edit_abandons_the_whole_surgery() {
+        let base = CompletionRequest::default();
+        // Two fixable claims in different paragraphs; the second edit errors.
+        let draft = format!("{P1}\n\n{P2}\n\n{P3}");
+        let provider = ScriptedEditor::new(vec![
+            ("hovercraft", Some("Smerdyakov worked as a cook in the household.")),
+            ("passionate", None),
+        ]);
+        let inf: Arc<dyn InferenceProvider> = provider.clone();
+        let failed = vec![
+            (
+                "Smerdyakov piloted an experimental hovercraft across the province".to_string(),
+                vec!["Smerdyakov was the household's cook.".to_string()],
+            ),
+            (
+                "Dmitri is passionate and reckless in his dealings".to_string(),
+                vec!["Dmitri's dealings with money are not described.".to_string()],
+            ),
+        ];
+        let out = surgical_rewrite(&inf, &base, &draft, &failed).await;
+        assert!(
+            out.is_none(),
+            "a single failed edit must abandon surgery entirely. Releasing the \
+             edits that DID succeed ships an answer where some failed claims \
+             were corrected and others still stand, and the released text is \
+             indistinguishable from a complete repair"
+        );
+        assert_eq!(
+            provider.calls().len(),
+            2,
+            "both edits were attempted — if only one ran, this test proved \
+             nothing about the surviving sibling"
+        );
+    }
+
+    /// **The repaired spans are the NEW prose, in document order.**
+    ///
+    /// They are the entire input to the incremental re-audit (order
+    /// audit-economy D4): the re-audit judges these and nothing else per-claim,
+    /// on the argument that they are the only prose surgery produced. Order is
+    /// load-bearing because the re-audit's per-claim records are read back
+    /// positionally against the text. Reporting them in completion order —
+    /// which is scheduling order, since the edits run concurrently — would put
+    /// the right sentences under the wrong claims.
+    #[tokio::test]
+    async fn repaired_spans_are_the_new_prose_in_document_order() {
+        let base = CompletionRequest::default();
+        let draft = three_paragraph_draft();
+        const FIRST_FIX: &str = "Smerdyakov worked as a cook in the household.";
+        const SECOND_FIX: &str = "Dmitri's dealings with money are not described in the sources.";
+        let provider = ScriptedEditor::new(vec![
+            ("hovercraft", Some(FIRST_FIX)),
+            ("passionate", Some(SECOND_FIX)),
+        ]);
+        let inf: Arc<dyn InferenceProvider> = provider.clone();
+        let failed = vec![
+            // Listed in REVERSE document order on purpose: the output must
+            // follow the document, not the caller's list.
+            (
+                "Dmitri is passionate and reckless in his dealings".to_string(),
+                vec!["Dmitri's dealings are not described.".to_string()],
+            ),
+            (
+                "Smerdyakov piloted an experimental hovercraft across the province".to_string(),
+                vec!["Smerdyakov was the household's cook.".to_string()],
+            ),
+        ];
+        let out = surgical_rewrite(&inf, &base, &draft, &failed)
+            .await
+            .expect("two fixes, no deletions — nothing to fall back for");
+        assert_eq!(
+            out.repaired_spans,
+            vec![FIRST_FIX.to_string(), SECOND_FIX.to_string()],
+            "spans must be the replacements, in DOCUMENT order — the caller \
+             listed them the other way round and the edits ran concurrently, \
+             so either could have leaked through"
+        );
+        assert_eq!(
+            out.text,
+            format!("{P1}\n\n{FIRST_FIX}\n\n{SECOND_FIX}"),
+            "and each replacement sits where the sentence it replaced was"
+        );
+    }
+
+    /// **The over-deletion guard's ABSOLUTE floor, exercised alone.**
+    ///
+    /// The guard has two arms — a hard `MIN_SURVIVING_CHARS` floor and a
+    /// "more than half the answer went" ratio — and `over_deletion_falls_back`
+    /// above only ever reaches the ratio. An arm no input reaches is not a
+    /// guard (ARCH §18.1). This fixture is built so the ratio arm CANNOT fire:
+    /// most of the draft survives, but what survives is too short to be an
+    /// answer, and shipping it would read to the user as an abstention the
+    /// system never decided to make.
+    #[tokio::test]
+    async fn the_absolute_floor_fires_where_the_ratio_arm_cannot() {
+        let inf: Arc<dyn InferenceProvider> = Arc::new(NoCallProvider);
+        let base = CompletionRequest::default();
+        let draft = "The mill stands on Harbour Row. Orrison flew a hovercraft.";
+
+        // Pin the arithmetic that makes this fixture the absolute arm's input
+        // and not the ratio arm's — if a later edit to the fixture lets the
+        // ratio fire, this test silently stops testing the floor.
+        let survivor = "The mill stands on Harbour Row.";
+        let kept = survivor.chars().count();
+        let original = draft.chars().count();
+        assert!(kept < MIN_SURVIVING_CHARS, "the absolute arm must fire: {kept}");
+        assert!(
+            kept * 2 >= original,
+            "the ratio arm must NOT fire ({kept}*2 vs {original}) or this test \
+             is a duplicate of over_deletion_falls_back"
+        );
+
+        let failed = vec![("Orrison flew a hovercraft".to_string(), Vec::<String>::new())];
+        assert!(
+            surgical_rewrite(&inf, &base, draft, &failed).await.is_none(),
+            "a surviving answer under the floor is a stub — the presenter renders \
+             it as an abstention nobody decided on, so the full re-synthesis \
+             (which regenerates a thinner GROUNDED answer) is the right fallback"
+        );
+    }
+
+    /// **The edit runs on the FAST slot under the Judge envelope — not the
+    /// caller's synthesis envelope.**
+    ///
+    /// This is the whole economic argument for surgery. `edit_sentence` builds
+    /// a fresh envelope precisely because inheriting `base_request`'s
+    /// synthesis one pins the primary 35B and turns a one-sentence edit back
+    /// into the cost it was built to avoid (~44s full re-synthesis vs ~5s
+    /// surgery, NATIVE_GROUNDING_ECONOMY §7.3). Inheriting is a one-line
+    /// change that breaks nothing, passes every other test in this module, and
+    /// shows up only as a latency number nobody attributes.
+    ///
+    /// The posture still has to come FROM the caller — the envelope carries
+    /// the turn's sharding privacy, so a fresh envelope must not quietly
+    /// become LocalOnly-by-default either.
+    #[tokio::test]
+    async fn the_edit_runs_on_the_fast_slot_under_a_judge_envelope() {
+        let base = crate::slot_policy::Workload::Synthesize
+            .request_shared("the original longform prompt", ShardingPrivacy::LocalOnly);
+        let base_tag = base
+            .oicp
+            .as_ref()
+            .and_then(|o| o.request_id.clone())
+            .expect("precondition: the caller's request carries a synthesis envelope");
+        assert!(
+            base_tag.starts_with("wl-synthesize-"),
+            "precondition: base is a SYNTHESIS request, got {base_tag}"
+        );
+
+        let provider = ScriptedEditor::new(vec![(
+            "hovercraft",
+            Some("Smerdyakov worked as a cook in the household."),
+        )]);
+        let inf: Arc<dyn InferenceProvider> = provider.clone();
+        let failed = vec![(
+            "Smerdyakov piloted an experimental hovercraft across the province".to_string(),
+            vec!["Smerdyakov was the household's cook.".to_string()],
+        )];
+        surgical_rewrite(&inf, &base, &three_paragraph_draft(), &failed)
+            .await
+            .expect("one fix, nothing to fall back for");
+
+        let calls = provider.calls();
+        assert_eq!(calls.len(), 1, "one sentence, one edit call");
+        let edit = &calls[0];
+        assert_eq!(
+            edit.preferred_speed,
+            Speed::Fast,
+            "a one-sentence correction must ask for the fast slot"
+        );
+        let tag = edit
+            .oicp
+            .as_ref()
+            .and_then(|o| o.request_id.as_deref())
+            .expect("the edit must carry its own OICP envelope");
+        assert!(
+            tag.starts_with("wl-judge-"),
+            "the edit inherited an envelope instead of declaring the Judge one \
+             (tag {tag}). With Speed::Fast alone the synthesis envelope still \
+             pins the primary 35B, which is exactly the cost surgery exists to \
+             avoid — and it fails as latency, never as a wrong answer"
+        );
+    }
+
+    /// **No failed claims is the identity, and it costs nothing.**
+    ///
+    /// The caller reaches surgery only with failures, but the empty case is a
+    /// public arm of this function and it must not quietly reformat an answer
+    /// nobody asked it to touch — `normalize_ws` collapses runs of whitespace,
+    /// so falling through would rewrite prose on a turn where surgery had no
+    /// work at all.
+    #[tokio::test]
+    async fn no_failed_claims_returns_the_draft_untouched() {
+        let inf: Arc<dyn InferenceProvider> = Arc::new(NoCallProvider);
+        let base = CompletionRequest::default();
+        // Deliberately carries whitespace `normalize_ws` would change: a
+        // doubled space and a trailing newline the author put there.
+        let draft = "The mill stands on Harbour Row.  It burned in 1892, and nobody was charged.\n";
+        let out = surgical_rewrite(&inf, &base, draft, &[])
+            .await
+            .expect("no failures is not a fallback");
+        assert_eq!(
+            out.text, draft,
+            "with nothing to repair the draft must come back byte-identical, \
+             not normalized"
+        );
+        assert!(out.repaired_spans.is_empty(), "no edits, no spans");
+    }
+
+    /// **A repaired paragraph keeps its break — the fix path's own verbatim
+    /// promise.**
+    ///
+    /// FOUND BY THIS TEST, 2026-09-02. `split_sentences` is lossless, so the
+    /// whitespace separating a sentence from its predecessor lives on the
+    /// FOLLOWING element — `"A.\n\nB."` splits to `["A.", "\n", "\nB."]`. The
+    /// fix path overwrote the whole element, so every repaired paragraph lost
+    /// its leading break and merged into the one above it, and the edit's
+    /// unconditional trailing space then landed BEFORE the next break.
+    ///
+    /// Nothing caught it because the delete path is immune (the standalone
+    /// `"\n"` element survives a deletion) and every prior fix-path test used a
+    /// single-paragraph draft. Surgery only ever runs on longform answers,
+    /// which are the multi-paragraph case — so the defect was live on exactly
+    /// the input the module exists for, and it degrades an answer's readability
+    /// without touching a single claim, which is the kind of damage no
+    /// grounding metric reports.
+    #[tokio::test]
+    async fn a_repaired_paragraph_keeps_its_break() {
+        let base = CompletionRequest::default();
+        const FIXED: &str = "Smerdyakov worked as a cook in the household.";
+        let draft = format!("{P1}\n\n{P2}");
+        let provider = ScriptedEditor::new(vec![("hovercraft", Some(FIXED))]);
+        let inf: Arc<dyn InferenceProvider> = provider.clone();
+        let failed = vec![(
+            "Smerdyakov piloted an experimental hovercraft across the province".to_string(),
+            vec!["Smerdyakov was the household's cook.".to_string()],
+        )];
+        let out = surgical_rewrite(&inf, &base, &draft, &failed)
+            .await
+            .expect("one fix, nothing to fall back for");
+        assert_eq!(
+            out.text,
+            format!("{P1}\n\n{FIXED}"),
+            "the repaired sentence must sit in the paragraph it came from. \
+             Overwriting the split element drops the leading break and merges \
+             the paragraphs; a stray space before the break is the same bug \
+             from the other end"
+>>>>>>> c4cf9a32e (tons of latent work)
         );
     }
 }

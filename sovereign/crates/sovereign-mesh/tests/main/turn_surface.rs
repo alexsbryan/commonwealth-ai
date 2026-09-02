@@ -157,6 +157,113 @@ async fn a_daemon_streams_a_turn_to_a_websocket_client() {
     }
 }
 
+/// Install a corpus at `<indexes>/<id>` with one chunk, marked complete so
+/// the engine's `installed_indexes()` reports it — the same fixture
+/// `knowledge_served_e2e` uses.
+async fn install_corpus(indexes_dir: &std::path::Path, id: &str) {
+    use corpus_engine::index::{CorpusIndex, InsertChunk};
+    let index = CorpusIndex::create(
+        &indexes_dir.join(id),
+        id,
+        id,
+        "qwen3-embedding-0.6b",
+        4,
+        /* mesh_sharing */ true,
+        "CC-BY-NC",
+    )
+    .await
+    .unwrap();
+    index
+        .insert_batch(&[(
+            InsertChunk {
+                content: "one chunk".into(),
+                title: Some(id.into()),
+                url: None,
+                metadata: None,
+                content_hash: None,
+                source_doc_id: Some(id.into()),
+                source_file: None,
+                code: Default::default(),
+                unit_id: None,
+            },
+            vec![0.0_f32; 4],
+        )])
+        .await
+        .unwrap();
+    index.mark_ingestion_complete().unwrap();
+}
+
+/// `enabled_corpora` on the create body — the wire form `svrn chat ask
+/// --corpus` uses — lands on the row BEFORE the first turn, so retrieval's
+/// allow-list filter sees it. Until 2026-09-01 the field had no wire form
+/// at all and a daemon-served turn could not be scoped.
+#[tokio::test]
+async fn create_conversation_seeds_the_corpus_allow_list_it_was_given() {
+    let (tmp, daemon, store) = serving_daemon(TestProvider::new());
+    std::fs::create_dir_all(tmp.path().join("indexes")).unwrap();
+    install_corpus(&tmp.path().join("indexes"), "sep").await;
+    install_corpus(&tmp.path().join("indexes"), "gutenberg").await;
+    let addr = spawn_router(turn_router(Arc::clone(&daemon))).await;
+
+    let resp = reqwest::Client::new()
+        .post(format!("http://{addr}/v1/conversations"))
+        .json(&serde_json::json!({ "enabled_corpora": ["sep"] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
+    let body = resp.json::<serde_json::Value>().await.unwrap();
+    let conv = body["id"].as_str().unwrap().to_string();
+    assert_eq!(
+        body["enabled_corpora"],
+        serde_json::json!(["sep"]),
+        "the create response echoes the seeded allow-list — the client's only \
+         way to tell a daemon that scoped from one that dropped the key"
+    );
+
+    let row = store.get_conversation(&conv).await.unwrap();
+    assert_eq!(
+        row.enabled_corpora.as_deref(),
+        Some(&["sep".to_string()][..]),
+        "the allow-list must be on the row the first turn will read"
+    );
+}
+
+/// The named failing input (§18.3): an id the daemon has not installed.
+/// Retrieval would silently intersect it away and search NOTHING while the
+/// answer read as "the corpus does not cover this". The route refuses with
+/// a 400 that names the offender and lists what IS installed — the remedy,
+/// not just the complaint — and seeds no row.
+#[tokio::test]
+async fn create_conversation_refuses_an_unknown_corpus_and_lists_the_installed_ones() {
+    let (tmp, daemon, store) = serving_daemon(TestProvider::new());
+    std::fs::create_dir_all(tmp.path().join("indexes")).unwrap();
+    install_corpus(&tmp.path().join("indexes"), "sep").await;
+    let addr = spawn_router(turn_router(Arc::clone(&daemon))).await;
+
+    let resp = reqwest::Client::new()
+        .post(format!("http://{addr}/v1/conversations"))
+        .json(&serde_json::json!({ "enabled_corpora": ["sep", "nope"] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "an unknown corpus id is the caller's mistake, not a daemon fault"
+    );
+    let body = resp.json::<serde_json::Value>().await.unwrap();
+    let err = body["error"]
+        .as_str()
+        .expect("the refusal carries a reason");
+    assert!(err.contains("unknown corpus id: nope"), "{err}");
+    assert!(err.contains("installed: sep"), "{err}");
+    assert!(
+        store.list_conversations(10, 0).await.unwrap().is_empty(),
+        "a refused create must not leave a half-seeded row behind"
+    );
+}
+
 /// The create route SEEDS the row. Handing back an id without writing one
 /// would pass a status-code assertion and fail the first turn.
 #[tokio::test]

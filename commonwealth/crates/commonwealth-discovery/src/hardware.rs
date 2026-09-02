@@ -31,28 +31,44 @@ pub fn detect_hardware() -> HardwareProfile {
     }
 }
 
-/// Detect GPUs on this machine. Tries nvidia-smi, rocm-smi, then Metal.
+/// One vendor probe: a name for the log line and the thing that shells out.
+type VendorProbe<'a> = (&'a str, &'a dyn Fn() -> Vec<GpuInfo>);
+
+/// Walk a vendor probe chain in priority order and STOP at the first vendor
+/// that reports anything.
+///
+/// Stopping is the whole contract. Each probe shells out to a different
+/// vendor tool, and on a machine where two answer — an NVIDIA card in a
+/// system whose integrated GPU also answers Metal, a ROCm build on a box with
+/// a CUDA card — continuing past the first hit reports the SAME machine's
+/// compute twice. That is not a cosmetic duplicate: `HardwareProfile.gpus` is
+/// what the mesh advertises, so the node claims VRAM and TFLOPS it does not
+/// have and gets handed shards that will not fit.
+///
+/// Taking the chain as a parameter rather than hard-coding three calls is
+/// what makes the order and the stop observable: the real probes need the
+/// vendor's CLI on PATH, so on any given host at most one of them can answer
+/// and the fallthrough is untestable in place.
+fn first_vendor_with_gpus(probes: &[VendorProbe<'_>]) -> Vec<GpuInfo> {
+    for (vendor, probe) in probes {
+        let gpus = probe();
+        if !gpus.is_empty() {
+            debug!(vendor, count = gpus.len(), "detected GPUs");
+            return gpus;
+        }
+    }
+    debug!("no discrete GPUs detected");
+    Vec::new()
+}
+
+/// Detect GPUs on this machine. Tries nvidia-smi, rocm-smi, then Metal —
+/// capability is DETECTED, never configured.
 fn detect_gpus() -> Vec<GpuInfo> {
-    let mut gpus = Vec::new();
-
-    // Try NVIDIA (CUDA).
-    gpus.extend(detect_nvidia_gpus());
-
-    // Try AMD (ROCm).
-    if gpus.is_empty() {
-        gpus.extend(detect_rocm_gpus());
-    }
-
-    // Try macOS Metal.
-    if gpus.is_empty() {
-        gpus.extend(detect_metal_gpus());
-    }
-
-    if gpus.is_empty() {
-        debug!("no discrete GPUs detected");
-    }
-
-    gpus
+    first_vendor_with_gpus(&[
+        ("nvidia", &detect_nvidia_gpus),
+        ("rocm", &detect_rocm_gpus),
+        ("metal", &detect_metal_gpus),
+    ])
 }
 
 /// Parse nvidia-smi output to detect CUDA GPUs.
@@ -424,6 +440,86 @@ mod tests {
         assert!(profile.system_ram_gb > 0, "expected nonzero RAM");
         assert!(profile.cpu_cores > 0, "expected nonzero CPU cores");
         assert!(profile.total_storage_gb > 0, "expected nonzero storage");
+    }
+
+    /// covers: FE-22
+    ///
+    /// The fallback chain, asserted where it can actually be exercised.
+    /// `detect_hardware_returns_valid_profile` above never looks at
+    /// `profile.gpus` — it cannot, because on any one host at most one vendor
+    /// tool is on PATH, so the chain's ORDER and its stop condition are
+    /// invisible from the real probes.
+    #[test]
+    fn the_vendor_chain_stops_at_the_first_vendor_that_answers() {
+        use std::cell::Cell;
+
+        fn gpu(name: &str, compute_type: ComputeType) -> GpuInfo {
+            GpuInfo {
+                name: name.to_string(),
+                vram_gb: 24,
+                compute_type,
+                estimated_tflops: 80.0,
+            }
+        }
+
+        // NVIDIA present: ROCm and Metal must never be asked. A machine whose
+        // integrated GPU also answers Metal would otherwise advertise both.
+        let rocm_calls = Cell::new(0);
+        let metal_calls = Cell::new(0);
+        let gpus = first_vendor_with_gpus(&[
+            ("nvidia", &|| vec![gpu("RTX 4090", ComputeType::Cuda)]),
+            ("rocm", &|| {
+                rocm_calls.set(rocm_calls.get() + 1);
+                vec![gpu("MI300X", ComputeType::Rocm)]
+            }),
+            ("metal", &|| {
+                metal_calls.set(metal_calls.get() + 1);
+                vec![gpu("Apple M3 Ultra", ComputeType::Metal)]
+            }),
+        ]);
+        assert_eq!(gpus.len(), 1, "a stopped chain reports ONE vendor's GPUs");
+        assert_eq!(gpus[0].compute_type, ComputeType::Cuda);
+        assert_eq!(
+            (rocm_calls.get(), metal_calls.get()),
+            (0, 0),
+            "no probe may run after a vendor has answered"
+        );
+
+        // NVIDIA absent: fall through to ROCm, and stop there.
+        let metal_calls = Cell::new(0);
+        let gpus = first_vendor_with_gpus(&[
+            ("nvidia", &Vec::new),
+            ("rocm", &|| vec![gpu("MI300X", ComputeType::Rocm)]),
+            ("metal", &|| {
+                metal_calls.set(metal_calls.get() + 1);
+                vec![gpu("Apple M3 Ultra", ComputeType::Metal)]
+            }),
+        ]);
+        assert_eq!(gpus.len(), 1);
+        assert_eq!(gpus[0].compute_type, ComputeType::Rocm);
+        assert_eq!(metal_calls.get(), 0, "the chain stopped at ROCm");
+
+        // Both absent: Metal is reached, which is the macOS path.
+        let gpus = first_vendor_with_gpus(&[
+            ("nvidia", &Vec::new),
+            ("rocm", &Vec::new),
+            ("metal", &|| vec![gpu("Apple M3 Ultra", ComputeType::Metal)]),
+        ]);
+        assert_eq!(gpus[0].compute_type, ComputeType::Metal);
+
+        // Nothing answers: an empty profile, not a panic and not a default.
+        // A CPU-only node advertises no GPU rather than a guessed one.
+        let nvidia_calls = Cell::new(0);
+        let gpus = first_vendor_with_gpus(&[
+            ("nvidia", &|| {
+                nvidia_calls.set(nvidia_calls.get() + 1);
+                Vec::new()
+            }),
+            ("rocm", &Vec::new),
+            ("metal", &Vec::new),
+        ]);
+        assert!(gpus.is_empty());
+        assert_eq!(nvidia_calls.get(), 1, "every probe is tried exactly once");
     }
 
     #[test]

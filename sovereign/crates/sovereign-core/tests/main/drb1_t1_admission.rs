@@ -354,6 +354,7 @@ fn recorded_outcome_reproduces_from_reconstruction() {
 /// so `web-3` from q2 and `web-3` from q3 are different hits with the
 /// same id; the id-matched ε check admitted them silently — never
 /// fetched, never ledgered (task 56 round 1's ranks 13 and 20).
+/// covers: GR-51
 #[test]
 fn phantom_rows_are_ledgered() {
     let hit = |id: &str, q: &str, n: usize| SearchHit {

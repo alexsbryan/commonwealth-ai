@@ -4410,6 +4410,204 @@ mod tests {
         );
     }
 
+    /// **GR-12 — the short path's retry is not tombstonable the way the
+    /// longform ladder is, and the reason is a structural asymmetry, not
+    /// appetite.**
+    ///
+    /// Note 4350f44d (2026-08-14): a tombstone order proposed removing the
+    /// short-path retry machinery alongside the longform repair ladder.
+    /// Nothing in the tree asserted why the two are different, so the next
+    /// order would have proposed it again — and this file's exit table is
+    /// where the difference actually lives.
+    ///
+    /// The longform ladder can ANNOTATE: three of its exits carry
+    /// `GateReach::Flawed`, releasing an audited draft with its failed claims
+    /// marked, so retiring the repair machinery there still leaves the reader
+    /// an answer. The short path has no `Flawed` exit and cannot be given one
+    /// — a single-claim answer whose one claim failed has nothing left to mark,
+    /// the claim IS the answer. So on that path the retry is the ONLY producer
+    /// of an exit that both follows a failed verdict and still reaches the user
+    /// with an answer. Delete it and every post-failure door is `Declined`:
+    /// the gate stops being a quality lever and becomes an availability one.
+    #[test]
+    fn the_short_paths_retry_is_the_only_door_from_a_failed_claim_back_to_an_answer() {
+        // (a) THE ASYMMETRY, as the exit table states it.
+        let longform_flawed: Vec<&str> = [
+            ACT_ANNOTATED_MARKED,
+            ACT_ANNOTATED_NO_RETRY,
+            ACT_ANNOTATED_REWRITE_ERROR,
+            ACT_REWRITE_ANNOTATED,
+        ]
+        .iter()
+        .filter(|a| a.reach == GateReach::Flawed)
+        .map(|a| a.id)
+        .collect();
+        assert_eq!(
+            longform_flawed.len(),
+            4,
+            "the longform ladder's annotate exits are what make ITS repair \
+             machinery removable — a reader still gets the draft with its \
+             failures marked. Found: {longform_flawed:?}"
+        );
+
+        const SHORT_PATH: &[GateAction] = &[
+            ACT_RELEASED,
+            ACT_RETRY_RELEASED,
+            ACT_RETRY_RELEASED_SPECIFICS,
+            ACT_RETRY_RELEASED_UNVERIFIED,
+            ACT_ABSTAINED,
+            ACT_ABSTAINED_NO_RETRY,
+            ACT_ABSTAINED_WEAK_EVIDENCE,
+            ACT_ABSTAINED_DECLINE,
+            ACT_ABSTAINED_RETRY_ERROR,
+            ACT_ABSTAINED_SPECIFICS,
+            ACT_JUDGE_FAILED_OPEN,
+        ];
+        let short_flawed: Vec<&str> = SHORT_PATH
+            .iter()
+            .filter(|a| a.reach == GateReach::Flawed)
+            .map(|a| a.id)
+            .collect();
+        assert!(
+            short_flawed.is_empty(),
+            "the short path grew an annotate exit ({short_flawed:?}). If a \
+             single-claim answer can now be released with its one claim marked, \
+             this asymmetry is gone and the retry's irreducibility argument has \
+             to be re-derived rather than assumed"
+        );
+
+        // (b) THE STATE the caller requires: after a failed first verdict, the
+        // only short-path exits that still hand the reader an answer.
+        let answering_after_failure: Vec<&str> = SHORT_PATH
+            .iter()
+            .filter(|a| a.id != ACT_RELEASED.id && a.id != ACT_JUDGE_FAILED_OPEN.id)
+            .filter(|a| a.reach == GateReach::Held)
+            .map(|a| a.id)
+            .collect();
+        assert_eq!(
+            answering_after_failure,
+            vec!["retry_released", "retry_released_specifics"],
+            "these are the retry's exits and nothing else produces them"
+        );
+
+        // (c) THE PRODUCER. Each of those states has exactly one production
+        // site. Delete the retry and the count goes to zero HERE, naming the
+        // state that went missing — rather than the build going quiet because
+        // an unused `const` is not an error.
+        const SRC: &str = include_str!("mod.rs");
+        let prod = SRC.split("\n#[cfg(test)]").next().unwrap_or(SRC);
+        for state in ["ACT_RETRY_RELEASED", "ACT_RETRY_RELEASED_SPECIFICS"] {
+            // Every mention outside the constant's own declaration and outside
+            // comments. Counted this way rather than by matching one assignment
+            // shape, because the two exits are produced differently — one binds
+            // `action`, the other is handed to `release_as` — and a guard that
+            // knew only the first shape would sit green through the second
+            // exit's removal.
+            let sites: Vec<&str> = prod
+                .lines()
+                .map(str::trim_start)
+                .filter(|t| {
+                    // Whole-name match: `ACT_RETRY_RELEASED` is a PREFIX of
+                    // `ACT_RETRY_RELEASED_UNVERIFIED` and of
+                    // `_SPECIFICS`, so a bare `contains` would let a sibling
+                    // exit vouch for a door that had been removed.
+                    let names = t.match_indices(state).any(|(i, _)| {
+                        t[i + state.len()..]
+                            .chars()
+                            .next()
+                            .is_none_or(|c| c != '_' && !c.is_ascii_alphanumeric())
+                    });
+                    names
+                        && !t.starts_with("//")
+                        && !t.starts_with(&format!("pub(crate) const {state}"))
+                })
+                .collect();
+            assert!(
+                !sites.is_empty(),
+                "`{state}` has no producer left in production code. It is a door \
+                 the short path cannot do without: there is no annotate exit to \
+                 fall back on, so removing the retry does not simplify the \
+                 ladder — it converts every failed single-claim turn into a \
+                 refusal, and the reader loses the answer rather than the badge"
+            );
+        }
+    }
+
+    /// **GR-11 — the decline-recognition set decides while the typed
+    /// disposition reads `not_computed`, and neither may be retired in favour
+    /// of the other yet.**
+    ///
+    /// Note df357e58 (2026-08-14): `answer_declines`, `released_pure_decline`
+    /// and the refusal-opener list were listed for retirement on the argument
+    /// that the typed disposition supersedes them. It does not — not yet. P1
+    /// made H1 telemetry, so on the overwhelming majority of turns the typed
+    /// field is the `not_computed` sentinel, and a field that does not decide
+    /// cannot be the only decider. Retiring the zoo against it would leave a
+    /// pure decline released as an ANSWER: the ledger would derive
+    /// `Unverified` instead of `CannotKnowFromHere`, the coverage probe would
+    /// never fire, and a genuine knowledge gap would mis-route as
+    /// `ClaimUncovered` (bench/gap_check/DECISION.md bug 2, observed on
+    /// `ood-australia-capital` over 10 retrieved distractors).
+    ///
+    /// The sibling test above pins that the typed verdict does not CHANGE an
+    /// action. This one pins the other side, which is what the retirement
+    /// order would have broken: the action is still reached with the typed
+    /// field carrying nothing at all, and the decline guard's own condition
+    /// cannot read it.
+    #[test]
+    fn a_decline_is_still_recognised_while_the_typed_disposition_is_uncomputed() {
+        const DECLINE: &str = "The sources do not contain that detail.";
+
+        // The turn as it actually ships on a flag-off (or no-instrument) arm:
+        // H1 produced nothing, so `with_native_verdict` writes the sentinel
+        // into BOTH keys — and the action beside them is still the zoo's.
+        let meta = with_native_verdict(
+            serde_json::json!({
+                "action": abstention_action(DECLINE)
+                    .expect("the zoo must recognise a pure decline"),
+            }),
+            None,
+        );
+        assert_eq!(
+            meta["native_decision"], NATIVE_VERDICT_NOT_COMPUTED,
+            "precondition: the typed disposition must be UNCOMPUTED here, or \
+             this test is not exercising the case the retirement order missed"
+        );
+        assert_eq!(
+            meta["native_answerability"], NATIVE_VERDICT_NOT_COMPUTED,
+            "precondition: no score either"
+        );
+        assert_eq!(
+            meta["action"], "abstained_decline",
+            "a pure decline must be reclassified as an abstention even though \
+             the typed disposition decided nothing — the zoo is the decider on \
+             both arms until P3c"
+        );
+
+        // Structural: the decline guard's own condition must not consult the
+        // typed verdict. Routing recognition through it is a one-token edit at
+        // the call site (`&& native.is_some()`) that no pure-function test can
+        // see, so the condition is read here directly. `include_str!` resolves
+        // relative to THIS file (ARCH §7 — structural, not remembered).
+        const SRC: &str = include_str!("mod.rs");
+        let prod = SRC.split("\n#[cfg(test)]").next().unwrap_or(SRC);
+        let i = prod
+            .find("let reclassify = ")
+            .expect("the decline guard is gone — re-point this guard");
+        let j = prod[i..]
+            .find(".flatten();")
+            .expect("the decline guard's condition no longer ends where this guard expects");
+        let condition = &prod[i..i + j];
+        assert!(
+            !condition.contains("native"),
+            "the decline guard reads H1's verdict. P1 retired the typed \
+             shortcut in BOTH directions because it made the flag change a \
+             turn's action, which is what A1's arm-identity kill forbids — and \
+             while the disposition reads `not_computed` it would simply stop \
+             recognising declines:\n{condition}"
+        );
+    }
+
     #[test]
     fn released_pure_decline_separates_declines_from_caveated_answers() {
         // The P0 target shape: a provenance-flagged decline that asserts

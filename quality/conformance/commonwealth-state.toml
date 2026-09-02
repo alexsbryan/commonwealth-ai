@@ -1,0 +1,18 @@
+# Conformance tags in `commonwealth-state` — GENERATED. DO NOT EDIT BY HAND.
+#
+#   UPDATE_CONFORMANCE_TAGS=1 cargo test -p kernel-types --test conformance_tags
+#
+# Each claim maps a requirement id from research/clean-room/REQUIREMENTS.md
+# to the test that proves it. `test` is `<junit classname>::<junit name>`, so
+# `svrn conformance` can join a claim to a real per-test verdict without
+# guessing.
+#
+# `asserts` counts falsifiable exits in the test body. It is never zero: a
+# covers: tag over a body that cannot fail is refused by the generator.
+
+[[claim]]
+requirement = "FE-119"
+test = "commonwealth-state::store::tests::gc_is_bounded_by_both_the_cutoff_and_the_namespace"
+file = "commonwealth/crates/commonwealth-state/src/store.rs"
+line = 242
+asserts = 9

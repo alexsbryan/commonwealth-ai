@@ -559,6 +559,181 @@ fn fault_detection_recovery_on_heartbeat() {
 // Full state machine from announcement to safe stop.
 // ============================================================================
 
+/// covers: FE-139
+///
+/// The departure sequence, driven by the ORCHESTRATOR — the thing that
+/// actually stops processes — rather than by a hand-advanced state machine.
+///
+/// `graceful_departure_full_lifecycle` below advances `GracefulDeparture`
+/// itself and passes green whatever the product does, because until
+/// 2026-09-02 nothing constructed one: `Orchestrator::stop_all`, whose doc
+/// comment said "(graceful departure)", terminated every child directly and
+/// neither state machine was ever reached. That is the exact shape of a test
+/// written against dead orchestration code — it reads as compliance and
+/// defends nothing.
+///
+/// Three things make this one an instrument instead:
+///   1. the sequence is read off the orchestrator's own event stream;
+///   2. the announcement has a CONSEQUENCE — a departing node refuses new
+///      shard plans, so the states are not merely logged;
+///   3. the processes are gone at the end, which is what an abrupt kill also
+///      produces, so it is the weakest of the three and is asserted last.
+#[tokio::test]
+async fn a_departing_orchestrator_announces_rebalances_and_drains_before_it_stops_anything() {
+    use commonwealth_inference::orchestrator::health::HealthCheckConfig;
+    use commonwealth_inference::orchestrator::orchestrator::{Orchestrator, OrchestratorEvent};
+    use commonwealth_inference::orchestrator::process::SpawnConfig;
+
+    let node_id = NodeId::from_u128(7);
+    let mut orch = Orchestrator::new(
+        SpawnConfig {
+            llama_server_path: "/nonexistent/llama-server".into(),
+            rpc_server_path: "/nonexistent/rpc-server".into(),
+            ..Default::default()
+        },
+        HealthCheckConfig::default(),
+    );
+    assert!(!orch.is_departing(), "a fresh orchestrator is not departing");
+
+    // A 50ms countdown so the drain window is real but the test is not slow.
+    // The states are unaffected by its length — that is the point of taking
+    // it as a parameter rather than reading the 30s default here.
+    let observed = orch
+        .depart_gracefully(node_id, Duration::from_millis(50))
+        .await
+        .expect("a departure with nothing to stop still runs its sequence");
+
+    assert_eq!(
+        observed,
+        vec![
+            DepartureState::Announced,
+            DepartureState::Rebalancing,
+            DepartureState::Draining,
+            DepartureState::Complete,
+        ],
+        "every state must be entered, in order — a departure that jumped \
+         straight to Complete looks identical from the outside"
+    );
+
+    // The same sequence on the event stream a peer would poll. Asserted
+    // separately from the return value because they are two surfaces, and a
+    // departure that returned the right list while emitting nothing would
+    // leave the rest of the mesh with no announcement to rebalance on.
+    let emitted: Vec<DepartureState> = orch
+        .drain_events()
+        .into_iter()
+        .filter_map(|e| match e {
+            OrchestratorEvent::DepartureAdvanced { node_id: n, state } => {
+                assert_eq!(n, node_id);
+                Some(state)
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(emitted, observed);
+
+    assert!(
+        !orch.is_departing(),
+        "the departure clears once its processes are stopped"
+    );
+    assert_eq!(orch.process_count(), 0);
+}
+
+/// covers: FE-139
+///
+/// The announcement has teeth: from the moment a departure is announced the
+/// node refuses new shard plans. Without this the state machine is a log
+/// line, and the scheduler could hand this node a model while its countdown
+/// runs — placing a shard on a process that is about to stop, which is the
+/// 503 the countdown exists to prevent.
+#[tokio::test]
+async fn a_node_that_has_announced_its_departure_refuses_new_shard_plans() {
+    use commonwealth_inference::orchestrator::health::HealthCheckConfig;
+    use commonwealth_inference::orchestrator::orchestrator::Orchestrator;
+    use commonwealth_inference::orchestrator::process::SpawnConfig;
+
+    let node_id = NodeId::from_u128(7);
+    let spawn = SpawnConfig {
+        llama_server_path: "/nonexistent/llama-server".into(),
+        rpc_server_path: "/nonexistent/rpc-server".into(),
+        ..Default::default()
+    };
+    let plan = ShardPlan {
+        model: ModelId::from_u128(1),
+        entry_node: node_id,
+        assignments: vec![ShardAssignment {
+            node_id,
+            layers: LayerRange::new(0, 64),
+            gpu_index: 0,
+            rpc_address: "127.0.0.1:50051".parse().unwrap(),
+        }],
+        estimated_tokens_per_sec: 40.0,
+        estimated_ttft_ms: 1000,
+    };
+    let mut orch = Orchestrator::new(spawn, HealthCheckConfig::default());
+
+    // The control first (§18.4): with no departure in flight this plan is
+    // ACCEPTED into the spawn path and fails for its own reason — a missing
+    // binary. If it refused here too, the assertion below would prove nothing.
+    let err = orch
+        .apply_shard_plan(&plan, "/tmp/model.gguf")
+        .await
+        .expect_err("the fixture binary does not exist");
+    assert!(
+        !format!("{err}").contains("departing"),
+        "a non-departing node must reach the spawn, not the departure guard: {err}"
+    );
+
+    // Announce, and DO NOT drain yet — this is the window a scheduler that
+    // has not seen the announcement would place work in.
+    orch.announce_departure(node_id, Duration::from_millis(20))
+        .expect("announce");
+    assert!(orch.is_departing());
+    assert_eq!(orch.departure_state(), Some(DepartureState::Announced));
+
+    let err = orch
+        .apply_shard_plan(&plan, "/tmp/model.gguf")
+        .await
+        .expect_err("a departing node must refuse new work");
+    assert!(
+        format!("{err}").contains("departing"),
+        "the refusal must name the departure, so an operator reading the log \
+         sees a node leaving rather than a spawn that failed: {err}"
+    );
+
+    // Announcing twice is a refusal, not a second countdown — the second call
+    // would otherwise reset the clock and drain forever.
+    assert!(orch
+        .announce_departure(node_id, Duration::from_millis(20))
+        .is_err());
+
+    let rest = orch.complete_departure().await.expect("departure completes");
+    assert_eq!(
+        rest,
+        vec![
+            DepartureState::Rebalancing,
+            DepartureState::Draining,
+            DepartureState::Complete,
+        ]
+    );
+
+    // And once it is over the node is placeable again — a departure is a
+    // transition, not a permanent lock.
+    assert!(!orch.is_departing());
+    let err = orch
+        .apply_shard_plan(&plan, "/tmp/model.gguf")
+        .await
+        .expect_err("the fixture binary still does not exist");
+    assert!(
+        !format!("{err}").contains("departing"),
+        "the guard must lift when the departure completes: {err}"
+    );
+
+    // Completing without announcing is refused rather than silently running a
+    // departure nobody was told about.
+    assert!(orch.complete_departure().await.is_err());
+}
+
 #[test]
 fn graceful_departure_full_lifecycle() {
     let id = NodeId::from_u128(1);

@@ -35,12 +35,20 @@ pub struct SendMessageRequest {
 pub struct CreateConversationRequest {
     #[serde(default)]
     pub skill_id: Option<String>,
+    /// Per-conversation retrieval allow-list (`Conversation::enabled_corpora`).
+    /// Same wire form as the daemon's `turn_http` — one client speaks to both.
+    /// Validated in `Runtime::seed_conversation`; an unknown id is a 400.
+    #[serde(default)]
+    pub enabled_corpora: Option<Vec<String>>,
 }
 
 #[derive(serde::Serialize)]
 pub struct CreateConversationResponse {
     pub id: String,
     pub created_at: i64,
+    /// Echo of the seeded allow-list — see the daemon's `turn_http` twin.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled_corpora: Option<Vec<String>>,
 }
 
 #[derive(serde::Serialize)]
@@ -214,18 +222,29 @@ pub async fn create_conversation(
     // `resolve_active_mode` can't route the conversation into a
     // workspace agent loop.
     if let Err(e) = tr
-        .seed_conversation(&id, now, req.skill_id.as_deref())
+        .seed_conversation(
+            &id,
+            now,
+            req.skill_id.as_deref(),
+            req.enabled_corpora.as_deref(),
+        )
         .await
     {
-        return Err(api_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            &format!("seed conversation: {e}"),
-        ));
+        return Err(match e {
+            sovereign_core::error::Error::InvalidInput(msg) => {
+                api_error(StatusCode::BAD_REQUEST, &msg)
+            }
+            other => api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &format!("seed conversation: {other}"),
+            ),
+        });
     }
 
     Ok(Json(CreateConversationResponse {
         id,
         created_at: now,
+        enabled_corpora: req.enabled_corpora,
     }))
 }
 

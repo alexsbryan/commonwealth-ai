@@ -208,7 +208,7 @@ crates/
 ├── sovereign-work-atlas     # Coordination atlas for agents on the mesh
 ├── sovereign-enrichment-catalog # The enrichment store below every host that reads it: the `<data-root>/enrichment/<corpus>/` layout, the `config.json` schema (`EnrichConfig`) and the inventory. Minted 2026-08-20 (rung nc-16-shared-capability) — the schema lived in `sovereign-cli-llm`, a BINARY, so the daemon's watched-folder driver mirrored it by hand in `sovereign-tools` (four fields behind) and the desktop hand-parsed the same file. All three now read one definition; the CLI's `enrich_cmd::{config,paths}` are re-exports
 ├── sovereign-runtime-recipe # THE recipe that commissions a `Runtime`: the router classifier stack, the turn tool registry and the enrichment lane, below every host. Minted 2026-08-25 (TOPOLOGY.md §10 phase 5c) — the recipe needs `sovereign-tools` + `sovereign-gliner` and every crate that could already see both was a host BINARY, so `svrn chat`, the desktop and `sovereign-server` each carried their own ~600-line copy and only ONE of eleven optional slots was wired by all three. **All four hosts are on it as of 2026-08-26** (phase 7): `sovereign daemon run`, `svrn chat`, the desktop and the hub server, so `runtime_commission_census.rs`'s `UNSHARED_RECIPES` list is EMPTY. A host now supplies `RecipeInputs` — inference, store, corpus engine, skills, `Vec<Box<dyn ToolBundle>>`, `ToolSwitches`, `LaneWarmth`, `RerankWiring` — and struct-updates only the slots that are its own. `common_parts` returns the parts, the shared `AtlasContextManager` and the MCP manager; `commission` is the only `Runtime::new` in first-party production code
-├── sovereign-turn-client  # THE client half of the turn protocol — how a surface asks a serving host for a turn. Minted 2026-08-25 (TOPOLOGY.md §10 phase 6) in the **contract** layer beside `oicp-client`, the existing precedent for "protocol types plus the client that speaks them"; its only non-leaf dependency is `sovereign-contracts`, so it cannot see a `Runtime`, a store or a corpus — which is what lets a surface depend on it without dragging a serving host's world along. `TurnClient::run_turn` is the client-side mirror of `sovereign_core::runtime::serve_turn`: ONE implementation of "drive a turn to completion and tell me what it did", where five CLI ask commands each had their own and each ended by re-reading the store — which only works from inside the process that owns it. `svrn chat ask` and `svrn chat session` are its first callers and hold no `Runtime`. Before it, the only Rust code that had ever SENT a `TurnRequest` was two integration tests, each with its own hand-rolled WebSocket dance
+├── sovereign-turn-client  # THE client half of the turn protocol — how a surface asks a serving host for a turn. Minted 2026-08-25 (TOPOLOGY.md §10 phase 6) in the **contract** layer beside `oicp-client`, the existing precedent for "protocol types plus the client that speaks them"; its only non-leaf dependency is `sovereign-contracts`, so it cannot see a `Runtime`, a store or a corpus — which is what lets a surface depend on it without dragging a serving host's world along. `TurnClient::run_turn` is the client-side mirror of `sovereign_core::runtime::serve_turn`: ONE implementation of "drive a turn to completion and tell me what it did", where five CLI ask commands each had their own and each ended by re-reading the store — which only works from inside the process that owns it. `svrn chat ask` and `svrn chat session` are its first callers and hold no `Runtime`. Before it, the only Rust code that had ever SENT a `TurnRequest` was two integration tests, each with its own hand-rolled WebSocket dance `TurnClient::create_conversation(skill_id, enabled_corpora)` (2026-09-01, issue #57) carries the per-conversation corpus allow-list on the create body — `svrn chat ask/session --corpus <id>` — which the host validates in `Runtime::seed_conversation` against the corpora it would actually search and refuses with a 400 naming the unknown id and the installed list; the key is omitted when unset, so an unscoped create is byte-identical to before.
 ├── sovereign-mesh           # In-process cmnwlth embed
 ├── sovereign-compute        # Supervised compute-child process boundary (P1): child-process supervisor + native lossless wire + child server/entrypoint + daemon-side single-child routing facade. Value = crash isolation + distributed case, NOT parallelism (see doc)
 ├── sovereign-server         # Axum REST + WebSocket, multi-tenant + approvals
@@ -264,7 +264,7 @@ only the OICP contract crates, enforced by the xtask `boundary-gate`
 ```
 crates/
 ├── sovereign-workflow       # Step·Artifact·Runner — typed dataflow over local-model steps (P0+P1 + content cache + `for_each` collection-map; `svrn workflow run`). Diffed byte-for-byte against the real corpus chunk→embed stage. Owns the `StepKind`/`WireKind` wire-kind catalog the authoring schema derives from (§2.1 source of truth).
-├── sovereign-workflow-host  # Daemon-runnable workflow host — assembles the standard tool registry + daemon inference + content cache to run a workflow in-process; the catalog/resolve surface; the living trigger; the `recipe:` corpus-ingest stage; and the NL workflow-author tool bundle (`workflow_write`/`_write_structured`/`validate`/`test`, the JSON-Schema-constrained author mirroring recipe-author). Two run entries: `run_workflow_in_process` (builds a daemon-routed provider from a URL — the CLI + living trigger) and `run_workflow_with_provider` (takes an **injected** provider + optional `StepObserver` — the desktop **Run a workflow** view feeds its own `AppState.inference` and streams per-step progress to the UI).
+├── sovereign-workflow-host  # Daemon-runnable workflow host — assembles the standard tool registry + daemon inference + content cache to run a workflow in-process; the catalog/resolve surface; the living trigger; the `recipe:` corpus-ingest stage; and the NL workflow-author tool bundle (`workflow_write`/`_write_structured`/`validate`/`test`, the JSON-Schema-constrained author mirroring recipe-author). Two run entries: `run_workflow_in_process` (builds a daemon-routed provider from a URL — the CLI + living trigger) and `run_workflow_with_provider` (takes an **injected** provider + optional `StepObserver` — the desktop **Run a workflow** view feeds its own `AppState.inference` and streams per-step progress to the UI). Also the ONE decider for "which embed model, and does the daemon answer with it" — `daemon_models::resolve_embed_model` (explicit → configured stem → embedding-like `/v1/models` id, then a `POST /v1/embeddings` probe as the verdict), shared by `run_workflow_in_process` (`svrn corpus ingest`), `svrn corpus search`, `svrn recipe test --enrich` and `svrn chat` bootstrap since 2026-09-01; before that three copies disagreed and a daemon whose listing carried only chat ids served chat but refused ingest.
 ├── sovereign-tools-base     # Pure leaf workflow tools (shell/web/chunk/file/json/csv/zip/vector/MCP) — the tool set the studio package ships without sovereign-tools
 ├── sovereign-recipe-author  # Recipe-authoring tool bundle + RecipeProject model + project store (re-exported as `sovereign_tools::recipe_author` for legacy paths)
 └── sovereign-studio         # Headless studio CLI — authors/tests recipes + runs workflows against any OICP daemon; the proof the package is independently usable
@@ -4000,23 +4000,44 @@ the standalone-daemon topology — flagged for its own liveness
 investigation in OICP_RATIONALIZATION.md):
 
 - `ManagedProcess` tracks lifecycle states (`Starting | Running |
-  Unhealthy | Failed | Stopped`); graceful SIGTERM with timeout,
-  then SIGKILL.
+  Unhealthy | Failed | Stopped`); SIGTERM, then `SpawnConfig::stop_timeout`
+  (default 10s), then SIGKILL. Both halves of that were untrue until
+  2026-09-02: `stop()` reached straight for tokio's `start_kill` (SIGKILL on
+  unix) and waited out a hard-coded 5s that no signal had been sent to earn.
 - `HealthTracker` polls every 5s; 20-sample latency window;
   `Unresponsive` after 3 consecutive failures.
-- `GracefulDeparture` — 30s countdown state machine
-  (`Announced → Rebalancing → Draining → Complete`).
-- `FaultDetector` collapses health changes into `FaultEvent`s.
+- `GracefulDeparture` — countdown state machine
+  (`Announced → Rebalancing → Draining → Complete`), driven by
+  `Orchestrator::depart_gracefully` / `announce_departure` +
+  `complete_departure`. From the announcement the node refuses new shard
+  plans, which is the state machine's only externally visible consequence
+  and the thing that keeps it from being a log line. `stop_all` is the
+  ABRUPT path and says so; the standby transition in `apply_mesh_plan`
+  departs instead. Nothing constructed a `GracefulDeparture` before
+  2026-09-02 — it was unit-tested, wired to nothing, and `stop_all`'s doc
+  comment claimed its job (FE-139).
+- `FaultDetector` collapses health changes into `FaultEvent`s. STILL
+  UNWIRED: nothing outside its own tests constructs one.
 
 ### HTTP API
 
 Two listeners, two trust domains.
 
-**Client API — :9741, binds 0.0.0.0** (federated inference needs peer
-reachability). Loopback callers pass free; non-loopback callers go
-through a bearer-token layer (`client_auth`, `[daemon] client_token`,
-with exempt paths for federation/health) — added with the SaaS
-hardening, 2026-07.
+**Client API — :9741, binds 127.0.0.1 by default.** Secure by default:
+the wildcard bind is reached only when something explicit asks for it —
+an explicit `[daemon] client_bind`, or the `client-exposed` marker
+`expose_client_api` writes on `mesh create`/`join` (federated inference
+needs peer reachability). An ENCRYPTED mesh forces it back to loopback
+whatever the config says: the iroh acceptor is the sole ingress. The one
+decider is `sovereign-mesh::daemon::resolve_client_bind_posture`.
+
+A non-loopback bind carries a bearer token or serves nobody — the token
+chain is env → `[daemon] client_token` → generate-and-persist, and when
+even that fails the posture installs NONE, which makes `client_auth`
+refuse every remote caller rather than serve unauthenticated. Loopback
+callers pass free; the layer has exempt paths for federation/health.
+Added with the SaaS hardening, 2026-07; extracted out of `start_daemon`
+and given a test 2026-09-02 (UI-22).
 
 A non-loopback caller can now present one of **two** bearers, matched in
 that order. `client_token` is the daemon-wide one and unlocks everything.
@@ -5198,7 +5219,7 @@ Default ports:
 | Understand local-corpus snapshot/rollback        | `sovereign-tools/src/local_corpus/writeback.rs` + `frontmatter.rs`  |
 | Pick the next daemon test to write               | [`docs/TESTING_SURFACE.md`](./docs/TESTING_SURFACE.md)              |
 | Add a binary-bearing corpus (email / .docx / .xlsx / future calendar / transactions) | `corpus-engine/src/extractors/described_asset.rs` — register an `AssetSubExtractor` via `CorpusEngine::set_asset_sub_extractors`; the in-tree defaults cover xlsx / docx / plaintext / opaque |
-| Read or extend the multi-origin reconciliation primitive | `corpus-engine/src/enrichment/reconciliation/{mod,multi_origin,oplog,signals}.rs` — operates on `Vec<Entity>` with `Provenance` (AD-4); writes `atlas/reconciliation_oplog.jsonl` reversible op log |
+| Read or extend the multi-origin reconciliation primitive | `corpus-engine/src/enrichment/reconciliation/{mod,multi_origin,oplog,signals}.rs` — operates on `Vec<Entity>` with `Provenance` (AD-4); writes `atlas/reconciliation_oplog.jsonl`. `oplog::reverse_merge` is the actual undo: it matches an `OpId` against the log and restores the merge's RECORDED inputs, stamping `reverts` on the Split (the governance `Revert { targets }` shape). `multi_origin::split_atom` is the operator's own judgement — caller-supplied outputs, no lookup — and is not undo |
 | Score a clustering of mention-ids vs ground truth (B³ + pairwise-F1) | `sovereign-eval/src/entity_resolution_score.rs` (scorer) + `entity_resolution_bench.rs` (Split/peek-budget) |
 | Run the Phase 5 Enron measurement loop | `svrn bench enron run --corpus enron-sample-onemailbox --split train --policy {pre_reconciliation\|tuned}` → `sovereign-cli-llm/src/bench_cmd/enron.rs` |
 | Add another typed Entity column-extractor for tabular asset kinds | `corpus-engine/src/extractors/column_aware.rs` — extend `ColumnHeaderMap` or write a per-asset-kind extractor reading the parquet parsed-form cache directly |

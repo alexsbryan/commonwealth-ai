@@ -106,6 +106,19 @@ pub struct EvidenceExcerpt {
 pub struct RelatedAtom {
     pub atom_id: AtomId,
     pub atom_type: AtomType,
+    /// Serialised as `canonical_name` — the wire name the other two
+    /// producers of this shape (`sovereign_mesh::RelatedAtom` and the
+    /// desktop's `RelatedAtomDto`) already emit, and the one the TS
+    /// `RelatedAtom` interface declares. Emitting `display_name` here
+    /// made the atlas Explore path the odd one out: the related-name
+    /// chip read `r.canonical_name`, got `undefined`, and rendered a
+    /// row of blank buttons. The Rust-side field keeps its name
+    /// because that is what a related atom IS to this module — the
+    /// rename is about converging ONE wire key (ARCH §10.6), not
+    /// about renaming the concept. Do NOT extend this to
+    /// `AtomDetail::display_name`: that is the FOCAL atom's name and
+    /// its wire key is correct.
+    #[serde(rename = "canonical_name")]
     pub display_name: String,
     pub edge_type: EdgeType,
     /// `"source"` or `"target"` — describes the *other* atom's role
@@ -749,6 +762,64 @@ mod tests {
         // Knowledge is the target of edge 2, so the other
         // (Justification) is the source.
         assert_eq!(detail.related[1].role, "source");
+    }
+
+    /// The related-atom NAME travels as `canonical_name` on the wire.
+    ///
+    /// Every other test in this module asserts the Rust field
+    /// (`related[0].display_name`), which a `#[serde(rename)]` does not
+    /// touch — so the whole suite stayed green while the desktop's
+    /// Explore tab rendered a column of nameless buttons. Three
+    /// producers emit this shape (`sovereign_mesh::RelatedAtom`, the
+    /// desktop's `RelatedAtomDto`, and this one) and the TS
+    /// `RelatedAtom` interface reads `canonical_name` from all three;
+    /// this module was the one that disagreed. The assertion is on
+    /// serialised JSON because the wire key IS the contract here.
+    #[tokio::test]
+    async fn related_atom_serialises_its_name_as_canonical_name() {
+        let tmp = tempfile::tempdir().unwrap();
+        let atlas_dir = tmp.path().join("wiki").join("atlas");
+        write_atoms(
+            &atlas_dir,
+            vec![entity(1, "Knowledge", 0.9), entity(2, "Belief", 0.6)],
+        );
+        write_edges(
+            &atlas_dir,
+            vec![Edge {
+                id: EdgeId::new(1),
+                edge_type: EdgeType::Grounds,
+                source: AtomId::entity(1),
+                target: AtomId::entity(2),
+                evidence: vec![],
+                trigger_event: None,
+                sub_question: None,
+                confidence: 0.85,
+                provenance: EdgeProvenance::LlmExtraction,
+            }],
+        );
+        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        let detail = reader
+            .get_atom_detail("wiki", "entity-0001")
+            .await
+            .unwrap()
+            .unwrap();
+
+        let json = serde_json::to_value(&detail).unwrap();
+        let related = &json["related"][0];
+        assert_eq!(
+            related["canonical_name"], "Belief",
+            "the desktop reads r.canonical_name; anything else renders blank",
+        );
+        assert!(
+            related.get("display_name").is_none(),
+            "two keys for one name is how the frontend ends up reading the wrong one",
+        );
+
+        // The FOCAL atom keeps `display_name` — it is a different
+        // field with a different consumer, and the rename above must
+        // not spread to it.
+        assert_eq!(json["display_name"], "Knowledge");
+        assert!(json.get("canonical_name").is_none());
     }
 
     #[tokio::test]

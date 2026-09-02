@@ -3011,6 +3011,127 @@ mod rpc_prune_tests {
         assert!(local_fit_verdict(84 * GIB, Some(20 * GIB), 110 * GIB, 16 * GIB).is_some());
     }
 
+    /// covers: FE-77
+    ///
+    /// An overflow is not a shortage. `InsufficientCluster` means "not enough
+    /// anchors yet" and resolves ITSELF as peers settle, so an operator reading
+    /// it waits. A per-device overflow never resolves by waiting — one device
+    /// was handed more than it has — and pooling more memory does not fix it.
+    /// Reusing the shortage variant sends the operator hunting for a peer that
+    /// is already there.
+    ///
+    /// The advice half matters just as much: `need = held x headroom`, so
+    /// telling an operator to RAISE the headroom makes the overflow worse. The
+    /// refusal must say lower, and must name the override.
+    #[test]
+    fn a_per_device_overflow_is_its_own_refusal_and_advises_lowering_headroom() {
+        const GIB: u64 = 1024 * 1024 * 1024;
+        // The gate is only meaningful with its own override off.
+        std::env::remove_var("SOVEREIGN_SKIP_PER_DEVICE_FIT");
+
+        // Four 2 GiB blocks split evenly across a 1 GiB worker and a 64 GiB
+        // host: the CLUSTER holds the model comfortably (65 GiB pooled for
+        // 8 GiB of weights) and the worker's own share still does not fit.
+        // That gap is exactly what a pooled-memory check cannot see.
+        let dist = DistributionPlan {
+            devs: Vec::new(),
+            overrides: Vec::new(),
+            plan: vec![
+                NodeShard {
+                    device_index: 0,
+                    blocks: Some((0, 1)),
+                    holds_output: false,
+                    fraction: 0.5,
+                },
+                NodeShard {
+                    device_index: 1,
+                    blocks: Some((2, 3)),
+                    holds_output: true,
+                    fraction: 0.5,
+                },
+            ],
+            tensor_split: vec![0.5, 0.5],
+            assignments: vec![RpcWarmAssignment {
+                endpoint: "10.0.0.7:50052".to_string(),
+                device_index: 0,
+            }],
+            eligible_workers: 1,
+            device_vram_bytes: vec![GIB, 64 * GIB],
+            mass: Some(ModelMass {
+                block_bytes: vec![2 * GIB; 4],
+                head_bytes: 0,
+                embd_bytes: 0,
+                other_global_bytes: 0,
+                routed_expert_bytes: 0,
+                recurrent: false,
+            }),
+            overheads: None,
+        };
+        assert!(
+            dist.device_vram_bytes.iter().sum::<u64>() > 8 * GIB,
+            "the premise: pooled memory is ample, so only a PER-DEVICE check can refuse this"
+        );
+
+        let overflow =
+            first_worker_overflow(&dist).expect("a 4 GiB share on a 1 GiB device must refuse");
+        assert_eq!(overflow.device_index, 0);
+        assert_eq!(
+            overflow.endpoint.as_deref(),
+            Some("10.0.0.7:50052"),
+            "the refusal must name the one device an operator can act on"
+        );
+        assert_eq!(overflow.capacity_mb, 1024);
+        assert!(
+            overflow.need_mb > overflow.capacity_mb,
+            "need {} MiB must exceed capacity {} MiB for this to be an overflow",
+            overflow.need_mb,
+            overflow.capacity_mb
+        );
+
+        // A typed variant of its own, and one an operator can tell apart from
+        // "the cluster is still forming" without reading the numbers.
+        assert_eq!(
+            summarize_placement(&LoadPlacement::WorkerUnfit(overflow.clone())).mode,
+            "unfit-worker"
+        );
+        assert_ne!(
+            summarize_placement(&LoadPlacement::WorkerUnfit(overflow.clone())).mode,
+            summarize_placement(&LoadPlacement::InsufficientCluster {
+                eligible: 0,
+                quorum: 1
+            })
+            .mode,
+            "an overflow must never render as the shortage that fixes itself"
+        );
+
+        let text = overflow.refusal();
+        assert!(
+            text.contains("LOWER"),
+            "the refusal must advise lowering headroom; got: {text}"
+        );
+        assert!(
+            !text.to_lowercase().contains("raise `[shared_model] headroom`")
+                && !text.to_lowercase().contains("raise the headroom"),
+            "raising headroom multiplies `need` and makes the overflow worse; got: {text}"
+        );
+        assert!(
+            text.contains("SOVEREIGN_SKIP_PER_DEVICE_FIT=1"),
+            "the refusal must name its own override; got: {text}"
+        );
+        assert!(
+            text.contains("10.0.0.7:50052"),
+            "the refusal must name the device; got: {text}"
+        );
+
+        // The control: every device fitting is not a refusal at all.
+        let mut roomy = dist;
+        roomy.device_vram_bytes = vec![64 * GIB, 64 * GIB];
+        assert!(
+            first_worker_overflow(&roomy).is_none(),
+            "a plan where every share fits must not refuse"
+        );
+    }
+
     #[test]
     fn local_unfit_placement_reports_unfit_local_mode() {
         // Glassbox: /status must say WHY the shared model is unavailable —

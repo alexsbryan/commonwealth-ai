@@ -361,6 +361,68 @@ def apply_mutant(p, m) -> None:
     p.write_text(cur.replace(m["find"], m["replace"], 1))
 
 
+def mark_stale(m, src: str) -> bool:
+    """STALE iff this mutant's `find` does not occur EXACTLY ONCE in `src`.
+
+    Checked before any build, because a bank that no longer describes the code
+    invalidates everything downstream of it. Zero occurrences means the site
+    moved or was deleted, so the mutation would never apply; more than one
+    means the mutation is ambiguous and whichever site `replace(..., 1)` hits
+    is an accident. Neither is a verdict about the suite, and calling either
+    one SURVIVED would be a bug report filed against the wrong thing.
+
+    Returns whether the mutant was marked. Separated from `main` so the
+    self-test can drive it without a repo checkout.
+    """
+    if src.count(m["find"]) != 1:
+        m["verdict"] = "STALE"
+        return True
+    return False
+
+
+def adjudicate(m, results, red) -> str:
+    """The verdict for ONE mutant. Sets `verdict` (and `detail`/`killed`) on it.
+
+    FOUR VERDICTS, NOT TWO (ARCH §18.1). Each could-not-judge arm below is a
+    distinct way of knowing nothing, and every one of them would read as a
+    pass if it were collapsed into SURVIVED:
+
+      CAUGHT           a test this mutant DECLARES went red. The requirement
+                       is genuinely defended.
+      SURVIVED         every declared test RAN and stayed green. The product
+                       was broken and the suite did not notice — a bug report
+                       about the suite, not about this script.
+      COULD-NOT-JUDGE  the build broke (the suite never ran); or a declared
+                       test was ALREADY red at baseline, so its redness proves
+                       nothing about this mutation; or a declared test is
+                       absent from the report, so nobody looked.
+
+    `results` is `{test: passed}` for the batch, or falsy when the build
+    failed. `red` is the set of tests already failing at baseline.
+
+    Extracted from `run_phase` so it can be exercised without cargo: the
+    self-test above it covers batching and name resolution, and until this
+    was a function the verdict computation itself — the part that decides
+    whether a mutation counts as proof — had no falsifier at all.
+    """
+    if not results:
+        m["verdict"] = "COULD-NOT-JUDGE"   # the build broke; not a pass
+        m.setdefault("detail", "this mutation does not compile — the "
+                               "suite never ran, so nothing is proven")
+        return m["verdict"]
+    if any(t in red for t in m["mustFail"]):
+        m["verdict"] = "COULD-NOT-JUDGE"
+        m["detail"] = "declared test was already red at baseline"
+        return m["verdict"]
+    hits = [t for t in m["mustFail"] if results.get(t) is False]
+    missing = [t for t in m["mustFail"] if t not in results]
+    m["verdict"] = "CAUGHT" if hits else ("COULD-NOT-JUDGE" if missing else "SURVIVED")
+    m["killed"] = hits
+    if missing:
+        m["detail"] = f"declared test(s) not in the report: {missing}"
+    return m["verdict"]
+
+
 def run_phase(items, env, red, width, one_per_crate, label):
     """One adjudication pass. Sets `verdict` on every item it judges.
 
@@ -426,22 +488,7 @@ def run_phase(items, env, red, width, one_per_crate, label):
                 originals.clear()
                 continue
             for m in batch:
-                if not results:
-                    m["verdict"] = "COULD-NOT-JUDGE"   # the build broke; not a pass
-                    m.setdefault("detail", "this mutation does not compile — the "
-                                           "suite never ran, so nothing is proven")
-                    continue
-                # CAUGHT iff a test this mutant DECLARES went red.
-                if any(t in red for t in m["mustFail"]):
-                    m["verdict"] = "COULD-NOT-JUDGE"
-                    m["detail"] = "declared test was already red at baseline"
-                    continue
-                hits = [t for t in m["mustFail"] if results.get(t) is False]
-                missing = [t for t in m["mustFail"] if t not in results]
-                m["verdict"] = "CAUGHT" if hits else ("COULD-NOT-JUDGE" if missing else "SURVIVED")
-                m["killed"] = hits
-                if missing:
-                    m["detail"] = f"declared test(s) not in the report: {missing}"
+                adjudicate(m, results, red)
             for p, text in originals.items():
                 Path(p).write_text(text)
             originals.clear()
@@ -552,6 +599,88 @@ def self_test() -> int:
           ["ck::commonwealth-knowledge::guest_grant::tests::expired_grant_is_not_live"],
           f"stats={st} mustFail={qual[0].get('mustFail')}")
 
+    # 8. THE VERDICT ITSELF (EV-25). Checks 1-7 cover batching, application
+    #    and name resolution — everything AROUND the judgment. What decides
+    #    whether a mutation counts as proof is `adjudicate`, and nothing
+    #    exercised it. Every arm below is a way of knowing nothing that would
+    #    read as a pass, or as proof, if it were collapsed.
+    def mutant(must_fail):
+        return {"id": "m", "target": "x/src/lib.rs", "find": "A", "replace": "a",
+                "mustFail": list(must_fail)}
+
+    # 8a. A declared test that goes red is the ONLY thing that means CAUGHT.
+    m = mutant(["t_one"])
+    check("a declared test going red is CAUGHT",
+          adjudicate(m, {"t_one": False, "t_two": True}, set()) == "CAUGHT"
+          and m["killed"] == ["t_one"],
+          f"verdict={m.get('verdict')} killed={m.get('killed')}")
+
+    # 8b. A declared test that RAN and stayed green is SURVIVED — the product
+    #     was broken and the suite did not notice. This is the verdict that is
+    #     a bug report, and the one it is most tempting to soften.
+    m = mutant(["t_one"])
+    check("a declared test that ran and stayed green is SURVIVED",
+          adjudicate(m, {"t_one": True, "t_two": True}, set()) == "SURVIVED",
+          f"verdict={m.get('verdict')}")
+
+    # 8c. A declared test ALREADY RED AT BASELINE is COULD-NOT-JUDGE, never
+    #     CAUGHT. Its redness has nothing to do with the mutation — several
+    #     tests here spawn real processes on real timers, so a loaded machine
+    #     reddens them on its own. Counting one would let a flake masquerade
+    #     as a defended requirement, which is a FALSE CAUGHT: the verdict that
+    #     manufactures coverage out of noise.
+    m = mutant(["t_flaky"])
+    check("a declared test already red at baseline is COULD-NOT-JUDGE, not CAUGHT",
+          adjudicate(m, {"t_flaky": False}, {"t_flaky"}) == "COULD-NOT-JUDGE"
+          and "already red at baseline" in m.get("detail", ""),
+          f"verdict={m.get('verdict')} detail={m.get('detail')!r}")
+
+    # 8d. A declared test ABSENT from the report is COULD-NOT-JUDGE, not
+    #     SURVIVED. Nobody ran it, so nobody looked — reporting SURVIVED would
+    #     file a bug against a suite that was never asked the question.
+    m = mutant(["t_missing"])
+    check("a declared test missing from the report is COULD-NOT-JUDGE, not SURVIVED",
+          adjudicate(m, {"t_other": True}, set()) == "COULD-NOT-JUDGE"
+          and "not in the report" in m.get("detail", ""),
+          f"verdict={m.get('verdict')} detail={m.get('detail')!r}")
+
+    # 8e. A build that produced no report at all is COULD-NOT-JUDGE. The
+    #     suite never ran; an empty report is not a green one.
+    m = mutant(["t_one"])
+    check("a batch with no report at all is COULD-NOT-JUDGE, not SURVIVED",
+          adjudicate(m, {}, set()) == "COULD-NOT-JUDGE"
+          and "does not compile" in m.get("detail", ""),
+          f"verdict={m.get('verdict')} detail={m.get('detail')!r}")
+
+    # 8f. One red among several declared tests is enough — a mutant declares
+    #     the tests that SHOULD catch it, and any one of them doing so is the
+    #     requirement being defended.
+    m = mutant(["t_one", "t_two"])
+    check("one red among several declared tests is CAUGHT, and names which",
+          adjudicate(m, {"t_one": True, "t_two": False}, set()) == "CAUGHT"
+          and m["killed"] == ["t_two"],
+          f"verdict={m.get('verdict')} killed={m.get('killed')}")
+
+    # 8g. STALE is decided BEFORE any build, from the source alone. Zero
+    #     occurrences means the site moved; more than one means whichever site
+    #     `replace(..., 1)` hits is an accident. Either way the bank is lying
+    #     about the code, and neither is a verdict about the suite.
+    src = "fn one() { A }\nfn two() { A }\n"
+    m = mutant([]); m["find"] = "A"
+    check("a `find` occurring twice is STALE before any build",
+          mark_stale(m, src) and m["verdict"] == "STALE",
+          f"verdict={m.get('verdict')}")
+
+    m = mutant([]); m["find"] = "GONE"
+    check("a `find` that no longer occurs is STALE, not a silent skip",
+          mark_stale(m, src) and m["verdict"] == "STALE",
+          f"verdict={m.get('verdict')}")
+
+    m = mutant([]); m["find"] = "fn one"
+    check("a `find` occurring exactly once is NOT stale (the control)",
+          not mark_stale(m, src) and "verdict" not in m,
+          f"verdict={m.get('verdict')}")
+
     # 7. A killed run must UNWIND, or `run_phase`'s finally never restores the
     #    mutated tree. Python's default SIGTERM does not unwind.
     import os as _os
@@ -625,9 +754,7 @@ def main():
 
     # STALE check first — cheap, and a lying bank invalidates everything after.
     for m in bank:
-        src = (ROOT / m["target"]).read_text()
-        if src.count(m["find"]) != 1:
-            m["verdict"] = "STALE"
+        mark_stale(m, (ROOT / m["target"]).read_text())
 
     live = [m for m in bank if "verdict" not in m]
 

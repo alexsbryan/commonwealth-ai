@@ -1,0 +1,46 @@
+# Conformance tags in `sovereign-cli-llm` — GENERATED. DO NOT EDIT BY HAND.
+#
+#   UPDATE_CONFORMANCE_TAGS=1 cargo test -p kernel-types --test conformance_tags
+#
+# Each claim maps a requirement id from research/clean-room/REQUIREMENTS.md
+# to the test that proves it. `test` is `<junit classname>::<junit name>`, so
+# `svrn conformance` can join a claim to a real per-test verdict without
+# guessing.
+#
+# `asserts` counts falsifiable exits in the test body. It is never zero: a
+# covers: tag over a body that cannot fail is refused by the generator.
+
+[[claim]]
+requirement = "EV-11"
+test = "sovereign-cli-llm::bench_cmd::rubric::judge::tests::a_class_with_no_items_reads_as_not_under_test_never_as_a_measured_pass"
+file = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/judge.rs"
+line = 610
+asserts = 5
+
+[[claim]]
+requirement = "EV-11"
+test = "sovereign-cli-llm::bench_cmd::rubric::judge::tests::a_tier_below_either_stated_floor_does_not_clear"
+file = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/judge.rs"
+line = 561
+asserts = 15
+
+[[claim]]
+requirement = "EV-11"
+test = "sovereign-cli-llm::bench_cmd::rubric::judge::tests::the_bank_itself_must_be_large_and_balanced_enough_to_estimate_a_rate"
+file = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/judge.rs"
+line = 636
+asserts = 4
+
+[[claim]]
+requirement = "ST-15"
+test = "sovereign-cli-llm::corpus_cmd::optimize::tests::a_prune_with_no_real_retention_window_is_refused_before_any_index_is_opened"
+file = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/optimize.rs"
+line = 366
+asserts = 3
+
+[[claim]]
+requirement = "ST-15"
+test = "sovereign-cli-llm::corpus_cmd::optimize::tests::a_stated_retention_window_is_accepted_and_carried_through_verbatim"
+file = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/optimize.rs"
+line = 411
+asserts = 8

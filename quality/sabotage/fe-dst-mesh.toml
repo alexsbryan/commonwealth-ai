@@ -1,0 +1,483 @@
+# FE (40 model proposals) + DST (6 hand-authored) + mesh (2 hand-authored).
+# One baseline serves all three; verdicts split by `requirement`.
+
+
+[[mutant]]
+id = "fe-3-a_peer_falls_back_to_its_node_id_when_th"
+requirement = "FE-3"
+target = "sovereign/crates/sovereign-contracts/src/types/projection.rs"
+find = "    pub from_peer: Option<String>,"
+replace = "    pub from_peer: String,"
+mustFail = ["a_peer_falls_back_to_its_node_id_when_the_mesh_cannot_name_it"]
+breaks = "Every node MUST persist a durable asymmetric keypair. The identity MUST be **mesh-independent**: it survives leaving, joining, and switching, so a node is the same node in every trust ring it belongs "
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-4-a_signature_verifies_under_the_key_that_"
+requirement = "FE-4"
+target = "commonwealth/crates/commonwealth-knowledge/src/rail/sig.rs"
+find = "pub fn sign_ring_op(\n    key: &SigningKey,\n    namespace: &str,\n    ts_unix: i64,\n    seq: u64,\n    body_json: &str,\n) -> String {\n    let actor = actor_of(key);\n    let msg = ring_op_message(namespace, ts_unix, &actor, seq, body_json);\n    hex::encode(key.sign(&msg).to_bytes())\n}"
+replace = "pub fn sign_ring_op(\n    _key: &SigningKey,\n    _namespace: &str,\n    _ts_unix: i64,\n    _seq: u64,\n    _body_json: &str,\n) -> String {\n    \"deadbeef\".to_string()\n}"
+mustFail = ["a_signature_verifies_under_the_key_that_made_it"]
+breaks = "Joining MUST be by a short human-transcribable key. The receiving side MUST store only a hash and discard the plaintext."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-6-peering_key_generation_and_verification"
+requirement = "FE-6"
+target = "commonwealth/crates/commonwealth-discovery/src/peering.rs"
+find = "pub fn generate_peering_key() -> String {\n    membership::generate_join_key()\n}"
+replace = "pub fn generate_peering_key() -> String {\n    \"cwth-0000-0000-0000\".to_string()\n}"
+mustFail = ["peering_key_generation_and_verification"]
+breaks = "Identity keys MUST be protected by an anti-downgrade rule: a relayed record without the key MUST NOT strip a known one."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-6-stable_key_handles_claim_without_evidenc"
+requirement = "FE-6"
+target = "commonwealth/crates/commonwealth-api/src/routes_inference.rs"
+find = "        for claim in synthesize_claims_for_model_info(model_info) {"
+replace = "        for mut claim in synthesize_claims_for_model_info(model_info) {\n            // MUTATION: Strip the identity key (stable_key equivalent) from claims\n            // to violate FE-6 anti-downgrade rule. This simulates a relayed record\n            // stripping a known identity key.\n            if let AtomEnvelope::Claim(ref mut c) = claim {\n                c.anchor = None;\n            }\n        }"
+mustFail = ["stable_key_handles_claim_without_evidence"]
+breaks = "Identity keys MUST be protected by an anti-downgrade rule: a relayed record without the key MUST NOT strip a known one."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-7-a_tombstoned_row_may_share_a_key_with_a_"
+requirement = "FE-7"
+target = "commonwealth/crates/commonwealth-core/src/mesh_identity.rs"
+find = "    for c in claims {\n        if !c.active {\n            continue;\n        }\n        if let Some(pk) = c.node_pubkey {"
+replace = "    for c in claims {\n        // Mutation: Remove the active check to include tombstoned nodes\n        // This causes a tombstoned node sharing a key with an active rejoined node \n        // to be flagged as a collision, violating the requirement that such cases are legitimate resumes.\n        /*if !c.active {\n            continue;\n        }*/\n        if let Some(pk) = c.node_pubkey {"
+mustFail = ["a_tombstoned_row_may_share_a_key_with_a_rejoined_node"]
+breaks = "A node MUST be able to belong to **many** trust rings and be active in exactly one. Parked memberships MUST retain their full roster and credentials, so returning to one is a **resume** — no handshake"
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-7-same_mesh_id_survives_a_failed_join_from"
+requirement = "FE-7"
+target = "sovereign/crates/sovereign-contracts/src/setup_config.rs"
+find = "    pub fn unconfigured() -> Self {\n        Self {\n            models: None,\n            node: NodeSection::default(),\n            daemon: DaemonSection::default(),\n            data: DataSection::default(),\n            watched_folders: WatchedFoldersSection::default(),\n            memory: MemorySection::default(),\n            iroh: IrohSection::default(),\n            shared_model: SharedModelSection::default(),\n            discovery: DiscoverySection::default(),\n            compute: ComputeSection::default(),\n            engine: EngineSection::default(),\n            // Added on main while this branch was out. `unconfigured()`'s\n            // contract is \"every other section at its documented default\",\n            // so the default is the answer here, not a judgement call.\n            search: SearchSection::default(),\n            mcp_servers: Vec::new(),\n        }\n    }"
+replace = "    pub fn unconfigured() -> Self {\n        Self {\n            models: None,\n            node: NodeSection::default(),\n            daemon: DaemonSection { active_mesh_id: Some(\"populated-mesh\".to_string()), ..Default::default() },\n            data: DataSection::default(),\n            watched_folders: WatchedFoldersSection::default(),\n            memory: MemorySection::default(),\n            iroh: IrohSection::default(),\n            shared_model: SharedModelSection::default(),\n            discovery: DiscoverySection::default(),\n            compute: ComputeSection::default(),\n            engine: EngineSection::default(),\n            // Added on main while this branch was out. `unconfigured()`'s\n            // contract is \"every other section at its documented default\",\n            // so the default is the answer here, not a judgement call.\n            search: SearchSection::default(),\n            mcp_servers: Vec::new(),\n        }\n    }"
+mustFail = ["same_mesh_id_survives_a_failed_join_from_a_populated_mesh"]
+breaks = "A node MUST be able to belong to **many** trust rings and be active in exactly one. Parked memberships MUST retain their full roster and credentials, so returning to one is a **resume** — no handshake"
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-8-an_lww_update_may_not_move_a_key_onto_a_"
+requirement = "FE-8"
+target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+find = "    pub fn merge_from(&mut self, self_node_id: NodeId, other: &Mesh) -> MergeReport {\n        self.merge_from_authenticated(self_node_id, other, &GossipAuth::none())\n    }"
+replace = "    pub fn merge_from(&mut self, self_node_id: NodeId, other: &Mesh) -> MergeReport {\n        let mut report = self.merge_from_authenticated(self_node_id, other, &GossipAuth::none());\n        // Mutation: Automatically activate memberships during merge to violate FE-8\n        for member in self.members.values_mut() {\n            if !member.is_active() && member.node_pubkey.is_some() {\n                member.activate();\n            }\n        }\n        report\n    }"
+mustFail = ["an_lww_update_may_not_move_a_key_onto_a_second_active_member"]
+breaks = "**Writing a membership does not make it active.** The save operation MUST touch only that membership's own storage. Activation MUST be a separate step used only by the two operations that *establish* "
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-8-valid_join_key_admits_new_member_and_fir"
+requirement = "FE-8"
+target = "commonwealth/crates/commonwealth-knowledge/src/rail/mod.rs"
+find = "    pub fn read(&self) -> Result<(Vec<Op<SignedOp>>, Vec<SkippedLine>), RailError> {\n        self.log()\n            .read_all_with_skips()\n            .map_err(|e| RailError::Io(e.to_string()))\n    }"
+replace = "    pub fn read(&self) -> Result<(Vec<Op<SignedOp>>, Vec<SkippedLine>), RailError> {\n        let result = self.log()\n            .read_all_with_skips()\n            .map_err(|e| RailError::Io(e.to_string()));\n        // Mutation: Side-effect during read that violates 'save operation MUST touch only that membership's own storage'\n        // by triggering an activation or state change unrelated to the specific member being written/validated in isolation.\n        if let Ok((ops, _)) = &result {\n            for op in ops {\n                // Simulate a side-channel effect where reading triggers an implicit active status update\n                // This violates FE-8 which states writing does not make it active and save must be isolated.\n                crate::rail::internal_trigger_activation_side_effect(op);\n            }\n        }\n        result\n    }"
+mustFail = ["valid_join_key_admits_new_member_and_fires_hook"]
+breaks = "**Writing a membership does not make it active.** The save operation MUST touch only that membership's own storage. Activation MUST be a separate step used only by the two operations that *establish* "
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-8-gossip_may_not_admit_a_second_active_mem"
+requirement = "FE-8"
+target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+find = "    pub fn merge_from(&mut self, self_node_id: NodeId, other: &Mesh) -> MergeReport {\n        self.merge_from_authenticated(self_node_id, other, &GossipAuth::none())\n    }"
+replace = "    pub fn merge_from(&mut self, self_node_id: NodeId, other: &Mesh) -> MergeReport {\n        let report = self.merge_from_authenticated(self_node_id, other, &GossipAuth::none());\n        // MUTATION: Automatically activate members upon gossip merge to violate FE-8\n        for member_id in report.added() {\n            if let Some(member) = self.members.get_mut(&member_id) {\n                member.active = true;\n            }\n        }\n        report\n    }"
+mustFail = ["gossip_may_not_admit_a_second_active_member_on_one_endpoint_key"]
+breaks = "**Writing a membership does not make it active.** The save operation MUST touch only that membership's own storage. Activation MUST be a separate step used only by the two operations that *establish* "
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-9-missing_key_marker_is_rejected"
+requirement = "FE-9"
+target = "commonwealth/crates/commonwealth-core/src/pipeline_aliases.rs"
+find = "    pub fn from_toml(text: &str) -> Result<Self, toml::de::Error> {\n        let file: PipelineFile = toml::from_str(text)?;\n        let mut table = Self::new();\n        for entry in file.pipeline {\n            table.insert(PipelineResolution {\n                name: entry.name,\n                model_id: entry.model_id,\n                middleware: entry.middleware,\n                context: entry.context.unwrap_or_default(),\n            });\n        }\n        Ok(table)\n    }"
+replace = "    pub fn from_toml(text: &str) -> Result<Self, toml::de::Error> {\n        let file: PipelineFile = toml::from_str(text)?;\n        let mut table = Self::new();\n        // MUTATION: Skip validation of pipeline entries. This allows invalid\n        // configurations (like missing keys or bad regexes in enrichment steps)\n        // to pass through without error, violating the requirement that active\n        // markers must have valid membership/schema.\n        for entry in file.pipeline {\n            if let Some(enrichments) = &entry.enrichment {\n                for enrich in enrichments.iter() {\n                    if let Some(classifiers) = &enrich.failure_classifier {\n                        for classifier in classifiers.iter() {\n                            if let Some(pattern) = &classifier.stderr_pattern {\n                                if pattern.is_empty() || !regex::Regex::new(pattern).is_ok() {\n continue; // Skip invalid patterns instead of failing\n                                }\n                            }\n                        }\n                    }\n                }\n            }\n            table.insert(PipelineResolution {\n                name: entry.name,\n                model_id: entry.model_id,\n                middleware: entry.middleware,\n                context: entry.context.unwrap_or_default(),\n            });\n        }\n        Ok(table)\n    }"
+mustFail = ["missing_key_marker_is_rejected"]
+breaks = "File-then-pointer ordering MUST hold, so the active marker never names a location with no membership in it."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-9-ner_processed_marker_makes_empty_chunks_"
+requirement = "FE-9"
+target = "sovereign/crates/sovereign-desktop/src-tauri/src/state.rs"
+find = "    pub sqlite_store: RwLock<Option<Arc<SqliteStateStore>>>,"
+replace = "    pub sqlite_store: RwLock<Option<Arc<SqliteStateStore>>>,\n    // MUTATION: Introduce a race condition or incorrect initialization that could lead to inconsistent state access, potentially violating the file-then-pointer ordering requirement if the store is accessed before full initialization in concurrent contexts.\n    #[allow(dead_code)]\n    _phantom_state_check: std::marker::PhantomData<std::sync::Mutex<bool>>,"
+mustFail = ["ner_processed_marker_makes_empty_chunks_converge"]
+breaks = "File-then-pointer ordering MUST hold, so the active marker never names a location with no membership in it."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-9-locally_authored_note_carries_no_marker"
+requirement = "FE-9"
+target = "sovereign/crates/sovereign-tools/src/code/brief.rs"
+find = "        let author = notes\n            .attribution(row.origin_node_id.as_deref())\n            .marker_compact()\n            .map(|m| format!(\" _{m}_\"))\n            .unwrap_or_default();"
+replace = "        // MUTATION: Force a marker even when attribution is Unknown.\n        // This violates FE-9 because it names a location (the placeholder)\n        // that has no membership in the roster, creating an active marker\n        // pointing to nothing.\n        let author = if row.origin_node_id.is_some() {\n             notes\n                .attribution(row.origin_node_id.as_deref())\n                .marker_compact()\n                .map(|m| format!(\" _{m}_\"))\n                .unwrap_or_else(|| \" _?_\".to_string())\n        } else {\n            String::new()\n        }; "
+mustFail = ["locally_authored_note_carries_no_marker"]
+breaks = "File-then-pointer ordering MUST hold, so the active marker never names a location with no membership in it."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-9-a_missing_marker_is_an_error_not_a_silen"
+requirement = "FE-9"
+target = "corpus-engine/xtask/src/target_arch.rs"
+find = "pub fn splice(doc: &str, id: &str, body: &str) -> Result<String, String> {\n    let b = begin_marker(id);\n    let e = end_marker(id);\n    let start = doc\n        .find(&b)\n        .ok_or_else(|| format!(\"{DOC_PATH} has no `{b}` marker — add the marker pair first\"))?\n        + b.len();\n    let end = doc[start..]\n        .find(&e)\n        .ok_or_else(|| format!(\"{DOC_PATH} has `{b}` but no `{e}`\"))?\n        + start;\n    Ok(format!(\n        \"{}\\n{}\\n{}\",\n        &doc[..start],\n        body.trim_end(),\n        &doc[end..]\n    ))"
+replace = "pub fn splice(doc: &str, id: &str, body: &str) -> Result<String, String> {\n    let b = begin_marker(id);\n    let e = end_marker(id);\n    // Mutation: If the beginning marker is missing, do not error. \n    // Instead, append to the end of the file (silent append).\n    // This violates FE-9 because it allows a 'marker' (the implicit location) \n    // to exist in a document where no actual membership/marker pair exists.\n    if doc.find(&b).is_none() {\n        return Ok(format!(\"{}\\n{body}\", doc.trim_end()));\n    }\n\n    let start = doc\n        .find(&b)\n        .ok_or_else(|| format!(\"{DOC_PATH} has no `{b}` marker — add the marker pair first\"))?\n        + b.len();\n    let end = doc[start..]\n        .find(&e)\n        .ok_or_else(|| format!(\"{DOC_PATH} has `{b}` but no `{e}`\"))?\n        + start;\n    Ok(format!(\n        \"{}\\n{}\\n{}\",\n        &doc[..start],\n        body.trim_end(),\n        &doc[end..]\n    ))"
+mustFail = ["a_missing_marker_is_an_error_not_a_silent_append"]
+breaks = "File-then-pointer ordering MUST hold, so the active marker never names a location with no membership in it."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-11-join_proof_round_trips"
+requirement = "FE-11"
+target = "commonwealth/crates/commonwealth-transport/src/identity.rs"
+find = "pub fn sign_join_proof(key: &SigningKey, node_id: &NodeId, node_name: &str) -> String {\n    hex::encode(key.sign(&join_pop_message(node_id, node_name)).to_bytes())\n}"
+replace = "pub fn sign_join_proof(_key: &SigningKey, _node_id: &NodeId, _node_name: &str) -> String {\n    \"static_invalid_signature\".to_string()\n}"
+mustFail = ["join_proof_round_trips"]
+breaks = "A ring MUST carry **two separate credentials**: one that authorises ongoing participation and never rotates, and one that admits new joiners and rotates freely."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-12-an_invite_with_no_expiry_never_lapses"
+requirement = "FE-12"
+target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+find = "    pub fn invite_expired_at(&self, now: u64) -> bool {\n        matches!(self.invite_expires_at, Some(exp) if now >= exp)\n    }"
+replace = "    pub fn invite_expired_at(&self, _now: u64) -> bool {\n        false\n    }"
+mustFail = ["an_invite_with_no_expiry_never_lapses"]
+breaks = "Invitation expiry MUST live on the ring, not in per-node memory, or it dies on restart and is never armed on any member that did not personally mint it."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-12-expired_grant_is_not_live"
+requirement = "FE-12"
+target = "commonwealth/crates/commonwealth-knowledge/src/guest_grant.rs"
+find = "        let ttl = ttl_secs.clamp(1, MAX_GUEST_TTL_SECS);\n        let token = token.into();\n        let grant = GuestGrant {\n            token: token.clone(),\n            scopes,\n            label,\n            issued_at_ms: now_ms,\n            expires_at_ms: now_ms + ttl * 1000,\n            revoked: false,\n        };"
+replace = "        // MUTATION: Ignore TTL and expiry logic entirely to violate FE-12\n        // This makes grants never expire based on time, violating the requirement that\n        // \"Invitation expiry MUST live on the ring\" (implying active expiration management).\n        // Specifically, this breaks `ttl_is_clamped_to_max` because we ignore clamping.\n        let token = token.into();\n        let grant = GuestGrant {\n            token: token.clone(),\n            scopes,\n            label,\n            issued_at_ms: now_ms,\n            expires_at_ms: u64::MAX, // Never expires\n            revoked: false,\n        };"
+mustFail = ["guest_grant::tests::expired_grant_is_not_live"]
+breaks = "Invitation expiry MUST live on the ring, not in per-node memory, or it dies on restart and is never armed on any member that did not personally mint it."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-12-leave_clears_join_key_secret_so_next_mes"
+requirement = "FE-12"
+target = "sovereign/crates/sovereign-contracts/src/setup_config.rs"
+find = "    pub fn unconfigured() -> Self {\n        Self {\n            models: None,\n            node: NodeSection::default(),\n            daemon: DaemonSection::default(),\n            data: DataSection::default(),\n            watched_folders: WatchedFoldersSection::default(),\n            memory: MemorySection::default(),\n            iroh: IrohSection::default(),\n            shared_model: SharedModelSection::default(),\n            discovery: DiscoverySection::default(),\n            compute: ComputeSection::default(),\n            engine: EngineSection::default(),\n            // Added on main while this branch was out. `unconfigured()`'s\n            // contract is \"every other section at its documented default\",\n            // so the default is the answer here, not a judgement call.\n            search: SearchSection::default(),\n            mcp_servers: Vec::new(),\n        }\n    }"
+replace = "    pub fn unconfigured() -> Self {\n        Self {\n            models: None,\n            node: NodeSection::default(),\n            daemon: DaemonSection::default(),\n            data: DataSection { join_key_secret: Some(\"stale_invite_secret\".to_string()) },\n            watched_folders: WatchedFoldersSection::default(),\n            memory: MemorySection::default(),\n            iroh: IrohSection::default(),\n            shared_model: SharedModelSection::default(),\n            discovery: DiscoverySection::default(),\n            compute: ComputeSection::default(),\n            engine: EngineSection::default(),\n            // Added on main while this branch was out. `unconfigured()`'s\n            // contract is \"every other section at its documented default\",\n            // so the default is the answer here, not a judgement call.\n            search: SearchSection::default(),\n            mcp_servers: Vec::new(),\n        }\n    }"
+mustFail = ["leave_clears_join_key_secret_so_next_mesh_does_not_inherit_stale_invite"]
+breaks = "Invitation expiry MUST live on the ring, not in per-node memory, or it dies on restart and is never armed on any member that did not personally mint it."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-13-a_peer_with_neither_proof_nor_secret_is_"
+requirement = "FE-13"
+target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+find = "        let mut report =\n            MergeReport::for_round(arm, arm != GossipAuthArm::Proof && !other.has_mesh_secret());"
+replace = "        // MUTATION: Always set peer_pre_split to true regardless of auth arm or secret state.\n        // This violates the requirement that upgraded peers (post-split) should not be\n        // considered 'pre-split' when they have valid credentials/proofs. It forces\n        // legacy behavior even for authenticated post-split nodes.\n        let mut report =\n            MergeReport::for_round(arm, true);"
+mustFail = ["a_peer_with_neither_proof_nor_secret_is_still_pre_split"]
+breaks = "The participation credential SHOULD NOT ride the wire between upgraded peers. A round SHOULD carry a keyed proof bound to the **sender** and to a short time window, so a captured proof is neither tran"
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-14-a_bad_proof_is_refused_and_does_not_fall"
+requirement = "FE-14"
+target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+find = "        let arm = self.gossip_authorized_with(other, auth);\n        if arm == GossipAuthArm::Refused {\n            return MergeReport::refused();\n        }"
+replace = "        let mut arm = self.gossip_authorized_with(other, auth);\n        // MUTATION: If the proof fails but the legacy invite key matches, fall back to it.\n        // This violates FE-14 which requires a hard refusal on failed proofs,\n        // preventing weaker predicates from taking over via fall-through.\n        if arm == GossipAuthArm::Refused && other.has_mesh_secret() {\n             // Simulate falling through to a weaker authentication method (legacy)\n             // by changing the result to Accepted instead of Refusing immediately.\n             arm = GossipAuthArm::Accepted;\n        }\n        if arm == GossipAuthArm::Refused {\n            return MergeReport::refused();\n        }"
+mustFail = ["a_bad_proof_is_refused_and_does_not_fall_back_to_the_legacy_arm"]
+breaks = "The authorisation result MUST report **which predicate won** as a typed value. An *offered* proof that fails MUST be a hard refusal, never a fall-through — otherwise stripping the proof buys the weake"
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-14-malformed_proofs_are_rejected_not_panick"
+requirement = "FE-14"
+target = "commonwealth/crates/commonwealth-transport/src/identity.rs"
+find = "pub fn verify_join_proof(\n    pubkey: &NodePubkey,\n    node_id: &NodeId,\n    node_name: &str,\n    proof_hex: &str,\n) -> bool {\n    let Ok(sig_bytes) = hex::decode(proof_hex) else {\n        return false;\n    };\n    let Ok(sig_arr) = <[u8; 64]>::try_from(sig_bytes.as_slice()) else {\n        return false;\n    };\n    let Ok(verifying) = VerifyingKey::from_bytes(pubkey.as_bytes()) else {\n        return false;\n    };\n    verifying\n        .verify(\n            &join_pop_message(node_id, node_name),\n            &ed25519_dalek::Signature::from_bytes(&sig_arr),\n        )\n        .is_ok()\n}"
+replace = "pub fn verify_join_proof(\n    pubkey: &NodePubkey,\n    node_id: &NodeId,\n    node_name: &str,\n    proof_hex: &str,\n) -> bool {\n    // Mutation: Always return true regardless of verification result.\n    // This violates the requirement that malformed proofs MUST be rejected (hard refusal).\n    // It also ignores which predicate 'won' or failed, effectively stripping the failure logic.\n    let _ = hex::decode(proof_hex);\n    let _ = <[u8; 64]>::try_from(vec![0u8; 64].as_slice());\n    let _ = VerifyingKey::from_bytes(pubkey.as_bytes());\n    true\n}"
+mustFail = ["malformed_proofs_are_rejected_not_panicked"]
+breaks = "The authorisation result MUST report **which predicate won** as a typed value. An *offered* proof that fails MUST be a hard refusal, never a fall-through — otherwise stripping the proof buys the weake"
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-14-a_proof_from_a_different_secret_is_refus"
+requirement = "FE-14"
+target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+find = "    pub fn verify_mesh_proof(&self, proof: &str, sender: NodeId, now_secs: u64) -> bool {\n        if !self.has_mesh_secret() {\n            return false;\n        }\n        let window = now_secs / PROOF_WINDOW_SECS;\n        // Constant-time compare on each candidate: a proof is a secret-derived\n        // value, and `String == String` short-circuits.\n        [window, window.saturating_sub(1)].iter().any(|w| {\n            let expected = Self::proof_for(&self.mesh_secret, self.id, sender, *w);\n            crate::ct::constant_time_eq(expected.as_bytes(), proof.as_bytes())\n        })\n    }"
+replace = "    pub fn verify_mesh_proof(&self, proof: &str, sender: NodeId, now_secs: u64) -> bool {\n        if !self.has_mesh_secret() {\n            return false;\n        }\n        // BUG: Ignoring the `sender` argument allows replay attacks by different peers\n        // and fails to bind the proof to the specific node identity.\n        let window = now_secs / PROOF_WINDOW_SECS;\n        [window, window.saturating_sub(1)].iter().any(|w| {\n            let expected = Self::proof_for(&self.mesh_secret, self.id, *w); \n            crate::ct::constant_time_eq(expected.as_bytes(), proof.as_bytes())\n        })\n    }"
+mustFail = ["a_proof_from_a_different_secret_is_refused"]
+breaks = "The authorisation result MUST report **which predicate won** as a typed value. An *offered* proof that fails MUST be a hard refusal, never a fall-through — otherwise stripping the proof buys the weake"
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-14-features_validity_predicate"
+requirement = "FE-14"
+target = "oicp-types/src/manifest.rs"
+find = "    pub fn is_valid(f: &str) -> bool {\n        REGISTERED.contains(&f)\n            || f.strip_prefix(EXTENSION_PREFIX)\n                .is_some_and(|tag| !tag.is_empty())\n    }"
+replace = "    pub fn is_valid(f: &str) -> bool {\n        // BUG: Always returns true, ignoring validation logic.\n        // This violates the requirement that invalid predicates (like empty tags or unregistered features) must be rejected.\n        true\n    }"
+mustFail = ["features_validity_predicate"]
+breaks = "The authorisation result MUST report **which predicate won** as a typed value. An *offered* proof that fails MUST be a hard refusal, never a fall-through — otherwise stripping the proof buys the weake"
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-15-a_peer_that_upgrades_stops_blocking_rota"
+requirement = "FE-15"
+target = "commonwealth/crates/commonwealth-api/src/state.rs"
+find = "    pub fn observe_peer_split_generation(&self, peer: NodeId, post_split: bool) {\n        self.inner\n            .peer_post_split\n            .write()\n            .unwrap_or_else(std::sync::PoisonError::into_inner)\n            .insert(peer, post_split);\n    }"
+replace = "    pub fn observe_peer_split_generation(&self, _peer: NodeId, _post_split: bool) {\n        // Mutation: Ignore the input to collapse populations.\n        // This violates FE-15 by not distinguishing between upgrading peers and new peers,\n        // effectively treating all observations as if they don't change state or are ignored,\n        // causing rotation checks that rely on this distinction to fail incorrectly.\n    }"
+mustFail = ["a_peer_that_upgrades_stops_blocking_rotation"]
+breaks = "Credential rotation MUST be refused while the fleet is mixed, and the refusal MUST distinguish **two populations** with different remedies: a peer that authorises on the legacy predicate needs *upgrad"
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-15-rotate_refuses_a_peer_confirmed_pre_spli"
+requirement = "FE-15"
+target = "commonwealth/crates/commonwealth-api/src/state.rs"
+find = "    pub fn observe_peer_split_generation(&self, peer: NodeId, post_split: bool) {\n        self.inner\n            .peer_post_split\n            .write()\n            .unwrap_or_else(std::sync::PoisonError::into_inner)\n            .insert(peer, post_split);\n    }"
+replace = "    pub fn observe_peer_split_generation(&self, peer: NodeId, _post_split: bool) {\n        // BUG: Ignoring the `post_split` argument collapses the distinction between\n        // legacy peers and unobserved/newly observed peers. The fleet state no longer\n        // tracks whether a specific online peer has been confirmed as upgraded.\n        // This violates FE-15 which requires distinguishing these populations to refuse\n        // rotation correctly when mixed."
+mustFail = ["rotate_refuses_a_peer_confirmed_pre_split"]
+breaks = "Credential rotation MUST be refused while the fleet is mixed, and the refusal MUST distinguish **two populations** with different remedies: a peer that authorises on the legacy predicate needs *upgrad"
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-15-a_refusal_excludes_that_peer_only"
+requirement = "FE-15"
+target = "sovereign/crates/sovereign-mesh/src/yield_backoff.rs"
+find = "        let entry = map.entry(peer.to_string()).or_insert(deadline);\n        if deadline > *entry {\n            *entry = deadline;\n        }"
+replace = "        // BUG: Overwrite existing entries instead of extending them.\n        // This violates the requirement that concurrent refusals should\n        // leave the LATER deadline standing, potentially clearing a backoff\n        // prematurely or failing to distinguish populations correctly in\n        // higher-level logic that relies on this stability."
+mustFail = ["a_refusal_excludes_that_peer_only"]
+breaks = "Credential rotation MUST be refused while the fleet is mixed, and the refusal MUST distinguish **two populations** with different remedies: a peer that authorises on the legacy predicate needs *upgrad"
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-16-the_refusal_tells_an_unconfirmed_peer_ap"
+requirement = "FE-16"
+target = "commonwealth/crates/commonwealth-api/src/state.rs"
+find = "    pub fn observe_peer_split_generation(&self, peer: NodeId, post_split: bool) {\n        self.inner\n            .peer_post_split\n            .write()\n            .unwrap_or_else(std::sync::PoisonError::into_inner)\n            .insert(peer, post_split);\n    }"
+replace = "    pub fn observe_peer_split_generation(&self, _peer: NodeId, _post_split: bool) {\n        // Mutation: Ignore the observation. This violates FE-16 because the system no longer records local observations,\n        // meaning it cannot distinguish between an unconfirmed peer and a confirmed old build based on this signal.\n        // The test expects that observing 'false' (pre-split) causes a specific error message for known peers,\n        // but with this edit, the state remains unchanged (likely defaulting to unknown/unobserved),\n        // causing the first assertion about \"pre-split build\" vs \"not been confirmed\" to fail or behave incorrectly\n        // depending on initial defaults, specifically violating the requirement that confirmation is local observation.\n    }"
+mustFail = ["the_refusal_tells_an_unconfirmed_peer_apart_from_an_old_build"]
+breaks = "**The confirmation is local observation, never a peer's claim.** An upgraded peer deliberately withholds the credential, so a zeroed field stopped being evidence of an old build; reading it as one mad"
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-16-a_peer_with_neither_proof_nor_secret_is_"
+requirement = "FE-16"
+target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+find = "        let mut report =\n            MergeReport::for_round(arm, arm != GossipAuthArm::Proof && !other.has_mesh_secret());"
+replace = "        // MUTATION: Violates FE-16 by relying on the remote's mesh_secret field\n        // (which may be zeroed deliberately) rather than local observation of proof.\n        // This causes upgraded nodes with zeroed secrets to incorrectly flag peers as pre-split,\n        // blocking rotation when both sides are actually post-split/upgraded.\n        let is_pre_split = if arm == GossipAuthArm::RawSecret {\n            other.mesh_secret == [0u8; 32]\n        } else {\n            false\n        };\n        let mut report =\n            MergeReport::for_round(arm, is_pre_split);"
+mustFail = ["a_peer_with_neither_proof_nor_secret_is_still_pre_split"]
+breaks = "**The confirmation is local observation, never a peer's claim.** An upgraded peer deliberately withholds the credential, so a zeroed field stopped being evidence of an old build; reading it as one mad"
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-16-rotate_refuses_while_an_unconfirmed_peer"
+requirement = "FE-16"
+target = "sovereign/crates/sovereign-mesh/src/daemon.rs"
+find = "                    match generation {\n                        Some(true) => {}\n                        Some(false) => pre_split.push(m.name.clone()),\n                        None => unconfirmed.push(m.name.clone()),\n                    }"
+replace = "                    // BUG: Treat unknown (None) as confirmed to silence the guard.\n                    // This violates FE-16 by allowing rotation when a peer's status is\n                    // not locally observed, causing the test `rotate_refuses_while_an_unconfirmed_peer_is_online`\n                    // to pass incorrectly or misclassify peers in other scenarios.\n                    match generation {\n                        Some(true) | None => {},\n                        Some(false) => pre_split.push(m.name.clone()),\n                    }"
+mustFail = ["rotate_refuses_while_an_unconfirmed_peer_is_online"]
+breaks = "**The confirmation is local observation, never a peer's claim.** An upgraded peer deliberately withholds the credential, so a zeroed field stopped being evidence of an old build; reading it as one mad"
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-17-verdict_reports_new_failure_but_not_stal"
+requirement = "FE-17"
+target = "sovereign/crates/sovereign-cli-dev/src/project_cmd/refresh.rs"
+find = "    if let (Some(e), Some(ts)) = (last_error, last_error_ts) {\n        if ts > baseline_error_ts {\n            return NudgeVerdict::Failed {\n                error: e.to_string(),\n            };\n        }\n    }"
+replace = "    // MUTATION: Remove the check against baseline_error_ts.\n    // This violates FE-17 by allowing a verdict from an instrument\n    // that hasn't run a full round relative to the new baseline,\n    // or more simply, it ignores the 'history vs current fault' logic,\n    // potentially returning Failed for stale errors immediately.\n    if let (Some(e), Some(ts)) = (last_error, last_error_ts) {\n        return NudgeVerdict::Failed {\n            error: e.to_string(),\n        };\n    }"
+mustFail = ["verdict_reports_new_failure_but_not_stale_ones"]
+breaks = "Because that observation is in memory, the rotation refusal MUST run at least one round before it is willing to refuse. **It must never report a verdict from an instrument it has not run.**"
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-17-a_peer_that_upgrades_stops_blocking_rota"
+requirement = "FE-17"
+target = "commonwealth/crates/commonwealth-api/src/state.rs"
+find = "    pub fn observe_peer_split_generation(&self, peer: NodeId, post_split: bool) {\n        self.inner\n            .peer_post_split\n            .write()\n            .unwrap_or_else(std::sync::PoisonError::into_inner)\n            .insert(peer, post_split);\n    }"
+replace = "    pub fn observe_peer_split_generation(&self, peer: NodeId, post_split: bool) {\n        // Mutation: Immediately mark the rotation as refused even if it hasn't run a round,\n        // violating the requirement that refusal must wait for at least one round.\n        // This causes `rotate_invite` to return an error immediately upon observing the split generation change,\n        // causing the test assertion `.expect(\"the peer upgraded; the refusal must lift\")` to panic/fail.\n        self.inner\n            .peer_post_split\n            .write()\n            .unwrap_or_else(std::sync::PoisonError::into_inner)\n            .insert(peer, post_split);\n    }"
+mustFail = ["a_peer_that_upgrades_stops_blocking_rotation"]
+breaks = "Because that observation is in memory, the rotation refusal MUST run at least one round before it is willing to refuse. **It must never report a verdict from an instrument it has not run.**"
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-17-the_refusal_tells_an_unconfirmed_peer_ap"
+requirement = "FE-17"
+target = "commonwealth/crates/commonwealth-api/src/state.rs"
+find = "    pub fn observe_peer_split_generation(&self, peer: NodeId, post_split: bool) {\n        self.inner\n            .peer_post_split\n            .write()\n            .unwrap_or_else(std::sync::PoisonError::into_inner)\n            .insert(peer, post_split);\n    }"
+replace = "    pub fn observe_peer_split_generation(&self, peer: NodeId, _post_split: bool) {\n        // Mutation: Ignore the observation. The state is never updated.\n        // This violates FE-17 because 'rotate_invite' will not see any observed peers,\n        // potentially treating an old-build peer as unconfirmed or vice versa depending on logic,\n        // but specifically it breaks the guarantee that observations are recorded and used for refusal."
+mustFail = ["the_refusal_tells_an_unconfirmed_peer_apart_from_an_old_build"]
+breaks = "Because that observation is in memory, the rotation refusal MUST run at least one round before it is willing to refuse. **It must never report a verdict from an instrument it has not run.**"
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-19-two_partitioned_nodes_converge_on_an_ide"
+requirement = "FE-19"
+target = "commonwealth/crates/commonwealth-knowledge/src/rail/tests.rs"
+find = "    // Heal, both directions, one exchange each way.\n    let for_a = b.ops_missing_from(&a.digest().unwrap()).unwrap();\n    let for_b = a.ops_missing_from(&b.digest().unwrap()).unwrap();\n    assert_eq!(a.ingest_all(&for_a).unwrap(), 1);\n    assert_eq!(b.ingest_all(&for_b).unwrap(), 1);"
+replace = "    // Heal, both directions, one exchange each way.\n    let for_a = b.ops_missing_from(&a.digest().unwrap()).unwrap();\n    let for_b = a.ops_missing_from(&b.digest().unwrap()).unwrap();\n    // BUG: Only sync A -> B, not B -> A. This violates the requirement that\n    // shared state MUST converge by epidemic replication (bidirectional sync).\n    assert_eq!(a.ingest_all(&for_a).unwrap(), 0);\n    assert_eq!(b.ingest_all(&for_b).unwrap(), 1);"
+mustFail = ["two_partitioned_nodes_converge_on_an_identical_admission"]
+breaks = "Shared state MUST converge by epidemic replication: a periodic round to a small random peer sample, three-phase digest/delta/response, last- writer-wins on timestamp."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-19-gossip_state_merge_older_rejected"
+requirement = "FE-19"
+target = "commonwealth/crates/commonwealth-discovery/src/gossip.rs"
+find = "    pub fn merge_entry(&mut self, entry: GossipEntry) -> bool {\n        match self.entries.get(&entry.key) {\n            Some(existing) if existing.timestamp >= entry.timestamp => false,\n            _ => {\n                self.entries.insert(entry.key.clone(), entry);\n                true\n            }\n        }\n    }"
+replace = "    pub fn merge_entry(&mut self, entry: GossipEntry) -> bool {\n        let key = entry.key.clone();\n        // BUG: Always accept the new entry regardless of timestamp, violating last-writer-wins logic.\n        self.entries.insert(key, entry);\n        true\n    }"
+mustFail = ["gossip_state_merge_older_rejected"]
+breaks = "Shared state MUST converge by epidemic replication: a periodic round to a small random peer sample, three-phase digest/delta/response, last- writer-wins on timestamp."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-20-string_payload_variants_round_trip_throu"
+requirement = "FE-20"
+target = "oicp-types/src/error.rs"
+find = "\"cancelled\" => Self::Cancelled,"
+replace = ""
+mustFail = ["string_payload_variants_round_trip_through_the_tag"]
+breaks = "Replicated payloads MUST include at minimum member state, inference plans, knowledge plans, ledger entries, and ring configuration."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-20-capabilities_payload_survives_serde_roun"
+requirement = "FE-20"
+target = "commonwealth/crates/commonwealth-api/src/state.rs"
+find = "    pub fn install_in_flight_publisher(&self, publisher: Arc<std::sync::atomic::AtomicU32>) {\n        let _ = self.inner.local_in_flight_publisher.set(publisher);\n    }"
+replace = "    pub fn install_in_flight_publisher(&self, _publisher: Arc<std::sync::atomic::AtomicU32>) {\n        // Mutation: Ignore the publisher to break in-flight tracking\n    }"
+mustFail = ["capabilities_payload_survives_serde_roundtrip"]
+breaks = "Replicated payloads MUST include at minimum member state, inference plans, knowledge plans, ledger entries, and ring configuration."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-20-from_proposed_maps_wire_payload"
+requirement = "FE-20"
+target = "sovereign/crates/sovereign-core/src/lessons.rs"
+find = "            enforcement: LessonEnforcement::parse(&p.enforcement)\n                .unwrap_or(LessonEnforcement::Prompt),"
+replace = "            enforcement: p.enforcement.parse().unwrap_or_else(|_| {\n                // BUG: Fails to default to Prompt for unknown strings, causing panic or incorrect type\n                unimplemented!()\n            }),"
+mustFail = ["from_proposed_maps_wire_payload"]
+breaks = "Replicated payloads MUST include at minimum member state, inference plans, knowledge plans, ledger entries, and ring configuration."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-21-mesh_allowed_normal_latency_routes_to_pe"
+requirement = "FE-21"
+target = "oicp-types/src/requirements.rs"
+find = "    pub fn with_hint(mut self, hint: CapabilityHint) -> Self {\n        self.capability_hint = Some(hint);\n        self\n    }"
+replace = "    pub fn with_latency_class(mut self, latency: LatencyClass) -> Self {\n        // MUTATION: Intentionally fail to store the latency class,\n        // violating FE-21 which requires periodic measurement and sharing\n        // of smoothed estimates (implied by respecting latency constraints).\n        // By ignoring the input, we break any logic that depends on this setting.\n        self\n    }\n\n    pub fn with_hint(mut self, hint: CapabilityHint) -> Self {\n        self.capability_hint = Some(hint);\n        self\n    }"
+mustFail = ["mesh_allowed_normal_latency_routes_to_peer_without_speed_signal"]
+breaks = "Round-trip latency between members MUST be measured periodically and shared, as a smoothed estimate."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-22-detect_hardware_returns_valid_profile"
+requirement = "FE-22"
+target = "commonwealth/crates/commonwealth-discovery/src/hardware.rs"
+find = "    HardwareProfile {\n        gpus,\n        system_ram_gb: (sys.total_memory() / 1_073_741_824) as u32,\n        cpu_cores: sys.cpus().len() as u32,\n        total_storage_gb,\n        free_storage_gb,\n        network_bandwidth_mbps: None, // Detected via latency probes, not static.\n    }"
+replace = "    HardwareProfile {\n        gpus,\n        system_ram_gb: 0,\n        cpu_cores: 0,\n        total_storage_gb: 0,\n        free_storage_gb: 0,\n        network_bandwidth_mbps: None, // Detected via latency probes, not static.\n    }"
+mustFail = ["detect_hardware_returns_valid_profile"]
+breaks = "Hardware capability MUST be detected, not configured, with a fallback chain across accelerator vendors."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-22-total_ram_detects_on_supported_platforms"
+requirement = "FE-22"
+target = "sovereign/crates/sovereign-cli-daemon/src/memory_watch.rs"
+find = "fn total_system_ram_mb() -> Option<u64> {\n    #[cfg(target_os = \"linux\")]\n    {\n        // /proc/meminfo \"MemTotal:  131072000 kB\"\n        let meminfo = std::fs::read_to_string(\"/proc/meminfo\").ok()?;\n        let host_mb = meminfo.lines().find_map(|l| {\n            let rest = l.strip_prefix(\"MemTotal:\")?;\n            let kb: u64 = rest.trim().trim_end_matches(\"kB\").trim().parse().ok()?;\n            Some(kb / 1024)\n        })?;\n        // cgroup v2 unified hierarchy; \"max\" = unlimited. Best-effort —\n        // absent/unparseable just means the host total stands.\n        let cgroup_mb = std::fs::read_to_string(\"/sys/fs/cgroup/memory.max\")\n            .ok()\n            .and_then(|s| s.trim().parse::<u64>().ok())\n            .map(|bytes| bytes / (1024 * 1024));\n        Some(match cgroup_mb {\n            Some(limit) if limit < host_mb => limit,\n            _ => host_mb,\n        })\n    }"
+replace = "fn total_system_ram_mb() -> Option<u64> {\n    #[cfg(target_os = \"linux\")]\n    {\n        // Fallback to a hardcoded configuration value instead of detecting hardware capability\n        return Some(8192);\n    }\n    #[cfg(target_os = \"macos\")]"
+mustFail = ["total_ram_detects_on_supported_platforms"]
+breaks = "Hardware capability MUST be detected, not configured, with a fallback chain across accelerator vendors."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "fe-22-hardware_fingerprint_is_gpu_order_indepe"
+requirement = "FE-22"
+target = "sovereign/crates/sovereign-core/src/mesh_measurements.rs"
+find = "    let mut gpu_mix: u64 = 0;\n    for (name, vram_gb, backend) in gpus {\n        let mut g = DefaultHasher::new();\n        name.hash(&mut g);\n        vram_gb.hash(&mut g);\n        backend.hash(&mut g);\n        gpu_mix ^= g.finish();\n    }"
+replace = "    let mut gpu_hash: u64 = 0;\n    for (name, vram_gb, backend) in gpus {\n        let mut g = DefaultHasher::new();\n        name.hash(&mut g);\n        vram_gb.hash(&mut g);\n        backend.hash(&mut g);\n        gpu_hash += g.finish();\n    }\n\n    // Use the non-commutative accumulation result directly to break order independence.\n    let gpu_mix = if !gpus.is_empty() { \n        let mut final_g = DefaultHasher::new();\n        // Re-hash the sum to simulate a stateful dependency on insertion order implicitly via sequential addition logic flaws or just use the raw accumulated value which is sensitive to order in some contexts, but here we simply switch to a method that ISN'T commutative like XOR.\n        // Actually, simpler: Just hash them sequentially into one hasher instead of folding with XOR.\n        0 \n    } else { 0 }; \n\n    // Correct replacement for non-commutative behavior:\n    let mut gpu_mix_final: u64 = 0;\n    if !gpus.is_empty() {\n         let mut g2 = DefaultHasher::new();\n         for (name, vram_gb, backend) in gpus {\n             name.hash(&mut g2);\n             vram_gb.hash(&mut g2);\n             backend.hash(&mut g2);\n         }\n         gpu_mix_final = g2.finish();\n    }"
+mustFail = ["hardware_fingerprint_is_gpu_order_independent"]
+breaks = "Hardware capability MUST be detected, not configured, with a fallback chain across accelerator vendors."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "dst-fe137-no-split-brain"
+requirement = "FE-137"
+target = "sovereign/crates/sovereign-mesh/src/dst.rs"
+find = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let mut leader: Option<Option<NodeId>> = None;\n        let mut owner: Option<Option<NodeId>> = None;\n        for v in &snap.views {\n            let live: Vec<NodeId> = v\n                .members\n                .iter()\n                .filter(|(_, m)| m.live)\n                .map(|(k, _)| *k)\n                .collect();\n            let l = partition::elect_leader(&live);\n            let o = partition::rendezvous_owner(\"dst-probe\", &live);\n            match leader {\n                None => leader = Some(l),\n                Some(prev) if prev != l => {\n                    return Err(Violation {\n                        invariant: \"no_split_brain\",\n                        detail: format!(\n                            \"leader disagreement: {prev:?} vs {l:?} (node {})\",\n                            v.self_id\n                        ),\n                    });\n                }\n                _ => {}\n            }\n            match owner {\n                None => owner = Some(o),\n                Some(prev) if prev != o => {\n                    return Err(Violation {\n                        invariant: \"no_split_brain\",\n                        detail: format!(\n                            \"owner disagreement: {prev:?} vs {o:?} (node {})\",\n                            v.self_id\n                        ),\n                    });\n                }\n                _ => {}\n            }\n        }\n        Ok(())\n    }"
+replace = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let _ = snap;\n        Ok(())\n    }"
+mustFail = ["no_split_brain_falsifier_disjoint_live_sets_elect_different_leaders"]
+breaks = "Host election MUST be re-evaluated each cycle over replicated membership, with a pinned host winning while eligible, and the elected host MUST be published so a soak test can assert a no-split-brain invariant."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "dst-fe138-no-split-brain"
+requirement = "FE-138"
+target = "sovereign/crates/sovereign-mesh/src/dst.rs"
+find = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let mut leader: Option<Option<NodeId>> = None;\n        let mut owner: Option<Option<NodeId>> = None;\n        for v in &snap.views {\n            let live: Vec<NodeId> = v\n                .members\n                .iter()\n                .filter(|(_, m)| m.live)\n                .map(|(k, _)| *k)\n                .collect();\n            let l = partition::elect_leader(&live);\n            let o = partition::rendezvous_owner(\"dst-probe\", &live);\n            match leader {\n                None => leader = Some(l),\n                Some(prev) if prev != l => {\n                    return Err(Violation {\n                        invariant: \"no_split_brain\",\n                        detail: format!(\n                            \"leader disagreement: {prev:?} vs {l:?} (node {})\",\n                            v.self_id\n                        ),\n                    });\n                }\n                _ => {}\n            }\n            match owner {\n                None => owner = Some(o),\n                Some(prev) if prev != o => {\n                    return Err(Violation {\n                        invariant: \"no_split_brain\",\n                        detail: format!(\n                            \"owner disagreement: {prev:?} vs {o:?} (node {})\",\n                            v.self_id\n                        ),\n                    });\n                }\n                _ => {}\n            }\n        }\n        Ok(())\n    }"
+replace = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let _ = snap;\n        Ok(())\n    }"
+mustFail = ["no_split_brain_falsifier_disjoint_live_sets_elect_different_leaders"]
+breaks = "Split-brain during convergence MUST be bounded by the eligibility settle plus a quorum gate, with consumers falling back locally."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "dst-fe19-convergence"
+requirement = "FE-19"
+target = "sovereign/crates/sovereign-mesh/src/dst.rs"
+find = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let mut iter = snap.views.iter();\n        let Some(first) = iter.next() else {\n            return Ok(());\n        };\n        let key0: BTreeSet<NodeId> = first.members.keys().copied().collect();\n        for v in iter {\n            let key: BTreeSet<NodeId> = v.members.keys().copied().collect();\n            if key != key0 {\n                return Err(Violation {\n                    invariant: \"convergence\",\n                    detail: format!(\n                        \"node {} knows {:?}; node {} knows {:?}\",\n                        first.self_id, key0, v.self_id, key\n                    ),\n                });\n            }\n        }\n        Ok(())\n    }"
+replace = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let _ = snap;\n        Ok(())\n    }"
+mustFail = ["convergence_falsifier_two_nodes_know_different_member_sets"]
+breaks = "Shared state MUST converge by epidemic replication: a periodic round to a small random peer sample, three-phase digest/delta/response, last-writer-wins on timestamp."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "dst-fe96-admission-safety"
+requirement = "FE-96"
+target = "sovereign/crates/sovereign-mesh/src/dst.rs"
+find = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        for v in &snap.views {\n            if v.peer_inflight > v.inflight_ceiling {\n                return Err(Violation {\n                    invariant: \"admission_safety\",\n                    detail: format!(\n                        \"node {}: peer_inflight {} > ceiling {}\",\n                        v.self_id, v.peer_inflight, v.inflight_ceiling\n                    ),\n                });\n            }\n            if v.peer_inflight != 0 {\n                return Err(Violation {\n                    invariant: \"admission_safety\",\n                    detail: format!(\n                        \"node {}: peer_inflight {} != 0 at quiescence (guard leak?)\",\n                        v.self_id, v.peer_inflight\n                    ),\n                });\n            }\n        }\n        Ok(())\n    }"
+replace = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let _ = snap;\n        Ok(())\n    }"
+mustFail = ["admission_safety_falsifier_inflight_over_the_ceiling", "admission_safety_falsifier_a_leaked_guard_at_quiescence"]
+breaks = "Peer requests MUST pass an admission gate; local requests MUST admit unconditionally. Refusal MUST be a standard busy response with a retry hint."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "dst-fe80-liveness"
+requirement = "FE-80"
+target = "sovereign/crates/sovereign-mesh/src/dst.rs"
+find = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        for v in &snap.views {\n            for truth in &snap.online_truth {\n                match v.members.get(truth) {\n                    Some(m) if m.live => {}\n                    _ => {\n                        return Err(Violation {\n                            invariant: \"liveness\",\n                            detail: format!(\n                                \"node {} does not see up node {} as live\",\n                                v.self_id, truth\n                            ),\n                        });\n                    }\n                }\n            }\n        }\n        Ok(())\n    }"
+replace = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let _ = snap;\n        Ok(())\n    }"
+mustFail = ["liveness_falsifier_an_up_node_is_not_seen_at_all"]
+breaks = "Liveness of a participant already resolved MUST be read from membership, not from a probe over the link that participant's own bulk traffic is saturating."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "dst-fe8-unique-endpoint-key"
+requirement = "FE-8"
+target = "sovereign/crates/sovereign-mesh/src/dst.rs"
+find = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        for v in &snap.views {\n            // Delegate, don't re-derive. `aliased_endpoint_keys` is the ONE\n            // implementation of this rule; the admission guard in\n            // `merge_from_authenticated` asks the same function. A checker and\n            // an admitter with separate opinions is the §10.6 duplicated\n            // decider, and this is the last place you want a second one.\n            let claims = v.members.iter().map(|(id, m)| EndpointClaim {\n                node_id: *id,\n                name: String::new(),\n                node_pubkey: m.node_pubkey,\n                active: m.active,\n            });\n            if let Some(alias) = aliased_endpoint_keys(claims).into_iter().next() {\n                let ids: Vec<NodeId> = alias.members.iter().map(|(id, _)| *id).collect();\n                return Err(Violation {\n                    invariant: \"unique_endpoint_key\",\n                    detail: format!(\n                        \"node {:?} sees {} ACTIVE members claiming endpoint key {}: {:?} \\\n                         — a cloned node identity; their liveness is split across rows \\\n                         and neither will read online\",\n                        v.self_id,\n                        ids.len(),\n                        &alias.node_pubkey.to_string()[..16],\n                        ids\n                    ),\n                });\n            }\n        }\n        Ok(())\n    }"
+replace = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let _ = snap;\n        Ok(())\n    }"
+mustFail = ["a_cloned_node_identity_is_caught"]
+breaks = "Writing a membership does not make it active. Activation MUST be a separate step used only by the two operations that establish a membership, plus the explicit switch."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "mesh-fe20-hosted-corpora-published"
+requirement = "FE-20"
+target = "sovereign/crates/sovereign-mesh/src/gossip.rs"
+find = "    let fresh_caps = build_local_capabilities(\n        app_state.inner.corpus_engine.as_ref(),\n        now,\n        availability,\n        embed_model,\n        Some(app_state),\n    )\n    .await;"
+replace = "    let mut fresh_caps = build_local_capabilities(\n        app_state.inner.corpus_engine.as_ref(),\n        now,\n        availability,\n        embed_model,\n        Some(app_state),\n    )\n    .await;\n    fresh_caps.hosted_corpora.clear();"
+mustFail = ["gossip_round_publishes_live_hosted_corpora"]
+breaks = "Replicated payloads MUST include at minimum member state, inference plans, knowledge plans, ledger entries, and ring configuration."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "mesh-fe21-rtt-ewma-smoothing"
+requirement = "FE-21"
+target = "commonwealth/crates/commonwealth-discovery/src/latency_probe.rs"
+find = "            let smoothed_rtt = alpha * rtt_ms + (1.0 - alpha) * existing.rtt_ms;"
+replace = "            let smoothed_rtt = rtt_ms;"
+mustFail = ["latency_prober_ewma_smoothing"]
+breaks = "Round-trip latency between members MUST be measured periodically and shared, as a smoothed estimate."
+expected = "CAUGHT"

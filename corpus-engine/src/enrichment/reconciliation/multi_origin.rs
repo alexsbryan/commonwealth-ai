@@ -253,8 +253,13 @@ pub fn reconcile_with_signals(
     }
 }
 
-/// Reverse a prior merge by splitting `canonical_id` into the original
-/// atoms. Returns the [`crate::oplog::Op`] the caller must persist.
+/// Split `canonical_id` into `into` on the OPERATOR's judgement. Returns the
+/// [`crate::oplog::Op`] the caller must persist.
+///
+/// This is a fresh decision, not an undo: the caller supplies the outputs and
+/// nothing checks them against any prior merge. To reverse a specific recorded
+/// merge, use [`super::oplog::reverse_merge`], which reads the atoms to
+/// restore out of the log and stamps the reversal with the op it undoes.
 pub fn split_atom(
     canonical_id: AtomId,
     into: Vec<AtomId>,

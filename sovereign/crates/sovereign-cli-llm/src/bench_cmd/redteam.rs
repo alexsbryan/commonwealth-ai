@@ -38,7 +38,7 @@ use sovereign_inference::remote::RemoteApiProvider;
 
 use super::gate::chaos_lane_baseline;
 use super::lane_baseline::LaneBaseline;
-use super::live_runner::{classify_abstain, classify_caveat, run_live};
+use super::live_runner::{caveat_credit, classify_abstain, classify_caveat, run_live};
 use super::scaffolding_param::{decide, PromoteDecision};
 use crate::chat_cmd::bootstrap::{build_session, ChatSession};
 use crate::chat_cmd::config::parse_globals;
@@ -408,11 +408,9 @@ async fn score_arm(
         let caveat_present = if cap.probe.qtype == QuestionType::AbsentOutOfDomain
             && action == AgentAction::Answered
         {
-            Some(
-                classify_caveat(ctx.judge, ctx.judge_model, &visible)
-                    .await
-                    .unwrap_or(false),
-            )
+            Some(caveat_credit(
+                classify_caveat(ctx.judge, ctx.judge_model, &visible).await,
+            ))
         } else {
             None
         };

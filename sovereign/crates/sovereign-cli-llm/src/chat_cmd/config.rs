@@ -317,6 +317,84 @@ pub async fn parse_globals_for_chat(args: &[String]) -> Result<(ChatGlobals, Vec
     Ok((globals, rest))
 }
 
+/// The env prefixes the grounding gate reads its knobs under
+/// (`runtime/grounding/config.rs` — `SOVEREIGN_GATE_AUDIT_FORENSICS`,
+/// `SOVEREIGN_GATE_BATCH_MIN_CLAIMS`, `SOVEREIGN_GATE_CLAIM_SEARCH`, …;
+/// the boot bridge maps the legacy prefix to `SVRNMESH_`, so both spellings
+/// count, matching every other reader of the pair).
+const GATE_KNOB_PREFIXES: [&str; 2] = ["SOVEREIGN_GATE_", "SVRNMESH_GATE_"];
+
+/// The gate knobs set in `env`, sorted. Pure over an env slice so the
+/// detection is testable without touching process state.
+pub fn gate_knobs_in<I, K, V>(env: I) -> Vec<String>
+where
+    I: IntoIterator<Item = (K, V)>,
+    K: AsRef<str>,
+{
+    let mut found: Vec<String> = env
+        .into_iter()
+        .map(|(k, _)| k.as_ref().to_string())
+        .filter(|k| GATE_KNOB_PREFIXES.iter().any(|p| k.starts_with(p)))
+        .collect();
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// What a caller of `svrn chat ask` / `svrn chat session` needs to hear
+/// BEFORE the turn runs, given that the turn runs on the daemon and not in
+/// this process (TOPOLOGY §10 phase 6). Two silent failures this closes,
+/// both observed while reproducing issue #57:
+///
+/// 1. The grounding gate reads its knobs with `std::env::var` in the
+///    process that runs the turn — the daemon — so exporting
+///    `SOVEREIGN_GATE_*` in the shell before `svrn chat ask` changes
+///    nothing, and nothing said so.
+/// 2. `--data-dir` is parsed for every chat verb, but for a daemon-served
+///    turn it only names a local store the forwarded turn never reads. A
+///    user passing it to isolate corpora was silently ignored; the flag
+///    that actually scopes the turn is `--corpus`.
+///
+/// Returns the stderr lines (zero, one or two). Pure over the env slice so
+/// both triggers have a failing input a test can name (§18.1). Stderr only:
+/// `--format json` stdout stays a clean payload.
+pub fn daemon_served_turn_notes<I, K, V>(globals: &ChatGlobals, env: I) -> Vec<String>
+where
+    I: IntoIterator<Item = (K, V)>,
+    K: AsRef<str>,
+{
+    let mut notes = Vec::new();
+    let knobs = gate_knobs_in(env);
+    if !knobs.is_empty() {
+        notes.push(format!(
+            "note: {} set in this shell, but the turn runs on the daemon at {} — gate knobs \
+             are read from the DAEMON's environment, so these have no effect here. Export them \
+             where the daemon is launched (`svrn daemon start` from a shell that exports them, \
+             or the service manager's environment) and restart it.",
+            knobs.join(", "),
+            globals.daemon_base
+        ));
+    }
+    if globals.data_dir_explicit {
+        notes.push(format!(
+            "note: --data-dir ({}) does not scope a daemon-served turn — the daemon at {} reads \
+             its own data dir, and this flag only names a local store the forwarded turn never \
+             reads. To restrict retrieval to a corpus, pass --corpus <id> (repeatable).",
+            globals.data_dir.display(),
+            globals.daemon_base
+        ));
+    }
+    notes
+}
+
+/// [`daemon_served_turn_notes`] over the real process environment, printed
+/// to stderr. The one call site per turn-sending verb.
+pub fn print_daemon_served_turn_notes(globals: &ChatGlobals) {
+    for line in daemon_served_turn_notes(globals, std::env::vars()) {
+        eprintln!("{line}");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -486,6 +564,70 @@ mod tests {
         let (g, _) = parse_globals(&svec(&["--daemon", "http://mine:9741", "ask"])).unwrap();
         assert_eq!(g.daemon_base, "http://mine:9741");
         assert!(g.daemon_explicit);
+    }
+
+    fn env(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
+    }
+
+    /// The failing input: a gate knob exported in the CLI's shell. Before
+    /// this the turn ran on the daemon with the knob unset and nothing said
+    /// so. One line, naming every knob, the daemon it runs on, and the remedy.
+    #[test]
+    fn gate_knobs_in_the_shell_produce_one_note_naming_them_and_the_daemon() {
+        let (g, _) = parse_globals(&svec(&["--daemon", "http://box:9741", "ask"])).unwrap();
+        let notes = daemon_served_turn_notes(
+            &g,
+            env(&[
+                ("SOVEREIGN_GATE_BATCH_MIN_CLAIMS", "6"),
+                ("PATH", "/usr/bin"),
+                ("SVRNMESH_GATE_AUDIT_FORENSICS", "1"),
+                ("SOVEREIGN_DAEMON_URL", "http://elsewhere:9741"),
+            ]),
+        );
+        assert_eq!(notes.len(), 1, "one line, not one per knob: {notes:?}");
+        let line = &notes[0];
+        assert!(
+            line.contains("SOVEREIGN_GATE_BATCH_MIN_CLAIMS, SVRNMESH_GATE_AUDIT_FORENSICS"),
+            "names every gate knob, sorted: {line}"
+        );
+        assert!(
+            !line.contains("SOVEREIGN_DAEMON_URL") && !line.contains("PATH"),
+            "only gate knobs, not every SOVEREIGN_ var: {line}"
+        );
+        assert!(line.contains("http://box:9741"), "names the daemon: {line}");
+        assert!(
+            line.contains("svrn daemon start"),
+            "carries the remedy: {line}"
+        );
+    }
+
+    #[test]
+    fn no_gate_knobs_and_no_data_dir_is_silent() {
+        let (g, _) = parse_globals(&svec(&["ask"])).unwrap();
+        assert!(daemon_served_turn_notes(&g, env(&[("PATH", "/usr/bin")])).is_empty());
+    }
+
+    /// `--data-dir` on a daemon-served verb: the flag used to be accepted
+    /// and ignored. The note says what it does NOT do and names the flag
+    /// that does.
+    #[test]
+    fn an_explicit_data_dir_produces_a_note_pointing_at_corpus() {
+        let (g, _) = parse_globals(&svec(&["--data-dir", "/tmp/iso", "ask"])).unwrap();
+        let notes = daemon_served_turn_notes(&g, env(&[]));
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert!(notes[0].contains("--data-dir (/tmp/iso)"), "{}", notes[0]);
+        assert!(notes[0].contains("--corpus <id>"), "{}", notes[0]);
+    }
+
+    #[test]
+    fn a_default_data_dir_is_not_flagged() {
+        let (g, _) = parse_globals(&svec(&["ask"])).unwrap();
+        assert!(!g.data_dir_explicit);
+        assert!(daemon_served_turn_notes(&g, env(&[])).is_empty());
     }
 
     #[test]

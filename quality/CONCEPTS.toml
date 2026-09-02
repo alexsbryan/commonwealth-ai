@@ -350,7 +350,7 @@ home        = "minted"
 in_program  = true
 phase       = 3
 verified_at = "journey"
-measure     = "tauri commands whose Result error type is String, over total commands (method: parse #[tauri::command] signatures, cross-check the generate_handler! list — scripts/desktop-invoke-coverage.py already parses it)"
+measure     = "tauri commands whose Result error type is String, over total commands (method: parse #[tauri::command] signatures, cross-check the generate_handler! list — tests/e2e/scripts/command-manifest.mjs already parses it)"
 today       = "2026-08-17: 246 of 256 commands return Result<_, String>; 5 use DesktopError; 5 return non-Result. invokeChecked has 13 frontend call sites (since 2026-07-09), not 1 — the enabler is more adopted and the debt larger than v1 recorded. SYSTEM_OVERVIEW §10.1's '~140 command modules remaining' framing is unsupported either way and should be corrected regardless of this program. sovereign-mobile carries 15 further commands with its own error.rs, outside this count."
 
 [[concept]]
