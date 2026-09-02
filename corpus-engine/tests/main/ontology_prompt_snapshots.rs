@@ -60,7 +60,10 @@ fn fixtures_dir() -> PathBuf {
 /// re-blessing writes the canonical form so the committed bytes stay sorted
 /// whichever feature set blessed them. Inserting into a fresh `Map` in sorted
 /// key order yields the same bytes under either map type.
-fn canonical_json(text: &str) -> Option<String> {
+///
+/// `recipe_schema.rs` calls this for the descriptor gate, which has the
+/// same problem: ONE canonicaliser, not one per gate (ARCH §10.6).
+pub(crate) fn canonical_json(text: &str) -> Option<String> {
     fn sort_keys(v: serde_json::Value) -> serde_json::Value {
         match v {
             serde_json::Value::Object(map) => {

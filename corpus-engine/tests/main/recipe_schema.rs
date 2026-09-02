@@ -431,13 +431,16 @@ fn recipe_schema_descriptor_is_fresh() {
         "voices":             descriptor::struct_fields(&ontology_file, "VoicesDecl"),
     });
 
-    // Keys inserted in ALPHABETICAL order on purpose. serde_json's object
-    // ordering depends on the `preserve_order` feature: a scoped `-p
-    // corpus-engine` build (no preserve_order) sorts keys via BTreeMap, while a
-    // `--workspace` build unifies in `serde_json/preserve_order` and keeps
-    // insertion order. Inserting alphabetically makes both configs emit
-    // byte-identical output, so the bless command's feature set can't skew the
-    // gate. (The array values below are Vec — insertion order always.)
+    // Keys inserted in ALPHABETICAL order by convention, so the source reads
+    // in the order the file does. It is NOT what makes the gate stable: the
+    // `canonical_json` call below is. serde_json's object ordering depends on
+    // the `preserve_order` feature — a scoped `-p corpus-engine` build (no
+    // preserve_order) sorts keys via BTreeMap, a `--workspace` build unifies
+    // it in and keeps insertion order — and alphabetical insertion only ever
+    // covered these two outer objects. The nested ones `variants_with_fields`
+    // and `variants_with_required` build are ordered by whatever the helper
+    // inserted, which is how a descriptor blessed scoped stayed red under the
+    // workspace run (2026-09-01).
     let desc = serde_json::json!({
         "acquire":    descriptor::variants_with_required(&recipe_file, "AcquirerConfig"),
         "chunk":      descriptor::variant_keys(&recipe_file, "ChunkerConfig"),
@@ -447,9 +450,13 @@ fn recipe_schema_descriptor_is_fresh() {
         "ontology":   ontology,
         "pattern":    descriptor::variant_keys(&recipe_file, "PatternDecl"),
     });
-    // Pretty-print + a trailing newline (checked-in-file hygiene). The consumer
-    // parses with `serde_json::from_str`, which ignores trailing whitespace.
-    let generated = serde_json::to_string_pretty(&desc).unwrap() + "\n";
+    // Sorted keys at EVERY depth, pretty-printed, trailing newline (checked-in
+    // file hygiene; the consumer uses `serde_json::from_str`, which ignores
+    // trailing whitespace). One canonicaliser, shared with the prompt-snapshot
+    // gate — see `ontology_prompt_snapshots::canonical_json`.
+    let generated =
+        crate::ontology_prompt_snapshots::canonical_json(&serde_json::to_string(&desc).unwrap())
+            .expect("the descriptor is JSON");
 
     let out_dir = manifest.join("../sovereign-recipes/schema");
     let out_path = out_dir.join("recipe_schema_descriptor.json");
@@ -460,7 +467,12 @@ fn recipe_schema_descriptor_is_fresh() {
         return;
     }
 
-    let committed = std::fs::read_to_string(&out_path).unwrap_or_default();
+    // Canonicalise the committed side too, so a descriptor blessed under a
+    // different feature set is judged on content, not key order. A file that
+    // is missing or not JSON falls through as raw bytes and mismatches.
+    let committed_raw = std::fs::read_to_string(&out_path).unwrap_or_default();
+    let committed =
+        crate::ontology_prompt_snapshots::canonical_json(&committed_raw).unwrap_or(committed_raw);
     if committed != generated {
         let (cl, gl) = (committed.lines().count(), generated.lines().count());
         panic!(
