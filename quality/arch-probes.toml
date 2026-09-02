@@ -122,6 +122,21 @@ max = 3
 per = "file"
 message = "string-literal match arms added"
 
+# `kind = "message_symbols"`: every backticked token in the commit message
+# that has the shape of a code symbol (a `::` path, CamelCase, snake_case,
+# SCREAMING_CASE, `f()`, `m!`) must exist in the tree the commit produces or
+# the tree it started from. Absent from both, it was recalled, not cited —
+# the §11.1 smell "a claim that a function exists, without a citation", at
+# the one moment code can check it. CLI verbs, file names, flags and TOML
+# fragments are backticked in this repo's messages too and are not symbol-
+# shaped, so they never fire. The check is `git grep -w -F`, no parsing.
+[[decider]]
+id = "uncited-symbol"
+anchor = "ARCH §11.1"
+kind = "message_symbols"
+max_symbols = 12
+message = "not found in the tree, before or after this commit"
+
 # --------------------------------------------------------------------------
 # Refused — measured, dropped, and kept here so it is not re-proposed
 # --------------------------------------------------------------------------

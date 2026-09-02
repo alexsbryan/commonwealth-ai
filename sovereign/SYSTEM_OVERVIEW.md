@@ -764,7 +764,7 @@ identical schema for a full index or a shard.
     │   ├── <hh>/<sha256>                # raw bytes, sharded by leading 2 hex
     │   └── parsed/<sha256>.<ext>        # typed parsed cache (parquet/ical/…)
     └── atlas/
-        ├── atoms.json                   # AtomsFile SCHEMA_VERSION 2.3 (canonical export)
+        ├── atoms.json                   # AtomsFile SCHEMA_VERSION 2.4 (canonical export)
         ├── atoms.lance/                 # ATLAS_STORAGE_V2 columnar atom store — the
         │                                # query-path reader (hot scalar columns + a
         │                                # lossless payload). Replaced atoms.rkyv; the
@@ -1171,8 +1171,25 @@ means one thing.
   ArgumentReconstruction, Configuration, Asset). `Pipeline` trait +
   registry + `ExemplarBank` + `PhaseCache`. Pipelines: `literary`,
   `literary_atlas`, `philosophy_atlas`, `referential_atlas`,
-  `engineering_atlas`, `conversation_atlas`. State at
-  `~/.svrnmesh/indexes/<corpus>/atlas/`. Deep-dive:
+  `engineering_atlas`, `conversation_atlas`, and `custom_atlas` — the
+  recipe-declared genre (`pipelines/configurable_atlas.rs`), built from a
+  recipe's versioned `[enrichment.ontology]` block. `version` (absent = 0)
+  selects an `OntologyLanguage` in `enrichment/ontology/language.rs`
+  (registry keyed by the integer; unknown version refuses naming the max; a
+  later version's key without its version line refuses naming the fix); every
+  version parses to `enrichment::ontology::OntologyPolicies` (five axes +
+  prose), which is all the pipeline reads. Version 0 is the prose
+  `OntologyConfig`; version 1 declares types with typed attributes
+  (`OntologyTypeDecl`, `AttrDecl`) plus `voices`/`change`/`tension`/`derive`.
+  `recipe validate` resolves every reference and prints the derived facets;
+  `recipe new --ontology <name>` scaffolds from
+  `sovereign-recipes/_templates/ontology-v1/` (`recipe_templates.rs`);
+  `recipe migrate --ontology-version 1` adds the version line as a diff.
+  `CustomAtlasSpec.policies` carries the parsed policies into `config.json`;
+  `CustomOntology::from_policies` composes the Phase-1 prompt (I1: a
+  version-1 block with no declarations composes version-0 bytes). Design:
+  `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md`, `ONTOLOGY_MIGRATION.md`.
+  State at `~/.svrnmesh/indexes/<corpus>/atlas/`. Deep-dive:
   [`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md). Beyond the LLM
   pipelines, the deterministic **`structure_first`** strategy lifts a SCIP-indexed
   **code** corpus into this same typed-atom graph (content-hash atoms, code-intel
@@ -5496,6 +5513,7 @@ now) and the row is dropped — or trimmed to the still-open residual.
 | `pipeline/runner.rs` split | `corpus-engine/src/enrichment/pipeline/runner.rs` (~3100 lines) | v2 atlas orchestrator. Phase dispatch + ExemplarBank + PhaseCache + step retry all touch the same state. |
 | `engine/mod.rs` split | `corpus-engine/src/engine/mod.rs` (~3000 lines) | `CorpusEngine` façade. Plausible after watcher-driven recipes settle and `ingest_driver` enumify lands. |
 | `pipelines/literary_atlas.rs` split | `corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs` (~2900 lines) | Splits naturally along phase boundaries (extract, cluster, name, resolve, synthesize). |
+| `pipeline/atlas.rs` split (partial, 2026-09-01) | `corpus-engine/src/enrichment/pipeline/atlas.rs` (1,680 → 1,373 lines) | Pure Phase-1 data shapes: core sketches, the open-enum vocabulary macro, and six per-genre extension families. The descriptive/reflective/procedural/lyric families moved to `atlas_extensions.rs` (341 lines) to clear the ARCH §3.1 growth ratchet. The remaining cut — core sketches, vocabulary enums, and all six families as peers each under the 800 approach floor — is deferred because it cannot be taken in one step: the arch-gate's approach band (800-1200, no slack) rejects any residual that lands inside it, so the file must go from >1200 to <800 in a single move, and both the macro and the core sketches are live surface for the in-flight ontology-v1 waves. Due when those land. |
 
 ### 10.1c Size-debt acceptance — 2026-07-30 red-gate sweep
 

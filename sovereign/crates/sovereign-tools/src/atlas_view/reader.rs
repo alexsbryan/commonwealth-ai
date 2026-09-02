@@ -504,6 +504,8 @@ mod tests {
 
     fn sample_claim(id: usize, content: &str) -> AtomEnvelope {
         AtomEnvelope::Claim(Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(id),
             content: content.into(),
             discourse_act: DiscourseAct::Assert,

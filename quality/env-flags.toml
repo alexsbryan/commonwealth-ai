@@ -1286,6 +1286,12 @@ status = "guard"
 purpose = "The toolbox container scripts/lib/release-host.sh runs native build legs inside. The default matches the container this repo's native deps (cmake, clang, vulkan) are installed in; the knob exists because the container name is a property of the HOST, not of the release. Resolution is guarded, not assumed: the driver uses `toolbox run -c $SOVEREIGN_TOOLBOX` only when the `toolbox` binary exists AND `toolbox list --containers` actually names it, so a missing or renamed container degrades loudly instead of producing a leg that silently built on the host."
 
 [[flag]]
+name = "SOVEREIGN_NO_COMMIT_SMELLS"
+cluster = "dev-gates"
+default = "off"
+status = "guard"
+purpose = """Set to 1 to silence .claude/hooks/commit-smells.py, the PreToolUse hook that runs the model-free ARCH §15 smell gate (scripts/co-arch.py over quality/arch-probes.toml) on what a `git commit` would record and blocks the agent once per site per session. A kill-switch for a false-positive storm or a fixture-heavy commit; the nightly co-arch audit still judges the commit afterwards, so nothing is lost by opting out, only the in-session placement of the principle next to the diff."""
+[[flag]]
 name = "SOVEREIGN_FAST_SHORT_QUEUE_CAP"
 cluster = "inference"
 default = "64"

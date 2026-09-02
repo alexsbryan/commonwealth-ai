@@ -1,0 +1,85 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! Ontology-v1 recipe templates — the worked declarations from
+//! `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md` §1 as complete recipes.
+//!
+//! `svrn recipe new --ontology <name>` scaffolds one of these. They are
+//! data, not code: each lives at
+//! `sovereign-recipes/_templates/ontology-v1/<name>/recipe.toml` and is
+//! vendored into `OUT_DIR` by `build.rs` exactly like the bundled recipes
+//! (`recipe_builtin.rs`), so there is one checked-in copy and no
+//! repo-relative `include_str!` path. Adding a template is adding a
+//! directory there and a row in [`BUILTINS`]; `tests/main/ontology_recipe.rs`
+//! parses and validates every row.
+//!
+//! P1 ships the first two (numismatics, governance); P7.1 adds the other
+//! eight from §1.
+
+use crate::error::{Error, Result};
+
+/// `(name, recipe.toml)` for every shipped template, in catalog order.
+const BUILTINS: &[(&str, &str)] = &[
+    (
+        "numismatics",
+        include_str!(concat!(
+            env!("OUT_DIR"),
+            "/recipes/_templates/ontology-v1/numismatics/recipe.toml"
+        )),
+    ),
+    (
+        "governance",
+        include_str!(concat!(
+            env!("OUT_DIR"),
+            "/recipes/_templates/ontology-v1/governance/recipe.toml"
+        )),
+    ),
+];
+
+/// The placeholder the templates use for the fields an author must fill
+/// (`corpus.id`, `corpus.name`, `acquire.path`). `recipe new --id` replaces
+/// the id and name lines; the path is always the author's.
+pub const PLACEHOLDER: &str = "REPLACE_ME";
+
+/// Every template name, in catalog order.
+pub fn list_builtin_names() -> Vec<&'static str> {
+    BUILTINS.iter().map(|(n, _)| *n).collect()
+}
+
+/// The recipe TOML for a template, or an error naming every template there
+/// is (mirrors `enrich_cmd/templates::load_builtin`; ARCH §4, unknown id loud).
+pub fn load_builtin(name: &str) -> Result<&'static str> {
+    BUILTINS
+        .iter()
+        .find_map(|(n, body)| (*n == name).then_some(*body))
+        .ok_or_else(|| {
+            Error::InvalidInput(format!(
+                "no built-in ontology template '{name}' (available: {})",
+                list_builtin_names().join(", ")
+            ))
+        })
+}
+
+/// Instantiate a template: the `id = "REPLACE_ME"` and `name = "REPLACE_ME"`
+/// lines take `id`; nothing else changes, so the template's comments survive.
+/// Pass `None` to get the template verbatim.
+pub fn instantiate(template: &str, id: Option<&str>) -> String {
+    let Some(id) = id else {
+        return template.to_string();
+    };
+    template
+        .lines()
+        .map(|line| {
+            let t = line.trim_start();
+            if t.starts_with(&format!("id = \"{PLACEHOLDER}\""))
+                || t.starts_with(&format!("name = \"{PLACEHOLDER}\""))
+            {
+                let key = t.split_whitespace().next().unwrap_or("id");
+                let indent = &line[..line.len() - t.len()];
+                format!("{indent}{key} = \"{id}\"")
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + if template.ends_with('\n') { "\n" } else { "" }
+}

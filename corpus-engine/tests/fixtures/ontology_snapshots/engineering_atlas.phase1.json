@@ -1,0 +1,43 @@
+{
+  "system": "# Phase 1 — engineering-doc claim extraction\n\nYou read one section of an engineering document — an architecture\nnote, a system overview, a design doc, a README — and extract every\nCLAIM that mentions a CODE ARTIFACT.\n\nA code artifact is anything a maintainer could grep for in a\ncodebase:\n\n- file paths (`src/foo.rs`, `commonwealth/crates/.../mod.rs`)\n- globs and directories (`src/utils/`, `**/*.toml`)\n- type, struct, trait, enum names (`ToolRegistry`, `DomainRegistry`)\n- function, method, free-function names (`build_pipeline`,\n  `open_index_for_corpus`)\n- HTTP routes (`POST /internal/storage/budget`)\n- module paths (`sovereign-core::registry::ToolRegistry`)\n- CLI commands, flags, environment variables\n- configuration keys, file names like `_corpus_meta.json`\n\nA CLAIM is a sentence-level assertion. Both prescriptive sentences\n(\"dispatch through a registry\") and descriptive sentences (\"the\nruntime lives in `runtime.rs`\") count, as long as the sentence\nmentions at least one code artifact. Skip sentences that mention no\nartifact.\n\nDo not classify \"normative\" vs \"descriptive\" — that's a downstream\njudgment. Your job is to extract every grounded claim and list its\nanchors verbatim from the source.\n\n## Output\n\nFor each claim, emit a JSON object with:\n\n- `content` — the claim sentence in its strongest form. Paraphrase\n  only to trim filler; preserve identifying terminology and any\n  modal verb (must / shall / never / always).\n- `code_anchors` — the artifact strings AS THEY APPEAR IN THE\n  SOURCE. Copy verbatim — same case, same punctuation. If the\n  source wraps the artifact in backticks, copy the inner string\n  (not the backticks). List every artifact the sentence mentions.\n  Prefer the most specific form available: a fully-qualified path\n  beats a basename when both are present.\n- `evidence_excerpt` — *optional.* If one sentence in the section,\n  ≤200 chars, carries the claim verbatim, include it. Exact text,\n  no paraphrase. Omit when no single sentence is the carrier.\n\nEmit exactly one JSON object matching this shape:\n\n```json\n{\n  \"claims\": [\n    {\n      \"content\": \"Big files without a roadmap entry are bugs.\",\n      \"code_anchors\": [\"SYSTEM_OVERVIEW.md §10 Architecture Roadmap\"],\n      \"evidence_excerpt\": \"Big files without a roadmap entry are bugs.\"\n    }\n  ]\n}\n```\n\nIf the section mentions no code artifacts at all, return\n`{\"claims\": []}`.\n\nStart your reply with `{`. No prose. No `<think>` block. No trailing\ncommentary.\n",
+  "user": "**Section:** Article II — Quiet hours\n**Section id:** sec-0002\n\n---\n\nArticle II — Quiet hours. Quiet hours begin at 11 PM every night. Members may not play amplified music in the common spaces after that time. Guests are bound by the same rule as the member who invited them.",
+  "response_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "claims": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "code_anchors": {
+              "items": {
+                "type": "string",
+                "x-asciiExtended": true
+              },
+              "type": "array"
+            },
+            "content": {
+              "type": "string",
+              "x-asciiExtended": true
+            },
+            "evidence_excerpt": {
+              "type": "string",
+              "x-asciiExtended": true
+            }
+          },
+          "required": [
+            "content",
+            "code_anchors"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "claims"
+    ],
+    "type": "object"
+  },
+  "response_schema_name": "engineering_claims",
+  "phase_id": "phase1"
+}

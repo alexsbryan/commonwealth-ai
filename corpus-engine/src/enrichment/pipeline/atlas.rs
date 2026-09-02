@@ -311,7 +311,7 @@ string_enum_with_other! {
 // downstream and lose fidelity once the claim is lifted from its
 // passage into a cluster.
 
-fn is_empty_str(s: &str) -> bool {
+pub(crate) fn is_empty_str(s: &str) -> bool {
     s.is_empty()
 }
 
@@ -338,6 +338,12 @@ pub struct EntitySketch {
     /// passage; replaced by a `ChunkRef` during Phase 5 resolution.
     #[serde(default, skip_serializing_if = "is_empty_str")]
     pub anchor: String,
+    /// Declared-type attributes (ontology v1), keyed by the declared
+    /// attribute name and validated by family in the parser. Empty for
+    /// undeclared corpora and absent on the wire when empty, so cached
+    /// section JSON re-serialises byte-identically.
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub attributes: serde_json::Map<String, serde_json::Value>,
 }
 
 /// A state an entity occupies during this section.
@@ -368,6 +374,13 @@ pub struct RelationSketch {
     pub label: String,
     #[serde(default, skip_serializing_if = "is_empty_str")]
     pub anchor: String,
+    /// Declared relation type name (ontology v1); `None` when the corpus
+    /// declares none and classification stays deferred to Phase 5.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relation_type: Option<String>,
+    /// Declared-type attributes; see [`EntitySketch::attributes`].
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub attributes: serde_json::Map<String, serde_json::Value>,
 }
 
 /// A state a relation occupies during this section.
@@ -394,6 +407,13 @@ pub struct EventSketch {
     pub participants: Vec<String>,
     #[serde(default, skip_serializing_if = "is_empty_str")]
     pub anchor: String,
+    /// Declared event type name (ontology v1); `None` when the corpus
+    /// declares none and classification stays deferred to Phase 5.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_type: Option<String>,
+    /// Declared-type attributes; see [`EntitySketch::attributes`].
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub attributes: serde_json::Map<String, serde_json::Value>,
 }
 
 /// A knowledge-carrying act the text performs in this section.
@@ -401,7 +421,8 @@ pub struct EventSketch {
 /// `discourse_act` and `epistemic_status` are kept on the sketch
 /// (exception to the defer-classification rule — see module doc) but
 /// `scope` is deferred to Phase 5 since it's often resolvable from
-/// cluster context.
+/// cluster context — unless a declared claim type (ontology v1) fixes
+/// it, in which case the sketch carries it.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ClaimSketch {
     /// The claim in propositional form.
@@ -421,6 +442,22 @@ pub struct ClaimSketch {
     pub quotable_excerpt: Option<String>,
     #[serde(default, skip_serializing_if = "is_empty_str")]
     pub anchor: String,
+    /// Declared claim type name (ontology v1); `None` for the generic
+    /// claim of an undeclared corpus.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim_kind: Option<String>,
+    /// Name of the entity the claim is ABOUT (declared claim types with a
+    /// `subject`), resolved to an atom id in Phase 3 the way
+    /// `attributed_to` is. `attributed_to` is the voice; `subject` is the
+    /// referent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
+    /// Scope fixed by the declared claim type; `None` defers to Phase 5.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<ClaimScope>,
+    /// Declared-type attributes; see [`EntitySketch::attributes`].
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub attributes: serde_json::Map<String, serde_json::Value>,
 }
 
 /// A question this section raises. Question-type classification
@@ -997,323 +1034,16 @@ pub struct ParticipantArcSketch {
     pub anchor: String,
 }
 
-/// Descriptive discourse mode: definitions, property claims,
-/// structural relationships, examples, provenance pointers. The
-/// extractor that fires on `DiscourseMode::Descriptive` writes here
-/// instead of (or alongside) the literary base schema's claims field.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
-pub struct DescriptiveExtension {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub definitions: Vec<DefinitionSketch>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub property_claims: Vec<PropertyClaimSketch>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub relationships: Vec<RelationSketch>,
-    /// Concrete examples used to illustrate a definition / claim.
-    /// Distinct from `evidence_invocations` on the argumentative
-    /// extension — descriptive examples illustrate rather than
-    /// support.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub examples: Vec<ExampleSketch>,
-    /// Source pointers — citations, footnotes, "as described in X"
-    /// references. Empty when the section is voice-only.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub provenance: Vec<ProvenanceSketch>,
-}
-
-impl DescriptiveExtension {
-    pub fn atom_count(&self) -> usize {
-        self.definitions.len()
-            + self.property_claims.len()
-            + self.relationships.len()
-            + self.examples.len()
-            + self.provenance.len()
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct DefinitionSketch {
-    pub term: String,
-    pub content: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub anchor: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct PropertyClaimSketch {
-    pub subject: String,
-    pub property: String,
-    pub value: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub anchor: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ExampleSketch {
-    pub label: String,
-    pub content: String,
-    /// Definition / claim / concept the example illustrates. Empty
-    /// when ungrounded.
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub illustrates: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub anchor: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ProvenanceSketch {
-    /// Short label for the source — author + title, URL, or DOI-ish
-    /// identifier.
-    pub label: String,
-    /// One sentence of context for the source.
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub context: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub anchor: String,
-}
-
-/// Reflective discourse mode: interactions with others / texts,
-/// observations, open threads (questions or lines of thinking the
-/// author leaves unresolved), mood shifts, realisations.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
-pub struct ReflectiveExtension {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub interactions: Vec<InteractionSketch>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub observations: Vec<ObservationSketch>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub open_threads: Vec<OpenThreadSketch>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub mood_shifts: Vec<MoodShiftSketch>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub realisations: Vec<RealisationSketch>,
-}
-
-impl ReflectiveExtension {
-    pub fn atom_count(&self) -> usize {
-        self.interactions.len()
-            + self.observations.len()
-            + self.open_threads.len()
-            + self.mood_shifts.len()
-            + self.realisations.len()
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct InteractionSketch {
-    /// Named other(s) the author interacted with — colleague, friend,
-    /// author of a text. Empty when the interaction is with an
-    /// inanimate object or a non-personalised idea.
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub with: String,
-    pub content: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub anchor: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ObservationSketch {
-    pub content: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub anchor: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct OpenThreadSketch {
-    /// One sentence stating the unresolved thread — a question, a
-    /// hunch the author can't yet pin down, a line of work to return
-    /// to.
-    pub content: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub anchor: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct MoodShiftSketch {
-    /// Where the author started.
-    pub from: String,
-    /// Where the author ended.
-    pub to: String,
-    /// What moved them — the trigger / catalyst.
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub catalyst: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub anchor: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct RealisationSketch {
-    pub content: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub anchor: String,
-}
-
-/// Procedural discourse mode: tasks (what will be done), decisions
-/// (what was chosen), artifacts (the produced things), dependencies
-/// (what blocks what), blockers (active obstacles), status signals
-/// (progress markers).
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
-pub struct ProceduralExtension {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub tasks: Vec<TaskSketch>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub decisions: Vec<DecisionSketch>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub artifacts: Vec<ArtifactSketch>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub dependencies: Vec<DependencySketch>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub blockers: Vec<BlockerSketch>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub status_signals: Vec<StatusSignalSketch>,
-}
-
-impl ProceduralExtension {
-    pub fn atom_count(&self) -> usize {
-        self.tasks.len()
-            + self.decisions.len()
-            + self.artifacts.len()
-            + self.dependencies.len()
-            + self.blockers.len()
-            + self.status_signals.len()
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct TaskSketch {
-    pub content: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub owner: String,
-    /// Free-form due-at hint — "by Thursday", "Q3", "before the merge
-    /// freeze". The temporal modulator (task #36) may upgrade this to
-    /// a structured date when context permits.
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub due_at: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub anchor: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct DecisionSketch {
-    pub content: String,
-    /// Alternatives considered and rejected. Empty when the decision
-    /// is voiced without alternatives.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub alternatives: Vec<String>,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub anchor: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ArtifactSketch {
-    pub name: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub description: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub anchor: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct DependencySketch {
-    pub from: String,
-    pub to: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub kind: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub anchor: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct BlockerSketch {
-    pub content: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub blocks: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub anchor: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct StatusSignalSketch {
-    /// One of `done`, `in_progress`, `paused`, `cancelled`, `unknown`.
-    /// Free-form to tolerate future expansion; routing on it stays
-    /// optional.
-    pub state: String,
-    pub content: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub anchor: String,
-}
-
-/// Lyric discourse mode: images, motifs, formal devices, voice shifts,
-/// tonal movements. The atom shapes here are deliberately
-/// expressive-domain — they don't try to recover argumentation or
-/// fact-claims from verse.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
-pub struct LyricExtension {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub images: Vec<ImageSketch>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub motifs: Vec<MotifSketch>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub formal_devices: Vec<FormalDeviceSketch>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub voice_shifts: Vec<VoiceShiftSketch>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub tonal_movements: Vec<TonalMovementSketch>,
-}
-
-impl LyricExtension {
-    pub fn atom_count(&self) -> usize {
-        self.images.len()
-            + self.motifs.len()
-            + self.formal_devices.len()
-            + self.voice_shifts.len()
-            + self.tonal_movements.len()
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ImageSketch {
-    pub content: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub anchor: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct MotifSketch {
-    pub name: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub description: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub anchor: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct FormalDeviceSketch {
-    /// Anaphora, enjambment, caesura, refrain, parallelism, etc.
-    /// Free-form so the prompt can name a device without a fixed
-    /// taxonomy.
-    pub name: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub example: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub anchor: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct VoiceShiftSketch {
-    pub from: String,
-    pub to: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub anchor: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct TonalMovementSketch {
-    pub from: String,
-    pub to: String,
-    #[serde(default, skip_serializing_if = "is_empty_str")]
-    pub anchor: String,
-}
+/// The descriptive, reflective, procedural and lyric extension payloads
+/// live in [`super::atlas_extensions`] (ARCH §3.1 size ratchet) and are
+/// re-exported here: `TypeExtension` names them next to its other arms.
+pub use super::atlas_extensions::{
+    ArtifactSketch, BlockerSketch, DecisionSketch, DefinitionSketch, DependencySketch,
+    DescriptiveExtension, ExampleSketch, FormalDeviceSketch, ImageSketch, InteractionSketch,
+    LyricExtension, MoodShiftSketch, MotifSketch, ObservationSketch, OpenThreadSketch,
+    ProceduralExtension, PropertyClaimSketch, ProvenanceSketch, RealisationSketch,
+    ReflectiveExtension, StatusSignalSketch, TaskSketch, TonalMovementSketch, VoiceShiftSketch,
+};
 
 #[cfg(test)]
 mod tests {
@@ -1385,6 +1115,7 @@ mod tests {
             section_id: "ch_0013".into(),
             enrichment_depth: EnrichmentDepth::Extracted,
             entities_introduced: vec![EntitySketch {
+                attributes: Default::default(),
                 canonical_name: "Alyosha".into(),
                 aliases: vec!["Alyosha Karamazov".into(), "Alexei Fyodorovich".into()],
                 entity_type: EntityType::Person,
@@ -1398,6 +1129,8 @@ mod tests {
                 anchor: "could not imagine the world without Zosima".into(),
             }],
             relations_introduced: vec![RelationSketch {
+                attributes: Default::default(),
+                relation_type: None,
                 participants: vec!["Alyosha".into(), "Zosima".into()],
                 label: "Novice-elder bond — spiritual formation".into(),
                 anchor: "the elder laid his hand".into(),
@@ -1408,11 +1141,17 @@ mod tests {
                 anchor: "glared past one another".into(),
             }],
             events: vec![EventSketch {
+                attributes: Default::default(),
+                event_type: None,
                 description: "Zosima instructs Alyosha to leave the monastery.".into(),
                 participants: vec!["Zosima".into(), "Alyosha".into()],
                 anchor: "go out into the world".into(),
             }],
             claims: vec![ClaimSketch {
+                attributes: Default::default(),
+                claim_kind: None,
+                subject: None,
+                scope: None,
                 content: "Active love in reality is harder than the love one dreams of.".into(),
                 discourse_act: DiscourseAct::Argue,
                 epistemic_status: EpistemicStatus::Confident,
@@ -1434,6 +1173,66 @@ mod tests {
         assert_eq!(parsed, extraction);
         assert_eq!(parsed.atom_count(), 7);
         assert!(!parsed.has_no_atoms());
+    }
+
+    #[test]
+    fn sketches_with_empty_ontology_fields_serialise_without_new_keys() {
+        // Cached section JSON written before the ontology-v1 fields existed
+        // must re-serialise byte-identically: every new field is absent on
+        // the wire when empty.
+        let entity = EntitySketch {
+            canonical_name: "coin".into(),
+            aliases: vec![],
+            entity_type: EntityType::Concept,
+            description: String::new(),
+            defining_quote: None,
+            anchor: String::new(),
+            attributes: Default::default(),
+        };
+        let relation = RelationSketch {
+            participants: vec![],
+            label: "struck at".into(),
+            anchor: String::new(),
+            relation_type: None,
+            attributes: Default::default(),
+        };
+        let event = EventSketch {
+            description: "minted".into(),
+            participants: vec![],
+            anchor: String::new(),
+            event_type: None,
+            attributes: Default::default(),
+        };
+        let claim = ClaimSketch {
+            content: "weighs 1.29 g".into(),
+            discourse_act: DiscourseAct::Assert,
+            epistemic_status: EpistemicStatus::Confident,
+            attributed_to: None,
+            quotable_excerpt: None,
+            anchor: String::new(),
+            claim_kind: None,
+            subject: None,
+            scope: None,
+            attributes: Default::default(),
+        };
+        let keys = |v: serde_json::Value| -> Vec<String> {
+            let mut keys: Vec<String> = v.as_object().unwrap().keys().cloned().collect();
+            keys.sort();
+            keys
+        };
+        assert_eq!(
+            keys(serde_json::to_value(&entity).unwrap()),
+            ["canonical_name", "entity_type"]
+        );
+        assert_eq!(
+            keys(serde_json::to_value(&relation).unwrap()),
+            ["label", "participants"]
+        );
+        assert_eq!(keys(serde_json::to_value(&event).unwrap()), ["description"]);
+        assert_eq!(
+            keys(serde_json::to_value(&claim).unwrap()),
+            ["content", "discourse_act", "epistemic_status"]
+        );
     }
 
     #[test]

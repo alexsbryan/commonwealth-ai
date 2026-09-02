@@ -545,6 +545,8 @@ mod tests {
 
     fn claim_with_evidence(id: usize, content: &str, chunks: &[&str]) -> AtomEnvelope {
         AtomEnvelope::Claim(Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(id),
             content: content.into(),
             discourse_act: DiscourseAct::Assert,
@@ -781,6 +783,8 @@ mod tests {
         // Lift the underlying atom_id text so the claim points at it.
         let hume_id = hume.id().clone();
         let claim_with_attribution = AtomEnvelope::Claim(Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(1),
             content: "Custom is the great guide of human life.".into(),
             discourse_act: DiscourseAct::Assert,
@@ -825,6 +829,8 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let atlas_dir = tmp.path().join("wiki").join("atlas");
         let dangling_claim = AtomEnvelope::Claim(Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(1),
             content: "x".into(),
             discourse_act: DiscourseAct::Assert,

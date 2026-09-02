@@ -524,6 +524,7 @@ mod tests {
 
     fn relation(idx: usize, label: &str, participants: Vec<AtomId>) -> Relation {
         Relation {
+            attributes: Default::default(),
             id: AtomId::relation(idx),
             label: label.into(),
             participants,
@@ -550,6 +551,8 @@ mod tests {
     #[allow(dead_code)]
     fn claim(idx: usize, content: &str, attrib: Option<usize>) -> Claim {
         Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(idx),
             content: content.into(),
             discourse_act: DiscourseAct::Argue,
@@ -587,6 +590,7 @@ mod tests {
 
     fn event(idx: usize, description: &str, participants: Vec<AtomId>) -> Event {
         Event {
+            attributes: Default::default(),
             id: AtomId::event(idx),
             description: description.into(),
             event_type: EventType::Other("unspecified".into()),

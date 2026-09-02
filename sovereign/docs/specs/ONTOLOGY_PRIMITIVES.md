@@ -142,6 +142,14 @@ kind = "entity"
 role_of = "person"
 
 [[enrichment.ontology.types]]
+name = "person"
+kind = "entity"
+
+[[enrichment.ontology.types]]
+name = "mint"
+kind = "entity"
+
+[[enrichment.ontology.types]]
 name = "attribution"
 kind = "claim"
 force = "assertive"
@@ -164,6 +172,10 @@ by which decision; which rules contradict each other. **Built**
 [enrichment.ontology]
 version = 1
 guidance = """The governing rules of a community: founding documents plus dated decisions ..."""
+
+[[enrichment.ontology.types]]
+name = "topic"
+kind = "entity"
 
 [[enrichment.ontology.types]]
 name = "rule"
@@ -221,10 +233,12 @@ kind = "claim"
 force = "assertive"
 grades = ["trial", "case-series", "member-report"]
 
+[enrichment.ontology]
+must_not = ["give dosing advice", "present a member report as a trial result"]
+
 [enrichment.ontology.voices]
 not_entities = ["the poster", "the moderator"]
 attributed_to = ["paper", "clinician", "member"]
-must_not = ["give dosing advice", "present a member report as a trial result"]
 ```
 
 ### 1.4 The contracts practice
@@ -634,9 +648,10 @@ already asks the first (`sovereign/modes/recipe-author/skill.toml:333-338`).
 | Derivation | What should it notice that no single document says — contradictions, patterns, larger structures? What looks like a contradiction but isn't? | `tension`, `patterns`, `derive` |
 
 `recipe validate` checks every `ref`, `specializes`, `role_of`, `from`,
-`to` and `subject` resolves to a declared type, every `same` names a
-declared attribute or `subject`, and prints the question shapes the
-corpus will answer. The build report counts atoms per declared type,
+`to` and `subject` resolves to a declared type (so a declaration must name
+every type it points at — §1.1 declares `person` and `mint`, §1.2 `topic`),
+every `same` names a declared attribute or `subject`, and prints the
+question shapes the corpus will answer. The build report counts atoms per declared type,
 names the zero-coverage ones, shows the identity criterion each type
 resolved to, and lists reified merges. The inspector filters by
 declared type. The Conflicts panel already speaks the labels.

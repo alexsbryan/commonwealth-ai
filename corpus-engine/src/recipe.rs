@@ -528,14 +528,16 @@ pub struct EnrichmentConfig {
     /// Custom atlas ONTOLOGY for `type = "atlas"` recipes. This is the
     /// headline "build the ontology for your specific domain" path: instead of
     /// picking a prebuilt genre pipeline (`literary_atlas`/`philosophy_atlas`),
-    /// the recipe author (with the agent) describes — in the domain's own
-    /// language — what entities / relations / claims / events matter. A generic
-    /// `ConfigurableAtlasPipeline` runs the universal 7-phase atlas machinery
-    /// with this guidance and writes the same `atoms.json` that feeds chat.
-    /// When present (with non-empty `guidance`), it takes precedence over
+    /// the recipe author (with the agent) declares — in the domain's own
+    /// language — what entities / relations / claims / events matter, and the
+    /// universal atlas machinery extracts to it, writing the same `atoms.json`
+    /// that feeds chat. The block is versioned: `version` (absent = 0) selects
+    /// the declaration language — see [`OntologyBlock`], [`OntologyConfig`]
+    /// (version 0, prose) and `OntologyV1` (declared types). When active
+    /// (non-empty `guidance` or any declared type) it takes precedence over
     /// `pipeline` and `domain`. `None` → fall back to a prebuilt atlas pipeline.
     #[serde(default)]
-    pub ontology: Option<OntologyConfig>,
+    pub ontology: Option<OntologyBlock>,
 
     /// Prompt version tag. Recorded in `_corpus_meta.json` so the health
     /// checker can detect stale enrichment when prompts change.
@@ -614,47 +616,10 @@ impl EnrichmentConfig {
     }
 }
 
-/// Custom atlas ontology declared in `[enrichment.ontology]`. The headline
-/// "build the ontology for your domain" surface: `guidance` is domain-language
-/// instructions for what to extract (entities, relations, events, claims),
-/// injected into a NEUTRAL atlas Phase-1 prompt by
-/// [`crate::enrichment::pipeline::pipelines::configurable_atlas::ConfigurableAtlasPipeline`].
-/// The universal atom schema + open `EntityType::Other(..)` labels let a domain
-/// expert author the extraction shape in TOML without touching Rust, and the
-/// result feeds chat via the same `atoms.json` the prebuilt genre pipelines
-/// produce. Precedence: a non-empty `guidance` here beats `pipeline`/`domain`.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-pub struct OntologyConfig {
-    /// Domain-language extraction guidance — what entities, relations, events,
-    /// and claims matter in THIS corpus's domain, in the domain's own words.
-    /// Appended under a "Domain focus" heading to the neutral atlas Phase-1
-    /// system prompt. The load-bearing field; an empty `guidance` disables the
-    /// custom path (falls back to a prebuilt atlas pipeline).
-    #[serde(default)]
-    pub guidance: String,
-
-    /// Optional CLI/label vocabulary overrides (what a "concern", "position",
-    /// "tension", "absence", and unit of "evidence" are called for this domain).
-    /// Omitted fields fall back to generic defaults in the pipeline.
-    #[serde(default)]
-    pub vocabulary: Option<OntologyVocabulary>,
-}
-
-/// Per-domain term overrides for the configurable atlas pipeline's vocabulary.
-/// Maps onto the engine's `Vocabulary`; any omitted term uses a generic default.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-pub struct OntologyVocabulary {
-    #[serde(default)]
-    pub concern_term: Option<String>,
-    #[serde(default)]
-    pub position_term: Option<String>,
-    #[serde(default)]
-    pub tension_term: Option<String>,
-    #[serde(default)]
-    pub absence_term: Option<String>,
-    #[serde(default)]
-    pub evidence_term: Option<String>,
-}
+/// The `[enrichment.ontology]` block, its version-0 prose body, and that
+/// body's vocabulary overrides live in [`crate::recipe_ontology`] and are
+/// re-exported here: a recipe author reads one schema, not two modules.
+pub use crate::recipe_ontology::{OntologyBlock, OntologyConfig, OntologyVocabulary};
 
 /// Data-driven entity-name normalization for the investigation pipeline.
 /// Every field is optional; an empty config folds names by case/punctuation
@@ -824,7 +789,7 @@ pub struct RelationshipTypeDecl {
 /// built. The investigation pipeline runs every declared
 /// [`PatternDecl`] after the graph is populated; matches land in
 /// `pattern_findings.json` for the audit step.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PatternDecl {
     /// Money / influence flows in a cycle: A→B→C→A. Powered by
@@ -2074,6 +2039,11 @@ impl Recipe {
     ///    refused HERE, rather than after acquire + extract + embed +
     ///    index have already run and the install strands a partition.
     ///    See [`check_enrichment_domain`](crate::recipe_parsing::check_enrichment_domain).
+    /// 4. Ontology-version gate — the three rules on [`OntologyBlock`]
+    ///    (unknown version, a later version's key without its version
+    ///    line, structural errors inside the block), so a declared ontology
+    ///    that would not extract as written fails at load.
+    ///    See [`check_ontology_block`](crate::recipe_parsing::check_ontology_block).
     ///
     /// This is the ONE recipe load boundary: [`Self::from_file`],
     /// `recipe_builtin`, and the desktop recipe author's validate
@@ -2083,6 +2053,7 @@ impl Recipe {
         match toml::from_str::<Self>(toml_str) {
             Ok(recipe) => {
                 check_schema_version(recipe.corpus.schema_version)?;
+                crate::recipe_parsing::check_ontology_block(&recipe)?;
                 crate::recipe_parsing::check_enrichment_domain(&recipe)?;
                 Ok(recipe)
             }
@@ -2132,50 +2103,76 @@ impl Recipe {
         self.enrichment.as_ref().is_some_and(|e| !e.enabled)
     }
 
-    /// The custom atlas ontology this recipe declares, if any. Returns `Some`
-    /// only when `[enrichment.ontology]` is present with **non-empty**
-    /// `guidance` — that's the signal to use the `ConfigurableAtlasPipeline`
-    /// (`custom_atlas`) rather than a prebuilt genre pipeline. This is the top
-    /// of the atlas-pipeline precedence chain: `custom_ontology()` →
-    /// `enrichment.pipeline` pin → `enrichment.domain` heuristic. Callers that
-    /// pick an atlas pipeline should consult this first.
-    pub fn custom_ontology(&self) -> Option<&OntologyConfig> {
-        self.enrichment
-            .as_ref()
-            .and_then(|e| e.ontology.as_ref())
-            .filter(|o| !o.guidance.trim().is_empty())
+    /// The custom atlas ontology this recipe declares, if any, as the policies
+    /// the pipeline reads. `Some` only when `[enrichment.ontology]` is present
+    /// and ACTIVE — non-empty `guidance` (today's hinge) or at least one
+    /// declared type — which is the signal to use the `custom_atlas` pipeline
+    /// rather than a prebuilt genre. Top of the atlas-pipeline precedence
+    /// chain: `custom_ontology()` → `enrichment.pipeline` pin →
+    /// `enrichment.domain` heuristic.
+    ///
+    /// `from_toml` already parsed the block eagerly, so a parse failure here
+    /// means a `Recipe` built without the load boundary; it is logged, never
+    /// swallowed silently.
+    pub fn custom_ontology(&self) -> Option<crate::enrichment::ontology::OntologyPolicies> {
+        let block = self.ontology_block()?;
+        match block.policies() {
+            Ok(p) if p.is_active() => Some(p),
+            Ok(_) => None,
+            Err(e) => {
+                tracing::warn!(
+                    target: "corpus_engine::recipe",
+                    error = %e,
+                    "ontology block failed to parse after load; treating as no custom ontology"
+                );
+                None
+            }
+        }
+    }
+
+    /// The raw `[enrichment.ontology]` block, whatever its version or state.
+    pub fn ontology_block(&self) -> Option<&OntologyBlock> {
+        self.enrichment.as_ref()?.ontology.as_ref()
     }
 
     /// Materialize this recipe's `[enrichment.ontology]` into a pipeline-ready
     /// [`crate::enrichment::pipeline::CustomAtlasSpec`] — the data `enrich init`
     /// persists into `config.json` and `resolve_pipeline` turns into a live
     /// `custom_atlas` pipeline. `name` comes from `enrichment.domain` (else the
-    /// corpus id); `guidance` + `vocabulary` come from the ontology block.
-    /// `None` when there is no custom ontology (non-empty guidance). This is the
-    /// single mapping point recipe→pipeline so the two type families don't drift.
+    /// corpus id); `policies` carries the parsed block; `guidance` and
+    /// `vocabulary` mirror the prose so a reader that predates `policies`
+    /// still builds the same prompt. `None` when there is no active custom
+    /// ontology. This is the single mapping point recipe→pipeline.
     pub fn custom_atlas_spec(&self) -> Option<crate::enrichment::pipeline::CustomAtlasSpec> {
-        let ont = self.custom_ontology()?;
+        let policies = self.custom_ontology()?;
+        let ontology_version = self.ontology_block()?.version;
         let name = self
             .enrichment
             .as_ref()
             .and_then(|e| e.domain.clone())
             .filter(|d| !d.trim().is_empty())
             .unwrap_or_else(|| self.corpus.id.clone());
-        let vocabulary =
-            ont.vocabulary
-                .as_ref()
-                .map(|v| crate::enrichment::pipeline::CustomVocabulary {
-                    concern_term: v.concern_term.clone(),
-                    position_term: v.position_term.clone(),
-                    tension_term: v.tension_term.clone(),
-                    absence_term: v.absence_term.clone(),
-                    evidence_term: v.evidence_term.clone(),
-                });
+        let vocabulary = (policies.prose.terms != OntologyVocabulary::default())
+            .then(|| policies.prose.terms.clone());
         Some(crate::enrichment::pipeline::CustomAtlasSpec {
             name,
-            guidance: ont.guidance.clone(),
+            guidance: policies.prose.guidance.clone(),
             vocabulary,
+            ontology_version,
+            policies: Some(policies),
         })
+    }
+
+    /// Rewrite a recipe's TOML text so `[enrichment.ontology]` declares
+    /// `version = target`, leaving every other byte alone — the change is one
+    /// inserted or replaced line, so the diff a reviewer sees is the whole
+    /// migration. `Ok(None)` when the block already declares `target` or
+    /// higher. Errors when there is no `[enrichment.ontology]` table header
+    /// to attach the line to, or when the result does not load through
+    /// [`Self::from_toml`] (a v1 body that is structurally wrong surfaces here,
+    /// not after the file was rewritten).
+    pub fn migrate_ontology_version(toml_str: &str, target: u32) -> Result<Option<String>> {
+        crate::recipe_parsing::migrate_ontology_version(toml_str, target)
     }
 
     /// Build a recipe with resolved parameter values stamped on
@@ -4115,107 +4112,6 @@ comparison = "greater_than"
             }
             other => panic!("expected Threshold, got {other:?}"),
         }
-    }
-
-    #[test]
-    fn custom_atlas_ontology_parses_and_is_detected() {
-        let toml_str = r#"
-[corpus]
-id = "numis"
-name = "numis"
-
-[acquire]
-type = "local_file"
-path = "/tmp/x.md"
-
-[extract]
-type = "markdown"
-
-[chunk]
-type = "passthrough"
-
-[enrichment]
-enabled = true
-type = "atlas"
-domain = "medieval-numismatics"
-
-[enrichment.ontology]
-guidance = """
-Extract coins (mint, ruler, denomination, metal), mints, rulers, hoards.
-Relations: minted_by, found_in_hoard, succeeds_ruler.
-"""
-
-[enrichment.ontology.vocabulary]
-concern_term = "numismatic question"
-evidence_term = "passage"
-"#;
-        let r = Recipe::from_toml(toml_str).expect("recipe must parse");
-        let enr = r.enrichment.clone().expect("enrichment parsed");
-        assert_eq!(enr.enrichment_type, "atlas");
-        let ont = enr.ontology.as_ref().expect("ontology block parsed");
-        assert!(ont.guidance.contains("minted_by"), "guidance retained");
-        let vocab = ont.vocabulary.as_ref().expect("vocabulary parsed");
-        assert_eq!(vocab.concern_term.as_deref(), Some("numismatic question"));
-        assert_eq!(vocab.position_term, None, "omitted term stays None");
-
-        // The accessor signals "use the custom atlas pipeline".
-        assert!(r.custom_ontology().is_some());
-        assert!(r.produces_enriched_atoms());
-    }
-
-    #[test]
-    fn custom_ontology_precedence_and_empty_guidance() {
-        // Empty/whitespace guidance does NOT trigger the custom path even if the
-        // block is present — falls back to pipeline/domain.
-        let empty = r#"
-[corpus]
-id = "c"
-name = "c"
-[acquire]
-type = "local_file"
-path = "/tmp/x.md"
-[extract]
-type = "markdown"
-[chunk]
-type = "passthrough"
-[enrichment]
-enabled = true
-type = "atlas"
-pipeline = "philosophy_atlas"
-[enrichment.ontology]
-guidance = "   "
-"#;
-        let r = Recipe::from_toml(empty).expect("parse");
-        assert!(
-            r.custom_ontology().is_none(),
-            "blank guidance must not trigger custom atlas"
-        );
-        assert_eq!(
-            r.enrichment.unwrap().pipeline.as_deref(),
-            Some("philosophy_atlas"),
-            "falls through to the explicit pipeline pin"
-        );
-
-        // No ontology block at all → None.
-        let none = r#"
-[corpus]
-id = "c"
-name = "c"
-[acquire]
-type = "local_file"
-path = "/tmp/x.md"
-[extract]
-type = "markdown"
-[chunk]
-type = "passthrough"
-[enrichment]
-enabled = true
-type = "atlas"
-"#;
-        assert!(Recipe::from_toml(none)
-            .expect("parse")
-            .custom_ontology()
-            .is_none());
     }
 
     /// Pagination strategies should round-trip for all four shapes.

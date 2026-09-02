@@ -241,6 +241,8 @@ mod tests {
 
     fn claim(id: u32, content: &str, has_evidence: bool) -> Claim {
         Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::from_raw(format!("claim-{id:04}")),
             content: content.into(),
             discourse_act: DiscourseAct::Assert,

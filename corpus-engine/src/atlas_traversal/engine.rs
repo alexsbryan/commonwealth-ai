@@ -519,6 +519,7 @@ mod tests {
 
     fn relation(idx: usize, label: &str, a: usize, b: usize) -> Relation {
         Relation {
+            attributes: Default::default(),
             id: AtomId::relation(idx),
             label: label.into(),
             participants: vec![AtomId::entity(a), AtomId::entity(b)],
@@ -545,6 +546,8 @@ mod tests {
 
     fn claim(idx: usize, content: &str, attrib: Option<usize>) -> Claim {
         Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(idx),
             content: content.into(),
             discourse_act: DiscourseAct::Assert,

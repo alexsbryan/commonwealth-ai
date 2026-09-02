@@ -384,6 +384,8 @@ mod tests {
 
     fn claim(id: usize, content: &str) -> AtomEnvelope {
         AtomEnvelope::Claim(Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(id),
             content: content.into(),
             discourse_act: DiscourseAct::Assert,
@@ -698,6 +700,7 @@ mod tests {
         assert_eq!(s.evidence().len() as u32, 3);
         // Event also has evidence + section_position; pin the shape.
         let e = AtomEnvelope::Event(corpus_engine::enrichment::atlas::atoms::Event {
+            attributes: Default::default(),
             id: AtomId::event(1),
             description: "x".into(),
             event_type: EventType::Action,
