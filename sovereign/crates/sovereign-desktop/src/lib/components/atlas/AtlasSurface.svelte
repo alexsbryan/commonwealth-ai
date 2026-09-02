@@ -16,7 +16,11 @@
   import ConvDetail from "./ConvDetail.svelte";
   import type { AtlasCorpusSummary } from "../../types";
 
-  import { atlasListConvCorpora, atlasListMembers } from "../../api";
+  import {
+    atlasListCorpora,
+    atlasListConvCorpora,
+    atlasListMembers,
+  } from "../../api";
   import { atlasNavigation } from "../../stores/atlasNavigation.svelte";
 
   type CorpusKind = "atom" | "conv" | "collection";
@@ -113,6 +117,9 @@
 
   /** Which Explore surface a corpus wants.
    *
+   *  A corpus that DECLARED an ontology wins the atom browser outright —
+   *  see the comment in the body. Otherwise:
+   *
    *  Conv corpora (SQLite tiered enrichment) are listed by
    *  `atlasListConvCorpora`. Collection corpora own no atoms of their
    *  own — their map lives in `<id>-<slug>` member atlases — and
@@ -121,6 +128,21 @@
    *  catalog corpora) routes to the atom browser. Best-effort: any
    *  failure defaults to "atom". */
   async function resolveCorpusKind(corpusId: string): Promise<CorpusKind> {
+    // A DECLARED ontology outranks the conv listing. Both can be true of
+    // one corpus — a folder of markdown gets conversation skeletons from
+    // the importer whatever else it is — and when the author has said
+    // "this corpus is coins, sceattas and attributions", opening it as a
+    // list of conversations is this whole program failing at its last
+    // step. Nothing else changes: a corpus that declares nothing is
+    // resolved exactly as before.
+    try {
+      const row = (await atlasListCorpora()).find(
+        (c) => c.corpus_id === corpusId,
+      );
+      if (row?.declared_types?.length) return "atom";
+    } catch {
+      // Fall through — the conv/collection checks below still apply.
+    }
     try {
       const convs = await atlasListConvCorpora();
       if (convs.some((c) => c.corpus_id === corpusId)) return "conv";

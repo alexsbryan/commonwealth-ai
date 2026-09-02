@@ -15,11 +15,12 @@
 // Four things here are not guessable from the wire and each has a
 // specific way of going wrong:
 //
-//  - `coin` is 5 in the badge and 3 in the list. `subtype_counts` are
-//    OWN counts, so the badge adds the 2 sceattas via `specializes`
-//    while the backend's `subtype` filter matches EXACTLY. Both numbers
-//    are correct and they are different; the spec pins both so the pair
-//    cannot drift apart silently.
+//  - `coin` is 5 in the badge AND 5 in the list, and it takes work to
+//    keep them equal. `subtype_counts` are OWN counts (3), the backend
+//    filter matches EXACTLY and never walks `specializes`, so the pill
+//    has to name the whole family — `["coin", "sceatta"]` — for the
+//    badge and the click to be one question. An earlier cut badged 5
+//    and opened 3. The spec pins the pair.
 //  - `ruler` is declared `kind = "entity"` and lands as a STATE atom on
 //    the person. Filtering it by kind finds nothing; filtering it by
 //    subtype finds the king.
@@ -75,17 +76,18 @@ test("real stack: a declared corpus browses by the author's own nouns", async ({
   // ── Clicking a declared pill filters by that type. ──
   const rows = page.locator('[data-testid="atlas-atom-row"]');
   await pill("subtype:coin").click();
-  // EXACT match, no roll-up: the three coins, not the five of the badge.
-  // The backend's `subtype` filter is deliberately own-only — see
-  // `AtomFilter::subtype`.
-  await expect(rows).toHaveCount(3);
+  // The family, and the same number the badge showed. The filter names
+  // every descendant explicitly (`AtomFilter::subtypes`); the server
+  // still never walks the hierarchy.
+  await expect(rows).toHaveCount(5);
   for (const name of ["Wessex Down 1", "Wessex Down 2", "Wessex Down 3"]) {
     await expect(rows.getByText(name, { exact: true })).toBeVisible();
   }
-  await expect(rows.getByText("Wessex Down 4", { exact: true })).toHaveCount(0);
 
-  // The row's type chip says the author's noun, not "Entity".
-  await expect(rows.first().getByText("coin", { exact: true })).toBeVisible();
+  // The row's type chip says the author's noun, not "Entity" — and with
+  // the family listed, both nouns appear rather than the parent's alone.
+  await expect(rows.getByText("coin", { exact: true }).first()).toBeVisible();
+  await expect(rows.getByText("sceatta", { exact: true }).first()).toBeVisible();
 
   // ── The `role_of` type resolves to a State atom on the person. ──
   await pill("subtype:ruler").click();
