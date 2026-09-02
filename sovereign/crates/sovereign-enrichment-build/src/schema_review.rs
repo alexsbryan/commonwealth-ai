@@ -294,8 +294,7 @@ pub fn compute_report(corpus_id: &str) -> Result<SchemaValidationReport, String>
         open_questions,
         ungrounded_claims,
         transitions_without_trigger,
-        ontology: ontology.as_ref(),
-        merges,
+        ontology: ontology.as_ref().map(|o| (o, merges)),
     });
     Ok(report)
 }

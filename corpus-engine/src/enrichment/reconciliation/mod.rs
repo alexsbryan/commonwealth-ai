@@ -21,15 +21,17 @@
 //!     `Split` from day one (the legacy `entity_extraction::merge_responses`
 //!     is destructive — this primitive is not).
 
+pub mod identity_signals;
 pub mod multi_origin;
 pub mod oplog;
+pub mod reified;
 pub mod signals;
 
-pub use multi_origin::{
-    reconcile, reify_merges, ReconciledEntity, ReconciliationPolicy, ReifiedMerge,
-};
+pub use identity_signals::signals_for_policy;
+pub use multi_origin::{reconcile, ReconciledEntity, ReconciliationPolicy, ReifiedMerge};
 pub use oplog::{JudgeTrace, OpKind, ReconciliationAct, RECONCILER};
-pub use signals::{signals_for_policy, MergeSignal, MergeSignalCheck};
+pub use reified::reify_merges;
+pub use signals::{MergeSignal, MergeSignalCheck};
 
 #[cfg(test)]
 mod tests {

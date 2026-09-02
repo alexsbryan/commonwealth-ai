@@ -37,6 +37,7 @@ pub mod edges;
 pub mod embeddings;
 pub mod ingestion;
 pub mod migrate_ids;
+pub mod ontology_coverage;
 pub mod projection;
 pub mod registry;
 pub mod resolution;

@@ -156,7 +156,7 @@ pub struct RoleMention {
 /// not one per atom: two sections that both call Aldfrith a ruler are two
 /// points on his trajectory, which is what lets the existing Transition pass
 /// chain them for free.
-pub fn role_mentions(
+fn role_mentions(
     policy: &ResolutionPolicy<'_>,
     sections: &[SectionExtraction],
     entities: &[Entity],
@@ -413,10 +413,89 @@ pub fn snap_ref_attributes(
     (updates, failures)
 }
 
+/// The `State` atoms and edges a corpus's role mentions produce.
+pub struct RoleStates {
+    pub states: Vec<super::atoms::State>,
+    pub edges: Vec<super::edges::Edge>,
+    pub failures: Vec<PhaseFailure>,
+}
+
+/// Turn every role mention into a `State` on the rigid atom, plus the
+/// `Involves` and `Grounds` edges an extracted state would carry.
+///
+/// Indices come from the caller, which owns the atom and edge counters — this
+/// module allocates no ids of its own, so a role State cannot collide with one
+/// the resolver already numbered.
+///
+/// The State is deliberately indistinguishable in SHAPE from an extracted one.
+/// That is the whole trick: the trajectory pass at the end of Step 3b groups
+/// states by owner and chains consecutive ones into `Transition`s, so "when
+/// did Aldfrith become a ruler" is answered by machinery that knows nothing
+/// about ontologies.
+pub fn emit_role_states(
+    policy: &ResolutionPolicy<'_>,
+    sections: &[SectionExtraction],
+    entities: &[Entity],
+    name_index: &HashMap<String, AtomId>,
+    token_index: &HashMap<String, Vec<AtomId>>,
+    next_state_index: usize,
+    next_edge_index: usize,
+) -> RoleStates {
+    use super::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
+    use crate::enrichment::pipeline::atlas::{EnrichmentDepth, StateType};
+
+    let (mentions, failures) = role_mentions(policy, sections, entities, name_index, token_index);
+    let mut states = Vec::with_capacity(mentions.len());
+    let mut edges = Vec::new();
+    let mut edge_index = next_edge_index;
+
+    for (offset, mention) in mentions.iter().enumerate() {
+        let state_id = AtomId::state(next_state_index + offset);
+        let evidence = role_evidence(mention);
+        states.push(super::atoms::State {
+            id: state_id.clone(),
+            entity_id: mention.owner.clone(),
+            label: mention.role.clone(),
+            // The author's noun, not a Phase-5 guess: the recipe SAYS this is
+            // the state the mention records.
+            state_type: StateType::Other(mention.role.clone()),
+            evidence: evidence.clone(),
+            section_range: super::atoms::SectionRange::point(mention.section_id.clone()),
+            confidence: None,
+            enrichment_depth: EnrichmentDepth::Extracted,
+        });
+        let mut push = |edge_type, target, evidence: Vec<ChunkRef>| {
+            let e = Edge {
+                id: EdgeId::new(edge_index),
+                edge_type,
+                source: state_id.clone(),
+                target,
+                evidence,
+                trigger_event: None,
+                sub_question: None,
+                confidence: 1.0,
+                provenance: EdgeProvenance::Derived,
+            };
+            edge_index += 1;
+            e
+        };
+        edges.push(push(EdgeType::Involves, mention.owner.clone(), Vec::new()));
+        for e in evidence {
+            let target = AtomId::from_raw(e.chunk_id.clone());
+            edges.push(push(EdgeType::Grounds, target, vec![e]));
+        }
+    }
+    RoleStates {
+        states,
+        edges,
+        failures,
+    }
+}
+
 /// The evidence a role State grounds on. Same shape the sibling module's
 /// sketch anchors produce, so a role State is indistinguishable from an
 /// extracted one downstream.
-pub(super) fn role_evidence(mention: &RoleMention) -> Vec<ChunkRef> {
+fn role_evidence(mention: &RoleMention) -> Vec<ChunkRef> {
     if mention.anchor.trim().is_empty() {
         vec![ChunkRef::new(mention.section_id.clone(), None)]
     } else {

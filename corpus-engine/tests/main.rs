@@ -48,10 +48,14 @@ mod investigation_pipeline_e2e;
 mod newsworthy_integration;
 #[path = "main/on_demand_guard.rs"]
 mod on_demand_guard;
+#[path = "main/ontology_identity_e2e.rs"]
+mod ontology_identity_e2e;
 #[path = "main/ontology_prompt_snapshots.rs"]
 mod ontology_prompt_snapshots;
 #[path = "main/ontology_recipe.rs"]
 mod ontology_recipe;
+#[path = "main/ontology_resolution_e2e.rs"]
+mod ontology_resolution_e2e;
 #[path = "main/parquet_ingest_e2e.rs"]
 mod parquet_ingest_e2e;
 #[path = "main/probe_index_residency.rs"]
