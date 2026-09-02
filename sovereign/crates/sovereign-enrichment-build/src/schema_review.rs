@@ -500,6 +500,26 @@ fn print_human_report(r: &SchemaValidationReport) {
             "      claims of a subject-declaring type with no subject: {}",
             o.claims_missing_subject
         );
+        if !o.attribute_fill.is_empty() {
+            // The type count above says the noun landed; this says whether it
+            // landed carrying anything. A row reading `0/14` is a type that
+            // exists in name only, and it is invisible in every other line of
+            // this report.
+            println!("      declared attributes filled");
+            for f in &o.attribute_fill {
+                let note = if f.atoms > 0 && f.with_slot == 0 {
+                    "  ← no attribute slot on this atom kind (role_of lands as a State)"
+                } else if f.with_slot > 0 && f.filled == 0 {
+                    "  ← declared and never filled"
+                } else {
+                    ""
+                };
+                println!(
+                    "        · {:10} {:16} {:>4}/{}{}",
+                    f.type_name, f.attribute, f.filled, f.with_slot, note
+                );
+            }
+        }
     }
 
     // Collected gap signatures — the single place an operator can

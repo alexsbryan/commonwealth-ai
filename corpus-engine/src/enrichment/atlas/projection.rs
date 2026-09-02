@@ -69,6 +69,26 @@ pub struct AtomRecord {
     pub payload: Vec<u8>,
 }
 
+/// The atom's declared attributes, where its kind has a slot for them.
+///
+/// The ONE answer to "what did this atom carry under the author's declared
+/// attribute names" (§10.6). Four of the eleven atom kinds have an
+/// `attributes` map — Entity, Event, Relation, Claim — and the rest have no
+/// slot at all. `None` means "this kind cannot carry attributes", which is a
+/// different finding from `Some(empty)` ("it could and did not"): a `role_of`
+/// type lands as a State, and a State has nowhere to put a declared
+/// attribute, so reporting that as an unfilled attribute would blame the
+/// model for something the atom model decides (§18.3).
+pub fn attributes_of(atom: &AtomEnvelope) -> Option<&serde_json::Map<String, serde_json::Value>> {
+    match atom {
+        AtomEnvelope::Entity(e) => Some(&e.attributes),
+        AtomEnvelope::Event(e) => Some(&e.attributes),
+        AtomEnvelope::Relation(r) => Some(&r.attributes),
+        AtomEnvelope::Claim(c) => Some(&c.attributes),
+        _ => None,
+    }
+}
+
 /// The atom's subtype — the author's noun where there is one.
 ///
 /// The ONE answer to "what type is this atom, within its kind" (§10.6): the
