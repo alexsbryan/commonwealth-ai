@@ -34,7 +34,9 @@ use std::path::Path;
 
 use super::governance::{derive_active, ActiveSet, GovernanceOpKind, RuleStatus};
 use crate::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomsFile, Claim};
-use crate::enrichment::ontology::{clock::section_date, AttrFamily, ChangePolicy, OntologyPolicies};
+use crate::enrichment::ontology::{
+    clock::section_date, AttrFamily, ChangePolicy, OntologyPolicies,
+};
 use crate::error::{Error, Result};
 use crate::oplog::Op;
 
@@ -126,9 +128,9 @@ pub fn derive_active_with_policy(
                     continue;
                 };
                 // Every rule in the group this one is LINKED to.
-                let linked = members.iter().filter(|newer| {
-                    newer.id != older.id && are_linked(older, newer, &by_id)
-                });
+                let linked = members
+                    .iter()
+                    .filter(|newer| newer.id != older.id && are_linked(older, newer, &by_id));
                 let by_rules: Vec<AtomId> = linked
                     .filter(|newer| {
                         newer
@@ -231,8 +233,7 @@ pub(crate) fn read_rule_facts(dir: &Path, policies: &OntologyPolicies) -> Result
             })
             .unwrap_or_default();
         for id in &merged {
-            let mut others: Vec<AtomId> =
-                merged.iter().filter(|o| *o != id).cloned().collect();
+            let mut others: Vec<AtomId> = merged.iter().filter(|o| *o != id).cloned().collect();
             same_as.entry(id.clone()).or_default().append(&mut others);
         }
     }

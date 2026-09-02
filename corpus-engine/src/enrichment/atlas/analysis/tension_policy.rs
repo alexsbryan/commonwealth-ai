@@ -315,8 +315,8 @@ mod tests {
     use super::*;
     use crate::enrichment::atlas::analysis::tensions::CandidateSource;
     use crate::enrichment::atlas::atoms::{AtomId, ChunkRef, Entity};
-    use crate::enrichment::pipeline::atlas::EntityType;
     use crate::enrichment::ontology::{AttrDecl, AttrFamily, OntologyTypeDecl, TypeKind};
+    use crate::enrichment::pipeline::atlas::EntityType;
     use crate::enrichment::pipeline::atlas::{
         ClaimScope, DiscourseAct, EnrichmentDepth, EpistemicStatus,
     };
@@ -470,7 +470,10 @@ mod tests {
         assert_eq!(candidates.len(), 1, "not known to differ is not a mismatch");
         assert_eq!(report.dropped, 0);
         assert_eq!(report.by_field.get("subject").copied(), None);
-        assert_eq!(report.one_sided, 1, "the blind spot is reported, not hidden");
+        assert_eq!(
+            report.one_sided, 1,
+            "the blind spot is reported, not hidden"
+        );
         assert!(report.summary().unwrap().contains("could not be judged"));
     }
 
@@ -507,12 +510,8 @@ mod tests {
         let mut b = claim(2, Some("attribution"), None);
         b.attributed_to = Some(AtomId::entity(4));
         let mut candidates = vec![pair("cand-0001", 1, 2)];
-        let report = drop_non_comparable_pairs(
-            &mut candidates,
-            &[a, b],
-            &[topic, other_topic],
-            &policies,
-        );
+        let report =
+            drop_non_comparable_pairs(&mut candidates, &[a, b], &[topic, other_topic], &policies);
         assert!(candidates.is_empty(), "different topics are not comparable");
         assert_eq!(report.by_field.get("subject").copied(), Some(1));
     }
@@ -664,5 +663,4 @@ mod tests {
         };
         assert_eq!(derive_declared_strategy(&one_unit_sparse, default), default);
     }
-
 }

@@ -554,10 +554,8 @@ mod tests {
             "",
             "no declaration, no extras"
         );
-        let prose = OntologyPolicies::from_prose(
-            "Rules about guests and quiet hours.",
-            Default::default(),
-        );
+        let prose =
+            OntologyPolicies::from_prose("Rules about guests and quiet hours.", Default::default());
         assert_eq!(
             render_phase6_extras(&prose),
             "",

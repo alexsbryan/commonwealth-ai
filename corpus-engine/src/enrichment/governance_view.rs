@@ -36,10 +36,10 @@ use serde::{Deserialize, Serialize};
 
 use super::governance::{ActiveSet, GovernanceOpKind, PairKey, RuleStatus, TensionStatus};
 use super::governance_change::{derive_active_with_policy, read_rule_facts, RuleFacts};
-use crate::enrichment::atlas::read_atlas_ontology;
-use crate::enrichment::ontology::ChangePolicy;
 use crate::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim};
 use crate::enrichment::atlas::edges::{Edge, EdgeId, EdgeType, EdgesFile};
+use crate::enrichment::atlas::read_atlas_ontology;
+use crate::enrichment::ontology::ChangePolicy;
 use crate::error::{Error, Result};
 use crate::oplog::{Op, OpId, Oplog};
 

@@ -570,9 +570,11 @@ mod tests {
             !declared.system.contains("{tension_term}"),
             "the extras' placeholders are filled"
         );
-        assert!(declared.response_schema.as_ref().expect("schema")["properties"]
-            .get("relation")
-            .is_some());
+        assert!(
+            declared.response_schema.as_ref().expect("schema")["properties"]
+                .get("relation")
+                .is_some()
+        );
     }
 
     /// A legacy `config.json` has no `policies`; the accessor synthesizes
@@ -723,10 +725,7 @@ impl super::genre::AtlasGenre for CustomOntology {
         if !self.policies.has_declarations() {
             return CUSTOM_TENSION_STRATEGY;
         }
-        crate::enrichment::atlas::analysis::derive_declared_strategy(
-            shape,
-            CUSTOM_TENSION_STRATEGY,
-        )
+        crate::enrichment::atlas::analysis::derive_declared_strategy(shape, CUSTOM_TENSION_STRATEGY)
     }
 
     /// Phase 8 is a genre opt-in (ONTOLOGY_MIGRATION §P4). A corpus that

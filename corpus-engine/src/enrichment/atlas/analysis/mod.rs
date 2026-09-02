@@ -47,6 +47,7 @@ pub use parcel_analytics::{
     compute_aggregates, flags, per_parcel_deltas, FlagKind, ParcelAggregates, ParcelDelta,
     ParcelFlag,
 };
+pub use patterns_adapter::{to_investigation_graph, InvestigationGraph, PatternFindingsOutput};
 pub use sec_facts::{
     authoritative_store as sec_authoritative_store, change as sec_change,
     coverage_card as sec_coverage_card, coverage_summary as sec_coverage_summary,
@@ -61,9 +62,6 @@ pub use tension_classifier::{
     phase6_classifier_response_schema_with_relation, resolve_candidate_content, AtomIndex,
     CandidateContent, Phase6Classification, Phase6Relation, Phase6Verdict, TensionSide,
     SAME_AS_CLAIM_KIND, SAME_AS_GRADE_CLASSIFIER, SAME_AS_GRADE_KEY, SAME_AS_MERGED_KEY,
-};
-pub use patterns_adapter::{
-    to_investigation_graph, InvestigationGraph, PatternFindingsOutput,
 };
 pub use tension_policy::{
     drop_non_comparable_pairs, restrict_claims_to_types, BetweenOutcome, ComparabilityReport,

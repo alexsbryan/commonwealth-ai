@@ -115,7 +115,9 @@ impl ClassifyOutcome {
             } => {
                 let mut s = format!("{accepted} tension(s), {rejected} rejected");
                 if *equivalent > 0 {
-                    s.push_str(&format!("; {equivalent} equivalent pair(s) → same_as claim(s)"));
+                    s.push_str(&format!(
+                        "; {equivalent} equivalent pair(s) → same_as claim(s)"
+                    ));
                 }
                 if chat_failures + parse_failures > 0 {
                     s.push_str(&format!(
@@ -166,8 +168,13 @@ pub async fn run(parsed: &ParsedClassify) -> Result<ClassifyOutcome, String> {
     //   classifies each candidate.
     // - Neither → no-op.
     if pipeline.runs_phase6_holistic() {
-        return super::atlas_tensions_holistic::run(&cfg, pipeline.as_ref(), &atlas_dir, parsed.dry_run)
-            .await;
+        return super::atlas_tensions_holistic::run(
+            &cfg,
+            pipeline.as_ref(),
+            &atlas_dir,
+            parsed.dry_run,
+        )
+        .await;
     }
 
     if !pipeline.runs_phase6_atlas_classifier() {

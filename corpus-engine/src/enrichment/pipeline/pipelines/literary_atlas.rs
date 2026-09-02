@@ -1727,10 +1727,7 @@ mod tests {
         // …no unfilled placeholders…
         assert!(!s.contains("{tension_term}"), "unfilled tension_term");
         assert!(!s.contains("{guidance}"), "unfilled guidance");
-        assert!(
-            !s.contains("{ontology_extras}"),
-            "unfilled ontology_extras"
-        );
+        assert!(!s.contains("{ontology_extras}"), "unfilled ontology_extras");
         // …and it is NOT the literary frame.
         assert!(!s.contains("Macbeth"), "leaked the literary classifier");
         // The literary classifier system, by contrast, IS character-framed —

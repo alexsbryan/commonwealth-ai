@@ -384,11 +384,11 @@ pub fn next_claim_ordinal(atoms: &AtomsFile) -> usize {
         .atoms
         .iter()
         .filter_map(|a| match a {
-            AtomEnvelope::Claim(c) => c
-                .id
-                .as_str()
-                .strip_prefix("claim-")
-                .and_then(|s| s.parse::<usize>().ok()),
+            AtomEnvelope::Claim(c) => {
+                c.id.as_str()
+                    .strip_prefix("claim-")
+                    .and_then(|s| s.parse::<usize>().ok())
+            }
             _ => None,
         })
         .max()

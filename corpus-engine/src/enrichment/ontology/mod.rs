@@ -30,12 +30,12 @@ pub mod language;
 pub mod type_index;
 mod validate;
 
+pub use clock::section_date;
 pub use language::{
     AttrDecl, AttrFamily, ChangeDecl, ClaimScopeDecl, Clock, Deontic, DeriveDecl, Force,
     OntologyLanguage, OntologyLanguageRegistry, OntologyTypeDecl, OntologyV1, SourceDecl,
     TensionDecl, TypeKind, VoicesDecl,
 };
-pub use clock::section_date;
 pub use type_index::TypeIndex;
 pub use validate::{
     validate_block, OntologyValidation, MAX_ATTRS_PER_TYPE, MAX_ENUM_VALUES, MAX_TYPES_PER_KIND,
