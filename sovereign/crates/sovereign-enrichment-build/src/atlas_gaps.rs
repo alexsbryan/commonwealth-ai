@@ -26,9 +26,14 @@
 use std::path::PathBuf;
 
 use corpus_engine::enrichment::atlas::{
-    analysis::gaps::{detect_deterministic_gaps, GapDetectionInput, GapKind, GapsOutput},
-    read_atlas_atoms, read_atlas_edges, write_atlas_gaps, AtomEnvelope, ATLAS_DIRNAME,
+    analysis::{
+        gaps::{detect_deterministic_gaps, GapDetectionInput, GapKind, GapsOutput},
+        patterns_adapter::{to_investigation_graph, PatternFindingsOutput},
+    },
+    read_atlas_atoms, read_atlas_edges, read_atlas_ontology, write_atlas_gaps,
+    write_atlas_pattern_findings, AtomEnvelope, ATLAS_DIRNAME,
 };
+use corpus_engine::enrichment::investigation::patterns::detect_all;
 
 use super::config::EnrichConfig;
 use super::paths;
@@ -53,6 +58,8 @@ pub struct GapsReport {
     /// Gap counts by detector, sorted by kind so output is stable.
     pub by_kind: Vec<(&'static str, usize)>,
     pub total: usize,
+    /// The declared-pattern pass, or `None` when the corpus declares none.
+    pub patterns: Option<PatternRun>,
     pub written_to: PathBuf,
 }
 
@@ -109,6 +116,11 @@ pub fn run(parsed: &ParsedGaps) -> Result<GapsReport, String> {
         )
     })?;
 
+    // Axis 5's declared `patterns`, over the SAME atlas — run before the
+    // partition below consumes `atoms`. No-op (and no file) for a corpus
+    // that declares none, which is every corpus built before ontology v1.
+    let patterns = run_declared_patterns(&atlas_dir, &atoms)?;
+
     // Partition atoms by kind. Only Claim / State / Question drive
     // detectors today; the other atom types pass through untouched.
     let mut claims = Vec::new();
@@ -155,8 +167,55 @@ pub fn run(parsed: &ParsedGaps) -> Result<GapsReport, String> {
         inputs,
         by_kind,
         total,
+        patterns,
         written_to,
     })
+}
+
+/// What the declared `patterns` found, or `None` when none are declared.
+///
+/// The detectors are `investigation::patterns::detect_all` unchanged — the
+/// atlas is projected into the graph they already read
+/// (`to_investigation_graph`) rather than a second detector set being
+/// written for it (ARCH §19).
+fn run_declared_patterns(
+    atlas_dir: &std::path::Path,
+    atoms: &corpus_engine::enrichment::atlas::atoms::AtomsFile,
+) -> Result<Option<PatternRun>, String> {
+    let Some(ontology) = read_atlas_ontology(atlas_dir) else {
+        return Ok(None);
+    };
+    let declared = &ontology.policies.derivation.patterns;
+    if declared.is_empty() {
+        return Ok(None);
+    }
+    let graph = to_investigation_graph(atoms);
+    let findings = detect_all(declared, &graph.entities, &graph.relationships);
+    let out = PatternFindingsOutput::new(findings, graph.non_binary_relations);
+    let findings = out.findings.len();
+    let written_to = write_atlas_pattern_findings(atlas_dir, &out)
+        .map_err(|e| format!("writing pattern_findings.json: {e}"))?;
+    Ok(Some(PatternRun {
+        declared: declared.len(),
+        entities: graph.entities.len(),
+        relationships: graph.relationships.len(),
+        non_binary_relations: graph.non_binary_relations,
+        findings,
+        written_to,
+    }))
+}
+
+/// What the declared-pattern pass did. Carried on the report for the same
+/// reason [`GapInputs`] is: zero findings over zero projected edges and
+/// zero findings over a full graph are different outcomes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PatternRun {
+    pub declared: usize,
+    pub entities: usize,
+    pub relationships: usize,
+    pub non_binary_relations: usize,
+    pub findings: usize,
+    pub written_to: PathBuf,
 }
 
 /// Print the report the way `svrn enrich atlas-gaps` always has.
@@ -168,6 +227,20 @@ pub fn render(report: &GapsReport) {
     println!("  ✓ {} gap(s) total", report.total);
     for (kind, count) in &report.by_kind {
         println!("    · {kind}: {count}");
+    }
+    if let Some(p) = &report.patterns {
+        println!(
+            "  · {} declared pattern(s) over {} entity/{} relation projection: {} finding(s)",
+            p.declared, p.entities, p.relationships, p.findings,
+        );
+        if p.non_binary_relations > 0 {
+            println!(
+                "    ⚠ {} relation atom(s) had other than two participants and were not \
+                 projected — the detectors are binary-edge algorithms",
+                p.non_binary_relations,
+            );
+        }
+        println!("  ✓ wrote {}", p.written_to.display());
     }
     println!("  ✓ wrote {}", report.written_to.display());
 }
@@ -241,6 +314,7 @@ mod tests {
             },
             by_kind: Vec::new(),
             total: 0,
+            patterns: None,
             written_to: PathBuf::from("/tmp/gaps.json"),
         };
         let rich = GapsReport {
@@ -267,6 +341,7 @@ mod tests {
             },
             by_kind: vec![("open-question", 3), ("ungrounded-claim", 1)],
             total: 4,
+            patterns: None,
             written_to: PathBuf::from("/tmp/gaps.json"),
         };
         let s = r.summary();

@@ -283,6 +283,95 @@ pub fn render_declared_types(policies: &OntologyPolicies) -> String {
     out
 }
 
+// ── Phase 6: what the declarations add to the tension classifier ────────
+
+/// The declared ontology's contribution to the Phase-6 classifier system
+/// prompt — the `{ontology_extras}` slot in
+/// `literary_atlas_prompts/custom_phase6_classifier_system.md`.
+///
+/// **Empty for every corpus that declares nothing**, which is invariant I1
+/// for the Phase-6 prompt: the template renders byte-identically for a
+/// version-0 block and for a version-1 block with no types
+/// (`maple_house.phase6_classifier` pins both).
+///
+/// Three sections, each present only when the declaration earns it:
+///
+/// - **Declared non-conflicts** — `tension.not_conflicts`, the author's own
+///   list of pairs that look like conflicts and are not. Versioned with the
+///   recipe because it is never complete (ONTOLOGY_PRIMITIVES §2 axis 5).
+/// - **Deontic reading** — the interdefinition of `forbid` / `require` /
+///   `permit`, emitted when any declared claim type carries a deontic mode.
+///   Without it "must not host after 10pm" and "must end hosting by 10pm"
+///   are two rules in conflict instead of one rule stated twice.
+/// - **Relation** — asks for the third field the declared response schema
+///   carries ([`crate::enrichment::atlas::analysis::phase6_classifier_response_schema_with_relation`]).
+///   `equivalent` is the verdict that becomes a `same_as` Claim rather than
+///   a Tension edge.
+///
+/// The returned text may itself contain `{tension_term}`; the caller
+/// substitutes this slot BEFORE the term placeholders so it is filled.
+pub fn render_phase6_extras(policies: &OntologyPolicies) -> String {
+    if !policies.has_declarations() {
+        return String::new();
+    }
+    let mut out = String::new();
+
+    let not_conflicts = &policies.derivation.tension.not_conflicts;
+    if !not_conflicts.is_empty() {
+        out.push_str(
+            "\n\n## Declared non-conflicts\n\n\
+             The author of this corpus named the pairs below as things that LOOK like \
+             {tension_term}s and are not. A pair matching any of them is NOT a \
+             {tension_term}, whatever else you notice about it:\n",
+        );
+        for n in not_conflicts {
+            out.push_str(&format!("\n- {}", n.trim()));
+        }
+        out.push('\n');
+    }
+
+    if declares_deontic(policies) {
+        out.push_str(
+            "\n\n## Deontic reading\n\n\
+             The declared claim types carry a deontic mode (require, forbid, permit, \
+             request). Read the modes as INTERDEFINED, not as separate vocabularies:\n\
+             \n\
+             - \"forbid X\" and \"require not-X\" are the same statement in two \
+             surface forms. So are \"must not do X after T\" and \"must stop X by T\". \
+             A restatement is never a {tension_term}.\n\
+             - \"permit X\" is compatible with \"require Y\" unless honouring Y makes \
+             the permitted act impossible in the same ordinary moment.\n\
+             - Two statements that differ only in wording, in mode, or in which side \
+             of one prohibition they state, are ONE statement said twice.\n",
+        );
+    }
+
+    out.push_str(
+        "\n\n## Relation\n\n\
+         Alongside `is_tension`, return a `relation` naming what A and B are to \
+         each other:\n\
+         \n\
+         - `conflict` — a genuine {tension_term} (set `is_tension: true`).\n\
+         - `equivalent` — the same statement in different words: same subject, same \
+         content, nothing added or narrowed by either side. Two surface forms of one \
+         rule are `equivalent`, NOT a {tension_term}.\n\
+         - `compatible` — anything else: both can hold at once and they are not the \
+         same statement.\n\
+         \n\
+         `equivalent` is a strong claim. Use it only when the two would be redundant \
+         if both were kept; when either adds a condition, a scope, or a number the \
+         other lacks, the answer is `compatible`.\n",
+    );
+
+    out
+}
+
+/// Does any declared claim type carry a deontic mode? Only a `directive`
+/// claim type can, so this is also the test for "this corpus states rules".
+fn declares_deontic(policies: &OntologyPolicies) -> bool {
+    policies.claim_types().any(|t| !t.deontic.is_empty())
+}
+
 /// One attribute, rendered for the prompt: name plus what the family admits.
 fn render_attr(a: &AttrDecl) -> String {
     let shape = match &a.family {
@@ -451,6 +540,73 @@ mod tests {
             .iter()
             .map(|x| x.as_str().unwrap_or_default().to_string())
             .collect()
+    }
+
+    // ── Phase 6 extras ───────────────────────────────────────
+
+    #[test]
+    fn phase6_extras_empty_when_undeclared() {
+        // Invariant I1: a version-0 block (prose only) and a version-1
+        // block with no types both add NOTHING to the Phase-6 classifier,
+        // so the template renders the bytes it always did.
+        assert_eq!(
+            render_phase6_extras(&OntologyPolicies::default()),
+            "",
+            "no declaration, no extras"
+        );
+        let prose = OntologyPolicies::from_prose(
+            "Rules about guests and quiet hours.",
+            Default::default(),
+        );
+        assert_eq!(
+            render_phase6_extras(&prose),
+            "",
+            "a version-0 prose block declares no types"
+        );
+    }
+
+    #[test]
+    fn phase6_extras_render_the_relation_section_for_any_declared_corpus() {
+        // Numismatics declares types and a `between`, but no
+        // `not_conflicts` and no deontic: it gets the `relation` section
+        // and neither of the other two.
+        let extras = render_phase6_extras(&numismatics());
+        assert!(extras.contains("## Relation"), "relation section present");
+        assert!(extras.contains("`equivalent`"));
+        assert!(
+            !extras.contains("## Declared non-conflicts"),
+            "numismatics names no non-conflicts"
+        );
+        assert!(
+            !extras.contains("## Deontic reading"),
+            "numismatics declares no directive claim type"
+        );
+        // The term placeholder survives for the caller to substitute.
+        assert!(extras.contains("{tension_term}"));
+    }
+
+    #[test]
+    fn phase6_extras_render_non_conflicts_and_the_deontic_reading_when_declared() {
+        let toml = crate::recipe_templates::load_builtin("governance")
+            .expect("governance is a shipped ontology template");
+        let policies = crate::recipe::Recipe::from_toml(toml)
+            .expect("the shipped template parses")
+            .custom_atlas_spec()
+            .expect("it declares an [enrichment.ontology] block")
+            .policies();
+
+        let extras = render_phase6_extras(&policies);
+        assert!(extras.contains("## Declared non-conflicts"));
+        assert!(
+            extras.contains("a rule for visitors versus a rule for members"),
+            "the author's own words reach the classifier"
+        );
+        assert!(extras.contains("## Deontic reading"));
+        assert!(
+            extras.contains("require not-X"),
+            "the interdefinition is what makes two surface forms one rule"
+        );
+        assert!(extras.contains("## Relation"));
     }
 
     #[test]

@@ -1,0 +1,48 @@
+{
+  "corpus_id": "larkspur-hosting",
+  "fixture": "hosting.md",
+  "recipe": "recipe.toml (the shipped `governance` ontology-v1 template, with corpus.id/name and acquire.path filled)",
+  "note": "Ground truth for the ontology-v1 P4 equivalence case (ONTOLOGY_MIGRATION.md §P4, order ontology-v1-p4 'Done when'). The point is NOT tension recall — maple-house already covers that. The point is the one case the deontic reading and the `equivalent` verdict exist for: two surface forms of ONE rule must yield one rule, not two, and NOT a conflict. Invented house, invented decisions.",
+  "schema_version": 1,
+  "declared_types": ["topic", "rule"],
+  "topics": [
+    {"id": "T-hosting", "name": "hosting in the common room"},
+    {"id": "T-quiet", "name": "quiet hours"},
+    {"id": "T-parking", "name": "guest parking"}
+  ],
+  "rules": [
+    {"id": "R1", "section": "Article VII — Hosting in the common room", "subject": "T-hosting", "deontic": "require", "text": "Hosting must end by 10pm on weeknights.", "valid": "/"},
+    {"id": "R2", "section": "Decision 2025-03-14 — hosting curfew restated", "subject": "T-hosting", "deontic": "forbid", "text": "Members must not host in the common room after 10pm on weeknights.", "valid": "2025-03-14/"},
+    {"id": "R3", "section": "Decision 2025-06-02 — quiet hours moved", "subject": "T-quiet", "deontic": "require", "text": "Weekend quiet hours in the common room begin at 11pm.", "valid": "2025-06-02/"},
+    {"id": "R4", "section": "Decision 2025-06-02 — guest parking", "subject": "T-parking", "deontic": "permit", "text": "Guests may park in the visitor bay for up to four hours.", "valid": "2025-06-02/"},
+    {"id": "R5", "section": "Decision 2025-06-02 — guest parking", "subject": "T-parking", "deontic": "forbid", "text": "The visitor bay is not for overnight guest parking.", "valid": "2025-06-02/"}
+  ],
+  "expected_equivalences": [
+    {
+      "id": "E1",
+      "a": "R1",
+      "b": "R2",
+      "why": "The SAME rule in two surface forms: `require (hosting ends by 10pm)` and `forbid (hosting after 10pm)` are interdefined. The Phase-6 classifier must return `relation: \"equivalent\"` with `is_tension: false`, which materialises ONE `same_as` Claim (grade `classifier`) and NO Tension edge. This is the case `render_phase6_extras`'s `## Deontic reading` section exists for.",
+      "materialises": {"same_as_claims": 1, "tension_edges": 0}
+    }
+  ],
+  "expected_supersessions": [
+    {
+      "id": "S1",
+      "older": "R1",
+      "newer": "R2",
+      "why": "Once E1 links them (a `same_as` claim), `change.supersedes = { rule = \"valid\" }` folds the older onto the newer clock: R1 becomes `RuleStatus::SupersededByClock { by_rules: [R2] }` and R2 stays Active. Without the link the pair must NOT fold — that is what `derive_active_with_policy_folds_linked_only` pins."
+    }
+  ],
+  "expected_non_tensions": [
+    {"id": "N1", "a": "R2", "b": "R3", "why": "Different topics (hosting vs quiet hours) and different days (weeknight vs weekend). `tension.same = [\"subject\", \"valid\"]` should drop this pair before the classifier ever sees it — different subject."},
+    {"id": "N2", "a": "R4", "b": "R5", "why": "Same topic, overlapping validity, so the pair IS comparable and does reach the classifier. `permit (4h in the bay)` and `forbid (overnight in the bay)` are compatible — one bounds the other. The author's own `not_conflicts` names 'two separate exemptions to the same rule'."},
+    {"id": "N3", "a": "R1", "b": "R4", "why": "Different subjects again — the Maple House decoy class, two rules sharing the word 'guest' and governing nothing in common."}
+  ],
+  "expected_tensions": [],
+  "bars": {
+    "one_rule_not_two": "After `enrich build --full`, the governance view lists exactly ONE active rule on topic `hosting`.",
+    "no_conflict": "`atlas/edges.json` carries no Tension edge between the Article VII rule and the 2025-03-14 decision.",
+    "reified": "`atlas/atoms.json` carries one Claim with `claim_kind == \"same_as\"` and `attributes.grade == \"classifier\"` naming both."
+  }
+}

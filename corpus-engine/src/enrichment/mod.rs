@@ -18,6 +18,7 @@ pub mod fault_lines;
 pub mod field_engine;
 pub mod filter;
 pub mod governance;
+pub mod governance_change;
 pub mod governance_view;
 pub mod investigation;
 pub mod ontology;

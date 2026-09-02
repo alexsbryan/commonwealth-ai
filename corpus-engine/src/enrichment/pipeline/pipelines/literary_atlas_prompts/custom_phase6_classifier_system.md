@@ -7,7 +7,7 @@ whether they stand in a genuine {tension_term}.
 
 ## Domain ontology
 
-{guidance}
+{guidance}{ontology_extras}
 
 ## What a {tension_term} is — and is not
 

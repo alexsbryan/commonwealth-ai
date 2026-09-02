@@ -30,7 +30,9 @@ use super::super::exemplar_bank::Exemplar;
 use super::super::types::{ChapterInput, ChatPrompt, Phase1ChapterResult, Vocabulary};
 use super::literary_atlas::render_phase1_user_body;
 use super::ontology_parse::parse_phase1_section_extraction;
-use super::ontology_schema::{phase1_schema_for, render_declared_types, report_added_prompt_size};
+use super::ontology_schema::{
+    phase1_schema_for, render_declared_types, render_phase6_extras, report_added_prompt_size,
+};
 use super::parse_policy::ParsePolicy;
 use crate::enrichment::ontology::OntologyPolicies;
 use crate::recipe::OntologyVocabulary;
@@ -144,6 +146,13 @@ pub struct CustomOntology {
     /// What the reader enforces. `ParsePolicy::default()` when nothing is
     /// declared — the same value the generic dispatch passes.
     pub(super) parse_policy: ParsePolicy,
+    /// The whole declared policy set, kept so the phases downstream of
+    /// Phase 1 (the Phase-6 classifier's extras and response schema, the
+    /// Phase-8 opt-in, the derived selector) read the ONE carrier rather
+    /// than each caching its own projection of it. `OntologyPolicies` is
+    /// small, owned and `Clone`; the leaked `&'static str`s above exist
+    /// only because the `Pipeline` trait returns `&'static str`.
+    pub(super) policies: OntologyPolicies,
 }
 
 impl CustomOntology {
@@ -206,6 +215,7 @@ impl CustomOntology {
             vocabulary: policies.vocabulary(),
             phase1_schema,
             parse_policy,
+            policies: policies.clone(),
         }
     }
 
@@ -441,6 +451,130 @@ mod tests {
         assert!(p.is_empty());
     }
 
+    /// P4 item 7: Phase 8 is a genre opt-in, and the opt-in is asymmetric.
+    /// A corpus that declares nothing keeps today's `true` (invariant I1);
+    /// a corpus that declares its OWN types gets Phase 8 only if its author
+    /// asked, because the Phase-8 prompt is written in the literary frame.
+    #[test]
+    fn phase8_is_off_for_a_declared_corpus_that_did_not_ask() {
+        use super::super::genre::AtlasGenre;
+
+        let undeclared = CustomOntology::from_policies("d", &OntologyPolicies::default());
+        assert!(
+            undeclared.runs_configuration_phase(),
+            "no declaration, today's behaviour"
+        );
+
+        // The shipped numismatics template declares types and no
+        // `derive.configurations`.
+        let declared = super::super::numismatics_policies();
+        assert!(declared.has_declarations());
+        assert!(
+            !declared.derivation.configurations,
+            "a declared corpus does not get the literary rollups by default"
+        );
+        assert!(!CustomOntology::from_policies("n", &declared).runs_configuration_phase());
+
+        // …and an author who asks for them gets them.
+        let mut asked = declared.clone();
+        asked.derivation.configurations = true;
+        assert!(CustomOntology::from_policies("n", &asked).runs_configuration_phase());
+    }
+
+    /// P4 item 5: the selector is derived, but an UNDECLARED corpus never
+    /// reaches the derivation — it keeps the measured constant whatever
+    /// shape it happens to have. That is what protects the v0 maple-house
+    /// detector from a change meant for declared corpora.
+    #[test]
+    fn undeclared_ontology_keeps_the_measured_selector_whatever_the_shape() {
+        use super::super::genre::AtlasGenre;
+        use crate::enrichment::atlas::analysis::CorpusShape;
+
+        let ont = CustomOntology::from_policies("d", &OntologyPolicies::default());
+        // The shape that WOULD select Graph for a declared corpus.
+        let one_dense_unit = CorpusShape {
+            claims: 9,
+            doc_count: 1,
+            attributed_ratio: 0.9,
+        };
+        assert_eq!(
+            ont.derive_tension_strategy(&one_dense_unit),
+            CUSTOM_TENSION_STRATEGY
+        );
+    }
+
+    /// A declared corpus DOES reach the derivation, and a cross-document
+    /// one still lands on the measured constant.
+    #[test]
+    fn declared_ontology_derives_and_still_lands_on_the_measured_selector() {
+        use super::super::genre::AtlasGenre;
+        use crate::enrichment::atlas::analysis::CorpusShape;
+
+        let ont = CustomOntology::from_policies("n", &super::super::numismatics_policies());
+        let catalogue = CorpusShape {
+            claims: 7,
+            doc_count: 7,
+            attributed_ratio: 1.0,
+        };
+        assert_eq!(
+            ont.derive_tension_strategy(&catalogue),
+            CUSTOM_TENSION_STRATEGY,
+            "cross-document material keeps the embedding net"
+        );
+    }
+
+    /// P4 items 2 + 3, at the compose seam: a DECLARED corpus's Phase-6
+    /// classifier carries the extras and the schema that admits
+    /// `relation`; an undeclared one carries neither. The undeclared half
+    /// is also pinned byte-for-byte by `maple_house.phase6_classifier`.
+    #[test]
+    fn phase6_classifier_gains_extras_and_the_relation_schema_only_when_declared() {
+        use super::super::genre::AtlasGenre;
+        use crate::enrichment::atlas::analysis::{CandidateContent, TensionSide};
+        use crate::enrichment::atlas::atoms::AtomId;
+
+        let content = CandidateContent {
+            candidate_id: "cand-0001".into(),
+            source_atom: AtomId::from_raw("claim-0001"),
+            source_kind: TensionSide::Claim,
+            source_text: "A".into(),
+            target_atom: AtomId::from_raw("claim-0002"),
+            target_kind: TensionSide::Claim,
+            target_text: "B".into(),
+            shared_entity_name: None,
+            shared_entity_id: None,
+            evidence: Vec::new(),
+        };
+
+        let undeclared = CustomOntology::from_policies("d", &OntologyPolicies::default())
+            .compose_phase6_classifier(&content)
+            .expect("custom atlas composes its own Phase 6 classifier");
+        assert!(
+            !undeclared.system.contains("## Relation"),
+            "no declaration, no extras"
+        );
+        let schema = undeclared
+            .response_schema
+            .as_ref()
+            .expect("the classifier is schema-constrained");
+        assert!(
+            schema["properties"].get("relation").is_none(),
+            "no declaration, no relation field"
+        );
+
+        let declared = CustomOntology::from_policies("n", &super::super::numismatics_policies())
+            .compose_phase6_classifier(&content)
+            .expect("composes");
+        assert!(declared.system.contains("## Relation"));
+        assert!(
+            !declared.system.contains("{tension_term}"),
+            "the extras' placeholders are filled"
+        );
+        assert!(declared.response_schema.as_ref().expect("schema")["properties"]
+            .get("relation")
+            .is_some());
+    }
+
     /// A legacy `config.json` has no `policies`; the accessor synthesizes
     /// version-0 policies from the prose mirror, and a spec that carries
     /// policies round-trips them through JSON unchanged.
@@ -550,7 +684,19 @@ impl super::genre::AtlasGenre for CustomOntology {
             self.guidance,
             &self.vocabulary.tension_term,
             &self.vocabulary.position_term,
+            &render_phase6_extras(&self.policies),
         );
+        // A declared corpus is asked for the `relation` field as well, and
+        // gets the schema that admits it. An undeclared one is handed the
+        // same schema it always was — `render_phase6_extras` is empty
+        // there too, so BOTH halves of this prompt are byte-identical to
+        // what version 0 sent (invariant I1,
+        // `maple_house.phase6_classifier`).
+        let schema = if self.policies.has_declarations() {
+            crate::enrichment::atlas::analysis::phase6_classifier_response_schema_with_relation()
+        } else {
+            crate::enrichment::atlas::analysis::phase6_classifier_response_schema()
+        };
         Some(
             super::super::types::ChatPrompt::new(
                 system,
@@ -559,12 +705,38 @@ impl super::genre::AtlasGenre for CustomOntology {
                     &self.vocabulary.tension_term,
                 ),
             )
-            .with_response_schema(
-                "phase6_classifier_response",
-                crate::enrichment::atlas::analysis::phase6_classifier_response_schema(),
-            )
+            .with_response_schema("phase6_classifier_response", schema)
             .with_phase_id("phase6_classifier")
             .with_max_output_tokens(256),
         )
+    }
+
+    /// The selector, derived from the corpus's measured shape rather than
+    /// pinned to the constant. Undeclared corpora keep
+    /// [`CUSTOM_TENSION_STRATEGY`] whatever their shape — that is the
+    /// measured setting and invariant I1 — so only a declared ontology
+    /// reaches the derivation.
+    fn derive_tension_strategy(
+        &self,
+        shape: &crate::enrichment::atlas::analysis::CorpusShape,
+    ) -> crate::enrichment::atlas::analysis::TensionStrategy {
+        if !self.policies.has_declarations() {
+            return CUSTOM_TENSION_STRATEGY;
+        }
+        crate::enrichment::atlas::analysis::derive_declared_strategy(
+            shape,
+            CUSTOM_TENSION_STRATEGY,
+        )
+    }
+
+    /// Phase 8 is a genre opt-in (ONTOLOGY_MIGRATION §P4). A corpus that
+    /// declares types gets the interpretive-configuration rollups only when
+    /// its author asked for them: the Phase-8 prompt is written in the
+    /// literary frame, and running it over coins or clauses produces
+    /// confident nonsense. A corpus that declares nothing keeps today's
+    /// `true` — that is what version 0 does, and I1 says version 0 does not
+    /// move.
+    fn runs_configuration_phase(&self) -> bool {
+        self.policies.derivation.configurations
     }
 }

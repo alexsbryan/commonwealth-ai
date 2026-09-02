@@ -339,6 +339,18 @@ pub fn write_atlas_gaps(
     Ok(path)
 }
 
+/// Write the declared-pattern findings to `atlas/pattern_findings.json`.
+/// Atomic sibling-tmp + rename, same contract as the other atlas writers.
+pub fn write_atlas_pattern_findings(
+    atlas_dir: &Path,
+    findings: &super::analysis::patterns_adapter::PatternFindingsOutput,
+) -> io::Result<PathBuf> {
+    fs::create_dir_all(atlas_dir)?;
+    let path = atlas_dir.join("pattern_findings.json");
+    write_atomic(&path, findings)?;
+    Ok(path)
+}
+
 /// Write the tension candidate list (Phase 6 deterministic half) to
 /// `atlas/tension_candidates.json`. The Phase 6 LLM classifier
 /// (Landing 4) consumes this and emits `Tension` edges on
@@ -439,6 +451,21 @@ pub fn read_atlas_edges(atlas_dir: &Path) -> io::Result<EdgesFile> {
     let data = fs::read(&path)?;
     serde_json::from_slice(&data)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("parse edges.json: {e}")))
+}
+
+/// Replace `atlas/atoms.json` with the provided file. The atom-side
+/// companion to [`write_atlas_edges`], and used the same way: Phase 6's
+/// classifier appends the `same_as` Claims an `equivalent` verdict reifies
+/// without re-running [`write_atlas_full`], which would need every atom
+/// kind partitioned back out of the envelope list it just read.
+///
+/// Atomic: sibling `.tmp` + rename, so a crash leaves the pre-existing
+/// file intact rather than truncated.
+pub fn write_atlas_atoms(atlas_dir: &Path, atoms: &AtomsFile) -> io::Result<PathBuf> {
+    fs::create_dir_all(atlas_dir)?;
+    let path = atlas_dir.join("atoms.json");
+    write_atomic(&path, atoms)?;
+    Ok(path)
 }
 
 /// Replace `atlas/edges.json` with the provided file. Used by Phase

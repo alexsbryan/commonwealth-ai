@@ -1204,7 +1204,76 @@ means one thing.
   remembered; the pin is `tests/main/ontology_prompt_snapshots.rs`.
   `enrichment/ontology/type_index.rs` is the one `specializes` walk
   (`is_a`, `effective_attributes`), read by both the schema generator and
-  the parser. The resolve step writes `atlas/ontology.json`
+  the parser. **Axes 4 and 5 reach the pipeline at Phase 6, Phase 8 and the
+  governance fold (ontology-v1 P4).** Three small modules under
+  `atlas/analysis/` carry it: `tension_policy.rs` (what the DECLARATION
+  removes), `tension_fields.rs` (how a `same` field is read off a claim and
+  compared) and `tension_shape.rs` (what the CORPUS selects).
+  `restrict_claims_to_types` applies `tension.between` BEFORE selection and
+  `drop_non_comparable_pairs` applies `tension.same` (defaulting to subject
+  plus the type's clock) after it. **Both degrade by REPORTING, never by
+  enforcing a criterion the extraction did not fill** — `between` returns
+  `BetweenOutcome::Inert` when NO claim carries a `claim_kind` (enforcing
+  the allow-list there empties the pool and turns the axis off on a corpus
+  whose author asked for it), and a `same` field rules a pair out only when
+  BOTH sides carry it and they differ, with one-sided absence counted as
+  `ComparabilityReport::one_sided` rather than treated as a mismatch. Both
+  rules were settled by measurement against the real `wessex-hoard` atlas
+  on 2026-09-02, not by argument: excluding on one-sided absence drops 40
+  of 158 candidates and removes 0 of that corpus's 3 known false positives,
+  because all three are pairs the criterion is blind to on BOTH sides. The
+  `subject` field falls back to `attributed_to` only when that is NOT a
+  Person or Institution — the same voice-vs-referent distinction
+  `drop_same_named_speaker_pairs` already makes, and without it two
+  attributions of one coin by two different scholars (the tension the
+  numismatics corpus plants) become non-comparable. A `time` attribute
+  compares by interval OVERLAP, not equality. The pass prints per-field
+  coverage and warns when a declared field is carried by no claim, because
+  a criterion nothing fills is silently doing nothing (ARCH §18.1).
+  `CorpusShape::of` + `derive_declared_strategy` derive the selector the
+  pipeline is asked for through `Pipeline::derive_tension_strategy` — whose
+  default ignores the shape and answers `tension_strategy()`, so nothing
+  that has not opted in moves, and whose declared branch keeps the measured
+  `EmbeddingTopK { k: 10, floor: 0.5 }` unless the corpus is a single
+  densely-attributed unit. `ontology_schema::render_phase6_extras` fills
+  the `{ontology_extras}` slot in `custom_phase6_classifier_system.md` with
+  the author's `not_conflicts`, the deontic interdefinition (`forbid X` is
+  `require not-X`, so two surface forms of one rule are not a conflict) and
+  the `relation` instruction; it is EMPTY for an undeclared corpus, which
+  is what keeps the `maple_house.phase6_classifier` golden byte-identical.
+  A declared corpus is handed
+  `phase6_classifier_response_schema_with_relation` and its `equivalent`
+  verdict becomes ONE `same_as` Claim (grade `classifier`,
+  `classification_to_same_as_claim`, folded in by `merge_same_as_claims`)
+  on `atoms.json` instead of a Tension edge —
+  `Phase6Classification::verdict` is the one place `is_tension` and
+  `relation` are reconciled, and `is_tension` stays authoritative so a
+  self-contradicting response never silently merges a real conflict.
+  `AtlasGenre::runs_configuration_phase` makes Phase 8 a genre opt-in:
+  `derive.configurations` defaults to `true` for an undeclared corpus (I1)
+  and to `false` for one that declares its own types, because the Phase-8
+  prompt is written in the literary frame.
+  `enrichment/governance_change.rs` holds axis 4:
+  `derive_active_with_policy` is `derive_active` plus a third pass,
+  returning the act-fold's `ActiveSet` UNCHANGED alongside a separate
+  `ClockSupersessions` map — per claim type in `change.supersedes`, grouped
+  by subject, an older rule LINKED to a newer one (by a reified `same_as`
+  or a declared `ref`) is retired by the clock. **Recency ALONE never
+  folds**, which is what keeps the Maple House decoys standing, and the map
+  is deliberately NOT a `RuleStatus` variant: `ActiveSet` is what the ACTS
+  decided, and a derivation inside that enum would need an invented `OpId`
+  for an act nobody performed (ARCH §18.3).
+  `GovernanceView::from_atlas_dir` calls it when `atlas/ontology.json`
+  declares a `supersedes`, and `RuleView.superseded_by_clock` renders it
+  beside `status`. `enrichment/ontology/clock.rs::section_date` reads the
+  document date out of a section heading (ISO-8601 only, deliberately).
+  Axis 5's `patterns` run over the same atlas via
+  `atlas/analysis/patterns_adapter.rs`, which PROJECTS `atoms.json` into
+  the graph `investigation::patterns::detect_all` already reads (a
+  `Relation` atom with exactly two participants becomes a `Relationship`;
+  the rest are counted, not swallowed) and writes
+  `atlas/pattern_findings.json` from the Gaps step. The resolve step writes
+  `atlas/ontology.json`
   (`writer::write_atlas_ontology`) so the atlas dir records what it was
   extracted under, and `_summary.json` (SCHEMA_VERSION 3) carries an
   `OntologySummary` read back from it. Design:

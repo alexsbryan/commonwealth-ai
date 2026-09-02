@@ -25,6 +25,7 @@
 //! per-type merge policy, a resolved trajectory, an argument budget — on the
 //! axis that owns them, never a new struct.
 
+pub mod clock;
 pub mod language;
 pub mod type_index;
 mod validate;
@@ -34,6 +35,7 @@ pub use language::{
     OntologyLanguage, OntologyLanguageRegistry, OntologyTypeDecl, OntologyV1, SourceDecl,
     TensionDecl, TypeKind, VoicesDecl,
 };
+pub use clock::section_date;
 pub use type_index::TypeIndex;
 pub use validate::{
     validate_block, OntologyValidation, MAX_ATTRS_PER_TYPE, MAX_ENUM_VALUES, MAX_TYPES_PER_KIND,
