@@ -1183,8 +1183,26 @@ means one thing.
   `sovereign-recipes/_templates/ontology-v1/` (`recipe_templates.rs`);
   `recipe migrate --ontology-version 1` adds the version line as a diff.
   `CustomAtlasSpec.policies` carries the parsed policies into `config.json`;
-  `CustomOntology::from_policies` composes the Phase-1 prompt (I1: a
-  version-1 block with no declarations composes version-0 bytes). Design:
+  `CustomOntology::from_policies` composes the Phase-1 prompt and, when types
+  are declared, the generated response schema (`pipelines/ontology_schema.rs`
+  — it EDITS the shipped `phase1_section_extraction_schema`, extending the
+  entity enum, adding a type slot plus one union `attributes` object per kind,
+  requiring `claim_kind`, and dropping `argument_reconstructions` unless
+  `derivation.arguments`) and the reader's `ParsePolicy`
+  (`pipelines/parse_policy.rs`), enforced by `pipelines/ontology_parse.rs`:
+  a declared `EntityType::Other` is kept, attributes validate by family and
+  store normalised, a declared voice is neither an entity nor an attribution,
+  and a declared claim takes its `discourse_act` from the type's `force` and
+  is dropped when anchorless. All three compose/parse hooks return `None`
+  when nothing is declared, which is how I1 (a version-1 block with no
+  declarations composes version-0 bytes) is structural rather than
+  remembered; the pin is `tests/main/ontology_prompt_snapshots.rs`.
+  `enrichment/ontology/type_index.rs` is the one `specializes` walk
+  (`is_a`, `effective_attributes`), read by both the schema generator and
+  the parser. The resolve step writes `atlas/ontology.json`
+  (`writer::write_atlas_ontology`) so the atlas dir records what it was
+  extracted under, and `_summary.json` (SCHEMA_VERSION 3) carries an
+  `OntologySummary` read back from it. Design:
   `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md`, `ONTOLOGY_MIGRATION.md`.
   State at `~/.svrnmesh/indexes/<corpus>/atlas/`. Deep-dive:
   [`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md). Beyond the LLM

@@ -70,18 +70,10 @@ pub fn attribute_schema(decl: &AttrDecl) -> Value {
 pub fn phase1_schema_for(policies: &OntologyPolicies) -> Value {
     let mut schema = phase1_section_extraction_schema();
     let index = TypeIndex::from_policies(policies);
-    let of_kind = |k: TypeKind| -> Vec<&OntologyTypeDecl> {
-        policies
-            .shape
-            .types
-            .iter()
-            .filter(|t| t.kind == k)
-            .collect()
-    };
-    let entities = of_kind(TypeKind::Entity);
-    let relations = of_kind(TypeKind::Relation);
-    let events = of_kind(TypeKind::Event);
-    let claims = of_kind(TypeKind::Claim);
+    let entities = of_kind(policies, TypeKind::Entity);
+    let relations = of_kind(policies, TypeKind::Relation);
+    let events = of_kind(policies, TypeKind::Event);
+    let claims = of_kind(policies, TypeKind::Claim);
 
     // A build that lost `$defs` from the shipped const would be a
     // compile-visible edit, not a runtime surprise; the generic schema stands
@@ -320,13 +312,23 @@ fn wire_name<T: serde::Serialize>(v: &T) -> String {
         .to_string()
 }
 
+/// The declared types of one atom kind, in declaration order.
+fn of_kind(policies: &OntologyPolicies, kind: TypeKind) -> Vec<&OntologyTypeDecl> {
+    policies
+        .shape
+        .types
+        .iter()
+        .filter(|t| t.kind == kind)
+        .collect()
+}
+
 /// De-duplicated union of a per-type list, in declaration order.
 fn union_of<F>(types: &[&OntologyTypeDecl], f: F) -> Vec<String>
 where
     F: Fn(&OntologyTypeDecl) -> Vec<String>,
 {
     let mut out: Vec<String> = Vec::new();
-    for t in types {
+    for t in types.iter().copied() {
         for v in f(t) {
             if !out.contains(&v) {
                 out.push(v);
@@ -393,7 +395,7 @@ fn attach_attributes(
     types: &[&OntologyTypeDecl],
 ) {
     let mut props = serde_json::Map::new();
-    for t in types {
+    for t in types.iter().copied() {
         for a in index.effective_attributes(&t.name) {
             props
                 .entry(a.name.clone())
@@ -436,17 +438,8 @@ fn set_attribute_property(defs: &mut Defs, sketch: &str, key: &str, value: Value
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::recipe::Recipe;
 
-    fn numismatics() -> OntologyPolicies {
-        let toml = crate::recipe_templates::load_builtin("numismatics")
-            .expect("numismatics is a shipped template");
-        Recipe::from_toml(toml)
-            .expect("the shipped template parses")
-            .custom_atlas_spec()
-            .expect("it declares an [enrichment.ontology] block")
-            .policies()
-    }
+    use super::super::numismatics_policies as numismatics;
 
     fn sketch<'a>(schema: &'a Value, name: &str) -> &'a Value {
         &schema["$defs"][name]

@@ -15,5 +15,20 @@ pub mod literary_atlas;
 // atoms.json output against a vault can pass `--pipeline literary_atlas`.
 pub mod ontology_parse;
 pub mod ontology_schema;
+pub mod parse_policy;
 pub mod philosophy_atlas;
 pub mod referential_atlas;
+
+/// Test-only fixture: the shipped `numismatics` ontology template, parsed into
+/// policies. One definition for every ontology test in this module tree, so a
+/// test can never pass against a declaration nobody ships.
+#[cfg(test)]
+pub(crate) fn numismatics_policies() -> crate::enrichment::ontology::OntologyPolicies {
+    let toml = crate::recipe_templates::load_builtin("numismatics")
+        .expect("numismatics is a shipped ontology template");
+    crate::recipe::Recipe::from_toml(toml)
+        .expect("the shipped template parses")
+        .custom_atlas_spec()
+        .expect("it declares an [enrichment.ontology] block")
+        .policies()
+}

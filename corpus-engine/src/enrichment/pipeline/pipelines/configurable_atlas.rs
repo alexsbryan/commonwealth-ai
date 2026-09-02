@@ -349,16 +349,7 @@ mod tests {
         }
     }
 
-    /// The shipped numismatics template — the P2 fixture.
-    fn numismatics() -> OntologyPolicies {
-        let toml = crate::recipe_templates::load_builtin("numismatics")
-            .expect("numismatics is a shipped template");
-        Recipe::from_toml(toml)
-            .expect("the shipped template parses")
-            .custom_atlas_spec()
-            .expect("it declares an [enrichment.ontology] block")
-            .policies()
-    }
+    use super::super::numismatics_policies as numismatics;
 
     fn chapter() -> ChapterInput {
         ChapterInput {

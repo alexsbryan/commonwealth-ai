@@ -611,10 +611,8 @@ async fn resolve_entities(
                         role: None,
                         participants: Vec::new(),
                         provenance: Default::default(),
-                        // Declared-type attributes ride from the sketch onto
-                        // the atom. Empty for every undeclared corpus (the
-                        // Phase-1 schema has no slot for them there), so this
-                        // changes nothing outside ontology v1.
+                        // Declared attributes ride onto the atom. Always
+                        // empty outside ontology v1 (no schema slot).
                         attributes: sketch.attributes.clone(),
                         concept_kind: None,
                     };
@@ -851,14 +849,11 @@ fn merge_into_existing(
     if sketch.description.trim().len() > entity.description.len() {
         entity.description = sketch.description.trim().to_string();
     }
-    // Declared attributes merge FIRST-WINS: the section that introduced the
-    // entity described it; a later mention that disagrees is a conflict for
-    // the reconciler to reify (P3), not something to silently overwrite here.
+    // Declared attributes merge FIRST-WINS: a later mention that disagrees is
+    // a conflict for the reconciler to reify (P3), not a silent overwrite.
     for (key, value) in &sketch.attributes {
-        entity
-            .attributes
-            .entry(key.clone())
-            .or_insert_with(|| value.clone());
+        let e = entity.attributes.entry(key.clone());
+        e.or_insert_with(|| value.clone());
     }
     // First non-empty defining_quote wins. Later sections sometimes
     // re-introduce a concept with a thinner gloss; we keep the
