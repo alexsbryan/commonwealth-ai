@@ -9,9 +9,9 @@
 //! `tests/fixtures/ontology_snapshots/<stem>.json`:
 //!
 //! - I1: the `maple-house` recipe's custom atlas (version-0 ontology block)
-//!   — Phase 1, the terse Phase 1 retry, and the Phase 6 classifier. When
-//!   P1 lands, a `version = 1` block with no declarations must reproduce
-//!   these SAME goldens (the `#[ignore]`d stub below).
+//!   — Phase 1, the terse Phase 1 retry, and the Phase 6 classifier — and
+//!   the same recipe migrated to `version = 1` with no declarations, which
+//!   must reproduce these SAME goldens (not a second set).
 //! - I2: the four prebuilt genres' Phase 1 (literary, philosophy,
 //!   referential, engineering) — a genre that declares nothing sends no
 //!   different bytes.
@@ -157,14 +157,47 @@ fn maple_house_phase6_classifier_matches_golden() {
     assert_snapshot("maple_house.phase6_classifier", &prompt);
 }
 
-/// I1, second half. Lands with P1 (`[enrichment.ontology] version = 1`):
-/// parse the maple-house recipe with `version = 1` added and NO
-/// declarations, and compare each of the three prompts above against the
-/// SAME `maple_house.*` goldens — not a second set.
+/// I1, second half. The maple-house recipe migrated to `version = 1`
+/// (`Recipe::migrate_ontology_version` — one inserted line, nothing else
+/// changes) declares no types, so all three prompts must match the SAME
+/// `maple_house.*` goldens the version-0 tests above pin — not a second set.
+/// This is the structural half of I1: the P2 composer and parser hang off
+/// `OntologyPolicies::has_declarations()`, which is false here.
 #[test]
-#[ignore = "TODO(ontology-v1 P1 merge): needs `version = 1` parsing from P1; then compose maple-house with `version = 1` and no declarations against the same maple_house.* goldens"]
 fn maple_house_v1_without_declarations_matches_v0_goldens() {
-    unimplemented!("TODO(ontology-v1 P1 merge): see the #[ignore] reason");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(MAPLE_HOUSE_RECIPE);
+    let v0 =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let migrated = Recipe::migrate_ontology_version(&v0, 1)
+        .expect("migration yields a loadable recipe")
+        .expect("maple-house is version 0, so migrating to 1 changes it");
+    let recipe = Recipe::from_toml(&migrated).expect("migrated maple-house parses");
+    let spec = recipe
+        .custom_atlas_spec()
+        .expect("still a custom ontology after migration");
+    assert_eq!(spec.ontology_version, 1);
+    assert!(
+        !spec.policies().has_declarations(),
+        "the migration adds only the version line; no types are declared"
+    );
+    let pipeline = LiteraryAtlasPipeline::with_custom_ontology(&spec);
+
+    assert_snapshot(
+        "maple_house.phase1",
+        &pipeline.compose_phase1(&fixed_chapter(), &[]),
+    );
+    assert_snapshot(
+        "maple_house.phase1_terse",
+        &pipeline
+            .compose_phase1_terse(&fixed_chapter())
+            .expect("custom atlas composes a terse retry"),
+    );
+    assert_snapshot(
+        "maple_house.phase6_classifier",
+        &pipeline
+            .compose_phase6_atlas_classifier(&fixed_candidate())
+            .expect("custom atlas composes its own Phase 6 classifier"),
+    );
 }
 
 // ── I2: prebuilt genres declare nothing and send no different bytes ─────
