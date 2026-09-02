@@ -39,6 +39,16 @@ pub enum MergeSignal {
     /// thread_id matches → the two mentions are in the same
     /// conversation).
     ThreadRoot,
+    /// Every external identifier the recipe declared for this type
+    /// (`identity = ["rxnorm_id"]`) is present on both and agrees. The one
+    /// STRICT signal: it satisfies the cross-origin gate on its own, because
+    /// an identifier is a criterion of identity, not evidence toward one.
+    ExternalId,
+    /// Every descriptive key the recipe declared as the fallback
+    /// (`identity_fallback = ["name", "employer"]`) agrees. One ordinary
+    /// signal — it goes through the same count gate every other signal does,
+    /// which is what "a descriptive key is judged, not trusted" means today.
+    DescriptiveKey,
     Other(String),
 }
 
@@ -50,6 +60,8 @@ impl MergeSignal {
             MergeSignal::OrgRole => "org_role",
             MergeSignal::JudgeConfirmed => "judge_confirmed",
             MergeSignal::ThreadRoot => "thread_root",
+            MergeSignal::ExternalId => "external_id",
+            MergeSignal::DescriptiveKey => "descriptive_key",
             MergeSignal::Other(s) => s.as_str(),
         }
     }

@@ -59,7 +59,9 @@ pub(super) struct ClaimTypeRules {
     /// the model emitted: force is a property of the type, and a model cannot
     /// be asked to guarantee what the recipe already states (§7.6).
     pub(super) discourse_act: DiscourseAct,
-    /// From the type's `scope`; `None` leaves the resolver's default.
+    /// The scope a declared claim type fixes. Always `Some` for a declared
+    /// type — see [`claim_scope_for`] for why the ABSENCE of a `scope` key is
+    /// itself an answer.
     pub(super) scope: Option<ClaimScope>,
     /// Effective (inherited) declared attributes.
     pub(super) attributes: Vec<AttrDecl>,
@@ -203,7 +205,7 @@ impl ParsePolicy {
                         t.name.clone(),
                         ClaimTypeRules {
                             discourse_act: discourse_act_for(force),
-                            scope: t.scope.map(claim_scope_for),
+                            scope: Some(t.scope.map_or(ClaimScope::Universal, claim_scope_for)),
                             attributes: attrs,
                             has_subject: t.subject.is_some(),
                             deontic: t.deontic.clone(),
@@ -264,6 +266,18 @@ fn discourse_act_for(force: Force) -> DiscourseAct {
 /// Declared claim scope → the atlas's `ClaimScope`. `in_work` is what the
 /// literary resolver already defaults every claim to; `about_work` is scoped
 /// to the work being discussed, which is `contextual`, not universal.
+///
+/// `ClaimScopeDecl` has no `universal` variant BECAUSE universal is what a
+/// claim type that says nothing about scope means — `OntologyTypeDecl::scope`
+/// documents exactly that ("Default universal"), and the two variants are the
+/// two departures from it. The caller therefore maps `None` to
+/// [`ClaimScope::Universal`] rather than leaving the resolver's literary
+/// `Fictional` in place: a numismatics catalogue's attributions are claims
+/// about the world, and labelling all of them fiction is a wrong answer, not
+/// a missing one (measured on `wessex-hoard`, 2026-09-02: 48 of 48).
+///
+/// Undeclared corpora never reach here — there is no `ClaimTypeRules` without
+/// a declared claim type — so the literary default stands where it belongs.
 fn claim_scope_for(scope: ClaimScopeDecl) -> ClaimScope {
     match scope {
         ClaimScopeDecl::InWork => ClaimScope::Fictional,

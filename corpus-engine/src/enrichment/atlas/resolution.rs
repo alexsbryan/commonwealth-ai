@@ -42,6 +42,10 @@ use crate::types::EmbedFn;
 
 use super::atoms::{AtomId, ChunkRef, Entity, Event, SectionPosition};
 use super::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
+use super::resolution_ontology::{
+    check_event_participants, check_relation_endpoints, emit_role_states, rigid_entity_type,
+    snap_ref_attributes, ResolutionPolicy,
+};
 
 // ── Tuning constants ────────────────────────────────────────
 
@@ -120,7 +124,23 @@ pub async fn resolve_entities_and_events(
     sections: &[SectionExtraction],
     embed_fn: &EmbedFn,
 ) -> Result<ResolutionOutput> {
-    let mut entity_result = resolve_entities(sections, embed_fn).await?;
+    resolve_entities_and_events_with(sections, embed_fn, &ResolutionPolicy::default()).await
+}
+
+/// [`resolve_entities_and_events`] with a declared ontology in hand.
+///
+/// Two things change, both no-ops when `policy` declares nothing: a sketch
+/// typed as a declared ROLE produces an atom of the rigid type it is a role of
+/// (`ruler` → `person`), and an event of a declared type keeps only
+/// participants the declaration admits. Everything else — the merge rules, the
+/// id order, the salience normalisation — is the same code the shim runs, so a
+/// version-0 corpus resolves byte-for-byte as it did.
+pub async fn resolve_entities_and_events_with(
+    sections: &[SectionExtraction],
+    embed_fn: &EmbedFn,
+    policy: &ResolutionPolicy<'_>,
+) -> Result<ResolutionOutput> {
+    let mut entity_result = resolve_entities(sections, embed_fn, policy).await?;
     // Materialize Entity atoms for event participants the LLM named
     // but never separately introduced. Indirect-evidence atoms get
     // SYNTHESIZED_ENTITY_SALIENCE so a Phase 5 reader can tell them
@@ -165,13 +185,35 @@ pub async fn resolve_entities_and_events(
     // match exactly. Built AFTER synthesis so synthesized atoms also
     // catch alternative spellings via the token paths.
     let token_index = build_token_index(&entity_result.entities);
-    let event_result =
+    let mut event_result =
         resolve_events(sections, embed_fn, &entity_result.name_index, &token_index).await?;
+
+    // Declared event types constrain who can be in the event. A participant
+    // the declaration does not admit is dropped, and so is the Involves edge
+    // that asserted it — an edge left behind would say in the graph exactly
+    // what this pass just refused.
+    let (dropped, participant_failures) =
+        check_event_participants(policy, &mut event_result.events, &entity_result.entities);
+    if !dropped.is_empty() {
+        event_result.involves_edges.retain(|e| {
+            !dropped
+                .iter()
+                .any(|(ev, pid)| e.source == *ev && e.target == *pid)
+        });
+        info!(
+            dropped = dropped.len(),
+            "phase 3a: dropped {} event participant(s) not of a declared type",
+            dropped.len()
+        );
+    }
+    let mut failures = event_result.failures;
+    failures.extend(participant_failures);
+
     Ok(ResolutionOutput {
         entities: entity_result.entities,
         events: event_result.events,
         edges: event_result.involves_edges,
-        failures: event_result.failures,
+        failures,
     })
 }
 
@@ -496,6 +538,14 @@ pub struct Step3bOutput {
     /// aggregator surfaces them grouped by kind with a remediation
     /// hint per group.
     pub failures: Vec<crate::enrichment::pipeline::types::PhaseFailure>,
+    /// Entity attribute maps this pass rewrote, keyed by the entity's
+    /// raw atom id — a declared `ref` attribute now holds the atom id
+    /// it named instead of the name. Applied by the caller the way
+    /// `TypeExtensionResolveOutput::entity_qualifier_updates` is,
+    /// because Step 3a owns the entity vector and this pass only
+    /// borrows it. Empty for every corpus that declares no `ref`.
+    pub entity_attribute_updates:
+        std::collections::BTreeMap<String, serde_json::Map<String, serde_json::Value>>,
 }
 
 /// A single per-entity (or per-relation) state sequence. Mirrors the
@@ -535,6 +585,7 @@ struct EntityResolution {
 async fn resolve_entities(
     sections: &[SectionExtraction],
     embed_fn: &EmbedFn,
+    policy: &ResolutionPolicy<'_>,
 ) -> Result<EntityResolution> {
     let mut entities: Vec<Entity> = Vec::new();
     let mut descriptions: Vec<Vec<f32>> = Vec::new();
@@ -592,7 +643,10 @@ async fn resolve_entities(
                         id: new_id.clone(),
                         canonical_name: sketch.canonical_name.trim().to_string(),
                         aliases: dedup_aliases(&sketch.aliases, &sketch.canonical_name),
-                        entity_type: sketch.entity_type.clone(),
+                        // A declared ROLE is not the atom's kind — see
+                        // `rigid_entity_type`. Identity is unchanged for
+                        // everything else, including the generic six.
+                        entity_type: rigid_entity_type(policy, &sketch.entity_type),
                         first_appearance: ChunkRef::new(
                             section.section_id.clone(),
                             if sketch.anchor.is_empty() {
@@ -969,13 +1023,19 @@ async fn resolve_events(
                 None => {
                     let new_id = AtomId::event(events.len() + 1);
                     let ev = Event {
-                        attributes: Default::default(),
+                        // Declared attributes ride onto the atom, as they do
+                        // for entities. Always empty outside ontology v1.
+                        attributes: sketch.attributes.clone(),
                         id: new_id.clone(),
                         description: sketch.description.trim().to_string(),
                         // Event-type classification is deferred to
-                        // Phase 5. Step 3a tags all events as
-                        // unspecified so the schema still types them.
-                        event_type: EventType::Other("unspecified".into()),
+                        // Phase 5 — unless the recipe declared the type and
+                        // the reader kept it, in which case the author's
+                        // noun is the answer and Phase 5 has nothing to add.
+                        event_type: match sketch.event_type.as_deref() {
+                            Some(t) if !t.trim().is_empty() => EventType::Other(t.trim().into()),
+                            _ => EventType::Other("unspecified".into()),
+                        },
                         participants: participant_ids.clone(),
                         evidence: vec![ChunkRef::new(
                             section.section_id.clone(),
@@ -1114,6 +1174,33 @@ pub fn resolve_step_3b(
     entities: &[super::atoms::Entity],
     events: &[super::atoms::Event],
 ) -> Result<Step3bOutput> {
+    resolve_step_3b_with(sections, entities, events, &ResolutionPolicy::default())
+}
+
+/// [`resolve_step_3b`] with a declared ontology in hand.
+///
+/// Four things change, every one of them inert when `policy` declares
+/// nothing:
+///
+/// - a relation whose ends are declared is checked against the atoms they
+///   resolved to, and DROPPED on a mismatch with a recorded
+///   [`PhaseFailureKind::EndpointTypeMismatch`];
+/// - a declared relation keeps the author's noun as its `relation_type` and
+///   its typed attributes, instead of `Other("unclassified")`;
+/// - a claim's `subject`, `scope`, `claim_kind` and attributes reach the atom,
+///   and `subject` gets the same salience-aware resolution and the same
+///   `Involves` edge `attributed_to` has always had;
+/// - a mention typed as a declared ROLE becomes a `State` on the rigid atom,
+///   which the trajectory pass below then chains into `Transition`s for free.
+///
+/// Plus one pass whose output the caller applies: declared `ref` attributes
+/// snap to atom ids ([`Step3bOutput::entity_attribute_updates`]).
+pub fn resolve_step_3b_with(
+    sections: &[SectionExtraction],
+    entities: &[super::atoms::Entity],
+    events: &[super::atoms::Event],
+    policy: &ResolutionPolicy<'_>,
+) -> Result<Step3bOutput> {
     use crate::enrichment::pipeline::types::{PhaseFailure, PhaseFailureKind, PipelinePhase};
 
     let name_index = build_name_index(entities);
@@ -1219,6 +1306,24 @@ pub fn resolve_step_3b(
         }
     }
 
+    // 1b. Role States. `ruler role_of person` made the atom a person in Step
+    //     3a; the role itself is a condition that person is IN, so it lands
+    //     here, in the same shape an extracted state has — which is what lets
+    //     the trajectory pass at the end chain two mentions of a role into a
+    //     Transition without knowing anything about ontologies.
+    let roles = emit_role_states(
+        policy,
+        sections,
+        entities,
+        &name_index,
+        &token_index,
+        states.len() + 1,
+        edges.len() + 1,
+    );
+    states.extend(roles.states);
+    edges.extend(roles.edges);
+    failures.extend(roles.failures);
+
     // 2. Relations (one Relation per distinct participant-set from
     //    RelationSketch introductions). Dedup across sections on
     //    sorted-participant-ids key.
@@ -1251,6 +1356,33 @@ pub fn resolve_step_3b(
                 );
                 continue;
             }
+            // A declared relation says what is at each end. When the atoms
+            // that resolved there are not those types, the relation is not
+            // the one the recipe declared — drop it and say why, rather than
+            // writing a link the author's own declaration contradicts.
+            let declared_type = sketch.relation_type.as_deref().filter(|t| !t.is_empty());
+            if let Some(rel_type) = declared_type {
+                if let Err(reason) =
+                    check_relation_endpoints(policy, rel_type, &participant_ids, entities)
+                {
+                    debug!(
+                        relation_type = rel_type,
+                        %reason,
+                        "atlas/resolution 3b: relation endpoint type mismatch; dropping"
+                    );
+                    failures.push(PhaseFailure {
+                        phase: PipelinePhase::Questions,
+                        subject: format!(
+                            "sketch:relation_introduced:{}#{}",
+                            section.section_id, sketch_index
+                        ),
+                        kind: PhaseFailureKind::EndpointTypeMismatch,
+                        reason,
+                        raw_response_head: None,
+                    });
+                    continue;
+                }
+            }
             let key = relation_key(&participant_ids);
             if relation_key_to_id.contains_key(&key) {
                 continue;
@@ -1258,12 +1390,14 @@ pub fn resolve_step_3b(
             let rel_id = super::atoms::AtomId::relation(relations.len() + 1);
             relation_key_to_id.insert(key, rel_id.clone());
             relations.push(super::atoms::Relation {
-                attributes: Default::default(),
+                attributes: sketch.attributes.clone(),
                 id: rel_id.clone(),
                 label: sketch.label.trim().to_string(),
                 participants: participant_ids.clone(),
+                // The author's noun when the recipe declared one; Phase 5's
+                // job otherwise.
                 relation_type: crate::enrichment::pipeline::atlas::RelationType::Other(
-                    "unclassified".into(),
+                    declared_type.unwrap_or("unclassified").to_string(),
                 ),
                 evidence: sketch_anchor_evidence(&section.section_id, &sketch.anchor),
                 section_range: super::atoms::SectionRange::point(section.section_id.clone()),
@@ -1412,6 +1546,27 @@ pub fn resolve_step_3b(
                 }
                 resolved
             });
+            // `subject` is the referent, `attributed_to` the voice — two
+            // different questions, resolved the same way, because "which atom
+            // does this name mean" has one answer in this file (§10.6).
+            let subject = sketch.subject.as_ref().and_then(|name| {
+                let resolved =
+                    resolve_entity_id_with_salience(name, entities, &name_index, &token_index);
+                if resolved.is_none() {
+                    failures.push(PhaseFailure {
+                        phase: PipelinePhase::Questions,
+                        subject: format!("sketch:claim:{}#{}", section.section_id, sketch_index),
+                        kind: PhaseFailureKind::UnresolvedClaimSubject,
+                        reason: format!(
+                            "claim subject `{}` did not resolve (claim content: `{}`)",
+                            name,
+                            sketch.content.trim()
+                        ),
+                        raw_response_head: None,
+                    });
+                }
+                resolved
+            });
             let evidence = sketch_anchor_evidence(&section.section_id, &sketch.anchor);
             // Carry the anchor onto the persisted atom. Empty-string
             // anchors collapse to `None` so the renderer can branch on
@@ -1431,27 +1586,37 @@ pub fn resolve_step_3b(
                 }
             };
             claims.push(super::atoms::Claim {
-                attributes: Default::default(),
-                subject: None,
+                attributes: sketch.attributes.clone(),
+                subject: subject.clone(),
                 id: claim_id.clone(),
                 content: sketch.content.trim().to_string(),
                 discourse_act: sketch.discourse_act.clone(),
                 epistemic_status: sketch.epistemic_status.clone(),
-                // Scope defers to Phase 5 (sketches dropped it per
-                // the slim schema). Fictional is the literary default.
-                scope: crate::enrichment::pipeline::atlas::ClaimScope::Fictional,
+                // A declared claim type FIXES the scope, and the reader put it
+                // on the sketch. Absent that, scope defers to Phase 5 and
+                // Fictional stays the literary default.
+                scope: sketch
+                    .scope
+                    .clone()
+                    .unwrap_or(crate::enrichment::pipeline::atlas::ClaimScope::Fictional),
                 evidence: evidence.clone(),
                 quotable_excerpt: sketch.quotable_excerpt.clone(),
                 attributed_to: attributed_to.clone(),
                 // Derived — Phase 5 will replace with LLM score.
                 confidence: None,
                 anchor,
-                claim_kind: None,
+                // The declared claim type. `claim_kind` is the ONE carrier of
+                // it (§10.6) — the projection reads it as the atom's subtype
+                // and the tension selector reads it as the type name.
+                claim_kind: sketch.claim_kind.clone(),
                 concession_outcome: None,
                 evidence_kind: None,
                 enrichment_depth: section.enrichment_depth,
             });
-            if let Some(entity_id) = attributed_to {
+            // One Involves per resolved link. The voice and the referent are
+            // both entities the claim involves; a reader seeded on either
+            // finds the claim.
+            for entity_id in [attributed_to, subject].into_iter().flatten() {
                 edges.push(Edge {
                     id: EdgeId::new(edges.len() + 1),
                     edge_type: EdgeType::Involves,
@@ -1613,6 +1778,13 @@ pub fn resolve_step_3b(
         );
     }
 
+    // 7. Declared `ref` attributes become atom ids. Last, because it reads
+    //    the finished entity set and writes nothing into this pass's atoms —
+    //    the caller applies the updates to the Step 3a entities it owns.
+    let (entity_attribute_updates, ref_failures) =
+        snap_ref_attributes(policy, entities, &name_index, &token_index);
+    failures.extend(ref_failures);
+
     Ok(Step3bOutput {
         states,
         relations,
@@ -1622,6 +1794,7 @@ pub fn resolve_step_3b(
         edges,
         trajectories,
         failures,
+        entity_attribute_updates,
     })
 }
 

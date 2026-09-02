@@ -333,6 +333,9 @@ impl EnrichProgress {
             super::types::PhaseFailureKind::UnresolvedClaimAttribution => {
                 "unresolved_claim_attribution"
             }
+            super::types::PhaseFailureKind::EndpointTypeMismatch => "endpoint_type_mismatch",
+            super::types::PhaseFailureKind::UnresolvedClaimSubject => "unresolved_claim_subject",
+            super::types::PhaseFailureKind::UnresolvedAttributeRef => "unresolved_attribute_ref",
             super::types::PhaseFailureKind::NoClusterableItems => "no_clusterable_items",
             super::types::PhaseFailureKind::ClusterNamingFailed => "cluster_naming_failed",
             super::types::PhaseFailureKind::Other => "other",

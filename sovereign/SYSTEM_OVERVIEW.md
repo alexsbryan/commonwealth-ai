@@ -1203,8 +1203,11 @@ means one thing.
   declarations composes version-0 bytes) is structural rather than
   remembered; the pin is `tests/main/ontology_prompt_snapshots.rs`.
   `enrichment/ontology/type_index.rs` is the one `specializes` walk
-  (`is_a`, `effective_attributes`), read by both the schema generator and
-  the parser. **Axes 4 and 5 reach the pipeline at Phase 6, Phase 8 and the
+  (`is_a`, `effective_attributes`, plus `rigid_type_of` / `endpoints` /
+  `participants` / `effective_identity*` / `generic_ancestor`), read by the
+  schema generator, the parser, the resolver, the reconciler and the
+  enumeration planner.
+  **Axes 4 and 5 reach the pipeline at Phase 6, Phase 8 and the
   governance fold (ontology-v1 P4).** Three small modules under
   `atlas/analysis/` carry it: `tension_policy.rs` (what the DECLARATION
   removes), `tension_fields.rs` (how a `same` field is read off a claim and
@@ -1300,7 +1303,37 @@ means one thing.
   `atom_attributes_suffix` — called by BOTH renderers, since the daemon's bag
   loader forks `render_atom_entry`) and `SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS`
   (`AtlasContextFilter.include_declared_claim_types`, keyed into `signature()`).
-  Design:
+  Resolution reads the same policies
+  through `ResolutionPolicy` (`atlas/resolution_ontology.rs`), which is what
+  makes a declaration RESOLVE (ontology-v1 P3): a mention typed as a
+  `role_of` role produces an atom of the rigid type and a `State` carrying
+  the role (so the existing trajectory pass chains repeat mentions into
+  `Transition`s); a declared relation's `from`/`to` and a declared event's
+  `participants` are type-checked against the atoms they resolved to, with a
+  mismatch dropped and recorded as `PhaseFailureKind::EndpointTypeMismatch`;
+  a claim's `subject` resolves the way `attributed_to` always has
+  (`UnresolvedClaimSubject`) and gets its own `Involves` edge; and declared
+  `ref` attributes snap to atom ids, an unresolvable one keeping the name
+  plus an `UnresolvedAttributeRef` record. `resolve_step_3b` /
+  `resolve_entities_and_events` stay as shims over the `_with` forms, so
+  every version-0 corpus runs the code it always did. Identity is the
+  reconciler's half: `ReconciliationPolicy.identity` carries the per-type
+  keys flattened through `specializes`
+  (`TypeIndex::effective_identity_policy`), `signals_for_policy` adds
+  `ExternalIdSignal` (STRICT — it alone satisfies the cross-origin gate) and
+  `DescriptiveKeySignal` (one ordinary signal), the blocking pass buckets on
+  declared key values so an identifier match survives entirely different
+  names, and each merge is reified as a `same_as` Claim with `Involves` /
+  `Grounds` edges (`reify_merges` → `writer::append_atoms_and_edges`) — for
+  a DECLARED corpus only, which is why `bench enron` B³ is a leak detector
+  for this phase. `enrich schema-report` gains a ninth dimension
+  (`SchemaValidationReport.ontology`, report SCHEMA_VERSION 2.1): per-type
+  counts with and without subtypes, the identity criterion per type, merges,
+  `same_as` claims, claims of a subject-declaring type with no subject, and a
+  `coverage:zero:<type>` gap signature. The resolve step writes
+  `atlas/ontology.json` (`writer::write_atlas_ontology`) so the atlas dir
+  records what it was extracted under, and `_summary.json` (SCHEMA_VERSION 3)
+  carries an `OntologySummary` read back from it. Design:
   `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md`, `ONTOLOGY_MIGRATION.md`.
   State at `~/.svrnmesh/indexes/<corpus>/atlas/`. Deep-dive:
   [`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md). Beyond the LLM
@@ -5254,7 +5287,8 @@ Default ports:
 | Understand local-corpus snapshot/rollback        | `sovereign-tools/src/local_corpus/writeback.rs` + `frontmatter.rs`  |
 | Pick the next daemon test to write               | [`docs/TESTING_SURFACE.md`](./docs/TESTING_SURFACE.md)              |
 | Add a binary-bearing corpus (email / .docx / .xlsx / future calendar / transactions) | `corpus-engine/src/extractors/described_asset.rs` — register an `AssetSubExtractor` via `CorpusEngine::set_asset_sub_extractors`; the in-tree defaults cover xlsx / docx / plaintext / opaque |
-| Read or extend the multi-origin reconciliation primitive | `corpus-engine/src/enrichment/reconciliation/{mod,multi_origin,oplog,signals}.rs` — operates on `Vec<Entity>` with `Provenance` (AD-4); writes `atlas/reconciliation_oplog.jsonl` reversible op log |
+| Read or extend the multi-origin reconciliation primitive | `corpus-engine/src/enrichment/reconciliation/{mod,multi_origin,oplog,signals}.rs` — operates on `Vec<Entity>` with `Provenance` (AD-4); writes `atlas/reconciliation_oplog.jsonl` reversible op log. `ReconciliationPolicy.identity` (ontology-v1 P3) carries declared per-type identity keys; empty for every undeclared corpus, and only then is the signal stack `default_signals` term for term |
+| Add an atom to an atlas after `write_atlas_full` ran | `writer::append_atoms_and_edges` — reads both JSON files, extends, rewrites, and rebuilds the v2 store from the merged set (the store is the read path; writing only `atoms.json` leaves it short). Ids are the caller's problem |
 | Score a clustering of mention-ids vs ground truth (B³ + pairwise-F1) | `sovereign-eval/src/entity_resolution_score.rs` (scorer) + `entity_resolution_bench.rs` (Split/peek-budget) |
 | Run the Phase 5 Enron measurement loop | `svrn bench enron run --corpus enron-sample-onemailbox --split train --policy {pre_reconciliation\|tuned}` → `sovereign-cli-llm/src/bench_cmd/enron.rs` |
 | Add another typed Entity column-extractor for tabular asset kinds | `corpus-engine/src/extractors/column_aware.rs` — extend `ColumnHeaderMap` or write a per-asset-kind extractor reading the parquet parsed-form cache directly |
@@ -5691,6 +5725,51 @@ What the re-freeze accepted, all of it already on `origin/main`:
 | Daemon bootstrap | `sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs` (2,672 → 2,786) | Child-process supervision + RPC-worker spawn + manifest refresh cohere as one startup state machine; splits when the compute-child boundary takes the worker half. |
 | corpus-engine engine | `corpus-engine/src/engine/mod.rs` (3,804 → 3,879) | Under the 10-crate decomposition (`corpus-engine/DECOMPOSITION.md`); this file shrinks by carve-out, not by a local split. |
 | Newly oversized, no prior row | `commonwealth-api/src/server.rs` (1,253), `sovereign-cli-daemon/src/setup_cmd/mod.rs` (1,287), `sovereign-mesh/src/oicp_synthesis.rs` (1,266), `sovereign-cli/tests/main/cli_contract_journeys.rs` (1,201) | Four files crossed 1,200 during the 2026-08 arcs. All are within 90 lines of the ceiling and each splits along an obvious seam (route families, setup targets, synthesis stages, journey families) — first candidates when the queue is worked. |
+
+### 10.1f Size — 2026-09-02 `resolution.rs` is +217 over its baseline, and P3 could not buy that back (ontology-v1 P3)
+
+**The number.** `arch-gate` reports
+`corpus-engine/src/enrichment/atlas/resolution.rs 5173 → 5390 (+217, slack
+50)`. Split three ways: the baseline snapshot is 5173, the file was **5217** at
+P3's branch point `cf160813f` (P0-P2 spent 44 of the 50-line slack before P3
+started), and P3's own net is **+173**.
+
+**What was tried, and what it bought.** P3 moved everything it could out of the
+file rather than growing it and asking for the baseline:
+
+| move | out of `resolution.rs` | into |
+|---|---|---|
+| the four declared-resolution behaviour tests | −343 | `tests/main/ontology_resolution_e2e.rs` (418) |
+| `emit_role_states` (the State + Involves + Grounds emission) | −31 | `atlas/resolution_ontology.rs` (711) |
+
+Two more cuts were taken in the same phase for the same reason, and they
+cleared the OTHER arch-gate failure outright — the 800-1200 approach band went
+from `157588` (+313 over baseline) back to **155760**, its value at the branch
+point and 1,515 lines *below* the baseline:
+
+| move | out of | into |
+|---|---|---|
+| the two declared-identity signals | `reconciliation/signals.rs` 875 → 720 | `reconciliation/identity_signals.rs` (164) |
+| `reify_merges` | `reconciliation/multi_origin.rs` 950 → 654 | `reconciliation/reified.rs` (137) |
+| the three identity behaviour tests | (same file) | `tests/main/ontology_identity_e2e.rs` (228) |
+| the ninth schema dimension | `atlas/schema_validation.rs` 1666 → 1488 | `atlas/ontology_coverage.rs` (186) |
+
+**Why the residual stands.** What is left in `resolution.rs` is the
+declared-ontology logic that is INSIDE `resolve_step_3b_with`'s existing loops
+— the claim `subject` resolution, the relation endpoint check, the ref-snap
+call — plus the doc comments on the two `_with` entry points. Moving those
+would push `resolution_ontology.rs` from 711 to ~792, one line under the
+approach band's floor, trading a named overage for an unnamed one. And even a
+P3 that added ZERO lines would leave the file at 5217, six lines inside slack:
+the honest fix is not a smaller P3, it is a split of a 5,390-line file that has
+been 4.5x ARCH §3.1's ceiling since before this program began.
+
+**The decision this row asks for.** Accept the +217 with `arch-gate
+--update-baseline` and schedule the `resolution.rs` split as its own order —
+the same disposition §10 already carries for `pipeline/atlas.rs`, and for the
+same reason: the gate's approach band rejects any residual that lands inside
+it, so the file has to go from >1200 to <800 in one move and cannot be taken
+in steps while ontology-v1's waves are in flight.
 
 ### 10.1e Placement — 2026-09-01 the orchestrator moved below the hosts (ontology-v1 P0.4 → P0.5)
 

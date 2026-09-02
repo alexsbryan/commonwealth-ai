@@ -64,6 +64,7 @@ use super::atoms::{
 };
 use super::cross_corpus::CrossCorpusEdgesFile;
 use super::edges::{Edge, EdgeType, EdgesFile};
+use super::ontology_coverage::{build_ontology_coverage, OntologyCoverage};
 use crate::enrichment::pipeline::atlas::{DiscourseAct, EnrichmentDepth};
 
 // ── Report types ─────────────────────────────────────────────
@@ -84,10 +85,21 @@ pub struct SchemaValidationReport {
     pub discourse: DiscourseDistribution,
     pub cross_corpus: CrossCorpusConnectivity,
     pub gaps: DeterministicGapCounts,
+    /// Ninth dimension, present only when the corpus DECLARED an ontology:
+    /// did the author's own types come out the other end, and under what
+    /// identity criterion. Absent — not zeroed — for every version-0 corpus,
+    /// because "this corpus declares nothing" and "this corpus declared types
+    /// and got none" are different findings (§18.3).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ontology: Option<OntologyCoverage>,
 }
 
 impl SchemaValidationReport {
-    pub const SCHEMA_VERSION: &'static str = "2.0";
+    /// History:
+    /// - `2.0` — the eight dimensions.
+    /// - `2.1` — added the optional `ontology` dimension (ontology v1, P3).
+    ///   Additive and optional, so a 2.0 report still deserialises.
+    pub const SCHEMA_VERSION: &'static str = "2.1";
 
     /// Collect every gap signature this report carries. Used by
     /// `compare_across_corpora` — any signature present in ≥ 2
@@ -102,6 +114,9 @@ impl SchemaValidationReport {
         out.extend(self.discourse.gap_signatures());
         out.extend(self.cross_corpus.gap_signatures());
         out.extend(self.gaps.gap_signatures());
+        if let Some(o) = &self.ontology {
+            out.extend(o.gap_signatures());
+        }
         out
     }
 }
@@ -342,6 +357,15 @@ pub struct SchemaValidationInput<'a> {
     pub open_questions: usize,
     pub ungrounded_claims: usize,
     pub transitions_without_trigger: usize,
+    /// The atlas's own `ontology.json` (what `read_atlas_ontology` returns)
+    /// paired with the merge count from `reconciliation.json`.
+    ///
+    /// One field, because a merge count means nothing without a declaration —
+    /// only a declared corpus reports one. `None` on the outside means the
+    /// corpus declares nothing and the ninth dimension is absent from the
+    /// report; `None` on the inside means reconciliation has not been run,
+    /// which is not zero merges (§18.3).
+    pub ontology: Option<(&'a super::writer::AtlasOntologyFile, Option<usize>)>,
 }
 
 /// Compute the §12 validation report for one corpus. Pure —
@@ -389,6 +413,10 @@ pub fn build_report(input: SchemaValidationInput<'_>) -> SchemaValidationReport 
         total_questions: questions.len(),
     };
 
+    let ontology = input
+        .ontology
+        .map(|(file, merges)| build_ontology_coverage(file, &input.atoms.atoms, merges));
+
     // Section count: union of section_ids across evidence. Cheap
     // proxy for "how long is the corpus".
     let mut sections: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -414,6 +442,7 @@ pub fn build_report(input: SchemaValidationInput<'_>) -> SchemaValidationReport 
         discourse,
         cross_corpus,
         gaps,
+        ontology,
     }
 }
 
@@ -1086,6 +1115,7 @@ mod tests {
             open_questions: 0,
             ungrounded_claims: 0,
             transitions_without_trigger: 0,
+            ontology: None,
         });
         assert_eq!(report.extraction.total_atoms, 1);
         let sig_list = report.extraction.gap_signatures();
@@ -1111,6 +1141,7 @@ mod tests {
             open_questions: 0,
             ungrounded_claims: 0,
             transitions_without_trigger: 0,
+            ontology: None,
         });
         assert!(report.confidence.low_confidence_fraction > 0.5);
         assert!(report
@@ -1143,6 +1174,7 @@ mod tests {
             open_questions: 0,
             ungrounded_claims: 0,
             transitions_without_trigger: 0,
+            ontology: None,
         });
         assert_eq!(report.discourse.top_act.as_deref(), Some("assert"));
         assert!(report.discourse.top_fraction >= 0.90);
@@ -1309,6 +1341,7 @@ mod tests {
             open_questions: 0,
             ungrounded_claims: 9,
             transitions_without_trigger: 0,
+            ontology: None,
         });
         assert!(
             report
@@ -1335,6 +1368,7 @@ mod tests {
             open_questions: 0,
             ungrounded_claims: 0,
             transitions_without_trigger: 0,
+            ontology: None,
         });
         assert!(
             !report
@@ -1369,6 +1403,7 @@ mod tests {
             open_questions: 0,
             ungrounded_claims: 2, // 2/2 claims = 100%, over 50%
             transitions_without_trigger: 0,
+            ontology: None,
         });
         let report_b = build_report(SchemaValidationInput {
             corpus_id: "b",
@@ -1378,6 +1413,7 @@ mod tests {
             open_questions: 0,
             ungrounded_claims: 10, // 10/10 claims = 100%
             transitions_without_trigger: 0,
+            ontology: None,
         });
 
         let cmp = compare_across_corpora(&[report_a, report_b]);
@@ -1418,6 +1454,7 @@ mod tests {
             open_questions: 0,
             ungrounded_claims: 0,
             transitions_without_trigger: 0,
+            ontology: None,
         });
         assert!(report
             .utilisation
@@ -1442,6 +1479,7 @@ mod tests {
             open_questions: 0,
             ungrounded_claims: 0,
             transitions_without_trigger: 0,
+            ontology: None,
         });
         // Bucket 3 (0.3–0.4) has 1; bucket 9 (0.9–1.0) has 1.
         assert_eq!(report.confidence.buckets[3], 1);

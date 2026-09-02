@@ -453,19 +453,59 @@ pub fn read_atlas_edges(atlas_dir: &Path) -> io::Result<EdgesFile> {
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("parse edges.json: {e}")))
 }
 
-/// Replace `atlas/atoms.json` with the provided file. The atom-side
-/// companion to [`write_atlas_edges`], and used the same way: Phase 6's
-/// classifier appends the `same_as` Claims an `equivalent` verdict reifies
-/// without re-running [`write_atlas_full`], which would need every atom
-/// kind partitioned back out of the envelope list it just read.
+/// Replace `atlas/atoms.json` with the provided file, and rebuild the v2
+/// store from it. The atom-side companion to [`write_atlas_edges`]: Phase 6's
+/// classifier replaces the atom set with one carrying the `same_as` Claims an
+/// `equivalent` verdict reifies, dropping what a prior run wrote, so it cannot
+/// use [`append_atoms_and_edges`] — the contract is REPLACE, not append.
 ///
-/// Atomic: sibling `.tmp` + rename, so a crash leaves the pre-existing
-/// file intact rather than truncated.
+/// It rebuilds `atoms.lance` for the same reason that function does, and the
+/// reason is worth stating once for both: `atoms.json` is the export and the
+/// store is what the runtime reads. Writing only the JSON leaves the read path
+/// missing atoms the export claims are there, silently, until something
+/// queries for one. (Merging P3 and P4 on 2026-09-02 put the two writers side
+/// by side and made the omission visible; the appending one had it right.)
+///
+/// The JSON write is atomic — sibling `.tmp` + rename — so a crash leaves the
+/// pre-existing file intact rather than truncated. The pair is not atomic
+/// ACROSS the two artefacts: the store is rebuilt after the rename, which is
+/// the ordering `write_atlas_full` and `append_atoms_and_edges` both use.
 pub fn write_atlas_atoms(atlas_dir: &Path, atoms: &AtomsFile) -> io::Result<PathBuf> {
     fs::create_dir_all(atlas_dir)?;
     let path = atlas_dir.join("atoms.json");
     write_atomic(&path, atoms)?;
+    let edges_file = read_atlas_edges(atlas_dir)?;
+    write_atlas_v2_store(atlas_dir, &atoms.atoms, &edges_file.edges)?;
     Ok(path)
+}
+
+/// Append atoms and edges to a written atlas, keeping the v2 store in step.
+///
+/// The one supported way to add to an atlas after `write_atlas_full` ran.
+/// Reconciliation is the first caller: it runs over a resolved atlas and
+/// reifies each merge as a `same_as` Claim, which has to reach the same
+/// `atoms.lance` the runtime reads — writing only `atoms.json` would leave the
+/// read path missing atoms the export claims are there.
+///
+/// Not atomic ACROSS the three artefacts (JSON, JSON, store): each is written
+/// through its own rename, and the store is rebuilt last from the merged set,
+/// which is the same ordering `write_atlas_full` uses. Ids are the caller's
+/// problem — nothing here renumbers.
+pub fn append_atoms_and_edges(
+    atlas_dir: &Path,
+    atoms: &[AtomEnvelope],
+    edges: &[Edge],
+) -> io::Result<()> {
+    if atoms.is_empty() && edges.is_empty() {
+        return Ok(());
+    }
+    let mut atoms_file = read_atlas_atoms(atlas_dir)?;
+    let mut edges_file = read_atlas_edges(atlas_dir)?;
+    atoms_file.atoms.extend(atoms.iter().cloned());
+    edges_file.edges.extend(edges.iter().cloned());
+    write_atomic(&atlas_dir.join("atoms.json"), &atoms_file)?;
+    write_atomic(&atlas_dir.join("edges.json"), &edges_file)?;
+    write_atlas_v2_store(atlas_dir, &atoms_file.atoms, &edges_file.edges)
 }
 
 /// Replace `atlas/edges.json` with the provided file. Used by Phase

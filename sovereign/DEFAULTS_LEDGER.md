@@ -30,6 +30,31 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### Reified merges — ON for a DECLARED corpus, OFF everywhere else (2026-09-02)
+
+**What ships.** `svrn enrich reconcile` writes one `same_as` Claim per merge
+(plus `Involves` / `Grounds` edges) when — and only when — the atlas's
+`ontology.json` declares types. An undeclared corpus keeps today's silent
+merge: `atoms.json` is unchanged and only the oplog records what collapsed.
+
+**Why not always-on.** Enron is the reconciler's only measured corpus and it
+declares nothing. Reifying its merges would add a Claim atom per cluster to
+`atoms.json`, which the B³ lane does not read — but the atlas it reads would no
+longer be the one the baseline was minted on, and "probably fine" is not a
+measurement (§18.5). **The condition that flips it:** two `bench enron` runs on
+the always-on build with B³ unmoved. That bench is also what P3 pre-registered
+as its own leak detector, so the run is already on the board.
+
+**One thing this row is NOT.** The grade on a reified merge is `external` or
+`signal_gated` — never "judged". `ONTOLOGY_PRIMITIVES.md` calls the non-strict
+path judged, and `ReconciliationPolicy.judge_when_uncertain` defaults to `true`,
+but `enrich reconcile` installs no judge (`reconcile` takes no `InferenceFn`),
+so what actually decides a non-strict merge today is the signal-count gate. The
+word is not a default that can be flipped; it is a capability that does not
+exist yet, and grading a merge by a judge that never ran would be the
+well-formed false result §18.3 forbids. When a judge lands it produces a THIRD
+grade, and this paragraph is what says so.
+
 ### `[node] entry` — keyed on an ADDRESS, not a node id — **CLOSED 2026-08-31**
 
 **Repaid.** A terminal now binds its entry node by mesh identity
