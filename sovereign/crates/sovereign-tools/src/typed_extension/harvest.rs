@@ -15,7 +15,8 @@
 
 use std::collections::HashMap;
 
-use corpus_engine::enrichment::atlas::atoms::Entity;
+use corpus_engine::enrichment::atlas::atoms::{AtomId, Entity};
+use corpus_engine::enrichment::pipeline::atlas::EnrichmentDepth;
 use sovereign_core::conv_tiered::{ConvRaptorNodeRow, VaultThemeRow};
 
 use super::pass;
