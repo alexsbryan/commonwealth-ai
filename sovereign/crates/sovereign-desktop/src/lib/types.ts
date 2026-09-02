@@ -2441,6 +2441,16 @@ export interface RestoreCheckpointOutcome {
 // /atlas index route. Mirrors `sovereign_tools::atlas_view::reader::
 // AtlasCorpusSummary` — keep in sync.
 
+/** Every atom KIND the backend can emit. Mirrors
+ *  `corpus_engine::enrichment::atlas::atoms::AtomType` — all ELEVEN
+ *  variants, not the eight this union carried until 2026-09-02.
+ *
+ *  The missing three were not inert: `AtomDetail` dispatches its body
+ *  on `atom.atom_type`, so a Position / Opposition / Asset fell off the
+ *  end of the `{#if}` chain and rendered an EMPTY body — and, because
+ *  `ATOM_TYPE_LABEL[t]` was `undefined` for them, a blank type pill
+ *  beside it. No error, no boundary trip, just a page with nothing on
+ *  it. Widen here and the label maps + body components follow. */
 export type AtomType =
   | "Entity"
   | "Event"
@@ -2449,7 +2459,30 @@ export type AtomType =
   | "Claim"
   | "Question"
   | "Configuration"
-  | "ArgumentReconstruction";
+  | "ArgumentReconstruction"
+  | "Position"
+  | "Opposition"
+  | "Asset";
+
+/** One declared type, as the viewer needs it. Mirrors
+ *  `sovereign_tools::atlas_view::reader::DeclaredTypeRow`. */
+export interface DeclaredTypeRow {
+  /** The author's noun, exactly as declared — also the key into
+   *  `AtlasCorpusSummary.subtype_counts` and the value the browse
+   *  filter's `subtype` matches. */
+  name: string;
+  /** The atom kind this type specializes (`entity`, `claim`, …),
+   *  lowercase. NOT an `AtomType`: a `role_of` type declares
+   *  `kind = "entity"` and lands as `State` atoms. */
+  kind: string;
+  /** The declared type this one specializes, when it declares one.
+   *  One level per row — walk it for the transitive closure. */
+  specializes?: string;
+  /** `external:<keys>` / `fallback:<keys>`, or absent when the type
+   *  resolves on its canonical name (the reported default). */
+  identity_criterion?: string;
+}
+
 
 export interface AtlasCorpusSummary {
   corpus_id: string;
@@ -2471,10 +2504,91 @@ export interface AtlasCorpusSummary {
   /** Icon hint from the recipe's `[display]` block. Free-form
    *  string; the frontend maps known values onto its icon set. */
   display_icon?: string;
+  /** The author's own nouns and how many atoms carry each. Absent from
+   *  the wire (hence `?`) for every corpus that declares nothing.
+   *
+   *  Counts are OWN, not rolled up: on `wessex-hoard`, `coin` is 13 and
+   *  does NOT include the 2 `sceatta`s. `derivePills` does the roll-up
+   *  using `declared_types[].specializes`. */
+  subtype_counts?: Record<string, number>;
+  /** What this corpus declared. Absent when it declared nothing —
+   *  which is what tells a viewer to fall back to the generic atom
+   *  kinds rather than render an empty ontology. */
+  declared_types?: DeclaredTypeRow[];
+}
+
+
+// ─── Build report (ontology v1) ──────────────────────────────
+//
+// What the LAST build found about a declared corpus. Read from the
+// artefacts a build already writes (`schema_validation.json`, the ANN
+// table's freshness) rather than recomputed — so this is a VERDICT
+// with an age, not a live measurement. Mirrors
+// `sovereign_tools::atlas_view::reader::AtlasBuildReport` and
+// `corpus_engine::…::ontology_coverage::OntologyCoverage`.
+
+/** Atoms carrying one declared type. Counted by SUBTYPE across every
+ *  atom kind, not within `kind` — a `role_of` type is declared
+ *  `kind = "entity"` and produces `State` atoms. */
+export interface DeclaredTypeCount {
+  kind: string;
+  name: string;
+  /** Atoms whose subtype IS this name. */
+  count: number;
+  /** …or any `specializes` descendant of it. */
+  count_with_subtypes: number;
+}
+
+/** What makes two mentions of a declared type one thing. */
+export interface IdentityCriterion {
+  type_name: string;
+  /** `external:<keys>`, `fallback:<keys>`, or `default:canonical_name`
+   *  — the last being stated rather than left blank. */
+  criterion: string;
+}
+
+/** How much of one declared attribute the build actually filled.
+ *
+ *  `atoms > 0 && with_slot === 0` is a DECLARATION defect, not a model
+ *  failure: the type's atoms have no attributes slot (a `role_of` type
+ *  lands as a State). `with_slot > 0 && filled === 0` is the model
+ *  never filling it. The two need different fixes, so the card must
+ *  not average them together. */
+export interface AttributeFill {
+  type_name: string;
+  attribute: string;
+  atoms: number;
+  with_slot: number;
+  filled: number;
+}
+
+export interface OntologyCoverage {
+  ontology_version: number;
+  by_type: DeclaredTypeCount[];
+  identity: IdentityCriterion[];
+  /** Clusters the reconciler collapsed. Absent when `svrn enrich
+   *  reconcile` has not run — which is NOT the same as zero merges. */
+  merges?: number | null;
+  same_as_claims: number;
+  claims_missing_subject: number;
+  attribute_fill: AttributeFill[];
+}
+
+export interface AtlasBuildReport {
+  corpus_id: string;
+  /** Whether `schema_validation.json` exists and parsed. `false` means
+   *  the report step never ran — distinct from "ran and found no
+   *  ontology", which is `reported: true` with no `ontology`. */
+  reported: boolean;
+  ontology?: OntologyCoverage;
+  /** The atom-level ANN table exists AND is newer than atoms.json. */
+  grounding_fresh: boolean;
+  grounding_present: boolean;
 }
 
 /** One article in a *collection* notebook's Explore picker. Mirrors
  *  the Rust `AtlasMemberSummary`.
+
  *
  *  A collection corpus is ingested as one index but enriched per
  *  article: SEP's paragraphs live in `sep`, its map lives in 1,769
@@ -2499,7 +2613,20 @@ export interface AtomFilter {
   /** Inclusive lower bound. Only Entity and Configuration carry a
    *  scalar score; other atom types are filtered out when set. */
   min_salience?: number;
+  /** The author's own nouns — declared subtype names, each matched
+   *  EXACTLY against the backend's `subtype_of`. Empty/absent matches
+   *  anything; otherwise an atom passes if its subtype is ANY of these.
+   *  INDEPENDENT of `atom_type`: `ruler role_of person` lands as State
+   *  atoms, so pairing the two would make `ruler` unfindable.
+   *
+   *  A LIST because the server never walks the declared hierarchy. Ask
+   *  for a family by naming it — `["coin", "sceatta"]` is what "how
+   *  many coins" means when one specializes the other. That keeps the
+   *  hierarchy's one decider in the viewer, and keeps a pill's badge
+   *  and the rows its click returns the same question. */
+  subtypes?: string[];
 }
+
 
 export interface PageCursor {
   offset: number;
@@ -2712,7 +2839,16 @@ export interface AtomSummary {
   atom_id: string;
   stable_key: string;
   atom_type: AtomType;
+  /** The author's own noun for this atom, when it has one.
+   *
+   *  An ENTITY always has one — a declared name (`coin`) or one of the
+   *  generic six (`person`, `concept`, …) — so its presence is NOT a
+   *  signal that the corpus declared anything. `undefined` means the
+   *  atom genuinely carries no subtype (an unclassified Relation,
+   *  Event or State). */
+  subtype?: string;
   display_name: string;
+
   salience?: number;
   enrichment_depth: "structural" | "extracted" | "structural_classified";
   evidence_chunk_count: number;
@@ -2758,7 +2894,7 @@ export interface SectionPositionData {
 
 /** Loose typing of per-variant payloads. Each type-body Svelte
  *  component (`EntityBody`, `ClaimBody`, …) narrows the shape it
- *  needs at render time. Avoids modeling all 8 corpus-engine
+ *  needs at render time. Avoids modeling all 11 corpus-engine
  *  structs in TS just to render fields — Phase 1 pragma. */
 export type AtomEnvelope =
   | { atom_type: "Entity"; data: EntityData }
@@ -2768,7 +2904,11 @@ export type AtomEnvelope =
   | { atom_type: "Claim"; data: ClaimData }
   | { atom_type: "Question"; data: QuestionData }
   | { atom_type: "Configuration"; data: ConfigurationData }
-  | { atom_type: "ArgumentReconstruction"; data: ArgumentReconstructionData };
+  | { atom_type: "ArgumentReconstruction"; data: ArgumentReconstructionData }
+  | { atom_type: "Position"; data: PositionData }
+  | { atom_type: "Opposition"; data: OppositionData }
+  | { atom_type: "Asset"; data: AssetData };
+
 
 // NOTE: Vec<>/Option<> fields on the corpus-engine atom structs use
 // `#[serde(default, skip_serializing_if = "...")]`, so empty / None
@@ -2776,11 +2916,28 @@ export type AtomEnvelope =
 // `[]` / `null`. The TS types mark those fields optional so render
 // code uses `?? []` or `?.length` and doesn't crash on undefined.
 
+/** Declared-type attribute values, keyed by the author's attribute
+ *  name. Mirrors the four backend `attributes` maps (Entity, Event,
+ *  Relation, Claim) — the other seven atom kinds have no slot at all,
+ *  which is why a `role_of` type's attributes have nowhere to land.
+ *
+ *  Values are whatever the declaration said: a `quantity` arrives as a
+ *  JSON number, everything else as a string. A `ref` attribute's value
+ *  is an atom id when it resolved (`"entity-0013"`) and free text when
+ *  it did not (`"unidentified continental mint"`) — so a renderer asks
+ *  `referenced_atoms` whether the string names a real atom rather than
+ *  pattern-matching the id shape. */
+export type AtomAttributes = Record<string, string | number | boolean | null>;
+
 export interface EntityData {
   id: string;
   canonical_name: string;
   aliases?: string[];
+  /** The entity's subtype: a declared noun (`coin`) or one of the
+   *  generic six (`person`, `concept`, …). */
   entity_type: string;
+  attributes?: AtomAttributes;
+
   first_appearance: ChunkRefData;
   description: string;
   defining_quote?: string;
@@ -2795,7 +2952,9 @@ export interface EventData {
   id: string;
   description: string;
   event_type: string;
+  attributes?: AtomAttributes;
   participants?: string[];
+
   evidence?: ChunkRefData[];
   section_position: SectionPositionData;
   causal_antecedents?: string[];
@@ -2818,6 +2977,8 @@ export interface RelationData {
   label: string;
   participants: string[];
   relation_type: string;
+  attributes?: AtomAttributes;
+
   evidence?: ChunkRefData[];
   section_range: SectionRangeData;
   enrichment_depth: string;
@@ -2831,10 +2992,22 @@ export interface ClaimData {
   scope: string;
   evidence?: ChunkRefData[];
   quotable_excerpt?: string;
+  /** The VOICE — who said it. */
   attributed_to?: string;
+  /** The REFERENT — the atom the claim is ABOUT, for a declared claim
+   *  type that names a `subject` (ontology v1). Distinct from
+   *  `attributed_to`, and the whole point of declaring such a type:
+   *  an `attribution` claim's subject is the coin it dates. */
+  subject?: string;
+  /** The declared claim type (`attribution`, `rule`, `same_as`) —
+   *  the Claim's subtype. Also carries the typed-extension qualifiers
+   *  (`evidence`, `concession`, …) on undeclared corpora. */
+  claim_kind?: string;
+  attributes?: AtomAttributes;
   confidence?: number;
   enrichment_depth: string;
 }
+
 
 export interface QuestionData {
   id: string;
@@ -2877,8 +3050,63 @@ export interface ArgumentReconstructionData {
   enrichment_depth: string;
 }
 
+/** A NAMED stance the corpus identifies — "the view that X", a thing
+ *  the section names and may reference repeatedly. Distinct from a
+ *  Claim, which is the assertion itself. */
+export interface PositionData {
+  id: string;
+  canonical_name: string;
+  content: string;
+  /** `endorse` | `rebut` | `survey` | `mixed`. A string, not a union:
+   *  the backend carries it as one so future stance refinements land
+   *  without a migration, and readers snap on the four known values. */
+  stance: string;
+  proponent_id?: string;
+  evidence_ids?: string[];
+  first_appearance: ChunkRefData;
+  anchors?: string[];
+  salience: number;
+  enrichment_depth: string;
+}
+
+/** A NAMED X-vs-Y framing the section sets up ("markets vs
+ *  governments"). The `*_label` fields are always populated; the
+ *  `*_atom_id` fields only when the side snapped to a Concept atom. */
+export interface OppositionData {
+  id: string;
+  canonical_label: string;
+  left_atom_id?: string;
+  left_label: string;
+  right_atom_id?: string;
+  right_label: string;
+  axis?: string;
+  framing?: string;
+  first_appearance: ChunkRefData;
+  anchors?: string[];
+  salience: number;
+  enrichment_depth: string;
+}
+
+/** An opaque-bytes object referenced from the atom graph by content
+ *  hash — an attachment, a folder-walked binary, a calendar export. */
+export interface AssetData {
+  id: string;
+  sha256: string;
+  mime: string;
+  original_filename?: string;
+  size: number;
+  /** The dispatcher's self-identified tag (`pdf`, `xlsx`, `opaque`) —
+   *  not the MIME, which can be missing or wrong. */
+  asset_kind: string;
+  described_by?: string;
+  parsed_form?: string;
+  first_seen_source_doc_id?: string;
+  enrichment_depth: string;
+}
+
 export interface EvidenceExcerpt {
   section_id: string;
+
   /** Numeric chunk id from `index.resolve_sections_to_chunks`,
    *  populated by `atlas_get_atom_detail` at the Tauri boundary.
    *  Present → the evidence row is clickable and deep-links into

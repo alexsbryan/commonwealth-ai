@@ -12,25 +12,20 @@
   // the interaction shape is already in place.
 
   import { onMount, untrack, tick } from "svelte";
-  import { atlasListAtoms, atlasSubgraph } from "../../api";
+  import { atlasListAtoms, atlasListCorpora, atlasSubgraph } from "../../api";
   import AtlasGraph from "./AtlasGraph.svelte";
+  import { ATOM_TYPE_LABEL } from "./atomKinds";
+  import { derivePills, type AtomPill } from "./pills";
   import type {
+    AtlasCorpusSummary,
     AtomFilter,
     AtomListPage,
     AtomSummary,
-    AtomType,
     AtlasSubgraph,
   } from "../../types";
 
   interface Props {
     corpusId: string;
-    /** Total atom count for the corpus, passed in by the parent so
-     *  we can render the "X of Y" label without an extra round-trip
-     *  while atoms load. Optional — falls back to the live response. */
-    totalAtomsHint?: number;
-    /** Per-type counts from the picker. Drives the tab badges. Same
-     *  shape as `AtlasCorpusSummary.atom_counts`. */
-    atomCountsHint?: Partial<Record<AtomType, number>>;
     onBack: () => void;
     /** Whether the "Atlas" back control leads anywhere. False when this
      *  view IS the surface root (a notebook's scoped Explore tab, where
@@ -45,44 +40,27 @@
     backLabel?: string;
     /** Drill into a single atom's detail view. */
     onSelectAtom?: (atomId: string) => void;
+    /** This corpus's picker row, when the host already has it. Carries
+     *  the declared types + subtype census the pill row is built from.
+     *  Omitted on the scoped notebook mount, which never sees the
+     *  index — the view fetches its own row in that case. */
+    summary?: AtlasCorpusSummary;
   }
 
   let {
     corpusId,
-    totalAtomsHint,
-    atomCountsHint,
     onBack,
     showBack = true,
     backLabel = "Atlas",
     onSelectAtom,
+    summary,
   }: Props = $props();
-
-  const ATOM_TYPE_ORDER: readonly AtomType[] = [
-    "Entity",
-    "Event",
-    "State",
-    "Relation",
-    "Claim",
-    "Question",
-    "Configuration",
-    "ArgumentReconstruction",
-  ] as const;
-
-  const ATOM_TYPE_LABEL: Record<AtomType, string> = {
-    Entity: "Entity",
-    Event: "Event",
-    State: "State",
-    Relation: "Relation",
-    Claim: "Claim",
-    Question: "Question",
-    Configuration: "Config",
-    ArgumentReconstruction: "Argument",
-  };
 
   const PAGE_LIMIT = 200;
 
   // ─── State ────────────────────────────────────────────────
-  let activeType: AtomType | "all" = $state("all");
+  /** The pill currently narrowing the list, by `AtomPill.key`. */
+  let activePill = $state("all");
   let nameQuery = $state("");
   /** Debounced version of nameQuery actually sent to the backend.
    *  Each keystroke resets the timer; after 200ms of inactivity the
@@ -127,20 +105,72 @@
    *  copy: with no filter applied, "no atoms" is a fact about the
    *  corpus, not about the user's query. */
   const filterActive = $derived(
-    activeType !== "all" || debouncedQuery.trim().length > 0,
+    activePill !== "all" || debouncedQuery.trim().length > 0,
   );
+
+  // ─── The corpus's own row (declared types + censuses) ──────
+  //
+  // `summary` is passed down when the user arrived through the atlas
+  // index, which already listed every corpus. The scoped mount (a
+  // notebook's Explore tab) has no index behind it, so fetch the row
+  // rather than invent a second Tauri command for one corpus — the
+  // list is served from the `_summary.json` sidecars and the index has
+  // called it on every mount since Phase 1 (ARCH §19).
+  let fetchedSummary = $state<AtlasCorpusSummary | null>(null);
+  $effect(() => {
+    const cid = corpusId;
+    if (summary) return;
+    untrack(() => {
+      void atlasListCorpora()
+        .then((rows) => {
+          fetchedSummary = rows.find((r) => r.corpus_id === cid) ?? null;
+        })
+        .catch(() => {
+          // A picker-listing failure must not take out the browse
+          // view: without a row the pills fall back to the generic
+          // kinds with no badges, which is the pre-ontology surface.
+          fetchedSummary = null;
+        });
+    });
+  });
+  let corpusRow = $derived(summary ?? fetchedSummary ?? undefined);
+
+  let pills: AtomPill[] = $derived(
+    derivePills({
+      declaredTypes: corpusRow?.declared_types,
+      subtypeCounts: corpusRow?.subtype_counts,
+      atomCounts: corpusRow?.atom_counts,
+      totalAtoms: corpusRow?.total_atoms,
+    }),
+  );
+
+  /** The declared nouns, for labelling ROWS. A row shows the author's
+   *  noun only when the author declared it: every Entity carries a
+   *  subtype (`person`, `concept`) whether or not anything was
+   *  declared, so labelling rows by subtype unconditionally would
+   *  silently relabel every undeclared corpus in the library. */
+  let declaredNames = $derived(
+    new Set((corpusRow?.declared_types ?? []).map((t) => t.name)),
+  );
+
+  function rowLabel(a: AtomSummary): string {
+    return a.subtype && declaredNames.has(a.subtype)
+      ? a.subtype
+      : ATOM_TYPE_LABEL[a.atom_type];
+  }
 
   // ─── Effects ──────────────────────────────────────────────
   $effect(() => {
     // Re-fire the initial fetch whenever the active filter changes.
-    // Reads `activeType` + `debouncedQuery`; we untrack the actual
+    // Reads `activePill` + `debouncedQuery`; we untrack the actual
     // fetch + state writes so the effect graph stays linear.
-    const _type = activeType;
+    const _pill = activePill;
     const _query = debouncedQuery;
     untrack(() => {
       void initialFetch();
     });
   });
+
 
   $effect(() => {
     // Debounce nameQuery → debouncedQuery. Reset the timer on every
@@ -193,10 +223,17 @@
 
   function buildFilter(): AtomFilter {
     const f: AtomFilter = {};
-    if (activeType !== "all") f.atom_type = activeType;
+    const pill = pills.find((p) => p.key === activePill);
+    // `atom_type` and `subtype` are independent server-side, and a
+    // declared pill sets ONLY `subtype`: `ruler role_of person` lands
+    // as State atoms on Entity-kind people, so pairing the two would
+    // return nothing for the type that landed perfectly.
+    if (pill?.filter.scope === "kind") f.atom_type = pill.filter.kind;
+    if (pill?.filter.scope === "subtype") f.subtypes = pill.filter.subtypes;
     if (debouncedQuery.trim()) f.name_query = debouncedQuery.trim();
     return f;
   }
+
 
   function applyPage(page: AtomListPage, replace: boolean) {
     if (replace) {
@@ -208,11 +245,6 @@
     nextOffset = page.next_offset;
   }
 
-  function countForType(t: AtomType | "all"): number | undefined {
-    if (!atomCountsHint) return undefined;
-    if (t === "all") return totalAtomsHint;
-    return atomCountsHint[t];
-  }
 
   function formatSalience(s: number | undefined): string {
     if (s === undefined) return "";
@@ -308,9 +340,10 @@
       </button>
     {/if}
     <h1 class="corpus-title">{corpusId}</h1>
-    {#if totalAtomsHint !== undefined}
-      <span class="total-hint">{totalAtomsHint.toLocaleString()} atoms</span>
+    {#if corpusRow !== undefined}
+      <span class="total-hint">{corpusRow.total_atoms.toLocaleString()} atoms</span>
     {/if}
+
     <div class="view-toggle" role="group" aria-label="View mode">
       <button
         class="vt-btn"
@@ -328,34 +361,29 @@
   </header>
 
   {#if viewMode === "list"}
-  <nav class="type-tabs" aria-label="Filter by atom type">
-    <button
-      class="tab"
-      class:active={activeType === "all"}
-      type="button"
-      onclick={() => (activeType = "all")}
-    >
-      All
-      {#if countForType("all") !== undefined}
-        <span class="badge">{countForType("all")?.toLocaleString()}</span>
-      {/if}
-    </button>
-    {#each ATOM_TYPE_ORDER as t (t)}
-      {@const count = countForType(t)}
+  <nav class="type-tabs" aria-label="Filter by type" data-testid="atlas-pills">
+    {#each pills as p (p.key)}
       <button
         class="tab"
-        class:active={activeType === t}
+        class:active={activePill === p.key}
+        class:declared={p.declared}
         type="button"
-        disabled={count === 0}
-        onclick={() => (activeType = t)}
+        data-testid="atlas-pill"
+        data-pill={p.key}
+        disabled={p.count === 0}
+        title={p.ownCount !== undefined
+          ? `${p.count} including its subtypes — ${p.ownCount} are ${p.label} itself`
+          : undefined}
+        onclick={() => (activePill = p.key)}
       >
-        {ATOM_TYPE_LABEL[t]}
-        {#if count !== undefined}
-          <span class="badge">{count.toLocaleString()}</span>
+        {p.label}
+        {#if p.count !== undefined}
+          <span class="badge">{p.count.toLocaleString()}</span>
         {/if}
       </button>
     {/each}
   </nav>
+
 
   <div class="search-row">
     <input
@@ -415,9 +443,10 @@
                 aria-label={`Inspect ${a.display_name}`}
               >
                 <div class="atom-header">
-                  <span class="type-pill" data-type={a.atom_type}>
-                    {ATOM_TYPE_LABEL[a.atom_type]}
+                  <span class="type-pill" data-type={a.atom_type} title={a.atom_type}>
+                    {rowLabel(a)}
                   </span>
+
                   <span class="display-name">{a.display_name}</span>
                   {#if a.updated_at != null}
                     <span
@@ -605,6 +634,16 @@
     opacity: 0.4;
     cursor: default;
   }
+
+  /* The author's own nouns read as the corpus's vocabulary, the
+     generic kinds as the system's. The declared half keeps its
+     verbatim casing — `coin`, not `Coin` — because it is the word the
+     author wrote in the recipe. */
+  .tab.declared {
+    border-color: var(--border);
+    color: var(--text-primary);
+  }
+
 
   .badge {
     padding: 1px 6px;

@@ -7,23 +7,32 @@
   // Phase 2 edit affordances slot (empty today).
   //
   // The body dispatch is a {#if} chain over `atom.atom_type` rather
-  // than a registry — 8 known variants, closed set, no extension
+  // than a registry — 11 known variants, closed set, no extension
   // point. Keeping it inline reads faster than chasing through a
   // dynamic component map for the same outcome.
+  //
+  // It listed EIGHT until 2026-09-02, which was not a harmless gap: a
+  // Position / Opposition / Asset atom fell off the end of the chain
+  // and rendered an empty body under a blank pill. Nothing threw, so
+  // the error boundary below never fired and nothing in the UI said
+  // anything was missing. If a twelfth kind lands, its arm belongs
+  // here — `ATOM_TYPE_LABEL` in `./atomKinds` is the other half.
+
 
   import { onMount, setContext } from "svelte";
   import { atlasGetAtomDetail } from "../../api";
   import { readingNavigation } from "../../stores/readingNavigation.svelte";
   import type {
     AtomDetail,
-    AtomType,
     EvidenceExcerpt,
     RelatedAtom,
   } from "../../types";
+
   import {
     ATOM_LINK_CONTEXT_KEY,
     type AtomLinkResolver,
   } from "./AtomLink.svelte";
+  import { ATOM_TYPE_LABEL } from "./atomKinds";
 
   import EntityBody from "./types/EntityBody.svelte";
   import EventBody from "./types/EventBody.svelte";
@@ -33,6 +42,10 @@
   import QuestionBody from "./types/QuestionBody.svelte";
   import ConfigurationBody from "./types/ConfigurationBody.svelte";
   import ArgumentReconstructionBody from "./types/ArgumentReconstructionBody.svelte";
+  import PositionBody from "./types/PositionBody.svelte";
+  import OppositionBody from "./types/OppositionBody.svelte";
+  import AssetBody from "./types/AssetBody.svelte";
+
 
   interface Props {
     corpusId: string;
@@ -50,16 +63,6 @@
 
   let { corpusId, atomId, onBack, onSelectAtom, onAskAbout }: Props = $props();
 
-  const ATOM_TYPE_LABEL: Record<AtomType, string> = {
-    Entity: "Entity",
-    Event: "Event",
-    State: "State",
-    Relation: "Relation",
-    Claim: "Claim",
-    Question: "Question",
-    Configuration: "Configuration",
-    ArgumentReconstruction: "Argument",
-  };
 
   let detail: AtomDetail | null = $state(null);
   let loading = $state(true);
@@ -196,7 +199,14 @@
             <ConfigurationBody data={detail.atom.data} />
           {:else if detail.atom.atom_type === "ArgumentReconstruction"}
             <ArgumentReconstructionBody data={detail.atom.data} />
+          {:else if detail.atom.atom_type === "Position"}
+            <PositionBody data={detail.atom.data} />
+          {:else if detail.atom.atom_type === "Opposition"}
+            <OppositionBody data={detail.atom.data} />
+          {:else if detail.atom.atom_type === "Asset"}
+            <AssetBody data={detail.atom.data} />
           {/if}
+
           {#snippet failed(error)}
             <div class="body-render-error">
               <p>

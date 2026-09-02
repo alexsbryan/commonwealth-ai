@@ -47,9 +47,9 @@ const LIST_ATOMS_HELP: Help = Help {
             "TYPE is one of: Entity, Event, State, Relation, Claim, Question, \
              Configuration, ArgumentReconstruction. NAME is a declared type \
              from the corpus's own ontology (`coin`, `attribution`) or one of \
-             the generic entity kinds (`person`, `concept`); it matches \
-             exactly and does NOT roll up, so a corpus declaring `sceatta \
-             specializes coin` answers the two separately. Default limit is \
+             the generic entity kinds (`person`, `concept`). Each name matches \
+             exactly and nothing rolls up, so ask for the family by naming it: \
+             `--subtype=coin,sceatta`. Default limit is \
              50; pass --limit=0 to dump everything matching.",
         ),
     ],
@@ -151,7 +151,19 @@ pub async fn run_list_atoms(args: &[String]) -> i32 {
     // not an atom KIND: `--subtype=coin` and `--subtype=sceatta` are both
     // Entities, and a `role_of` type lands as a State on a person atom, so
     // folding the two flags together would make `ruler` unaskable.
-    let subtype = parse_flag(args, "--subtype");
+    // Comma-separated so the family is askable in one call — `--subtype=coin`
+    // is the type itself and `--subtype=coin,sceatta` is what "how many coins"
+    // means when one specializes the other. The server never walks the
+    // hierarchy; the caller names it.
+    let subtypes: Vec<String> = parse_flag(args, "--subtype")
+        .map(|s| {
+            s.split(',')
+                .map(str::trim)
+                .filter(|p| !p.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
     let limit: usize = parse_flag(args, "--limit")
         .and_then(|s| s.parse().ok())
         .unwrap_or(50);
@@ -172,7 +184,7 @@ pub async fn run_list_atoms(args: &[String]) -> i32 {
                 atom_type,
                 name_query: name_query.clone(),
                 min_salience: None,
-                subtype: subtype.clone(),
+                subtypes: subtypes.clone(),
             },
             PageCursor {
                 offset,

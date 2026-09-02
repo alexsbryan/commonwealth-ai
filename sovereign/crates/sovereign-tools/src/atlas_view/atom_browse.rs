@@ -33,18 +33,24 @@ pub struct AtomFilter {
     /// Inclusive lower bound. `None` = no minimum.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min_salience: Option<f32>,
-    /// The author's own noun — a declared subtype name, matched EXACTLY
-    /// against `projection::subtype_of` (ontology-v1 P6). Independent of
-    /// `atom_type` like every other field here: a `role_of` type lands as a
-    /// State on a person atom, so requiring the caller to also pick the right
-    /// kind would make `ruler` unfindable.
+    /// The author's own nouns — declared subtype names, each matched EXACTLY
+    /// against `projection::subtype_of` (ontology-v1 P6). Empty matches
+    /// anything; otherwise an atom passes if its subtype is ANY of these.
     ///
-    /// Own only, no roll-up: `subtype = "coin"` does not return `sceatta`
-    /// atoms. A caller that wants the family asks for each name, using the
-    /// `specializes` edges the corpus summary carries — one decider for the
-    /// hierarchy, and it is not this filter (§10.6).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub subtype: Option<String>,
+    /// Independent of `atom_type` like every other field here: a `role_of`
+    /// type lands as a State on a person atom, so requiring the caller to also
+    /// pick the right kind would make `ruler` unfindable.
+    ///
+    /// A LIST rather than one name, because the server must never walk the
+    /// declared hierarchy: `coin` and `sceatta` are separate names here, and a
+    /// caller wanting the family names both. That keeps one decider for the
+    /// hierarchy — the viewer, reading the `specializes` edges the corpus
+    /// summary carries (§10.6) — while letting a "13 coins" badge and the 15
+    /// rows a click returns be the same question asked once. A single-name
+    /// field could not express the family, so the badge and the list
+    /// disagreed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subtypes: Vec<String>,
 }
 
 /// Pagination cursor. Phase 1: simple offset+limit. Future-proof for
@@ -293,8 +299,9 @@ fn filter_and_page(
                 _ => continue,
             }
         }
-        if let Some(want) = filter.subtype.as_deref().filter(|s| !s.is_empty()) {
-            if corpus_engine::enrichment::atlas::projection::subtype_of(atom) != want {
+        if !filter.subtypes.is_empty() {
+            let have = corpus_engine::enrichment::atlas::projection::subtype_of(atom);
+            if !filter.subtypes.iter().any(|w| *w == have) {
                 continue;
             }
         }
@@ -531,7 +538,7 @@ mod tests {
             .list_atoms(
                 "wiki",
                 AtomFilter {
-                    subtype: Some("coin".into()),
+                    subtypes: vec!["coin".into()],
                     ..Default::default()
                 },
                 PageCursor::default(),
@@ -564,7 +571,7 @@ mod tests {
             .list_atoms(
                 "wiki",
                 AtomFilter {
-                    subtype: Some("concept".into()),
+                    subtypes: vec!["concept".into()],
                     ..Default::default()
                 },
                 PageCursor::default(),

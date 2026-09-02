@@ -1177,7 +1177,13 @@ impl AtomEnvelope {
                 .collect(),
             AtomEnvelope::State(a) => vec![&a.entity_id],
             AtomEnvelope::Relation(a) => a.participants.iter().collect(),
-            AtomEnvelope::Claim(a) => a.attributed_to.iter().collect(),
+            // Both reference fields, not just the voice: `attributed_to`
+            // is WHO said it and `subject` is WHAT it is about, and a
+            // declared claim type that names a subject exists for that
+            // second link. Reading only the first left an `attribution`
+            // claim's coin unresolvable, so the desktop rendered the
+            // raw id (`entity-0007`) where the link belongs.
+            AtomEnvelope::Claim(a) => a.attributed_to.iter().chain(a.subject.iter()).collect(),
             AtomEnvelope::Question(a) => {
                 let mut refs: Vec<&AtomId> = a.addressed_by.iter().collect();
                 match &a.resolution_status {

@@ -14,7 +14,8 @@
   import AtlasConvCorpusView from "./AtlasConvCorpusView.svelte";
   import AtomDetail from "./AtomDetail.svelte";
   import ConvDetail from "./ConvDetail.svelte";
-  import type { AtomType } from "../../types";
+  import type { AtlasCorpusSummary } from "../../types";
+
   import { atlasListConvCorpora, atlasListMembers } from "../../api";
   import { atlasNavigation } from "../../stores/atlasNavigation.svelte";
 
@@ -28,10 +29,13 @@
      *  "collection" → AtlasCollectionView (an article picker over
      *  `<id>-<slug>` member atlases; SEP). */
     kind: CorpusKind;
-    /** Per-type counts captured from the picker, so the corpus view
-     *  can render tab badges without re-fetching the summary. */
-    atomCounts?: Partial<Record<AtomType, number>>;
-    totalAtoms?: number;
+    /** The picker's own row for this corpus, so the browse view can
+     *  render its pills (declared types + subtype census + per-kind
+     *  counts) without re-fetching the listing. Absent on the scoped
+     *  notebook mount, which never shows the picker — the browse view
+     *  fetches its own row there. */
+    summary?: AtlasCorpusSummary;
+
     /** When set + kind=collection, the member atlas being explored.
      *  Every atlas call below addresses THIS id, not `corpusId` —
      *  `corpusId` stays the collection so "back" returns to the
@@ -145,18 +149,24 @@
     }
   }
 
-  async function handleSelectCorpus(corpusId: string, kind: CorpusKind) {
+  async function handleSelectCorpus(
+    corpusId: string,
+    kind: CorpusKind,
+    summary?: AtlasCorpusSummary,
+  ) {
+
     // Show the corpus immediately with the picker's own classification,
     // then upgrade to "collection" if this corpus turns out to keep its
     // map in member atlases. Without the re-resolve, picking a
     // collection from the standalone index lands on the empty atom
     // browser — the exact dead end this surface exists to remove.
-    selection = { corpusId, kind };
+    selection = { corpusId, kind, summary };
     if (kind !== "atom") return;
     const resolved = await resolveCorpusKind(corpusId);
     if (resolved === "collection" && selection?.corpusId === corpusId) {
       selection = { corpusId, kind: "collection" };
     }
+
   }
 
   /** Open one article's atlas inside a collection. */
@@ -190,9 +200,9 @@
       corpusId: selection.corpusId,
       kind: selection.kind,
       memberId: selection.memberId,
-      atomCounts: selection.atomCounts,
-      totalAtoms: selection.totalAtoms,
+      summary: selection.summary,
     };
+
   }
 
   function handleBackFromConv() {
@@ -247,8 +257,8 @@
 {:else if selection}
   <AtlasCorpusView
     corpusId={selection.corpusId}
-    atomCountsHint={selection.atomCounts}
-    totalAtomsHint={selection.totalAtoms}
+    summary={selection.summary}
+
     onBack={resetToRoot}
     showBack={!startingCorpusId}
     onSelectAtom={handleSelectAtom}

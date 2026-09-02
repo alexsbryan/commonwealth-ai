@@ -90,3 +90,139 @@ describe("AtomDetail related list", () => {
     expect(screen.getAllByText("Repeated Neighbour").length).toBe(2);
   });
 });
+
+// ─── The author's own nouns, in the inspector ───────────────────
+
+function claimDetail(): AtomDetailData {
+  return {
+    corpus_id: "wessex-hoard",
+    atom_id: "claim-0004",
+    stable_key: "sk-4",
+    atom_type: "Claim",
+    display_name: "struck at Canterbury between 710 and 725",
+    atom: {
+      atom_type: "Claim",
+      data: {
+        id: "claim-0004",
+        content: "struck at Canterbury between 710 and 725",
+        discourse_act: "assert",
+        epistemic_status: "confident",
+        scope: "particular",
+        claim_kind: "attribution",
+        // The VOICE and the REFERENT are different atoms and the whole
+        // reason a declared claim type names a `subject`.
+        attributed_to: "entity-0009",
+        subject: "entity-0002",
+        attributes: {
+          proposed_date: "AH 157 (773 or 774)",
+          // A `ref` attribute that resolved, and one that did not.
+          mint: "entity-0013",
+          basis: "an unidentified continental die-link",
+        },
+        enrichment_depth: "extracted",
+      },
+    },
+    evidence_excerpts: [],
+    related: [],
+    cross_corpus: [],
+    referenced_atoms: {
+      "entity-0002": { display_name: "Wessex Down 2", atom_type: "Entity" },
+      "entity-0009": { display_name: "Metcalf", atom_type: "Entity" },
+      "entity-0013": { display_name: "Canterbury", atom_type: "Entity" },
+    },
+    curation_status: "generated",
+  } as unknown as AtomDetailData;
+}
+
+describe("AtomDetail — a declared Claim", () => {
+  it("shows what the claim is ABOUT, distinct from who said it", async () => {
+    vi.mocked(api.atlasGetAtomDetail).mockResolvedValue(claimDetail());
+    render(AtomDetail, {
+      props: { corpusId: "wessex-hoard", atomId: "claim-0004", onBack: () => {} },
+    });
+
+    const about = await screen.findByTestId("claim-subject");
+    expect(about.textContent).toContain("Wessex Down 2");
+    // The voice is still rendered, and it is a different atom.
+    expect(screen.getByText("Metcalf")).toBeTruthy();
+    // The declared type is named, not left to the generic "Claim" pill.
+    expect(
+      (await screen.findByTestId("claim-declared-type")).textContent?.trim(),
+    ).toBe("attribution");
+  });
+
+  it("renders declared attributes as rows, linking only the ones that resolve", async () => {
+    vi.mocked(api.atlasGetAtomDetail).mockResolvedValue(claimDetail());
+    render(AtomDetail, {
+      props: { corpusId: "wessex-hoard", atomId: "claim-0004", onBack: () => {} },
+    });
+
+    await screen.findByTestId("atom-attributes");
+    const names = screen
+      .getAllByTestId("atom-attribute-name")
+      .map((n) => n.textContent?.trim());
+    expect(names).toEqual(["proposed_date", "mint", "basis"]);
+
+    // A `ref` that names a real atom becomes a link…
+    expect(screen.getByText("Canterbury")).toBeTruthy();
+    // …and one that is just what the source said stays text, not a
+    // chip styled as a broken reference.
+    expect(
+      screen.getByText("an unidentified continental die-link"),
+    ).toBeTruthy();
+  });
+});
+
+describe("AtomDetail — Position", () => {
+  // Before 2026-09-02 the TS `AtomType` union had 8 variants and the
+  // backend had 11, so a Position fell off the end of AtomDetail's
+  // {#if} chain: EMPTY body, BLANK type pill, no error and no boundary
+  // trip. "It renders without a body-render-error" would have passed
+  // on that code — this asserts the body's OWN fields instead.
+  it("renders its stance, proponent and content", async () => {
+    vi.mocked(api.atlasGetAtomDetail).mockResolvedValue({
+      corpus_id: "commons",
+      atom_id: "position-0001",
+      stable_key: "sk-p1",
+      atom_type: "Position",
+      display_name: "Hardin's tragedy thesis",
+      salience: 0.8,
+      atom: {
+        atom_type: "Position",
+        data: {
+          id: "position-0001",
+          canonical_name: "Hardin's tragedy thesis",
+          content:
+            "Shared resources are inevitably degraded absent private property or state control.",
+          stance: "rebut",
+          proponent_id: "entity-0004",
+          evidence_ids: [],
+          first_appearance: { chunk_id: "sec_0003" },
+          anchors: ["tragedy of the commons"],
+          salience: 0.8,
+          enrichment_depth: "extracted",
+        },
+      },
+      evidence_excerpts: [],
+      related: [],
+      cross_corpus: [],
+      referenced_atoms: {
+        "entity-0004": { display_name: "Garrett Hardin", atom_type: "Entity" },
+      },
+      curation_status: "generated",
+    } as unknown as AtomDetailData);
+
+    render(AtomDetail, {
+      props: { corpusId: "commons", atomId: "position-0001", onBack: () => {} },
+    });
+
+    await screen.findByText(/Shared resources are inevitably degraded/);
+    expect(screen.getByText("rebut")).toBeTruthy();
+    expect(screen.getByText("Garrett Hardin")).toBeTruthy();
+    expect(screen.getByText(/tragedy of the commons/)).toBeTruthy();
+    // The header pill names the kind — it was blank while the union
+    // was eight wide.
+    expect(screen.getAllByText("Position").length).toBeGreaterThan(0);
+  });
+});
+
