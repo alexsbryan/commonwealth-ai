@@ -243,7 +243,9 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 
 | flag | default | status | purpose |
 |---|---|---|---|
+| `SOVEREIGN_ATLAS_EMBED_ATTRIBUTES` | off | experiment | Append a declared atom's `attributes` to its embed text (`attr: metal=silver; …`) so attribute questions have something to match. Atoms with no attributes render identically, so an undeclared corpus is unaffected. Flip conditions: sovereign/DEFAULTS_LEDGER.md. |
 | `SOVEREIGN_ATLAS_GROUNDING` | on | shipped | Atlas graph-walk grounding: cosine seeds → BFS over typed edges → FTS-fetch evidence chunks. =0/false/off/no disables. |
+| `SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS` | off | experiment | Admit Claim atoms whose `claim_kind` names a DECLARED claim type into the atlas embedding bag. Narrower than SOVEREIGN_ATLAS_INCLUDE_CLAIMS; inert for a corpus that declares nothing. Flip conditions: sovereign/DEFAULTS_LEDGER.md. |
 | `SOVEREIGN_ATOM_ENUM` | off | experiment | Enumeration-class questions get top-degree typed atoms injected as virtual chunks. Net-negative on focused enumeration (2026-06-04 bench); keep gated. |
 | `SOVEREIGN_ATOM_ENUM_NOFILTER` | off | experiment | Ablation hatch: disable the enumeration-question classifier filter. |
 | `SOVEREIGN_ATOM_ENUM_OVERVIEW` | on | shipped | Overview/summary questions inject the scoped corpus's atlas Claim atoms as virtual chunks. Independent of SOVEREIGN_ATOM_ENUM; question-shape detected, no LLM call. |

@@ -5705,11 +5705,13 @@ run ONCE over the merged tree. What P5 owes, measured (`wc -l`, HEAD of
 | `sovereign-core/src/runtime/retrieval/atom_enum.rs` | 1,605 | 1,791 | `enumerable_types` + its five tests + the hoisted scope/graph/vocabulary block. Already oversized; the enumerate and overview paths are the obvious seam and neither is settled. |
 | `corpus-engine/src/enrichment/governance_view.rs` | 1,249 | 1,340 | `project_claim` reading `subject` + the declared deontic, and one test. Already oversized. |
 
-Three files entered the 800–1200 approach band that were under it
+Files also entered the 800–1200 approach band that were under it
 (`atlas_traversal/engine.rs` 772 → 1,072; `atlas_traversal/classifier.rs`
-574 → 881; `meta_atlas/classifier.rs` 696 → 867), and two already in it grew
+574 → 934; `meta_atlas/classifier.rs` 696 → 867), and two already in it grew
 (`meta_atlas/builder.rs` → 833, `sovereign-tools/src/atlas_context_manager.rs`
-→ 993). Net against the band baseline: **+3 files, +2,889 lines.**
+→ 993). The gate's own figure for the net, which is the one to cite: **files
+162 → 163 (+1), lines 157,275 → 158,796 (+1,521)** (`cargo run -p xtask --
+arch-gate`, 2026-09-02, exit 1 with five size failures and zero doc failures).
 
 Roughly half of every one of those numbers is test code, and it stays in the
 module rather than moving to `tests/main/` to make a ratchet green: three of
