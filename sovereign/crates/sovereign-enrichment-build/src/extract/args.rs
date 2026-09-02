@@ -223,7 +223,7 @@ pub(super) fn read_failures_for_retry(
 /// newest `questions-*.json`" is a single decision and lives in one
 /// place (ARCH §10.6).
 #[derive(Debug, Clone)]
-pub(super) struct LatestRun {
+pub(crate) struct LatestRun {
     pub path: PathBuf,
     /// Chapters that produced an extraction.
     pub extracted: usize,
