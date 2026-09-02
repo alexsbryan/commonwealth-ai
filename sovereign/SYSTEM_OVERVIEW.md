@@ -2185,16 +2185,54 @@ the independent check: on the 2026-08-13 rewrite turn the arms agreed 15 == 15
 within ~20 ms per call, which is what licensed trusting NAMED at all), and
 **PIN** (`prefix_state` HIT lines joined by absolute time). The PIN arm is the
 load-proof one: a call that restored carries
-`key=<family hash> restored_tokens=N restore_ms=M` and a call that did not
-carries no line at all, so "do these two mechanisms share a prefix family" is
-answered by comparing KEYS rather than by hoping a duration shrank — which
-matters because a mis-declared `stable_prefix_len` does not error, it silently
-full-prefills. Measured 2026-08-13, one clean turn: the five per-claim judges
+`key=<family hash> restored_tokens=N restore_ms=M`, so "do these two
+mechanisms share a prefix family" is answered by comparing KEYS rather than by
+hoping a duration shrank — which matters because a mis-declared
+`stable_prefix_len` does not error, it silently full-prefills.
+**A call that did NOT restore used to carry no line at all**, and that silence
+was itself a defect: it made "not eligible", "first sighting", "family
+drifted" and "refused a pin it should have taken" indistinguishable, so the
+undirected path could decline forever without anything to read (ARCH §9.1).
+Since 2026-09-02 every `Pass` return names its reason and its arithmetic
+(`key`, `prompt_tokens`, `lcp`, `pin`, `min_pin`) at `debug` on target
+`prefix_state`. Turning that on is what found the refusal below, so treat the
+DEBUG lines as part of the PIN arm, not as noise:
+`RUST_LOG=info,prefix_state=debug`. Measured 2026-08-13, one clean turn: the five per-claim judges
 all restored `key=3b4389a9d12c54fd`, 5,508 tokens in 26-32 ms (including the
-one declaring the shorter 26,089 B window — the two declared lengths collapse
-to ONE family, because the family probe is the first 48 tokens); the specifics
+one declaring the shorter 26,089 B window — under the 48-token probe key of
+the day, two declared lengths collapsed to ONE family; since 2026-09-01 a
+declared prefix keys on its own CONTENT, so those two are two entries and each
+restores its whole declaration — issue #57); the specifics
 scan restored nothing and paid 10,881 ms for 7,817 tokens. Implied primary
 prefill ≈ 719 tok/s, which back-predicts the judge calls.
+
+**Two identical prompts now form a family** (2026-09-02, issue #57). The
+UNDIRECTED planner learns a boundary from two sightings, and its guard was
+`lcp >= min_pin && lcp < tokens.len()` — so the one case where two sightings
+share EVERYTHING fell through to `Pass`, permanently. Anything that re-sent a
+byte-identical prompt therefore re-prefilled it in full, every time, forever.
+Measured on the live daemon: a DeepQuery turn discarded ~16.3k tokens of
+prefill per turn across three families — the synthesis call (9,891 tokens,
+`lcp=9891 len=9891 min_pin=384`), the citation judge (5,134) and the
+topic/route pass (1,278) — while the gate's per-claim judges beside them
+restored 4,881 tokens in 45 ms off the DIRECTED path, which had always backed
+off two tokens instead of refusing. Both paths now take the margin from one
+`PIN_TAIL_MARGIN`, and `pin_with_tail(lcp, len)` is what the undirected
+branches call. Effect on three repeats of one question, warm model: synthesis
+TTFT 34.0 s → 11.9 s (learn) → **0.2 s** (restore), wall 59.4 s → 27.8 s →
+**8.8 s**. State files are 145-171 MB per family against the 2,048 MB budget,
+committed in 215-721 ms.
+
+**What this does NOT fix, and the shape of the next win.** A pin only forms
+over a prefix that actually repeats, so a turn whose prompt is stable-first
+benefits and one whose volatile part leads does not. `citation.rs` builds
+`PASSAGES:\n{passages}\n\nQUESTION: …` — stable-first by construction — but
+`build_passages` emits chunks in RETRIEVAL RANK order, so a different question
+over the *same ten chunks* reorders them and the shared prefix collapses:
+measured `lcp=49` against a 5,132-token entry, dropping the family. Ordering
+the passage block by a stable key (document position) while carrying relevance
+separately would make it pin across questions; it is a PROMPT change, so it
+belongs behind `sovereign-ci-bench.sh`, not behind a latency argument.
 **Deliberately NOT the stage ledger**: per-call rows in `TurnStageLedger`
 would make `sum(rows)` exceed `gate_ms` and saturate the `gate_unattributed`
 residual to zero, destroying the detector described above. The funnel is
