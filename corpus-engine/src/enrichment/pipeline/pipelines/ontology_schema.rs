@@ -257,6 +257,8 @@ pub fn render_declared_types(policies: &OntologyPolicies) -> String {
         }
     }
 
+    out.push_str(&render_attribute_shape(policies, &index));
+
     let voices = &policies.assertion.voices;
     if !voices.not_entities.is_empty() || !voices.attributed_to.is_empty() {
         out.push_str("\n## Voices\n\n");
@@ -370,6 +372,78 @@ pub fn render_phase6_extras(policies: &OntologyPolicies) -> String {
 /// claim type can, so this is also the test for "this corpus states rules".
 fn declares_deontic(policies: &OntologyPolicies) -> bool {
     policies.claim_types().any(|t| !t.deontic.is_empty())
+}
+
+/// Where a declared attribute goes in the emitted JSON, shown once.
+///
+/// The prose above already says to put attributes in the sketch's
+/// `attributes` object. It was not enough: the wessex-hoard probe filled 0 of
+/// 14 `coin` atoms across all seven declared attributes while filling the
+/// claim-side `grade` 28 times. The reason is that the NEUTRAL Phase-1 prompt
+/// this block is appended to carries a worked JSON example — and that example
+/// happens to show a `coin` entity with no `attributes` object at all. A
+/// model shown one filled example and one contradicting instruction follows
+/// the example. Phase 1 cannot fall back on the grammar to force the issue:
+/// the response schema is advisory here (models emit `"1.29 g"` where it says
+/// `number`, which is why the parser recovers quantities itself), so the
+/// prompt is the only lever there is.
+///
+/// The shapes are deliberately `<text>` / `<number>` rather than plausible
+/// values. A filled example invites copying, and a copied value is a
+/// fabricated one — it would also register as a filled attribute in the
+/// coverage report, corrupting the instrument that measures this fix (§18.4).
+/// `<number>` earns its place separately: a quantity is the one family whose
+/// JSON shape a model routinely gets wrong.
+///
+/// Empty when no declared type declares an attribute, so a declaration that
+/// cannot benefit does not pay for the block.
+fn render_attribute_shape(policies: &OntologyPolicies, index: &TypeIndex<'_>) -> String {
+    // The first declared type that has attributes, in declaration order —
+    // the example uses the AUTHOR's own keys, so it needs no translation.
+    let Some((t, attrs)) = policies
+        .shape
+        .types
+        .iter()
+        .map(|t| (t, index.effective_attributes(&t.name)))
+        .find(|(_, a)| !a.is_empty())
+    else {
+        return String::new();
+    };
+    let pairs = attrs
+        .iter()
+        .map(|a| {
+            let shape = match a.family {
+                AttrFamily::Quantity { .. } => "<number>",
+                _ => "<text>",
+            };
+            format!("\"{}\": {shape}", a.name)
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "\n## Where attributes go\n\n\
+         A declared attribute is a field of the sketch object itself. The \
+         example above shows a sketch without one; a `{name}` sketch is \
+         written like this instead:\n\n\
+         \x20   {{ \"canonical_name\": <text>, \"{slot}\": \"{name}\",\n\
+         \x20     \"description\": <text>, \"anchor\": <text>,\n\
+         \x20     \"attributes\": {{ {pairs} }} }}\n\n\
+         When a type declares an attribute, the value belongs in that object \
+         and nowhere else. Do not restate it as a claim, as a relation, or as \
+         prose inside the description: \"the weight is 1.05 g\" written as a \
+         claim is a weight that no one can look up.\n\n\
+         `<text>` and `<number>` are shapes, not values. Take every value from \
+         the section's own words, use only the keys listed for that type \
+         above, and omit the `attributes` object entirely when the section \
+         states none of them. Never invent one.\n",
+        name = t.name,
+        slot = match t.kind {
+            TypeKind::Relation => "relation_type",
+            TypeKind::Event => "event_type",
+            TypeKind::Claim => "claim_kind",
+            _ => "entity_type",
+        },
+    )
 }
 
 /// One attribute, rendered for the prompt: name plus what the family admits.
@@ -750,6 +824,61 @@ mod tests {
         assert!(block.contains("grade: die-link | hoard-context"));
         // `sceatta` declares no attributes of its own but inherits coin's.
         assert!(block.contains("a kind of coin"));
+    }
+
+    /// The prose alone did not carry it: the neutral Phase-1 prompt this block
+    /// is appended to shows a worked JSON example whose `coin` entity has no
+    /// `attributes` object, and the wessex-hoard build filled 0 of 14. The
+    /// block has to show the shape, in the author's own keys.
+    ///
+    /// Falsifier: drop `render_attribute_shape` from `render_declared_types`
+    /// and the emitted JSON has no example of a filled `attributes` object
+    /// anywhere in the Phase-1 prompt.
+    #[test]
+    fn the_block_shows_where_an_attribute_goes_in_the_json() {
+        let block = render_declared_types(&numismatics());
+        assert!(block.contains("## Where attributes go"));
+        assert!(
+            block.contains("\"attributes\": {"),
+            "the object is shown as JSON, not only described: {block}"
+        );
+        assert!(
+            block.contains("\"entity_type\": \"coin\""),
+            "the sketch is shown whole, in the slot the type actually fills"
+        );
+        assert!(
+            block.contains("Do not restate it as a claim"),
+            "the observed competing behaviour is named: the model emitted \
+             `weight` as a claim rather than as the coin's attribute"
+        );
+        for key in ["\"metal\": <text>", "\"denomination\": <text>"] {
+            assert!(block.contains(key), "{key} shown in the author's own keys");
+        }
+        assert!(
+            block.contains("\"weight\": <number>"),
+            "a quantity is shown as a bare number — the family models get wrong"
+        );
+        assert!(
+            !block.contains("silver") || !block.contains("\"metal\": \"silver\""),
+            "the example must not carry a copyable value: a copied value is a \
+             fabricated one, and it would read as a filled attribute in the \
+             coverage report"
+        );
+    }
+
+    /// A declaration with types but no attributes pays nothing for the block.
+    #[test]
+    fn nothing_to_fill_renders_no_shape_section() {
+        let mut p = numismatics();
+        for t in &mut p.shape.types {
+            t.attributes.clear();
+        }
+        let block = render_declared_types(&p);
+        assert!(block.starts_with("## Declared types"), "types still named");
+        assert!(
+            !block.contains("## Where attributes go"),
+            "but no attribute shape: {block}"
+        );
     }
 
     #[test]

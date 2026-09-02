@@ -371,6 +371,14 @@ pub(super) fn validated_attributes(
         );
         return out;
     }
+    // The per-key lines below fire only when something is DROPPED, so a model
+    // that offered nothing at all and a parser that threw everything away look
+    // identical in the log — silence. They are opposite defects with opposite
+    // fixes (the prompt vs. this function), and telling them apart is what the
+    // wessex-hoard 0-of-14 investigation needed and did not have. `offered` is
+    // the count before any filtering, so it is the one number that can only
+    // come from the model.
+    let offered = raw.len();
     for (key, value) in raw {
         let Some(decl) = decls.iter().find(|d| d.name == key) else {
             debug!(
@@ -390,6 +398,11 @@ pub(super) fn validated_attributes(
             ),
         }
     }
+    debug!(
+        atom = %kind, subject = %subject,
+        declared = decls.len(), offered, kept = out.len(),
+        "ontology parse: declared attributes"
+    );
     out
 }
 
