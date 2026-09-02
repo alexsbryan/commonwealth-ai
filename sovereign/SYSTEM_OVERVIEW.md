@@ -1330,7 +1330,16 @@ means one thing.
   (`SchemaValidationReport.ontology`, report SCHEMA_VERSION 2.1): per-type
   counts with and without subtypes, the identity criterion per type, merges,
   `same_as` claims, claims of a subject-declaring type with no subject, and a
-  `coverage:zero:<type>` gap signature. The resolve step writes
+  `coverage:zero:<type>` gap signature. Since 2026-09-02 it also carries
+  `attribute_fill` — one row per (declared type × declared attribute) giving
+  `atoms` / `with_slot` / `filled`, with `attribute:zero:<type>:<attribute>`
+  and `attribute:unlandable:<type>` signatures. The type counts alone reported
+  `coin` as fully covered on 14 atoms carrying none of its seven attributes,
+  which is how that gap survived four merged phases; `with_slot` is counted
+  from the atom rather than the declaration so a `role_of` type — which lands
+  as a State, and States have no attributes map — reads as a declaration with
+  nowhere to land rather than as a model failure (§18.3). `projection::
+  attributes_of` is the one accessor, beside `subtype_of` (§10.6). The resolve step writes
   `atlas/ontology.json` (`writer::write_atlas_ontology`) so the atlas dir
   records what it was extracted under, and `_summary.json` (SCHEMA_VERSION 3)
   carries an `OntologySummary` read back from it. Design:

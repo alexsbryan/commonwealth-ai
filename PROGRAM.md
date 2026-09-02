@@ -25,7 +25,8 @@ PASS: 73 of 176 atom(s) carry a type the author declared.
 ```
 
 `scope` is `universal` on all 49 claims (was `fictional` — the literary default
-leaking into a numismatics catalogue). 33 of 49 claims carry declared attributes.
+leaking into a numismatics catalogue). 33 of 49 claims carried an attribute — though only 10 of those were a DECLARED
+one, the other 28 being the reserved `grade` enum (see the section below).
 `ruler` reads as a **State on a person atom**, not a `ruler` entity — a part played
 is not an essence (§7.5). Enumeration returns all seven catalogue coins including
 the three that lost the chunk top-k to Wikipedia; enumeration has no top-k.
@@ -33,20 +34,56 @@ the three that lost the chunk top-k to Wikipedia; enumeration has no top-k.
 Re-run any time: `scripts/setup-numismatics-corpus.sh` (`--assert-only` for the
 payload check alone, ~1s against the built atlas).
 
-## The one gap left in the chain
+## The attributes gap — closed 2026-09-02
 
-**Declared attributes never reach an ENTITY.** 0 of 32 entity atoms carry one,
-while 33 of 49 claims do. Two consequences, both measured:
+**Declared attributes never reached an ENTITY: 0 of 32.** They do now. The cause
+was neither the prompt's prose nor the family validation, and the trace that
+settles it says so in one line:
 
-- `Aggregate{coin, metal}` classifies correctly and tallies `(unset): 13` — "and
-  what metal is each" cannot be answered.
-- `enrich reconcile` reads the declaration correctly (`identity criteria: 2
-  external, 0 descriptive` — `catalogue_ref` on `coin`, inherited by `sceatta`)
-  and merges nothing, because no atom carries the key. "Coenwulf mancus" and
-  "gold mancus" stay two atoms.
+```
+ontology parse: declared attributes atom=entity subject=Series Y sceattas
+                declared=7 offered=0 kept=0
+```
 
-This is upstream of P3 and P5 — the Phase-1 prompt or the family validation, which
-is P2's ground. It is the next thing worth fixing.
+`offered=0` — the model emitted no `attributes` object at all, so the parser was
+never the loss. The **neutral Phase-1 prompt carries a worked JSON example, and
+that example shows a `coin` entity with no attributes**. The declared block asked
+in prose; the example showed otherwise; the model followed the example. Phase 1
+has no grammar to fall back on — the response schema is advisory (models emit
+`"1.29 g"` where it says `number`), so the prompt is the whole lever.
+
+The neutral example cannot gain the key: it is shared with every undeclared
+corpus. So the declared block — which exists only when types are declared — shows
+the sketch whole, in the author's own keys, and names the behaviour it has to beat.
+
+| | before | after |
+|---|---|---|
+| coin metal | 0/14 | 6/13 |
+| coin weight | 0/14 | 5/13 |
+| coin catalogue_ref | 0/14 | 4/13 |
+| coin ruler · mint · denomination · struck | 0/14 each | 4-5/13 each |
+| attribution proposed_date | 10/49 | 14/43 |
+
+Fourteen `attribute:zero:` gap signatures, gone. Both blocked behaviours:
+
+- `Aggregate{coin, metal}` tallied `(unset): 13`; it now reads
+  **`13 coin by metal — (unset): 7, gold: 2, silver: 4`**, and enumeration renders
+  each coin with its mint, weight, metal and catalogue reference inline.
+- `enrich reconcile` still merges **0**, and that is now the correct answer rather
+  than a blocked one: the five coins carrying a reference carry five *different*
+  references, so there is nothing to collapse. The declared-external-key path had
+  never been watched to fire, so it has a test that does (§18.1) — "Coenwulf
+  mancus" and "the gold mancus of Coenwulf" share no name token and no origin, and
+  collapse on the reference alone.
+
+Two things the fix had to earn rather than assume. A filled attribute must be
+TRUE: the build was writing `weight=0` and `mint="Unknown in text"` where the text
+states nothing, which reads downstream as a measurement. A declared `unit` now
+refuses a zero in the parser (a count with no unit keeps its zero), and no
+placeholder survives in the rebuilt atlas. And the fill rate is measurable at all
+only because `enrich schema-report` gained a tenth dimension this session — the
+type-count dimension reported `coin` as fully covered while it carried nothing,
+which is how the gap survived four merged phases.
 
 ## What running the chain found — four breaks, none visible to 11,657 tests
 
@@ -74,7 +111,9 @@ Ahead: **P6** desktop · `--quick` bench once, at the very end
 
 ## Watch
 
-- Declared attributes on entities: 0 of 32. The gap above. **P2's ground.**
+- Declared attributes reach roughly a third to a half of the atoms that could
+  carry them (`coin metal 6/13`), not all of them. The zeros are gone and the
+  remainder is elicitation, now measured every build by the tenth dimension.
 - `enrich reconcile` is NOT a build step — the coverage report says "merges: not run"
   and names the command. P3's order sequenced it before backfill; it isn't there.
 - P4's tension axes are **could-not-judge**, not passing: `between` reports rather
