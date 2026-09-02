@@ -269,7 +269,9 @@ impl From<Note> for DashboardNoteEntry {
 pub struct RecipeValidationReport {
     /// `true` when the recipe parsed and the engine accepted it.
     pub ok: bool,
-    /// Human-readable failure messages (one per error). Empty when
+    /// Human-readable failure messages (one per error) — a parse failure, or
+    /// a semantic one from the offline validation pass (an unresolved
+    /// ontology reference, an uncompilable section regex). Empty when
     /// `ok == true` or when there's no recipe to validate yet.
     pub errors: Vec<String>,
     /// `true` when there is no recipe to validate (project hasn't
@@ -282,6 +284,21 @@ pub struct RecipeValidationReport {
     /// atoms). Meaningless when `ok == false`. Drives the readiness pill so a
     /// novice sees "this won't enrich" before the build, not after.
     pub enrichment_ready: bool,
+    /// Findings that do not block: an empty `corpus.license`, a key no
+    /// ontology version reads, a `custom_sql` pattern that parses but will
+    /// not run. Straight from `validate_recipe_offline`, so the card and
+    /// `svrn recipe validate` say the same thing. Always empty for a
+    /// workflow, which has no equivalent pass.
+    pub warnings: Vec<String>,
+    /// Derived facets of a declared ontology — the clock, the tension
+    /// selector, the identity criterion each type resolved to, the question
+    /// shapes the corpus will answer. Neither errors nor warnings: this is
+    /// what the recipe WILL do, shown so the author can see the inference and
+    /// override it in the recipe (`ONTOLOGY_PRIMITIVES.md` §6). Its own field
+    /// rather than tagged strings inside `warnings` — a facet is not a defect,
+    /// and a prefix a renderer has to strip is a second encoding of the same
+    /// distinction (ARCH §8).
+    pub notes: Vec<String>,
 }
 
 /// The single struct the dashboard reads on every poll. Coarse on
@@ -314,11 +331,14 @@ pub struct RecipeAuthorDashboardState {
 
 /// Validate artifact TOML into the dashboard's [`RecipeValidationReport`] shape,
 /// dispatched by [`ArtifactKind`]: a recipe via `Recipe::from_toml` (carrying the
-/// translated parse guidance + enrichment readiness), a workflow via
-/// `Workflow::parse` (syntax, duplicate step ids, step cycles). `enrichment_ready`
-/// is recipe-only — always `false` for a workflow. Single source of truth for "did
-/// this artifact parse?" used by both the dashboard poll and the in-app TOML save
-/// so the partner sees identical verdicts whether the agent or they authored it.
+/// translated parse guidance + enrichment readiness) and then
+/// `corpus_engine::testing::validate_recipe_offline` for the semantic pass —
+/// errors, warnings, and the derived ontology facets; a workflow via
+/// `Workflow::parse` (syntax, duplicate step ids, step cycles). `enrichment_ready`,
+/// `warnings` and `notes` are recipe-only — always empty/`false` for a workflow.
+/// Single source of truth for "is this artifact valid?" used by both the dashboard
+/// poll and the in-app TOML save so the partner sees identical verdicts whether the
+/// agent or they authored it — and the same verdict `svrn recipe validate` prints.
 fn validate_artifact_toml(
     kind: ArtifactKind,
     artifact_toml: Option<&str>,
@@ -330,23 +350,41 @@ fn validate_artifact_toml(
                 errors: Vec::new(),
                 no_recipe: true,
                 enrichment_ready: false,
+                warnings: Vec::new(),
+                notes: Vec::new(),
             }
         }
         Some(t) => t,
     };
     match kind {
         ArtifactKind::Recipe => match Recipe::from_toml(toml_str) {
-            Ok(recipe) => RecipeValidationReport {
-                ok: true,
-                errors: Vec::new(),
-                no_recipe: false,
-                enrichment_ready: recipe.produces_enriched_atoms(),
-            },
+            Ok(recipe) => {
+                // Parsing is not validity. The offline pass — the one
+                // `svrn recipe validate` runs, reused whole rather than
+                // re-derived here — is what catches a `role_of` that names
+                // no type, an `[[extract.sections]]` regex that will not
+                // compile, an `http_api` template with an undeclared
+                // placeholder. Those errors BLOCK: a green pill over a
+                // recipe that cannot extract what it declares is a false
+                // verdict (ARCH §18.3), and the card's "Ask agent to fix"
+                // path is exactly what the author needs for them.
+                let v = corpus_engine::testing::validate_recipe_offline(&recipe);
+                RecipeValidationReport {
+                    ok: v.errors.is_empty(),
+                    errors: v.errors,
+                    no_recipe: false,
+                    enrichment_ready: recipe.produces_enriched_atoms(),
+                    warnings: v.warnings,
+                    notes: v.notes,
+                }
+            }
             Err(e) => RecipeValidationReport {
                 ok: false,
                 errors: split_parse_errors(&e.to_string()),
                 no_recipe: false,
                 enrichment_ready: false,
+                warnings: Vec::new(),
+                notes: Vec::new(),
             },
         },
         ArtifactKind::Workflow => match Workflow::parse(toml_str) {
@@ -355,12 +393,16 @@ fn validate_artifact_toml(
                 errors: Vec::new(),
                 no_recipe: false,
                 enrichment_ready: false,
+                warnings: Vec::new(),
+                notes: Vec::new(),
             },
             Err(e) => RecipeValidationReport {
                 ok: false,
                 errors: split_parse_errors(&e.to_string()),
                 no_recipe: false,
                 enrichment_ready: false,
+                warnings: Vec::new(),
+                notes: Vec::new(),
             },
         },
     }

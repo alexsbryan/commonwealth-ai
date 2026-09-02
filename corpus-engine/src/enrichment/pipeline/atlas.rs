@@ -123,6 +123,12 @@ macro_rules! string_enum_with_other {
         }
 
         impl $name {
+            /// Wire names of every named variant, in declaration order —
+            /// never `Other`. The one list to read for "the kinds this
+            /// enum already emits" (the ontology validator resolves
+            /// references against `EntityType::NAMED`, ARCH §10.6).
+            pub const NAMED: &[&str] = &[$( $lit, )*];
+
             pub fn as_str_repr(&self) -> &str {
                 match self {
                     $( Self::$variant => $lit, )*

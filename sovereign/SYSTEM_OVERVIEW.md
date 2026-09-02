@@ -1179,8 +1179,10 @@ means one thing.
   `OntologyConfig`; version 1 declares types with typed attributes
   (`OntologyTypeDecl`, `AttrDecl`) plus `voices`/`change`/`tension`/`derive`.
   `recipe validate` resolves every reference and prints the derived facets;
-  `recipe new --ontology <name>` scaffolds from
-  `sovereign-recipes/_templates/ontology-v1/` (`recipe_templates.rs`);
+  `recipe new --ontology <name>` scaffolds one of the ten PRIMITIVES §1
+  templates from `sovereign-recipes/_templates/ontology-v1/`
+  (`recipe_templates.rs`; each template's derived facets are pinned under
+  `corpus-engine/tests/fixtures/recipe_templates/`);
   `recipe migrate --ontology-version 1` adds the version line as a diff.
   `CustomAtlasSpec.policies` carries the parsed policies into `config.json`;
   `CustomOntology::from_policies` composes the Phase-1 prompt (I1: a
@@ -1297,11 +1299,22 @@ it. Generic primitives:
   (project model), `situated_context.rs` (per-turn renderer),
   `svrn recipe-agent {new,show,list,live-trial}` CLI. Skill
   manifest at `sovereign/modes/recipe-author/skill.toml`
-  (privacy = `local_only`). The project model carries an
+  (privacy = `local_only`); its interview is the five
+  `ONTOLOGY_PRIMITIVES.md` §4 questions (shape, assertion, identity,
+  change, derivation), asked only where the charter is silent, and it
+  points at `recipe new --ontology <name>` rather than a blank block.
+  The project model carries an
   `ArtifactKind` (recipe | workflow), so the same checkpoints /
   decision log / desktop workspace back **workflow** authoring too
   (checkpoints snapshot `recipe.toml` or `workflow.toml` by kind) —
   the recipes×workflows merge.
+- **Recipe validation card** — `recipe_author_commands::validate_artifact_toml`
+  parses, then runs `corpus_engine::testing::validate_recipe_offline`, so
+  `RecipeValidationReport` carries the same three lists `svrn recipe validate`
+  prints: `errors` (blocking — an unresolved ontology reference blocks like a
+  parse failure), `warnings`, and `notes`, the derived facets (clock, tension
+  selector, identity criterion per type, question shapes).
+  `RecipeValidationCard.svelte` renders them as three sections, never merged.
 
 ### Schema back-compat
 

@@ -346,7 +346,7 @@ it was enriched:
 | **Obsidian / watched folders** | `tiered` (no recipe) | System 3 (folder variant + `vault_themes`) | T1+T2+T3 + vault themes | `sovereign-tools/src/local_corpus/` + `tiered.rs::run_folder_tiered_enrichment` |
 | **commonwealth-ai** (code) | _(none — `enrich code-intel` verb)_ | **System 4 — Code intelligence** | LanceDB cosine + FTS, code-intel summary chunks boosted, + SCIP call-graph trace via the `CodeQuery` route | `scip_graph.db` + `sovereign enrich code-intel` |
 | **maple-house** (governance probe) | `atlas` (`custom_atlas`, ontology version 0) | System 2, recipe-declared genre | LanceDB cosine + FTS + governance step | `sovereign-recipes/maple-house/recipe.toml` |
-| `recipe new --ontology numismatics` / `governance` | `atlas` (`custom_atlas`, ontology version 1) | System 2, recipe-declared genre | as above; declared types reach the schema in P2 | `sovereign-recipes/_templates/ontology-v1/<name>/recipe.toml` |
+| `recipe new --ontology <name>` (ten templates, PRIMITIVES §1.1–§1.10) | `atlas` (`custom_atlas`, ontology version 1) | System 2, recipe-declared genre | as above; declared types reach the schema in P2 | `sovereign-recipes/_templates/ontology-v1/<name>/recipe.toml` |
 
 ### Custom ontology (version 1)
 

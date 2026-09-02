@@ -1,0 +1,84 @@
+# Due diligence — an ontology-v1 recipe template.
+#
+# Filings, leaked spreadsheets, press, a registry export. The questions it is
+# built to answer: who sits on both boards; where money flows in a circle;
+# which counterparties exceed ten percent of revenue. The declaration is
+# ONTOLOGY_PRIMITIVES.md §1.6 verbatim.
+#
+# Scaffold:  svrn recipe new --ontology due-diligence --id my-target --out my-target.toml
+# Then fill the REPLACE_ME fields, and:
+#   svrn recipe validate my-target.toml      # prints what the ontology derives
+#   svrn corpus install my-target.toml
+#   svrn enrich init my-target --from-corpus my-target
+#   svrn enrich build my-target --full
+
+[corpus]
+# REQUIRED: a stable, repo-scoped id.
+id = "REPLACE_ME"
+# REQUIRED: human-readable name.
+name = "REPLACE_ME"
+description = "Filings, spreadsheets, press and a registry export, extracted as organizations, people, counterparties and dated payments."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# One markdown file: each filing, article and exported table as a `## ` section.
+[acquire]
+type = "local_file"
+# REQUIRED: absolute path to the markdown file.
+path = "REPLACE_ME"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "due-diligence"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is a due-diligence file on a target: company filings, leaked spreadsheets,
+press coverage and a registry export. Organizations are known by their registry
+identifier where one is given, otherwise by name and jurisdiction; people by name and
+employer. A counterparty is an organization in the role of trading partner. A payment
+is a dated flow of money from one organization to another; money that flows in a
+circle back to its origin is the pattern to find.
+"""
+
+[[enrichment.ontology.types]]
+name = "organization"
+kind = "entity"
+identity = ["registry_id"]
+identity_fallback = ["name", "jurisdiction"]
+
+[[enrichment.ontology.types]]
+name = "person"
+kind = "entity"
+identity_fallback = ["name", "employer"]
+
+[[enrichment.ontology.types]]
+name = "counterparty"
+kind = "entity"
+role_of = "organization"
+
+[[enrichment.ontology.types]]
+name = "payment"
+kind = "event"
+participants = { from = "organization", to = "organization" }
+attributes = [{ name = "amount", type = "quantity", unit = "USD" }, { name = "date", type = "time" }]
+
+[[enrichment.ontology.patterns]]
+type = "circular_flow"
+edge_types = ["payment"]
+min_entities = 3

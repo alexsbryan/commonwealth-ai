@@ -67,13 +67,21 @@ fn main() {
     vendor_recipes(&recipes_root, &out_dir.join("recipes"));
     // Ontology-v1 recipe templates (`svrn recipe new --ontology <name>`), same
     // shape one level down: `_templates/ontology-v1/<name>/recipe.toml`.
+    let templates_root = recipes_root.join("_templates").join("ontology-v1");
     vendor_recipes(
-        &recipes_root.join("_templates").join("ontology-v1"),
+        &templates_root,
         &out_dir
             .join("recipes")
             .join("_templates")
             .join("ontology-v1"),
     );
+    // A NEW template directory must re-run this script; the per-file lines
+    // `vendor_recipes` emits watch only files that already existed, so a new
+    // `template!("x")` row would fail with "couldn't read" until `build.rs`
+    // itself changed. The dir is ten small recipes, so the recursive scan is
+    // cheap; the recipes root is NOT watched this way because it would
+    // rebuild the crate on every doc edit under sovereign-recipes/.
+    println!("cargo:rerun-if-changed={}", templates_root.display());
     vendor_registry(&recipes_root, &out_dir);
     vendor_data_assets(&recipes_root, &out_dir);
 

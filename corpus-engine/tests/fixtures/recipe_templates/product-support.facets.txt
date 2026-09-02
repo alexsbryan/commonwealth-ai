@@ -1,0 +1,5 @@
+clock: document_date — supersession folds on document dates (the default; set `change.clock = "narrative"` for order within a work)
+identity: organization → canonical name (default; declare `identity = [...]` for an external key)
+identity: customer → account_id (external key, strict merge)
+identity: feature → canonical name (default; declare `identity = [...]` for an external key)
+question shapes: enumerate [organization, customer, feature]; relations [(none)]; events [ticket]; aggregate [request by customer]
