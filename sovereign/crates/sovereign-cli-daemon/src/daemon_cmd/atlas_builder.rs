@@ -38,7 +38,7 @@ impl sovereign_tools::local_corpus::watched::enrich::AtlasBuildRunner for InProc
         Box::pin(async move {
             // `from_inputs` rejects only unknown skip ids; with none given it
             // cannot fail, but a wiring error is reported, never swallowed.
-            let parsed = match sovereign_cli_llm::ParsedBuild::from_inputs(
+            let parsed = match sovereign_enrichment_build::ParsedBuild::from_inputs(
                 corpus_id.clone(),
                 None,
                 &[],
@@ -50,7 +50,7 @@ impl sovereign_tools::local_corpus::watched::enrich::AtlasBuildRunner for InProc
                     return 2;
                 }
             };
-            sovereign_cli_llm::build_with_progress_with_embedder(
+            sovereign_enrichment_build::build_with_progress_with_embedder(
                 &parsed,
                 Some(progress),
                 Some(provider),

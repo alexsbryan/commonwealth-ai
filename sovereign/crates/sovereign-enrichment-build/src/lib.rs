@@ -36,6 +36,13 @@ pub use sovereign_enrichment_catalog::{config, paths};
 /// The orchestrator: the plan, the steps, the cache gates.
 pub mod build;
 
+/// The two names a HOST needs to run an atlas build, at the crate root
+/// because they are the interface this crate exists to offer: hand it a
+/// `ParsedBuild` and an embed provider, get an exit code and a stream of
+/// typed progress events. The daemon uses exactly these; `svrn enrich build`
+/// wraps them with argv parsing and help text.
+pub use build::{build_with_progress_with_embedder, ParsedBuild};
+
 // The phase drivers the plan runs, each keeping the verb triple's `Parsed*`,
 // `run` and `render`. Their `cmd_*` entry points and `HELP` consts stayed in
 // `sovereign-cli-llm` — see this module's header.
