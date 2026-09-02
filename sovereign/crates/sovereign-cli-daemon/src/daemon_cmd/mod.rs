@@ -40,6 +40,7 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 pub(crate) mod bootstrap;
 pub(crate) mod build;
 mod discovery_policy;
+mod rlimit;
 // `pub(crate)` so `setup_cmd::fim` can reach `restart_daemon` directly.
 // `svrn setup --fim` rewrites the model config and must bounce the
 // daemon itself — telling the operator to go run `svrn daemon restart`
@@ -155,6 +156,8 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
 };
 
 async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
+    #[cfg(unix)]
+    rlimit::raise_open_file_limit();
     // ── Worker-mode branch (ephemeral pod) ────────────────────────
     //
     // `svrn daemon run --worker-mode` runs an ephemeral worker

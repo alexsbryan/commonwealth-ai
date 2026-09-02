@@ -76,10 +76,65 @@ impl YieldHook for AppStateYieldHook {
     }
 }
 
+/// [`corpus_engine::ForegroundSignal`] backed by the same `AppStateInner`
+/// atomics the [`AppStateYieldHook`] reads — one source of truth for both
+/// halves. The daemon installs it on the corpus engine beside the hook;
+/// each turn holds a lease on it for its whole life.
+pub struct AppStateForegroundSignal {
+    inner: Arc<AppStateInner>,
+}
+
+impl AppStateForegroundSignal {
+    pub fn new(inner: Arc<AppStateInner>) -> Arc<Self> {
+        Arc::new(Self { inner })
+    }
+    fn app(&self) -> crate::state::AppState {
+        crate::state::AppState {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+impl corpus_engine::ForegroundSignal for AppStateForegroundSignal {
+    fn begin(&self) {
+        self.app().foreground_begin();
+    }
+    fn end(&self) {
+        self.app().foreground_end();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::state::test_app_state;
+
+    #[test]
+    fn a_turn_in_flight_holds_the_hook_past_the_window() {
+        // The failing input: a 120 s turn against a 60 s window. With only
+        // the timestamp the hook went idle 60 s in and background work
+        // resumed under the turn (G5b, 2026-09-02: the newsworthy tick
+        // resumed inside the claim-search fan-out). The lease holds it.
+        use corpus_engine::ForegroundLease;
+        let app = test_app_state();
+        app.set_yield_window_secs(60);
+        let hook = AppStateYieldHook::new(app.inner.clone());
+        assert!(!hook.should_yield());
+        let signal: Arc<dyn corpus_engine::ForegroundSignal> =
+            AppStateForegroundSignal::new(app.inner.clone());
+        let lease = ForegroundLease::acquire(signal);
+        rewind_foreground_to(&app, 120);
+        assert_eq!(app.foreground_inflight(), 1);
+        assert!(hook.should_yield(), "in flight beats a stale timestamp");
+        drop(lease);
+        assert_eq!(app.foreground_inflight(), 0);
+        assert!(
+            hook.should_yield(),
+            "the window counts from the END of the turn"
+        );
+        rewind_foreground_to(&app, 120);
+        assert!(!hook.should_yield(), "and lapses after it");
+    }
 
     #[test]
     fn should_yield_false_when_window_is_zero() {

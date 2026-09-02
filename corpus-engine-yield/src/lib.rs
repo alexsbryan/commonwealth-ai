@@ -72,6 +72,36 @@ pub trait YieldHook: Send + Sync {
     }
 }
 
+/// The write side of the same contract: a person is waiting on a turn.
+/// [`YieldHook`] is what background work reads; this is what the turn
+/// holds, for its whole life, so every reader parks for the entire turn —
+/// the claim-search fan-out, tool calls, a two-minute decode — with no
+/// per-operation bump site to remember (issue #57 rec 4, 2026-09-02: the
+/// only bump site was one HTTP handler the product's own chat paths never
+/// crossed, and every yield gate stayed open under them).
+pub trait ForegroundSignal: Send + Sync {
+    fn begin(&self);
+    fn end(&self);
+}
+
+/// RAII pairing of [`ForegroundSignal::begin`] / [`ForegroundSignal::end`].
+/// Held by the turn's stream handle; dropped when the turn ends or the
+/// client goes away.
+pub struct ForegroundLease(std::sync::Arc<dyn ForegroundSignal>);
+
+impl ForegroundLease {
+    pub fn acquire(signal: std::sync::Arc<dyn ForegroundSignal>) -> Self {
+        signal.begin();
+        Self(signal)
+    }
+}
+
+impl Drop for ForegroundLease {
+    fn drop(&mut self) {
+        self.0.end();
+    }
+}
+
 /// Ceiling on the **cumulative** time one worker will defer at a single
 /// yield checkpoint before proceeding regardless of foreground activity.
 ///

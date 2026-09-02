@@ -2641,6 +2641,12 @@ impl EmbeddedDaemon {
                 commonwealth_api::yield_hook::AppStateYieldHook::new(app_state.inner.clone());
             engine.set_yield_hook(hook);
             info!("foreground-yield: hook installed on corpus engine");
+            engine.set_foreground_signal(
+                commonwealth_api::yield_hook::AppStateForegroundSignal::new(
+                    app_state.inner.clone(),
+                ),
+            );
+            info!("foreground-yield: turn lease installed on corpus engine");
         }
 
         // Bound peer-inference admission for headless contributors. The desktop

@@ -83,11 +83,14 @@ pub async fn chat_completions(
     // Fire-and-forget atomic store of the current unix-ts. The
     // corpus-engine ingest pipeline polls this through a `YieldHook`
     // before each embed batch / enrichment phase and pauses while
-    // the timestamp is recent. This is the *only* bump site for
-    // foreground activity — every chat path (HTTP, Tauri proxy,
-    // CLI `sovereign chat`, MCP `tools/call` that triggers chat)
-    // converges through this handler before slot dispatch, so a
-    // single store covers them all. The corresponding bump for
+    // the timestamp is recent. This WAS claimed to be the only bump
+    // site, on the belief that every chat path converged here; the
+    // in-process paths (CLI `sovereign chat`, the server's turn
+    // routes, MCP) never do, and measured 2026-09-02 they ran with the
+    // timestamp still at 0. The structural site is now the turn
+    // itself: every `Runtime` stream handle holds a `ForegroundLease`
+    // on the corpus engine for the turn's whole life. This bump stays
+    // for the external client whose request arrives here. The corresponding bump for
     // `/v1/embeddings` is intentionally absent: embed requests come
     // from ingest itself; bumping there would prevent self-yield.
     state.bump_foreground_active();

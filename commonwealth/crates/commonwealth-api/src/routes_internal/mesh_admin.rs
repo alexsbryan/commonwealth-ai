@@ -361,6 +361,8 @@ pub struct ForegroundStateResponse {
     /// the actual workers that would be paused. Useful to sanity-check
     /// "is yield even relevant right now".
     pub active_ingests_count: usize,
+    /// Turns in flight (`AppStateInner::foreground_inflight`).
+    pub foreground_inflight: usize,
 }
 
 /// `GET /internal/daemon/foreground_state` — read-only snapshot of
@@ -373,6 +375,7 @@ pub async fn foreground_state(State(state): State<AppState>) -> Json<ForegroundS
         currently_yielding: state.should_yield_to_foreground(),
         seconds_until_idle: state.seconds_until_foreground_idle(),
         active_ingests_count,
+        foreground_inflight: state.foreground_inflight(),
     })
 }
 

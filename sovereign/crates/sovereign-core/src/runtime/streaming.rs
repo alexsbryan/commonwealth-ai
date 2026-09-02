@@ -763,7 +763,7 @@ impl Runtime {
     /// just with classification pre-decided so no router call is
     /// made. PR2c will additionally reuse the retrieval cache keyed
     /// by `resume.session_id`.
-    pub async fn resume_session_stream(
+    pub(super) async fn resume_session_stream_unleased(
         &self,
         message: &str,
         conversation_id: &str,
@@ -802,7 +802,7 @@ impl Runtime {
     /// PR2c scope: cancel + new stream, no retrieval reuse yet (the
     /// new stream re-runs `prepare_knowledge_query_plan`). Caching is
     /// PR2d — noted in the plan file.
-    pub async fn redirect_turn_stream(
+    pub(super) async fn redirect_turn_stream_unleased(
         &self,
         session_id: &str,
         intent_hint: &str,
@@ -869,7 +869,7 @@ impl Runtime {
             .await
     }
 
-    pub async fn handle_message_stream(
+    pub(super) async fn handle_message_stream_unleased(
         &self,
         message: &str,
         conversation_id: &str,
@@ -885,7 +885,7 @@ impl Runtime {
     /// factual lookups — uses this to bypass router misclassification. The
     /// caller owns the choice of intent; this method has no domain
     /// knowledge of why.
-    pub async fn handle_message_stream_as(
+    pub(super) async fn handle_message_stream_as_unleased(
         &self,
         message: &str,
         conversation_id: &str,
@@ -921,7 +921,7 @@ impl Runtime {
     /// v1 cancellation is a standalone token: the stop button doesn't
     /// reach naked turns yet (naked is affordance-free by construction
     /// and never calls `sessions.begin`). Wiring stop is a follow-up.
-    pub async fn handle_message_stream_naked(
+    pub(super) async fn handle_message_stream_naked_unleased(
         &self,
         message: &str,
         conversation_id: &str,

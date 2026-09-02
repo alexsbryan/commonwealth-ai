@@ -9,7 +9,7 @@ mod ingest;
 mod ingest_factories;
 mod ingest_helpers;
 mod ingest_prebuilt;
-mod yield_gate;
+pub(crate) mod yield_gate;
 
 pub mod reindex;
 
@@ -267,6 +267,9 @@ pub struct CorpusEngine {
     /// hot path is one rwlock acquisition per embed-batch start,
     /// which is on the order of seconds — negligible.
     yield_hook: std::sync::RwLock<Option<Arc<dyn crate::YieldHook>>>,
+    /// The write side of the yield contract (`crate::ForegroundSignal`);
+    /// installed by the daemon beside the hook, held by each turn.
+    foreground_signal: std::sync::RwLock<Option<Arc<dyn crate::ForegroundSignal>>>,
     /// Per-partition exclusion locks. Each entry serializes (well —
     /// rejects, see below) concurrent `ingest` / `ingest_with_overrides`
     /// calls that would write into the same `<corpus>-partition-<node>/`
@@ -377,6 +380,7 @@ impl CorpusEngine {
             asset_stores: Arc::new(RwLock::new(HashMap::new())),
             asset_sub_extractors: Arc::new(RwLock::new(None)),
             yield_hook: std::sync::RwLock::new(None),
+            foreground_signal: std::sync::RwLock::new(None),
             partition_locks: Arc::new(std::sync::Mutex::new(HashMap::new())),
         }
     }
@@ -437,6 +441,26 @@ impl CorpusEngine {
             .read()
             .expect("yield_hook RwLock poisoned")
             .clone()
+    }
+
+    /// Install the write side of the yield contract. Same seam as
+    /// [`Self::set_yield_hook`], same installer (the daemon).
+    pub fn set_foreground_signal(&self, signal: Arc<dyn crate::ForegroundSignal>) {
+        let mut guard = self
+            .foreground_signal
+            .write()
+            .expect("foreground_signal RwLock poisoned");
+        *guard = Some(signal);
+    }
+
+    /// A lease that says "a person is waiting" until dropped. `None`
+    /// when no signal is installed (tests, hosts without a daemon).
+    pub fn foreground_lease(&self) -> Option<crate::ForegroundLease> {
+        self.foreground_signal
+            .read()
+            .expect("foreground_signal RwLock poisoned")
+            .clone()
+            .map(crate::ForegroundLease::acquire)
     }
 
     /// Register a custom acquirer keyed by `kind`. Recipes referencing

@@ -2432,3 +2432,91 @@ async fn conation_prompt_rung_drops_malformed_draft_silently() {
     let quiet = tokio::time::timeout(std::time::Duration::from_millis(400), rx.recv()).await;
     assert!(quiet.is_err(), "malformed draft must drop silently");
 }
+
+/// Counts the turn-level foreground contract (issue #57 rec 4).
+#[derive(Default)]
+struct CountingForeground {
+    begun: std::sync::atomic::AtomicUsize,
+    ended: std::sync::atomic::AtomicUsize,
+}
+impl corpus_engine::ForegroundSignal for CountingForeground {
+    fn begin(&self) {
+        self.begun.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+    fn end(&self) {
+        self.ended.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// A turn holds the corpus engine's foreground lease from the moment its
+/// handle exists until its stream is dropped, so every background yield
+/// gate reading the paired signal parks for the WHOLE turn. The failing
+/// inputs this names: a lease taken per model call (the gate opens inside
+/// the claim-search fan-out, measured 2026-09-02 as the newsworthy tick
+/// resuming mid-turn) or never taken at all (the pre-2026-09-02 state for
+/// every in-process chat path).
+#[tokio::test]
+async fn a_turn_holds_the_foreground_lease_until_its_stream_is_dropped() {
+    use std::sync::atomic::Ordering::SeqCst;
+    let dir = tempfile::tempdir().unwrap();
+    let recipes = dir.path().join("recipes");
+    let indexes = dir.path().join("indexes");
+    std::fs::create_dir_all(&recipes).unwrap();
+    std::fs::create_dir_all(&indexes).unwrap();
+    let embed: corpus_engine::types::EmbedFn =
+        Arc::new(|_t: &str| Box::pin(async { Ok(vec![0.1_f32; 4]) }));
+    let engine = Arc::new(corpus_engine::CorpusEngine::new(recipes, indexes, embed));
+    let signal = Arc::new(CountingForeground::default());
+    let as_signal: Arc<dyn corpus_engine::ForegroundSignal> = signal.clone();
+    engine.set_foreground_signal(as_signal);
+
+    let store = Arc::new(MockStore::new());
+    let runtime = Runtime::new(sovereign_core::RuntimeParts {
+        corpus_engine: Some(engine),
+        ..sovereign_core::RuntimeParts::new(
+            Arc::new(RecordingInference::new("A short answer.")),
+            Box::new(PassthroughRouter),
+            Box::new(NoOpPlanner),
+            Arc::new(ToolRegistry::new()),
+            store.clone(),
+            Arc::new(SkillRegistry::new()),
+            Arc::new(AutoApprovalChannel),
+            sovereign_core::types::InferenceConfig::default(),
+            sovereign_core::runtime::lane::LaneSources::none(),
+        )
+    });
+
+    let handle = runtime
+        .handle_message_stream("hello there", "c1")
+        .await
+        .unwrap();
+    assert_eq!(
+        signal.begun.load(SeqCst),
+        1,
+        "the lease is taken with the handle"
+    );
+    assert_eq!(
+        signal.ended.load(SeqCst),
+        0,
+        "and held while the stream is live"
+    );
+    drain(handle).await;
+    assert_eq!(
+        signal.ended.load(SeqCst),
+        1,
+        "released only when the stream is dropped"
+    );
+
+    // A second turn takes its own lease; nothing is remembered between turns.
+    let handle = runtime
+        .handle_message_stream("and again", "c1")
+        .await
+        .unwrap();
+    assert_eq!(signal.begun.load(SeqCst), 2);
+    drop(handle);
+    assert_eq!(
+        signal.ended.load(SeqCst),
+        2,
+        "a client that goes away releases it too"
+    );
+}

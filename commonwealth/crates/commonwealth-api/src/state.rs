@@ -946,6 +946,11 @@ pub struct AppStateInner {
     /// startup; the desktop Settings tab can rewrite it at runtime
     /// without a daemon restart.
     pub yield_window_secs: std::sync::atomic::AtomicU64,
+    /// Turns in flight right now. A turn holds a `ForegroundLease` on the
+    /// corpus engine for its whole life, so the yield hook stays true for
+    /// the entire turn regardless of the window; the window only governs
+    /// the quiet after the last turn ends.
+    pub foreground_inflight: std::sync::atomic::AtomicUsize,
 
     /// Mesh quiesce flag. When `true`, the auto-collaborate loop
     /// (`sovereign-mesh::auto_ingest`) skips peer-pull discovery and
@@ -1161,6 +1166,13 @@ impl AppStateInner {
             .load(std::sync::atomic::Ordering::Relaxed);
         if window == 0 {
             return None;
+        }
+        if self
+            .foreground_inflight
+            .load(std::sync::atomic::Ordering::Relaxed)
+            > 0
+        {
+            return Some(window);
         }
         let last = self
             .foreground_last_active_ts
@@ -1733,6 +1745,7 @@ impl AppState {
                 // from config (`daemon.yield_to_foreground_secs`,
                 // default 60) before AppState is shared.
                 yield_window_secs: std::sync::atomic::AtomicU64::new(0),
+                foreground_inflight: std::sync::atomic::AtomicUsize::new(0),
                 // false = full peer collaboration. Daemon startup
                 // overrides this from `SOVEREIGN_DISABLE_AUTO_COLLAB`
                 // when set, preserving the env-var escape hatch.
@@ -2087,6 +2100,30 @@ impl AppState {
     /// shouldn't pause before the first user request).
     pub fn should_yield_to_foreground(&self) -> bool {
         self.inner.foreground_yield_remaining_secs().is_some()
+    }
+
+    /// A turn started (see `foreground_inflight`).
+    pub fn foreground_begin(&self) {
+        self.bump_foreground_active();
+        self.inner
+            .foreground_inflight
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// A turn ended; the yield window counts from here.
+    pub fn foreground_end(&self) {
+        let _ = self.inner.foreground_inflight.fetch_update(
+            std::sync::atomic::Ordering::Relaxed,
+            std::sync::atomic::Ordering::Relaxed,
+            |n| Some(n.saturating_sub(1)),
+        );
+        self.bump_foreground_active();
+    }
+
+    pub fn foreground_inflight(&self) -> usize {
+        self.inner
+            .foreground_inflight
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Seconds remaining in the current yield window, when one is
