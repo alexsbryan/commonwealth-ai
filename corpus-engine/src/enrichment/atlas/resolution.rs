@@ -195,9 +195,11 @@ pub async fn resolve_entities_and_events_with(
     let (dropped, participant_failures) =
         check_event_participants(policy, &mut event_result.events, &entity_result.entities);
     if !dropped.is_empty() {
-        event_result
-            .involves_edges
-            .retain(|e| !dropped.iter().any(|(ev, pid)| e.source == *ev && e.target == *pid));
+        event_result.involves_edges.retain(|e| {
+            !dropped
+                .iter()
+                .any(|(ev, pid)| e.source == *ev && e.target == *pid)
+        });
         info!(
             dropped = dropped.len(),
             "phase 3a: dropped {} event participant(s) not of a declared type",
@@ -1321,9 +1323,7 @@ pub fn resolve_step_3b_with(
             label: mention.role.clone(),
             // The author's noun, not a Phase-5 guess: the recipe SAYS this is
             // the state the mention records.
-            state_type: crate::enrichment::pipeline::atlas::StateType::Other(
-                mention.role.clone(),
-            ),
+            state_type: crate::enrichment::pipeline::atlas::StateType::Other(mention.role.clone()),
             evidence: evidence.clone(),
             section_range: super::atoms::SectionRange::point(mention.section_id.clone()),
             confidence: None,
@@ -5427,6 +5427,7 @@ mod tests {
     // nothing, and a role mentioned twice.
     mod declared_ontology {
         use super::*;
+        use crate::enrichment::atlas::resolution_ontology::ResolutionPolicy;
         use crate::enrichment::ontology::{
             AttrDecl, AttrFamily, Force, OntologyPolicies, OntologyTypeDecl, ShapePolicy, TypeKind,
         };
@@ -5434,7 +5435,6 @@ mod tests {
             ClaimSketch, DiscourseAct, EpistemicStatus, RelationSketch,
         };
         use crate::enrichment::pipeline::types::PhaseFailureKind;
-        use crate::enrichment::atlas::resolution_ontology::ResolutionPolicy;
 
         /// The shipped numismatics shape, plus the one relation type the
         /// template leaves to the author (there is nothing to check endpoints
@@ -5565,7 +5565,11 @@ mod tests {
             ];
             let (_, step_3b) = resolve(&policies, vec![section]).await;
 
-            assert_eq!(step_3b.relations.len(), 1, "the mismatched relation dropped");
+            assert_eq!(
+                step_3b.relations.len(),
+                1,
+                "the mismatched relation dropped"
+            );
             assert_eq!(
                 step_3b.relations[0].relation_type,
                 crate::enrichment::pipeline::atlas::RelationType::Other("struck_at".into()),
@@ -5626,10 +5630,7 @@ mod tests {
             // The unresolvable subject: the claim keeps its content and type,
             // and the loss is recorded rather than silent.
             assert_eq!(step_3b.claims[1].subject, None);
-            assert_eq!(
-                step_3b.claims[1].claim_kind.as_deref(),
-                Some("attribution")
-            );
+            assert_eq!(step_3b.claims[1].claim_kind.as_deref(), Some("attribution"));
             let dropped: Vec<_> = step_3b
                 .failures
                 .iter()

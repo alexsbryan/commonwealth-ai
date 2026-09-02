@@ -317,12 +317,12 @@ fn declared_keys_agree(
     if keys.is_empty() || keys_by_type.get(right.entity_type.as_str_repr()) != Some(keys) {
         return false;
     }
-    keys.iter().all(|k| {
-        match (identity_key_value(left, k), identity_key_value(right, k)) {
+    keys.iter().all(
+        |k| match (identity_key_value(left, k), identity_key_value(right, k)) {
             (Some(l), Some(r)) => l == r,
             _ => false,
-        }
-    })
+        },
+    )
 }
 
 /// External-identifier signal — the STRICT one. See

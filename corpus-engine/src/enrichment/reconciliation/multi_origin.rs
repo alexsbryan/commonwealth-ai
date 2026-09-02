@@ -358,8 +358,9 @@ pub fn reify_merges(
     Vec<crate::enrichment::atlas::edges::Edge>,
 ) {
     use crate::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
-    use crate::enrichment::pipeline::atlas::{ClaimScope, DiscourseAct, EnrichmentDepth,
-        EpistemicStatus};
+    use crate::enrichment::pipeline::atlas::{
+        ClaimScope, DiscourseAct, EnrichmentDepth, EpistemicStatus,
+    };
 
     let mut claims = Vec::with_capacity(merges.len());
     let mut edges = Vec::new();
@@ -548,7 +549,10 @@ fn candidate_pairs(entities: &[Entity], identity: &IdentityPolicy) -> Vec<(usize
     use std::collections::{HashMap, HashSet};
     let mut buckets: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, e) in entities.iter().enumerate() {
-        for (prefix, map) in [("x", &identity.identity), ("d", &identity.identity_fallback)] {
+        for (prefix, map) in [
+            ("x", &identity.identity),
+            ("d", &identity.identity_fallback),
+        ] {
             if let Some(keys) = map.get(e.entity_type.as_str_repr()) {
                 if let Some(key) = identity_blocking_key(prefix, e, keys) {
                     buckets.entry(key).or_default().push(i);
@@ -625,8 +629,8 @@ fn pick_canonical(entities: &[Entity], members: &[usize]) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::signals::default_signals;
+    use super::*;
     use crate::enrichment::atlas::atoms::SignalKind;
     use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
 
@@ -790,10 +794,8 @@ mod tests {
     fn coin(id: &str, name: &str, find_id: &str, sk: SignalKind, doc: &str) -> Entity {
         let mut e = ent(name, id, sk, doc);
         e.entity_type = EntityType::Other("coin".into());
-        e.attributes.insert(
-            "find_id".into(),
-            serde_json::Value::String(find_id.into()),
-        );
+        e.attributes
+            .insert("find_id".into(), serde_json::Value::String(find_id.into()));
         e
     }
 
@@ -914,7 +916,11 @@ mod tests {
             ent("Kenneth Lay", "entity-0002", SignalKind::LlmBatch, "b.eml"),
         ];
         let outcome = reconcile(entities, &ReconciliationPolicy::default());
-        assert_eq!(outcome.entities.len(), 1, "the same-origin merge still runs");
+        assert_eq!(
+            outcome.entities.len(),
+            1,
+            "the same-origin merge still runs"
+        );
         assert_eq!(outcome.oplog_entries.len(), 1);
         assert_eq!(
             outcome.reified.len(),
@@ -922,7 +928,9 @@ mod tests {
             "the merge IS reified — the primitive always fills it"
         );
         assert!(
-            !outcome.reified[0].signals.contains(&MergeSignal::ExternalId),
+            !outcome.reified[0]
+                .signals
+                .contains(&MergeSignal::ExternalId),
             "but nothing declared can have fired"
         );
 
@@ -931,7 +939,10 @@ mod tests {
         let (claims, edges) = reify_merges(&outcome.reified, 1, 1);
         assert_eq!(claims.len(), 1);
         assert_eq!(claims[0].claim_kind.as_deref(), Some("same_as"));
-        assert_eq!(claims[0].subject.as_ref().map(|s| s.as_str()), Some("entity-0001"));
+        assert_eq!(
+            claims[0].subject.as_ref().map(|s| s.as_str()),
+            Some("entity-0001")
+        );
         assert_eq!(claims[0].attributes["same_as"].as_array().unwrap().len(), 2);
         assert!(
             edges.iter().all(|e| e.source == claims[0].id),

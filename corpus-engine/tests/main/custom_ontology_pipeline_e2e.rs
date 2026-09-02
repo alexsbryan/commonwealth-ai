@@ -25,13 +25,13 @@ use corpus_engine::enrichment::atlas::{
     ResolutionPolicy,
 };
 use corpus_engine::enrichment::ontology::{OntologyPolicies, TypeIndex};
-use corpus_engine::enrichment::reconciliation::{reconcile, reify_merges, ReconciliationPolicy};
 use corpus_engine::enrichment::pipeline::atlas::{
     DiscourseAct, EnrichmentDepth, EntityType, SectionExtraction,
 };
 use corpus_engine::enrichment::pipeline::pipelines::literary_atlas::LiteraryAtlasPipeline;
 use corpus_engine::enrichment::pipeline::types::ChapterInput;
 use corpus_engine::enrichment::pipeline::Pipeline;
+use corpus_engine::enrichment::reconciliation::{reconcile, reify_merges, ReconciliationPolicy};
 use corpus_engine::types::EmbedFn;
 use corpus_engine::Recipe;
 
@@ -443,13 +443,15 @@ fn two_coins_sharing_an_external_id_merge_into_one_same_as_claim() {
     assert_eq!(outcome.entities.len(), 1, "one find, one coin");
 
     let (claims, edges) = reify_merges(&outcome.reified, 1, 1);
-    assert_eq!(claims.len(), 1, "and the merge is IN the atlas, not only in the oplog");
+    assert_eq!(
+        claims.len(),
+        1,
+        "and the merge is IN the atlas, not only in the oplog"
+    );
     assert_eq!(claims[0].claim_kind.as_deref(), Some("same_as"));
     assert_eq!(claims[0].attributes["grade"].as_str(), Some("external"));
     assert_eq!(
-        claims[0].attributes["same_as"]
-            .as_array()
-            .map(|a| a.len()),
+        claims[0].attributes["same_as"].as_array().map(|a| a.len()),
         Some(2)
     );
     // Reachable from either side.

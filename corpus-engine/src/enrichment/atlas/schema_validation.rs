@@ -585,8 +585,8 @@ fn build_ontology_coverage(
     atoms: &[AtomEnvelope],
     merges: Option<usize>,
 ) -> OntologyCoverage {
-    use crate::enrichment::ontology::TypeIndex;
     use super::projection::subtype_of;
+    use crate::enrichment::ontology::TypeIndex;
 
     let index = TypeIndex::from_policies(&ontology.policies);
     let subtypes: Vec<String> = atoms.iter().map(subtype_of).collect();

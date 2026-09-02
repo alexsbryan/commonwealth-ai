@@ -20,8 +20,8 @@ use std::path::{Path, PathBuf};
 use corpus_engine::enrichment::atlas::{
     build_schema_validation_report, compare_across_corpora, count_open_questions,
     count_transitions_without_trigger, count_ungrounded_claims, read_atlas_atoms,
-    read_atlas_cross_corpus_edges, read_atlas_edges, AtomEnvelope, SchemaComparison,
-    read_atlas_ontology, SchemaValidationInput, SchemaValidationReport, ATLAS_DIRNAME,
+    read_atlas_cross_corpus_edges, read_atlas_edges, read_atlas_ontology, AtomEnvelope,
+    SchemaComparison, SchemaValidationInput, SchemaValidationReport, ATLAS_DIRNAME,
 };
 
 use super::config::EnrichConfig;
