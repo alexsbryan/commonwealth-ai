@@ -472,10 +472,7 @@ pub async fn run_extract(args: &[String]) -> i32 {
     // 30 s. A snapshot is written one final time after the runner
     // returns so the on-disk ledger reflects the run-end state.
     let tokens_path = paths::enrichment_root(&cfg.corpus_id).join("_tokens.json");
-    let started_at_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
+    let started_at_ms = sovereign_core::time::unix_millis();
     let flusher_ledger = std::sync::Arc::clone(&usage_ledger);
     let flusher_path = tokens_path.clone();
     let flusher_corpus = cfg.corpus_id.clone();

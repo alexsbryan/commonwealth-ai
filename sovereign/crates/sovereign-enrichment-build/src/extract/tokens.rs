@@ -37,10 +37,7 @@ pub fn write_token_snapshot(
     ledger: &crate::inference_client::TokenUsageLedger,
 ) -> std::io::Result<()> {
     let snap = ledger.snapshot();
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
+    let now_ms = sovereign_core::time::unix_millis();
     let record = TokenSpendRecord {
         schema_version: TOKEN_SPEND_SCHEMA,
         corpus_id: corpus_id.to_string(),

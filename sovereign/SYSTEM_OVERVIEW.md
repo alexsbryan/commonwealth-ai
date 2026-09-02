@@ -5654,6 +5654,31 @@ dead. The small increase is consistent with a new crate boundary costing a
 compilation unit's own metadata and losing cross-crate inlining, but that is a
 plausible reading of a 0.016% delta, not a measured cause.
 
+**The ratchet this cost, accepted 2026-09-02.** `layer-gate` reported four
+fan-in growths, each exactly `+1 crate`:
+
+| god-crate | fan-in before | after |
+|---|---|---|
+| `corpus-engine` | 18 | 19 |
+| `sovereign-contracts` | 23 | 24 |
+| `sovereign-core` | 18 | 19 |
+| `sovereign-tools` | 8 | 9 |
+
+All four are the same crate. `sovereign-enrichment-build/Cargo.toml` declares
+those four dependencies and no others among the eight the ratchet watches, so
+the four `+1`s are one new node, not four new edges of independent origin —
+checked in the manifest rather than inferred from the arithmetic. Nothing
+started depending on a god-crate that did not already; a body of code that
+already depended on all four moved from inside `sovereign-cli-llm` to beside
+it, and a crate boundary made its existing appetite countable.
+
+Accepted by re-baselining `layer-gate`, which is what this row buys: the
+growth is the price of the split the operator funded, and refusing to pay it
+would mean either leaving the orchestrator in a host crate or inventing
+narrower façades for four crates in the same commit as the move. The bill to
+watch is that this makes the god-crates marginally harder to break up later,
+and `sovereign-tools` at 9 is the one closest to being severable.
+
 **The judgement this leaves.** The boundary was worth funding on architectural
 grounds alone: a capability three hosts need is out of a host binary, the
 back-of-house crate is out of the shipped desktop bundle, and the layer map is
