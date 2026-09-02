@@ -464,7 +464,13 @@ fn render_attribute_shape(policies: &OntologyPolicies, index: &TypeIndex<'_>) ->
          `<text>` and `<number>` are shapes, not values. Take every value from \
          the section's own words, use only the keys listed for that type \
          above, and omit the `attributes` object entirely when the section \
-         states none of them. Never invent one.\n\
+         states none of them. Never invent one.\n\n\
+         Leave out any single key the section does not state, the way the \
+         other keys are left out. A `0`, an empty string or a phrase like \
+         \"unknown\" put there to fill the slot reads downstream as a \
+         measurement — a coin recorded as weighing 0 is worse than a coin \
+         with no weight recorded, because only the second one is visibly \
+         missing.\n\
          {identity}",
         name = t.name,
         slot = match t.kind {

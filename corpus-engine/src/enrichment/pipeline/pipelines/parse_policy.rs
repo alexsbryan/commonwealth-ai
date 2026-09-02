@@ -318,17 +318,38 @@ fn validate_attr(family: &AttrFamily, value: &serde_json::Value) -> Option<serde
                 .find(|v| v.eq_ignore_ascii_case(s))
                 .map(|v| Value::String(v.clone()))
         }
-        AttrFamily::Quantity { .. } => match value {
-            Value::Number(n) => Some(Value::Number(n.clone())),
-            // Models write the unit back into the value ("1.29 g") even when
-            // the schema says number, and the grammar-constrained sampler is
-            // a known no-op — so the parser is the only place this can be
-            // recovered. Take the leading number; refuse anything else.
-            Value::String(s) => leading_number(s)
-                .and_then(serde_json::Number::from_f64)
-                .map(Value::Number),
-            _ => None,
-        },
+        AttrFamily::Quantity { unit } => {
+            let n = match value {
+                Value::Number(n) => n.as_f64(),
+                // Models write the unit back into the value ("1.29 g") even
+                // when the schema says number, and the grammar-constrained
+                // sampler is a known no-op — so the parser is the only place
+                // this can be recovered. Take the leading number; refuse
+                // anything else.
+                Value::String(s) => leading_number(s),
+                _ => None,
+            }?;
+            // A declared UNIT means the attribute measures something physical,
+            // and prose does not report a coin weighing zero grams — a `0`
+            // here is the model filling a slot it could not fill, which then
+            // reads downstream as a measurement. Absence is recoverable and
+            // visible; a fabricated zero is neither (§18.3). Unitless
+            // quantities keep their zero: a count legitimately reaches it.
+            if let (Some(u), true) = (unit.as_deref(), n == 0.0) {
+                // Traced HERE rather than left to the caller: the caller's
+                // drop line reads "value is not of the declared family", and
+                // a `0` is a perfectly good number. Only this site knows the
+                // real reason, and an operator who cannot see it would go
+                // looking for a parser bug (§9.1).
+                debug!(
+                    unit = %u,
+                    "ontology parse: dropping attribute — zero is an absent \
+                     measurement, not a measured zero"
+                );
+                return None;
+            }
+            serde_json::Number::from_f64(n).map(Value::Number)
+        }
         AttrFamily::Time { .. } | AttrFamily::Ref { .. } => {
             let s = value.as_str()?.trim();
             if s.is_empty() {
@@ -466,6 +487,36 @@ mod tests {
     }
 
     /// An undeclared type is unclassified, never a substituted default.
+    /// A weight of zero grams is not a light coin, it is a model filling a
+    /// slot it could not fill — and once stored it reads as a measurement.
+    /// The wessex-hoard build recorded `weight=0` on two coins whose sections
+    /// state no weight at all.
+    ///
+    /// Falsifier: drop the `unit.is_some()` guard and the zero is stored.
+    #[test]
+    fn a_zero_measurement_with_a_unit_is_an_absence_not_a_value() {
+        let grams = AttrFamily::Quantity {
+            unit: Some("g".into()),
+        };
+        assert!(validate_attr(&grams, &serde_json::json!(0)).is_none());
+        assert!(validate_attr(&grams, &serde_json::json!("0 g")).is_none());
+        assert_eq!(
+            validate_attr(&grams, &serde_json::json!("1.21 g")).and_then(|v| v.as_f64()),
+            Some(1.21),
+            "a real measurement is untouched"
+        );
+    }
+
+    /// A quantity with no declared unit is not a physical measurement, and a
+    /// count of zero is a fact. The guard above must not reach it.
+    #[test]
+    fn a_unitless_zero_is_kept() {
+        let bare = AttrFamily::Quantity { unit: None };
+        assert_eq!(
+            validate_attr(&bare, &serde_json::json!(0)).and_then(|v| v.as_f64()),
+            Some(0.0)
+        );
+    }
     #[test]
     fn declared_attributes_of_an_undeclared_name_is_empty() {
         let p = ParsePolicy::from_policies(&numismatics_policies());
