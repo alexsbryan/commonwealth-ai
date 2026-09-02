@@ -45,7 +45,9 @@ const SUMMARY_FILE: &str = "_summary.json";
 // breakdowns without re-reading atoms.json. v1 caches are auto-
 // invalidated by `read_or_compute_summary`'s schema_version check and
 // transparently recomputed on next read.
-const SCHEMA_VERSION: u32 = 2;
+// v3 (2026-09-01) adds `ontology`, so a reader can say what a corpus
+// declared without opening atoms.json or the enrich config.
+const SCHEMA_VERSION: u32 = 3;
 
 /// Atlas-level statistics carried in mesh gossip and shown in
 /// `sovereign corpus status` / `sovereign mesh status`.
@@ -77,6 +79,28 @@ pub struct AtlasSummary {
     /// partially-written or hand-edited files.
     #[serde(default)]
     pub atom_counts: BTreeMap<AtomType, u64>,
+    /// What this atlas was extracted under, when the recipe declared an
+    /// ontology. `None` for every prebuilt genre and every prose-only custom
+    /// atlas — declaring nothing is the common case and costs no key on the
+    /// wire. Added in schema v3.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ontology: Option<OntologySummary>,
+}
+
+/// The headline facts about a declared ontology, for a caller that wants to
+/// label a corpus without reading `atlas/ontology.json` itself.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct OntologySummary {
+    /// The `[enrichment.ontology] version` the policies were parsed under.
+    pub version: u32,
+    /// Declared type name → its atom kind, in name order.
+    pub declared: BTreeMap<String, String>,
+    /// The clock supersession folds on (`document_date` | `narrative` | `none`).
+    pub clock: String,
+    /// Type → how two mentions of it are judged the same thing:
+    /// `external:<keys>`, `fallback:<keys>`, or absent when the type resolves
+    /// on its canonical name (the reported default).
+    pub identity_criteria: BTreeMap<String, String>,
 }
 
 impl AtlasSummary {
@@ -92,6 +116,7 @@ impl AtlasSummary {
             atoms_mtime_ms: 0,
             atoms_size_bytes: 0,
             atom_counts: BTreeMap::new(),
+            ontology: None,
         }
     }
 }
@@ -137,6 +162,48 @@ pub fn compute_summary(atlas_dir: &Path) -> io::Result<AtlasSummary> {
         atoms_mtime_ms,
         atoms_size_bytes,
         atom_counts,
+        ontology: read_ontology_summary(atlas_dir),
+    })
+}
+
+/// Project `atlas/ontology.json` into the summary's view. `None` when the
+/// corpus declares nothing, which is also what a pre-ontology atlas reads as.
+fn read_ontology_summary(atlas_dir: &Path) -> Option<OntologySummary> {
+    let file = super::writer::read_atlas_ontology(atlas_dir)?;
+    let p = &file.policies;
+    if !p.has_declarations() {
+        return None;
+    }
+    let mut identity_criteria = BTreeMap::new();
+    for (name, keys) in &p.identity.identity {
+        identity_criteria.insert(name.clone(), format!("external:{}", keys.join(",")));
+    }
+    for (name, keys) in &p.identity.identity_fallback {
+        identity_criteria
+            .entry(name.clone())
+            .or_insert_with(|| format!("fallback:{}", keys.join(",")));
+    }
+    Some(OntologySummary {
+        version: file.ontology_version,
+        declared: p
+            .shape
+            .types
+            .iter()
+            .map(|t| {
+                (
+                    t.name.clone(),
+                    serde_json::to_string(&t.kind)
+                        .unwrap_or_default()
+                        .trim_matches('"')
+                        .to_string(),
+                )
+            })
+            .collect(),
+        clock: serde_json::to_string(&p.change.clock)
+            .unwrap_or_default()
+            .trim_matches('"')
+            .to_string(),
+        identity_criteria,
     })
 }
 
@@ -304,6 +371,46 @@ mod tests {
         assert_eq!(fresh.schema_version, SCHEMA_VERSION);
         assert_eq!(fresh.atom_counts.get(&AtomType::Entity).copied(), Some(2));
         assert_ne!(fresh.fingerprint, "stale");
+    }
+
+    /// A declared ontology beside the atoms shows up in the summary, and an
+    /// atlas without `ontology.json` reads as declaring nothing rather than
+    /// as an error.
+    #[test]
+    fn summary_projects_a_declared_ontology_and_tolerates_its_absence() {
+        use crate::enrichment::ontology::{OntologyTypeDecl, TypeKind};
+
+        let tmp = tempfile::tempdir().unwrap();
+        write_atoms(tmp.path(), &[EnrichmentDepth::Extracted]);
+        assert!(
+            compute_summary(tmp.path()).unwrap().ontology.is_none(),
+            "no ontology.json means the corpus declares nothing"
+        );
+
+        let mut policies = crate::enrichment::ontology::OntologyPolicies::default();
+        policies.shape.types = vec![OntologyTypeDecl {
+            name: "coin".into(),
+            kind: TypeKind::Entity,
+            identity: vec!["find_id".into()],
+            ..Default::default()
+        }];
+        // Axis 3 is the policy's own map; `OntologyV1::into_policies` fills it
+        // from the type decls at parse time, which is what this mirrors.
+        policies
+            .identity
+            .identity
+            .insert("coin".into(), vec!["find_id".into()]);
+        super::super::writer::write_atlas_ontology(tmp.path(), 1, &policies).unwrap();
+
+        let s = compute_summary(tmp.path()).unwrap();
+        let o = s.ontology.expect("the declaration is recorded");
+        assert_eq!(o.version, 1);
+        assert_eq!(o.declared.get("coin").map(String::as_str), Some("entity"));
+        assert_eq!(o.clock, "document_date");
+        assert_eq!(
+            o.identity_criteria.get("coin").map(String::as_str),
+            Some("external:find_id")
+        );
     }
 
     #[test]

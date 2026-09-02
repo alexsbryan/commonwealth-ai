@@ -172,7 +172,12 @@ macro_rules! string_enum_with_other {
 /// Normalise an enum tag coming off the wire into the canonical
 /// snake_case literal. Lowercases, then maps hyphens / whitespace to
 /// underscores, then collapses runs.
-fn normalise_enum_tag(s: &str) -> String {
+///
+/// `pub(crate)` since 2026-09-01: the ontology parser matches a model's tag
+/// against DECLARED type names, and it has to do that by the same rule the
+/// named variants get — otherwise `"Coin"` resolves for a generic type and
+/// drops for a declared one, which is the reverse of what an author expects.
+pub(crate) fn normalise_enum_tag(s: &str) -> String {
     let lower = s.to_ascii_lowercase();
     let mut out = String::with_capacity(lower.len());
     let mut last_was_underscore = false;

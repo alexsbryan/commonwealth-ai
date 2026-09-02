@@ -73,7 +73,7 @@ pub struct AtomRecord {
 /// (`super::store::write_store`) and the reader (`LancePreload`), so the
 /// columnar `atoms.lance` and the resident records derive from the *same*
 /// projection rather than two functions kept in sync.
-pub(crate) fn project(atom: &AtomEnvelope) -> AtomRecord {
+pub fn project(atom: &AtomEnvelope) -> AtomRecord {
     let id = atom.id().as_str().to_string();
     let kind = atom.atom_type();
     let mut name = String::new();
@@ -101,11 +101,25 @@ pub(crate) fn project(atom: &AtomEnvelope) -> AtomRecord {
                 .iter()
                 .map(|p| p.as_str().to_string())
                 .collect();
+            // The declared relation type, when the corpus has one.
+            // `resolution.rs` tags every untyped relation
+            // `Other("unclassified")` — that is the ABSENCE of a subtype, not
+            // a subtype named "unclassified". (The literal is spelled six
+            // times across the crate and was before this line; folding it
+            // into one const is its own change.)
+            let relation_type = r.relation_type.as_str_repr();
+            if relation_type != "unclassified" {
+                subtype = relation_type.to_string();
+            }
         }
         AtomEnvelope::Claim(c) => {
             content = c.content.clone();
             excerpt = c.quotable_excerpt.clone().unwrap_or_default();
             confidence = c.confidence.unwrap_or(0.5);
+            // `claim_kind` is the Claim's subtype under both vocabularies —
+            // the typed-extension qualifiers (`evidence`, `concession`, …)
+            // and a declared claim type (ontology v1).
+            subtype = c.claim_kind.clone().unwrap_or_default();
         }
         _ => {}
     }

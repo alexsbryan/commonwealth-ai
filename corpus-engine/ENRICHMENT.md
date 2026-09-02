@@ -346,7 +346,7 @@ it was enriched:
 | **Obsidian / watched folders** | `tiered` (no recipe) | System 3 (folder variant + `vault_themes`) | T1+T2+T3 + vault themes | `sovereign-tools/src/local_corpus/` + `tiered.rs::run_folder_tiered_enrichment` |
 | **commonwealth-ai** (code) | _(none — `enrich code-intel` verb)_ | **System 4 — Code intelligence** | LanceDB cosine + FTS, code-intel summary chunks boosted, + SCIP call-graph trace via the `CodeQuery` route | `scip_graph.db` + `sovereign enrich code-intel` |
 | **maple-house** (governance probe) | `atlas` (`custom_atlas`, ontology version 0) | System 2, recipe-declared genre | LanceDB cosine + FTS + governance step | `sovereign-recipes/maple-house/recipe.toml` |
-| `recipe new --ontology <name>` (ten templates, PRIMITIVES §1.1–§1.10) | `atlas` (`custom_atlas`, ontology version 1) | System 2, recipe-declared genre | as above; declared types reach the schema in P2 | `sovereign-recipes/_templates/ontology-v1/<name>/recipe.toml` |
+| `recipe new --ontology <name>` (ten templates, PRIMITIVES §1.1–§1.10) | `atlas` (`custom_atlas`, ontology version 1) | System 2, recipe-declared genre | as above; declared types reach the Phase-1 schema, prompt and parser | `sovereign-recipes/_templates/ontology-v1/<name>/recipe.toml` |
 
 ### Custom ontology (version 1)
 
@@ -365,10 +365,31 @@ caps (12 types per kind, 8 attributes per type, 12 enum values) and prints
 the derived facets — clock, tension selector, identity default per entity
 type, question shapes. Templates: `svrn recipe new --ontology <name>`
 (`src/recipe_templates.rs`, data under `sovereign-recipes/_templates/ontology-v1/`).
-Migration: `svrn recipe migrate --ontology-version 1 <recipe>`. As of P1 the
-declarations are parsed, validated and recorded in `config.json`
-(`CustomAtlasSpec.policies`); the generated extraction schema is P2. Design
-and phase plan: `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md`,
+Migration: `svrn recipe migrate --ontology-version 1 <recipe>`.
+
+The declarations reach the model and the reader. `pipelines/ontology_schema.rs`
+generates the Phase-1 response schema by EDITING the shipped
+`phase1_section_extraction_schema` — declared names extend the `entity_type`
+enum (the generic six stay), relation / event / claim sketches gain their type
+slot and one union `attributes` object per kind, claims require `claim_kind`
+instead of `discourse_act`, and `argument_reconstructions` is dropped unless
+`derive.arguments`. The same module renders the `## Declared types` prompt
+block from the same `TypeIndex::effective_attributes` the reader validates
+against, so the grammar, the prompt and the parser cannot disagree.
+`pipelines/parse_policy.rs` + `pipelines/ontology_parse.rs` enforce it: a
+declared type survives as `EntityType::Other("<name>")`, attributes are kept
+only when declared on that type (inherited through `specializes`) and only in
+their family, stored normalised — a number for a quantity, the declared
+spelling for a closed set; a declared voice never becomes an entity and never
+holds an attribution; a declared claim takes its `discourse_act` from the
+type's `force` and is dropped when it has no anchor. Every drop is traced with
+its reason. A corpus that declares nothing runs the identical code under
+`ParsePolicy::default()`, and all three compose/parse hooks return `None` —
+that, not a remembered branch, is what makes an empty version-1 block compose
+version-0 bytes (pinned by `tests/main/ontology_prompt_snapshots.rs`). After
+resolution, `atlas/ontology.json` records the policies the atlas was built
+under and `_summary.json` (schema 3) carries an `OntologySummary`. Design and
+phase plan: `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md`,
 `ONTOLOGY_MIGRATION.md`; field reference: `sovereign-recipes/SCHEMA.md`.
 
 ---
