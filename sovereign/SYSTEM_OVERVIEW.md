@@ -770,9 +770,12 @@ identical schema for a full index or a shard.
         │                                # lossless payload). Replaced atoms.rkyv; the
         │                                # sole atom backend. See docs/specs/ATLAS_STORAGE_V2.md
         ├── edges.csr                    # mmap'd CSR adjacency — sync, paged BFS
-        ├── atoms_ann.lance/             # ANN seed table (atom_id → embedding), built at
-        │                                # enrich/backfill; seeds atlas grounding (only
-        │                                # on embedding-bearing corpora)
+        ├── atoms_ann.lance/             # ANN seed table (atom_id → embedding); seeds atlas
+        │                                # grounding. Written by ONE function,
+        │                                # `sovereign_tools::atlas_context_manager::backfill_ann`,
+        │                                # from `enrich build`'s last step (`backfill`, skipped
+        │                                # while `ann_table_is_fresh` — table mtime ≥ atoms.json)
+        │                                # or `svrn atlas backfill-ann <id>`
         ├── asset_atoms.jsonl            # AD-2 Asset envelopes (sidecar union'd
         │                                # into atoms.json on next atlas write)
         ├── asset_edges.jsonl            # EdgeType::Attaches edges
@@ -5144,6 +5147,7 @@ Default ports:
 | Understand index storage on disk                 | `corpus-engine/src/index/mod.rs`                                    |
 | Understand the v2 atlas pipeline                 | [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md) + `corpus-engine/src/enrichment/pipeline/mod.rs` |
 | Drive v2 enrichment from the CLI                 | `sovereign-cli-llm/src/enrich_cmd/`                                 |
+| Run an atlas build INSIDE the daemon (a shipped desktop has no CLI on PATH) | `enrich_now` (`sovereign-tools/src/local_corpus/manager.rs`) routes `[enrichment] type = "atlas"` recipes to `EnrichmentDriver::start_atlas_build` → the host-installed `watched::enrich::AtlasBuildRunner` (`sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs::in_process_atlas_builder`, which links `sovereign-cli-llm` as a library); progress lands in `_enrichment_state.json`. `tiered` and recipe-less folders keep `start_tiered_build`. The subprocess runner (`sovereign-tools/src/enrich.rs`) is the fallback where no builder is installed. (ontology-v1 P0.4) |
 | Understand the recipe registry                   | `corpus-engine/src/registry.rs` (+ `recipe.rs::bundled_recipe_toml`) |
 | Understand delta updates                         | `corpus-engine/src/update/delta.rs`                                 |
 | Understand scope expansion (filter delta)        | `corpus-engine/src/engine/expand.rs`                                |
@@ -5594,6 +5598,70 @@ What the re-freeze accepted, all of it already on `origin/main`:
 | Daemon bootstrap | `sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs` (2,672 → 2,786) | Child-process supervision + RPC-worker spawn + manifest refresh cohere as one startup state machine; splits when the compute-child boundary takes the worker half. |
 | corpus-engine engine | `corpus-engine/src/engine/mod.rs` (3,804 → 3,879) | Under the 10-crate decomposition (`corpus-engine/DECOMPOSITION.md`); this file shrinks by carve-out, not by a local split. |
 | Newly oversized, no prior row | `commonwealth-api/src/server.rs` (1,253), `sovereign-cli-daemon/src/setup_cmd/mod.rs` (1,287), `sovereign-mesh/src/oicp_synthesis.rs` (1,266), `sovereign-cli/tests/main/cli_contract_journeys.rs` (1,201) | Four files crossed 1,200 during the 2026-08 arcs. All are within 90 lines of the ceiling and each splits along an obvious seam (route families, setup targets, synthesis stages, journey families) — first candidates when the queue is worked. |
+
+### 10.1e Placement — 2026-09-01 the orchestrator moved below the hosts (ontology-v1 P0.4 → P0.5)
+
+**History, one line, because the cheaper option was tried and named rather
+than overlooked.** P0.4 gave the daemon the atlas `enrich build` orchestrator
+by linking `sovereign-cli-llm`'s library target — host → host, layer-legal,
+accepted as a NAMED substitution (ARCH §18.3) with this row recording it as
+outstanding debt. The operator adjudicated the fork on 2026-09-01 and funded
+the split. P0.5 landed it: the orchestrator is now
+`sovereign-enrichment-build`, a `capabilities` crate (17 modules / ~9,900
+lines) beside `sovereign-enrichment-catalog`, and the daemon depends on it
+rather than on a host.
+
+**What the rung delivered, measured.** The bar was that `sovereign-eval` —
+grandfathered into `sovereign-cli-llm` by `bench_cmd`, and therefore linked
+into the daemon and into every desktop bundle that embeds it — must leave both
+dependency graphs.
+
+| `cargo tree -p <bin> -i sovereign-eval -e normal` | before (`e05381a9d`) | after (`d6c1c48d6`) |
+|---|---|---|
+| `sovereign-cli-daemon` | prints the chain via `sovereign-cli-llm` | `error: package ID specification `sovereign-eval` did not match any packages` |
+| `sovereign-desktop` | prints the chain via `sovereign-cli-daemon` | same error |
+
+That error string IS the evidence, and it is quoted here so the next reader
+does not file it as a broken command: `cargo tree -i` filters to the target's
+graph FIRST, so "did not match any packages" means the package is not in that
+binary's graph at all. Also delivered: the daemon no longer depends on any
+`hosts` crate, the P0.4 substitution is retired rather than left standing, and
+`sovereign-cli-shared` — the last `hosts` edge inside the orchestrator's
+closure — is gone, because the `cmd_*` entry points and their `HELP` consts
+stayed in `sovereign-cli-llm` where the user interface belongs.
+
+**What the rung did NOT deliver: the size.** The second bar condition was that
+the +12.3 MB the library edge cost must come back down. It did not. Measured
+with one identical, staleness-guarded command (`rm -f` the binary first, so a
+stale file cannot be read at all — an earlier run of this same measurement
+returned the previous value with a fresh-looking exit code):
+
+| `target/debug/sovereign-cli-daemon` | bytes |
+|---|---|
+| before the flip (`e05381a9d`) | 863,517,536 |
+| after the flip (`d6c1c48d6`) | 863,657,464 |
+| delta | **+139,928 (+0.133 MiB, +0.016%)** |
+
+The binary is 140 KB LARGER. Nothing of the 12.3 MB was recovered.
+
+The reason, and it invalidates the premise the bar was written on: **the
+12.3 MB was never `sovereign-eval`.** It was the orchestrator's own code —
+~9,900 lines and its transitive deps — which the daemon genuinely runs and
+still links. The split changed WHERE the daemon reaches that code from (a
+`capabilities` crate instead of a `hosts` crate); it removed nothing the
+daemon uses. The size win was not available because nothing being carried was
+dead. The small increase is consistent with a new crate boundary costing a
+compilation unit's own metadata and losing cross-crate inlining, but that is a
+plausible reading of a 0.016% delta, not a measured cause.
+
+**The judgement this leaves.** The boundary was worth funding on architectural
+grounds alone: a capability three hosts need is out of a host binary, the
+back-of-house crate is out of the shipped desktop bundle, and the layer map is
+true rather than excepted. Anyone re-running this argument for another
+extraction should NOT expect binary size to move — and should check whether
+the weight they mean to shed is actually dead before making it a bar. This one
+was assumed severable by the coordinator and by the worker, and the
+measurement said otherwise.
 
 ### 10.2 cmnwlth deferrals
 

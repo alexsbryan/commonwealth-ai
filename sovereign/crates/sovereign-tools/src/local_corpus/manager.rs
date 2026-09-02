@@ -120,7 +120,9 @@ pub type ProgressCallback = Arc<dyn Fn(LocalCorpusProgress) + Send + Sync>;
 // ─── Manager ─────────────────────────────────────────────────────────
 
 pub struct LocalCorpusManager {
-    engine: Arc<CorpusEngine>,
+    /// `pub(super)` for `atlas_dispatch`, which carries the `enrich_now`
+    /// half of this impl; private otherwise.
+    pub(super) engine: Arc<CorpusEngine>,
     store: Arc<dyn StateStore>,
     #[allow(dead_code)]
     inference: Option<Arc<dyn InferenceProvider>>,
@@ -152,7 +154,7 @@ pub struct LocalCorpusManager {
     /// Defaults are installed at daemon boot via
     /// `set_enrichment_defaults`; before that, `enable_enrichment`
     /// returns an error.
-    enrichment_driver: Arc<super::watched::enrich::EnrichmentDriver>,
+    pub(super) enrichment_driver: Arc<super::watched::enrich::EnrichmentDriver>,
     /// Live enrichment progress per corpus. The driver's progress
     /// callback writes here on every parsed `EnrichProgress` event
     /// so the HTTP `/details` route can render the current phase
@@ -384,6 +386,16 @@ impl LocalCorpusManager {
         defaults: super::watched::enrich::EnrichmentDefaults,
     ) {
         self.enrichment_driver.set_defaults(defaults).await;
+    }
+
+    /// Install the host's in-process atlas build (ontology-v1 P0.4; see
+    /// `watched::enrich::AtlasBuildRunner`). Passthrough to the driver, like
+    /// `set_tiered_deps` — the daemon wires both at boot.
+    pub async fn set_atlas_builder(
+        &self,
+        builder: Arc<dyn super::watched::enrich::AtlasBuildRunner>,
+    ) {
+        self.enrichment_driver.set_atlas_builder(builder).await;
     }
 
     /// Install in-process tiered-enrichment deps (FolderTieredProvider
@@ -864,16 +876,6 @@ impl LocalCorpusManager {
         self.enable_enrichment(corpus_id, &pipeline_id).await
     }
 
-    /// One-shot tiered enrichment for a folder corpus (vault, watched, or
-    /// a one-shot document folder) — no pipeline id needed. This is "the
-    /// watched folder's first sweep, without the watching": it runs the
-    /// same tiered build (`start_tiered_build`) the enable path uses, so a
-    /// drag-drop import gets the RAPTOR + entity atlas a watched folder
-    /// gets. The pipeline id is a formality the tiered path ignores.
-    pub async fn enrich_now(&self, corpus_id: &str) -> Result<String> {
-        self.enable_enrichment(corpus_id, "referential_atlas").await
-    }
-
     /// Re-enrich a SINGLE note in-process — the "flag a wrong summary →
     /// re-enrich just this note" revision loop
     /// (`docs/specs/SUMMARY_REVISION_LOOP.md`). Thin proxy to the driver,
@@ -907,7 +909,8 @@ impl LocalCorpusManager {
     /// non-terminal, which is exactly the signal we key off here).
     ///
     /// **Signal.** The corpus's own `_enrichment_state.json`
-    /// ([`EnrichmentPhase::is_resumable_interruption`]): a finished build
+    /// ([`corpus_engine::enrichment::state::EnrichmentPhase::is_resumable_interruption`]):
+    /// a finished build
     /// stamps `Complete` (skip); a genuine total failure stamps `Failed`
     /// (skip — the operator retries deliberately, we don't auto-loop);
     /// anything else was a process killed mid-run (resume). A corpus with
@@ -1774,7 +1777,7 @@ impl LocalCorpusManager {
         self.engine_index_dir()
     }
 
-    fn engine_index_dir(&self) -> PathBuf {
+    pub(super) fn engine_index_dir(&self) -> PathBuf {
         // The engine does not expose its index_dir publicly yet, so we
         // derive it from data_dir by convention. `AppState` passes the
         // same data_dir both to CorpusEngine and to us.

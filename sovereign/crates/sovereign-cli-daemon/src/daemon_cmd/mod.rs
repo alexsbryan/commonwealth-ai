@@ -37,6 +37,7 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 // the separable lifecycle / workspace / provider / worker / tool-registry
 // concerns moved to submodules. `home_dir_buf` + `warn_orphaned_indexes`
 // stay here (the former is shared with submodules as an ancestor-private).
+mod atlas_builder;
 pub(crate) mod bootstrap;
 pub(crate) mod build;
 mod discovery_policy;
@@ -890,6 +891,9 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         &data_dir,
         &config,
         folder_tiered_deps,
+        Some(atlas_builder::in_process_atlas_builder(Arc::clone(
+            &routed_provider,
+        ))),
     )
     .await;
 

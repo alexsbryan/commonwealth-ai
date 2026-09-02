@@ -1306,7 +1306,7 @@ async fn enrich_once_handler(
     let fail_id = corpus_id.clone();
     tokio::spawn(async move {
         match mgr.enrich_now(&id).await {
-            Ok(job) => tracing::info!(corpus_id = %id, job, "enrich-once: tiered build started"),
+            Ok(job) => tracing::info!(corpus_id = %id, job, "enrich-once: enrichment started"),
             Err(e) => {
                 tracing::warn!(corpus_id = %id, "enrich-once: enrichment did not start: {e}");
                 // The tiered sink never took over — mark Failed so status

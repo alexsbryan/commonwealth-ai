@@ -22,6 +22,14 @@
 // wrapped.
 pub use sovereign_enrichment_catalog::{catalog, config, paths};
 
+// Moved DOWN to `sovereign-enrichment-build` (ontology-v1 P0.5) and re-exported
+// here so the ~15 sibling modules that reach them keep saying `super::corpus_io`,
+// `super::inference_client` and so on. Same reason `config` and `paths` are
+// re-exported on the line above: the home moved, the call sites did not.
+pub use sovereign_enrichment_build::{
+    corpus_io, inference_client, pipeline_resolve, providers, source_loader,
+};
+
 pub mod atlas_configuration;
 pub mod atlas_cross_corpus;
 pub mod atlas_drift_report;
@@ -41,7 +49,6 @@ pub mod capability_reconcile;
 pub mod cascade;
 pub mod classify;
 pub mod code_intel;
-pub mod corpus_io;
 pub mod delta_cmd;
 pub mod diagnose;
 pub mod diff;
@@ -51,14 +58,11 @@ pub mod eval_median;
 pub mod exemplars;
 pub mod extract;
 pub mod extract_typed;
-pub mod inference_client;
 pub mod ingest;
 pub mod init;
 pub mod investigation;
 pub mod phase_cmd;
-pub mod pipeline_resolve;
 pub mod promote;
-pub mod providers;
 pub mod query;
 pub mod raptor;
 pub mod raptor_index;
@@ -68,7 +72,6 @@ pub mod seed_cmd;
 pub mod sep_ingest;
 pub mod sheets_ingest;
 pub mod show;
-pub mod source_loader;
 pub mod spec_intel;
 pub mod spec_reconcile;
 pub mod status;
@@ -281,9 +284,6 @@ pub async fn run_enrich(args: &[String]) -> i32 {
     }
 }
 
-#[cfg(test)]
-mod integration_tests;
-
 /// R-5 red — a personal-corpus chunk must not reach a remote-model
 /// payload via the enrich --provider dispatch (order
 /// deep-research-t2a). Fails at HEAD; green once the egress
@@ -291,35 +291,9 @@ mod integration_tests;
 #[cfg(test)]
 mod egress_reds;
 
-/// Shared test helpers across `enrich_cmd` test modules.
-///
-/// `std::env::set_var("HOME", …)` is process-wide state; tests that
-/// scope `HOME` to a tempdir must acquire this lock before doing so
-/// to avoid racing each other.
+/// Shared test helpers across `enrich_cmd` test modules — the process-wide
+/// `HOME` lock. Defined ONCE, in `sovereign-enrichment-build` (§10.6), because
+/// `providers`' tests moved down there with the module and the four test
+/// modules here still need the same lock. Re-exported rather than copied.
 #[cfg(test)]
-pub(super) mod test_env {
-    use std::sync::{Mutex, MutexGuard};
-
-    static HOME_LOCK: Mutex<()> = Mutex::new(());
-
-    /// Handle holding both the tempdir and the `HOME` lock. Drop to
-    /// release.
-    pub struct HomeGuard {
-        dir: tempfile::TempDir,
-        _guard: MutexGuard<'static, ()>,
-    }
-
-    impl HomeGuard {
-        pub fn path(&self) -> &std::path::Path {
-            self.dir.path()
-        }
-    }
-
-    /// Acquire the `HOME` lock and point `HOME` at a fresh tempdir.
-    pub fn scoped_home() -> HomeGuard {
-        let guard = HOME_LOCK.lock().unwrap_or_else(|p| p.into_inner());
-        let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("HOME", dir.path());
-        HomeGuard { dir, _guard: guard }
-    }
-}
+pub(super) use sovereign_enrichment_build::test_env;

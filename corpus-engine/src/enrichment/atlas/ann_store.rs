@@ -36,6 +36,28 @@ pub fn ann_table_present(atlas_dir: &Path) -> bool {
     ann_table_dir(atlas_dir).is_dir()
 }
 
+/// Whether the ANN seed table is at least as new as `atoms.json` — the
+/// "already built" test the `enrich build` Backfill step and the daemon's
+/// post-write hook share (ontology-v1 P0). [`ann_table_present`] answers only
+/// "is there a table"; a table older than the atlas it was embedded from
+/// seeds grounding with atoms the last resolve renamed or deleted, which is
+/// worse than no table (ATLAS_STORAGE_V2 3b keys the table on atom-id). Same
+/// mtime idiom as `store::store_needs_build`.
+///
+/// Absent table → `false`. Table present but no `atoms.json` → `true`
+/// (nothing newer exists to embed). An unreadable mtime → `false` (rebuild).
+pub fn ann_table_is_fresh(atlas_dir: &Path) -> bool {
+    let mtime = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+    let Some(table) = mtime(&ann_table_dir(atlas_dir)) else {
+        return false;
+    };
+    // `atoms.json` is the file `writer::write_atlas_full` stamps last.
+    match mtime(&atlas_dir.join("atoms.json")) {
+        Some(atoms) => table >= atoms,
+        None => true,
+    }
+}
+
 /// A flat Lance vector table over opaque string keys. Cheap to build at the
 /// hundreds-to-thousands scale of pooled atlas seeds; `nearest` brute-forces
 /// exactly (no quantization), so its ranking equals exact cosine.
@@ -282,5 +304,56 @@ mod tests {
         assert_eq!(with_vecs[0].0, "b");
         // The vector comes back verbatim so the caller can re-score with cosine.
         assert_eq!(with_vecs[0].1, vec![0.0, 1.0, 0.0]);
+    }
+
+    /// Freshness fixture: an `atlas/` dir with `atoms.json` stamped at
+    /// `atoms_secs` and (optionally) an ANN table dir stamped at
+    /// `table_secs`, both relative to the epoch so the order is explicit.
+    fn freshness_fixture(atoms_secs: Option<u64>, table_secs: Option<u64>) -> tempfile::TempDir {
+        use std::time::{Duration, UNIX_EPOCH};
+        let tmp = tempfile::tempdir().unwrap();
+        if let Some(a) = atoms_secs {
+            let p = tmp.path().join("atoms.json");
+            std::fs::write(&p, "{}").unwrap();
+            std::fs::File::open(&p)
+                .unwrap()
+                .set_modified(UNIX_EPOCH + Duration::from_secs(a))
+                .unwrap();
+        }
+        if let Some(t) = table_secs {
+            let d = ann_table_dir(tmp.path());
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::File::open(&d)
+                .unwrap()
+                .set_modified(UNIX_EPOCH + Duration::from_secs(t))
+                .unwrap();
+        }
+        tmp
+    }
+
+    #[test]
+    fn ann_table_is_fresh_absent_table_is_not_fresh() {
+        let tmp = freshness_fixture(Some(2_000), None);
+        assert!(!ann_table_is_fresh(tmp.path()));
+    }
+
+    #[test]
+    fn ann_table_is_fresh_table_newer_than_atoms_is_fresh() {
+        let tmp = freshness_fixture(Some(1_000), Some(2_000));
+        assert!(ann_table_is_fresh(tmp.path()));
+    }
+
+    /// The falsifier `ann_table_present` cannot pass: a table that exists
+    /// but predates the atoms.json it should have been embedded from.
+    #[test]
+    fn ann_table_is_fresh_table_older_than_atoms_is_stale() {
+        let tmp = freshness_fixture(Some(2_000), Some(1_000));
+        assert!(!ann_table_is_fresh(tmp.path()));
+    }
+
+    #[test]
+    fn ann_table_is_fresh_table_without_atoms_json_is_fresh() {
+        let tmp = freshness_fixture(None, Some(1_000));
+        assert!(ann_table_is_fresh(tmp.path()));
     }
 }

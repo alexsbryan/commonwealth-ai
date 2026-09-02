@@ -465,7 +465,7 @@ mod tests {
         // Without this, a parallel `scoped_home()`-using test was
         // observing a stomped HOME and producing
         // `Invalid input: no enrichment config for corpus 'test-book'`.
-        let _home = crate::enrich_cmd::test_env::scoped_home();
+        let _home = crate::test_env::scoped_home();
         let reg = ProviderRegistry::load_default("http://localhost:9741");
         let local = reg.get("local").unwrap();
         assert_eq!(local.kind, ProviderKind::OpenaiCompatible);
@@ -478,7 +478,7 @@ mod tests {
 
     #[test]
     fn registry_does_not_double_append_v1() {
-        let _home = crate::enrich_cmd::test_env::scoped_home();
+        let _home = crate::test_env::scoped_home();
         let reg = ProviderRegistry::load_default("http://localhost:9741/v1");
         let local = reg.get("local").unwrap();
         assert_eq!(local.base_url, "http://localhost:9741/v1");
@@ -488,7 +488,7 @@ mod tests {
     fn synthesized_local_is_not_marked_configured() {
         // The built-in `local` provider must be eligible for capability
         // discovery — it carries a *default*, not an operator override.
-        let _home = crate::enrich_cmd::test_env::scoped_home();
+        let _home = crate::test_env::scoped_home();
         let reg = ProviderRegistry::load_default("http://localhost:9741");
         assert!(!reg.get("local").unwrap().structured_output_configured);
     }

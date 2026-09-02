@@ -41,7 +41,9 @@ use sovereign_core::types::AssetState;
 use tokio::sync::{Mutex, OwnedSemaphorePermit, RwLock, Semaphore};
 use tokio::task::JoinHandle;
 
-use crate::enrich::{new_cancellation_flag, run_enrich_build, CancellationFlag, EnrichBuildConfig};
+use crate::enrich::{
+    new_cancellation_flag, run_enrich_build, CancellationFlag, EnrichBuildConfig, EXIT_CANCELLED,
+};
 // The enrichment store, below every host that reads it (rung
 // nc-16-shared-capability). Both the schema and the path layout were
 // re-derived in this file until 2026-08-20.
@@ -227,6 +229,22 @@ pub struct TieredDeps {
 /// the per-corpus job table + the global concurrency cap. The
 /// `LocalCorpusManager` owns one `Arc<EnrichmentDriver>` and
 /// proxies its public methods.
+/// An in-process `enrich build` a HOST installs so the driver never has to
+/// spawn a CLI — which a shipped desktop bundle does not carry (ontology-v1
+/// P0.4, operator decision (b)). Object-safe with a boxed future so the one
+/// host crate that links the orchestrator (`sovereign-cli-daemon`) can
+/// implement it without this crate depending upward (ARCH_LAYERS: hosts are
+/// terminal). `cancel` is polled between steps; the build returns
+/// [`EXIT_CANCELLED`] when it honours it.
+pub trait AtlasBuildRunner: Send + Sync {
+    fn build(
+        &self,
+        corpus_id: String,
+        progress: crate::enrich::EnrichProgressFn,
+        cancel: CancellationFlag,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = i32> + Send + 'static>>;
+}
+
 pub struct EnrichmentDriver {
     defaults: RwLock<Option<EnrichmentDefaults>>,
     /// In-flight builds, keyed by corpus_id. Reads must take this
@@ -244,6 +262,10 @@ pub struct EnrichmentDriver {
     /// loudly instead of shelling out (the subprocess fallback was
     /// removed — it isn't bundled with every deployment).
     tiered_deps: RwLock<Option<TieredDeps>>,
+    /// The in-process atlas build, when the host installed one. `None` keeps
+    /// the subprocess path (`run_enrich_build`) — a dev box with the CLI on
+    /// PATH still works; a shipped bundle installs this.
+    atlas_builder: RwLock<Option<Arc<dyn AtlasBuildRunner>>>,
 }
 
 impl EnrichmentDriver {
@@ -253,7 +275,18 @@ impl EnrichmentDriver {
             in_flight: Mutex::new(HashMap::new()),
             permits: Arc::new(Semaphore::new(1)),
             tiered_deps: RwLock::new(None),
+            atlas_builder: RwLock::new(None),
         }
+    }
+
+    /// Install the host's in-process atlas build (see [`AtlasBuildRunner`]).
+    pub async fn set_atlas_builder(&self, builder: Arc<dyn AtlasBuildRunner>) {
+        *self.atlas_builder.write().await = Some(builder);
+    }
+
+    /// Whether [`set_atlas_builder`](Self::set_atlas_builder) has run.
+    pub async fn has_atlas_builder(&self) -> bool {
+        self.atlas_builder.read().await.is_some()
     }
 
     /// Install tiered-path deps. Called once at daemon boot after
@@ -382,11 +415,52 @@ impl EnrichmentDriver {
             )));
         }
 
-        // Synthesize + write the enrich config. The subprocess
-        // reads from this exact path on the very next line.
+        // Synthesize + write the enrich config. The build reads from
+        // this exact path on the very next line.
         let cfg = synthesize_watched_config(corpus_id, pipeline_id, source_path, &defaults);
         save_watched_config(&cfg)?;
 
+        self.spawn_build(corpus_id, defaults.cli_path.clone(), progress)
+            .await
+    }
+
+    /// Start the atlas build for a corpus whose enrichment config ALREADY
+    /// exists (a recipe corpus after `svrn enrich init`; the caller checks).
+    /// No config is synthesized — a recipe-driven config carries the custom
+    /// ontology, and rewriting it here would lose it. Same permit, same
+    /// in-flight bookkeeping, same cancel flag as [`start_build`](Self::start_build).
+    /// Does not require the watched-folder enrichment defaults: with the
+    /// in-process builder installed there is no CLI to point at.
+    pub async fn start_atlas_build(
+        &self,
+        corpus_id: &str,
+        progress: crate::enrich::EnrichProgressFn,
+    ) -> Result<String> {
+        if self.is_running(corpus_id).await {
+            return Err(Error::Execution(format!(
+                "enrichment build already in flight for corpus '{corpus_id}' \
+                 — cancel it first if you want to retry"
+            )));
+        }
+        let cli_path = self
+            .defaults
+            .read()
+            .await
+            .as_ref()
+            .and_then(|d| d.cli_path.clone());
+        self.spawn_build(corpus_id, cli_path, progress).await
+    }
+
+    /// The shared tail of both `start_*` entries: take the global permit,
+    /// spawn the build — in-process when a host installed an
+    /// [`AtlasBuildRunner`], else the `sovereign-cli` subprocess — and record
+    /// the job so `cancel` / `forget` / `in_flight_snapshot` see it.
+    async fn spawn_build(
+        &self,
+        corpus_id: &str,
+        cli_path: Option<PathBuf>,
+        progress: crate::enrich::EnrichProgressFn,
+    ) -> Result<String> {
         // Acquire a global permit. With capacity = 1 this means a
         // build for any other corpus is queued behind this one;
         // by the time the spawned task starts running, the permit
@@ -403,12 +477,39 @@ impl EnrichmentDriver {
         let cancel = new_cancellation_flag();
         let cancel_for_task = cancel.clone();
         let corpus_id_owned = corpus_id.to_string();
-        let cli_path = defaults.cli_path.clone();
         let task_permit = permit.clone();
+        let builder = self.atlas_builder.read().await.clone();
 
         let task = tokio::spawn(async move {
             // Hold the permit for the duration of the build.
             let _permit = task_permit;
+            if let Some(builder) = builder {
+                tracing::info!(
+                    corpus_id = %corpus_id_owned,
+                    "enrichment_driver:build_in_process"
+                );
+                let code = builder
+                    .build(corpus_id_owned.clone(), progress.clone(), cancel_for_task)
+                    .await;
+                if code == 0 {
+                    tracing::info!(
+                        corpus_id = %corpus_id_owned,
+                        "enrichment_driver:build_complete"
+                    );
+                } else if code == EXIT_CANCELLED {
+                    tracing::info!(
+                        corpus_id = %corpus_id_owned,
+                        "enrichment_driver:build_cancelled"
+                    );
+                } else {
+                    tracing::warn!(
+                        corpus_id = %corpus_id_owned,
+                        exit_code = code,
+                        "enrichment_driver:build_failed_exit"
+                    );
+                }
+                return;
+            }
             let build_cfg = EnrichBuildConfig {
                 cli_path,
                 extra_args: vec!["--full".into()],
@@ -706,6 +807,7 @@ mod tests {
     #![allow(clippy::await_holding_lock)]
 
     use super::*;
+    use corpus_engine::enrichment::pipeline::EnrichProgress;
     use tempfile::tempdir;
 
     fn defaults() -> EnrichmentDefaults {
@@ -844,6 +946,79 @@ mod tests {
         let parsed: EnrichConfig = serde_json::from_str(&raw).unwrap();
         assert_eq!(parsed.corpus_id, "watched-test");
         std::env::remove_var("SVRNMESH_DATA_DIR");
+    }
+
+    /// Records what it was asked to build and reports Complete, so the
+    /// test can see the in-process path was taken.
+    struct RecordingBuilder {
+        calls: Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    impl AtlasBuildRunner for RecordingBuilder {
+        fn build(
+            &self,
+            corpus_id: String,
+            progress: crate::enrich::EnrichProgressFn,
+            _cancel: CancellationFlag,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = i32> + Send + 'static>> {
+            let calls = self.calls.clone();
+            Box::pin(async move {
+                calls.lock().unwrap().push(corpus_id.clone());
+                progress(EnrichProgress::Complete {
+                    corpus_id,
+                    steps_completed: 0,
+                });
+                0
+            })
+        }
+    }
+
+    /// The daemon-level substitution for the tauri-bundle gate (ontology-v1
+    /// P0.4): with a host-installed builder, `start_atlas_build` runs the
+    /// build in-process and never reaches for a CLI. `cli_path` names a
+    /// binary that does not exist, so had the subprocess path been taken the
+    /// spawn would have failed and no `Complete` would arrive; the recorded
+    /// call and the Complete event prove which path ran.
+    #[tokio::test]
+    async fn start_atlas_build_runs_the_installed_builder_not_a_subprocess() {
+        let driver = EnrichmentDriver::new();
+        let mut d = defaults();
+        d.cli_path = Some(PathBuf::from("/nonexistent/sovereign-cli"));
+        driver.set_defaults(d).await;
+        let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+        driver
+            .set_atlas_builder(Arc::new(RecordingBuilder {
+                calls: calls.clone(),
+            }))
+            .await;
+        assert!(driver.has_atlas_builder().await);
+
+        let completed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let completed_sink = completed.clone();
+        let progress: crate::enrich::EnrichProgressFn = Arc::new(move |evt| {
+            if matches!(evt, EnrichProgress::Complete { .. }) {
+                completed_sink.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+        });
+        let job = driver
+            .start_atlas_build("maple-house", progress)
+            .await
+            .expect("an installed builder needs no CLI");
+        assert!(!job.is_empty());
+
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while !completed.load(std::sync::atomic::Ordering::SeqCst) {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("the in-process build reports Complete");
+        assert_eq!(*calls.lock().unwrap(), vec!["maple-house".to_string()]);
+        assert_eq!(
+            driver.in_flight_snapshot().await.get("maple-house"),
+            Some(&job),
+            "the job is tracked like a subprocess build"
+        );
     }
 
     #[tokio::test]

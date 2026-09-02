@@ -32,7 +32,7 @@ const CORPUS_SOURCE_PREFIX: &str = "corpus:";
 /// Build the section detector the config selects. Returns a boxed
 /// trait object so both callers (`rebuild_corpus_state` and
 /// `build_corpus`) share one dispatch site.
-pub(super) fn detector_for(cfg: &EnrichConfig) -> Result<Box<dyn SectionDetector>> {
+pub fn detector_for(cfg: &EnrichConfig) -> Result<Box<dyn SectionDetector>> {
     if let Some(tm) = &cfg.toc_markers {
         Ok(Box::new(TocAnchoredDetector::with_markers(
             &tm.start, &tm.end,
@@ -147,9 +147,7 @@ fn fetch_enrichment_chunks(
 /// which has to locate all of them against the source document — it cannot
 /// name the ids it wants in advance, because working them out is the whole
 /// job.
-pub(super) fn fetch_all_corpus_chunks(
-    corpus_id: &str,
-) -> Result<Vec<corpus_engine::EnrichmentChunkRow>> {
+pub fn fetch_all_corpus_chunks(corpus_id: &str) -> Result<Vec<corpus_engine::EnrichmentChunkRow>> {
     read_corpus_chunks(corpus_id, None)
 }
 

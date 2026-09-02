@@ -1972,6 +1972,9 @@ pub(super) async fn setup_watched_folders(
     data_dir: &Path,
     config: &SetupConfig,
     folder_tiered_deps: Option<sovereign_tools::local_corpus::watched::enrich::TieredDeps>,
+    atlas_builder: Option<
+        Arc<dyn sovereign_tools::local_corpus::watched::enrich::AtlasBuildRunner>,
+    >,
 ) -> Option<sovereign_mesh::watched_folder_setup::WatchedSubsystem> {
     // ── Watched-folder reconciliation scheduler ─────────────────
     //
@@ -2053,6 +2056,23 @@ pub(super) async fn setup_watched_folders(
                          enable_enrichment will route through the \
                          in-process tiered driver"
                 );
+            }
+            // ontology-v1 P0.4 — `enrich_now` on an `[enrichment] type =
+            // "atlas"` recipe runs the atlas orchestrator in THIS process.
+            // Without this the driver falls back to spawning `sovereign-cli`,
+            // which a shipped desktop bundle does not carry (exit 127).
+            match atlas_builder {
+                Some(builder) => {
+                    manager.set_atlas_builder(builder).await;
+                    tracing::info!(
+                        "watched_folder:atlas_builder_installed — \
+                             enrich_now runs atlas recipes in-process"
+                    );
+                }
+                None => tracing::info!(
+                    "watched_folder:atlas_builder_absent — \
+                         atlas recipes will spawn `sovereign-cli enrich build`"
+                ),
             }
             // Headless OCR. `corpus watch --ocr` sets `with_ocr: true` on
             // the folder config, but the sweep only takes the OCR path when
