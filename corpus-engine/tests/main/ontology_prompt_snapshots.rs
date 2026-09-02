@@ -25,7 +25,7 @@
 //! ```
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use corpus_engine::enrichment::atlas::analysis::{CandidateContent, TensionSide};
 use corpus_engine::enrichment::atlas::atoms::{AtomId, ChunkRef};
@@ -60,7 +60,10 @@ fn fixtures_dir() -> PathBuf {
 /// re-blessing writes the canonical form so the committed bytes stay sorted
 /// whichever feature set blessed them. Inserting into a fresh `Map` in sorted
 /// key order yields the same bytes under either map type.
-fn canonical_json(text: &str) -> Option<String> {
+///
+/// `recipe_schema.rs` calls this for the descriptor gate, which has the
+/// same problem: ONE canonicaliser, not one per gate (ARCH §10.6).
+pub(crate) fn canonical_json(text: &str) -> Option<String> {
     fn sort_keys(v: serde_json::Value) -> serde_json::Value {
         match v {
             serde_json::Value::Object(map) => {
@@ -102,29 +105,42 @@ fn assert_snapshot(stem: &str, prompt: &ChatPrompt) {
     let path = fixtures_dir().join(format!("{stem}.json"));
     let serialised = serde_json::to_string(prompt).expect("serialise ChatPrompt");
     let rendered = canonical_json(&serialised).expect("a serialised ChatPrompt is JSON");
+    // A byte that moves here is a leak: the bytes sent to a model changed.
+    assert_golden(&path, &rendered, "ontology_prompt_snapshots");
+}
 
+/// Compare `rendered` against the golden at `path`, or rewrite it under
+/// `UPDATE_ONTOLOGY_SNAPSHOTS=1`. A JSON golden is compared as canonical JSON
+/// ([`canonical_json`], so key order cannot skew the gate); anything else,
+/// including a missing or truncated golden, is compared as raw bytes — a
+/// mismatch, never a pass. `module` is the test module the re-bless hint
+/// names. Shared with `recipe_templates.rs` (plain-text derived-facet
+/// goldens): one bless convention, one canonicaliser.
+pub(crate) fn assert_golden(path: &Path, rendered: &str, module: &str) {
     if std::env::var(UPDATE_ENV).is_ok() {
-        std::fs::create_dir_all(fixtures_dir()).expect("create fixtures dir");
-        std::fs::write(&path, &rendered)
-            .unwrap_or_else(|e| panic!("write {}: {e}", path.display()));
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).expect("create fixtures dir");
+        }
+        std::fs::write(path, rendered).unwrap_or_else(|e| panic!("write {}: {e}", path.display()));
         eprintln!("wrote {}", path.display());
         return;
     }
 
-    let committed_raw = std::fs::read_to_string(&path).unwrap_or_default();
-    // A golden that is not JSON (missing, truncated) compares as its raw
-    // bytes and therefore mismatches — never silently passes.
+    let committed_raw = std::fs::read_to_string(path).unwrap_or_default();
+    // A golden that is not JSON compares as its raw bytes: that covers a
+    // missing or truncated one (which therefore mismatches, never silently
+    // passes) and the plain-text facet pins under `recipe_templates/`.
     let committed = canonical_json(&committed_raw).unwrap_or(committed_raw);
     if committed != rendered {
         panic!(
-            "prompt snapshot `{stem}` differs from {} ({} committed bytes vs {} rendered).\n\
-             The bytes sent to a model changed. If that is intended, re-bless with:\n  \
-             {UPDATE_ENV}=1 cargo test -p corpus-engine --test main ontology_prompt_snapshots\n\
+            "golden {} differs ({} committed bytes vs {} rendered).\n\
+             If the change is intended, re-bless with:\n  \
+             {UPDATE_ENV}=1 cargo test -p corpus-engine --test main {module}\n\
              and read the change with `git diff --word-diff` on the fixture.\n{}",
             path.display(),
             committed.len(),
             rendered.len(),
-            crate::recipe_schema::first_diff(&committed, &rendered)
+            crate::recipe_schema::first_diff(&committed, rendered)
         );
     }
 }

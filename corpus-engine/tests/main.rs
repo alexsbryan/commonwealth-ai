@@ -64,6 +64,8 @@ mod recipe_back_compat;
 mod recipe_domain_gate;
 #[path = "main/recipe_schema.rs"]
 mod recipe_schema;
+#[path = "main/recipe_templates.rs"]
+mod recipe_templates;
 #[path = "main/sharding_round_trip_e2e.rs"]
 mod sharding_round_trip_e2e;
 #[path = "main/snapshot_restore_e2e.rs"]

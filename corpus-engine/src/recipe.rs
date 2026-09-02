@@ -796,6 +796,7 @@ pub enum PatternDecl {
     /// petgraph's Tarjan SCC; filters cycles with `len >=
     /// min_entities` whose edges all match `edge_types`.
     CircularFlow {
+        #[serde(default = "default_name_circular_flow")]
         name: String,
         #[serde(default)]
         description: String,
@@ -811,6 +812,7 @@ pub enum PatternDecl {
     /// `"<edge_type>.<from|to>"` describing which side of the edge
     /// the entity sits on.
     RoleOverlap {
+        #[serde(default = "default_name_role_overlap")]
         name: String,
         #[serde(default)]
         description: String,
@@ -820,6 +822,7 @@ pub enum PatternDecl {
     /// E.g. "revenue concentration > 10%": find revenue edges
     /// whose `percentage_of_total` attribute exceeds 0.10.
     Threshold {
+        #[serde(default = "default_name_threshold")]
         name: String,
         #[serde(default)]
         description: String,
@@ -842,6 +845,7 @@ pub enum PatternDecl {
     /// us land the SQL escape hatch later without forcing a
     /// schema migration on recipes already in the wild.
     CustomSql {
+        #[serde(default = "default_name_custom_sql")]
         name: String,
         #[serde(default)]
         description: String,
@@ -854,6 +858,25 @@ pub enum PatternDecl {
 
 fn default_circular_flow_min_entities() -> u32 {
     3
+}
+
+// A pattern's `name` defaults to its `type` (ONTOLOGY_PRIMITIVES.md §1.6
+// writes no name). One fn per variant because serde takes a zero-argument
+// path; `pattern_name_defaults_to_type` pins each to its wire tag.
+fn default_name_circular_flow() -> String {
+    "circular_flow".into()
+}
+
+fn default_name_role_overlap() -> String {
+    "role_overlap".into()
+}
+
+fn default_name_threshold() -> String {
+    "threshold".into()
+}
+
+fn default_name_custom_sql() -> String {
+    "custom_sql".into()
 }
 
 fn default_comparison() -> Comparison {

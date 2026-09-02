@@ -398,6 +398,8 @@ Run and curate corpus ingestion recipes.
 | `test <path>` | Run the full test harness against a recipe file. Flags: `--sample-size N`, `--output <path>`, `--params k=v[,...]`, `--params-file <json>` |
 | `validate <path>` | Validate recipe fields without downloading data. `--offline` skips registry fetch |
 | `publish <path>` | Add a recipe to `~/.svrnmesh/recipes/registry.toml`. `--submit-pr` also drafts a community-registry PR via `gh` |
+| `new --ontology <name> [--id <corpus-id>] [--out <path>]` | Scaffold a complete recipe from a built-in ontology-v1 template; `--ontology list` prints the names (they come from the engine's template registry, `corpus-engine/src/recipe_templates.rs`, not from this page). Stdout unless `--out`; never overwrites |
+| `migrate <path> --ontology-version N [--dry-run]` | Add or raise the `version = N` line under `[enrichment.ontology]` and change nothing else; `--dry-run` prints the diff instead of writing |
 
 ### `svrn pipeline`
 

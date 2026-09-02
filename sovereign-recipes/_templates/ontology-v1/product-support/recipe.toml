@@ -1,0 +1,88 @@
+# Product support — an ontology-v1 recipe template.
+#
+# Tickets, call transcripts, a feedback board, release notes. The questions it
+# is built to answer: how many customers asked for a feature this quarter;
+# which features come up in churn conversations; which issues a release
+# resolved. The declaration is ONTOLOGY_PRIMITIVES.md §1.10 verbatim, plus
+# the `organization` and `feature` types its facets point at.
+#
+# Scaffold:  svrn recipe new --ontology product-support --id my-support --out my-support.toml
+# Then fill the REPLACE_ME fields, and:
+#   svrn recipe validate my-support.toml     # prints what the ontology derives
+#   svrn corpus install my-support.toml
+#   svrn enrich init my-support --from-corpus my-support
+#   svrn enrich build my-support --full
+
+[corpus]
+# REQUIRED: a stable, repo-scoped id.
+id = "REPLACE_ME"
+# REQUIRED: human-readable name.
+name = "REPLACE_ME"
+description = "Tickets, transcripts, feedback and release notes, extracted as customers, features and the requests customers make, with sentiment."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# One markdown file: each ticket, transcript, board post and release note as
+# a `## ` section (dates in the headings let requests be counted by quarter).
+[acquire]
+type = "local_file"
+# REQUIRED: absolute path to the markdown file.
+path = "REPLACE_ME"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "product-support"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is a product's support record: tickets, call transcripts, a feedback board
+and release notes. Customers are organizations known by account id. A request is a
+customer asking for something of a feature — offline mode, an export, a fix — with the
+sentiment it was made in; the same customer asking for the same thing twice is one
+request. Release notes say which issues a version resolved.
+"""
+
+[[enrichment.ontology.types]]
+name = "organization"
+kind = "entity"
+description = "A company or team that holds an account."
+
+[[enrichment.ontology.types]]
+name = "customer"
+kind = "entity"
+role_of = "organization"
+identity = ["account_id"]
+
+[[enrichment.ontology.types]]
+name = "feature"
+kind = "entity"
+description = "A product capability customers ask about: offline mode, SSO, exports."
+
+[[enrichment.ontology.types]]
+name = "ticket"
+kind = "event"
+source = { file = "tickets.jsonl", attributes = { opened = "created_at", status = "status" } }
+
+[[enrichment.ontology.types]]
+name = "request"
+kind = "claim"
+force = "directive"
+deontic = ["request"]
+subject = "feature"
+identity_fallback = ["subject", "customer"]
+attributes = [{ name = "customer", type = "ref", of = "customer" }, { name = "sentiment", type = "text", values = ["positive", "neutral", "negative"] }]

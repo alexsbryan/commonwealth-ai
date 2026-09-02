@@ -1,0 +1,74 @@
+# Research notebook — an ontology-v1 recipe template.
+#
+# Reading notes, half-formed positions, arguments copied from sources, a log
+# of changing views. The questions it is built to answer: what is my current
+# position on a question and how did it change; who argues against it; which
+# of my claims are someone else's. The declaration is
+# ONTOLOGY_PRIMITIVES.md §1.8 verbatim.
+#
+# Scaffold:  svrn recipe new --ontology research-notebook --id my-notes --out my-notes.toml
+# Then fill the REPLACE_ME fields, and:
+#   svrn recipe validate my-notes.toml       # prints what the ontology derives
+#   svrn corpus install my-notes.toml
+#   svrn enrich init my-notes --from-corpus my-notes
+#   svrn enrich build my-notes --full
+
+[corpus]
+# REQUIRED: a stable, repo-scoped id.
+id = "REPLACE_ME"
+# REQUIRED: human-readable name.
+name = "REPLACE_ME"
+description = "A researcher's notes, extracted as dated positions — held by the author or copied from a source — with the arguments between them."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# One markdown file: each dated note as a `## ` section (dates in the
+# headings let a later position supersede an earlier one).
+[acquire]
+type = "local_file"
+# REQUIRED: absolute path to the markdown file.
+path = "REPLACE_ME"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "research-notebook"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is one researcher's notebook: reading notes, positions taken and revised,
+arguments copied from sources, and a log of views changing over time. A position is
+a claim held by the author ("me") or attributed to a source — say which. A later note
+on the same question supersedes an earlier one, so the current position is the latest.
+Arguments for and against a position, wherever they come from, are worth reconstructing.
+"""
+
+[[enrichment.ontology.types]]
+name = "position"
+kind = "claim"
+force = "assertive"
+attributes = [{ name = "held_by", type = "text", values = ["me", "source"] }]
+
+[enrichment.ontology.voices]
+self = "me"
+attributed_to = ["source", "me"]
+
+[enrichment.ontology.change]
+supersedes = { position = "document_date" }
+
+[enrichment.ontology.derive]
+arguments = true

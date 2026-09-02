@@ -8,30 +8,41 @@
 //! vendored into `OUT_DIR` by `build.rs` exactly like the bundled recipes
 //! (`recipe_builtin.rs`), so there is one checked-in copy and no
 //! repo-relative `include_str!` path. Adding a template is adding a
-//! directory there and a row in [`BUILTINS`]; `tests/main/ontology_recipe.rs`
-//! parses and validates every row.
+//! directory there and a row in [`BUILTINS`]; `tests/main/recipe_templates.rs`
+//! parses and validates every row and pins its derived facets.
 //!
-//! P1 ships the first two (numismatics, governance); P7.1 adds the other
-//! eight from §1.
+//! One template per §1 user, in §1 order (§1.1 numismatics … §1.10
+//! product-support).
 
 use crate::error::{Error, Result};
 
+/// `(name, recipe.toml)` for one vendored template directory.
+macro_rules! template {
+    ($name:literal) => {
+        (
+            $name,
+            include_str!(concat!(
+                env!("OUT_DIR"),
+                "/recipes/_templates/ontology-v1/",
+                $name,
+                "/recipe.toml"
+            )),
+        )
+    };
+}
+
 /// `(name, recipe.toml)` for every shipped template, in catalog order.
 const BUILTINS: &[(&str, &str)] = &[
-    (
-        "numismatics",
-        include_str!(concat!(
-            env!("OUT_DIR"),
-            "/recipes/_templates/ontology-v1/numismatics/recipe.toml"
-        )),
-    ),
-    (
-        "governance",
-        include_str!(concat!(
-            env!("OUT_DIR"),
-            "/recipes/_templates/ontology-v1/governance/recipe.toml"
-        )),
-    ),
+    template!("numismatics"),
+    template!("governance"),
+    template!("patient-community"),
+    template!("contracts"),
+    template!("engineering-org"),
+    template!("due-diligence"),
+    template!("literary"),
+    template!("research-notebook"),
+    template!("materials-lab"),
+    template!("product-support"),
 ];
 
 /// The placeholder the templates use for the fields an author must fill

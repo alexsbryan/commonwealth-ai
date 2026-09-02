@@ -142,10 +142,6 @@ kind = "entity"
 role_of = "person"
 
 [[enrichment.ontology.types]]
-name = "person"
-kind = "entity"
-
-[[enrichment.ontology.types]]
 name = "mint"
 kind = "entity"
 
@@ -221,6 +217,10 @@ specializes = "treatment"
 identity = ["rxnorm_id"]
 
 [[enrichment.ontology.types]]
+name = "symptom"
+kind = "entity"
+
+[[enrichment.ontology.types]]
 name = "affects"
 kind = "relation"
 from = "treatment"
@@ -250,9 +250,17 @@ authority has been distinguished since.
 
 ```toml
 [[enrichment.ontology.types]]
+name = "organization"
+kind = "entity"
+
+[[enrichment.ontology.types]]
 name = "party"
 kind = "entity"
 role_of = "organization"
+
+[[enrichment.ontology.types]]
+name = "agreement"
+kind = "entity"
 
 [[enrichment.ontology.types]]
 name = "defined_term"
@@ -266,6 +274,10 @@ force = "directive"
 deontic = ["require", "forbid", "permit"]
 subject = "party"
 attributes = [{ name = "valid", type = "time", range = true }, { name = "deadline", type = "time" }]
+
+[[enrichment.ontology.types]]
+name = "case"
+kind = "entity"
 
 [[enrichment.ontology.types]]
 name = "cites"
@@ -285,6 +297,10 @@ against gRPC internally, and is it still in force; what depends on the
 billing service; which incidents were caused by a config change.
 
 ```toml
+[[enrichment.ontology.types]]
+name = "team"
+kind = "entity"
+
 [[enrichment.ontology.types]]
 name = "component"
 kind = "entity"
@@ -435,6 +451,10 @@ kind = "entity"
 specializes = "material"
 
 [[enrichment.ontology.types]]
+name = "method"
+kind = "entity"
+
+[[enrichment.ontology.types]]
 name = "measurement"
 kind = "claim"
 force = "assertive"
@@ -461,10 +481,18 @@ resolve.
 
 ```toml
 [[enrichment.ontology.types]]
+name = "organization"
+kind = "entity"
+
+[[enrichment.ontology.types]]
 name = "customer"
 kind = "entity"
 role_of = "organization"
 identity = ["account_id"]
+
+[[enrichment.ontology.types]]
+name = "feature"
+kind = "entity"
 
 [[enrichment.ontology.types]]
 name = "ticket"
@@ -637,7 +665,8 @@ block with no types yields the same policies as version 0, so adding
 the version line is always safe.
 
 The interview is one question per axis, in the user's words. The agent
-already asks the first (`sovereign/modes/recipe-author/skill.toml:333-338`).
+asks all five — `sovereign/modes/recipe-author/skill.toml`, under
+"Eliciting the ontology" — and skips any the charter already answers.
 
 | Axis | The agent asks | It writes |
 |---|---|---|
@@ -648,10 +677,14 @@ already asks the first (`sovereign/modes/recipe-author/skill.toml:333-338`).
 | Derivation | What should it notice that no single document says — contradictions, patterns, larger structures? What looks like a contradiction but isn't? | `tension`, `patterns`, `derive` |
 
 `recipe validate` checks every `ref`, `specializes`, `role_of`, `from`,
-`to` and `subject` resolves to a declared type (so a declaration must name
-every type it points at — §1.1 declares `person` and `mint`, §1.2 `topic`),
-every `same` names a declared attribute or `subject`, and prints the
-question shapes the corpus will answer. The build report counts atoms per declared type,
+`to` and `subject` resolves to a declared type or to one of the base
+entity kinds the atlas already emits (`person`, `concept`, `institution`,
+`work`, `place`, `initiative` — read from `EntityType`, not a copy), so
+`role_of = "person"` needs no `person` declaration while §1.1 must declare
+`mint`, §1.2 `topic`, §1.4 `organization` (the base kind is `institution`);
+declaring a base kind stays legal and adds attributes to it. It checks every `same` names a declared attribute or
+`subject`, and prints the question shapes the corpus will answer. The build
+report counts atoms per declared type,
 names the zero-coverage ones, shows the identity criterion each type
 resolved to, and lists reified merges. The inspector filters by
 declared type. The Conflicts panel already speaks the labels.

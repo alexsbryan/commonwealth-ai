@@ -40,9 +40,18 @@ sovereign-recipes/
 ├── _templates/                # copy-paste starting points
 │   ├── annotated/             #   fully-commented general template
 │   ├── narrative-markdown/    #   template for stable markdown docs
-│   └── ontology-v1/           #   `svrn recipe new --ontology <name>` — declared-type recipes
+│   └── ontology-v1/           #   `svrn recipe new --ontology <name>` — declared-type recipes,
+│       │                      #   one per ONTOLOGY_PRIMITIVES.md §1 user
 │       ├── numismatics/       #     coins, mints, rulers, graded attributions
-│       └── governance/        #     a charter + dated decisions, rules that supersede
+│       ├── governance/        #     a charter + dated decisions, rules that supersede
+│       ├── patient-community/ #     treatments, symptoms, graded findings, member voices
+│       ├── contracts/         #     parties, defined terms, dated obligations, citations
+│       ├── engineering-org/   #     components, incidents, decisions in force, root causes
+│       ├── due-diligence/     #     organizations by registry id, payments, circular flows
+│       ├── literary/          #     characters, inner states on the narrative clock, readings
+│       ├── research-notebook/ #     one voice's positions over time, arguments derived
+│       ├── materials-lab/     #     materials by CAS number, table-anchored measurements
+│       └── product-support/   #     customers by account, features, requests with sentiment
 ├── wikipedia/recipe.toml      # one directory per corpus
 ├── sep/recipe.toml
 └── …
