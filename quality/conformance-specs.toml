@@ -54,6 +54,8 @@ clause = '''Traffic that names an origin and traffic that does not MUST be gated
 target = '''commonwealth/crates/commonwealth-api/src/admission.rs:551::peer_admission_layer'''
 asserts = '''a request carrying X-Node-Id moves only peer_admission_layer's counters and never consumes a client_fairness_layer share slot, and vice versa for a request without it.'''
 catches = '''the two gates' early-return conditions drifting apart, so one request is charged against both the peer ceiling and the client fair-share cap, or against neither.'''
+destination = '''commonwealth/crates/commonwealth-api/src/admission.rs (mod tests)'''
+kind = '''rust-unit; drive both middleware layers over a tower stack'''
 
 [[spec]]
 id = "FE-105"
@@ -63,6 +65,8 @@ clause = '''A refusal produced by *this* gate MUST be exempted from peer health 
 target = '''sovereign/crates/sovereign-mesh/src/peer_inference.rs:1055::book_peer_failure'''
 asserts = '''book_peer_failure(peer, err, shed=true) repeated past FAILURE_THRESHOLD leaves is_quarantined(peer) false; the same calls with shed=false quarantine it.'''
 catches = '''dropping the shed early-exit so our own busy/shed refusals are booked as peer faults, quarantining a healthy peer after a few concurrent turns.'''
+destination = '''sovereign/crates/sovereign-mesh/src/peer_inference.rs (mod tests)'''
+kind = '''rust-unit'''
 
 [[spec]]
 id = "FE-119"
@@ -72,6 +76,8 @@ clause = '''A replicated namespaced key-value store MUST exist with last-writer-
 target = '''commonwealth/crates/commonwealth-state/src/store.rs:188::gc'''
 asserts = '''gc_app(app, ttl) removes only entries older than now-ttl within that namespace, leaving other namespaces and newer entries intact; gc(ttl) spans all apps. Return value equals the number deleted.'''
 catches = '''an off-by-one on the cutoff, gc_app deleting across all namespaces, or a silent no-op letting stale entries accumulate forever. Neither function has any test.'''
+destination = '''commonwealth/crates/commonwealth-state/src/store.rs (mod tests)'''
+kind = '''rust-unit; MeshStore::in_memory'''
 
 [[spec]]
 id = "FE-139"
@@ -80,7 +86,9 @@ status = "gap"
 clause = '''Managed subordinate processes MUST have an explicit lifecycle state machine (starting / running / unhealthy / failed / stopped), graceful termination with a timeout before forced termination, periodic health polling with a sampled latency window and an unresponsive threshold, a **graceful departure** countdown state machine (announced → rebalancing → draining → complete), and a fault detector collapsing health changes into events.'''
 target = '''sovereign/crates/sovereign-compute/src/supervisor.rs:199::SupervisorState'''
 asserts = '''a subordinate's observed SupervisorState sequence is Starting -> Healthy -> Unhealthy -> Failed on repeated crashes, AND separately a departure sequence announced -> rebalancing -> draining -> complete.'''
-catches = '''SPEC GAP, not just a test gap: the crash half is partly covered at supervisor.rs:1695, but NO graceful-departure state machine was located anywhere in sovereign-mesh or sovereign-compute. Confirm it exists before writing a test.'''
+catches = '''DUE DILIGENCE 2026-09-02 — ALL THREE PARTS EXIST AS CODE AND NONE IS WIRED. SupervisorState (sovereign-compute/src/supervisor.rs:199), GracefulDeparture Announced->Rebalancing->Draining->Complete (commonwealth-inference/src/orchestrator/departure.rs:11-83) and FaultDetector (orchestrator/fault.rs:34-213) are each self-contained and unit-tested, but neither departure nor fault is ever constructed or called from orchestrator.rs, process.rs or any handler. Orchestrator::stop_all (orchestrator.rs:161), itself commented 'graceful departure', SIGTERMs every process directly and bypasses both. This is dead orchestration code that reads as compliance. The requirement is UNMET: wire it, then test it. A test written against the modules alone would pass while the product still kills processes abruptly.'''
+destination = '''commonwealth/crates/commonwealth-test-harness/tests/integration.rs'''
+kind = '''rust-integration; but WIRING COMES FIRST — see catches'''
 
 [[spec]]
 id = "FE-22"
@@ -90,6 +98,8 @@ clause = '''Hardware capability MUST be detected, not configured, with a fallbac
 target = '''commonwealth/crates/commonwealth-discovery/src/hardware.rs:35::detect_gpus'''
 asserts = '''detect_gpus() with NVIDIA present returns only NVIDIA GpuInfos and never invokes the ROCm or Metal probes; with NVIDIA absent and ROCm present it falls through to ROCm and stops.'''
 catches = '''a reorder or a probe chain that keeps querying after a vendor returned results, duplicating GPUs. The existing hardware test asserts only ram/cores/storage and never inspects profile.gpus or probe order.'''
+destination = '''commonwealth/crates/commonwealth-discovery/src/hardware.rs (mod tests)'''
+kind = '''rust-unit; needs a probe seam — detect_gpus shells out today, so extracting the per-vendor probe is part of this spec'''
 
 [[spec]]
 id = "FE-77"
@@ -99,6 +109,8 @@ clause = '''An overflow refusal MUST be a **new** typed variant, not a reuse of 
 target = '''sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs:1328::WorkerOverflow'''
 asserts = '''first_worker_overflow on a plan with one non-fitting device returns Some(WorkerOverflow), distinct from InsufficientCluster; refusal() text contains LOWER (not raise) and names SOVEREIGN_SKIP_PER_DEVICE_FIT=1.'''
 catches = '''collapsing per-device overflow into InsufficientCluster (which self-resolves as anchors settle), sending an operator hunting a peer that is already there; or advising raising headroom, which makes the overflow worse.'''
+destination = '''sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs (mod tests)'''
+kind = '''rust-unit'''
 
 [[spec]]
 id = "IN-19"
@@ -108,6 +120,8 @@ clause = '''Crash records MUST be local-first and never auto-uploaded (X-PV-6), 
 target = '''sovereign/crates/sovereign-desktop/src-tauri/src/crash_report.rs:261::render_shareable_markdown'''
 asserts = '''render_shareable_markdown for a CrashRecord whose model_path is an absolute path under the user's home emits only the basename, never the full path or username.'''
 catches = '''a new CrashRecord field, or a change to the renderer, leaking an absolute path and therefore the user's identity into a crash export the user is invited to send.'''
+destination = '''sovereign/crates/sovereign-desktop/src-tauri/src/crash_report.rs (mod tests)'''
+kind = '''rust-unit'''
 
 [[spec]]
 id = "IN-27"
@@ -117,6 +131,8 @@ clause = '''Outcome reporting MUST add zero user-visible surface: fire-and-forge
 target = '''commonwealth/crates/commonwealth-api/src/next_edit_journal.rs:144::edit_prediction_outcome'''
 asserts = '''POST edit_prediction_outcome with a recognised outcome and non-empty episode_id returns 204; an unrecognised outcome or empty episode_id returns 400 — never 5xx, never blocking.'''
 catches = '''a change that panics, hangs, or returns a status the editor extension does not already treat as ignorable, turning an advisory journal write into a visible editor failure.'''
+destination = '''commonwealth/crates/commonwealth-api/src/next_edit_journal.rs (mod tests)'''
+kind = '''rust-unit; axum handler over a test router'''
 
 [[spec]]
 id = "ST-15"
@@ -126,6 +142,8 @@ clause = '''Compaction is non-destructive, so storage grows until pruning. Pruni
 target = '''sovereign/crates/sovereign-cli-llm/src/corpus_cmd/optimize.rs:80::run_optimize'''
 asserts = '''`corpus optimize <id> --prune-days 0` (or a non-integer) writes an error naming the constraint to stderr and exits 2 without ever calling CorpusIndex::prune.'''
 catches = '''letting a zero or unparsed retention through to the destructive prune path, deleting every superseded version regardless of what an in-flight reader still holds.'''
+destination = '''sovereign/docs/cli-contract.toml (journey) + optimize.rs mod tests'''
+kind = '''cli-journey; the refusal is an operator-facing surface, so assert stderr+exit in a journey'''
 
 [[spec]]
 id = "ST-41"
@@ -136,6 +154,8 @@ target = '''corpus-engine/src/engine/reindex.rs:323::reindex_by_source_doc_id'''
 existing = '''partial: corpus-engine/src/freshness.rs:79::stamp_then_load_round_trips'''
 asserts = '''after reindex_by_source_doc_id, freshness::load_doc_freshness(index_dir) contains that source_doc_id with a timestamp >= the call start.'''
 catches = '''a new content source's reindex path inserting chunks but never calling the shared stamp, so its documents never sort fresh-first. The existing freshness test covers stamp/load in isolation, not that the reindex path calls them.'''
+destination = '''corpus-engine/tests/main/'''
+kind = '''rust-integration; needs a real index dir'''
 
 [[spec]]
 id = "UI-10"
@@ -144,7 +164,9 @@ status = "gap"
 clause = '''Accessibility seams MUST be shared across surfaces: per-turn completion announcement (announced on completion, never per token) and modal focus trapping with restore. Dynamic accessibility behaviour MUST be verified by assistive-technology testing, not only by automated scanning.'''
 target = '''packages/chat-ui/src/announce.ts::completionAnnouncement (SEAM DOES NOT EXIST)'''
 asserts = '''the live region's text changes exactly once on the streaming->idle transition and never on a MESSAGE_CHUNK; a modal traps focus and restores it to the trigger on close. Instrument: vitest.'''
-catches = '''SEAM DOES NOT EXIST: neither completionAnnouncement nor any ChatView/modal test is in the repo. An aria-live region wired to the streaming text re-announces the whole growing answer every token, which is unusable with a screen reader.'''
+catches = '''DUE DILIGENCE 2026-09-02 — RECLASSIFIED. The seam DOES exist and IS wired: completionAnnouncement (packages/chat-ui/src/announce.ts:26), a role=status aria-live=polite region (ChatView.svelte:1635), fired only on the streaming->idle falling edge (ChatView.svelte:633-661, explicitly not per chunk), and dialogFocus (packages/chat-ui/src/actions/dialog-focus.ts:46-116) provides both the Tab-cycle trap and focus restore, used by five dialogs. The gap is purely test coverage: packages/chat-ui/src contains NO test file at all. This is an ordinary test gap, not missing capability.'''
+destination = '''packages/chat-ui/src/announce.test.ts (new) + a ChatView vitest'''
+kind = '''vitest; packages/chat-ui/src currently has NO test file at all'''
 
 [[spec]]
 id = "UI-22"
@@ -154,6 +176,8 @@ clause = '''Secure by default: bind to the loopback interface, and refuse at sta
 target = '''sovereign/crates/sovereign-mesh/src/daemon.rs:2418::start_daemon'''
 asserts = '''with a non-loopback client_bind and no resolvable token, startup either refuses to bind or installs no token layer and every remote request 401s.'''
 catches = '''an edit flipping the loopback branch shipping an unauthenticated non-loopback listener. The entire posture lives inline in a ~4700-line async fn with no extracted decision function and zero tests — extracting it is part of this spec.'''
+destination = '''sovereign/crates/sovereign-mesh/tests/main/loopback_parity.rs'''
+kind = '''rust-integration; EXTRACTION FIRST — the decision has no testable function today'''
 
 [[spec]]
 id = "UI-4"
@@ -163,6 +187,8 @@ clause = '''The graphical application MUST be organised around **user intent**, 
 target = '''sovereign/crates/sovereign-desktop/src/lib/components/NavRail.svelte:24'''
 asserts = '''the nav rail renders exactly five items with testids nav-ask, nav-library, nav-reflect, nav-workshop, nav-settings and their labels, in order. Instrument: Playwright.'''
 catches = '''a surface silently dropped, renamed or reordered out of the intent-based shape. No spec currently references nav-ask at all.'''
+destination = '''sovereign/crates/sovereign-desktop/tests/e2e/'''
+kind = '''playwright'''
 
 [[spec]]
 id = "UI-9"
@@ -173,6 +199,8 @@ target = '''sovereign/crates/sovereign-desktop/src/lib/machines/chat.machine.ts:
 existing = '''partial: sovereign/crates/sovereign-desktop/src/lib/machines/chat.machine.test.ts:259'''
 asserts = '''a second SEND_INITIATED while the machine is in turn:preparing or turn:streaming appends exactly one user message and starts no second turn. Instrument: vitest.'''
 catches = '''a refactor of the nested turn region that lets a fast double-click fire two turns. The existing machine test covers only the conversation-binding half.'''
+destination = '''sovereign/crates/sovereign-desktop/src/lib/machines/chat.machine.test.ts'''
+kind = '''vitest; extend the existing file'''
 
 [[spec]]
 id = "EN-16"
@@ -181,7 +209,9 @@ status = "gap"
 clause = '''A reversible operation MUST actually be reversible. Where an operation log claims to support undo, the log envelope MUST carry the identity, version, actor, and timestamp needed to find the matching forward operation.'''
 target = '''corpus-engine/src/enrichment/reconciliation/multi_origin.rs:258::split_atom'''
 asserts = '''given a Merge op id, a reversal reads that op's recorded inputs from the log and produces a Split whose outputs equal them — with no operator-supplied `into` list.'''
-catches = '''CAPABILITY CLAIMED BUT ABSENT: split_atom only accepts a caller-supplied output list, so an operator who does not already remember what a merge collapsed cannot reverse it, though the module doc claims reversibility by walking backwards.'''
+catches = '''DUE DILIGENCE 2026-09-02 — CONFIRMED ABSENT for reconciliation, and there is a working pattern to copy. governance.rs:296 (derive_active) already does exactly this for the governance tenant: it matches Revert{targets: Vec<OpId>} against op.id to find and tombstone the forward op. Reconciliation never got that wiring: split_atom(canonical_id, into, rationale) takes a caller-supplied output list, never looks up the Merge by OpId to read its recorded inputs, and its ONLY call site is its own test (multi_origin.rs:471) — no production path calls it. corpus-engine/src/oplog.rs:24-26 documents the reversibility this code does not implement.'''
+destination = '''corpus-engine/src/enrichment/reconciliation/multi_origin.rs (mod tests)'''
+kind = '''rust-unit; BUILD THE REVERSAL FIRST — see catches'''
 
 [[spec]]
 id = "EN-20"
@@ -191,6 +221,8 @@ clause = '''Retrieval MUST drop passages from superseded rules — **no dead law
 target = '''sovereign/crates/sovereign-core/src/runtime/retrieval_pipeline.rs:807::step_governance_active_set'''
 asserts = '''given a GovernanceView with a superseded rule's section and chunks from it, st.chunks after step_governance_active_set excludes those ids and the outcome note reports the drop count.'''
 catches = '''the failure the step's own comment names: the filter matches nothing, every amended rule stays live, and a governance answer built on repealed text is reported clean.'''
+destination = '''sovereign/crates/sovereign-core/src/runtime/retrieval_pipeline.rs (mod tests)'''
+kind = '''rust-unit'''
 
 [[spec]]
 id = "EN-4"
@@ -200,6 +232,8 @@ clause = '''There MUST be exactly one helper constructing this cache identity, s
 target = '''corpus-engine/src/enrichment/pipeline/phase_cache.rs:72::with_model_identity'''
 asserts = '''CacheModelIdentity is constructed in exactly one place in phase_cache.rs production code (source-scan test, like the existing call_census pattern).'''
 catches = '''a second construction site built from different fields that silently disagrees with with_model_identity and defeats the model-swap guard.'''
+destination = '''corpus-engine/src/enrichment/pipeline/phase_cache.rs (mod tests)'''
+kind = '''rust-unit; source-scan, mirror call_census'''
 
 [[spec]]
 id = "EN-5"
@@ -209,6 +243,8 @@ clause = '''A dedicated span-typed entity extractor MUST be available, generatio
 target = '''corpus-engine/src/enrichment/tiered.rs:64::ChunkEntityExtractor'''
 asserts = '''a mock ChunkEntityExtractor injected into run_tiered_enrichment has extract_for_conversation invoked once per non-empty conversation group with the right corpus_id/conv_uuid/chunks, and its count flows into the outcome.'''
 catches = '''a dispatch-loop change that stops calling the injected extractor, silently reverting to RAPTOR-derived entities only. Nothing exercises this seam today.'''
+destination = '''corpus-engine/src/enrichment/tiered.rs (mod tests)'''
+kind = '''rust-unit; mock ChunkEntityExtractor impl'''
 
 [[spec]]
 id = "EN-9"
@@ -219,6 +255,8 @@ target = '''corpus-engine/src/enrichment/domains/philosophy.rs:222::clustering_c
 existing = '''partial: corpus-engine/src/enrichment/domains/personal.rs:392::clustering_config_values'''
 asserts = '''PhilosophyDomain.clustering_config() has max_cluster_points 30000 and reduced_dims 128 while PersonalDomain's are 0/0 — the configs actually differ by corpus shape.'''
 catches = '''a copy-paste giving every domain the same caps, applying a large-corpus projection to a small personal corpus. The existing test asserts only the shared constants.'''
+destination = '''corpus-engine/src/enrichment/domains/ (mod tests)'''
+kind = '''rust-unit; compare two domains' configs'''
 
 [[spec]]
 id = "EV-11"
@@ -228,6 +266,8 @@ clause = '''A judge MUST pass a **calibration gate** against a hand-labelled ban
 target = '''sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/judge.rs:312::TierScore::clears_floors'''
 asserts = '''a TierScore below CALIBRATION_SENSITIVITY_FLOOR or CALIBRATION_SPECIFICITY_FLOOR (0.85) makes clears_floors() false; a tier with zero items of a class is not-under-test, not a pass.'''
 catches = '''a judge model or prompt swap quietly dropping below the stated floor and still being accepted into production scoring, because nothing computes the floor comparison.'''
+destination = '''sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/judge.rs (mod tests)'''
+kind = '''rust-unit'''
 
 [[spec]]
 id = "EV-25"
@@ -238,6 +278,8 @@ target = '''scripts/sabotage.py:364::run_phase'''
 existing = '''partial: scripts/sabotage.py::self_test covers mechanics not verdicts'''
 asserts = '''a declared test red at baseline yields COULD-NOT-JUDGE not CAUGHT; a declared test going red yields CAUGHT; a built-and-run batch whose declared test stays green yields SURVIVED; a `find` not occurring exactly once yields STALE before any build.'''
 catches = '''a mutation that does not actually break the behaviour being counted as proof. sabotage.py's own self-test covers batching and name resolution but NOT the verdict computation itself.'''
+destination = '''scripts/sabotage.py --self-test'''
+kind = '''python-selftest; extend the nine existing falsifiers'''
 
 [[spec]]
 id = "EV-33"
@@ -247,6 +289,8 @@ clause = '''The **primary** correctness gate MUST be local (a pre-push hook), ve
 target = '''scripts/pre-push.sh:147::CHANGED fail-closed fallback'''
 asserts = '''when `git diff --name-only $RANGE` exits non-zero, CHANGED becomes the full `git ls-files` listing rather than empty.'''
 catches = '''a shallow clone, rebase or pruned ref making the diff fail so the hook gates zero files and exits green on a push that could contain anything. The fail-closed code exists at pre-push.sh:143-151; nothing tests it. Home: scripts/tests/.'''
+destination = '''scripts/tests/pre-push-fail-closed.sh (new)'''
+kind = '''shell; the suite already stubs gh/podman in a mktemp repo — same pattern'''
 
 [[spec]]
 id = "GR-4"
@@ -256,6 +300,8 @@ clause = '''Any window bound inside the gate MUST be *derived* from the retrieve
 target = '''sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs:3188::gate_longform'''
 asserts = '''per_claim_chunks scales with leaf_chunks.len() — 3 leaf chunks yield a materially different window than 30 — and never reverts to a literal.'''
 catches = '''reintroducing a constant (like the removed max_chunks: 8) that stops governing the audit window, so the auditor sees less evidence than the drafter did, silently.'''
+destination = '''sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs (mod tests)'''
+kind = '''rust-unit'''
 
 [[spec]]
 id = "GR-46"
@@ -265,6 +311,8 @@ clause = '''An answer MUST be a typed object carrying per-claim provenance, an o
 target = '''sovereign/crates/sovereign-core/src/runtime/epistemic.rs:79::assemble_epistemic_state'''
 asserts = '''one assemble_epistemic_state call, given both a supported and an uncovered demand, returns an EpistemicState whose holdings, verdict and gaps are populated together and mutually consistent.'''
 catches = '''a change that populates gaps correctly but leaves holdings stale, or a verdict disagreeing with the holdings it derives from. Every existing test exercises one slice in isolation.'''
+destination = '''sovereign/crates/sovereign-core/src/runtime/epistemic.rs (mod tests)'''
+kind = '''rust-unit'''
 
 [[spec]]
 id = "FE-10"
