@@ -98,12 +98,19 @@ for t in "${DECLARED[@]}"; do
   # A declared type can land on any atom kind — `coin` is an entity type,
   # `attribution` a claim type — so look at every type-bearing field rather
   # than assuming which one the declaration turned into.
+  # `// ""`, NOT `// empty`. jq's `empty` produces NO output, and one empty
+  # branch makes the whole `or` chain empty — so an atom whose `entity_type`
+  # is absent was dropped before its `claim_kind` was ever compared. That bug
+  # reported `attribution 0` for an atlas where all 49 Claim atoms carried
+  # `claim_kind: "attribution"`, and the script still exited PASS on the other
+  # four types. A check that cannot see the thing it is checking is not a
+  # check (ARCH §18.4 — validate the instrument before the result).
   n=$(jq --arg t "$t" '[.atoms[] | select(
-        (.data.entity_type // empty) == $t
-     or (.data.claim_kind  // empty) == $t
-     or (.data.relation_type // empty) == $t
-     or (.data.event_type  // empty) == $t
-     or (.data.state_type  // empty) == $t)] | length' "$ATOMS")
+        (.data.entity_type   // "") == $t
+     or (.data.claim_kind    // "") == $t
+     or (.data.relation_type // "") == $t
+     or (.data.event_type    // "") == $t
+     or (.data.state_type    // "") == $t)] | length' "$ATOMS")
   declared_total=$(( declared_total + n ))
   printf '  %-14s %s\n' "$t" "$n"
 done
@@ -121,6 +128,15 @@ if (( declared_total == 0 )); then
          | group_by(.) | map("        \(.[0]): \(length)") | .[]' "$ATOMS" >&2
   exit 1
 fi
+
+# A `role_of` type is NOT an entity type in the atoms, and must not be counted
+# as a miss. `ruler` declares `role_of = "person"`, so a ruler mention resolves
+# to a PERSON atom carrying a `ruler` State — identity from essence, and a part
+# played is not an essence (ARCH §7.5). The count above already reads
+# `state_type`, so this line only names what the reader is looking at.
+roles=$(jq -r '[.atoms[] | select(.atom_type == "State") | .data.state_type]
+               | map(select(. != "unclassified")) | unique | join(", ")' "$ATOMS")
+[[ -n "$roles" ]] && echo "roles carried as State (role_of): $roles"
 
 echo
 echo "PASS: $declared_total of $total atom(s) carry a type the author declared."
