@@ -25,9 +25,11 @@ pub mod multi_origin;
 pub mod oplog;
 pub mod signals;
 
-pub use multi_origin::{reconcile, ReconciledEntity, ReconciliationPolicy};
+pub use multi_origin::{
+    reconcile, reify_merges, ReconciledEntity, ReconciliationPolicy, ReifiedMerge,
+};
 pub use oplog::{JudgeTrace, OpKind, ReconciliationAct, RECONCILER};
-pub use signals::{MergeSignal, MergeSignalCheck};
+pub use signals::{signals_for_policy, MergeSignal, MergeSignalCheck};
 
 #[cfg(test)]
 mod tests {

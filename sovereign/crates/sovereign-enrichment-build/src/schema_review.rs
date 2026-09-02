@@ -21,7 +21,7 @@ use corpus_engine::enrichment::atlas::{
     build_schema_validation_report, compare_across_corpora, count_open_questions,
     count_transitions_without_trigger, count_ungrounded_claims, read_atlas_atoms,
     read_atlas_cross_corpus_edges, read_atlas_edges, AtomEnvelope, SchemaComparison,
-    SchemaValidationInput, SchemaValidationReport, ATLAS_DIRNAME,
+    read_atlas_ontology, SchemaValidationInput, SchemaValidationReport, ATLAS_DIRNAME,
 };
 
 use super::config::EnrichConfig;
@@ -278,6 +278,14 @@ pub fn compute_report(corpus_id: &str) -> Result<SchemaValidationReport, String>
     let ungrounded_claims = count_ungrounded_claims(&claims, &edges.edges);
     let transitions_without_trigger = count_transitions_without_trigger(&edges.edges);
 
+    // The declaration this atlas was built under, and what the reconciler did
+    // with it. Both optional and both read from the atlas dir: a corpus that
+    // declares nothing gets the eight dimensions it always got, and a declared
+    // corpus that has never been reconciled reports the merge count as absent
+    // rather than as zero.
+    let ontology = read_atlas_ontology(&atlas_dir);
+    let merges = read_merge_count(&atlas_dir);
+
     let report = build_schema_validation_report(SchemaValidationInput {
         corpus_id,
         atoms: &atoms,
@@ -286,8 +294,23 @@ pub fn compute_report(corpus_id: &str) -> Result<SchemaValidationReport, String>
         open_questions,
         ungrounded_claims,
         transitions_without_trigger,
+        ontology: ontology.as_ref(),
+        merges,
     });
     Ok(report)
+}
+
+/// `merged_entity_count` from `atlas/reconciliation.json`, or `None` when the
+/// file is absent or unreadable. Absence is reported as absence — a corpus
+/// that has not been reconciled has not merged zero things, it has not been
+/// asked (§18.3).
+fn read_merge_count(atlas_dir: &Path) -> Option<usize> {
+    let raw = std::fs::read(atlas_dir.join("reconciliation.json")).ok()?;
+    let parsed: serde_json::Value = serde_json::from_slice(&raw).ok()?;
+    parsed
+        .get("merged_entity_count")
+        .and_then(serde_json::Value::as_u64)
+        .map(|n| n as usize)
 }
 
 fn atlas_dir_for(corpus_id: &str) -> PathBuf {
@@ -448,6 +471,37 @@ fn print_human_report(r: &SchemaValidationReport) {
         "        · open_question:              {}/{}",
         r.gaps.open_question, r.gaps.total_questions
     );
+
+    if let Some(o) = &r.ontology {
+        println!();
+        println!("  [9] Declared ontology (version {})", o.ontology_version);
+        println!("      per-type coverage");
+        for t in &o.by_type {
+            // Two numbers, because they answer different questions: how many
+            // atoms ARE a `coin`, and how many count AS one once `sceatta`
+            // is included. A zero in the second is the headline failure.
+            println!(
+                "        · {:10} {:14} {:>6}  (with subtypes {})",
+                t.kind, t.name, t.count, t.count_with_subtypes
+            );
+        }
+        println!("      identity criteria");
+        for i in &o.identity {
+            println!("        · {:14} {}", i.type_name, i.criterion);
+        }
+        match o.merges {
+            Some(n) => println!("      merges: {n}"),
+            None => println!(
+                "      merges: not run (`svrn enrich reconcile {}`)",
+                r.corpus_id
+            ),
+        }
+        println!("      same_as claims: {}", o.same_as_claims);
+        println!(
+            "      claims of a subject-declaring type with no subject: {}",
+            o.claims_missing_subject
+        );
+    }
 
     // Collected gap signatures — the single place an operator can
     // see every systematic-issue flag this report detected.

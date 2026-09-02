@@ -441,6 +441,35 @@ pub fn read_atlas_edges(atlas_dir: &Path) -> io::Result<EdgesFile> {
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("parse edges.json: {e}")))
 }
 
+/// Append atoms and edges to a written atlas, keeping the v2 store in step.
+///
+/// The one supported way to add to an atlas after `write_atlas_full` ran.
+/// Reconciliation is the first caller: it runs over a resolved atlas and
+/// reifies each merge as a `same_as` Claim, which has to reach the same
+/// `atoms.lance` the runtime reads — writing only `atoms.json` would leave the
+/// read path missing atoms the export claims are there.
+///
+/// Not atomic ACROSS the three artefacts (JSON, JSON, store): each is written
+/// through its own rename, and the store is rebuilt last from the merged set,
+/// which is the same ordering `write_atlas_full` uses. Ids are the caller's
+/// problem — nothing here renumbers.
+pub fn append_atoms_and_edges(
+    atlas_dir: &Path,
+    atoms: &[AtomEnvelope],
+    edges: &[Edge],
+) -> io::Result<()> {
+    if atoms.is_empty() && edges.is_empty() {
+        return Ok(());
+    }
+    let mut atoms_file = read_atlas_atoms(atlas_dir)?;
+    let mut edges_file = read_atlas_edges(atlas_dir)?;
+    atoms_file.atoms.extend(atoms.iter().cloned());
+    edges_file.edges.extend(edges.iter().cloned());
+    write_atomic(&atlas_dir.join("atoms.json"), &atoms_file)?;
+    write_atomic(&atlas_dir.join("edges.json"), &edges_file)?;
+    write_atlas_v2_store(atlas_dir, &atoms_file.atoms, &edges_file.edges)
+}
+
 /// Replace `atlas/edges.json` with the provided file. Used by Phase
 /// 6's LLM Tension classifier to merge new edges into the resolved
 /// atlas without re-running the entire write_atlas pipeline. Atomic:

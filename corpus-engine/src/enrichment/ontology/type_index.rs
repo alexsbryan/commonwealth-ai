@@ -59,6 +59,13 @@ impl<'a> TypeIndex<'a> {
         self.by_name.contains_key(name)
     }
 
+    /// Does this shape declare nothing? The predicate every declared-ontology
+    /// pass short-circuits on, and the reason a version-0 corpus pays nothing
+    /// for the machinery above.
+    pub fn is_empty(&self) -> bool {
+        self.by_name.is_empty()
+    }
+
     /// Is `name` the same type as `ancestor`, or a `specializes` descendant
     /// of it? A name nobody declared is nothing's descendant.
     pub fn is_a(&self, name: &str, ancestor: &str) -> bool {

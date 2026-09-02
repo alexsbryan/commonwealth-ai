@@ -20,7 +20,8 @@
 use std::path::{Path, PathBuf};
 
 use corpus_engine::enrichment::atlas::{
-    resolve_entities_and_events, resolve_step_3b, write_atlas, write_atlas_full, ATLAS_DIRNAME,
+    resolve_entities_and_events_with, resolve_step_3b_with, write_atlas, write_atlas_full,
+    ResolutionPolicy, ATLAS_DIRNAME,
 };
 use corpus_engine::enrichment::pipeline::{
     ExtractedQuestion, Phase1Output, PipelinePhase, SectionExtraction,
@@ -214,10 +215,20 @@ pub async fn resolve_into_dir(
     target_atlas_dir: &Path,
     phase: ResolvePhase,
 ) -> Result<ResolveReport, String> {
+    // The declared ontology, read once. Every resolver pass that reads it is
+    // inert when nothing is declared, so a version-0 corpus (and every
+    // prebuilt one) resolves through exactly the code it always did.
+    let policies = cfg
+        .ontology
+        .as_ref()
+        .map(|spec| spec.policies())
+        .unwrap_or_default();
+    let policy = ResolutionPolicy::new(&policies);
+
     // Step 3a: always runs. Step 3b is re-resolved from 3a's
     // output so the atom ids remain consistent regardless of
     // whether the caller chose 3a-only or 3b/all.
-    let step_3a = resolve_entities_and_events(sections, embed)
+    let step_3a = resolve_entities_and_events_with(sections, embed, &policy)
         .await
         .map_err(|e| format!("atlas resolution (3a) failed: {e}"))?;
 
@@ -237,7 +248,7 @@ pub async fn resolve_into_dir(
     let counts: ResolveReport;
 
     let written = if want_3b {
-        let step_3b = resolve_step_3b(sections, &step_3a.entities, &step_3a.events)
+        let step_3b = resolve_step_3b_with(sections, &step_3a.entities, &step_3a.events, &policy)
             .map_err(|e| format!("atlas resolution (3b) failed: {e}"))?;
         resolution_failures.extend(step_3b.failures.iter().cloned());
 
@@ -273,6 +284,12 @@ pub async fn resolve_into_dir(
         for e in entities.iter_mut() {
             if let Some(kind) = typed.entity_qualifier_updates.get(&e.id) {
                 e.concept_kind = Some(kind.clone());
+            }
+            // Declared `ref` attributes that 3b snapped to atom ids. Same
+            // shape as the qualifier updates above and applied at the same
+            // point, because 3b borrows the entity vector this loop owns.
+            if let Some(attrs) = step_3b.entity_attribute_updates.get(e.id.as_str()) {
+                e.attributes = attrs.clone();
             }
         }
         // Merge new entities (mechanism Concepts the resolver
@@ -371,7 +388,6 @@ pub async fn resolve_into_dir(
     // written; a prose-only custom atlas leaves no file, and readers treat
     // absence as "declares nothing".
     if let Some(spec) = cfg.ontology.as_ref() {
-        let policies = spec.policies();
         if policies.has_declarations() {
             match corpus_engine::enrichment::atlas::write_atlas_ontology(
                 atlas_dir,

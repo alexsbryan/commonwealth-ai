@@ -732,6 +732,13 @@ impl ReconciliationToml {
             cross_origin_required_signals: self.cross_origin_required_signals,
             judge_when_uncertain: self.judge_when_uncertain,
             judge_trials: self.judge_trials,
+            // Declared identity keys are NOT read from here. They live on the
+            // atlas (`atlas/ontology.json`), because the reconciler runs over
+            // resolved atoms and the atlas is what records the policies that
+            // produced them — a recipe edited after the build would otherwise
+            // silently re-key a merge against criteria the atoms never saw.
+            // `enrich_cmd/atlas_reconcile.rs` fills the field from there.
+            identity: Default::default(),
         }
     }
 }

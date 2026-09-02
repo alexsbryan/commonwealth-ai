@@ -16,10 +16,19 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use corpus_engine::enrichment::atlas::atoms::AtomEnvelope;
+use corpus_engine::enrichment::atlas::atoms::{
+    AtomEnvelope, AtomId, ChunkRef, Entity, Provenance, SignalKind,
+};
 use corpus_engine::enrichment::atlas::projection::project;
-use corpus_engine::enrichment::atlas::resolve_entities_and_events;
-use corpus_engine::enrichment::pipeline::atlas::{DiscourseAct, EntityType, SectionExtraction};
+use corpus_engine::enrichment::atlas::{
+    resolve_entities_and_events, resolve_entities_and_events_with, resolve_step_3b_with,
+    ResolutionPolicy,
+};
+use corpus_engine::enrichment::ontology::{OntologyPolicies, TypeIndex};
+use corpus_engine::enrichment::reconciliation::{reconcile, reify_merges, ReconciliationPolicy};
+use corpus_engine::enrichment::pipeline::atlas::{
+    DiscourseAct, EnrichmentDepth, EntityType, SectionExtraction,
+};
 use corpus_engine::enrichment::pipeline::pipelines::literary_atlas::LiteraryAtlasPipeline;
 use corpus_engine::enrichment::pipeline::types::ChapterInput;
 use corpus_engine::enrichment::pipeline::Pipeline;
@@ -244,4 +253,206 @@ async fn resolved_atoms_carry_the_declared_type_and_its_attributes() {
     let record = project(&AtomEnvelope::Entity(coin.clone()));
     assert_eq!(record.subtype, "coin", "the declared name IS the subtype");
     assert_eq!(record.name, "Series R sceatta");
+}
+
+// ── P3: resolution and identity ─────────────────────────────
+//
+// Two things a declared ontology has to do that P2 could not: make a ROLE
+// resolve to the thing that plays it, and make an author's identity criterion
+// decide when two mentions are one thing. Both drive SHIPPED templates.
+
+/// The contracts template's canned Phase 1: Acme appears twice, once as the
+/// `organization` it is and once as the `party` it is acting as, plus an
+/// obligation about it.
+const CONTRACTS_SECTION_1: &str = r#"{
+  "section_id": "sec_0001",
+  "entities_introduced": [
+    {
+      "canonical_name": "Acme Holdings Ltd",
+      "entity_type": "organization",
+      "description": "A holding company incorporated in Delaware.",
+      "anchor": "Acme Holdings Ltd"
+    }
+  ],
+  "questions_raised": [
+    { "content": "Which entity is the contracting party?", "anchor": "Acme Holdings Ltd" }
+  ]
+}"#;
+
+const CONTRACTS_SECTION_2: &str = r#"{
+  "section_id": "sec_0002",
+  "entities_introduced": [
+    {
+      "canonical_name": "Acme Holdings Ltd",
+      "entity_type": "party",
+      "description": "The counterparty under the master agreement.",
+      "anchor": "the Party"
+    }
+  ],
+  "claims": [
+    {
+      "content": "Acme shall deliver the audited accounts by 31 March.",
+      "discourse_act": "assert",
+      "claim_kind": "obligation",
+      "subject": "Acme Holdings Ltd",
+      "anchor": "shall deliver the audited accounts",
+      "attributes": { "deontic": "require", "deadline": "31 March" }
+    }
+  ],
+  "questions_raised": [
+    { "content": "What happens if the accounts are late?", "anchor": "shall deliver" }
+  ]
+}"#;
+
+/// The contracts template's pipeline and the policies it composed from — the
+/// same `OntologyPolicies` both halves of the chain read.
+fn contracts() -> (LiteraryAtlasPipeline, OntologyPolicies) {
+    let toml = corpus_engine::recipe_templates::load_builtin("contracts")
+        .expect("contracts is a shipped ontology template");
+    let recipe = Recipe::from_toml(toml).expect("the shipped template parses");
+    let spec = recipe
+        .custom_atlas_spec()
+        .expect("the template declares an [enrichment.ontology] block");
+    (
+        LiteraryAtlasPipeline::with_custom_ontology(&spec),
+        spec.policies(),
+    )
+}
+
+#[tokio::test]
+async fn acme_is_one_organization_atom_with_a_party_state() {
+    let (pipeline, policies) = contracts();
+    let sections: Vec<SectionExtraction> = [CONTRACTS_SECTION_1, CONTRACTS_SECTION_2]
+        .iter()
+        .map(|raw| {
+            pipeline
+                .parse_phase1(raw)
+                .expect("the canned response parses")
+                .section_extraction
+                .expect("the atlas parser attaches a section extraction")
+        })
+        .collect();
+
+    let policy = ResolutionPolicy::new(&policies);
+    let step_3a = resolve_entities_and_events_with(&sections, &fake_embed(), &policy)
+        .await
+        .expect("resolution succeeds");
+
+    // ONE atom. `party role_of organization`, so the mention that called Acme
+    // a party is a mention of the same organization — not a second thing.
+    let acme: Vec<_> = step_3a
+        .entities
+        .iter()
+        .filter(|e| e.canonical_name == "Acme Holdings Ltd")
+        .collect();
+    assert_eq!(acme.len(), 1, "one organization, not one per role");
+    assert_eq!(
+        acme[0].entity_type,
+        EntityType::Other("organization".into()),
+        "the atom is what Acme IS, not what it is acting as"
+    );
+    let acme_id = acme[0].id.clone();
+
+    let step_3b = resolve_step_3b_with(&sections, &step_3a.entities, &step_3a.events, &policy)
+        .expect("3b resolves");
+
+    // …and the role it plays is a State on it, which is where the contract's
+    // "who is a party" question is answered from.
+    let party: Vec<_> = step_3b
+        .states
+        .iter()
+        .filter(|s| s.entity_id == acme_id && s.label == "party")
+        .collect();
+    assert_eq!(party.len(), 1, "the party mention became a State");
+
+    // The obligation's `subject` is a party — and resolves to that same
+    // organization atom, because there is only one.
+    let obligation = step_3b
+        .claims
+        .iter()
+        .find(|c| c.claim_kind.as_deref() == Some("obligation"))
+        .expect("the anchored obligation survived");
+    assert_eq!(obligation.subject.as_ref(), Some(&acme_id));
+}
+
+#[test]
+fn two_coins_sharing_an_external_id_merge_into_one_same_as_claim() {
+    // The numismatics template ships no `identity` — a catalogue whose finds
+    // carry an accession number declares one. This is that recipe's edit, and
+    // the merge below is impossible without it: the two entries share no name
+    // token, so every default signal is silent on them.
+    let toml = corpus_engine::recipe_templates::load_builtin("numismatics").unwrap();
+    let recipe = Recipe::from_toml(toml).unwrap();
+    let mut policies = recipe.custom_atlas_spec().unwrap().policies();
+    let coin = policies
+        .shape
+        .types
+        .iter_mut()
+        .find(|t| t.name == "coin")
+        .expect("the template declares `coin`");
+    coin.identity = vec!["find_id".into()];
+
+    let entry = |id: &str, name: &str, find_id: &str, kind: SignalKind, doc: &str| {
+        let mut e = Entity {
+            id: AtomId::from_raw(id),
+            canonical_name: name.into(),
+            aliases: Vec::new(),
+            entity_type: EntityType::Other("coin".into()),
+            first_appearance: ChunkRef::new("sec_0001", None),
+            description: String::new(),
+            defining_quote: None,
+            salience: 1.0,
+            enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
+            provenance: Provenance::new("ext", doc, kind),
+            attributes: serde_json::Map::new(),
+            concept_kind: None,
+        };
+        e.attributes
+            .insert("find_id".into(), serde_json::Value::String(find_id.into()));
+        e
+    };
+
+    // Exactly the chain `svrn enrich reconcile` runs: the atlas's declared
+    // identity, flattened through `specializes`, into the merge policy.
+    let policy = ReconciliationPolicy {
+        identity: TypeIndex::from_policies(&policies).effective_identity_policy(),
+        ..Default::default()
+    };
+    let outcome = reconcile(
+        vec![
+            entry(
+                "entity-0001",
+                "Series Y penny of Aldfrith",
+                "SF-2019-114",
+                SignalKind::LlmBatch,
+                "catalogue.md",
+            ),
+            entry(
+                "entity-0002",
+                "Wessex Down 114",
+                "sf-2019-114",
+                SignalKind::ColumnHeader,
+                "finds.csv",
+            ),
+        ],
+        &policy,
+    );
+    assert_eq!(outcome.entities.len(), 1, "one find, one coin");
+
+    let (claims, edges) = reify_merges(&outcome.reified, 1, 1);
+    assert_eq!(claims.len(), 1, "and the merge is IN the atlas, not only in the oplog");
+    assert_eq!(claims[0].claim_kind.as_deref(), Some("same_as"));
+    assert_eq!(claims[0].attributes["grade"].as_str(), Some("external"));
+    assert_eq!(
+        claims[0].attributes["same_as"]
+            .as_array()
+            .map(|a| a.len()),
+        Some(2)
+    );
+    // Reachable from either side.
+    let targets: Vec<&str> = edges.iter().map(|e| e.target.as_str()).collect();
+    assert!(targets.contains(&"entity-0001") && targets.contains(&"entity-0002"));
 }

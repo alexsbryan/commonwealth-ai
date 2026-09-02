@@ -69,6 +69,42 @@ pub struct AtomRecord {
     pub payload: Vec<u8>,
 }
 
+/// The atom's subtype — the author's noun where there is one.
+///
+/// The ONE answer to "what type is this atom, within its kind" (§10.6): the
+/// store column, the resident record and the ontology-coverage rollup all read
+/// it here.
+///
+/// Absence is `""`, and absence has two spellings on disk. `resolution.rs`
+/// tags an unclassified relation `Other("unclassified")` and an unclassified
+/// event `Other("unspecified")` — those are the ABSENCE of a subtype, not
+/// subtypes with those names, and a reader that took them literally would
+/// report a corpus as fully typed when nothing in it was typed at all.
+pub fn subtype_of(atom: &AtomEnvelope) -> String {
+    /// The two placeholders `resolution.rs` writes when nothing classified the
+    /// atom. (The literals are spelled several times across the crate and were
+    /// before this function; folding every site into these is its own change.)
+    const ABSENT: [&str; 2] = ["unclassified", "unspecified"];
+    let named = |s: &str| {
+        if ABSENT.contains(&s) {
+            String::new()
+        } else {
+            s.to_string()
+        }
+    };
+    match atom {
+        AtomEnvelope::Entity(e) => e.entity_type.as_str_repr().to_string(),
+        AtomEnvelope::Relation(r) => named(r.relation_type.as_str_repr()),
+        AtomEnvelope::Event(e) => named(e.event_type.as_str_repr()),
+        AtomEnvelope::State(s) => named(s.state_type.as_str_repr()),
+        // `claim_kind` is the Claim's subtype under both vocabularies — the
+        // typed-extension qualifiers (`evidence`, `concession`, …) and a
+        // declared claim type (ontology v1).
+        AtomEnvelope::Claim(c) => c.claim_kind.clone().unwrap_or_default(),
+        _ => String::new(),
+    }
+}
+
 /// Project an atom to its hot-field record. Shared by the v2 store writer
 /// (`super::store::write_store`) and the reader (`LancePreload`), so the
 /// columnar `atoms.lance` and the resident records derive from the *same*
@@ -89,7 +125,7 @@ pub fn project(atom: &AtomEnvelope) -> AtomRecord {
     match atom {
         AtomEnvelope::Entity(e) => {
             name = e.canonical_name.clone();
-            subtype = e.entity_type.as_str_repr().to_string();
+            subtype = subtype_of(atom);
             description = e.description.clone();
             salience = e.salience;
             aliases = e.aliases.clone();
@@ -101,26 +137,20 @@ pub fn project(atom: &AtomEnvelope) -> AtomRecord {
                 .iter()
                 .map(|p| p.as_str().to_string())
                 .collect();
-            // The declared relation type, when the corpus has one.
-            // `resolution.rs` tags every untyped relation
-            // `Other("unclassified")` — that is the ABSENCE of a subtype, not
-            // a subtype named "unclassified". (The literal is spelled six
-            // times across the crate and was before this line; folding it
-            // into one const is its own change.)
-            let relation_type = r.relation_type.as_str_repr();
-            if relation_type != "unclassified" {
-                subtype = relation_type.to_string();
-            }
+            subtype = subtype_of(atom);
         }
         AtomEnvelope::Claim(c) => {
             content = c.content.clone();
             excerpt = c.quotable_excerpt.clone().unwrap_or_default();
             confidence = c.confidence.unwrap_or(0.5);
-            // `claim_kind` is the Claim's subtype under both vocabularies —
-            // the typed-extension qualifiers (`evidence`, `concession`, …)
-            // and a declared claim type (ontology v1).
-            subtype = c.claim_kind.clone().unwrap_or_default();
+            subtype = subtype_of(atom);
         }
+        // Event and State DO carry a subtype since P3 (a declared event type,
+        // a `role_of` role) and [`subtype_of`] returns it — but putting it in
+        // the store's column would change what an existing corpus reads back
+        // on its next rebuild, and the readers of that column are P5/P6's to
+        // move. The rule is one function; which kinds enter the column is this
+        // caller's decision.
         _ => {}
     }
     // `AtomEnvelope::evidence` is the canonical per-variant evidence accessor

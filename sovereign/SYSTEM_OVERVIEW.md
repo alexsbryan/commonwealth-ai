@@ -1203,11 +1203,39 @@ means one thing.
   declarations composes version-0 bytes) is structural rather than
   remembered; the pin is `tests/main/ontology_prompt_snapshots.rs`.
   `enrichment/ontology/type_index.rs` is the one `specializes` walk
-  (`is_a`, `effective_attributes`), read by both the schema generator and
-  the parser. The resolve step writes `atlas/ontology.json`
-  (`writer::write_atlas_ontology`) so the atlas dir records what it was
-  extracted under, and `_summary.json` (SCHEMA_VERSION 3) carries an
-  `OntologySummary` read back from it. Design:
+  (`is_a`, `effective_attributes`, plus `rigid_type_of` / `endpoints` /
+  `participants` / `effective_identity*`), read by the schema generator, the
+  parser, the resolver and the reconciler. Resolution reads the same policies
+  through `ResolutionPolicy` (`atlas/resolution_ontology.rs`), which is what
+  makes a declaration RESOLVE (ontology-v1 P3): a mention typed as a
+  `role_of` role produces an atom of the rigid type and a `State` carrying
+  the role (so the existing trajectory pass chains repeat mentions into
+  `Transition`s); a declared relation's `from`/`to` and a declared event's
+  `participants` are type-checked against the atoms they resolved to, with a
+  mismatch dropped and recorded as `PhaseFailureKind::EndpointTypeMismatch`;
+  a claim's `subject` resolves the way `attributed_to` always has
+  (`UnresolvedClaimSubject`) and gets its own `Involves` edge; and declared
+  `ref` attributes snap to atom ids, an unresolvable one keeping the name
+  plus an `UnresolvedAttributeRef` record. `resolve_step_3b` /
+  `resolve_entities_and_events` stay as shims over the `_with` forms, so
+  every version-0 corpus runs the code it always did. Identity is the
+  reconciler's half: `ReconciliationPolicy.identity` carries the per-type
+  keys flattened through `specializes`
+  (`TypeIndex::effective_identity_policy`), `signals_for_policy` adds
+  `ExternalIdSignal` (STRICT — it alone satisfies the cross-origin gate) and
+  `DescriptiveKeySignal` (one ordinary signal), the blocking pass buckets on
+  declared key values so an identifier match survives entirely different
+  names, and each merge is reified as a `same_as` Claim with `Involves` /
+  `Grounds` edges (`reify_merges` → `writer::append_atoms_and_edges`) — for
+  a DECLARED corpus only, which is why `bench enron` B³ is a leak detector
+  for this phase. `enrich schema-report` gains a ninth dimension
+  (`SchemaValidationReport.ontology`, report SCHEMA_VERSION 2.1): per-type
+  counts with and without subtypes, the identity criterion per type, merges,
+  `same_as` claims, claims of a subject-declaring type with no subject, and a
+  `coverage:zero:<type>` gap signature. The resolve step writes
+  `atlas/ontology.json` (`writer::write_atlas_ontology`) so the atlas dir
+  records what it was extracted under, and `_summary.json` (SCHEMA_VERSION 3)
+  carries an `OntologySummary` read back from it. Design:
   `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md`, `ONTOLOGY_MIGRATION.md`.
   State at `~/.svrnmesh/indexes/<corpus>/atlas/`. Deep-dive:
   [`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md). Beyond the LLM
@@ -5161,7 +5189,8 @@ Default ports:
 | Understand local-corpus snapshot/rollback        | `sovereign-tools/src/local_corpus/writeback.rs` + `frontmatter.rs`  |
 | Pick the next daemon test to write               | [`docs/TESTING_SURFACE.md`](./docs/TESTING_SURFACE.md)              |
 | Add a binary-bearing corpus (email / .docx / .xlsx / future calendar / transactions) | `corpus-engine/src/extractors/described_asset.rs` — register an `AssetSubExtractor` via `CorpusEngine::set_asset_sub_extractors`; the in-tree defaults cover xlsx / docx / plaintext / opaque |
-| Read or extend the multi-origin reconciliation primitive | `corpus-engine/src/enrichment/reconciliation/{mod,multi_origin,oplog,signals}.rs` — operates on `Vec<Entity>` with `Provenance` (AD-4); writes `atlas/reconciliation_oplog.jsonl` reversible op log |
+| Read or extend the multi-origin reconciliation primitive | `corpus-engine/src/enrichment/reconciliation/{mod,multi_origin,oplog,signals}.rs` — operates on `Vec<Entity>` with `Provenance` (AD-4); writes `atlas/reconciliation_oplog.jsonl` reversible op log. `ReconciliationPolicy.identity` (ontology-v1 P3) carries declared per-type identity keys; empty for every undeclared corpus, and only then is the signal stack `default_signals` term for term |
+| Add an atom to an atlas after `write_atlas_full` ran | `writer::append_atoms_and_edges` — reads both JSON files, extends, rewrites, and rebuilds the v2 store from the merged set (the store is the read path; writing only `atoms.json` leaves it short). Ids are the caller's problem |
 | Score a clustering of mention-ids vs ground truth (B³ + pairwise-F1) | `sovereign-eval/src/entity_resolution_score.rs` (scorer) + `entity_resolution_bench.rs` (Split/peek-budget) |
 | Run the Phase 5 Enron measurement loop | `svrn bench enron run --corpus enron-sample-onemailbox --split train --policy {pre_reconciliation\|tuned}` → `sovereign-cli-llm/src/bench_cmd/enron.rs` |
 | Add another typed Entity column-extractor for tabular asset kinds | `corpus-engine/src/extractors/column_aware.rs` — extend `ColumnHeaderMap` or write a per-asset-kind extractor reading the parquet parsed-form cache directly |

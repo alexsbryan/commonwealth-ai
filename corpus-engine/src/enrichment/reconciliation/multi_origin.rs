@@ -16,9 +16,11 @@ use serde::{Deserialize, Serialize};
 
 use super::oplog::ReconciliationAct;
 use super::signals::{
-    collect_emails, default_signals, fold_name, strip_org_suffixes, MergeSignal, MergeSignalCheck,
+    collect_emails, fold_name, identity_blocking_key, signals_for_policy, strip_org_suffixes,
+    MergeSignal, MergeSignalCheck,
 };
-use crate::enrichment::atlas::atoms::{AtomId, Entity, Provenance};
+use crate::enrichment::atlas::atoms::{AtomId, ChunkRef, Entity, Provenance};
+use crate::enrichment::ontology::IdentityPolicy;
 use crate::enrichment::pipeline::atlas::EntityType;
 use crate::oplog::Op;
 
@@ -54,6 +56,17 @@ pub struct ReconciliationPolicy {
     /// `trials` parameter.
     #[serde(default = "default_judge_trials")]
     pub judge_trials: u8,
+    /// Per-declared-type identity keys (ontology v1), already resolved through
+    /// `specializes` by `TypeIndex::effective_identity_policy`.
+    ///
+    /// Empty by default and empty for every corpus that declares no ontology,
+    /// which is what makes this addition invisible to Enron: with no keys the
+    /// signal stack is [`super::signals::default_signals`] term for term, the
+    /// blocking keys are the same four, and the strict gate below can never
+    /// fire. It is serialized into `reconciliation.json` so the criterion a
+    /// merge ran under is on disk beside the merge.
+    #[serde(default)]
+    pub identity: IdentityPolicy,
 }
 
 impl Default for ReconciliationPolicy {
@@ -63,6 +76,7 @@ impl Default for ReconciliationPolicy {
             cross_origin_required_signals: default_cross_origin_required_signals(),
             judge_when_uncertain: default_true(),
             judge_trials: default_judge_trials(),
+            identity: IdentityPolicy::default(),
         }
     }
 }
@@ -97,6 +111,44 @@ pub struct ReconciledEntity {
     pub source_atom_ids: Vec<AtomId>,
 }
 
+/// One merge, in the shape the atlas can hold it.
+///
+/// The oplog already records every merge, but an oplog is an operator
+/// artefact: nothing that answers a question reads it. A corpus that DECLARED
+/// its identity criteria asked for the merge to be part of the knowledge, so
+/// each one is also reified as a `same_as` Claim ([`reify_merges`]) — visible
+/// in the inspector, reachable from either side, and carrying the criterion it
+/// ran under.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReifiedMerge {
+    /// The atoms that collapsed, in the order the cluster held them.
+    pub inputs: Vec<AtomId>,
+    /// The canonical atom they collapsed into. Always one of `inputs`.
+    pub output: AtomId,
+    /// The signals that fired somewhere in the cluster.
+    pub signals: Vec<MergeSignal>,
+    /// First appearances of the merged atoms — the passages a reader would
+    /// go to in order to check the merge.
+    pub evidence: Vec<ChunkRef>,
+    /// [`Self::EXTERNAL`] or [`Self::SIGNAL_GATED`].
+    pub grade: String,
+}
+
+impl ReifiedMerge {
+    /// A declared external identifier agreed. Strict: the criterion IS the
+    /// identity, so one signal decides it.
+    pub const EXTERNAL: &'static str = "external";
+    /// Everything else — the merge cleared the signal-count gate.
+    ///
+    /// The primitives note calls this path "judged". It is not, yet: no judge
+    /// is wired into `svrn enrich reconcile` (`judge_when_uncertain` describes
+    /// a hook the CLI does not install), and grading a merge "judged" when
+    /// nothing judged it would be exactly the well-formed false claim §18.3
+    /// forbids. When the judge lands, the grade it produces is a third value,
+    /// not a re-reading of this one.
+    pub const SIGNAL_GATED: &'static str = "signal_gated";
+}
+
 /// Outcome bundle the runner consumes.
 #[derive(Debug, Clone, Default)]
 pub struct ReconciliationOutcome {
@@ -106,6 +158,11 @@ pub struct ReconciliationOutcome {
     /// `<corpus_index>/atlas/reconciliation_oplog.jsonl` so the
     /// audit trail survives the process exiting.
     pub oplog_entries: Vec<Op<ReconciliationAct>>,
+    /// One [`ReifiedMerge`] per merge, for a caller that wants the merges as
+    /// atoms. Populated on every run — it is the CALLER that decides whether
+    /// to write them, and only `enrich reconcile` on a declared corpus does
+    /// (`bench enron` reads `entities` and nothing else, so B³ is untouched).
+    pub reified: Vec<ReifiedMerge>,
 }
 
 /// Run the merger over `entities` with `policy`. The signal stack is
@@ -114,7 +171,7 @@ pub struct ReconciliationOutcome {
 /// reconciler — a -> b -> c chain collapses into a single canonical
 /// id even if a and c have no direct pairwise signal.
 pub fn reconcile(entities: Vec<Entity>, policy: &ReconciliationPolicy) -> ReconciliationOutcome {
-    let signals = default_signals();
+    let signals = signals_for_policy(&policy.identity);
     reconcile_with_signals(entities, policy, &signals)
 }
 
@@ -144,7 +201,7 @@ pub fn reconcile_with_signals(
     // cross-origin gate below still decides each candidate; blocking
     // only skips pairs that provably cannot fire. Pairs are sorted, so
     // iteration order (and thus the oplog) matches the naive scan.
-    for (i, j) in candidate_pairs(&entities) {
+    for (i, j) in candidate_pairs(&entities, &policy.identity) {
         let mut fired: Vec<MergeSignal> = Vec::new();
         for signal in signals {
             if signal.check(&entities[i], &entities[j]) {
@@ -155,7 +212,15 @@ pub fn reconcile_with_signals(
             continue;
         }
         let cross_origin = entities[i].provenance.signal_kind != entities[j].provenance.signal_kind;
-        let needed = if cross_origin {
+        // A declared external identifier is a criterion of identity, not
+        // evidence toward one: when it agrees, the pair IS one thing and a
+        // second signal would add nothing. Every other signal — including the
+        // descriptive-key fallback, which the recipe declares precisely
+        // because it is NOT an identifier — goes through the count gate.
+        let strict = fired.contains(&MergeSignal::ExternalId);
+        let needed = if strict {
+            1
+        } else if cross_origin {
             policy.cross_origin_required_signals as usize
         } else {
             1
@@ -175,6 +240,7 @@ pub fn reconcile_with_signals(
             left = %entities[i].canonical_name,
             right = %entities[j].canonical_name,
             cross_origin,
+            strict,
             signals = ?fired.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
             "reconciliation: merging candidate pair"
         );
@@ -190,6 +256,7 @@ pub fn reconcile_with_signals(
 
     let mut out_entities = Vec::with_capacity(clusters.len());
     let mut oplog_entries = Vec::new();
+    let mut reified: Vec<ReifiedMerge> = Vec::new();
 
     for (root, members) in clusters {
         let canonical_idx = pick_canonical(&entities, &members);
@@ -222,6 +289,20 @@ pub fn reconcile_with_signals(
         }
 
         if members.len() > 1 {
+            reified.push(ReifiedMerge {
+                inputs: source_atom_ids.clone(),
+                output: canonical_id.clone(),
+                signals: signals_fired.clone(),
+                evidence: members
+                    .iter()
+                    .map(|&m| entities[m].first_appearance.clone())
+                    .collect(),
+                grade: if signals_fired.contains(&MergeSignal::ExternalId) {
+                    ReifiedMerge::EXTERNAL.to_string()
+                } else {
+                    ReifiedMerge::SIGNAL_GATED.to_string()
+                },
+            });
             oplog_entries.push(Op::merge(
                 source_atom_ids.clone(),
                 canonical_id.clone(),
@@ -247,10 +328,139 @@ pub fn reconcile_with_signals(
     }
 
     out_entities.sort_by(|a, b| a.canonical_name.cmp(&b.canonical_name));
+    // Cluster iteration is over a HashMap, so pin an order the way the entity
+    // list is pinned — a reified merge becomes an atom with an id, and an id
+    // that moves between runs is not an id (§7.5).
+    reified.sort_by(|a, b| a.output.as_str().cmp(b.output.as_str()));
     ReconciliationOutcome {
         entities: out_entities,
         oplog_entries,
+        reified,
     }
+}
+
+/// Turn merges into `same_as` Claims plus the edges that reach them.
+///
+/// `next_claim_index` and `next_edge_index` are the caller's next free ids —
+/// this primitive owns no counter, so appending to an existing atlas cannot
+/// collide with what is already there.
+///
+/// The edges are `Involves` (claim → each merged atom, so a reader seeded on
+/// either side finds the merge) and `Grounds` (claim → each evidence chunk).
+/// NOT `Grounding`: that is the cross-corpus family (`edges.rs`), and a merge
+/// inside one corpus is not a cross-corpus link.
+pub fn reify_merges(
+    merges: &[ReifiedMerge],
+    next_claim_index: usize,
+    next_edge_index: usize,
+) -> (
+    Vec<crate::enrichment::atlas::atoms::Claim>,
+    Vec<crate::enrichment::atlas::edges::Edge>,
+) {
+    use crate::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
+    use crate::enrichment::pipeline::atlas::{ClaimScope, DiscourseAct, EnrichmentDepth,
+        EpistemicStatus};
+
+    let mut claims = Vec::with_capacity(merges.len());
+    let mut edges = Vec::new();
+    let mut claim_index = next_claim_index;
+    let mut edge_index = next_edge_index;
+
+    for merge in merges {
+        let claim_id = AtomId::claim(claim_index);
+        claim_index += 1;
+        let mut attributes = serde_json::Map::new();
+        attributes.insert(
+            "same_as".to_string(),
+            serde_json::Value::Array(
+                merge
+                    .inputs
+                    .iter()
+                    .map(|id| serde_json::Value::String(id.as_str().to_string()))
+                    .collect(),
+            ),
+        );
+        attributes.insert(
+            "grade".to_string(),
+            serde_json::Value::String(merge.grade.clone()),
+        );
+        attributes.insert(
+            "signals".to_string(),
+            serde_json::Value::Array(
+                merge
+                    .signals
+                    .iter()
+                    .map(|s| serde_json::Value::String(s.as_str().to_string()))
+                    .collect(),
+            ),
+        );
+        claims.push(crate::enrichment::atlas::atoms::Claim {
+            attributes,
+            // The merge is ABOUT the atom it produced.
+            subject: Some(merge.output.clone()),
+            id: claim_id.clone(),
+            content: format!(
+                "{} are the same thing ({} identity: {})",
+                merge
+                    .inputs
+                    .iter()
+                    .map(|i| i.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                merge.grade,
+                merge
+                    .signals
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" + ")
+            ),
+            discourse_act: DiscourseAct::Assert,
+            epistemic_status: EpistemicStatus::Confident,
+            scope: ClaimScope::Universal,
+            evidence: merge.evidence.clone(),
+            quotable_excerpt: None,
+            attributed_to: None,
+            // Derived by the reconciler, not scored by a model — the same
+            // rule every deterministic atom in Phase 3 follows.
+            confidence: None,
+            anchor: None,
+            claim_kind: Some("same_as".to_string()),
+            concession_outcome: None,
+            evidence_kind: None,
+            enrichment_depth: EnrichmentDepth::Structural,
+        });
+
+        for target in &merge.inputs {
+            edges.push(Edge {
+                id: EdgeId::new(edge_index),
+                edge_type: EdgeType::Involves,
+                source: claim_id.clone(),
+                target: target.clone(),
+                evidence: Vec::new(),
+                trigger_event: None,
+                sub_question: None,
+                confidence: 1.0,
+                provenance: EdgeProvenance::Derived,
+            });
+            edge_index += 1;
+        }
+        for e in &merge.evidence {
+            edges.push(Edge {
+                id: EdgeId::new(edge_index),
+                edge_type: EdgeType::Grounds,
+                source: claim_id.clone(),
+                target: AtomId::from_raw(e.chunk_id.clone()),
+                evidence: vec![e.clone()],
+                trigger_event: None,
+                sub_question: None,
+                confidence: 1.0,
+                provenance: EdgeProvenance::Derived,
+            });
+            edge_index += 1;
+        }
+    }
+    (claims, edges)
 }
 
 /// Reverse a prior merge by splitting `canonical_id` into the original
@@ -325,12 +535,26 @@ fn surname_keys(folded: &str) -> Vec<String> {
 ///   (email-restricted) `NameSimilarity` alias overlap
 /// - `o:<aff>|<role>`      — `OrgRole` (both non-empty)
 ///
+/// - `x:<type>|<values>` / `d:<type>|<values>` — the declared identity and
+///   identity-fallback signals (ontology v1). Present only when the policy
+///   carries keys, so an undeclared corpus buckets on exactly the four keys it
+///   always did. This one is NOT an optimisation: a declared identifier can
+///   match across atoms that share no name token, so without it the blocking
+///   would hide the pair from the signal that was written to find it.
+///
 /// The returned vector is sorted so iteration order — and the resulting
 /// oplog — is deterministic and matches the old ascending i<j scan.
-fn candidate_pairs(entities: &[Entity]) -> Vec<(usize, usize)> {
+fn candidate_pairs(entities: &[Entity], identity: &IdentityPolicy) -> Vec<(usize, usize)> {
     use std::collections::{HashMap, HashSet};
     let mut buckets: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, e) in entities.iter().enumerate() {
+        for (prefix, map) in [("x", &identity.identity), ("d", &identity.identity_fallback)] {
+            if let Some(keys) = map.get(e.entity_type.as_str_repr()) {
+                if let Some(key) = identity_blocking_key(prefix, e, keys) {
+                    buckets.entry(key).or_default().push(i);
+                }
+            }
+        }
         let fc = fold_name(&e.canonical_name);
         if !fc.is_empty() {
             buckets.entry(format!("c:{fc}")).or_default().push(i);
@@ -402,7 +626,8 @@ fn pick_canonical(entities: &[Entity], members: &[usize]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enrichment::atlas::atoms::{ChunkRef, SignalKind};
+    use super::super::signals::default_signals;
+    use crate::enrichment::atlas::atoms::SignalKind;
     use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
 
     fn ent(name: &str, id: &str, sk: SignalKind, doc: &str) -> Entity {
@@ -527,7 +752,9 @@ mod tests {
         entities.push(b);
 
         let cands: std::collections::HashSet<(usize, usize)> =
-            candidate_pairs(&entities).into_iter().collect();
+            candidate_pairs(&entities, &IdentityPolicy::default())
+                .into_iter()
+                .collect();
         let n = entities.len();
         let mut fired_any = false;
         for i in 0..n {
@@ -544,5 +771,183 @@ mod tests {
             }
         }
         assert!(fired_any, "fixture should produce at least one firing pair");
+    }
+
+    // ── Declared identity keys (ontology v1, P3) ─────────────
+
+    /// `coin` identified by its accession number — the `identity` half of the
+    /// two tests below. The `identity_fallback` half builds its own map from
+    /// the same key, because that contrast IS the test.
+    fn identity_policy() -> IdentityPolicy {
+        let mut identity = std::collections::BTreeMap::new();
+        identity.insert("coin".to_string(), vec!["find_id".to_string()]);
+        IdentityPolicy {
+            identity,
+            identity_fallback: std::collections::BTreeMap::new(),
+        }
+    }
+
+    fn coin(id: &str, name: &str, find_id: &str, sk: SignalKind, doc: &str) -> Entity {
+        let mut e = ent(name, id, sk, doc);
+        e.entity_type = EntityType::Other("coin".into());
+        e.attributes.insert(
+            "find_id".into(),
+            serde_json::Value::String(find_id.into()),
+        );
+        e
+    }
+
+    #[test]
+    fn external_id_merges_strictly_cross_origin() {
+        // Two catalogue entries for one find, from two extractors, with names
+        // that share no token at all. Nothing in the default stack can see
+        // them: the merge exists only because the recipe said `find_id` IS the
+        // identity — so this also proves the blocking pass carries the pair.
+        let entities = vec![
+            coin(
+                "entity-0001",
+                "Series Y penny of Aldfrith",
+                "SF-2019-114",
+                SignalKind::LlmBatch,
+                "cat.md",
+            ),
+            coin(
+                "entity-0002",
+                "Wessex Down 114",
+                "sf-2019-114",
+                SignalKind::ColumnHeader,
+                "finds.csv",
+            ),
+        ];
+        // The default policy needs TWO signals cross-origin, and the pair has
+        // no name signal at all — so a run without the declaration is the red
+        // input for this test.
+        let undeclared = reconcile(entities.clone(), &ReconciliationPolicy::default());
+        assert_eq!(undeclared.entities.len(), 2, "no declaration, no merge");
+        assert!(undeclared.reified.is_empty());
+
+        let policy = ReconciliationPolicy {
+            identity: identity_policy(),
+            ..Default::default()
+        };
+        let outcome = reconcile(entities, &policy);
+        assert_eq!(outcome.entities.len(), 1, "one find, one atom");
+        assert_eq!(outcome.reified.len(), 1);
+        let merge = &outcome.reified[0];
+        assert_eq!(merge.grade, ReifiedMerge::EXTERNAL);
+        assert!(merge.signals.contains(&MergeSignal::ExternalId));
+        assert_eq!(merge.inputs.len(), 2);
+    }
+
+    #[test]
+    fn descriptive_key_alone_is_gated() {
+        // The SAME evidence as the test above, with the key moved from
+        // `identity` to `identity_fallback`. That is the whole difference
+        // between a criterion of identity and a description of one, and it is
+        // the only difference between these two fixtures.
+        //
+        // A fallback key on the NAME would prove nothing here: agreeing on
+        // `name` makes `name_similarity` fire too, so the pair would clear the
+        // gate on two signals and the gate would never be tested. `find_id` on
+        // two entries with unrelated names leaves the descriptive key alone.
+        let mut identity_fallback = std::collections::BTreeMap::new();
+        identity_fallback.insert("coin".to_string(), vec!["find_id".to_string()]);
+        let policy = ReconciliationPolicy {
+            identity: IdentityPolicy {
+                identity: std::collections::BTreeMap::new(),
+                identity_fallback,
+            },
+            ..Default::default()
+        };
+        let left = coin(
+            "entity-0001",
+            "Series Y penny of Aldfrith",
+            "SF-2019-114",
+            SignalKind::LlmBatch,
+            "cat.md",
+        );
+        let right_cross = coin(
+            "entity-0002",
+            "Wessex Down 114",
+            "sf-2019-114",
+            SignalKind::ColumnHeader,
+            "finds.csv",
+        );
+        let gated = reconcile(vec![left.clone(), right_cross], &policy);
+        assert_eq!(
+            gated.entities.len(),
+            2,
+            "one descriptive signal does not clear the cross-origin gate of 2"
+        );
+        assert!(gated.reified.is_empty());
+
+        // Same evidence, same origin: one signal is the whole gate there, and
+        // it merges — so the refusal above is the CROSS-ORIGIN rule doing its
+        // job, not the signal failing to fire.
+        let right_same = coin(
+            "entity-0002",
+            "Wessex Down 114",
+            "sf-2019-114",
+            SignalKind::LlmBatch,
+            "cat.md",
+        );
+        let merged = reconcile(vec![left, right_same], &policy);
+        assert_eq!(merged.entities.len(), 1);
+        assert_eq!(merged.reified.len(), 1);
+        assert!(merged.reified[0]
+            .signals
+            .contains(&MergeSignal::DescriptiveKey));
+        assert_eq!(
+            merged.reified[0].grade,
+            ReifiedMerge::SIGNAL_GATED,
+            "no external identifier agreed, and no judge ran"
+        );
+    }
+
+    #[test]
+    fn default_policy_reified_is_empty() {
+        // I5 in one assertion: with no declaration the signal stack, the
+        // blocking keys and the gate are what they were, so `bench enron` —
+        // which reads `entities` and never looks at `reified` — cannot move.
+        let entities = vec![
+            ent("Kenneth Lay", "entity-0001", SignalKind::LlmBatch, "a.eml"),
+            ent("Kenneth Lay", "entity-0002", SignalKind::LlmBatch, "b.eml"),
+        ];
+        let outcome = reconcile(entities, &ReconciliationPolicy::default());
+        assert_eq!(outcome.entities.len(), 1, "the same-origin merge still runs");
+        assert_eq!(outcome.oplog_entries.len(), 1);
+        assert_eq!(
+            outcome.reified.len(),
+            1,
+            "the merge IS reified — the primitive always fills it"
+        );
+        assert!(
+            !outcome.reified[0].signals.contains(&MergeSignal::ExternalId),
+            "but nothing declared can have fired"
+        );
+
+        // And the caller is what decides: nothing writes these unless the
+        // corpus declares an ontology (`enrich reconcile`'s gate).
+        let (claims, edges) = reify_merges(&outcome.reified, 1, 1);
+        assert_eq!(claims.len(), 1);
+        assert_eq!(claims[0].claim_kind.as_deref(), Some("same_as"));
+        assert_eq!(claims[0].subject.as_ref().map(|s| s.as_str()), Some("entity-0001"));
+        assert_eq!(claims[0].attributes["same_as"].as_array().unwrap().len(), 2);
+        assert!(
+            edges.iter().all(|e| e.source == claims[0].id),
+            "every edge hangs off the claim"
+        );
+        assert!(
+            edges
+                .iter()
+                .any(|e| e.edge_type == crate::enrichment::atlas::edges::EdgeType::Involves),
+            "Involves, so a reader seeded on either side finds the merge"
+        );
+        assert!(
+            !edges
+                .iter()
+                .any(|e| e.edge_type == crate::enrichment::atlas::edges::EdgeType::Grounding),
+            "Grounding is the cross-corpus family; a merge inside one corpus is not one"
+        );
     }
 }
