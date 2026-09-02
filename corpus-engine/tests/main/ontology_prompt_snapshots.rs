@@ -9,9 +9,9 @@
 //! `tests/fixtures/ontology_snapshots/<stem>.json`:
 //!
 //! - I1: the `maple-house` recipe's custom atlas (version-0 ontology block)
-//!   — Phase 1, the terse Phase 1 retry, and the Phase 6 classifier. When
-//!   P1 lands, a `version = 1` block with no declarations must reproduce
-//!   these SAME goldens (the `#[ignore]`d stub below).
+//!   — Phase 1, the terse Phase 1 retry, and the Phase 6 classifier — and
+//!   the same recipe migrated to `version = 1` with no declarations, which
+//!   must reproduce these SAME goldens (not a second set).
 //! - I2: the four prebuilt genres' Phase 1 (literary, philosophy,
 //!   referential, engineering) — a genre that declares nothing sends no
 //!   different bytes.
@@ -47,7 +47,45 @@ fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ontology_snapshots")
 }
 
-/// Byte-compare `prompt` against `<stem>.json`, or rewrite the golden under
+/// Rebuild a JSON value with every object's keys in sorted order and render
+/// it pretty with a trailing newline. `None` when `text` is not JSON (a
+/// missing or corrupt golden), which the caller treats as a mismatch.
+///
+/// Key ORDER follows Cargo feature unification, not the prompt: a scoped
+/// `-p corpus-engine` build resolves `serde_json` without `preserve_order`
+/// (objects are `BTreeMap`s, rendered sorted) while the full workspace
+/// unifies `preserve_order` on (insertion order — the `$defs` block of a
+/// response schema renders where the const wrote it). The pin is therefore
+/// content-not-order: both sides are canonicalised before the compare, and
+/// re-blessing writes the canonical form so the committed bytes stay sorted
+/// whichever feature set blessed them. Inserting into a fresh `Map` in sorted
+/// key order yields the same bytes under either map type.
+fn canonical_json(text: &str) -> Option<String> {
+    fn sort_keys(v: serde_json::Value) -> serde_json::Value {
+        match v {
+            serde_json::Value::Object(map) => {
+                let mut entries: Vec<(String, serde_json::Value)> = map.into_iter().collect();
+                entries.sort_by(|a, b| a.0.cmp(&b.0));
+                let mut out = serde_json::Map::new();
+                for (k, v) in entries {
+                    out.insert(k, sort_keys(v));
+                }
+                serde_json::Value::Object(out)
+            }
+            serde_json::Value::Array(items) => {
+                serde_json::Value::Array(items.into_iter().map(sort_keys).collect())
+            }
+            other => other,
+        }
+    }
+    let value: serde_json::Value = serde_json::from_str(text).ok()?;
+    let mut rendered = serde_json::to_string_pretty(&sort_keys(value)).ok()?;
+    rendered.push('\n');
+    Some(rendered)
+}
+
+/// Compare `prompt` against `<stem>.json` as canonical JSON (sorted keys —
+/// see [`canonical_json`]), or rewrite the golden under
 /// `UPDATE_ONTOLOGY_SNAPSHOTS=1`. A missing golden is a mismatch, never a
 /// pass.
 fn assert_snapshot(stem: &str, prompt: &ChatPrompt) {
@@ -62,16 +100,19 @@ fn assert_snapshot(stem: &str, prompt: &ChatPrompt) {
     }
 
     let path = fixtures_dir().join(format!("{stem}.json"));
-    let mut rendered = serde_json::to_string_pretty(prompt).expect("serialise ChatPrompt");
-    rendered.push('\n');
+    let serialised = serde_json::to_string(prompt).expect("serialise ChatPrompt");
+    let rendered = canonical_json(&serialised).expect("a serialised ChatPrompt is JSON");
     // A byte that moves here is a leak: the bytes sent to a model changed.
     assert_golden(&path, &rendered, "ontology_prompt_snapshots");
 }
 
-/// Byte-compare `rendered` against the golden at `path`, or rewrite it under
-/// `UPDATE_ONTOLOGY_SNAPSHOTS=1`. A missing golden is a mismatch, never a
-/// pass. `module` is the test module the re-bless hint names. Shared with
-/// `recipe_templates.rs` (derived-facet goldens): one bless convention.
+/// Compare `rendered` against the golden at `path`, or rewrite it under
+/// `UPDATE_ONTOLOGY_SNAPSHOTS=1`. A JSON golden is compared as canonical JSON
+/// ([`canonical_json`], so key order cannot skew the gate); anything else,
+/// including a missing or truncated golden, is compared as raw bytes — a
+/// mismatch, never a pass. `module` is the test module the re-bless hint
+/// names. Shared with `recipe_templates.rs` (plain-text derived-facet
+/// goldens): one bless convention, one canonicaliser.
 pub(crate) fn assert_golden(path: &Path, rendered: &str, module: &str) {
     if std::env::var(UPDATE_ENV).is_ok() {
         if let Some(dir) = path.parent() {
@@ -82,7 +123,11 @@ pub(crate) fn assert_golden(path: &Path, rendered: &str, module: &str) {
         return;
     }
 
-    let committed = std::fs::read_to_string(path).unwrap_or_default();
+    let committed_raw = std::fs::read_to_string(path).unwrap_or_default();
+    // A golden that is not JSON compares as its raw bytes: that covers a
+    // missing or truncated one (which therefore mismatches, never silently
+    // passes) and the plain-text facet pins under `recipe_templates/`.
+    let committed = canonical_json(&committed_raw).unwrap_or(committed_raw);
     if committed != rendered {
         panic!(
             "golden {} differs ({} committed bytes vs {} rendered).\n\
@@ -166,14 +211,47 @@ fn maple_house_phase6_classifier_matches_golden() {
     assert_snapshot("maple_house.phase6_classifier", &prompt);
 }
 
-/// I1, second half. Lands with P1 (`[enrichment.ontology] version = 1`):
-/// parse the maple-house recipe with `version = 1` added and NO
-/// declarations, and compare each of the three prompts above against the
-/// SAME `maple_house.*` goldens — not a second set.
+/// I1, second half. The maple-house recipe migrated to `version = 1`
+/// (`Recipe::migrate_ontology_version` — one inserted line, nothing else
+/// changes) declares no types, so all three prompts must match the SAME
+/// `maple_house.*` goldens the version-0 tests above pin — not a second set.
+/// This is the structural half of I1: the P2 composer and parser hang off
+/// `OntologyPolicies::has_declarations()`, which is false here.
 #[test]
-#[ignore = "TODO(ontology-v1 P1 merge): needs `version = 1` parsing from P1; then compose maple-house with `version = 1` and no declarations against the same maple_house.* goldens"]
 fn maple_house_v1_without_declarations_matches_v0_goldens() {
-    unimplemented!("TODO(ontology-v1 P1 merge): see the #[ignore] reason");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(MAPLE_HOUSE_RECIPE);
+    let v0 =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let migrated = Recipe::migrate_ontology_version(&v0, 1)
+        .expect("migration yields a loadable recipe")
+        .expect("maple-house is version 0, so migrating to 1 changes it");
+    let recipe = Recipe::from_toml(&migrated).expect("migrated maple-house parses");
+    let spec = recipe
+        .custom_atlas_spec()
+        .expect("still a custom ontology after migration");
+    assert_eq!(spec.ontology_version, 1);
+    assert!(
+        !spec.policies().has_declarations(),
+        "the migration adds only the version line; no types are declared"
+    );
+    let pipeline = LiteraryAtlasPipeline::with_custom_ontology(&spec);
+
+    assert_snapshot(
+        "maple_house.phase1",
+        &pipeline.compose_phase1(&fixed_chapter(), &[]),
+    );
+    assert_snapshot(
+        "maple_house.phase1_terse",
+        &pipeline
+            .compose_phase1_terse(&fixed_chapter())
+            .expect("custom atlas composes a terse retry"),
+    );
+    assert_snapshot(
+        "maple_house.phase6_classifier",
+        &pipeline
+            .compose_phase6_atlas_classifier(&fixed_candidate())
+            .expect("custom atlas composes its own Phase 6 classifier"),
+    );
 }
 
 // ── I2: prebuilt genres declare nothing and send no different bytes ─────

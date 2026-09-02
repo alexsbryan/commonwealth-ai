@@ -26,6 +26,7 @@ use syn::{Attribute, Fields, Item};
 /// Source files parsed for recipe-facing config types, in render order.
 const SOURCES: &[&str] = &[
     "src/recipe.rs",
+    "src/recipe_ontology.rs",
     "src/enrichment/ontology/language.rs",
     "src/filters/mod.rs",
     "src/filters/boilerplate.rs",
@@ -38,8 +39,9 @@ const SKIP_TYPES: &[&str] = &["ResolvedParameters", "ParameterValue"];
 
 const HEADER: &str = "# Recipe schema reference\n\
 \n\
-> **Generated** from `corpus-engine/src/recipe.rs` (+ the ontology declaration\n\
-> languages in `enrichment/ontology/language.rs` and the filter config types) by\n\
+> **Generated** from `corpus-engine/src/recipe.rs` (+ `recipe_ontology.rs`, the\n\
+> ontology declaration languages in `enrichment/ontology/language.rs`, and the\n\
+> filter config types) by\n\
 > the `recipe_schema` test. Do not edit by hand — regenerate with\n\
 > `UPDATE_RECIPE_SCHEMA=1 cargo test -p corpus-engine --test main recipe_schema`.\n\
 >\n\
@@ -397,6 +399,10 @@ pub(crate) fn first_diff(a: &str, b: &str) -> String {
 fn recipe_schema_descriptor_is_fresh() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let recipe_file = descriptor::parse(&manifest.join("src/recipe.rs"));
+    // `OntologyBlock`/`OntologyVocabulary` moved to their own module (ARCH
+    // §3.1 size ratchet); they are re-exported from `recipe`, but this gate
+    // parses SOURCE, so it reads them where they are declared.
+    let recipe_ont_file = descriptor::parse(&manifest.join("src/recipe_ontology.rs"));
     let filters_file = descriptor::parse(&manifest.join("src/filters/mod.rs"));
     let ontology_file = descriptor::parse(&manifest.join("src/enrichment/ontology/language.rs"));
     let registry = corpus_engine::enrichment::ontology::OntologyLanguageRegistry::builtin();
@@ -408,7 +414,7 @@ fn recipe_schema_descriptor_is_fresh() {
         "attribute":          descriptor::struct_fields(&ontology_file, "AttrDecl"),
         "attribute_families": descriptor::variants_with_fields(&ontology_file, "AttrFamily"),
         "attribute_family":   descriptor::variant_keys(&ontology_file, "AttrFamily"),
-        "block":              descriptor::struct_fields(&recipe_file, "OntologyBlock"),
+        "block":              descriptor::struct_fields(&recipe_ont_file, "OntologyBlock"),
         "change":             descriptor::struct_fields(&ontology_file, "ChangeDecl"),
         "claim_scope":        descriptor::variant_keys(&ontology_file, "ClaimScopeDecl"),
         "clock":              descriptor::variant_keys(&ontology_file, "Clock"),
@@ -421,7 +427,7 @@ fn recipe_schema_descriptor_is_fresh() {
         "type":               descriptor::struct_fields(&ontology_file, "OntologyTypeDecl"),
         "v1":                 descriptor::struct_fields(&ontology_file, "OntologyV1"),
         "versions":           versions,
-        "vocabulary":         descriptor::struct_fields(&recipe_file, "OntologyVocabulary"),
+        "vocabulary":         descriptor::struct_fields(&recipe_ont_file, "OntologyVocabulary"),
         "voices":             descriptor::struct_fields(&ontology_file, "VoicesDecl"),
     });
 

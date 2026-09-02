@@ -5511,6 +5511,7 @@ now) and the row is dropped — or trimmed to the still-open residual.
 | `pipeline/runner.rs` split | `corpus-engine/src/enrichment/pipeline/runner.rs` (~3100 lines) | v2 atlas orchestrator. Phase dispatch + ExemplarBank + PhaseCache + step retry all touch the same state. |
 | `engine/mod.rs` split | `corpus-engine/src/engine/mod.rs` (~3000 lines) | `CorpusEngine` façade. Plausible after watcher-driven recipes settle and `ingest_driver` enumify lands. |
 | `pipelines/literary_atlas.rs` split | `corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs` (~2900 lines) | Splits naturally along phase boundaries (extract, cluster, name, resolve, synthesize). |
+| `pipeline/atlas.rs` split (partial, 2026-09-01) | `corpus-engine/src/enrichment/pipeline/atlas.rs` (1,680 → 1,373 lines) | Pure Phase-1 data shapes: core sketches, the open-enum vocabulary macro, and six per-genre extension families. The descriptive/reflective/procedural/lyric families moved to `atlas_extensions.rs` (341 lines) to clear the ARCH §3.1 growth ratchet. The remaining cut — core sketches, vocabulary enums, and all six families as peers each under the 800 approach floor — is deferred because it cannot be taken in one step: the arch-gate's approach band (800-1200, no slack) rejects any residual that lands inside it, so the file must go from >1200 to <800 in a single move, and both the macro and the core sketches are live surface for the in-flight ontology-v1 waves. Due when those land. |
 
 ### 10.1c Size-debt acceptance — 2026-07-30 red-gate sweep
 
