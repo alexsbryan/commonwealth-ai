@@ -57,6 +57,15 @@ pub mod pipeline_resolve;
 pub mod providers;
 pub mod source_loader;
 
+/// End-to-end tests for the build: a scaffolded corpus, deterministic embed
+/// and canned chat closures, run through the real extract path. They came down
+/// with the code they exercise (ontology-v1 P0.5) — they drive
+/// `extract::run_with_closures_for_test`, which is `#[cfg(test)]`, and a
+/// `_for_test` helper reaching across a crate boundary is a design smell, not
+/// a visibility bug.
+#[cfg(test)]
+mod integration_tests;
+
 /// The process-wide `HOME` lock shared with `sovereign-cli-llm`'s test
 /// modules. Behind a feature so it costs a normal build nothing.
 #[cfg(any(test, feature = "test-support"))]

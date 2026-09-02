@@ -589,7 +589,10 @@ enum SelectionArg {
 }
 
 #[derive(Debug)]
-struct ParsedExtract {
+/// A parsed `enrich extract` invocation. `pub` because `parse_args` returns
+/// one across the crate boundary; fields stay PRIVATE — a caller may hold and
+/// pass one, not inspect it.
+pub struct ParsedExtract {
     corpus_id: String,
     selection: SelectionArg,
     /// Set by `--terse`. Requests the terse Phase 1 prompt variant

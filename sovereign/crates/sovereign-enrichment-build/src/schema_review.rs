@@ -20,8 +20,8 @@ use std::path::{Path, PathBuf};
 use corpus_engine::enrichment::atlas::{
     build_schema_validation_report, compare_across_corpora, count_open_questions,
     count_transitions_without_trigger, count_ungrounded_claims, read_atlas_atoms,
-    read_atlas_cross_corpus_edges, read_atlas_edges, AtomEnvelope, SchemaValidationInput,
-    SchemaValidationReport, ATLAS_DIRNAME,
+    read_atlas_cross_corpus_edges, read_atlas_edges, AtomEnvelope, SchemaComparison,
+    SchemaValidationInput, SchemaValidationReport, ATLAS_DIRNAME,
 };
 
 use super::config::EnrichConfig;
@@ -158,8 +158,67 @@ pub fn parse_report_args(args: &[String]) -> Result<ParsedReport, String> {
 // ── schema-review ────────────────────────────────────────────
 
 #[derive(Debug)]
-struct ParsedReview {
+/// A parsed `enrich review` invocation. `pub` for the same reason as
+/// [`ParsedExtract`], with the same private fields: the corpus list is an
+/// input to `run_review`, not a surface for a caller to walk.
+pub struct ParsedReview {
     corpora: Vec<String>,
+}
+
+/// The `review` verb's work: compute one report per corpus, then compare them.
+///
+/// The other half of this module's verb triple, added when the crate split
+/// made the shape matter. `report` always had `run` + `render`; `review` did
+/// not — its loop lived inside `cmd_schema_review`, which is why the split
+/// initially dragged it up into `sovereign-cli-llm` along with the help text.
+/// Comparing schemas across corpora is work, not user interface, so it lives
+/// here and `ParsedReview`'s fields stay private.
+pub fn run_review(parsed: &ParsedReview) -> Result<SchemaComparison, String> {
+    let mut reports = Vec::new();
+    for corpus_id in &parsed.corpora {
+        let cfg = EnrichConfig::require(corpus_id)
+            .map_err(|e| format!("loading config for `{corpus_id}`: {e}"))?;
+        reports.push(compute_report(&cfg.corpus_id)?);
+    }
+    Ok(compare_across_corpora(&reports))
+}
+
+/// Print a [`run_review`] comparison in the shape operators have seen since
+/// the verb shipped.
+pub fn render_review(comparison: &SchemaComparison) {
+    println!(
+        "=== Schema review across {} corpora ===",
+        comparison.corpora.len()
+    );
+    for c in &comparison.corpora {
+        println!("  · {c}");
+    }
+    println!();
+
+    if comparison.convergent_gaps.is_empty() {
+        println!("  No convergent gaps — no schema revision candidates.");
+    } else {
+        println!("  Convergent gaps (schema revision candidates — present in ≥ 2 corpora):");
+        for g in &comparison.convergent_gaps {
+            println!();
+            println!("  [{}]", g.signature);
+            println!("    present_in:     {}", g.present_in.join(", "));
+            println!("    recommendation: {}", g.recommendation);
+        }
+    }
+    println!();
+
+    if comparison.idiosyncratic_gaps.is_empty() {
+        println!("  No idiosyncratic gaps — nothing single-corpus to tune.");
+    } else {
+        println!(
+            "  Idiosyncratic gaps (prompt-tuning candidates — present in exactly one \
+             corpus):"
+        );
+        for g in &comparison.idiosyncratic_gaps {
+            println!("    · [{}] on {}", g.signature, g.present_in);
+        }
+    }
 }
 
 pub fn parse_review_args(args: &[String]) -> Result<ParsedReview, String> {

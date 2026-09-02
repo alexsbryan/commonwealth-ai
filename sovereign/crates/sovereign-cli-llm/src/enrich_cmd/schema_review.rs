@@ -7,13 +7,6 @@
 //! moved down to the capability crate (ontology-v1 P0.5) and is re-exported
 //! below, so `super::schema_review::…` keeps resolving for this crate's siblings.
 
-use super::config::EnrichConfig;
-use corpus_engine::enrichment::atlas::{
-    build_schema_validation_report, compare_across_corpora, count_open_questions,
-    count_transitions_without_trigger, count_ungrounded_claims, read_atlas_atoms,
-    read_atlas_cross_corpus_edges, read_atlas_edges, AtomEnvelope, SchemaValidationInput,
-    SchemaValidationReport, ATLAS_DIRNAME,
-};
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 pub use sovereign_enrichment_build::schema_review::*;
@@ -98,61 +91,14 @@ pub async fn cmd_schema_review(args: &[String]) -> i32 {
             return 2;
         }
     };
-
-    let mut reports = Vec::new();
-    for corpus_id in &parsed.corpora {
-        let cfg = match EnrichConfig::require(corpus_id) {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("error: loading config for `{corpus_id}`: {e}");
-                return 1;
-            }
-        };
-        let report = match compute_report(&cfg.corpus_id) {
-            Ok(r) => r,
-            Err(msg) => {
-                eprintln!("error: {msg}");
-                return 1;
-            }
-        };
-        reports.push(report);
-    }
-
-    let comparison = compare_across_corpora(&reports);
-
-    println!(
-        "=== Schema review across {} corpora ===",
-        comparison.corpora.len()
-    );
-    for c in &comparison.corpora {
-        println!("  · {c}");
-    }
-    println!();
-
-    if comparison.convergent_gaps.is_empty() {
-        println!("  No convergent gaps — no schema revision candidates.");
-    } else {
-        println!("  Convergent gaps (schema revision candidates — present in ≥ 2 corpora):");
-        for g in &comparison.convergent_gaps {
-            println!();
-            println!("  [{}]", g.signature);
-            println!("    present_in:     {}", g.present_in.join(", "));
-            println!("    recommendation: {}", g.recommendation);
+    match run_review(&parsed) {
+        Ok(comparison) => {
+            render_review(&comparison);
+            0
+        }
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            1
         }
     }
-    println!();
-
-    if comparison.idiosyncratic_gaps.is_empty() {
-        println!("  No idiosyncratic gaps — nothing single-corpus to tune.");
-    } else {
-        println!(
-            "  Idiosyncratic gaps (prompt-tuning candidates — present in exactly one \
-             corpus):"
-        );
-        for g in &comparison.idiosyncratic_gaps {
-            println!("    · [{}] on {}", g.signature, g.present_in);
-        }
-    }
-
-    0
 }
