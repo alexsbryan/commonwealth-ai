@@ -12,13 +12,13 @@
 //! This is also where a declared ontology is ENFORCED: the [`ParsePolicy`]
 //! threaded through each `into_sketch` is what keeps a declared type, drops a
 //! declared voice, validates an attribute against its family and takes a
-//! claim\'s discourse act from its declared force. The policy itself lives in
+//! claim's discourse act from its declared force. The policy itself lives in
 //! [`super::parse_policy`]; assembling a whole response lives in
-//! [`super::ontology_parse`], which owns the reader\'s behavioural tests.
+//! [`super::ontology_parse`], which owns the reader's behavioural tests.
 //!
 //! Split from `ontology_parse.rs` on the seam that file already drew (its own
 //! `── Lenient deserialisation layer ──` divider): at 1,134 lines it sat
-//! inside ARCH §3.1\'s 800-1200 approach band, which is a no-slack aggregate
+//! inside ARCH §3.1's 800-1200 approach band, which is a no-slack aggregate
 //! ratchet, so a file has to leave the band rather than merely shrink.
 
 use serde::Deserialize;
