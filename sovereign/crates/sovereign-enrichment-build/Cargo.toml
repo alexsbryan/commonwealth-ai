@@ -1,0 +1,83 @@
+[package]
+name = "sovereign-enrichment-build"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The atlas enrichment build orchestrator and its phase drivers, below every host that runs one."
+
+# WHY THIS CRATE EXISTS (ontology-v1 P0.5, funded by the operator 2026-09-01).
+# The atlas `enrich build` orchestrator is a CAPABILITY that three hosts need
+# — the CLI runs it as `svrn enrich build`, the daemon runs it in-process for
+# an `[enrichment] type = "atlas"` recipe, and a shipped desktop bundle
+# carries no CLI to shell out to. It lived inside `sovereign-cli-llm`, a HOST,
+# so the only way for the daemon to reach it was to link that host as a
+# library. P0.4 did exactly that and named it a substitution (ARCH §18.3);
+# this crate is the rung that repays it.
+#
+# What the library edge cost, and what this buys back: `bench_cmd` gives
+# `sovereign-cli-llm` a grandfathered dependency on `sovereign-eval`
+# (ARCH_LAYERS.toml [[exception]] nc-3-backstage), so the daemon AND the
+# desktop bundle linked the eval harness — a back-of-house crate that the
+# product must ship without. Nothing here reaches above `capabilities`.
+#
+# The boundary that made the split affordable: `enrich_cmd/build.rs`'s
+# transitive closure is 15 modules / ~10,300 lines, 29% of `enrich_cmd` — not
+# most of it. The one edge that would have dragged `sovereign-mesh`,
+# `sovereign-runtime-recipe`, `sovereign-store` and `commonwealth-transport`
+# in was a single call site building a daemon session for the Backfill step's
+# embedder; it moved UP into the CLI wrapper instead (P0.5a), which is where
+# resolving a session always belonged.
+#
+# WHAT DOES NOT LIVE HERE. `cmd_*` functions and their `HELP` consts stay in
+# `sovereign-cli-llm`. They are the `svrn enrich …` surface — usage strings,
+# flag parsing, `--help` — and pushing them down would put a host's user
+# interface inside a capability, which is the smell the layer map exists to
+# stop. Each module here keeps the verb triple's other three parts: `Parsed*`,
+# `run`, `render`.
+
+[dependencies]
+# The atlas itself: atoms, edges, resolution, the pipeline registry and the
+# `EnrichProgress` event the orchestrator emits. Knowledge layer — down.
+corpus-engine = { workspace = true, features = ["treesitter"] }
+# `atlas_context_manager::backfill_ann` (the ONE ANN-seed writer, which the
+# Backfill step drives) and `enrich::EXIT_CANCELLED`. Same layer.
+sovereign-tools = { workspace = true, features = ["treesitter"] }
+# The enrichment store's layout + `config.json` schema. Re-exported from
+# `lib.rs` as `config` / `paths` so the moved modules' `super::config` and
+# `super::paths` paths resolve unchanged — the same re-export
+# `enrich_cmd/mod.rs` already carried. Same layer.
+sovereign-enrichment-catalog = { workspace = true }
+# `traits::InferenceProvider` — the Backfill step's embedder, supplied by the
+# caller. Runtime layer — down.
+sovereign-core = { workspace = true }
+# `providers` resolves a `StructuredOutputMode` per provider. Runtime — down.
+sovereign-inference = { workspace = true }
+# `setup_config::client_daemon_base()` for the daemon base URL. Contract — down.
+sovereign-contracts = { workspace = true }
+# The provider vocabulary `providers` speaks. Contract layer — down.
+oicp-types = { workspace = true }
+chrono = { workspace = true }
+# `DaemonInferenceClient` talks to the daemon over HTTP on the CLI path.
+reqwest = { workspace = true, features = ["stream"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+# `test_env::scoped_home` only, behind `test-support`. NOT a runtime cost:
+# every non-test use of tempfile in the moved code sits after a `#[cfg(test)]`.
+tempfile = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[features]
+default = []
+# Exposes `test_env::scoped_home` — the process-wide `HOME` lock the moved
+# tests share with the ones that stayed in `sovereign-cli-llm`. A feature
+# rather than a copy in each crate so there is ONE lock definition (§10.6);
+# `sovereign-cli-llm` enables it from its dev-dependencies.
+test-support = ["dep:tempfile"]
+
+[lints]
+workspace = true
