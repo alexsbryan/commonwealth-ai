@@ -39,7 +39,10 @@ sovereign-recipes/
 ├── GETTING_STARTED.md         # tutorial
 ├── _templates/                # copy-paste starting points
 │   ├── annotated/             #   fully-commented general template
-│   └── narrative-markdown/    #   template for stable markdown docs
+│   ├── narrative-markdown/    #   template for stable markdown docs
+│   └── ontology-v1/           #   `svrn recipe new --ontology <name>` — declared-type recipes
+│       ├── numismatics/       #     coins, mints, rulers, graded attributions
+│       └── governance/        #     a charter + dated decisions, rules that supersede
 ├── wikipedia/recipe.toml      # one directory per corpus
 ├── sep/recipe.toml
 └── …

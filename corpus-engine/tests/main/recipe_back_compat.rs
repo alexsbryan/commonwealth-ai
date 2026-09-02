@@ -614,3 +614,172 @@ WHERE r1.type = 'revenue' AND r2.type = 'investment'
         other => panic!("expected CustomSql, got {other:?}"),
     }
 }
+
+// ---------------------------------------------------------------------------
+// [enrichment.ontology] — versioned block (ontology v1, 2026-09-01)
+// ---------------------------------------------------------------------------
+//
+// `version` (absent = 0) selects the declaration language. Every published
+// version-0 block must keep loading unchanged (I4); version 1 is additive and
+// a version-1 block with no declarations must equal version 0. The three
+// refusals are pinned so they cannot soften into silent drops.
+
+const ONTOLOGY_RECIPE_HEAD: &str = r#"
+[corpus]
+id = "ont-compat"
+name = "ont-compat"
+
+[acquire]
+type = "local_file"
+path = "/tmp/x.md"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+
+[enrichment]
+enabled = true
+type = "atlas"
+"#;
+
+fn ontology_recipe(block: &str) -> String {
+    format!("{ONTOLOGY_RECIPE_HEAD}\n{block}")
+}
+
+/// The original shape: a `guidance` paragraph and nothing else.
+#[test]
+fn ontology_v0_guidance_only_still_parses() {
+    let r = Recipe::from_toml(&ontology_recipe(
+        r#"[enrichment.ontology]
+guidance = "Extract coins and hoards.""#,
+    ))
+    .expect("guidance-only block must parse");
+    let block = r.ontology_block().expect("block present");
+    assert_eq!(block.version, 0);
+    let p = r
+        .custom_ontology()
+        .expect("non-empty guidance selects the custom path");
+    assert_eq!(p.prose.guidance, "Extract coins and hoards.");
+    assert!(!p.has_declarations());
+}
+
+/// The maple-house shape: guidance plus a `vocabulary` table.
+#[test]
+fn ontology_v0_guidance_and_vocabulary_still_parses() {
+    let r = Recipe::from_toml(&ontology_recipe(
+        r#"[enrichment.ontology]
+guidance = "Rules of a house."
+
+[enrichment.ontology.vocabulary]
+position_term = "rule"
+tension_term = "conflict""#,
+    ))
+    .expect("maple-shaped block must parse");
+    let spec = r.custom_atlas_spec().expect("spec");
+    assert_eq!(spec.ontology_version, 0);
+    assert_eq!(
+        spec.vocabulary
+            .as_ref()
+            .and_then(|v| v.position_term.clone())
+            .as_deref(),
+        Some("rule")
+    );
+    assert_eq!(spec.policies().vocabulary().tension_term, "conflict");
+}
+
+/// Version 1 with declared types (the numismatics template's core).
+#[test]
+fn ontology_v1_numismatics_parses() {
+    let r = Recipe::from_toml(&ontology_recipe(
+        r#"[enrichment.ontology]
+version = 1
+
+[[enrichment.ontology.types]]
+name = "coin"
+kind = "entity"
+attributes = [{ name = "weight", type = "quantity", unit = "g" }]
+
+[[enrichment.ontology.types]]
+name = "attribution"
+kind = "claim"
+force = "assertive"
+subject = "coin""#,
+    ))
+    .expect("v1 block must parse");
+    let p = r
+        .custom_ontology()
+        .expect("declared types select the custom path");
+    assert_eq!(p.shape.types.len(), 2);
+    assert_eq!(p.claim_types().count(), 1);
+    assert_eq!(r.ontology_block().unwrap().version, 1);
+}
+
+/// `version = 1` alone is exactly version 0: adding the line is always safe.
+#[test]
+fn ontology_v1_version_line_only_equals_v0() {
+    let v1 = Recipe::from_toml(&ontology_recipe(
+        "[enrichment.ontology]\nversion = 1\nguidance = \"g\"",
+    ))
+    .expect("parses");
+    let v0 = Recipe::from_toml(&ontology_recipe("[enrichment.ontology]\nguidance = \"g\""))
+        .expect("parses");
+    assert_eq!(v1.custom_ontology(), v0.custom_ontology());
+}
+
+/// Version 1 still honours the version-0 `vocabulary` table.
+#[test]
+fn ontology_v1_with_legacy_vocabulary_parses() {
+    let r = Recipe::from_toml(&ontology_recipe(
+        r#"[enrichment.ontology]
+version = 1
+guidance = "g"
+
+[enrichment.ontology.vocabulary]
+position_term = "rule"
+
+[[enrichment.ontology.types]]
+name = "topic"
+kind = "entity""#,
+    ))
+    .expect("parses");
+    let p = r.custom_ontology().unwrap();
+    assert_eq!(p.vocabulary().position_term, "rule");
+    assert!(p.has_declarations());
+}
+
+/// Refusal 1: a version-1 key in a block without `version = 1` is an error
+/// naming the fix — serde would otherwise drop `types` silently.
+#[test]
+fn ontology_v1_keys_without_version_are_refused() {
+    let e = Recipe::from_toml(&ontology_recipe(
+        r#"[enrichment.ontology]
+guidance = "g"
+
+[[enrichment.ontology.types]]
+name = "coin"
+kind = "entity""#,
+    ))
+    .err()
+    .expect("must be refused")
+    .to_string();
+    assert!(e.contains("`types`"), "{e}");
+    assert!(e.contains("version = 1"), "{e}");
+    assert!(e.contains("recipe migrate --ontology-version 1"), "{e}");
+}
+
+/// Refusal 2: a version this engine does not know names the highest it does.
+#[test]
+fn ontology_future_version_is_refused() {
+    let max =
+        corpus_engine::enrichment::ontology::OntologyLanguageRegistry::builtin().max_version();
+    let e = Recipe::from_toml(&ontology_recipe(&format!(
+        "[enrichment.ontology]\nversion = {}\nguidance = \"g\"",
+        max + 1
+    )))
+    .err()
+    .expect("must be refused")
+    .to_string();
+    assert!(e.contains(&format!("ontology version <= {max}")), "{e}");
+}

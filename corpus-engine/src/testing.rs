@@ -185,6 +185,16 @@ impl TestReport {
             md.push('\n');
         }
 
+        // ── Ontology (derived facets) ───────────────────────────────────────
+        if !self.validation.notes.is_empty() {
+            md.push_str("## Ontology\n\n");
+            md.push_str("What the declared ontology derives (override in the recipe):\n\n");
+            for n in &self.validation.notes {
+                md.push_str(&format!("- {n}\n"));
+            }
+            md.push('\n');
+        }
+
         // ── Validation ──────────────────────────────────────────────────────
         md.push_str("## Validation\n\n");
         md.push_str("| Check | Status |\n|---|---|\n");
@@ -404,6 +414,12 @@ impl TestReport {
 pub struct ValidationResult {
     pub errors: Vec<String>,
     pub warnings: Vec<String>,
+    /// Derived facets of a declared ontology — clock, tension selector,
+    /// identity default per type, question shapes — printed so an author can
+    /// see what the system inferred and override it. Empty when the recipe
+    /// declares no types. Neither an error nor a warning: the recipe is fine,
+    /// this is what it will do.
+    pub notes: Vec<String>,
     pub corpus_id_present: bool,
     pub corpus_name_present: bool,
     pub license_present: bool,
@@ -894,8 +910,22 @@ pub(crate) async fn run_test(
 
 /// Validate the recipe fields and optionally check source reachability.
 async fn validate_recipe(recipe: &Recipe, offline: bool) -> ValidationResult {
+    let mut result = validate_recipe_offline(recipe);
+    if !offline {
+        let url = acquirer_source_url(recipe);
+        result.source_reachable = Some(head_check(&url).await);
+    }
+    result
+}
+
+/// Every static check — the recipe fields, the ontology block, the
+/// investigation patterns — with no network. `source_reachable` is `None`.
+/// Synchronous so template tests and the desktop validator can call it
+/// without a runtime; `validate_recipe` adds the HEAD check on top.
+pub fn validate_recipe_offline(recipe: &Recipe) -> ValidationResult {
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
+    let mut notes = Vec::new();
 
     let corpus_id_present = !recipe.corpus.id.is_empty();
     let corpus_name_present = !recipe.corpus.name.is_empty();
@@ -934,6 +964,14 @@ async fn validate_recipe(recipe: &Recipe, offline: bool) -> ValidationResult {
             &mut errors,
             &mut warnings,
         );
+    }
+
+    // ── declared ontology: references resolve, caps hold, facets printed ──
+    if let Some(block) = recipe.ontology_block() {
+        let v = crate::enrichment::ontology::validate_block(block);
+        errors.extend(v.errors);
+        warnings.extend(v.warnings);
+        notes = v.notes;
     }
 
     // ── investigation patterns: surface reserved variants ─────────────
@@ -1026,22 +1064,16 @@ async fn validate_recipe(recipe: &Recipe, offline: bool) -> ValidationResult {
 
     let format_known = true; // recipe parsed successfully implies format is known
 
-    let source_reachable = if offline {
-        None
-    } else {
-        let url = acquirer_source_url(recipe);
-        Some(head_check(&url).await)
-    };
-
     ValidationResult {
         errors,
         warnings,
+        notes,
         corpus_id_present,
         corpus_name_present,
         license_present,
         source_present,
         format_known,
-        source_reachable,
+        source_reachable: None,
     }
 }
 
