@@ -14,5 +14,5 @@
 requirement = "UI-22"
 test = "sovereign-mesh::daemon::tests::the_client_api_binds_loopback_by_default_and_never_exposes_an_unauthenticated_listener"
 file = "sovereign/crates/sovereign-mesh/src/daemon.rs"
-line = 4572
+line = 4574
 asserts = 21

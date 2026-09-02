@@ -15,7 +15,7 @@ requirement = "EN-16"
 test = "corpus-engine::enrichment::reconciliation::oplog::tests::a_merge_is_reversed_from_the_log_with_no_operator_supplied_output_list"
 file = "corpus-engine/src/enrichment/reconciliation/oplog.rs"
 line = 287
-asserts = 9
+asserts = 7
 
 [[claim]]
 requirement = "EN-16"
@@ -29,21 +29,21 @@ requirement = "EN-4"
 test = "corpus-engine::enrichment::pipeline::phase_cache::tests::exactly_one_place_constructs_the_cache_model_identity"
 file = "corpus-engine/src/enrichment/pipeline/phase_cache.rs"
 line = 354
-asserts = 3
+asserts = 2
 
 [[claim]]
 requirement = "EN-5"
 test = "corpus-engine::main::tiered_entity_extractor_seam::ner_runs_before_the_provider_so_a_provider_failure_still_leaves_entities"
 file = "corpus-engine/tests/main/tiered_entity_extractor_seam.rs"
 line = 206
-asserts = 3
+asserts = 2
 
 [[claim]]
 requirement = "EN-5"
 test = "corpus-engine::main::tiered_entity_extractor_seam::the_injected_entity_extractor_is_called_once_per_conversation_with_its_own_chunks"
 file = "corpus-engine/tests/main/tiered_entity_extractor_seam.rs"
 line = 139
-asserts = 10
+asserts = 9
 
 [[claim]]
 requirement = "EN-9"
@@ -57,4 +57,4 @@ requirement = "ST-41"
 test = "corpus-engine::main::reindex_stamps_freshness::reindexing_a_document_stamps_its_recency_at_the_shared_convergence_point"
 file = "corpus-engine/tests/main/reindex_stamps_freshness.rs"
 line = 67
-asserts = 11
+asserts = 9

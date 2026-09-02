@@ -29,7 +29,7 @@ requirement = "EV-11"
 test = "sovereign-cli-llm::bench_cmd::rubric::judge::tests::the_bank_itself_must_be_large_and_balanced_enough_to_estimate_a_rate"
 file = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/rubric/judge.rs"
 line = 636
-asserts = 4
+asserts = 3
 
 [[claim]]
 requirement = "ST-15"

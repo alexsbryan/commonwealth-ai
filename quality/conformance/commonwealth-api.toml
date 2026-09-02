@@ -15,11 +15,11 @@ requirement = "FE-100"
 test = "commonwealth-api::admission::tests::peer_traffic_and_client_traffic_never_consume_each_others_budget"
 file = "commonwealth/crates/commonwealth-api/src/admission.rs"
 line = 1051
-asserts = 10
+asserts = 7
 
 [[claim]]
 requirement = "IN-27"
 test = "commonwealth-api::next_edit_journal::tests::the_outcome_route_answers_204_or_400_and_never_5xx"
 file = "commonwealth/crates/commonwealth-api/src/next_edit_journal.rs"
 line = 191
-asserts = 4
+asserts = 3

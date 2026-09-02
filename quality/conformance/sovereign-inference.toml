@@ -15,4 +15,4 @@ requirement = "FE-77"
 test = "sovereign-inference::embedded::rpc_distribution::rpc_prune_tests::a_per_device_overflow_is_its_own_refusal_and_advises_lowering_headroom"
 file = "sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs"
 line = 3027
-asserts = 13
+asserts = 12

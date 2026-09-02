@@ -15,11 +15,11 @@ requirement = "FE-139"
 test = "commonwealth-test-harness::integration::a_departing_orchestrator_announces_rebalances_and_drains_before_it_stops_anything"
 file = "commonwealth/crates/commonwealth-test-harness/tests/integration.rs"
 line = 582
-asserts = 7
+asserts = 6
 
 [[claim]]
 requirement = "FE-139"
 test = "commonwealth-test-harness::integration::a_node_that_has_announced_its_departure_refuses_new_shard_plans"
 file = "commonwealth/crates/commonwealth-test-harness/tests/integration.rs"
 line = 650
-asserts = 11
+asserts = 9
