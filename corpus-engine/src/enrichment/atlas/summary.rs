@@ -39,6 +39,7 @@ use serde::{Deserialize, Serialize};
 use super::atoms::AtomType;
 use super::{atoms_content_hash, read_atlas_atoms, AtomEnvelope};
 use crate::enrichment::pipeline::atlas::EnrichmentDepth;
+use tracing::debug;
 
 const SUMMARY_FILE: &str = "_summary.json";
 // v2 (2026-05-12) adds `atom_counts` so consumers can render per-type
@@ -47,7 +48,13 @@ const SUMMARY_FILE: &str = "_summary.json";
 // transparently recomputed on next read.
 // v3 (2026-09-01) adds `ontology`, so a reader can say what a corpus
 // declared without opening atoms.json or the enrich config.
-const SCHEMA_VERSION: u32 = 3;
+// v4 (2026-09-02) adds `subtype_counts` and `ontology.specializes`. v3 named
+// the author's types but could not say how many atoms each one has, so a
+// reader wanting "coin 13" had to open atoms.json and re-derive it — which is
+// the whole thing this file exists to avoid. `specializes` rides along because
+// a count without the hierarchy cannot answer "how many coins" for a corpus
+// where `sceatta` is one.
+const SCHEMA_VERSION: u32 = 4;
 
 /// Atlas-level statistics carried in mesh gossip and shown in
 /// `sovereign corpus status` / `sovereign mesh status`.
@@ -79,6 +86,22 @@ pub struct AtlasSummary {
     /// partially-written or hand-edited files.
     #[serde(default)]
     pub atom_counts: BTreeMap<AtomType, u64>,
+    /// Per-SUBTYPE atom counts — the author's own nouns, counted across every
+    /// atom kind rather than within one. A `role_of` type lands as a State on
+    /// a rigid atom (`ruler role_of person`), so counting `ruler` inside the
+    /// Entity bucket would report zero for a role that landed perfectly; the
+    /// key here is whatever [`projection::subtype_of`] says, which is the one
+    /// answer to "what type is this atom" (§10.6).
+    ///
+    /// Atoms with no subtype are ABSENT, not counted under `""` — a corpus
+    /// that classified nothing has an empty map, which reads differently from
+    /// one that classified everything as the empty string. Added in schema v4.
+    ///
+    /// Counts are OWN only: `sceatta` does not add to `coin`. The roll-up
+    /// needs the hierarchy, which rides in [`OntologySummary::specializes`] so
+    /// a consumer can do it and this map stays a plain census.
+    #[serde(default)]
+    pub subtype_counts: BTreeMap<String, u64>,
     /// What this atlas was extracted under, when the recipe declared an
     /// ontology. `None` for every prebuilt genre and every prose-only custom
     /// atlas — declaring nothing is the common case and costs no key on the
@@ -101,6 +124,16 @@ pub struct OntologySummary {
     /// `external:<keys>`, `fallback:<keys>`, or absent when the type resolves
     /// on its canonical name (the reported default).
     pub identity_criteria: BTreeMap<String, String>,
+    /// Declared type → the type it `specializes`, for the types that declare
+    /// one. Absent for the rest, so an empty map means a flat ontology.
+    ///
+    /// Here because a subtype census is not answerable without it: "how many
+    /// coins" in a corpus that also declares `sceatta specializes coin` is the
+    /// two counts added, and a consumer holding only names and counts cannot
+    /// know to add them. One level per entry — walk it for the transitive
+    /// closure. Added in schema v4.
+    #[serde(default)]
+    pub specializes: BTreeMap<String, String>,
 }
 
 impl AtlasSummary {
@@ -116,6 +149,7 @@ impl AtlasSummary {
             atoms_mtime_ms: 0,
             atoms_size_bytes: 0,
             atom_counts: BTreeMap::new(),
+            subtype_counts: BTreeMap::new(),
             ontology: None,
         }
     }
@@ -145,6 +179,8 @@ pub fn compute_summary(atlas_dir: &Path) -> io::Result<AtlasSummary> {
     // variants without a second pass.
     let mut tier2_count: u64 = 0;
     let mut atom_counts: BTreeMap<AtomType, u64> = BTreeMap::new();
+    let mut subtype_counts: BTreeMap<String, u64> = BTreeMap::new();
+    let mut unsubtyped: u64 = 0;
     for a in &atoms.atoms {
         if let AtomEnvelope::Entity(e) = a {
             if matches!(e.enrichment_depth, EnrichmentDepth::Extracted) {
@@ -152,7 +188,26 @@ pub fn compute_summary(atlas_dir: &Path) -> io::Result<AtlasSummary> {
             }
         }
         *atom_counts.entry(a.atom_type()).or_insert(0) += 1;
+        // Absence stays absent rather than bucketing under `""` — see the
+        // field's doc. `subtype_of` already folds the two on-disk spellings of
+        // "unclassified" to empty, so this is the only check needed.
+        let subtype = super::projection::subtype_of(a);
+        if subtype.is_empty() {
+            unsubtyped += 1;
+        } else {
+            *subtype_counts.entry(subtype).or_insert(0) += 1;
+        }
     }
+    // Traced as a total, not per atom (§9.1): the decision an operator needs
+    // to see is "how many atoms this census does not account for", and this
+    // loop runs over every atom in the corpus — 1.5M on the meta-atlas — so a
+    // line each would be the wrong shape for the same fact. Without it, a
+    // census summing to less than `atom_count` looks like a bug in the census.
+    debug!(
+        atlas = %atlas_dir.display(),
+        atoms = atom_count, subtypes = subtype_counts.len(), unsubtyped,
+        "atlas summary: subtype census"
+    );
 
     Ok(AtlasSummary {
         schema_version: SCHEMA_VERSION,
@@ -162,6 +217,7 @@ pub fn compute_summary(atlas_dir: &Path) -> io::Result<AtlasSummary> {
         atoms_mtime_ms,
         atoms_size_bytes,
         atom_counts,
+        subtype_counts,
         ontology: read_ontology_summary(atlas_dir),
     })
 }
@@ -204,6 +260,12 @@ fn read_ontology_summary(atlas_dir: &Path) -> Option<OntologySummary> {
             .trim_matches('"')
             .to_string(),
         identity_criteria,
+        specializes: p
+            .shape
+            .types
+            .iter()
+            .filter_map(|t| t.specializes.clone().map(|parent| (t.name.clone(), parent)))
+            .collect(),
     })
 }
 
@@ -499,5 +561,126 @@ mod tests {
         assert_ne!(s1.atom_count, s2.atom_count);
         assert_eq!(s2.tier2_count, 2);
         assert_ne!(s1.fingerprint, s2.fingerprint);
+    }
+}
+
+#[cfg(test)]
+mod subtype_census_tests {
+    use super::*;
+    use crate::enrichment::atlas::atoms::{AtomId, AtomsFile, ChunkRef, Entity, State};
+    use crate::enrichment::atlas::SectionRange;
+    use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType, StateType};
+
+    fn entity(i: usize, entity_type: EntityType) -> AtomEnvelope {
+        AtomEnvelope::Entity(Entity {
+            id: AtomId::entity(i),
+            canonical_name: format!("Entity {i}"),
+            aliases: Vec::new(),
+            entity_type,
+            first_appearance: ChunkRef::new("sec_0001", None),
+            description: "x".into(),
+            defining_quote: None,
+            salience: 1.0,
+            enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
+            provenance: Default::default(),
+            attributes: serde_json::Map::new(),
+            concept_kind: None,
+        })
+    }
+
+    /// The atom a `role_of` type produces: a State on the rigid person atom.
+    fn role_state(i: usize, label: &str) -> AtomEnvelope {
+        AtomEnvelope::State(State {
+            id: AtomId::from_raw(&format!("state-{i:04}")),
+            entity_id: AtomId::entity(1),
+            label: label.into(),
+            state_type: StateType::Other(label.into()),
+            evidence: Vec::new(),
+            section_range: SectionRange {
+                start: "sec_0001".into(),
+                end: "sec_0001".into(),
+            },
+            confidence: None,
+            enrichment_depth: EnrichmentDepth::Extracted,
+        })
+    }
+
+    fn write(dir: &Path, atoms: Vec<AtomEnvelope>) {
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(
+            dir.join("atoms.json"),
+            serde_json::to_vec_pretty(&AtomsFile::new(atoms)).unwrap(),
+        )
+        .unwrap();
+    }
+
+    /// The census counts the AUTHOR's nouns across every atom kind, so a
+    /// `role_of` type — which lands as a State, never as an entity of that
+    /// type — is counted where a per-kind breakdown reports zero for it.
+    ///
+    /// Falsifier: count subtypes only within the Entity bucket and `ruler`
+    /// disappears.
+    #[test]
+    fn the_census_counts_declared_nouns_across_kinds() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            tmp.path(),
+            vec![
+                entity(1, EntityType::Other("coin".into())),
+                entity(2, EntityType::Other("coin".into())),
+                entity(3, EntityType::Other("sceatta".into())),
+                role_state(1, "ruler"),
+                role_state(2, "ruler"),
+            ],
+        );
+        let s = compute_summary(tmp.path()).unwrap();
+        assert_eq!(s.subtype_counts.get("coin").copied(), Some(2));
+        assert_eq!(s.subtype_counts.get("sceatta").copied(), Some(1));
+        assert_eq!(
+            s.subtype_counts.get("ruler").copied(),
+            Some(2),
+            "a role lands as a State and is still the author's noun"
+        );
+        // Own counts only — the roll-up is the consumer's, using `specializes`.
+        assert_eq!(
+            s.subtype_counts.get("coin").copied(),
+            Some(2),
+            "`sceatta` does not silently add itself to `coin`"
+        );
+    }
+
+    /// An atom with no subtype is ABSENT from the census, never a count under
+    /// the empty string — "nothing was classified" and "everything was
+    /// classified as ``" are different findings (§18.3).
+    ///
+    /// Falsifier: drop the `is_empty` guard and `""` appears as a key.
+    #[test]
+    fn an_unclassified_atom_is_absent_not_empty_keyed() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            tmp.path(),
+            vec![
+                entity(1, EntityType::Other("coin".into())),
+                // `Other("unclassified")` is one of the two on-disk spellings
+                // of absence that `subtype_of` folds to empty.
+                AtomEnvelope::State(State {
+                    state_type: StateType::Other("unclassified".into()),
+                    ..match role_state(1, "x") {
+                        AtomEnvelope::State(s) => s,
+                        _ => unreachable!(),
+                    }
+                }),
+            ],
+        );
+        let s = compute_summary(tmp.path()).unwrap();
+        assert_eq!(s.subtype_counts.get("coin").copied(), Some(1));
+        assert!(
+            !s.subtype_counts.contains_key(""),
+            "absence is absent: {:?}",
+            s.subtype_counts
+        );
     }
 }
