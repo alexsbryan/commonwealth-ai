@@ -2027,6 +2027,57 @@ It PASSES the full bank (secret-agent 0.67/0.82/0.18 production-config;
 holdout honesty 0.91/0.09). Mechanism: **hold → verify → corrective retry
 (short answers) / per-claim audit → **mark** (long-form) → grounded
 abstention**, fail-open on judge failure.
+**Fail-open is accounted per claim** (2026-09-01, issue #57): a per-claim
+judge that returns no verdict (provider error, admission-queue shed) marks its
+claim `unjudged` on the `GateClaim` record; the audit then exits
+`judge_failed_open` instead of `released`, the journal verdict projects
+could-not-judge, and the epistemic ledger renders the holding `FailOpen` —
+never `Verified`. Before that date eight shed judges released as eight verified
+holdings on a `grounded` turn.
+**The claim-search triage is RETIRED; the fan-out is concurrent and bounded**
+(2026-09-02, issue #57). The batched `claims_support_batched` call no longer
+runs as a triage deciding which claims get a corpus search: it was a model call
+spent to avoid deterministic work, it measured 185 s on the reporter's 4B
+against 518 ms of searching, and two attempts to price it per turn each
+rebuilt the inversion (a bar measured here, then a per-search cost carried
+across corpora — a per-corpus quantity stored under the identity of the
+process). Nothing in the pass now thresholds on a model-produced claim count.
+The batched pass survives only behind the `SOVEREIGN_GATE_BATCH_VERIFY` /
+`SOVEREIGN_GATE_BATCH_SHADOW` study flags. What replaced it is deterministic:
+**the fan-out itself is concurrent, bounded by ONE permit.** `claims x corpora`
+was serial on BOTH axes, the only multiplicative term in the turn. A claim's
+hits depend on that claim alone, so the searches are hoisted out of the
+sequential judging loop and run `buffered` — never `buffer_unordered`, because
+the round-robin interleaves per corpus and the output must stay byte-identical,
+which makes this a scheduling change and not a semantic one. Measured over
+wikipedia+sep at ten claims: eight searches in 9,837 ms at concurrency 3
+against a 3,352 ms mean per search. **Concurrency is DERIVED, never declared:**
+`claim_search_concurrency()` is cores/4 clamped to `1..=4`, so a 12-core host
+runs three and the reporter's 4-core laptop runs one — its previous serial
+behaviour, inheriting no new concurrency and no new memory risk. **The bound is
+ONE process-wide semaphore** (`claim_search_permits`), not one per level:
+bounding each level separately bounds NEITHER — four claims by four corpora is
+sixteen concurrent `open_index` + hybrid searches against indexes that reach
+88 GB on a host holding a 17.7 GB model resident, and that product caused a
+memory event on 2026-09-02. The permit is taken at the innermost point and
+covers the OPEN as well as the search (every task opens a DIFFERENT corpus, so
+the engine's index cache cannot dedupe them). Any future nested fan-out here
+takes that permit rather than adding its own.
+**The audit pass is a module with a plan and an outcome** (`grounding/audit_pass.rs`,
+same date). What was a 650-line closure run twice per turn is `AuditPass::run`.
+What each claim gets is decided ONCE, before any IO, as a `ClaimDisposition`
+(`Exempt` / `Vetoed` / `Judge`) — one pure decider read by both the fan-out and
+the judging loop, so there is no second predicate to keep in step. The pass
+returns an `AuditPassOutcome` (`ExtractionFailed` / `Judged`), so a caller
+cannot forget a case. `ClaimSearcher` reaches its indexes through the two-method
+`SealedIndexSource` seam rather than a concrete `CorpusEngine`, which is what
+lets `search_corpus`'s deciders — the allow-list seal, the kind filter, the
+round-robin cap and permit-before-open — be tested against a fake
+(`search.rs` tests; zero existed before). **Every generation of the daemon is
+keyed:** `svrn daemon is running` carries `run`, `pid`, `exe`, `exe_mtime` and
+`version` (`sovereign_core::run_identity`), and the gate's `claim_search_fanout`
+event and `audit` forensics record carry the same `run`, because `daemon.err`
+is append-only across restarts and a line without that key is not attributable.
 **The long-form repair ladder is TOMBSTONED as of 2026-08-14** (Phase 4 of
 `NATIVE_GROUNDING_ECONOMY.md`, order `gate-tombstone-ladder`). On the default
 configuration a long-form draft whose audit found failures is **released with

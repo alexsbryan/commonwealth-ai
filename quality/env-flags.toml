@@ -119,9 +119,9 @@ purpose = "Manifest versions a corpus may retain before the maintenance sweep re
 [[flag]]
 name = "SOVEREIGN_GATE_CLAIM_SEARCH_LADDER"
 cluster = "grounding"
-default = "on"
-status = "shipped"
-purpose = "Two-stage claim audit: batched triage against the prompt window FIRST (claims_support_batched, triage only — the released verdict stays the calibrated per-claim forced-choice), per-claim corpus fan-out only for claims the window fails. DEFAULT ON since 2026-08-14 (order audit-economy D6, the registered flip bar met non-vacuously on the 21-turn shadow arm: lost_rescue 0/160 with 8 REAL rescues present in the bank and the skip set disjoint from all of them; newly_failed 0/160; 96/160 searches skippable, ~-3.5s/turn at healthy search prices). =0 (also false/off) opts out and restores search-every-claim. Flip record + reversal condition: sovereign/DEFAULTS_LEDGER.md."
+default = "unset"
+status = "deprecated"
+purpose = "RETIRED 2026-09-02 (issue #57); no longer read. It gated a batched model-call triage that decided which claims got a corpus search. The triage measured 185 s on the reporter's box against 518 ms of searching, and two attempts to price it per turn each reproduced that inversion. The per-claim fan-out is now concurrent under one derived, process-wide permit (claim_search_permits) instead, with no model in the loop. Setting this has no effect. Record: sovereign/DEFAULTS_LEDGER.md."
 
 [[flag]]
 name = "SOVEREIGN_GATE_BATCH_VERIFY"
@@ -135,7 +135,7 @@ name = "SOVEREIGN_GATE_BATCH_MIN_CLAIMS"
 cluster = "grounding"
 default = "6"
 status = "experiment"
-purpose = "Minimum extracted-claim count for the batched support pre-pass (SOVEREIGN_GATE_BATCH_VERIFY, and the ladder's triage read) to fire; below it the per-claim path runs unchanged. The single batched prefill only amortises when it replaces enough per-claim calls — measured break-even ~6 claims (audit#1 median is exactly 6, range 3-12)."
+purpose = "Minimum extracted-claim count for the batched support pre-pass (SOVEREIGN_GATE_BATCH_VERIFY / SOVEREIGN_GATE_BATCH_SHADOW) to fire; below it the per-claim path runs unchanged. The single batched prefill only amortises when it replaces enough per-claim calls — measured break-even ~6 claims (audit#1 median is exactly 6, range 3-12)."
 
 [[flag]]
 name = "SOVEREIGN_GATE_CLAIM_SEARCH_SHADOW"

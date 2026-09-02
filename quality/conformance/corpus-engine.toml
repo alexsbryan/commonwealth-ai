@@ -1,0 +1,39 @@
+# Conformance tags in `corpus-engine` — GENERATED. DO NOT EDIT BY HAND.
+#
+#   UPDATE_CONFORMANCE_TAGS=1 cargo test -p kernel-types --test conformance_tags
+#
+# Each claim maps a requirement id from research/clean-room/REQUIREMENTS.md
+# to the test that proves it. `test` is `<junit classname>::<junit name>`, so
+# `svrn conformance` can join a claim to a real per-test verdict without
+# guessing.
+#
+# `asserts` counts falsifiable exits in the test body. It is never zero: a
+# covers: tag over a body that cannot fail is refused by the generator.
+
+[[claim]]
+requirement = "EN-16"
+test = "corpus-engine::enrichment::reconciliation::oplog::tests::a_merge_is_reversed_from_the_log_with_no_operator_supplied_output_list"
+file = "corpus-engine/src/enrichment/reconciliation/oplog.rs"
+line = 287
+asserts = 9
+
+[[claim]]
+requirement = "EN-16"
+test = "corpus-engine::enrichment::reconciliation::oplog::tests::a_reversal_the_log_cannot_support_is_refused_not_guessed"
+file = "corpus-engine/src/enrichment/reconciliation/oplog.rs"
+line = 357
+asserts = 4
+
+[[claim]]
+requirement = "EN-4"
+test = "corpus-engine::enrichment::pipeline::phase_cache::tests::exactly_one_place_constructs_the_cache_model_identity"
+file = "corpus-engine/src/enrichment/pipeline/phase_cache.rs"
+line = 354
+asserts = 3
+
+[[claim]]
+requirement = "EN-9"
+test = "corpus-engine::enrichment::domains::tests::a_large_corpus_domain_and_a_small_one_do_not_share_clustering_caps"
+file = "corpus-engine/src/enrichment/domains/mod.rs"
+line = 33
+asserts = 10

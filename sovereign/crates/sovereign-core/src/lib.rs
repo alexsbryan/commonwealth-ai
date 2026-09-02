@@ -46,6 +46,7 @@ pub mod router_drift;
 pub mod router_embed;
 pub mod router_embed_cache;
 pub mod router_instruction;
+pub mod run_identity;
 pub mod runtime;
 pub mod scope_classifier;
 pub mod stubs;

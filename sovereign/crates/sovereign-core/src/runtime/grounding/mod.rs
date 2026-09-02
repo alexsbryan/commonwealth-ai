@@ -38,6 +38,7 @@
 //! OOD-caveat case must not be gated) — except on entity-anchored
 //! questions, where a GK caveat cannot exempt an in-world claim.
 
+mod audit_pass;
 mod call_census;
 mod citation;
 mod citation_attribution;
@@ -850,6 +851,13 @@ pub(crate) struct GateClaim {
     /// True when the first check failed and the claim went through a
     /// retry / rewrite / annotation before release.
     pub failed_once: bool,
+    /// The judge never returned a verdict for this claim (provider
+    /// error, admission-queue shed, parse gap). The ladder fails open
+    /// per claim, so the text shipped — but the record says nobody
+    /// judged it, the audit exits `judge_failed_open`, and the epistemic
+    /// ledger renders it FailOpen, never Verified (ARCH §18.3). Never
+    /// `true` together with `failed_once`. Issue #57.
+    pub unjudged: bool,
     /// The judge's violation probability, when a forced-choice verdict
     /// produced one (single-claim path only; long-form and citation
     /// records carry `None`).
@@ -1364,7 +1372,11 @@ fn record_gate_decision(
         d.violation_prob,
         claim_check_measured,
         profile.tau,
-        (!outcome.claims.is_empty()).then(|| outcome.claims.iter().all(|c| c.supported)),
+        // A claim the judge never reached makes the whole check
+        // could-not-judge (ARCH §18.1): `None` here projects to
+        // CouldNotJudge, never to Supported.
+        (!outcome.claims.is_empty() && !outcome.claims.iter().any(|c| c.unjudged))
+            .then(|| outcome.claims.iter().all(|c| c.supported)),
     );
     d.chunks = evidence.chunks.len();
     d.evidence = evidence
@@ -1953,6 +1965,7 @@ async fn gate_answer_inner(
                     text: answer,
                     supported: true,
                     failed_once: false,
+                    unjudged: false,
                     violation_prob: None,
                     // Filled post-gate, display only (see GateClaim::address).
                     address: None,
@@ -2051,6 +2064,7 @@ async fn gate_answer_inner(
                     // Filled post-gate, display only (see GateClaim::address).
                     address: None,
                     failed_once: v.violation_prob >= tau,
+                    unjudged: false,
                     violation_prob: Some(v.violation_prob),
                 });
                 emit_gate_progress(
@@ -3015,6 +3029,7 @@ async fn short_specifics_guard(
                     text: s.clone(),
                     supported: false,
                     failed_once: true,
+                    unjudged: false,
                     violation_prob: None,
                     // Filled post-gate, display only (see GateClaim::address).
                     address: None,
@@ -3053,6 +3068,7 @@ async fn short_specifics_guard(
                     text: s.clone(),
                     supported: true,
                     failed_once: true,
+                    unjudged: false,
                     violation_prob: None,
                     // Filled post-gate, display only (see GateClaim::address).
                     address: None,
@@ -3086,15 +3102,26 @@ async fn short_specifics_guard(
 /// for the epistemic ledger: audited claims get their final verdict;
 /// synthetic failures (specifics scan, sentence sweep) that never
 /// appeared in the extracted list are appended as unsupported records.
-fn longform_claims(audited: &[String], failed: &[FailedClaim]) -> Vec<GateClaim> {
+fn longform_claims(
+    audited: &[String],
+    failed: &[FailedClaim],
+    unjudged: &[String],
+) -> Vec<GateClaim> {
     let mut out: Vec<GateClaim> = audited
         .iter()
         .map(|c| {
             let is_failed = failed.iter().any(|f| &f.claim == c);
+            // A claim the judge never reached is neither supported nor
+            // failed. It shipped because the ladder fails open per claim,
+            // and the record must say so (ARCH §18.3): the ledger renders
+            // it FailOpen, and the verdict projection treats the whole
+            // check as could-not-judge.
+            let is_unjudged = !is_failed && unjudged.iter().any(|u| u == c);
             GateClaim {
                 text: c.clone(),
-                supported: !is_failed,
+                supported: !is_failed && !is_unjudged,
                 failed_once: is_failed,
+                unjudged: is_unjudged,
                 violation_prob: None,
                 // Filled post-gate, display only (see GateClaim::address).
                 address: None,
@@ -3107,6 +3134,7 @@ fn longform_claims(audited: &[String], failed: &[FailedClaim]) -> Vec<GateClaim>
                 text: f.claim.clone(),
                 supported: false,
                 failed_once: true,
+                unjudged: false,
                 violation_prob: None,
                 // Filled post-gate, display only (see GateClaim::address).
                 address: None,
@@ -3147,6 +3175,22 @@ fn audit_forensics(record: &serde_json::Value) {
             tracing::warn!(target: "grounding_gate", error = %e, path = %path.display(), "audit forensics file not writable");
         }
     }
+}
+
+/// The audit window: how many leaf chunks each claim's judge prompt carries.
+///
+/// **Derived, never a constant** (ARCH §18.6). The auditor is shown what the
+/// drafter was shown, so the bound IS the retrieved leaf set — the drafter's
+/// evidence already passed `prompt_budget::enforce` for this turn's context
+/// window, and a judge prompt is strictly smaller than the drafter's. There is
+/// no separate number to choose, and reintroducing one (the removed
+/// `profile.max_chunks = 8`) silently narrows the auditor's view below the
+/// drafter's without any surface saying so.
+///
+/// `max(1)` only guards the empty case: a claim loop over zero evidence still
+/// needs a non-zero take() bound.
+fn audit_window(leaf_chunk_count: usize) -> usize {
+    leaf_chunk_count.max(1)
 }
 
 /// Long-form ladder: per-claim audit → one rewrite → annotate.
@@ -3211,7 +3255,7 @@ async fn gate_longform(
     // so `SOVEREIGN_PREFIX_STATE` — whose only consumer is this gate — pins
     // the evidence state once per turn and restores it for claims 2..N. The
     // turn pays one larger prefill, not N.
-    let per_claim_chunks = leaf_chunks.len().max(1);
+    let per_claim_chunks = audit_window(leaf_chunks.len());
     let min_claims = profile.max_claims;
     // Session posture for the judge envelopes, resolved once from the
     // synthesis turn's request; the audit closure captures it by copy.
@@ -3220,742 +3264,28 @@ async fn gate_longform(
     // rewrite) captures Copy references, not the Vecs themselves.
     let leaf_chunks = &leaf_chunks;
     let summary_chunks = &summary_chunks;
-    // `incremental`: `Some(spans)` puts the pass in INCREMENTAL re-audit mode
-    // (order audit-economy D4): claim extraction is skipped and the given
-    // repaired spans are judged AS the claim list — they are the only new
-    // prose surgery produced. Everything else in this closure runs unchanged
-    // on the full text: the deterministic name/identifier vetoes, the
-    // claim-conditioned search, the holistic specifics scan and the sentence
-    // sweep. That "everything else" is the 2026-07-17 lesson made structural:
-    // the scoped re-audit that leaked (CONFAB-LEAK 0→1) skipped the holistic
-    // floor; this one cannot, because the floor is the same code path, not a
-    // second copy. `None` = the ordinary full audit (every call site except
-    // the surgical re-audit).
-    let audit = |text: String, recheck: bool, incremental: Option<Vec<String>>| {
-        let inference = inference.clone();
-        let searcher = evidence.searcher.clone();
-        let evidence_labels = evidence.source_labels.clone();
-        async move {
-            // G4 — this pass's own clock and model-call count. `recheck`
-            // selects the stage: the SAME closure is the draft's audit and
-            // the rewrite's re-audit, and the strip has to tell them apart
-            // because the second one exists only because the rewrite ran.
-            // Counted, not inferred: every model call below increments this
-            // where it is made, so a call added later without a bump shows
-            // up as an undercount against the gate's own clock rather than
-            // as a plausible number.
-            let audit_started = std::time::Instant::now();
-            let mut model_calls: u32 = 0;
-            let audit_stage = if recheck {
-                sovereign_contracts::types::StageId::ReAudit
-            } else {
-                sovereign_contracts::types::StageId::Audit
-            };
-            let audit_cause = if recheck {
-                sovereign_contracts::types::StageCause::RewriteProducedNewProse
-            } else {
-                sovereign_contracts::types::StageCause::EveryTurn
-            };
-            // Budget scales with THIS text's length — audited afresh for the
-            // draft and again for the (possibly different-length) rewrite.
-            let budget = claim_budget(text.chars().count(), min_claims);
-            let is_incremental = incremental.is_some();
-            let claims = match incremental {
-                // INCREMENTAL: the repaired spans ARE the claim list — no
-                // extraction call. A span sentence is judged whole, which is
-                // the conservative direction (a sentence carrying one
-                // unsupported clause fails entirely and gets annotated).
-                Some(spans) => spans,
-                None => {
-                    model_calls += 1;
-                    let Some(claims) =
-                        extract_claim_list(&inference, question, &text, budget, posture).await
-                    else {
-                        // Extraction failed and the ladder fails open above —
-                        // but the time was spent, so it is attributed rather
-                        // than dropped (ARCH §18.3).
-                        crate::runtime::stage_ledger::Stage::new(
-                            audit_stage,
-                            sovereign_contracts::types::StackOwner::Incumbent,
-                        )
-                        .cause(audit_cause)
-                        .calls(model_calls)
-                        .record(audit_started.elapsed().as_millis() as u64);
-                        return None;
-                    };
-                    claims
-                }
-            };
-            // Progress: the extracted claim list opens (or re-opens,
-            // on the rewrite's re-audit) the desktop's check panel.
-            emit_gate_progress(
-                progress,
-                NarrationPhase::ClaimCheckStart {
-                    claims: claims.iter().take(budget).map(|c| wire_claim(c)).collect(),
-                    recheck,
-                },
-            );
-            let mut failed: Vec<FailedClaim> = Vec::new();
-            // Forensics header: the evidence window this pass judges against,
-            // written once so the per-claim records below stay small. No-op
-            // unless SOVEREIGN_GATE_AUDIT_FORENSICS names a file.
-            let audit_id = uuid::Uuid::new_v4().to_string();
-            if config::audit_forensics_path().is_some() {
-                audit_forensics(&serde_json::json!({
-                    "kind": "audit",
-                    "audit_id": audit_id,
-                    "ts": chrono::Utc::now().to_rfc3339(),
-                    "recheck": recheck,
-                    "incremental": is_incremental,
-                    "question": question,
-                    "answer": text,
-                    "answer_chars": text.chars().count(),
-                    "budget": budget,
-                    "tau": tau,
-                    "n_claims_extracted": claims.len(),
-                    "claims": claims.iter().take(budget).collect::<Vec<_>>(),
-                    "per_claim_chunks": per_claim_chunks,
-                    "leaf_chunks": leaf_chunks,
-                    "summary_chunks": summary_chunks,
-                    "evidence_labels": evidence_labels,
-                }));
-            }
-            // Evidence + labels, lowercased once, for the deterministic
-            // in-world attribution veto below.
-            let hay_lower = {
-                let mut h = leaf_chunks.join(" ").to_lowercase();
-                for l in &evidence_labels {
-                    h.push(' ');
-                    h.push_str(&l.to_lowercase());
-                }
-                h
-            };
-            // Batched support pre-pass (SOVEREIGN_GATE_BATCH_VERIFY, default OFF):
-            // one call judges all claims with the evidence prefilled ONCE, so the
-            // N per-claim re-prefills of the same evidence collapse to one on the
-            // prefix-cache-vetoed qwen35moe. Indexed by the same enumerate() index
-            // as the loop below. Empty when the flag is off → the loop runs exactly
-            // as before. GATED on claim count: with only a few claims the single
-            // batched prefill does not amortise (measured net-negative below ~6
-            // claims), so small answers keep the per-claim path.
-            let claim_texts: Vec<String> = claims.iter().take(budget).cloned().collect();
-            let shadow_mode = config::gate_batch_shadow_enabled();
-            // The LADDER also drives this pass, as a TRIAGE signal only (it
-            // decides who gets a corpus search; it never becomes a verdict —
-            // see `batch_v` below). That distinction is what lets the ladder
-            // use a mechanism still marked STUDY for verdict purposes: the
-            // batched verdict is a text A/B whose tau semantics differ from the
-            // calibrated logit, which matters for judging a claim and does not
-            // matter for choosing whether to widen its evidence.
-            let ladder_enabled = config::claim_search_ladder_enabled();
-            // `claim_search_shadow_enabled` is in this list so the triage
-            // verdict exists to be LOGGED even with the ladder off. That is the
-            // only configuration in which the ladder's safety can actually be
-            // measured: ladder off means every claim is still searched, so the
-            // true rescue set is observable, while `triage` records which of
-            // them the ladder WOULD have skipped. With the ladder on, a skipped
-            // claim is never searched and its rescue is unobservable by
-            // construction.
-            let batched_support: Vec<Option<bool>> = if (config::gate_batch_verify_enabled()
-                || shadow_mode
-                || ladder_enabled
-                || config::claim_search_shadow_enabled())
-                && claim_texts.len() >= config::gate_batch_min_claims()
-            {
-                model_calls += 1;
-                judge::claims_support_batched(
-                    &inference,
-                    &claim_texts,
-                    &leaf_chunks,
-                    per_claim_chunks,
-                    posture,
-                )
-                .await
-            } else {
-                Vec::new()
-            };
-            for (claim_idx, claim) in claims.iter().take(budget).enumerate() {
-                // Jurisdiction: honesty meta-language is not a world-claim —
-                // "the system does not have access to X" can never be stated
-                // by a passage, and auditing it prosecutes the answer's own
-                // honesty (observed: refined honest declines rejected at vp
-                // 0.85–0.98 on exactly these sentences). Deterministic shape
-                // check; see is_self_referential_decline.
-                if judge::is_self_referential_decline(claim) {
-                    dbg(&format!(
-                        "longform claim EXEMPT — self-referential decline: {claim:?}"
-                    ));
-                    audit_forensics(&serde_json::json!({
-                        "kind": "claim", "audit_id": audit_id,
-                        "claim_idx": claim_idx, "claim": claim,
-                        "mechanism": "exempt_self_referential",
-                        "failed": false, "vp": serde_json::Value::Null,
-                    }));
-                    // Exempt = ships unflagged; stamp the row so the
-                    // panel never shows a permanently-pending claim.
-                    emit_gate_progress(
-                        progress,
-                        NarrationPhase::ClaimVerdict {
-                            index: claim_idx,
-                            supported: true,
-                        },
-                    );
-                    continue;
-                }
-                // Deterministic pre-check: an in-world attribution naming a
-                // person absent from the ENTIRE evidence is fabricated — do
-                // not ask the yes-biased joint judge (measured: "Betty
-                // Alexander sent an email…" cleared at vp=0.010 despite the
-                // name existing nowhere in the corpus; it shipped in 3 runs).
-                let vetoed = judge::absent_name_attribution(claim, &hay_lower)
-                    .map(|n| ("person", n))
-                    .or_else(|| {
-                        judge::absent_identifier_attribution(claim, &hay_lower)
-                            .map(|i| ("identifier", i))
-                    });
-                if let Some((kind, name)) = vetoed {
-                    dbg(&format!(
-                        "longform claim VETOED — in-world attribution names {kind} {name:?}, absent from evidence: {claim:?}"
-                    ));
-                    emit_gate_progress(
-                        progress,
-                        NarrationPhase::ClaimVerdict {
-                            index: claim_idx,
-                            supported: false,
-                        },
-                    );
-                    let extra = match &searcher {
-                        Some(s) => s.search(claim).await,
-                        None => Vec::new(),
-                    };
-                    audit_forensics(&serde_json::json!({
-                        "kind": "claim", "audit_id": audit_id,
-                        "claim_idx": claim_idx, "claim": claim,
-                        "mechanism": "deterministic_veto",
-                        "veto_kind": kind, "veto_token": &name,
-                        "failed": true, "vp": serde_json::Value::Null,
-                        "extra": &extra,
-                    }));
-                    failed.push(FailedClaim {
-                        claim: claim.clone(),
-                        evidence: extra,
-                    });
-                    continue;
-                }
-                // Claim-conditioned retrieval: verify against the
-                // sealed CORPUS, not just the prompt snapshot. The
-                // SHARED prompt window goes first and claim-specific
-                // hits are APPENDED after it, so every per-claim judge
-                // prompt shares one byte-stable evidence prefix — the
-                // pinned-prefix state cache (SOVEREIGN_PREFIX_STATE)
-                // can restore that prefix instead of re-prefilling the
-                // ~10K-token evidence per claim on prefix-cache-vetoed
-                // hybrids (hits-FIRST ordering diverged the prompts at
-                // the first passage and thrashed the pin). Duplicates
-                // resolve in favor of the shared copy; novel hits widen
-                // the cap by their count, so they never displace a
-                // shared chunk the old audit would have judged.
-                // NOTE: the claim-conditioned search itself is issued BELOW,
-                // after the shared window exists — the ladder needs to judge
-                // against that window before deciding whether to pay for it.
-                // With the ladder off the search still happens unconditionally,
-                // exactly as before, just a few lines later.
-                //
-                // T1 P1.4 class policy: FACTUAL/SPECIFIC claims verify
-                // against Leaf evidence only (a derived summary must
-                // never be the source-of-truth for a fact); THEMATIC/
-                // STRUCTURAL claims may additionally rest on Summary-
-                // class chunks — appended AFTER the leaf window so the
-                // leaf prefix stays byte-stable across both classes
-                // (mixed prefix declarations cost some pin efficiency,
-                // never correctness). With no summaries in evidence the
-                // window is exactly the pre-P1.4 one.
-                let factual = summary_chunks.is_empty()
-                    || judge::claim_is_factual_specific(&inference, claim).await;
-                let mut shared: Vec<String> =
-                    leaf_chunks.iter().take(per_claim_chunks).cloned().collect();
-                if !factual {
-                    shared.extend(summary_chunks.iter().take(per_claim_chunks).cloned());
-                    dbg(&format!(
-                        "longform claim THEMATIC — {} summary chunk(s) admitted as evidence: {claim:?}",
-                        summary_chunks.len().min(per_claim_chunks)
-                    ));
-                }
-                let seen: HashSet<String> = shared
-                    .iter()
-                    .map(|c| c.chars().take(120).collect::<String>())
-                    .collect();
-                // Every sibling claim-check declares this same shared-window
-                // boundary (judge::stable_passages_prefix_len), so the engine
-                // pins the evidence state once per turn and restores it for
-                // claims 2..N — including claims that append extra hits.
-                let n_shared = shared.len();
-                // SHADOW (SOVEREIGN_GATE_CLAIM_SEARCH_SHADOW, default OFF):
-                // keep a copy of the prompt-only window so the SAME claim can
-                // be re-judged without the re-searched hits. Unlike the
-                // single-claim path, `claim_violation_joint` judges all
-                // passages in ONE forced-choice — there is no per-chunk max to
-                // decompose — so the counterfactual costs one extra call per
-                // claim. That call's passages are exactly the pinned shared
-                // prefix, so it restores rather than re-prefills.
-                let shadow_claim_search = config::claim_search_shadow_enabled();
-                let shared_only: Option<Vec<String>> = if shadow_claim_search {
-                    Some(shared.clone())
-                } else {
-                    None
-                };
-                // ── THE LADDER (SOVEREIGN_GATE_CLAIM_SEARCH_LADDER, default OFF) ──
-                // Judge the claim against the prompt window FIRST, and pay for
-                // the corpus fan-out only when it fails without one.
-                //
-                // NOT LOSSLESS BY CONSTRUCTION — that claim was made and then
-                // WITHDRAWN (2026-08-05), and the withdrawal is the reason this
-                // flag is still default OFF.
-                //
-                // The argument was: a "rescue" is exactly a claim that fails
-                // without re-search and passes with it, so every rescue has
-                // stage-1 vp >= tau and always reaches stage 2. That holds only
-                // while stage 1 IS the calibrated per-claim judge — true of the
-                // first shape, false of this one. Stage 1 is now
-                // `claims_support_batched`, a text A/B whose tau semantics
-                // differ from the calibrated logit (see the note directly above
-                // `batched_support`). A batch false-"supported" on a claim the
-                // calibrated judge would have failed skips stage 2 and loses the
-                // rescue. Two instruments, so their agreement is an empirical
-                // question about the sample, not a property of the definition.
-                //
-                // 7/7 rescues kept at 61% of the fan-out on
-                // `summary_cosmological_argument` (18 claims, 2026-08-05) is
-                // therefore EVIDENCE, not proof — and one specimen at that.
-                // Before this can go default-on it owes a bank-level
-                // `lost_rescue` count from the shadow event below, which exists
-                // to measure exactly this.
-                //
-                // ONE BEHAVIOUR CHANGE, NAMED: today a re-searched hit can
-                // DILUTE a claim the shared window alone would have supported —
-                // all passages land in one joint forced-choice, so unlike the
-                // single-claim path there is no per-chunk max and no rescue
-                // floor to stop it. Under the ladder such a claim is released on
-                // its stage-1 verdict and never re-searched. Measured
-                // `newly_failed = 0` on the specimen above: real in principle,
-                // unobserved in practice. Watch `ladder_diluted_avoided`.
-                //
-                // STAGE 1 IS THE BATCHED PRE-PASS, NOT A PER-CLAIM JUDGE. The
-                // first cut of this used one `claim_violation_joint` per claim
-                // and MEASURED NET-NEGATIVE (+5.0s wall: -19.5s of avoided
-                // search against +11 extra forced-choice calls at ~2.2s each).
-                // A restored pinned prefix does not make a forced-choice free —
-                // it costs the same order as the corpus search it replaces.
-                // `claims_support_batched` scores every claim in ONE generation
-                // off a single evidence prefill, so triage costs ~1 call for the
-                // whole turn instead of one per claim, and the per-claim judge
-                // count stays exactly what the baseline pays. See note
-                // a4be8afd for the failed first shape.
-                let ladder = ladder_enabled && searcher.is_some();
-                // Triage only — deliberately NOT gated on
-                // gate_batch_verify_enabled, and deliberately never a verdict.
-                let triage = batched_support.get(claim_idx).and_then(|v| *v);
-                let mut stage2_searched = true;
-                let extra: Vec<String> = if ladder {
-                    match triage {
-                        // The shared window alone already supports it; a wider
-                        // net could only have confirmed what we have. Skip.
-                        Some(true) => {
-                            stage2_searched = false;
-                            Vec::new()
-                        }
-                        // Unsupported, OR no clean batched verdict, OR the batch
-                        // never ran (too few claims to amortise): widen. Every
-                        // ambiguous case searches, so triage errs toward the
-                        // status quo and a rescue can never be lost to a parse
-                        // gap.
-                        _ => match &searcher {
-                            Some(s) => s.search(claim).await,
-                            None => Vec::new(),
-                        },
-                    }
-                } else {
-                    match &searcher {
-                        Some(s) => {
-                            let hits = s.search(claim).await;
-                            if !hits.is_empty() {
-                                dbg(&format!(
-                                    "claim_search hits={} for {:?}",
-                                    hits.len(),
-                                    claim.chars().take(60).collect::<String>()
-                                ));
-                            }
-                            hits
-                        }
-                        None => Vec::new(),
-                    }
-                };
-                if ladder {
-                    tracing::info!(
-                        target: "grounding_gate",
-                        event = "claim_search_ladder",
-                        claim = %claim.chars().take(90).collect::<String>(),
-                        triage = match triage {
-                            Some(true) => "supported",
-                            Some(false) => "unsupported",
-                            None => "no-verdict",
-                        },
-                        searched = stage2_searched,
-                        extras = extra.len(),
-                        "claim search ladder: corpus fan-out spent only on claims the prompt window failed"
-                    );
-                }
-                let mut judged = shared;
-                judged.extend(
-                    extra
-                        .iter()
-                        .filter(|c| !seen.contains(&c.chars().take(120).collect::<String>()))
-                        .cloned(),
-                );
-                let cap = judged.len();
-                // ASYMMETRIC TRUST (order audit-economy D2; the shape D0
-                // pre-registered and D1 recalibrated): the batched verdict may
-                // only CLEAR. A batch "supported" releases the claim without a
-                // per-claim call — the error class that creates, false-
-                // "supported", is exactly what the D1 replay priced (catch
-                // 0.950/clear 1.000, zero (c)-class loss on the pinned set,
-                // fc58319d). A batch "unsupported" is NOT a released flag:
-                // the batched text A/B is not calibrated against tau, so it
-                // falls through to the calibrated `claim_violation_joint`
-                // over `judged` (shared + re-searched extras) — flags stay
-                // fully calibrated by construction and the rescue search
-                // stays judgeable. A parse gap (None) falls through the same
-                // way. The earlier both-directions shape (flag at vp 1.0 on
-                // batch "unsupported") shipped uncalibrated flags and threw
-                // away the rescue extras it had already searched.
-                // VERDICT source. Gated on the batch flags ONLY: when the ladder
-                // populated `batched_support` for triage, that must NOT become
-                // the released verdict. A ladder-skipped claim still takes the
-                // ordinary calibrated `claim_violation_joint` below, on
-                // `judged == shared`, which is exactly the call the baseline
-                // makes for it.
-                let batch_v = if config::gate_batch_verify_enabled() || shadow_mode {
-                    batched_support.get(claim_idx).and_then(|v| *v)
-                } else {
-                    None
-                };
-                let vp_opt = if shadow_mode {
-                    // SHADOW: keep BASELINE behavior (calibrated per-claim) but log
-                    // the batched verdict alongside so batch-vs-calibrated agreement
-                    // can be scored without changing any answer.
-                    model_calls += 1;
-                    let cal =
-                        claim_violation_joint(&inference, claim, &judged, cap, n_shared, posture)
-                            .await;
-                    dbg(&format!(
-                        "shadow claim {claim_idx}: batch={batch_v:?} cal_vp={cal:?} cal_supported={:?}",
-                        cal.map(|vp| vp < tau)
-                    ));
-                    cal
-                } else {
-                    match batch_v {
-                        // Batch: supported → cleared (vp below tau).
-                        Some(true) => Some(0.0),
-                        // Batch: unsupported OR parse gap → the calibrated
-                        // forced-choice decides, over shared + extras.
-                        _ => {
-                            model_calls += 1;
-                            claim_violation_joint(
-                                &inference, claim, &judged, cap, n_shared, posture,
-                            )
-                            .await
-                        }
-                    }
-                };
-                // The counterfactual, logged next to the production verdict.
-                // Nothing here feeds `vp_opt` — the released answer is
-                // untouched; this only prices what the re-search bought.
-                if let (Some(so), Some(vp), false) =
-                    (shared_only.as_ref(), vp_opt, extra.is_empty())
-                {
-                    model_calls += 1;
-                    let vp_wo =
-                        claim_violation_joint(&inference, claim, so, so.len(), n_shared, posture)
-                            .await;
-                    match vp_wo {
-                        Some(vp_wo) => tracing::info!(
-                            target: "grounding_gate",
-                            event = "claim_search_shadow",
-                            claim = %claim.chars().take(90).collect::<String>(),
-                            extras = extra.len(),
-                            n_shared,
-                            vp_production = format!("{vp:.3}").as_str(),
-                            vp_chunks_only = format!("{vp_wo:.3}").as_str(),
-                            delta = format!("{:.3}", vp_wo - vp).as_str(),
-                            tau = format!("{tau:.3}").as_str(),
-                            verdict_flips = (vp < tau) != (vp_wo < tau),
-                            rescued = (vp < tau) && (vp_wo >= tau),
-                            newly_failed = (vp >= tau) && (vp_wo < tau),
-                            // THE LADDER'S SAFETY, MEASURED RATHER THAN ARGUED.
-                            // The ladder skips stage 2 on `triage == Some(true)`,
-                            // but `triage` is the BATCHED text A/B while a rescue
-                            // is defined against the CALIBRATED forced-choice.
-                            // Two different instruments, so "a rescue always
-                            // reaches stage 2" is an empirical claim about their
-                            // agreement, not a property of the definition.
-                            // `lost_rescue` counts the case that breaks it: a
-                            // real rescue on a claim the ladder would have
-                            // skipped. Sum it over a bank — nonzero means the
-                            // ladder is lossy and must not go default-on.
-                            triage = ?triage,
-                            ladder_would_skip = triage == Some(true),
-                            triage_agrees = ?triage.map(|t| t == (vp_wo < tau)),
-                            lost_rescue = triage == Some(true)
-                                && (vp < tau)
-                                && (vp_wo >= tau),
-                            "claim search shadow: with re-search vs prompt chunks alone (no answer changed)"
-                        ),
-                        None => tracing::info!(
-                            target: "grounding_gate",
-                            event = "claim_search_shadow",
-                            claim = %claim.chars().take(90).collect::<String>(),
-                            extras = extra.len(),
-                            vp_production = format!("{vp:.3}").as_str(),
-                            vp_chunks_only = "unavailable",
-                            "claim search shadow: counterfactual judge returned no verdict"
-                        ),
-                    }
-                }
-                // Forensics: the claim, the mechanism that judged it, and the
-                // passages it was judged against — the record D1 needs to ask
-                // whether the audit's own verdict was right.
-                if config::audit_forensics_path().is_some() {
-                    audit_forensics(&serde_json::json!({
-                        "kind": "claim", "audit_id": audit_id,
-                        "claim_idx": claim_idx, "claim": claim,
-                        // The DECIDER: only a batch "supported" releases a
-                        // verdict; batch "unsupported"/gap rows are decided by
-                        // the calibrated judge (asymmetric trust, D2).
-                        "mechanism": if batch_v == Some(true) && !shadow_mode { "batched" } else { "per_claim_judge" },
-                        "failed": vp_opt.map(|vp| vp >= tau),
-                        "vp": vp_opt,
-                        "tau": tau,
-                        "factual_class": factual,
-                        "n_shared": n_shared,
-                        "searched": stage2_searched,
-                        "extra": &extra,
-                    }));
-                }
-                match vp_opt {
-                    Some(vp) => {
-                        dbg(&format!("longform claim vp={vp:.3} {claim:?}"));
-                        emit_gate_progress(
-                            progress,
-                            NarrationPhase::ClaimVerdict {
-                                index: claim_idx,
-                                supported: vp < tau,
-                            },
-                        );
-                        if vp >= tau {
-                            failed.push(FailedClaim {
-                                claim: claim.clone(),
-                                evidence: extra,
-                            });
-                        }
-                    }
-                    None => {
-                        // Unverifiable claim — fail open per claim; the
-                        // row still resolves (it ships unflagged).
-                        emit_gate_progress(
-                            progress,
-                            NarrationPhase::ClaimVerdict {
-                                index: claim_idx,
-                                supported: true,
-                            },
-                        );
-                    }
-                }
-            }
-            // Holistic supporting-specifics scan: catches the fabricated
-            // details the load-bearing claim extraction misses (misattribution,
-            // fake values, phantom section refs). One extra judge pass over the
-            // WHOLE text vs the FULL evidence; its findings join `failed` and
-            // ride the same rewrite/annotate path. Each flagged specific gets a
-            // claim-conditioned search so the rewrite has corrective material —
-            // which ALSO self-corrects a false positive: a truly-grounded
-            // specific gets its grounding passage back, so the rewrite keeps it.
-            // THE SCAN SEES THE SUMMARY CHUNKS TOO, and the asymmetry that
-            // makes this safe under Fix B is the whole argument.
-            //
-            // Fix B (2026-06-17, see `GateEvidenceParts`) bars an abstractive
-            // summary from being the source-of-truth a FACTUAL CLAIM is
-            // verified against — "a fabrication grounding a fabrication". That
-            // hazard is about ACCEPTING a claim on paraphrase evidence. This
-            // scan does not accept anything: its entire output is ACCUSATIONS
-            // ("these statements are unsupported"). Showing it a summary can
-            // only ever WITHDRAW an accusation about text the system itself put
-            // in the drafter's prompt; it can never let a fabrication through,
-            // because nothing here clears a claim.
-            //
-            // Withholding them did not protect the invariant, it manufactured
-            // false alarms: measured 2026-08-13, 16 of 20 summary-grounded
-            // failures came from this scan flagging content stated verbatim in
-            // a Summary chunk the drafter had been given — "Key figures such as
-            // John Martin Fischer and Paul Russell advance strategies like
-            // reasons-responsiveness" flagged as a fabricated specific while
-            // sitting word for word in summary #29 (note 95b82f97).
-            //
-            // Operator, 2026-08-13: "epistemic honesty is the point" — a
-            // summary is a legitimate evidence node when its provenance is
-            // inspectable, and the answer to a paraphrase is traceability, not
-            // blindness. The per-claim judge's factual-claim admission needs
-            // that traceability carried explicitly (RaptorNode::quote_spans)
-            // and is NOT changed here; this site needs only to stop accusing
-            // the drafter of inventing what we handed it.
-            if specifics_scan_enabled() {
-                model_calls += 1;
-                if let Some(specifics) = scan_unsupported_specifics(
-                    &inference,
-                    question,
-                    &text,
-                    leaf_chunks,
-                    summary_chunks,
-                    budget,
-                    posture,
-                )
-                .await
-                {
-                    for spec in specifics {
-                        // Citations are validated by the deterministic snap pass
-                        // BEFORE this audit — a scan finding about a passage
-                        // header is out of its jurisdiction (observed 2026-07-01:
-                        // the scan flagged REAL label citations, which then read
-                        // as self-indictment in the verification note).
-                        //
-                        // BOTH header shapes, not just one. The 2026-07-01 fix
-                        // named `[Source:` and stopped there, but `formatters.rs`
-                        // emits `[Web: title]` for live web-fetch results from the
-                        // same builder — so the system went on flagging its own
-                        // passage headers as fabricated specifics. Measured
-                        // 2026-08-13: `[Web: compatibilism]` and
-                        // `[Web: experimental-philosophy]` fired on 3 of 8 desktop
-                        // audit passes, each one triggering the repair chain
-                        // (note 95b82f97). One rule, every header the system writes.
-                        let low = spec.to_lowercase();
-                        if low.contains("[source:") || low.contains("[web:") {
-                            continue;
-                        }
-                        // Same jurisdiction rule as the claim loop: the
-                        // answer's own honesty meta-language is exempt.
-                        if judge::is_self_referential_decline(&spec) {
-                            continue;
-                        }
-                        // Skip specifics already surfaced by the per-claim audit.
-                        if failed
-                            .iter()
-                            .any(|f| f.claim.contains(&spec) || spec.contains(&f.claim))
-                        {
-                            continue;
-                        }
-                        let corrective = match &searcher {
-                            Some(s) => s.search(&spec).await,
-                            None => Vec::new(),
-                        };
-                        dbg(&format!(
-                            "specifics_scan flagged {:?} (corrective_hits={})",
-                            spec.chars().take(60).collect::<String>(),
-                            corrective.len()
-                        ));
-                        audit_forensics(&serde_json::json!({
-                            "kind": "claim", "audit_id": audit_id,
-                            "claim_idx": serde_json::Value::Null, "claim": &spec,
-                            "mechanism": "specifics_scan",
-                            "failed": true, "vp": serde_json::Value::Null,
-                            "extra": &corrective,
-                        }));
-                        failed.push(FailedClaim {
-                            claim: spec,
-                            evidence: corrective,
-                        });
-                    }
-                }
-            }
-            // Sentence-level identifier sweep: the vetoes above only see
-            // EXTRACTED claims, and ghost identifiers ride non-load-bearing
-            // sentences the extractor never surfaces (gen75d s2: `cmd_init` /
-            // `found.rs`, receipt-absent from the corpus, released inside a
-            // rewrite despite the claim-level veto). Sweep every sentence of
-            // the text with the same scoped checks; hits become synthetic
-            // failed claims and ride the existing rewrite/annotate ladder.
-            for sentence in text.split(['.', '\n']) {
-                let sentence = sentence.trim();
-                if sentence.chars().count() < 20 {
-                    continue;
-                }
-                let hit = judge::absent_identifier_attribution(sentence, &hay_lower)
-                    .or_else(|| judge::absent_name_attribution(sentence, &hay_lower));
-                if let Some(ident) = hit {
-                    if failed.iter().any(|f| f.claim.contains(&ident)) {
-                        continue;
-                    }
-                    dbg(&format!(
-                        "longform sentence sweep VETOED {ident:?} (absent from evidence)"
-                    ));
-                    let synthetic = format!(
-                        "The answer references \"{ident}\", which does not appear in the sources."
-                    );
-                    let extra = match &searcher {
-                        Some(s) => s.search(&synthetic).await,
-                        None => Vec::new(),
-                    };
-                    audit_forensics(&serde_json::json!({
-                        "kind": "claim", "audit_id": audit_id,
-                        "claim_idx": serde_json::Value::Null, "claim": &synthetic,
-                        "mechanism": "identifier_sweep",
-                        "veto_token": &ident, "sentence": sentence,
-                        "failed": true, "vp": serde_json::Value::Null,
-                        "extra": &extra,
-                    }));
-                    failed.push(FailedClaim {
-                        claim: synthetic,
-                        evidence: extra,
-                    });
-                }
-            }
-            let audited: Vec<String> = claims.into_iter().take(budget).collect();
-            // G4 — the pass is done. Recorded HERE, at the exit of the code
-            // that ran it, with the mechanism it actually used: this is an
-            // incumbent per-claim generative audit, and it says so because
-            // it just performed one, not because a flag says the ladder is
-            // on.
-            crate::runtime::stage_ledger::Stage::new(
-                audit_stage,
-                sovereign_contracts::types::StackOwner::Incumbent,
-            )
-            // The ReAudit stage now has two arms; the row records the arm
-            // actually taken, at the site that took it (the strip's honesty
-            // rule — never inferred from a flag).
-            .mechanism(if is_incremental {
-                sovereign_contracts::types::StageMechanism::IncrementalReVerify
-            } else {
-                sovereign_contracts::types::StageMechanism::PerClaimJudge
-            })
-            .cause(audit_cause)
-            .calls(model_calls)
-            .record(audit_started.elapsed().as_millis() as u64);
-            audit_forensics(&serde_json::json!({
-                "kind": "audit_result",
-                "audit_id": audit_id,
-                "recheck": recheck,
-                "audited": audited.len(),
-                "failed": failed.len(),
-                "ratio": if audited.is_empty() { 0.0 } else { failed.len() as f64 / audited.len() as f64 },
-                "zero_failure": failed.is_empty(),
-                "model_calls": model_calls,
-                "audit_ms": audit_started.elapsed().as_millis() as u64,
-                "failed_claims": failed.iter().map(|f| &f.claim).collect::<Vec<_>>(),
-            }));
-            Some((text, audited, failed))
-        }
+    let pass = audit_pass::AuditPass {
+        inference: inference.clone(),
+        searcher: evidence.searcher.clone(),
+        question,
+        leaf_chunks,
+        summary_chunks,
+        evidence_labels: evidence.source_labels.clone(),
+        per_claim_chunks,
+        min_claims,
+        tau,
+        posture,
+        progress,
     };
 
     let draft_backup = draft.clone();
-    let Some((text, audited, failed)) = audit(draft, false, None).await else {
+    let audit_pass::AuditPassOutcome::Judged {
+        text,
+        audited,
+        failed,
+        unjudged,
+    } = pass.run(draft, audit_pass::PassKind::Draft).await
+    else {
         // Claim-list extraction failed — fail open with the draft.
         return GateOutcome {
             // Claim-list extraction failed, so the gate reached no verdict.
@@ -3980,6 +3310,50 @@ async fn gate_longform(
         };
     };
     let n_claims = audited.len();
+    if failed.is_empty() && !unjudged.is_empty() {
+        // Nothing flagged, but not everything judged: the ladder fell open
+        // on `unjudged.len()` claims. That is the fourth verdict, not the
+        // first (ARCH §18.1) — the answer ships, the action says Unjudged,
+        // and every unjudged row reaches the ledger as FailOpen.
+        tracing::warn!(
+            target: "grounding_gate",
+            event = "judge_failed_open",
+            unjudged = unjudged.len(),
+            audited = n_claims,
+            "longform audit fell open — released without a verdict on every claim"
+        );
+        emit_gate_progress(
+            progress,
+            NarrationPhase::ClaimCheckComplete {
+                confirmed: n_claims.saturating_sub(unjudged.len()),
+                flagged: 0,
+            },
+        );
+        return GateOutcome {
+            answer: release_unjudged(
+                text,
+                Vec::new(),
+                inference,
+                base_request.preferred_speed,
+                format!(
+                    "{} of {n_claims} claim(s) could not be judged — gate fell open",
+                    unjudged.len()
+                ),
+            ),
+            meta: with_native_verdict(
+                serde_json::json!({
+                    "surface": profile.surface.id(),
+                    "action": "judge_failed_open", "retried": false,
+                    "claims_checked": n_claims, "failed_claims": [],
+                    "unjudged_claims": unjudged.len(),
+                    "claim_check_outcome": "could-not-judge",
+                    "threshold": tau, "mode": "per_claim",
+                }),
+                native,
+            ),
+            claims: longform_claims(&audited, &failed, &unjudged),
+        };
+    }
     if failed.is_empty() {
         dbg(&format!("longform released claims={n_claims} failed=0"));
         emit_gate_progress(
@@ -4006,7 +3380,7 @@ async fn gate_longform(
                 }),
                 native,
             ),
-            claims: longform_claims(&audited, &failed),
+            claims: longform_claims(&audited, &failed, &unjudged),
         };
     }
     // ── MARK, DON'T RE-SYNTHESISE ────────────────────────────────────────
@@ -4064,7 +3438,7 @@ async fn gate_longform(
         // `mixed` and renders under the answer. Neither this call nor the
         // ledger consults the repair flag — the mark is a fact about the
         // AUDIT, and the audit is unchanged by construction.
-        let claim_records = longform_claims(&audited, &failed);
+        let claim_records = longform_claims(&audited, &failed, &unjudged);
         let failed_claims: Vec<String> = failed.into_iter().map(|f| f.claim).collect();
         let note = verification_note(&failed_claims);
         return GateOutcome {
@@ -4250,7 +3624,7 @@ async fn gate_longform(
                         flagged: failed.len(),
                     },
                 );
-                let claim_records = longform_claims(&audited, &failed);
+                let claim_records = longform_claims(&audited, &failed, &unjudged);
                 let failed_claims: Vec<String> = failed.into_iter().map(|f| f.claim).collect();
                 let note = verification_note(&failed_claims);
                 return GateOutcome {
@@ -4308,8 +3682,21 @@ async fn gate_longform(
     } else {
         Vec::new()
     };
-    match audit(second, true, surgical_spans).await {
-        Some((text2, mut audited2, failed2)) if failed2.is_empty() => {
+    match pass
+        .run(
+            second,
+            audit_pass::PassKind::ReAudit {
+                incremental: surgical_spans,
+            },
+        )
+        .await
+    {
+        audit_pass::AuditPassOutcome::Judged {
+            text: text2,
+            audited: mut audited2,
+            failed: failed2,
+            unjudged: unjudged2,
+        } if failed2.is_empty() => {
             audited2.extend(carried_claims);
             let n2 = audited2.len();
             emit_gate_progress(
@@ -4337,10 +3724,15 @@ async fn gate_longform(
                     }),
                     native,
                 ),
-                claims: longform_claims(&audited2, &failed2),
+                claims: longform_claims(&audited2, &failed2, &unjudged2),
             }
         }
-        Some((text2, mut audited2, failed2)) => {
+        audit_pass::AuditPassOutcome::Judged {
+            text: text2,
+            audited: mut audited2,
+            failed: failed2,
+            unjudged: unjudged2,
+        } => {
             audited2.extend(carried_claims);
             let n2 = audited2.len();
             emit_gate_progress(
@@ -4350,7 +3742,7 @@ async fn gate_longform(
                     flagged: failed2.len(),
                 },
             );
-            let claim_records = longform_claims(&audited2, &failed2);
+            let claim_records = longform_claims(&audited2, &failed2, &unjudged2);
             let failed_claims: Vec<String> = failed2.into_iter().map(|f| f.claim).collect();
             let note = verification_note(&failed_claims);
             GateOutcome {
@@ -4376,7 +3768,7 @@ async fn gate_longform(
                 claims: claim_records,
             }
         }
-        None => GateOutcome {
+        audit_pass::AuditPassOutcome::ExtractionFailed => GateOutcome {
             // The rewrite produced text the gate never re-audited.
             answer: release_as_because(
                 ACT_REWRITE_RELEASED_UNVERIFIED,
@@ -4401,6 +3793,40 @@ async fn gate_longform(
 
 #[cfg(test)]
 mod tests {
+
+    // ---- audit_window: the derived bound (GR-4) ----
+
+    /// covers: GR-4
+    #[test]
+    fn the_audit_window_is_derived_from_the_retrieved_leaf_set_not_a_constant() {
+        // The failure this guards is the one the removed `max_chunks: 8`
+        // produced: a literal that stops governing, so the auditor sees less
+        // evidence than the drafter did and rejects claims it cannot reach.
+        // Measured 2026-08-13: 32 of 57 failed claims had their support past
+        // the eighth leaf chunk.
+        let small = super::audit_window(3);
+        let large = super::audit_window(30);
+        assert_eq!(small, 3, "the window is the retrieved leaf set, not a cap");
+        assert_eq!(large, 30, "the window is the retrieved leaf set, not a cap");
+        assert_ne!(
+            small, large,
+            "a constant window would return the same bound for 3 and 30 leaf chunks"
+        );
+
+        // Monotone across the range a real turn spans: any reintroduced ceiling
+        // shows up here as two adjacent inputs sharing a window.
+        let mut previous = super::audit_window(1);
+        for n in 2..=64 {
+            let w = super::audit_window(n);
+            assert_eq!(w, n, "window at {n} leaf chunks must equal the leaf set");
+            assert!(w > previous, "window must grow with the leaf set at {n}");
+            previous = w;
+        }
+
+        // The only non-identity case, and the reason `max(1)` is there at all:
+        // the claim loop's take() bound must stay non-zero on empty evidence.
+        assert_eq!(super::audit_window(0), 1);
+    }
 
     // ---- project_verdict: the four-valued projection (ARCH §18.1) ----
 
@@ -5753,6 +5179,352 @@ mod tests {
     /// "the refined text failed, keep the prior verified answer" — if the
     /// tombstone reused that string, every marked knowledge answer would
     /// read as a rejected refinement (ARCH §10.6).
+    // ───── Issue #57: the fan-out is concurrent and bounded, and an unjudged claim never ships as verified ─────
+
+    /// A sealed-evidence searcher with a scripted cost per call, counting
+    /// calls and peak overlap.
+    struct ScriptedSearcher {
+        search_ms: u64,
+        calls: std::sync::atomic::AtomicUsize,
+        in_flight: std::sync::atomic::AtomicUsize,
+        max_in_flight: std::sync::atomic::AtomicUsize,
+        claims_seen: std::sync::Mutex<Vec<String>>,
+    }
+
+    #[async_trait::async_trait]
+    impl crate::runtime::grounding::search::SealedEvidenceSearch for ScriptedSearcher {
+        async fn search(&self, claim: &str) -> Vec<String> {
+            use std::sync::atomic::Ordering::SeqCst;
+            self.calls.fetch_add(1, SeqCst);
+            // Peak overlap, sampled on entry. This is the only thing that can
+            // tell a concurrent fan-out from a serial one from the outside,
+            // and the only thing that can catch the bound being removed.
+            let cur = self.in_flight.fetch_add(1, SeqCst) + 1;
+            self.max_in_flight.fetch_max(cur, SeqCst);
+            self.claims_seen.lock().unwrap().push(claim.to_string());
+            if self.search_ms > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(self.search_ms)).await;
+            }
+            self.in_flight.fetch_sub(1, SeqCst);
+            vec![
+                "The shop on Harbour Row sells rope, is painted blue and opens at dawn."
+                    .to_string(),
+            ]
+        }
+    }
+
+    /// Six extracted claims (exactly the old batch threshold); every
+    /// forced-choice judge either clears the claim or — when `judges_fail` —
+    /// refuses the way a shed admission queue refuses ("host busy"). Counts
+    /// the batched pass and the per-claim judge calls.
+    struct LadderMock {
+        batch_calls: std::sync::atomic::AtomicUsize,
+        judge_calls: std::sync::atomic::AtomicUsize,
+        judges_fail: bool,
+    }
+
+    #[async_trait::async_trait]
+    impl crate::traits::InferenceProvider for LadderMock {
+        async fn complete(
+            &self,
+            request: &crate::types::CompletionRequest,
+        ) -> Result<CompletionResponse> {
+            use std::sync::atomic::Ordering;
+            let p = &request.prompt;
+            let forced_choice = request
+                .structured_output
+                .as_ref()
+                .map(|s| s.to_string().contains("x_forced_choice"))
+                .unwrap_or(false);
+            let text = if forced_choice {
+                self.judge_calls.fetch_add(1, Ordering::SeqCst);
+                if self.judges_fail {
+                    return Err(Error::NotImplemented(
+                        "host busy: ~75850 ms predicted wait at queue position 1".into(),
+                    ));
+                }
+                r#"{"A": 0.98, "B": 0.02}"#.to_string()
+            } else if p.contains("List the SPECIFIC factual claims") {
+                "The shop sits on Harbour Row, by the quay.\n\
+                 The shop is by the quay.\n\
+                 The shop is on Harbour Row.\n\
+                 The shop sells rope.\n\
+                 The shop is painted blue.\n\
+                 The shop opens at dawn."
+                    .to_string()
+            } else if p.contains("CLAIMS (numbered):") {
+                self.batch_calls.fetch_add(1, Ordering::SeqCst);
+                "1: A\n2: A\n3: A\n4: A\n5: A\n6: B".to_string()
+            } else if p.contains("Compare the ANSWER against the") {
+                "NONE".to_string()
+            } else {
+                "unexpected synthesis call".to_string()
+            };
+            Ok(CompletionResponse {
+                text,
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "ladder-mock".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+
+        async fn complete_stream(
+            &self,
+            _request: &crate::types::CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            Err(Error::NotImplemented("LadderMock: no streaming".into()))
+        }
+
+        async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+            Ok(vec![])
+        }
+
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: true,
+                relative_speed: crate::types::Speed::Fast,
+                relative_reasoning: Depth::Moderate,
+            }
+        }
+    }
+
+    /// One small-corpus grounded turn: a draft long enough for a claim
+    /// budget of six, sealed evidence with a scripted searcher attached.
+    fn fanout_fixture(
+        search_ms: u64,
+        judges_fail: bool,
+    ) -> (
+        Arc<LadderMock>,
+        Arc<ScriptedSearcher>,
+        EvidenceContext,
+        String,
+        GroundingProfile,
+    ) {
+        let mock = Arc::new(LadderMock {
+            batch_calls: Default::default(),
+            judge_calls: Default::default(),
+            judges_fail,
+        });
+        let searcher = Arc::new(ScriptedSearcher {
+            search_ms,
+            calls: Default::default(),
+            in_flight: Default::default(),
+            max_in_flight: Default::default(),
+            claims_seen: Default::default(),
+        });
+        let mut evidence = refinement_evidence();
+        evidence.searcher =
+            Some(searcher.clone()
+                as Arc<dyn crate::runtime::grounding::search::SealedEvidenceSearch>);
+        let profile = GateSurface::KnowledgeQuery.profile();
+        // >= 3,600 chars -> claim_budget 6, so all six extracted claims are audited.
+        let mut draft = longform_draft(&profile);
+        while draft.len() < 3_700 {
+            draft.push_str("The shop sits on Harbour Row, by the quay. ");
+        }
+        (mock, searcher, evidence, draft, profile)
+    }
+
+    /// Issue #57, the correctness defect. A per-claim judge that returned no
+    /// verdict shipped as `supported: true`, the audit exited `released`, and
+    /// the epistemic ledger rendered every holding Verified — observed as
+    /// eight shed judges on a `grounded` turn. Now every unjudged claim is
+    /// recorded, the exit is `judge_failed_open`, and no claim is supported.
+    #[tokio::test]
+    async fn unjudged_claims_exit_judge_failed_open_never_released() {
+        use std::sync::atomic::Ordering;
+        let (mock, _searcher, evidence, draft, profile) = fanout_fixture(0, true);
+        let inference: Arc<dyn crate::traits::InferenceProvider> = mock.clone();
+        let outcome = gate_answer(
+            &inference,
+            "Tell me about the shop.",
+            draft,
+            &evidence,
+            &CompletionRequest::default(),
+            &profile,
+        )
+        .await;
+        assert_eq!(
+            outcome.meta.get("mode").and_then(|m| m.as_str()),
+            Some("per_claim"),
+            "must drive the long-form ladder"
+        );
+        assert_eq!(
+            outcome.meta.get("action").and_then(|a| a.as_str()),
+            Some("judge_failed_open"),
+            "six judges refused: the gate fell open and must say so, never `released`; meta={}",
+            outcome.meta
+        );
+        assert_eq!(
+            outcome
+                .meta
+                .get("claim_check_outcome")
+                .and_then(|a| a.as_str()),
+            Some("could-not-judge")
+        );
+        assert_eq!(
+            outcome.meta.get("unjudged_claims").and_then(|v| v.as_u64()),
+            Some(6)
+        );
+        assert_eq!(outcome.claims.len(), 6);
+        assert!(
+            outcome
+                .claims
+                .iter()
+                .all(|c| c.unjudged && !c.supported && !c.failed_once),
+            "every record carries `unjudged` and nothing else; got {:?}",
+            outcome.claims
+        );
+        assert_eq!(
+            mock.judge_calls.load(Ordering::SeqCst),
+            6,
+            "each claim was offered to the judge exactly once"
+        );
+    }
+
+    /// CHANGE 3'S REGRESSION GUARD (issue #57, 2026-09-02). `claims x corpora`
+    /// is the turn's only multiplicative term and it ran serially on BOTH
+    /// axes. The searches are hoisted out of the sequential judging loop and
+    /// run `buffered`, which is a SCHEDULING change and nothing more: it must
+    /// overlap them, and it must never overlap more than the derived bound.
+    /// The nested fan-out multiplies into that bound, and the product — up to
+    /// sixteen concurrent `open_index` + hybrid searches against 88 GB indexes
+    /// on a host holding a 17.7 GB model — caused a memory event on this host.
+    ///
+    /// FAILS IF: the loop returns to `for … .await` (peak overlap falls to
+    /// one), or the bound is dropped (peak overlap exceeds it).
+    #[tokio::test]
+    async fn the_claim_search_fanout_overlaps_and_never_exceeds_its_bound() {
+        use std::sync::atomic::Ordering;
+        let (mock, searcher, evidence, draft, profile) = fanout_fixture(40, false);
+        let inference: Arc<dyn crate::traits::InferenceProvider> = mock.clone();
+        let _ = gate_answer(
+            &inference,
+            "Tell me about the shop.",
+            draft,
+            &evidence,
+            &CompletionRequest::default(),
+            &profile,
+        )
+        .await;
+
+        assert_eq!(
+            mock.batch_calls.load(Ordering::SeqCst),
+            0,
+            "no study flag is set, so no batched model call runs"
+        );
+        // Six audited claims, every one of them in the fan-out.
+        const FANNED: usize = 6;
+        assert_eq!(searcher.calls.load(Ordering::SeqCst), FANNED);
+
+        let bound = config::claim_search_concurrency();
+        let peak = searcher.max_in_flight.load(Ordering::SeqCst);
+        assert!(
+            peak <= bound,
+            "peak overlap {peak} exceeded the one bound {bound} — the product is unbounded again"
+        );
+        assert_eq!(
+            peak,
+            bound.min(FANNED),
+            "the fan-out must SATURATE its bound, not merely stay under it"
+        );
+        if bound > 1 {
+            assert!(peak > 1, "a serial fan-out shows one search in flight");
+        }
+    }
+
+    /// The hoist is a scheduling change, so it must lose nothing and repeat
+    /// nothing: every claim the serial loop would have searched is searched,
+    /// exactly once. The fan-out and the judging loop read ONE disposition
+    /// vector; this is what catches a second predicate creeping back in — one
+    /// that drops a claim costs a verdict, one that leaves the loop's own
+    /// search in place pays for it twice.
+    #[tokio::test]
+    async fn the_fanout_searches_every_audited_claim_exactly_once() {
+        use std::sync::atomic::Ordering;
+        let (mock, searcher, evidence, draft, profile) = fanout_fixture(10, false);
+        let inference: Arc<dyn crate::traits::InferenceProvider> = mock.clone();
+        let _ = gate_answer(
+            &inference,
+            "Tell me about the shop.",
+            draft,
+            &evidence,
+            &CompletionRequest::default(),
+            &profile,
+        )
+        .await;
+
+        assert_eq!(mock.batch_calls.load(Ordering::SeqCst), 0);
+        let seen = searcher.claims_seen.lock().unwrap().clone();
+        assert_eq!(
+            seen.len(),
+            6,
+            "every audited claim is searched, exactly once"
+        );
+        let mut unique = seen.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(
+            unique.len(),
+            seen.len(),
+            "a claim was searched twice — the hoist must REPLACE the loop's search, not add to it"
+        );
+    }
+
+    /// The bound is ONE permit for the WHOLE nested fan-out, not one per
+    /// level. Bounding each level separately bounds NEITHER: four claims by
+    /// four corpora is sixteen concurrent `open_index` + hybrid searches, and
+    /// that product caused a memory event on 2026-09-02. Process-global rather
+    /// than per-turn because the resource it protects — page cache, file
+    /// handles, the box — is global.
+    ///
+    /// FAILS IF: the semaphore becomes per-call or per-turn, or is sized to
+    /// anything but the derived concurrency, or the concurrency stops being
+    /// derived from the host and becomes a constant again.
+    #[test]
+    fn the_claim_search_bound_is_one_process_wide_permit() {
+        let a = config::claim_search_permits();
+        let b = config::claim_search_permits();
+        assert!(
+            std::ptr::eq(a, b),
+            "two callers got two semaphores — the nested product would be unbounded again"
+        );
+        assert_eq!(
+            a.available_permits(),
+            config::claim_search_concurrency(),
+            "the one bound must be sized to the derived concurrency"
+        );
+        // The DERIVATION, against named core counts. Re-deriving
+        // `(cores / 4).clamp(1, 4)` here to check `(cores / 4).clamp(1, 4)`
+        // would move both sides together and could never fail (§18.1).
+        assert_eq!(
+            config::concurrency_for_cores(4),
+            1,
+            "the reporter's 4-core laptop keeps its present serial behaviour"
+        );
+        assert_eq!(config::concurrency_for_cores(1), 1, "never below one");
+        assert_eq!(config::concurrency_for_cores(12), 3, "this 12-core host");
+        assert_eq!(
+            config::concurrency_for_cores(256),
+            4,
+            "and never above four"
+        );
+        assert_eq!(
+            config::claim_search_concurrency(),
+            config::concurrency_for_cores(
+                std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(1)
+            ),
+            "the live value must come from that derivation, not a constant"
+        );
+    }
+
     #[tokio::test]
     async fn a_verify_only_surface_keeps_its_own_action_name() {
         let inference: Arc<dyn crate::traits::InferenceProvider> =

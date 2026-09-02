@@ -542,4 +542,74 @@ mod tests {
             .await
             .is_none());
     }
+
+    /// **The wrong-span hazard: a recurring subject must not pull an edit onto
+    /// the wrong sentence.**
+    ///
+    /// This is the module's worst failure, and it is silent in both directions
+    /// at once — surgery deletes or rewrites a sentence that VERIFIED, and
+    /// leaves the fabrication standing. The re-audit does not save it: the
+    /// incremental pass judges the repaired spans, and the span it is handed
+    /// is a correction of prose that was never in doubt.
+    ///
+    /// `best_match` guards it with a content-word floor plus a distinctive-token
+    /// (proper-noun / number) bonus, and the bonus exists precisely for this
+    /// input: a longform answer names one subject in several sentences, so
+    /// content-word overlap alone ties, and the tie has to break on the
+    /// specifics — the year, the figure, the second name — that identify WHICH
+    /// sentence made the claim.
+    ///
+    /// Both directions are asserted. Picking the right sentence when a
+    /// distinctive token names it, and refusing outright when nothing clears
+    /// the content floor — a claim it cannot place must abandon surgery, never
+    /// settle for the least-bad sentence.
+    #[test]
+    fn a_recurring_subject_does_not_pull_the_edit_onto_the_wrong_sentence() {
+        // Three sentences about ONE person: content words overlap heavily and
+        // only the specifics tell them apart.
+        let sentences = split_sentences(
+            "Smerdyakov served the Karamazov household as its cook for many years. \
+             Smerdyakov suffered from epilepsy and fell ill on the night of the murder. \
+             Smerdyakov inherited three thousand roubles and hid them beneath the floor.",
+        );
+        assert_eq!(sentences.len(), 3, "fixture must split into three");
+
+        for (claim, must_contain) in [
+            (
+                "Smerdyakov inherited three thousand roubles from the household",
+                "roubles",
+            ),
+            (
+                "Smerdyakov suffered from epilepsy on the night of the murder",
+                "epilepsy",
+            ),
+            ("Smerdyakov served the household as its cook", "cook"),
+        ] {
+            let (idx, _score) = best_match(claim, &sentences)
+                .unwrap_or_else(|| panic!("{claim:?} shares plenty of content words — it must map"));
+            assert!(
+                sentences[idx].contains(must_contain),
+                "{claim:?} landed on {:?}. Every sentence names the same subject, \
+                 so content overlap alone ties; the distinctive-token bonus is \
+                 what has to break it. Editing the wrong span deletes prose that \
+                 VERIFIED and leaves the fabrication standing, and the \
+                 incremental re-audit cannot notice — it judges the repair it \
+                 was handed",
+                sentences[idx]
+            );
+        }
+
+        // The other direction: below the content floor, refuse. A claim placed
+        // by elimination is a wrong edit waiting for its turn, so the honest
+        // answer is the full rewrite.
+        assert!(
+            best_match(
+                "quantum chromodynamics governs the confinement of gluons",
+                &sentences
+            )
+            .is_none(),
+            "a claim that shares no content with any sentence must abandon \
+             surgery rather than settle for the least-bad match"
+        );
+    }
 }

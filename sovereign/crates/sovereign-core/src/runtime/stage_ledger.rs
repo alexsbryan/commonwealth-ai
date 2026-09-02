@@ -33,7 +33,8 @@
 //!
 //! **The honest limit on it, stated rather than discovered.** A task-local
 //! does not cross `tokio::spawn`. Gate work does not spawn — the ladder's
-//! concurrency is `futures::future::join_all`, which polls in-task — so no
+//! concurrency is `futures::future::join_all` (and, on the claim-search
+//! fan-out since 2026-09-02, `StreamExt::buffered`), which polls in-task — so no
 //! recorded stage is lost today. If a stage is ever moved onto a spawned
 //! task and forgets to carry the scope, its time does not vanish silently:
 //! it lands in the [`StageId::GateUnattributed`] residual, which is exactly
