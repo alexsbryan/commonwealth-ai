@@ -37,7 +37,9 @@ pub(super) struct Registered {
 /// a confusing local one.
 pub(super) fn looks_like_recipe_path(arg: &str) -> bool {
     let p = Path::new(arg);
-    p.extension().is_some_and(|e| e.eq_ignore_ascii_case("toml")) && p.is_file()
+    p.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("toml"))
+        && p.is_file()
 }
 
 /// Copy `path` into the local recipe overrides dir under its declared id.
@@ -45,9 +47,10 @@ pub(super) fn looks_like_recipe_path(arg: &str) -> bool {
 /// Returns the id to install. Errors are strings because this is a CLI seam
 /// and each one is printed verbatim to the user.
 pub(super) fn register(path: &Path) -> Result<Registered, String> {
-    let raw = std::fs::read_to_string(path).map_err(|e| format!("reading {}: {e}", path.display()))?;
-    let mut doc: toml::Value = toml::from_str(&raw)
-        .map_err(|e| format!("{} is not valid TOML: {e}", path.display()))?;
+    let raw =
+        std::fs::read_to_string(path).map_err(|e| format!("reading {}: {e}", path.display()))?;
+    let mut doc: toml::Value =
+        toml::from_str(&raw).map_err(|e| format!("{} is not valid TOML: {e}", path.display()))?;
 
     let id = doc
         .get("corpus")
@@ -76,7 +79,8 @@ pub(super) fn register(path: &Path) -> Result<Registered, String> {
     let dir = recipes_dir().join(&id);
     std::fs::create_dir_all(&dir).map_err(|e| format!("creating {}: {e}", dir.display()))?;
     let dest = dir.join("recipe.toml");
-    let body = toml::to_string_pretty(&doc).map_err(|e| format!("re-serializing the recipe: {e}"))?;
+    let body =
+        toml::to_string_pretty(&doc).map_err(|e| format!("re-serializing the recipe: {e}"))?;
     std::fs::write(&dest, body).map_err(|e| format!("writing {}: {e}", dest.display()))?;
 
     Ok(Registered {
@@ -179,19 +183,20 @@ mod tests {
     fn a_relative_acquire_path_resolves_against_the_recipe_not_the_cwd() {
         let tmp = tempfile::tempdir().unwrap();
         write(tmp.path(), "book.md", "# hi");
-        let mut doc: toml::Value =
-            toml::from_str("[acquire]\npath = \"book.md\"\n").unwrap();
+        let mut doc: toml::Value = toml::from_str("[acquire]\npath = \"book.md\"\n").unwrap();
         let (before, after) = resolve_acquire_path(&mut doc, tmp.path()).unwrap().unwrap();
         assert_eq!(before, "book.md");
-        assert!(after.ends_with("book.md") && after.starts_with('/'), "{after}");
+        assert!(
+            after.ends_with("book.md") && after.starts_with('/'),
+            "{after}"
+        );
         assert_eq!(doc["acquire"]["path"].as_str().unwrap(), after);
     }
 
     #[test]
     fn a_relative_path_with_nothing_beside_the_recipe_fails_here_not_in_the_daemon() {
         let tmp = tempfile::tempdir().unwrap();
-        let mut doc: toml::Value =
-            toml::from_str("[acquire]\npath = \"missing.md\"\n").unwrap();
+        let mut doc: toml::Value = toml::from_str("[acquire]\npath = \"missing.md\"\n").unwrap();
         let err = resolve_acquire_path(&mut doc, tmp.path()).unwrap_err();
         assert!(err.contains("missing.md"), "{err}");
         assert!(
@@ -206,7 +211,12 @@ mod tests {
         for p in ["/data/book.md", "~/book.md", "{path}"] {
             let mut doc: toml::Value =
                 toml::from_str(&format!("[acquire]\npath = \"{p}\"\n")).unwrap();
-            assert!(resolve_acquire_path(&mut doc, tmp.path()).unwrap().is_none(), "{p}");
+            assert!(
+                resolve_acquire_path(&mut doc, tmp.path())
+                    .unwrap()
+                    .is_none(),
+                "{p}"
+            );
         }
     }
 }
