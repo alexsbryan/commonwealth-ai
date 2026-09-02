@@ -30,9 +30,8 @@ use super::super::exemplar_bank::Exemplar;
 use super::super::types::{ChapterInput, ChatPrompt, Phase1ChapterResult, Vocabulary};
 use super::literary_atlas::render_phase1_user_body;
 use super::ontology_parse::parse_phase1_section_extraction;
-use super::ontology_schema::{
-    phase1_schema_for, render_declared_types, render_phase6_extras, report_added_prompt_size,
-};
+use super::ontology_prompt::{render_declared_types, render_phase6_extras};
+use super::ontology_schema::{phase1_schema_for, report_added_prompt_size};
 use super::parse_policy::ParsePolicy;
 use crate::enrichment::ontology::OntologyPolicies;
 use crate::recipe::OntologyVocabulary;

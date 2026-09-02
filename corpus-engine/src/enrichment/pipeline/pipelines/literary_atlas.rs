@@ -902,7 +902,7 @@ fn render_phase6_classifier_user_body(
 /// Fill the ontology-driven Phase-6 classifier template from a custom
 /// atlas's recipe data: the domain `guidance`, the `tension_term`, the
 /// `position_term`, and `ontology_extras` — what the DECLARED ontology adds
-/// (`ontology_schema::render_phase6_extras`), empty for every corpus that
+/// (`ontology_prompt::render_phase6_extras`), empty for every corpus that
 /// declares nothing. Extracted from `compose_phase6_atlas_classifier` so the
 /// "custom mode is ontology-driven, not literary" invariant is unit-testable
 /// without constructing a full candidate.
@@ -2128,9 +2128,9 @@ mod tests {
 
     #[test]
     fn parse_phase1_drops_unknown_entity_type_tag() {
-        // The daemon's grammar-constrained sampler is a known no-op
-        // (see sovereign-inference embedded.rs build_sampler comment),
-        // so unknown entity_type tags reach the parser. Models hedge
+        // Under the default `json_schema` mode the grammar is enforced,
+        // but a `json-object` provider sends no schema, and there unknown
+        // entity_type tags reach the parser. Models hedge
         // borderline cases — "the narrator" gets typed as
         // "unspecified", a personified force gets typed as "deity",
         // an abstract group gets typed as "collective". Persisting

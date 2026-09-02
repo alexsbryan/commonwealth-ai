@@ -1188,11 +1188,18 @@ means one thing.
   `corpus-engine/tests/fixtures/recipe_templates/`);
   `recipe migrate --ontology-version 1` adds the version line as a diff.
   `CustomAtlasSpec.policies` carries the parsed policies into `config.json`;
-  `CustomOntology::from_policies` composes the Phase-1 prompt and, when types
-  are declared, the generated response schema (`pipelines/ontology_schema.rs`
+  `CustomOntology::from_policies` composes the Phase-1 prompt (the declared
+  block and the Phase-6 extras render in `pipelines/ontology_prompt.rs`) and,
+  when types are declared, the generated response schema (`pipelines/ontology_schema.rs`
   — it EDITS the shipped `phase1_section_extraction_schema`, extending the
-  entity enum, adding a type slot plus one union `attributes` object per kind,
-  requiring `claim_kind`, and dropping `argument_reconstructions` unless
+  entity enum, adding a type slot plus one union `attributes` object per kind
+  — the object REQUIRED, its slots optional, since a strict grammar omits an
+  optional object at will and enforces only `required`; and `subject`
+  inserted BEFORE the bag, because property order is the model's generation
+  order under llguidance and a `subject` asked for after an empty `{}` was
+  skipped (note 5c06bc92; `corpus-engine` declares serde_json
+  `preserve_order` for the same reason) — requiring
+  `claim_kind`, and dropping `argument_reconstructions` unless
   `derivation.arguments`) and the reader's `ParsePolicy`
   (`pipelines/parse_policy.rs`), enforced by `pipelines/ontology_parse.rs`:
   a declared `EntityType::Other` is kept, attributes validate by family and

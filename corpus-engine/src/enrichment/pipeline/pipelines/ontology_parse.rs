@@ -289,8 +289,9 @@ mod tests {
     }
 
     /// A model that writes the unit back into a quantity is recovered, not
-    /// dropped — the grammar-constrained sampler is a known no-op, so the
-    /// parser is the only place this can be caught.
+    /// dropped. Under the enforced `json_schema` grammar a quantity arrives as
+    /// a number; this is the `json-object` provider path, where the parser is
+    /// the only place it can be caught.
     #[test]
     fn quantity_recovers_a_unit_suffixed_string() {
         let e = parse(

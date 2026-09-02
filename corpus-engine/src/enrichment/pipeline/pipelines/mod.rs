@@ -14,6 +14,7 @@ pub mod literary_atlas;
 // RAPTOR + GLiNER surface (FolderTieredProvider). Operators wanting
 // atoms.json output against a vault can pass `--pipeline literary_atlas`.
 pub mod ontology_parse;
+pub mod ontology_prompt;
 pub mod ontology_schema;
 pub mod parse_policy;
 pub mod philosophy_atlas;

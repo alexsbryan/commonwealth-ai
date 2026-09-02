@@ -126,16 +126,13 @@ Aldfrith date to 695-704 or to 685-690?"* — the Halstead/Ferreira dispute this
 corpus was built around. That is the axis the board recorded as **could-not-judge**
 below, for exactly this reason.
 
-**The cost, open and unresolved.** Claim ATTRIBUTES collapsed in the same move:
-`proposed_date` 14/43 to 1/37, `grade` 28 to 1. Four rebuilds — attributes
-mid-object and last, bare shapes and descriptive ones — all land within noise of
-zero, while the same example's `subject` fills 36 of 37. The model spends its
-per-claim effort on the slot the example makes obligatory. The claim's `content`
-still carries the date in prose; the queryable facet is what is lost. Shipped
-because the is-about link is what makes a declared claim type mean anything, and
-because the tension result is the capability the recipe was written for — but it
-is a trade, not a win, and a narrower second pass over claims is the obvious
-thing to price next.
+**The cost, and what it turned out to be.** Claim ATTRIBUTES collapsed in the
+same move: `proposed_date` 14/43 to 1/37, `grade` 28 to 1, and four prompt
+rebuilds all landed within noise of zero. The first reading — a per-claim
+attention budget — was wrong (note 9c603315). The schema marked every
+`attributes` object OPTIONAL, and a strict grammar omits an optional object at
+the model's discretion however the prompt is written. The section below is the
+fix and its measurement.
 
 Two things the fix had to earn rather than assume. A filled attribute must be
 TRUE: the build was writing `weight=0` and `mint="Unknown in text"` where the text
@@ -145,6 +142,43 @@ placeholder survives in the rebuilt atlas. And the fill rate is measurable at al
 only because `enrich schema-report` gained a tenth dimension this session — the
 type-count dimension reported `coin` as fully covered while it carried nothing,
 which is how the gap survived four merged phases.
+
+## The slots, required — 2026-09-02
+
+Two schema changes, no prompt change. The `attributes` object is `required` on
+every sketch that has one (its keys stay optional, so `{}` is legal and nothing
+is invented), and `subject` is inserted BEFORE the bag — because under llguidance
+the schema's property order is the model's generation order, and a `subject`
+asked for after an empty `{}` was skipped (note 5c06bc92). `corpus-engine` now
+declares serde_json `preserve_order` itself; without it the schema goes out
+alphabetical, `claims` is asked for first, and the model emits none (0 of 2
+replays vs 2 of 2 — the first 48-call probe matrix was invalid for this reason).
+
+Pre-registered bars (order `ontology-v1-required-slots`): `grade` and
+`proposed_date` at or above the subject-OFF control's 32 and 22; entity
+attributes hold at 5-9 of ~14; `subject` stays near 46/48.
+
+| wessex-hoard, full rebuild | control (subject OFF, bag optional) | subject ON, bag optional | bag required | bag required, subject first |
+|---|---|---|---|---|
+| claims | 39 | 37 | 40 | 51 |
+| `subject` | 9 | 36 | 10 | **49** |
+| `grade` | 32 | 1 | 6 | 18 |
+| `proposed_date` | 22 | 1 | 5 | 19 |
+| coin `metal` | 6/14 | 6/13 | 12/16 | **14/17** |
+| entities carrying a bag | 6/37 | — | 15/41 | 16/35 |
+
+**Verdict against the bars: entities and `subject` met, claim attributes NOT.**
+`grade` 18 and `proposed_date` 19 of 51 are a nine-fold move from the
+subject-ON floor but stay under the control's 32 and 22. The probes say why, and
+it is not a defect to chase: 3-run probes on runner-identical requests show the
+required bag filling truthfully on the dating sections (`685-690`, `695-704`,
+`no earlier than about 710`, each in the text, grade matching the evidence
+offered) and emitting an honest `{}` on the Beonna and Eoforwic sections, whose
+"attribution" claims propose no date. Forcing the decision instead — every slot
+required, nullable — filled 30 of 30 by stamping Beonna's reign dates as
+`proposed_date` with a `grade` on administrative claims. That is fabrication and
+it was rejected. The control's 32 grades were never checked for truth; the bar
+was set against an unverified number.
 
 ## What running the chain found — four breaks, none visible to 11,657 tests
 
@@ -182,8 +216,22 @@ Ahead: `--quick` bench once, at the very end · `bench enron` B³ for P3
 - P4's tension axes now have their input: `subject` reaches 36 of 37 claims and
   Phase 6 finds 2 tensions from 34 candidates (was 1 from 155). Whether `between`
   ENFORCES rather than reports is still P4's own question.
-- Claim attributes are the price of that: `grade` 28 -> 1, `proposed_date` 14 -> 1.
-  A narrower second pass over claims is the untried option.
+- Claim attributes: `grade` 18, `proposed_date` 19 of 51, `subject` 49/51 after the
+  required bag + subject-first order. Below the pre-registered bar; the probes say
+  the remainder is claims that carry no date, not omission. Tension verdict for
+  this build: could-not-judge on the designed dispute. Halstead's `685-690` and
+  Ferreira's `695-704` claims both carry subject + grade + date, but their subjects
+  resolved to two coin atoms ("Series Y sceatta" vs "Series Y sceattas (Wessex
+  Down 1)"), and Phase 6 only pairs same-subject claims — the identity seam, not
+  the schema. Two passes also lost 5 of 65 candidates each to daemon 503
+  `local_queue_full` (30 s predicted wait) that the client does not retry.
+- `attributed_to` arrives as the literal string `"omit"` on 22 of 40 claims — the
+  neutral prompt (`phase1_system.md:92,106`) says "omit" and the model writes it.
+  The parser maps it to no attribution, so nothing false lands, but real scholar
+  attributions may be lost with it.
+- Coin `weight` is invented under the full-key worked example: 0.32 / 0.72 g for a
+  coin whose section states no weight, in every probe variant. The parser catches a
+  zero, not a plausible number. Order item 5 (trim the example to fidelity) is open.
 - Four files accepted over their size baseline at the wave merge — `SYSTEM_OVERVIEW`
   §10.1h names them and schedules the splits.
 - `bench enron` B³ has never been run for P3, before or after.

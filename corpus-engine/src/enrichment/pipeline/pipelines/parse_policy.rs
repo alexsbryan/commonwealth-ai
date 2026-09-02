@@ -117,9 +117,10 @@ pub(super) fn declared_type<V>(
 /// The DECLARED spelling of the type a model named, matched the way the
 /// generic variants are matched, or `None` when nothing declares it.
 ///
-/// Case and separator drift is the norm, not the exception: the schema's enum
-/// is a REQUEST, since the grammar-constrained sampler is a known no-op, so a
-/// model that writes `"Coin"` or `"trade goods"` for a declared `coin` /
+/// Case and separator drift is the norm on the unconstrained path: the schema's
+/// enum is enforced under `json_schema` mode but is only a REQUEST for a
+/// `json-object` provider, where a model that writes `"Coin"` or
+/// `"trade goods"` for a declared `coin` /
 /// `trade_goods` must not lose the atom. `EntityType::from_str_repr` already
 /// forgives exactly this for the six named variants — it normalises before
 /// comparing and only then falls through to `Other`, which keeps the model's
@@ -321,11 +322,14 @@ fn validate_attr(family: &AttrFamily, value: &serde_json::Value) -> Option<serde
         AttrFamily::Quantity { unit } => {
             let n = match value {
                 Value::Number(n) => n.as_f64(),
-                // Models write the unit back into the value ("1.29 g") even
-                // when the schema says number, and the grammar-constrained
-                // sampler is a known no-op — so the parser is the only place
-                // this can be recovered. Take the leading number; refuse
-                // anything else.
+                // Insurance for the UNCONSTRAINED path only. Under the
+                // default `json_schema` mode the grammar is enforced and a
+                // quantity arrives as a number (probed 2026-09-02, note
+                // e6067398; the wessex rebuild stored 1.21, 1.05, 4.33 …).
+                // A provider on `structured_output_mode = "json-object"`
+                // (DeepSeek) gets no grammar, and there a model writes the
+                // unit back into the value ("1.29 g"). Take the leading
+                // number; refuse anything else.
                 Value::String(s) => leading_number(s),
                 _ => None,
             }?;

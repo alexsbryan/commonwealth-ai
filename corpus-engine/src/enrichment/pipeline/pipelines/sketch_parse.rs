@@ -179,12 +179,12 @@ impl RawEntitySketch {
             );
             return None;
         }
-        // Reject the type-evasion failure mode. The daemon's
-        // grammar-constrained sampler is a known no-op (see
-        // sovereign-inference/embedded.rs build_sampler comment), so
-        // schema-side `enum` constraints don't reach the model. The
-        // parser is the only place we can enforce "must commit to one
-        // of the 5 named variants" — without enforcement, models hedge
+        // Reject the type-evasion failure mode. Under the default
+        // `json_schema` structured-output mode the daemon's llguidance
+        // grammar DOES enforce the schema's `enum` (probed 2026-09-02,
+        // note e6067398), but a provider on `json-object` mode gets no
+        // grammar, so the parser still has to enforce "must commit to
+        // one of the 5 named variants" — without enforcement, models hedge
         // borderline cases (the Narrator, an unnamed character, an
         // abstract "the household") with entity_type:"unspecified",
         // which evades both forbidden-rule scoring and expected-type

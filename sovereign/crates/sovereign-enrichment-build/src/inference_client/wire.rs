@@ -201,6 +201,14 @@ impl DaemonInferenceClient {
             max_tokens = ?max_tokens,
             "inference_client: dispatching /v1/chat/completions"
         );
+        // The whole body, so a run can be replayed by hand and a probe
+        // compared against what the runner actually sent (§9.1). Debug: it
+        // carries the full prompt and schema.
+        tracing::debug!(
+            phase = %phase_label,
+            body = %body,
+            "inference_client: request body"
+        );
 
         // Bearer auth for remote OpenAI-compatible providers
         // (OpenAI, OpenRouter, Together, vLLM-with-auth). The local
