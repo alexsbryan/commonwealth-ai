@@ -29,6 +29,7 @@ use crate::enrichment::atlas::atoms::{
     ResolutionStatus, State,
 };
 use crate::enrichment::atlas::edges::{Edge, EdgeType};
+use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
 
 use super::classifier::{QueryPlan, QueryTarget};
 
@@ -105,6 +106,11 @@ pub struct AtlasView<'a> {
     pub edges: &'a [Edge],
     pub positions: &'a [Position],
     pub oppositions: &'a [Opposition],
+    /// The corpus's declared ontology (`atlas/ontology.json`), or `None` when
+    /// it declared nothing. Read by [`traverse_enumerate`] and
+    /// [`traverse_aggregate`] only — plans that can only be produced when this
+    /// is `Some`, so every pre-ontology walk is untouched.
+    pub vocab: Option<&'a OntologyPolicies>,
 }
 
 /// Execute the plan. Deterministic: same atlas + same plan → same
@@ -119,6 +125,8 @@ pub fn traverse(plan: &QueryPlan, atlas: AtlasView<'_>) -> TraversalResult {
         QueryPlan::TensionList => traverse_tension_list(atlas),
         QueryPlan::ConfigurationList => traverse_configuration_list(atlas),
         QueryPlan::CorpusOverview => traverse_corpus_overview(atlas),
+        QueryPlan::Enumerate { entity_type } => traverse_enumerate(entity_type, atlas),
+        QueryPlan::Aggregate { entity_type, over } => traverse_aggregate(entity_type, over, atlas),
         QueryPlan::Unknown { raw_query } => {
             TraversalResult::miss("unknown", format!("Unclassified query: {raw_query}"))
         }
@@ -443,6 +451,135 @@ fn traverse_configuration_list(atlas: AtlasView<'_>) -> TraversalResult {
     result
 }
 
+/// Cap on how many atoms an enumeration or aggregation returns. Matches the
+/// brief's scannability budget; `traverse_corpus_overview` uses 8 for a
+/// sample, but an enumeration's whole point is completeness, so this is the
+/// larger "a catalogue, not a sample" bound.
+const ENUMERATE_MAX: usize = 64;
+
+/// Every Entity of a declared type, including its `specializes` descendants.
+///
+/// This is why an enumeration of `coin` returns the sceattas too: the atlas
+/// stores each atom under its OWN declared subtype, and `sceatta specializes
+/// coin` is what makes a sceatta a coin. The walk goes through
+/// [`TypeIndex::is_a`] — the one place the chain is walked.
+fn traverse_enumerate(entity_type: &str, atlas: AtlasView<'_>) -> TraversalResult {
+    let Some(policies) = atlas.vocab else {
+        // Unreachable via `classify_query_with` (the plan is only minted when
+        // a vocabulary exists), but a hand-built plan must refuse rather than
+        // silently enumerate on equality alone.
+        return TraversalResult::miss(
+            "enumerate",
+            format!("No declared ontology in this atlas, so '{entity_type}' names no type."),
+        );
+    };
+    let index = TypeIndex::from_policies(policies);
+    let mut matched: Vec<Entity> = atlas
+        .entities
+        .iter()
+        .filter(|e| index.is_a(e.entity_type.as_str_repr(), entity_type))
+        .cloned()
+        .collect();
+    let total = matched.len();
+    matched.sort_by(|a, b| {
+        b.salience
+            .partial_cmp(&a.salience)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.id.as_str().cmp(b.id.as_str()))
+    });
+    matched.truncate(ENUMERATE_MAX);
+
+    tracing::debug!(
+        entity_type,
+        total,
+        returned = matched.len(),
+        "atlas traversal: enumerate over declared type"
+    );
+
+    if matched.is_empty() {
+        return TraversalResult::miss(
+            "enumerate",
+            format!("No {entity_type} atoms in this atlas."),
+        );
+    }
+    let label = index
+        .get(entity_type)
+        .and_then(|d| d.label.clone())
+        .unwrap_or_else(|| entity_type.to_string());
+    let mut result = TraversalResult::hit("enumerate", format!("{total} {label} in this atlas"));
+    result.entities = matched;
+    result
+}
+
+/// Tally the declared type's atoms by one of its declared attributes.
+///
+/// Entities and Claims both carry `attributes`, and a declared claim type is
+/// as tallyable as a declared entity type ("how many attributions by grade"),
+/// so both are walked. An atom missing the attribute is counted under
+/// `(unset)` rather than dropped — an absence is reported, never defaulted.
+fn traverse_aggregate(entity_type: &str, over: &str, atlas: AtlasView<'_>) -> TraversalResult {
+    let Some(policies) = atlas.vocab else {
+        return TraversalResult::miss(
+            "aggregate",
+            format!("No declared ontology in this atlas, so '{entity_type}' names no type."),
+        );
+    };
+    let index = TypeIndex::from_policies(policies);
+    const UNSET: &str = "(unset)";
+
+    let mut tally: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    let mut bucket = |attrs: &serde_json::Map<String, serde_json::Value>| {
+        let key = match attrs.get(over) {
+            Some(serde_json::Value::String(s)) => match s.trim() {
+                "" => UNSET.to_string(),
+                t => t.to_string(),
+            },
+            Some(serde_json::Value::Null) | None => UNSET.to_string(),
+            Some(v) => v.to_string(),
+        };
+        *tally.entry(key).or_insert(0) += 1;
+    };
+
+    let mut result = TraversalResult::hit("aggregate", String::new());
+    for e in atlas.entities {
+        if index.is_a(e.entity_type.as_str_repr(), entity_type) {
+            bucket(&e.attributes);
+            result.entities.push(e.clone());
+        }
+    }
+    for c in atlas.claims {
+        let subtype = c.claim_kind.as_deref().unwrap_or_default();
+        if index.is_a(subtype, entity_type) {
+            bucket(&c.attributes);
+            result.claims.push(c.clone());
+        }
+    }
+
+    let total: usize = tally.values().sum();
+    tracing::debug!(
+        entity_type,
+        over,
+        total,
+        buckets = tally.len(),
+        "atlas traversal: aggregate over declared attribute"
+    );
+    if total == 0 {
+        return TraversalResult::miss(
+            "aggregate",
+            format!("No {entity_type} atoms in this atlas to tally by {over}."),
+        );
+    }
+    let breakdown = tally
+        .iter()
+        .map(|(k, n)| format!("{k}: {n}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    result.headline = format!("{total} {entity_type} by {over} — {breakdown}");
+    result.entities.truncate(ENUMERATE_MAX);
+    result.claims.truncate(ENUMERATE_MAX);
+    result
+}
+
 fn traverse_corpus_overview(atlas: AtlasView<'_>) -> TraversalResult {
     // Top-salience entities (max 8 so the brief stays scannable).
     let mut ents: Vec<Entity> = atlas.entities.to_vec();
@@ -502,6 +639,167 @@ mod tests {
             attributes: serde_json::Map::new(),
             concept_kind: None,
         }
+    }
+
+    // ── ontology-v1 P5: declared-type walks ──────────────────
+
+    use crate::enrichment::ontology::{OntologyTypeDecl, ShapePolicy, TypeKind};
+
+    /// A coin atom typed under the AUTHOR'S noun, with declared attributes.
+    fn coin(idx: usize, name: &str, subtype: &str, metal: &str, salience: f32) -> Entity {
+        let mut e = entity(idx, name);
+        e.entity_type = EntityType::Other(subtype.to_string());
+        e.salience = salience;
+        e.attributes
+            .insert("metal".into(), serde_json::Value::String(metal.into()));
+        e
+    }
+
+    fn numismatics() -> OntologyPolicies {
+        OntologyPolicies {
+            shape: ShapePolicy {
+                types: vec![
+                    OntologyTypeDecl {
+                        name: "coin".into(),
+                        kind: TypeKind::Entity,
+                        label: Some("coins".into()),
+                        ..Default::default()
+                    },
+                    OntologyTypeDecl {
+                        name: "sceatta".into(),
+                        kind: TypeKind::Entity,
+                        specializes: Some("coin".into()),
+                        ..Default::default()
+                    },
+                ],
+            },
+            ..Default::default()
+        }
+    }
+
+    fn declared_view<'a>(entities: &'a [Entity], vocab: &'a OntologyPolicies) -> AtlasView<'a> {
+        AtlasView {
+            entities,
+            events: &[],
+            states: &[],
+            relations: &[],
+            claims: &[],
+            questions: &[],
+            configurations: &[],
+            edges: &[],
+            positions: &[],
+            oppositions: &[],
+            vocab: Some(vocab),
+        }
+    }
+
+    /// The wessex-hoard count. Four of the seven catalogue coins are typed
+    /// `sceatta`; `sceatta specializes coin`, so an enumeration of `coin`
+    /// returns SEVEN, not three. This is the whole reason the compare walks
+    /// `specializes` instead of testing equality.
+    #[test]
+    fn enumerate_a_declared_type_includes_its_specializations() {
+        let vocab = numismatics();
+        let entities = vec![
+            coin(1, "Aldfrith penny, Series Y", "sceatta", "silver", 0.9),
+            coin(2, "Series R sceatta", "sceatta", "silver", 0.8),
+            coin(3, "Beonna penny", "coin", "silver", 0.7),
+            coin(4, "Offa gold dinar", "coin", "gold", 0.6),
+            coin(5, "Coenwulf mancus", "coin", "gold", 0.5),
+            coin(6, "Series X sceatta", "sceatta", "silver", 0.4),
+            coin(7, "Series E porcupine sceatta", "sceatta", "billon", 0.3),
+            entity(8, "Offa"), // a Person; not a coin
+        ];
+        let plan = QueryPlan::Enumerate {
+            entity_type: "coin".into(),
+        };
+        let result = traverse(&plan, declared_view(&entities, &vocab));
+        assert!(result.hit);
+        assert_eq!(result.kind, "enumerate");
+        assert_eq!(
+            result.entities.len(),
+            7,
+            "expected all seven catalogue coins"
+        );
+        // Salience-sorted.
+        assert_eq!(
+            result.entities[0].canonical_name,
+            "Aldfrith penny, Series Y"
+        );
+        // The declared label is what the headline calls them.
+        assert_eq!(result.headline, "7 coins in this atlas");
+
+        // The narrower type returns only its own.
+        let sceattas = traverse(
+            &QueryPlan::Enumerate {
+                entity_type: "sceatta".into(),
+            },
+            declared_view(&entities, &vocab),
+        );
+        assert_eq!(sceattas.entities.len(), 4);
+    }
+
+    /// A declared type with no atoms is a miss, not an empty hit — the caller
+    /// must be able to tell "nothing of this type" from "here is the set".
+    #[test]
+    fn enumerate_with_no_matching_atoms_misses() {
+        let vocab = numismatics();
+        let entities = vec![entity(1, "Offa")];
+        let result = traverse(
+            &QueryPlan::Enumerate {
+                entity_type: "coin".into(),
+            },
+            declared_view(&entities, &vocab),
+        );
+        assert!(!result.hit);
+        assert_eq!(result.kind, "enumerate");
+    }
+
+    /// An Enumerate plan handed an atlas with NO declared vocabulary refuses.
+    /// It cannot be produced by the classifier in that state, and enumerating
+    /// on bare equality would be a second, weaker answer to "is this a coin".
+    #[test]
+    fn enumerate_without_a_vocabulary_refuses() {
+        let entities = vec![coin(1, "Beonna penny", "coin", "silver", 0.7)];
+        let vocab = numismatics();
+        let mut view = declared_view(&entities, &vocab);
+        view.vocab = None;
+        let result = traverse(
+            &QueryPlan::Enumerate {
+                entity_type: "coin".into(),
+            },
+            view,
+        );
+        assert!(!result.hit);
+        assert!(result.headline.contains("No declared ontology"));
+    }
+
+    /// The tally groups by the declared attribute and reports an absent value
+    /// as `(unset)` rather than dropping the atom.
+    #[test]
+    fn aggregate_tallies_by_a_declared_attribute() {
+        let vocab = numismatics();
+        let mut untyped = coin(9, "Unmeasured fragment", "coin", "", 0.1);
+        untyped.attributes.remove("metal");
+        let entities = vec![
+            coin(1, "Aldfrith penny", "sceatta", "silver", 0.9),
+            coin(2, "Offa gold dinar", "coin", "gold", 0.6),
+            coin(3, "Coenwulf mancus", "coin", "gold", 0.5),
+            untyped,
+        ];
+        let result = traverse(
+            &QueryPlan::Aggregate {
+                entity_type: "coin".into(),
+                over: "metal".into(),
+            },
+            declared_view(&entities, &vocab),
+        );
+        assert!(result.hit);
+        assert_eq!(result.kind, "aggregate");
+        assert_eq!(
+            result.headline,
+            "4 coin by metal — (unset): 1, gold: 2, silver: 1"
+        );
     }
 
     fn state(idx: usize, owner: usize, label: &str, section: &str) -> State {
@@ -621,6 +919,7 @@ mod tests {
             edges,
             positions: &[],
             oppositions: &[],
+            vocab: None,
         }
     }
 
@@ -762,6 +1061,7 @@ mod tests {
                 edges: &[],
                 positions: &[],
                 oppositions: &[],
+                vocab: None,
             },
         );
         assert!(result.hit);

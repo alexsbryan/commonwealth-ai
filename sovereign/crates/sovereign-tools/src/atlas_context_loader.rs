@@ -21,10 +21,11 @@ use std::time::Instant;
 
 use corpus_engine::enrichment::atlas::ann_store::ANN_TABLE_DIRNAME;
 use corpus_engine::enrichment::atlas::{
-    read_atlas_atoms, read_atlas_edges, AtomEnvelope, EdgeType,
+    read_atlas_atoms, read_atlas_edges, read_atlas_ontology, AtomEnvelope, EdgeType,
 };
 use sovereign_core::atlas_context::{
-    build_persistent_ann_seed_table, AnnBuildStats, AtlasContext, AtlasEntry,
+    atom_attributes_suffix, build_persistent_ann_seed_table, AnnBuildStats, AtlasContext,
+    AtlasEntry,
 };
 use sovereign_core::traits::InferenceProvider;
 
@@ -212,6 +213,23 @@ pub async fn load_atlas_context(
 
     let atoms = read_atlas_atoms(atlas_dir).map_err(|e| LoadAtlasError::Read(e.to_string()))?;
 
+    // The corpus's DECLARED claim types, for the
+    // `SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS` knob below. Empty for every
+    // corpus that declares nothing, which makes the admission guard inert
+    // there whatever the knob says (I5).
+    let declared_claim_types: Vec<String> = read_atlas_ontology(atlas_dir)
+        .map(|f| f.policies)
+        .filter(|p| p.has_declarations())
+        .map(|p| p.claim_types().map(|t| t.name.clone()).collect())
+        .unwrap_or_default();
+    if filter.include_declared_claim_types && !declared_claim_types.is_empty() {
+        tracing::debug!(
+            corpus = atlas_corpus_id,
+            declared_claim_types = ?declared_claim_types,
+            "atlas loader: admitting declared claim types as virtual chunks"
+        );
+    }
+
     // Build embed-text per Entity, applying filters. Counters track
     // why each entity was kept or dropped so the pre-embed log is
     // diagnostic — operators tuning a Tier-2 atlas need to see "we
@@ -300,12 +318,23 @@ pub async fn load_atlas_context(
                     text.push('\n');
                 }
                 text.push_str(&e.description);
+                text.push_str(&atom_attributes_suffix(&e.attributes));
                 if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
                     text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
                 }
                 payloads.push((e.id.as_str().to_string(), e.canonical_name.clone(), text));
             }
-            AtomEnvelope::Claim(c) if filter.include_claims => {
+            // `include_claims` is the corpus-wide switch. The declared-type
+            // arm is narrower and DARK: it admits only claims whose
+            // `claim_kind` names a type the author declared, so an undeclared
+            // corpus admits nothing new no matter how the knob is set.
+            AtomEnvelope::Claim(c)
+                if filter.include_claims
+                    || (filter.include_declared_claim_types
+                        && declared_claim_types
+                            .iter()
+                            .any(|t| Some(t.as_str()) == c.claim_kind.as_deref())) =>
+            {
                 total_claims += 1;
                 if !filter.depth_allowlist.is_empty() {
                     let depth_label = serde_json::to_string(&c.enrichment_depth)
@@ -336,6 +365,7 @@ pub async fn load_atlas_context(
                     .trim_matches('"')
                     .to_string();
                 let mut text = format!("[Claim: {act}, {status}] {content}", content = c.content);
+                text.push_str(&atom_attributes_suffix(&c.attributes));
                 if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
                     text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
                 }
@@ -602,6 +632,7 @@ mod tests {
             include_claims: false,
             include_tensions: false,
             include_configurations: false,
+            include_declared_claim_types: false,
         }
     }
 

@@ -156,7 +156,9 @@ pub(super) fn declared_attributes<'a>(
 }
 
 /// Reserved attribute key carrying a directive claim's deontic normal form.
-pub(super) const ATTR_DEONTIC: &str = "deontic";
+/// `pub(crate)` since ontology-v1 P5: `governance_view::project_claim` reads
+/// the same key off the atom, and one spelling is the point (§10.6).
+pub(crate) const ATTR_DEONTIC: &str = "deontic";
 /// Reserved attribute key carrying a claim's evidence grade.
 pub(super) const ATTR_GRADE: &str = "grade";
 

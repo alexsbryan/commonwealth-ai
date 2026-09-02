@@ -1276,7 +1276,31 @@ means one thing.
   `atlas/ontology.json`
   (`writer::write_atlas_ontology`) so the atlas dir records what it was
   extracted under, and `_summary.json` (SCHEMA_VERSION 3) carries an
-  `OntologySummary` read back from it. Design:
+  `OntologySummary` read back from it. **Retrieval reads that file back
+  (P5).** `AtlasGraph::load_lance_from_disk` attaches the policies to the
+  graph, dropping a set with no declared types to `None` — so `ontology()`
+  being `Some` IS the "this corpus declared something" gate, checked once at
+  the load rather than remembered at four call sites, and
+  `AtlasGraph::is_subtype_of` (the graph-side accessor for `TypeIndex::is_a`)
+  is inert for every corpus that declared nothing. Four readers: the
+  enumeration classifier's type enum is the six generic kinds ∪ the declared
+  ENTITY types, capped at 24 (`enumerable_types`,
+  `sovereign-core/src/runtime/retrieval/atom_enum.rs`), and its atom compare
+  walks `specializes`, so "which coins" returns the sceattas too;
+  `atlas_traversal` gains `QueryPlan::Enumerate` / `Aggregate`, minted only by
+  `classify_query_with` when a vocabulary is present and refused by the engine
+  when it is not; `governance_view::project_claim` scopes a rule on the
+  claim's `subject` (what it is about) falling back to `attributed_to` (whose
+  voice it is), and takes its deontic from the reserved `deontic` attribute the
+  ontology parser already validated; and `meta_atlas`'s
+  `classify_articulation_with` places a declared `EntityType::Other(name)` by
+  the generic kind it descends from instead of guessing from the chunk preview.
+  Two levers ship DARK with `DEFAULTS_LEDGER.md` rows and no measurement:
+  `SOVEREIGN_ATLAS_EMBED_ATTRIBUTES` (attributes appended to embed text, in
+  `atom_attributes_suffix` — called by BOTH renderers, since the daemon's bag
+  loader forks `render_atom_entry`) and `SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS`
+  (`AtlasContextFilter.include_declared_claim_types`, keyed into `signature()`).
+  Design:
   `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md`, `ONTOLOGY_MIGRATION.md`.
   State at `~/.svrnmesh/indexes/<corpus>/atlas/`. Deep-dive:
   [`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md). Beyond the LLM
@@ -5756,6 +5780,41 @@ extraction should NOT expect binary size to move — and should check whether
 the weight they mean to shed is actually dead before making it a bar. This one
 was assumed severable by the coordinator and by the worker, and the
 measurement said otherwise.
+
+### 10.1f Size debt OWED, not yet accepted — ontology-v1 P5 (2026-09-02)
+
+P5 grew eight files and the arch-gate baselines are **not** re-pinned in the
+P5 branch. That is deliberate: three ontology-v1 phases (P3, P4, P5) were in
+flight in separate worktrees at the same time, and `quality/baselines/` is one
+set of files. Three workers each running `arch-gate --update-baseline` on their
+own tree produces three divergent freezes whose merge silently reverts whichever
+lands first — the exact failure mode `--update-baseline` on a working tree is
+warned against in `AGENTS.md`. The re-pin belongs to whoever merges the wave,
+run ONCE over the merged tree. What P5 owes, measured (`wc -l`, HEAD of
+`ontology-v1-p5`):
+
+| File | Baseline | After P5 | Why |
+|------|----------|----------|-----|
+| `corpus-engine/src/enrichment/atlas/context.rs` | 1,989 | 2,195 | The vocabulary carrier on `AtlasGraph` + the `EMBED_ATTRIBUTES` renderer and their two tests. Already an oversized row; splits with the ATLAS_STORAGE_V2 read path, not locally. |
+| `sovereign-core/src/runtime/retrieval/atom_enum.rs` | 1,605 | 1,791 | `enumerable_types` + its five tests + the hoisted scope/graph/vocabulary block. Already oversized; the enumerate and overview paths are the obvious seam and neither is settled. |
+| `corpus-engine/src/enrichment/governance_view.rs` | 1,249 | 1,340 | `project_claim` reading `subject` + the declared deontic, and one test. Already oversized. |
+
+Files also entered the 800–1200 approach band that were under it
+(`atlas_traversal/engine.rs` 772 → 1,072; `atlas_traversal/classifier.rs`
+574 → 934; `meta_atlas/classifier.rs` 696 → 867), and two already in it grew
+(`meta_atlas/builder.rs` → 833, `sovereign-tools/src/atlas_context_manager.rs`
+→ 993). The gate's own figure for the net, which is the one to cite: **files
+162 → 163 (+1), lines 157,275 → 158,796 (+1,521)** (`cargo run -p xtask --
+arch-gate`, 2026-09-02, exit 1 with five size failures and zero doc failures).
+
+Roughly half of every one of those numbers is test code, and it stays in the
+module rather than moving to `tests/main/` to make a ratchet green: three of
+the five test the module's PRIVATE surface (`render_attributes`,
+`project_claim`, `enumerable_types`), and moving the rest out to shrink a line
+count would be teaching to the test. The real seam, when the phase settles, is
+`atlas_traversal/engine.rs` → the six pre-ontology walks and the two
+declared-type walks as peers; that split is due when P6 stops moving the
+traversal surface.
 
 ### 10.2 cmnwlth deferrals
 

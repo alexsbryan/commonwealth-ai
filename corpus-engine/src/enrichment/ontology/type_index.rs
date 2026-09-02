@@ -10,9 +10,12 @@
 //!
 //! P2 needs [`Self::effective_attributes`] for the parser's attribute
 //! validation, and [`Self::is_a`] because the same ancestor walk answers it
-//! in one line. P3 extends this with `descendants`, `rigid_type_of`,
-//! `effective_identity`, `endpoints` and `participants` — it does not mint a
-//! second index.
+//! in one line. P5 adds [`Self::generic_ancestor`] — the chain's terminal
+//! UNDECLARED parent, which `validate_block` only accepts when it names one of
+//! the six generic entity kinds, so `doctrine specializes concept` is legal
+//! without declaring `concept`. P3 extends this with `descendants`,
+//! `rigid_type_of`, `effective_identity`, `endpoints` and `participants` — it
+//! does not mint a second index.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -88,11 +91,27 @@ impl<'a> TypeIndex<'a> {
         out
     }
 
-    /// The `specializes` chain above `name`, nearest first. Terminates on an
-    /// undeclared parent and on a cycle (a recipe can write one; `validate`
-    /// does not yet reject it, and a hang here would be a worse answer than
-    /// a truncated chain).
-    fn ancestors(&self, name: &str) -> Vec<&'a str> {
+    /// The generic entity kind `name` bottoms out in: the first `specializes`
+    /// value on its chain that names no declared type.
+    ///
+    /// `validate_block` accepts an unresolvable reference only when it is one
+    /// of `EntityType::NAMED`, so a chain that leaves the declared set has
+    /// left it for a generic kind — `doctrine specializes concept` is a legal
+    /// recipe with no `concept` declaration, and [`Self::is_a`] cannot see it
+    /// (it walks DECLARED ancestors and stops where the declarations do).
+    /// `None` when the chain stays inside the declared set, when `name` is not
+    /// declared, or when the chain cycles.
+    pub fn generic_ancestor(&self, name: &str) -> Option<&'a str> {
+        self.walk_specializes(name).1
+    }
+
+    /// The `specializes` chain above `name`, nearest first, and the terminal
+    /// undeclared parent it ran into (if any). Terminates on an undeclared
+    /// parent and on a cycle (a recipe can write one; `validate` does not yet
+    /// reject it, and a hang here would be a worse answer than a truncated
+    /// chain). ONE walk: [`Self::ancestors`] and [`Self::generic_ancestor`]
+    /// are two questions about the same traversal, not two traversals.
+    fn walk_specializes(&self, name: &str) -> (Vec<&'a str>, Option<&'a str>) {
         let mut out: Vec<&'a str> = Vec::new();
         let mut seen: BTreeSet<&str> = BTreeSet::new();
         seen.insert(name);
@@ -101,7 +120,7 @@ impl<'a> TypeIndex<'a> {
             // Through `get`, not `by_name.get`: the accessor's return type is
             // `&'a`, so the walk is not tied to this `&self` borrow.
             let Some(decl) = self.get(parent) else {
-                break;
+                return (out, Some(parent));
             };
             if !seen.insert(decl.name.as_str()) {
                 break;
@@ -109,7 +128,11 @@ impl<'a> TypeIndex<'a> {
             out.push(decl.name.as_str());
             cursor = decl.specializes.as_deref();
         }
-        out
+        (out, None)
+    }
+
+    fn ancestors(&self, name: &str) -> Vec<&'a str> {
+        self.walk_specializes(name).0
     }
 }
 
@@ -189,6 +212,29 @@ mod tests {
         assert!(!idx.is_a("coin", "sceatta"));
     }
 
+    /// `specializes` may name a generic entity kind with no declaration —
+    /// `validate_block` resolves references against the declared names UNION
+    /// `EntityType::NAMED`. `is_a` stops where the declarations do, so the
+    /// terminal parent is its own question.
+    #[test]
+    fn generic_ancestor_finds_the_undeclared_kind_the_chain_bottoms_out_in() {
+        let s = shape(vec![
+            decl("doctrine", Some("concept"), &[]),
+            decl("school", Some("doctrine"), &[]),
+            decl("coin", None, &[]),
+            decl("sceatta", Some("coin"), &[]),
+        ]);
+        let idx = TypeIndex::new(&s);
+        assert_eq!(idx.generic_ancestor("doctrine"), Some("concept"));
+        assert_eq!(idx.generic_ancestor("school"), Some("concept"));
+        // `is_a` cannot see it — that is why this method exists.
+        assert!(!idx.is_a("doctrine", "concept"));
+        // A chain that stays inside the declared set bottoms out nowhere.
+        assert_eq!(idx.generic_ancestor("sceatta"), None);
+        assert_eq!(idx.generic_ancestor("coin"), None);
+        assert_eq!(idx.generic_ancestor("hoard"), None);
+    }
+
     #[test]
     fn a_specializes_cycle_terminates() {
         let s = shape(vec![
@@ -202,5 +248,7 @@ mod tests {
             .map(|a| a.name.as_str())
             .collect();
         assert_eq!(names, vec!["x", "y"]);
+        // The same bounded walk answers the terminal question without hanging.
+        assert_eq!(idx.generic_ancestor("a"), None);
     }
 }

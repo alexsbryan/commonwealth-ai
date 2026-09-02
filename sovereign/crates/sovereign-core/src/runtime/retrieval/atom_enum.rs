@@ -112,6 +112,47 @@ impl Runtime {
         // pay an LLM round-trip only to find nothing to enumerate.
         let provider = lane.atlas_context.as_ref()?;
 
+        // ---- Stage 0: the scope, its graphs, and the type names the
+        // classifier is allowed to choose from.
+        //
+        // Resolved BEFORE the classify call because the prompt's enum is
+        // derived from it: a corpus that declared `coin` / `sceatta` must be
+        // able to have its own noun chosen, and the model cannot pick a name
+        // it was never offered. The graphs are pulled once here and reused by
+        // stage 2 below (they are cached on the provider after the first
+        // pull, so this costs a load only on the first enumerate-eligible turn
+        // for a corpus, and only on the `SOVEREIGN_ATOM_ENUM=1` path).
+        // ONE decider for this scope — see `resolve_atom_enum_scope`. An
+        // absent scope resolves to the corpora this turn actually reached,
+        // never to every corpus installed on the box.
+        //
+        // Use the enabled-corpora list directly when scoped. The atlas
+        // GRAPH can be loaded even when its embedding-bag CONTEXT isn't:
+        // a freshly re-enriched atlas has a new atoms.json but a stale
+        // embeddings cache, so `load_one` skips the context — yet
+        // `AtlasGraph::load_from_disk` still loaded the graph. Keying off
+        // `loaded_corpus_ids()` (contexts only) would drop exactly that
+        // corpus (observed: enron-sample-multi-wide right after re-enrich
+        // → corpora=[] → no enumeration). `provider.graph(id)` returns
+        // None for any id that genuinely has no graph, so an unscoped
+        // fallback to loaded contexts is still safe.
+        let corpus_ids: Vec<String> = resolve_atom_enum_scope(enabled_corpora, pool_corpora);
+        let graphs: Vec<(String, std::sync::Arc<crate::atlas_context::AtlasGraph>)> = corpus_ids
+            .iter()
+            .filter_map(|id| provider.graph(id).map(|g| (id.clone(), g)))
+            .collect();
+        let vocabs: Vec<&corpus_engine::enrichment::ontology::OntologyPolicies> =
+            graphs.iter().filter_map(|(_, g)| g.ontology()).collect();
+        let entity_types = enumerable_types(&vocabs);
+        tracing::debug!(
+            target: "retrieval_audit",
+            event = "atom_enum_vocabulary",
+            corpora = ?corpus_ids,
+            declared_corpora = vocabs.len(),
+            entity_types = ?entity_types,
+            "retrieval_audit: atom_enum enumerable types"
+        );
+
         // ---- Stage 1: classify enumeration vs lookup (+ target type).
         // Question-shape only, no conversation context: whether a
         // question enumerates a set is a property of its phrasing, not
@@ -146,11 +187,11 @@ impl Runtime {
              - \"what do these reveal about the Alpha and Beta partnerships\" (names its subjects, even though several) -> lookup\n\
              - \"describe the agreement\" -> lookup\n\
              - \"why did the project fail\" -> lookup\n\n\
-             If enumerate, name the entity_type from: person, institution, \
-             initiative, concept, work, place.\n\n\
+             If enumerate, name the entity_type from: {offered}.\n\n\
              Question: {message}\n\n\
              Output only this JSON, nothing after it:\n\
-             {{\"mode\": \"enumerate\", \"entity_type\": \"institution\"}}"
+             {{\"mode\": \"enumerate\", \"entity_type\": \"institution\"}}",
+            offered = entity_types.join(", ")
         );
 
         let schema = serde_json::json!({
@@ -159,7 +200,7 @@ impl Runtime {
                 "mode": {"type": "string", "enum": ["enumerate", "lookup"]},
                 "entity_type": {
                     "type": "string",
-                    "enum": ["person", "institution", "initiative", "concept", "work", "place"]
+                    "enum": entity_types
                 }
             },
             "required": ["mode"]
@@ -256,21 +297,6 @@ impl Runtime {
             .filter(|&k| k > 0 && k <= 100)
             .unwrap_or(16);
 
-        // Use the enabled-corpora list directly when scoped. The atlas
-        // GRAPH can be loaded even when its embedding-bag CONTEXT isn't:
-        // a freshly re-enriched atlas has a new atoms.json but a stale
-        // embeddings cache, so `load_one` skips the context — yet
-        // `AtlasGraph::load_from_disk` still loaded the graph. Keying off
-        // `loaded_corpus_ids()` (contexts only) would drop exactly that
-        // corpus (observed: enron-sample-multi-wide right after re-enrich
-        // → corpora=[] → no enumeration). `provider.graph(id)` below
-        // returns None for any id that genuinely has no graph, so an
-        // unscoped fallback to loaded contexts is still safe.
-        // ONE decider for this scope — see `resolve_atom_enum_scope`. An
-        // absent scope resolves to the corpora this turn actually reached,
-        // never to every corpus installed on the box.
-        let corpus_ids: Vec<String> = resolve_atom_enum_scope(enabled_corpora, pool_corpora);
-
         // Prominence per atom: graph degree (in + out edges), tie-broken
         // by alias count then salience. Degree is the real signal — this
         // corpus's salience is a flat 0.70 default and post-reconciliation
@@ -306,12 +332,15 @@ impl Runtime {
             .as_deref()
             != Some("0");
         let mut best: HashMap<String, Candidate> = HashMap::new();
-        for id in &corpus_ids {
-            let Some(graph) = provider.graph(id) else {
-                continue;
-            };
+        for (id, graph) in &graphs {
             for view in graph.atoms_of_kind(corpus_engine::enrichment::atlas::AtomType::Entity) {
-                if view.subtype() != target_type {
+                // Equal, or a declared `specializes` descendant: an atlas that
+                // declares `sceatta specializes coin` answers "which coins"
+                // with the sceattas too. `is_subtype_of` is inert for a corpus
+                // that declared nothing, so this compare stays the plain
+                // equality it has always been there.
+                let subtype = view.subtype();
+                if subtype != target_type && !graph.is_subtype_of(subtype, &target_type) {
                     continue;
                 }
                 let name = view.name().trim();
@@ -1275,6 +1304,59 @@ pub(crate) fn resolve_atom_enum_scope(
         .collect()
 }
 
+/// The six generic entity types the enumeration classifier has always been
+/// able to choose from. Written once, here, because two places render them
+/// (the prompt prose and the structured-output enum) and they must agree.
+pub(crate) const GENERIC_ENTITY_TYPES: [&str; 6] = [
+    "person",
+    "institution",
+    "initiative",
+    "concept",
+    "work",
+    "place",
+];
+
+/// Ceiling on the enum offered to the classifier. A long enum costs prompt
+/// bytes on every enumerate-eligible turn and dilutes the choice; 24 leaves
+/// room for the six plus a realistic declared entity vocabulary (the
+/// numismatics template declares four entity types) while bounding a recipe
+/// that declares dozens.
+pub(crate) const MAX_ENUMERABLE_TYPES: usize = 24;
+
+/// The entity type names the classifier may choose from: the six generic
+/// kinds, then every DECLARED entity type in the scope's corpora, deduped and
+/// capped at [`MAX_ENUMERABLE_TYPES`].
+///
+/// The six come first and keep their historical order, so a scope in which
+/// nothing is declared renders the exact bytes it rendered before ontology v1
+/// — in the prompt prose and in the structured-output enum alike. That is I5:
+/// SEP, Wikipedia and Enron declare nothing and must see no change.
+///
+/// Only `kind = "entity"` declarations are offered. Stage 2 enumerates
+/// `AtomType::Entity` atoms, so a declared claim or relation type could never
+/// match one; offering it would be a name the model can pick and the walk can
+/// never satisfy.
+pub(crate) fn enumerable_types(
+    vocabs: &[&corpus_engine::enrichment::ontology::OntologyPolicies],
+) -> Vec<String> {
+    use corpus_engine::enrichment::ontology::TypeKind;
+    let mut out: Vec<String> = GENERIC_ENTITY_TYPES.iter().map(|s| s.to_string()).collect();
+    for policies in vocabs {
+        for t in &policies.shape.types {
+            if t.kind != TypeKind::Entity {
+                continue;
+            }
+            if out.len() >= MAX_ENUMERABLE_TYPES {
+                return out;
+            }
+            if !out.iter().any(|s| s == &t.name) {
+                out.push(t.name.clone());
+            }
+        }
+    }
+    out
+}
+
 fn extract_first_json_object(s: &str) -> Option<String> {
     let bytes = s.as_bytes();
     let start = s.find('{')?;
@@ -1307,6 +1389,110 @@ fn extract_first_json_object(s: &str) -> Option<String> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod enumerable_type_tests {
+    use super::{enumerable_types, GENERIC_ENTITY_TYPES, MAX_ENUMERABLE_TYPES};
+    use corpus_engine::enrichment::ontology::{OntologyPolicies, OntologyTypeDecl, TypeKind};
+
+    fn policies(types: &[(&str, TypeKind)]) -> OntologyPolicies {
+        let mut p = OntologyPolicies::default();
+        p.shape.types = types
+            .iter()
+            .map(|(name, kind)| OntologyTypeDecl {
+                name: (*name).to_string(),
+                kind: *kind,
+                ..Default::default()
+            })
+            .collect();
+        p
+    }
+
+    /// I5, at the site. A scope in which nothing is declared renders exactly
+    /// the six, in exactly the historical order — which is what keeps the
+    /// prompt prose and the structured-output enum byte-identical for SEP,
+    /// Wikipedia and Enron.
+    #[test]
+    fn undeclared_scope_offers_exactly_the_six_in_order() {
+        assert_eq!(enumerable_types(&[]), GENERIC_ENTITY_TYPES.to_vec());
+        assert_eq!(
+            enumerable_types(&[]).join(", "),
+            "person, institution, initiative, concept, work, place"
+        );
+    }
+
+    /// The author's noun is offered so the classifier can pick it. Without
+    /// this the numismatics probe cannot answer "which coins are in this
+    /// catalogue" with `coin` — the model can only choose a name it was shown.
+    #[test]
+    fn declared_entity_types_are_appended_after_the_six() {
+        let p = policies(&[
+            ("coin", TypeKind::Entity),
+            ("sceatta", TypeKind::Entity),
+            ("ruler", TypeKind::Entity),
+            ("mint", TypeKind::Entity),
+        ]);
+        let got = enumerable_types(&[&p]);
+        assert_eq!(&got[..6], &GENERIC_ENTITY_TYPES[..]);
+        assert_eq!(&got[6..], &["coin", "sceatta", "ruler", "mint"]);
+    }
+
+    /// Stage 2 walks `AtomType::Entity` atoms only, so a declared claim or
+    /// relation type is a name the model could pick and the walk could never
+    /// satisfy. Offering it would manufacture a miss.
+    #[test]
+    fn non_entity_declarations_are_not_offered() {
+        let p = policies(&[
+            ("coin", TypeKind::Entity),
+            ("attribution", TypeKind::Claim),
+            ("struck_at", TypeKind::Relation),
+            ("hoard_deposit", TypeKind::Event),
+            ("condition", TypeKind::State),
+        ]);
+        assert_eq!(
+            enumerable_types(&[&p]).len(),
+            GENERIC_ENTITY_TYPES.len() + 1
+        );
+        assert!(enumerable_types(&[&p]).contains(&"coin".to_string()));
+        assert!(!enumerable_types(&[&p]).contains(&"attribution".to_string()));
+    }
+
+    /// Two corpora in scope that both declare `coin` offer it once.
+    #[test]
+    fn declared_names_dedupe_across_corpora_and_against_the_six() {
+        let a = policies(&[("coin", TypeKind::Entity), ("person", TypeKind::Entity)]);
+        let b = policies(&[("coin", TypeKind::Entity), ("mint", TypeKind::Entity)]);
+        assert_eq!(
+            enumerable_types(&[&a, &b]),
+            [
+                "person",
+                "institution",
+                "initiative",
+                "concept",
+                "work",
+                "place",
+                "coin",
+                "mint"
+            ]
+            .map(str::to_string)
+            .to_vec()
+        );
+    }
+
+    /// A recipe that declares dozens of entity types must not blow the prompt
+    /// out; the cap holds and the six are never displaced.
+    #[test]
+    fn the_enum_is_capped() {
+        let many: Vec<(String, TypeKind)> = (0..100)
+            .map(|i| (format!("t{i}"), TypeKind::Entity))
+            .collect();
+        let refs: Vec<(&str, TypeKind)> = many.iter().map(|(n, k)| (n.as_str(), *k)).collect();
+        let p = policies(&refs);
+        let got = enumerable_types(&[&p]);
+        assert_eq!(got.len(), MAX_ENUMERABLE_TYPES);
+        assert_eq!(&got[..6], &GENERIC_ENTITY_TYPES[..]);
+    }
 }
 
 #[cfg(test)]

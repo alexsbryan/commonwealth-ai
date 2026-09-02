@@ -52,6 +52,8 @@ mod on_demand_guard;
 mod ontology_prompt_snapshots;
 #[path = "main/ontology_recipe.rs"]
 mod ontology_recipe;
+#[path = "main/ontology_retrieval_e2e.rs"]
+mod ontology_retrieval_e2e;
 #[path = "main/parquet_ingest_e2e.rs"]
 mod parquet_ingest_e2e;
 #[path = "main/probe_index_residency.rs"]
