@@ -33,6 +33,24 @@
 /// moved modules keep their `super::config` and `super::paths` paths verbatim.
 pub use sovereign_enrichment_catalog::{config, paths};
 
+/// The orchestrator: the plan, the steps, the cache gates.
+pub mod build;
+
+// The phase drivers the plan runs, each keeping the verb triple's `Parsed*`,
+// `run` and `render`. Their `cmd_*` entry points and `HELP` consts stayed in
+// `sovereign-cli-llm` — see this module's header.
+pub mod atlas_configuration;
+pub mod atlas_gaps;
+pub mod atlas_phase_cmd;
+pub mod atlas_resolve;
+pub mod atlas_tensions;
+pub mod atlas_tensions_classify;
+pub mod extract;
+pub mod schema_review;
+pub mod seed_cmd;
+
+// Shared plumbing. These carried no CLI half at all, so they moved whole and
+// `enrich_cmd/mod.rs` re-exports them for the ~15 siblings that reach them.
 pub mod corpus_io;
 pub mod inference_client;
 pub mod pipeline_resolve;
