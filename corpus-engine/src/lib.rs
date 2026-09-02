@@ -49,6 +49,7 @@ pub mod pii;
 pub mod progress;
 pub mod recipe;
 pub mod recipe_builtin;
+pub mod recipe_ontology;
 mod recipe_parsing;
 pub mod recipe_schema;
 pub mod recipe_templates;
