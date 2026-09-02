@@ -5099,6 +5099,7 @@ Default ports:
 | Understand index storage on disk                 | `corpus-engine/src/index/mod.rs`                                    |
 | Understand the v2 atlas pipeline                 | [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md) + `corpus-engine/src/enrichment/pipeline/mod.rs` |
 | Drive v2 enrichment from the CLI                 | `sovereign-cli-llm/src/enrich_cmd/`                                 |
+| Run an atlas build INSIDE the daemon (a shipped desktop has no CLI on PATH) | `enrich_now` (`sovereign-tools/src/local_corpus/manager.rs`) routes `[enrichment] type = "atlas"` recipes to `EnrichmentDriver::start_atlas_build` → the host-installed `watched::enrich::AtlasBuildRunner` (`sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs::in_process_atlas_builder`, which links `sovereign-cli-llm` as a library); progress lands in `_enrichment_state.json`. `tiered` and recipe-less folders keep `start_tiered_build`. The subprocess runner (`sovereign-tools/src/enrich.rs`) is the fallback where no builder is installed. (ontology-v1 P0.4) |
 | Understand the recipe registry                   | `corpus-engine/src/registry.rs` (+ `recipe.rs::bundled_recipe_toml`) |
 | Understand delta updates                         | `corpus-engine/src/update/delta.rs`                                 |
 | Understand scope expansion (filter delta)        | `corpus-engine/src/engine/expand.rs`                                |
@@ -5552,6 +5553,29 @@ What the re-freeze accepted, all of it already on `origin/main`:
 | Daemon bootstrap | `sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs` (2,672 → 2,786) | Child-process supervision + RPC-worker spawn + manifest refresh cohere as one startup state machine; splits when the compute-child boundary takes the worker half. |
 | corpus-engine engine | `corpus-engine/src/engine/mod.rs` (3,804 → 3,879) | Under the 10-crate decomposition (`corpus-engine/DECOMPOSITION.md`); this file shrinks by carve-out, not by a local split. |
 | Newly oversized, no prior row | `commonwealth-api/src/server.rs` (1,253), `sovereign-cli-daemon/src/setup_cmd/mod.rs` (1,287), `sovereign-mesh/src/oicp_synthesis.rs` (1,266), `sovereign-cli/tests/main/cli_contract_journeys.rs` (1,201) | Four files crossed 1,200 during the 2026-08 arcs. All are within 90 lines of the ceiling and each splits along an obvious seam (route families, setup targets, synthesis stages, journey families) — first candidates when the queue is worked. |
+
+### 10.1e Placement acceptance — 2026-09-01 the daemon links a host library (ontology-v1 P0.4)
+
+The atlas `enrich build` orchestrator (`sovereign-cli-llm/src/enrich_cmd/`,
+14 modules, ~9,100 lines) is a CAPABILITY three hosts need — the CLI, the
+daemon's `enrich_now`, the desktop — and belongs below the hosts, next to
+`sovereign-enrichment-catalog` (the same argument that moved the config
+schema there, rung nc-16). It has not been moved. Until it is, the daemon
+links `sovereign-cli-llm`'s library target for exactly two names
+(`build_with_progress_with_embedder`, `ParsedBuild`) behind the
+`watched::enrich::AtlasBuildRunner` seam that `sovereign-tools` declares.
+Accepted as a NAMED substitution for the crate split (ARCH §18.3; operator's
+"less, and reuse"): same-layer host→host is legal and `layer-gate` is green,
+but it re-couples the two binaries' build cadence the daemon manifest kept
+apart and carries `bench_cmd`'s grandfathered `sovereign-eval` link into the
+daemon binary (and, through `sovereign-desktop → sovereign-cli-daemon`, the
+desktop). Measured cost (debug profile, 2026-09-01): `sovereign-cli-daemon`
+849,058,800 → 861,348,192 bytes (+12.3 MB, +1.4%); the incremental
+touch-and-rebuild delta is measured at merge and recorded with the P0
+landing verdict. Follow-up rung: move `enrich_cmd::build` and the `cmd_*` step
+drivers it calls into a capabilities crate (`sovereign-enrich`, or the
+catalog crate if every dependency is ≤ capabilities), make `sovereign-cli-llm`
+a thin caller, and delete this dependency — the trait stays, its impl moves.
 
 ### 10.2 cmnwlth deferrals
 

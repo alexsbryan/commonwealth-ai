@@ -61,6 +61,12 @@ mod corpus_scrub_cmd;
 mod corpus_snapshot_cmd;
 mod corpus_watch_cmd;
 mod enrich_cmd;
+/// The atlas build as a library call (ontology-v1 P0.4): the daemon runs
+/// `enrich build` in-process for `[enrichment] type = "atlas"` recipes
+/// instead of spawning this binary, which a shipped desktop bundle does not
+/// carry. A thin re-export — the module stays private; only the two names a
+/// host needs cross the crate boundary.
+pub use enrich_cmd::build::{build_with_progress_with_embedder, ParsedBuild};
 mod eval_cmd;
 mod govern_cmd;
 mod guest_link;

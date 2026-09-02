@@ -42,6 +42,18 @@ sovereign-workflow = { workspace = true }
 sovereign-workflow-host = { workspace = true }
 sovereign-work-atlas = { workspace = true }
 sovereign-cli-shared = { workspace = true, features = ["scip"] }
+# ontology-v1 P0.4 (operator decision (b)): the atlas `enrich build` runs
+# IN-PROCESS for `[enrichment] type = "atlas"` recipes, because a shipped
+# desktop bundle carries no `sovereign-cli` to spawn. This links the LLM
+# sibling's LIBRARY target for exactly two names
+# (`sovereign_cli_llm::{build_with_progress_with_embedder, ParsedBuild}`).
+# Host → host is layer-legal (same layer; precedent:
+# sovereign-desktop → sovereign-cli-daemon), but it re-couples the two
+# binaries' build cadence the note above kept apart, and it carries
+# `bench_cmd`'s grandfathered sovereign-eval link into this binary — the
+# price of not paying for the crate split (enrich_cmd's build path below
+# the hosts) yet. Chosen over that split as the smaller lift.
+sovereign-cli-llm = { path = "../sovereign-cli-llm" }
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 # Direct edge for the notes convergence recorder (order commons-fluency

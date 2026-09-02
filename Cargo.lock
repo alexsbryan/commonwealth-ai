@@ -12125,6 +12125,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sovereign-cli-llm",
  "sovereign-cli-shared",
  "sovereign-compute",
  "sovereign-contracts",

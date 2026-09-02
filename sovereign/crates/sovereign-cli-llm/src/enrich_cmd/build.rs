@@ -38,6 +38,7 @@ use corpus_engine::enrichment::pipeline::{
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_tools::atlas_context_manager::{backfill_ann, AtlasContextFilter, BackfillOutcome};
+use sovereign_tools::enrich::EXIT_CANCELLED;
 use std::sync::Arc;
 
 const HELP: Help = Help {
@@ -145,11 +146,36 @@ pub async fn cmd_build(args: &[String]) -> i32 {
 /// Returns the same exit code `cmd_build` would: 0 on success,
 /// nonzero when any enabled step fails.
 ///
-/// Shared by the CLI (`cmd_build`) and the desktop Tauri layer
-/// (`sovereign-desktop/src-tauri/src/enrich_commands.rs`). Adding a
-/// per-step side effect means editing here once rather than across
-/// frontends.
+/// Shared by the CLI (`cmd_build`) and, through
+/// [`build_with_progress_with_embedder`], the daemon's in-process atlas
+/// build (ontology-v1 P0.4). Adding a per-step side effect means editing
+/// here once rather than across frontends.
+///
+/// The Backfill step's embed provider is resolved the CLI way: a daemon
+/// session built and probed before step 1 (`probe_backfill_session`).
 pub async fn build_with_progress(parsed: &ParsedBuild, progress: Option<EnrichProgressFn>) -> i32 {
+    build_with_progress_with_embedder(parsed, progress, None, None).await
+}
+
+/// [`build_with_progress`] with the Backfill step's embed provider supplied
+/// by the caller. The daemon passes its own `InferenceProvider` so an
+/// in-process build does not open an HTTP session to itself (and does not
+/// boot a second `Runtime` inside the daemon to get one). `None` is the CLI
+/// path: build and probe a daemon session. Either way the provider is
+/// probed with one `embed_query` before the first step runs.
+///
+/// `cancel` is the daemon driver's flag (`sovereign_tools::enrich::
+/// CancellationFlag`). It is polled BETWEEN steps: a step already running
+/// finishes (an extract can take thirty minutes), then the build emits
+/// `Cancelled { at_step }` and returns `sovereign_tools::enrich::EXIT_CANCELLED`
+/// (the driver that owns the flag also owns the code it reads back). Without
+/// this the UI's cancel button would fire a flag nothing read (§18.3).
+pub async fn build_with_progress_with_embedder(
+    parsed: &ParsedBuild,
+    progress: Option<EnrichProgressFn>,
+    embedder: Option<Arc<dyn InferenceProvider>>,
+    cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
+) -> i32 {
     let emit = |evt: EnrichProgress| {
         if let Some(cb) = progress.as_ref() {
             cb(evt);
@@ -177,19 +203,23 @@ pub async fn build_with_progress(parsed: &ParsedBuild, progress: Option<EnrichPr
     // proving it answers costs one embed call here, and discovering it does
     // not after thirty minutes of extraction would waste the run. The same
     // session is the step's provider, so the daemon is resolved once.
-    let backfill_session = if plan.enabled.contains(&Step::Backfill) {
-        match probe_backfill_session().await {
-            Ok(s) => Some(s),
-            Err(msg) => {
-                eprintln!("error: {msg}");
-                return 1;
+    let backfill_embedder: Option<Arc<dyn InferenceProvider>> =
+        if plan.enabled.contains(&Step::Backfill) {
+            let probed = match embedder {
+                Some(e) => probe_embedder(e).await,
+                None => probe_backfill_session().await.map(|s| s.inference),
+            };
+            match probed {
+                Ok(e) => Some(e),
+                Err(msg) => {
+                    eprintln!("error: {msg}");
+                    return 1;
+                }
             }
-        }
-    } else {
-        None
-    };
-    let embedder: Option<&Arc<dyn InferenceProvider>> =
-        backfill_session.as_ref().map(|s| &s.inference);
+        } else {
+            None
+        };
+    let embedder: Option<&Arc<dyn InferenceProvider>> = backfill_embedder.as_ref();
 
     emit(EnrichProgress::BuildStart {
         corpus_id: parsed.corpus_id.clone(),
@@ -206,6 +236,21 @@ pub async fn build_with_progress(parsed: &ParsedBuild, progress: Option<EnrichPr
     for (i, step) in plan.enabled_steps().enumerate() {
         let ordinal = i + 1;
         let build_step = step.to_build_step();
+        if cancel
+            .as_ref()
+            .is_some_and(|c| c.load(std::sync::atomic::Ordering::SeqCst))
+        {
+            eprintln!(
+                "cancelled build for {} before step `{}`",
+                parsed.corpus_id,
+                step.label()
+            );
+            emit(EnrichProgress::Cancelled {
+                corpus_id: parsed.corpus_id.clone(),
+                at_step: Some(build_step),
+            });
+            return EXIT_CANCELLED;
+        }
         emit(EnrichProgress::StepStart {
             corpus_id: parsed.corpus_id.clone(),
             step: build_step,
@@ -745,13 +790,22 @@ async fn probe_backfill_session() -> Result<ChatSession, String> {
              `--skip backfill` to build without grounding"
         )
     })?;
-    session.inference.embed_query("probe").await.map_err(|e| {
+    probe_embedder(session.inference.clone()).await?;
+    Ok(session)
+}
+
+/// One `embed_query("probe")` against a caller-supplied provider — the
+/// in-process (daemon) half of the fail-fast rule above.
+async fn probe_embedder(
+    embedder: Arc<dyn InferenceProvider>,
+) -> Result<Arc<dyn InferenceProvider>, String> {
+    embedder.embed_query("probe").await.map_err(|e| {
         format!(
-            "backfill: the daemon's embed slot did not answer ({e}); load an embed \
-             model, or pass `--skip backfill` to build without grounding"
+            "backfill: the embed slot did not answer ({e}); load an embed model, or \
+             pass `--skip backfill` to build without grounding"
         )
     })?;
-    Ok(session)
+    Ok(embedder)
 }
 
 /// The Backfill step: `atlas/atoms.json` → `atlas/atoms_ann.lance` through

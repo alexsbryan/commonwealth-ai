@@ -124,10 +124,14 @@ impl BuildStep {
 /// the wire was designed and simply never used. This is it, in one place, so
 /// the writer and the reader cannot drift (ARCH §10.6).
 ///
-/// It does NOT close §9.3, which is that `enrich build` should be a CALL and
-/// not a subprocess at all. That needs the 14-module, ~9,100-line orchestrator
-/// subtree to move below `sovereign-tools`. What it closes is the reparsing
-/// hazard, which was the part with no gate in front of it.
+/// §9.3 itself — `enrich build` as a CALL, not a subprocess — is closed for
+/// the daemon since ontology-v1 P0.4, without moving the 14-module orchestrator
+/// subtree below `sovereign-tools`: the tools crate declares
+/// `local_corpus::watched::enrich::AtlasBuildRunner`, the daemon (which links
+/// `sovereign-cli-llm` as a library) implements it, and `enrich_now` on an
+/// `[enrichment] type = "atlas"` recipe runs the build in-process. This wire
+/// remains the contract for the subprocess path, which dev boxes without the
+/// builder installed still take.
 pub mod wire {
     use super::EnrichProgress;
 

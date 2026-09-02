@@ -8,13 +8,14 @@
 //! time progress UI while keeping the orchestration one source of
 //! truth.
 //!
-//! Why not link the CLI crate directly? The CLI is a binary-only
-//! crate today; exposing its internals as a library would mean
-//! splitting the crate, reordering visibility, and threading state
-//! through. For Landing 3.C we keep the CLI untouched and sit one
-//! parser away from it. The parsed event shape is the same type
-//! the CLI emits internally, so a future library refactor is a
-//! drop-in replacement on this side.
+//! Why not link the CLI crate directly? This crate cannot: it sits in the
+//! capabilities layer and `sovereign-cli-llm` is a host (ARCH_LAYERS —
+//! hosts are terminal). Since ontology-v1 P0.4 the daemon, which may link
+//! the host, does exactly that and installs the result as
+//! `local_corpus::watched::enrich::AtlasBuildRunner`; the driver prefers it
+//! and falls back to this subprocess runner only where no builder was
+//! installed (a dev box with the CLI on PATH). The parsed event shape is
+//! the same type the CLI emits internally, so both paths feed one sink.
 //!
 //! Event mapping (CLI banner → `EnrichProgress`):
 //!
@@ -55,6 +56,13 @@ pub type EnrichProgressFn = Arc<dyn Fn(EnrichProgress) + Send + Sync + 'static>;
 /// one flag to one job and drop it on completion without worrying
 /// about outstanding senders. Cheap to clone, cheap to check.
 pub type CancellationFlag = Arc<AtomicBool>;
+
+/// Exit code of a build stopped through a [`CancellationFlag`] — the shell's
+/// own code for an interrupted process, so a driver reading the code sees
+/// "interrupted", not "failed". Owned here, beside the flag, and read back by
+/// the in-process orchestrator (`sovereign_cli_llm::enrich_cmd::build`) and
+/// the driver alike (ARCH §10.6).
+pub const EXIT_CANCELLED: i32 = 130;
 
 /// Create a fresh cancellation flag in the non-cancelled state.
 /// Pair with `fire_cancellation` from a separate task (or Tauri
