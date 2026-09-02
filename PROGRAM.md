@@ -76,6 +76,39 @@ Fourteen `attribute:zero:` gap signatures, gone. Both blocked behaviours:
   mancus" and "the gold mancus of Coenwulf" share no name token and no origin, and
   collapse on the reference alone.
 
+## The subject link — closed 2026-09-02, at a price
+
+Same root cause, next slot over. `attribution` declares `subject = "coin"` and
+36 of 43 claims carried none, because the neutral prompt's claim field list names
+`attributed_to` and never `subject`. The build filled `attributed_to` on all 49
+claims and `subject` on 1 — a natural control cleaner than any A/B.
+
+    claims of a subject-declaring type with no subject:  36/43  ->  1/37
+
+The payoff is Phase 6, not the count. Subjects let the tension pass compare
+claims about the SAME coin:
+
+| | candidates | judged tensions |
+|---|---|---|
+| before | 155 | 1 |
+| after | 34 | 2 |
+
+It now finds both designed disagreements, including *"Do the Series Y sceattas of
+Aldfrith date to 695-704 or to 685-690?"* — the Halstead/Ferreira dispute this
+corpus was built around. That is the axis the board recorded as **could-not-judge**
+below, for exactly this reason.
+
+**The cost, open and unresolved.** Claim ATTRIBUTES collapsed in the same move:
+`proposed_date` 14/43 to 1/37, `grade` 28 to 1. Four rebuilds — attributes
+mid-object and last, bare shapes and descriptive ones — all land within noise of
+zero, while the same example's `subject` fills 36 of 37. The model spends its
+per-claim effort on the slot the example makes obligatory. The claim's `content`
+still carries the date in prose; the queryable facet is what is lost. Shipped
+because the is-about link is what makes a declared claim type mean anything, and
+because the tension result is the capability the recipe was written for — but it
+is a trade, not a win, and a narrower second pass over claims is the obvious
+thing to price next.
+
 Two things the fix had to earn rather than assume. A filled attribute must be
 TRUE: the build was writing `weight=0` and `mint="Unknown in text"` where the text
 states nothing, which reads downstream as a measurement. A declared `unit` now
@@ -116,8 +149,11 @@ Ahead: **P6** desktop · `--quick` bench once, at the very end
   remainder is elicitation, now measured every build by the tenth dimension.
 - `enrich reconcile` is NOT a build step — the coverage report says "merges: not run"
   and names the command. P3's order sequenced it before backfill; it isn't there.
-- P4's tension axes are **could-not-judge**, not passing: `between` reports rather
-  than enforces while claims carry a kind but rarely a `subject` (1 of 49).
+- P4's tension axes now have their input: `subject` reaches 36 of 37 claims and
+  Phase 6 finds 2 tensions from 34 candidates (was 1 from 155). Whether `between`
+  ENFORCES rather than reports is still P4's own question.
+- Claim attributes are the price of that: `grade` 28 -> 1, `proposed_date` 14 -> 1.
+  A narrower second pass over claims is the untried option.
 - Four files accepted over their size baseline at the wave merge — `SYSTEM_OVERVIEW`
   §10.1h names them and schedules the splits.
 - `bench enron` B³ has never been run for P3, before or after.
