@@ -1,7 +1,8 @@
 # Recipe schema reference
 
-> **Generated** from `corpus-engine/src/recipe.rs` (+ the ontology declaration
-> languages in `enrichment/ontology/language.rs` and the filter config types) by
+> **Generated** from `corpus-engine/src/recipe.rs` (+ `recipe_ontology.rs`, the
+> ontology declaration languages in `enrichment/ontology/language.rs`, and the
+> filter config types) by
 > the `recipe_schema` test. Do not edit by hand — regenerate with
 > `UPDATE_RECIPE_SCHEMA=1 cargo test -p corpus-engine --test main recipe_schema`.
 >
@@ -141,36 +142,6 @@ Configures the optional enrichment pipeline. The new field model enrichment uses
 | `patterns` | `Vec<PatternDecl>` | no | type default | Graph-level patterns to detect once the relationship graph is built. Built-in detectors cover cycle / role-overlap / threshold patterns; the recipe author chooses which to run. |
 | `reconciliation` | `Option<ReconciliationToml>` | no | type default | Architecture-over-Enron Phase 4: multi-origin reconciliation policy. `None` (the default) skips reconciliation entirely; pipelines that don't carry [`crate::enrichment::atlas::atoms::Provenance`] on their entity atoms produce nothing to reconcile across anyway. Recipes that enable described-asset + email extractors set this block to tune the merger. |
 | `normalization` | `Option<NormalizationConfig>` | no | type default | Corpus-specific entity-name coalescing rules for the investigation pipeline. The engine supplies the *mechanism* (alias map, prefix / suffix / qualifier stripping, identity-by-attribute); this block supplies the *vocabulary*, so domain knowledge (US states, Air Force base aliases, disposition categories) lives in the recipe as data rather than hardcoded in the abstraction layer. `None` → names fold by case/punctuation only (the engine default). Consumed by [`crate::enrichment::investigation::normalize::Normalizer`]. |
-
-## `OntologyBlock`
-
-Custom atlas ontology declared in `[enrichment.ontology]`. The headline "build the ontology for your domain" surface: `guidance` is domain-language instructions for what to extract (entities, relations, events, claims), `[enrichment.ontology]` — a versioned block. `version` (absent = 0) names the declaration language; every other key belongs to that language and is parsed by its `OntologyLanguage` impl into `OntologyPolicies`, which is all the pipeline ever reads. Version 0 is [`OntologyConfig`] (prose); version 1 is `OntologyV1` (declared types). Three load-time rules keep this honest: a later version's key in an earlier block is refused naming the version to add; an unknown version is refused naming the highest supported; a version-1 block with no declarations yields version-0 policies.
-
-| TOML key | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `version` | `u32` | no | type default | Declaration-language version. Absent means 0 — today's prose block. |
-| `(inline: toml::Table)` | `toml::Table` | **yes** | — | Every other key of the block, interpreted by the language `version` names. Kept as a table (not a fixed struct) so version N+1 keys are visible to the load-time rules instead of silently dropped. |
-
-## `OntologyConfig`
-
-injected into a NEUTRAL atlas Phase-1 prompt by [`crate::enrichment::pipeline::pipelines::configurable_atlas::ConfigurableAtlasPipeline`]. The universal atom schema + open `EntityType::Other(..)` labels let a domain expert author the extraction shape in TOML without touching Rust, and the result feeds chat via the same `atoms.json` the prebuilt genre pipelines produce. Precedence: a non-empty `guidance` here beats `pipeline`/`domain`.
-
-| TOML key | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `guidance` | `String` | no | type default | Domain-language extraction guidance — what entities, relations, events, and claims matter in THIS corpus's domain, in the domain's own words. Appended under a "Domain focus" heading to the neutral atlas Phase-1 system prompt. The load-bearing field; an empty `guidance` disables the custom path (falls back to a prebuilt atlas pipeline). |
-| `vocabulary` | `Option<OntologyVocabulary>` | no | type default | Optional CLI/label vocabulary overrides (what a "concern", "position", "tension", "absence", and unit of "evidence" are called for this domain). Omitted fields fall back to generic defaults in the pipeline. |
-
-## `OntologyVocabulary`
-
-Per-domain term overrides for the configurable atlas pipeline's vocabulary. Maps onto the engine's `Vocabulary`; any omitted term uses a generic default.
-
-| TOML key | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `concern_term` | `Option<String>` | no | type default |  |
-| `position_term` | `Option<String>` | no | type default |  |
-| `tension_term` | `Option<String>` | no | type default |  |
-| `absence_term` | `Option<String>` | no | type default |  |
-| `evidence_term` | `Option<String>` | no | type default |  |
 
 ## `NormalizationConfig`
 
@@ -803,6 +774,36 @@ _No fields._
 | `vector` | `bool` | no | `default_true()` |  |
 | `embedding_model` | `String` | no | `default_embedding_model()` |  |
 | `embedding_dimensions` | `usize` | no | `default_embedding_dimensions()` |  |
+
+## `OntologyBlock`
+
+Custom atlas ontology declared in `[enrichment.ontology]`. The headline "build the ontology for your domain" surface: `guidance` is domain-language instructions for what to extract (entities, relations, events, claims), `[enrichment.ontology]` — a versioned block. `version` (absent = 0) names the declaration language; every other key belongs to that language and is parsed by its `OntologyLanguage` impl into `OntologyPolicies`, which is all the pipeline ever reads. Version 0 is [`OntologyConfig`] (prose); version 1 is `OntologyV1` (declared types). Three load-time rules keep this honest: a later version's key in an earlier block is refused naming the version to add; an unknown version is refused naming the highest supported; a version-1 block with no declarations yields version-0 policies.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `version` | `u32` | no | type default | Declaration-language version. Absent means 0 — today's prose block. |
+| `(inline: toml::Table)` | `toml::Table` | **yes** | — | Every other key of the block, interpreted by the language `version` names. Kept as a table (not a fixed struct) so version N+1 keys are visible to the load-time rules instead of silently dropped. |
+
+## `OntologyConfig`
+
+injected into a NEUTRAL atlas Phase-1 prompt by [`crate::enrichment::pipeline::pipelines::configurable_atlas::ConfigurableAtlasPipeline`]. The universal atom schema + open `EntityType::Other(..)` labels let a domain expert author the extraction shape in TOML without touching Rust, and the result feeds chat via the same `atoms.json` the prebuilt genre pipelines produce. Precedence: a non-empty `guidance` here beats `pipeline`/`domain`.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `guidance` | `String` | no | type default | Domain-language extraction guidance — what entities, relations, events, and claims matter in THIS corpus's domain, in the domain's own words. Appended under a "Domain focus" heading to the neutral atlas Phase-1 system prompt. The load-bearing field; an empty `guidance` disables the custom path (falls back to a prebuilt atlas pipeline). |
+| `vocabulary` | `Option<OntologyVocabulary>` | no | type default | Optional CLI/label vocabulary overrides (what a "concern", "position", "tension", "absence", and unit of "evidence" are called for this domain). Omitted fields fall back to generic defaults in the pipeline. |
+
+## `OntologyVocabulary`
+
+Per-domain term overrides for the configurable atlas pipeline's vocabulary. Maps onto the engine's `Vocabulary`; any omitted term uses a generic default.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `concern_term` | `Option<String>` | no | type default |  |
+| `position_term` | `Option<String>` | no | type default |  |
+| `tension_term` | `Option<String>` | no | type default |  |
+| `absence_term` | `Option<String>` | no | type default |  |
+| `evidence_term` | `Option<String>` | no | type default |  |
 
 ## `OntologyV1`
 
