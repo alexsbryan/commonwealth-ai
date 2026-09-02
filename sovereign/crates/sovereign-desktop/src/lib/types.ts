@@ -2386,6 +2386,15 @@ export interface RecipeValidationReport {
    *  (enabled atlas/investigation). False for a valid recipe whose enrichment
    *  is off or field_model — it would build to ZERO atoms. */
   enrichment_ready: boolean;
+  /** Non-blocking findings from the same offline pass `svrn recipe validate`
+   *  runs: an empty license, a key no ontology version reads, a custom_sql
+   *  pattern that will not execute yet. Always empty for a workflow. */
+  warnings: string[];
+  /** Derived facets of a declared ontology — clock, tension selector, identity
+   *  criterion per type, question shapes. Not defects: what the recipe WILL
+   *  do, shown so the author can override the inference. Own field, not a
+   *  prefix inside `warnings`. */
+  notes: string[];
 }
 
 /** Single coarse read for the workspace dashboard. */

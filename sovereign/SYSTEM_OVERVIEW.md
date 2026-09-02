@@ -1308,6 +1308,13 @@ it. Generic primitives:
   decision log / desktop workspace back **workflow** authoring too
   (checkpoints snapshot `recipe.toml` or `workflow.toml` by kind) —
   the recipes×workflows merge.
+- **Recipe validation card** — `recipe_author_commands::validate_artifact_toml`
+  parses, then runs `corpus_engine::testing::validate_recipe_offline`, so
+  `RecipeValidationReport` carries the same three lists `svrn recipe validate`
+  prints: `errors` (blocking — an unresolved ontology reference blocks like a
+  parse failure), `warnings`, and `notes`, the derived facets (clock, tension
+  selector, identity criterion per type, question shapes).
+  `RecipeValidationCard.svelte` renders them as three sections, never merged.
 
 ### Schema back-compat
 
