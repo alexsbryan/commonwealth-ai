@@ -17,7 +17,7 @@
 use std::sync::Arc;
 
 use sovereign_tools::atlas_view::{
-    AtlasCorpusSummary, AtlasMemberSummary, AtomDetail, AtomFilter, AtomListPage,
+    AtlasBuildReport, AtlasCorpusSummary, AtlasMemberSummary, AtomDetail, AtomFilter, AtomListPage,
     ConvCorpusSummary, ConvDetailView, ConvEntityChip, ConvListPage, ConvRaptorNodeView,
     ConvSummary, FileAtlasReader, PageCursor, SummaryCorrectionView,
 };
@@ -61,6 +61,29 @@ pub async fn atlas_list_corpora(
         .list_corpora()
         .await
         .map_err(|e| format!("atlas_list_corpora: {e}"))
+}
+
+/// What the last build found about one corpus — the desktop's build report
+/// card (ontology-v1 P6.4).
+///
+/// Reads the artefacts a build already wrote; it does not re-derive anything,
+/// so the card shows a VERDICT with an age rather than a live measurement.
+/// A corpus whose report step has not run comes back `reported: false` — a
+/// successful answer the card renders as "not built yet", never an error.
+#[tauri::command]
+pub async fn atlas_build_report(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<AtlasBuildReport, String> {
+    let engine = match state.corpus_engine.read().await.as_ref() {
+        Some(e) => Arc::clone(e),
+        None => return Err("Corpus engine not initialized".into()),
+    };
+    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
+    reader
+        .build_report(&corpus_id)
+        .await
+        .map_err(|e| format!("atlas_build_report: {e}"))
 }
 
 /// List the **member atlases** of a collection corpus — the sibling

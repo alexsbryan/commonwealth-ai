@@ -326,6 +326,37 @@ pub fn read_atlas_ontology(atlas_dir: &Path) -> Option<AtlasOntologyFile> {
     }
 }
 
+/// Read the stored `atlas/schema_validation.json` as the typed report, or
+/// `None` when the report step has not run or the file cannot be parsed.
+///
+/// The report is what the LAST build found — it is not recomputed here, so a
+/// caller showing it to a user is showing a build's verdict, not a live one.
+/// That is the point: it is the artefact `svrn enrich schema-report` writes,
+/// and re-deriving it would mean re-reading every atom.
+///
+/// The one typed door to this file. Two callers poke individual keys out of it
+/// as untyped JSON (`read_code_walk_visibility`, and the source-corpus lookup
+/// in `atlas_patch_code`) because they predate the report being deserializable
+/// as a whole; they are not folded in here, but nothing NEW should open this
+/// file by name (§10.6).
+pub fn read_schema_validation_report(
+    atlas_dir: &Path,
+) -> Option<super::schema_validation::SchemaValidationReport> {
+    let raw = fs::read(atlas_dir.join("schema_validation.json")).ok()?;
+    match serde_json::from_slice(&raw) {
+        Ok(parsed) => Some(parsed),
+        Err(e) => {
+            tracing::warn!(
+                atlas_dir = %atlas_dir.display(),
+                error = %e,
+                "atlas report: schema_validation.json present but unreadable; \
+                 treating as not-yet-reported"
+            );
+            None
+        }
+    }
+}
+
 /// Write a deterministic gaps file (Phase 7) to
 /// `atlas/gaps.json`. Atomic sibling-tmp + rename, same contract as
 /// the other atlas writers.

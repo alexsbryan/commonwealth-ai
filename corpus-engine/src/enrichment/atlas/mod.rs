@@ -87,10 +87,10 @@ pub use summary::{
 pub use vital_tier::{tier_sizes as vital_tier_sizes, vital_tier};
 pub use writer::{
     append_atoms_and_edges, read_atlas_atoms, read_atlas_cross_corpus_edges, read_atlas_edges,
-    read_atlas_ontology, read_tension_candidates, write_atlas, write_atlas_atoms,
-    write_atlas_configurations,
-    write_atlas_cross_corpus_edges, write_atlas_edges, write_atlas_failures, write_atlas_full,
-    write_atlas_gaps, write_atlas_ontology, write_atlas_pattern_findings, write_tension_candidates,
+    read_atlas_ontology, read_schema_validation_report, read_tension_candidates, write_atlas,
+    write_atlas_atoms, write_atlas_configurations, write_atlas_cross_corpus_edges,
+    write_atlas_edges, write_atlas_failures, write_atlas_full, write_atlas_gaps,
+    write_atlas_ontology, write_atlas_pattern_findings, write_tension_candidates,
     AtlasOntologyFile, AtlasWritten, ResolutionFailuresFile, TrajectoriesFile, ATLAS_DIRNAME,
 };
 

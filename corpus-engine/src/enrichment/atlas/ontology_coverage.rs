@@ -27,7 +27,7 @@ use crate::enrichment::ontology::TypeIndex;
 /// the headline failure — it is what the as-built probe measured (0 of 1
 /// surviving) — so it gets its own gap signature and the comparator can see
 /// it recur across corpora.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OntologyCoverage {
     /// The declaration language version the atlas was built under.
     pub ontology_version: u32,
@@ -64,7 +64,7 @@ pub struct OntologyCoverage {
 /// One row per attribute rather than an average per type: "the model never
 /// fills `weight`" and "it fills every attribute half the time" are different
 /// findings needing different fixes, and an average hides both (§18.3).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AttributeFill {
     /// The declaring type — the author's noun.
     pub type_name: String,
@@ -91,7 +91,7 @@ pub struct AttributeFill {
 /// entity (`ruler role_of person`: the atoms are people, the roles are
 /// states), so counting `ruler` inside the Entity bucket would report zero for
 /// a role that landed perfectly.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DeclaredTypeCount {
     /// The atom kind the type specializes (`entity`, `claim`, …).
     pub kind: String,
@@ -106,7 +106,7 @@ pub struct DeclaredTypeCount {
 }
 
 /// What makes two mentions of a declared type one thing.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct IdentityCriterion {
     pub type_name: String,
     /// `external:<keys>`, `fallback:<keys>`, or `default:canonical_name` —

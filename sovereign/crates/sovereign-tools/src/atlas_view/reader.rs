@@ -89,6 +89,38 @@ pub struct DeclaredTypeRow {
     pub identity_criterion: Option<String>,
 }
 
+/// What the last build found about a declared corpus, for the desktop's build
+/// report card.
+///
+/// Read from the artefacts a build already writes — `schema_validation.json`
+/// and the ANN table's freshness — rather than recomputed, so this is a
+/// VERDICT with an age, not a live measurement. A card showing it is showing
+/// what the last build said.
+///
+/// `ontology` is `None` for a corpus that declares nothing, which is what
+/// tells the card to render nothing at all rather than an empty ontology
+/// (§18.3). It is also `None` when the report step has not run yet, and those
+/// two are told apart by [`Self::reported`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AtlasBuildReport {
+    pub corpus_id: String,
+    /// Whether `schema_validation.json` exists and parsed. `false` means the
+    /// report step has not run — distinct from "ran and found no ontology".
+    pub reported: bool,
+    /// The declared-ontology dimension of the report: per-type coverage,
+    /// identity criteria, merges, `same_as` claims, claims of a
+    /// subject-declaring type with no subject, and the per-attribute fill
+    /// rate. Reused whole rather than re-flattened — the card wants exactly
+    /// what the CLI report prints (§19).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ontology: Option<corpus_engine::enrichment::atlas::ontology_coverage::OntologyCoverage>,
+    /// Whether the atom-level ANN table exists AND is newer than `atoms.json`.
+    /// `false` with `grounding_present` true means a rebuild left it stale, so
+    /// the card can say "re-run backfill" rather than "not grounded".
+    pub grounding_fresh: bool,
+    pub grounding_present: bool,
+}
+
 /// One row in a **collection** notebook's member picker.
 ///
 /// Some corpora are ingested as one index but enriched per *article*:
@@ -137,6 +169,11 @@ pub enum CurationStatus {
 pub enum AtlasViewError {
     #[error("indexes dir not readable: {0}")]
     IndexesDir(#[source] std::io::Error),
+    /// Asked about a corpus with no `atlas/` directory. Distinct from a
+    /// corpus whose atlas exists but has not been reported on — that is a
+    /// successful answer, not an error (§18.3).
+    #[error("no atlas for corpus `{0}`")]
+    CorpusNotFound(String),
 }
 
 /// File-system-backed atlas reader.
@@ -184,6 +221,30 @@ impl FileAtlasReader {
     /// fan out onto the blocking-task pool — for a fleet of
     /// installed atlases, picker latency is now `max(per-corpus)`
     /// instead of `sum(per-corpus)`.
+    /// What the last build found about one corpus (ontology-v1 P6.4).
+    ///
+    /// Never an error for a corpus with no report: an absent
+    /// `schema_validation.json` is the answer `reported: false`, which the
+    /// card renders as "not built yet" rather than a failure. The only error
+    /// is a corpus with no atlas directory at all.
+    pub async fn build_report(&self, corpus_id: &str) -> Result<AtlasBuildReport, AtlasViewError> {
+        let Some(atlas_dir) = self.atlas_dir(corpus_id) else {
+            return Err(AtlasViewError::CorpusNotFound(corpus_id.to_string()));
+        };
+        let report = corpus_engine::enrichment::atlas::read_schema_validation_report(&atlas_dir);
+        Ok(AtlasBuildReport {
+            corpus_id: corpus_id.to_string(),
+            reported: report.is_some(),
+            ontology: report.and_then(|r| r.ontology),
+            grounding_fresh: corpus_engine::enrichment::atlas::ann_store::ann_table_is_fresh(
+                &atlas_dir,
+            ),
+            grounding_present: corpus_engine::enrichment::atlas::ann_store::ann_table_present(
+                &atlas_dir,
+            ),
+        })
+    }
+
     pub async fn list_corpora(&self) -> Result<Vec<AtlasCorpusSummary>, AtlasViewError> {
         let entries = match std::fs::read_dir(&self.indexes_dir) {
             Ok(rd) => rd,
@@ -836,6 +897,48 @@ mod tests {
             .filter_map(|t| back.subtype_counts.get(&t.name))
             .sum();
         assert_eq!(family, 15);
+    }
+
+    /// The three answers this must keep apart: no atlas at all is the only
+    /// ERROR; an atlas with no report yet is a successful `reported: false`;
+    /// and a report too broken to parse is also `reported: false`, never a
+    /// half-verdict shown to a user (§18.3). Collapsing the first two would
+    /// make an unbuilt corpus look like a missing one.
+    ///
+    /// Falsifier: return `reported: true` whenever the file exists, and the
+    /// truncated-file case starts reporting a verdict nobody computed.
+    #[tokio::test]
+    async fn build_report_separates_unbuilt_from_undeclared() {
+        let tmp = TempDir::new().unwrap();
+        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+
+        // No atlas dir at all is the one error case.
+        assert!(reader.build_report("nothing-here").await.is_err());
+
+        // Atlas dir, no report yet.
+        let atlas = tmp.path().join("fresh").join("atlas");
+        std::fs::create_dir_all(&atlas).unwrap();
+        let r = reader.build_report("fresh").await.unwrap();
+        assert!(!r.reported, "the report step has not run");
+        assert!(r.ontology.is_none());
+        assert!(!r.grounding_present, "no ANN table on a fresh atlas");
+
+        // A report that is PRESENT but unreadable reads as not-reported, with
+        // a warning — a half-written file must not be shown to a user as a
+        // verdict. (`reported: true` requires a report that actually parsed;
+        // whether a parsed one carries an ontology is the `Option` on the
+        // report itself, which this cannot get wrong.)
+        std::fs::write(
+            atlas.join("schema_validation.json"),
+            r#"{"schema_version": "2.1", "truncated": "#,
+        )
+        .unwrap();
+        let r = reader.build_report("fresh").await.unwrap();
+        assert!(
+            !r.reported,
+            "an unparseable report is not a verdict to show anyone"
+        );
+        assert!(r.ontology.is_none());
     }
 
     #[test]

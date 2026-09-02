@@ -46,6 +46,7 @@ pub use conv::{
     ConvSummary, SummaryCorrectionView,
 };
 pub use reader::{
-    AtlasCorpusSummary, AtlasMemberSummary, AtlasViewError, CurationStatus, FileAtlasReader,
+    AtlasBuildReport, AtlasCorpusSummary, AtlasMemberSummary, AtlasViewError, CurationStatus,
+    DeclaredTypeRow, FileAtlasReader,
 };
 pub use subgraph::{AtlasEdge, AtlasNode, AtlasSubgraph, SubgraphCensus, DEFAULT_MAX_NODES};
