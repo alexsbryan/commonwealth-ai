@@ -177,14 +177,31 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
         }
     }
 
+    // Read readiness BEFORE the request goes out. `--wait` polls until the
+    // index is Ready, and an index that was ALREADY ready satisfies the first
+    // poll — so the wait reports "ready after 0s" for an ingest that has not
+    // run and may never run. Observed 2026-09-02: the probe corpus's source
+    // markdown was edited, `corpus install` printed `✓ installed (ready after
+    // 0s)`, and every later step read the previous build's atoms.
+    let was_ready = corpus_readiness(&indexes_dir(), id) == CorpusReadiness::Ready;
+
     let code = submit_install_request(id, params).await;
     if code != 0 {
         return code;
     }
     match wait_secs {
         None => 0,
-        Some(budget) => wait_until_installed(id, budget).await,
+        Some(budget) => wait_until_installed(id, budget, was_ready).await,
     }
+}
+
+/// Where `corpus_readiness` looks. One resolution, so the pre-check and the
+/// wait cannot disagree about which directory they are talking about (§10.6).
+fn indexes_dir() -> PathBuf {
+    sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.data.dir)
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
+        .join("indexes")
 }
 
 /// Default `--wait` budget. Generous enough for any LOCAL recipe (the
@@ -209,11 +226,15 @@ const DEFAULT_WAIT_SECS: u64 = 300;
 /// The absence is REPORTED here, never defaulted (§18.3): a budget that
 /// expires exits 1 and names the state it actually observed, so a caller
 /// cannot mistake "still building" for "installed".
-async fn wait_until_installed(corpus_id: &str, budget_secs: u64) -> i32 {
-    let indexes_dir = sovereign_core::setup_config::SetupConfig::load()
-        .map(|c| c.data.dir)
-        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root())
-        .join("indexes");
+///
+/// `was_ready` is the same reading taken BEFORE the request was submitted.
+/// When it is true, Ready on the first poll is not evidence of anything —
+/// the index was already there — so this says so rather than claiming an
+/// ingest it did not witness. Still exit 0: the corpus IS installed, which
+/// is what the command promises. What it must not do is let an author who
+/// edited their source read "✓ installed" and go on to query stale atoms.
+async fn wait_until_installed(corpus_id: &str, budget_secs: u64, was_ready: bool) -> i32 {
+    let indexes_dir = indexes_dir();
     let start = std::time::Instant::now();
     let budget = std::time::Duration::from_secs(budget_secs);
     let mut last = CorpusReadiness::Absent;
@@ -226,10 +247,22 @@ async fn wait_until_installed(corpus_id: &str, budget_secs: u64) -> i32 {
             "corpus install --wait: polled readiness"
         );
         if last == CorpusReadiness::Ready {
-            println!(
-                "✓ installed: {corpus_id} (ready after {}s)",
-                start.elapsed().as_secs()
-            );
+            if was_ready && start.elapsed().as_secs() == 0 {
+                println!(
+                    "· {corpus_id} was ALREADY installed and ready — this run \
+                     did not witness an ingest."
+                );
+                println!(
+                    "  `corpus install` is idempotent. If the source changed, \
+                     `svrn corpus remove {corpus_id}` first, or you will query \
+                     the previous build."
+                );
+            } else {
+                println!(
+                    "✓ installed: {corpus_id} (ready after {}s)",
+                    start.elapsed().as_secs()
+                );
+            }
             return 0;
         }
         if start.elapsed() >= budget {
