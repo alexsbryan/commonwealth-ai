@@ -13,5 +13,6 @@ pub mod literary_atlas;
 // `obsidian_atlas` removed when vault corpora moved to the tiered
 // RAPTOR + GLiNER surface (FolderTieredProvider). Operators wanting
 // atoms.json output against a vault can pass `--pipeline literary_atlas`.
+pub mod ontology_parse;
 pub mod philosophy_atlas;
 pub mod referential_atlas;
