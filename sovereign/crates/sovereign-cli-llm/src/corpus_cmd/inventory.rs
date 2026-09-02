@@ -86,8 +86,12 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
             }
             "--help" | "-h" => {
                 println!(
-                    "Usage: svrn corpus install <id> [--wait[=SECS]] \
+                    "Usage: svrn corpus install <id|recipe.toml> [--wait[=SECS]] \
                      [--params k=v[,k=v...]] [--params-file <path>]\n\n\
+                     Given a path to a recipe file, registers it under \
+                     ~/.svrnmesh/recipes/<id>/ (printing what it registered) and \
+                     installs the id the recipe declares. Given an id, installs \
+                     that id.\n\n\
                      Submits an install request to the running daemon. Recipe \
                      parameters declared in the recipe's `[recipe.parameters]` block \
                      are validated by the daemon before ingest spawns; missing \
@@ -111,10 +115,40 @@ pub(super) async fn cmd_corpus_install(args: &[String]) -> i32 {
         }
     }
 
-    let Some(id) = positional.first() else {
-        eprintln!("Missing corpus ID. Usage: svrn corpus install <id> [--params …]");
+    let Some(arg) = positional.first() else {
+        eprintln!("Missing corpus ID. Usage: svrn corpus install <id|recipe.toml> [--params …]");
         return 1;
     };
+
+    // `svrn recipe validate my-coins.toml` takes a path, so `svrn corpus
+    // install my-coins.toml` has to as well — the two are consecutive lines
+    // in every template header. Installing by path registers the file where
+    // the registry looks for user recipes, then installs the id it declares.
+    let id = if super::recipe_source::looks_like_recipe_path(arg) {
+        match super::recipe_source::register(std::path::Path::new(arg)) {
+            Ok(reg) => {
+                println!(
+                    "Registered {} as corpus '{}' → {}",
+                    arg,
+                    reg.id,
+                    reg.registered_at.display()
+                );
+                if let Some((before, after)) = &reg.acquire_rewrite {
+                    println!(
+                        "  acquire path `{before}` resolved against the recipe's directory → {after}"
+                    );
+                }
+                reg.id
+            }
+            Err(msg) => {
+                eprintln!("error: {msg}");
+                return 1;
+            }
+        }
+    } else {
+        arg.clone()
+    };
+    let id = &id;
 
     if let Some(path) = params_file {
         let raw = match std::fs::read_to_string(&path) {

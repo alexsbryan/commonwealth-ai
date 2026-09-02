@@ -25,7 +25,7 @@ schema_version = 1
 # One markdown file: each filing, article and exported table as a `## ` section.
 [acquire]
 type = "local_file"
-# REQUIRED: absolute path to the markdown file.
+# REQUIRED: the source file — an absolute path, or one relative to this recipe.
 path = "REPLACE_ME"
 
 [extract]

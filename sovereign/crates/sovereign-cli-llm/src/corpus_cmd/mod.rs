@@ -16,6 +16,7 @@ mod ingest;
 mod inventory;
 mod optimize;
 mod partitions;
+mod recipe_source;
 mod search;
 
 use diagnostics::{

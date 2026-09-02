@@ -26,7 +26,7 @@ schema_version = 1
 # chapters in reading order (the clock is narrative, not the calendar).
 [acquire]
 type = "local_file"
-# REQUIRED: absolute path to the markdown file.
+# REQUIRED: the source file — an absolute path, or one relative to this recipe.
 path = "REPLACE_ME"
 
 [extract]

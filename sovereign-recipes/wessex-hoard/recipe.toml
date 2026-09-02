@@ -14,9 +14,9 @@
 
 [corpus]
 # REQUIRED: a stable, repo-scoped id.
-id = "REPLACE_ME"
+id = "wessex-hoard"
 # REQUIRED: human-readable name.
-name = "REPLACE_ME"
+name = "The Wessex Down Hoard (numismatics ontology probe)"
 description = "Coin catalogues, hoard reports and articles, extracted as coins, mints, rulers and dated attributions."
 license = "private"
 mesh_sharing = false
@@ -26,8 +26,8 @@ schema_version = 1
 # (one file, `## ` headings per catalogue entry or article section).
 [acquire]
 type = "local_file"
-# REQUIRED: the source file — an absolute path, or one relative to this recipe.
-path = "REPLACE_ME"
+# REQUIRED: the markdown file — absolute, or relative to this recipe.
+path = "wessex-hoard.md"
 
 [extract]
 type = "markdown"

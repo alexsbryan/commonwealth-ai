@@ -27,7 +27,7 @@ schema_version = 1
 # kept as markdown tables (measurements anchor to them).
 [acquire]
 type = "local_file"
-# REQUIRED: absolute path to the markdown file.
+# REQUIRED: the source file — an absolute path, or one relative to this recipe.
 path = "REPLACE_ME"
 
 [extract]
