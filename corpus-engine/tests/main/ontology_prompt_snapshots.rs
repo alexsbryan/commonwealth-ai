@@ -1,0 +1,278 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! Prompt-byte snapshots pinning ontology invariants I1 and I2
+//! (`sovereign/docs/specs/ONTOLOGY_MIGRATION.md` §0).
+//!
+//! Each prompt the atlas pipeline would send to a model is serialised
+//! whole — the [`ChatPrompt`] the chat client itself serialises: system,
+//! user, response schema, schema name, phase id, output budget — and
+//! byte-compared against a committed golden under
+//! `tests/fixtures/ontology_snapshots/<stem>.json`:
+//!
+//! - I1: the `maple-house` recipe's custom atlas (version-0 ontology block)
+//!   — Phase 1, the terse Phase 1 retry, and the Phase 6 classifier — and
+//!   the same recipe migrated to `version = 1` with no declarations, which
+//!   must reproduce these SAME goldens (not a second set).
+//! - I2: the four prebuilt genres' Phase 1 (literary, philosophy,
+//!   referential, engineering) — a genre that declares nothing sends no
+//!   different bytes.
+//!
+//! A byte that moves is a leak. When the movement is intended, re-bless
+//! (the `UPDATE_RECIPE_SCHEMA` convention from `recipe_schema.rs`), then
+//! read the change with `git diff --word-diff` on the fixture:
+//!
+//! ```text
+//! UPDATE_ONTOLOGY_SNAPSHOTS=1 cargo test -p corpus-engine --test main ontology_prompt_snapshots
+//! ```
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+
+use corpus_engine::enrichment::atlas::analysis::{CandidateContent, TensionSide};
+use corpus_engine::enrichment::atlas::atoms::{AtomId, ChunkRef};
+use corpus_engine::enrichment::pipeline::pipelines::literary_atlas::LiteraryAtlasPipeline;
+use corpus_engine::enrichment::pipeline::pipelines::{
+    engineering_atlas, literary_atlas, philosophy_atlas, referential_atlas,
+};
+use corpus_engine::enrichment::pipeline::prompts::OVERLAY_ENV_VAR;
+use corpus_engine::enrichment::pipeline::types::{ChapterInput, ChatPrompt};
+use corpus_engine::enrichment::pipeline::{Pipeline, PipelineRegistry};
+use corpus_engine::Recipe;
+
+const UPDATE_ENV: &str = "UPDATE_ONTOLOGY_SNAPSHOTS";
+
+/// The recipe under test — the only shipped version-0 custom ontology.
+const MAPLE_HOUSE_RECIPE: &str = "../sovereign-recipes/maple-house/recipe.toml";
+
+fn fixtures_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ontology_snapshots")
+}
+
+/// Rebuild a JSON value with every object's keys in sorted order and render
+/// it pretty with a trailing newline. `None` when `text` is not JSON (a
+/// missing or corrupt golden), which the caller treats as a mismatch.
+///
+/// Key ORDER follows Cargo feature unification, not the prompt: a scoped
+/// `-p corpus-engine` build resolves `serde_json` without `preserve_order`
+/// (objects are `BTreeMap`s, rendered sorted) while the full workspace
+/// unifies `preserve_order` on (insertion order — the `$defs` block of a
+/// response schema renders where the const wrote it). The pin is therefore
+/// content-not-order: both sides are canonicalised before the compare, and
+/// re-blessing writes the canonical form so the committed bytes stay sorted
+/// whichever feature set blessed them. Inserting into a fresh `Map` in sorted
+/// key order yields the same bytes under either map type.
+///
+/// `recipe_schema.rs` calls this for the descriptor gate, which has the
+/// same problem: ONE canonicaliser, not one per gate (ARCH §10.6).
+pub(crate) fn canonical_json(text: &str) -> Option<String> {
+    fn sort_keys(v: serde_json::Value) -> serde_json::Value {
+        match v {
+            serde_json::Value::Object(map) => {
+                let mut entries: Vec<(String, serde_json::Value)> = map.into_iter().collect();
+                entries.sort_by(|a, b| a.0.cmp(&b.0));
+                let mut out = serde_json::Map::new();
+                for (k, v) in entries {
+                    out.insert(k, sort_keys(v));
+                }
+                serde_json::Value::Object(out)
+            }
+            serde_json::Value::Array(items) => {
+                serde_json::Value::Array(items.into_iter().map(sort_keys).collect())
+            }
+            other => other,
+        }
+    }
+    let value: serde_json::Value = serde_json::from_str(text).ok()?;
+    let mut rendered = serde_json::to_string_pretty(&sort_keys(value)).ok()?;
+    rendered.push('\n');
+    Some(rendered)
+}
+
+/// Compare `prompt` against `<stem>.json` as canonical JSON (sorted keys —
+/// see [`canonical_json`]), or rewrite the golden under
+/// `UPDATE_ONTOLOGY_SNAPSHOTS=1`. A missing golden is a mismatch, never a
+/// pass.
+fn assert_snapshot(stem: &str, prompt: &ChatPrompt) {
+    // The goldens pin the BAKED prompts. An overlay dir would swap the
+    // system text underneath the comparison and report a leak that is
+    // really the operator's overlay — refuse rather than substitute.
+    if let Ok(dir) = std::env::var(OVERLAY_ENV_VAR) {
+        panic!(
+            "{OVERLAY_ENV_VAR}={dir} is set; the prompt snapshots pin the baked prompts. \
+             Unset it for this test."
+        );
+    }
+
+    let path = fixtures_dir().join(format!("{stem}.json"));
+    let serialised = serde_json::to_string(prompt).expect("serialise ChatPrompt");
+    let rendered = canonical_json(&serialised).expect("a serialised ChatPrompt is JSON");
+    // A byte that moves here is a leak: the bytes sent to a model changed.
+    assert_golden(&path, &rendered, "ontology_prompt_snapshots");
+}
+
+/// Compare `rendered` against the golden at `path`, or rewrite it under
+/// `UPDATE_ONTOLOGY_SNAPSHOTS=1`. A JSON golden is compared as canonical JSON
+/// ([`canonical_json`], so key order cannot skew the gate); anything else,
+/// including a missing or truncated golden, is compared as raw bytes — a
+/// mismatch, never a pass. `module` is the test module the re-bless hint
+/// names. Shared with `recipe_templates.rs` (plain-text derived-facet
+/// goldens): one bless convention, one canonicaliser.
+pub(crate) fn assert_golden(path: &Path, rendered: &str, module: &str) {
+    if std::env::var(UPDATE_ENV).is_ok() {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).expect("create fixtures dir");
+        }
+        std::fs::write(path, rendered).unwrap_or_else(|e| panic!("write {}: {e}", path.display()));
+        eprintln!("wrote {}", path.display());
+        return;
+    }
+
+    let committed_raw = std::fs::read_to_string(path).unwrap_or_default();
+    // A golden that is not JSON compares as its raw bytes: that covers a
+    // missing or truncated one (which therefore mismatches, never silently
+    // passes) and the plain-text facet pins under `recipe_templates/`.
+    let committed = canonical_json(&committed_raw).unwrap_or(committed_raw);
+    if committed != rendered {
+        panic!(
+            "golden {} differs ({} committed bytes vs {} rendered).\n\
+             If the change is intended, re-bless with:\n  \
+             {UPDATE_ENV}=1 cargo test -p corpus-engine --test main {module}\n\
+             and read the change with `git diff --word-diff` on the fixture.\n{}",
+            path.display(),
+            committed.len(),
+            rendered.len(),
+            crate::recipe_schema::first_diff(&committed, rendered)
+        );
+    }
+}
+
+/// One fixed section. `render_phase1_user_body` reads only `chapter_id`,
+/// `title`, `metadata["ordinal"]` and `text`, so this is the whole user
+/// body's input.
+fn fixed_chapter() -> ChapterInput {
+    let text = "Article II — Quiet hours. Quiet hours begin at 11 PM every night. \
+                Members may not play amplified music in the common spaces after that \
+                time. Guests are bound by the same rule as the member who invited them."
+        .to_string();
+    ChapterInput {
+        chapter_id: "sec-0002".into(),
+        title: "Article II — Quiet hours".into(),
+        approx_tokens: text.len() / 4,
+        text,
+        metadata: HashMap::from([("ordinal".to_string(), "2".to_string())]),
+    }
+}
+
+/// One fixed Phase 6 candidate: two claims sharing the `quiet hours` topic.
+fn fixed_candidate() -> CandidateContent {
+    CandidateContent {
+        candidate_id: "cand-0001".into(),
+        source_atom: AtomId::from_raw("claim-0001"),
+        source_kind: TensionSide::Claim,
+        source_text: "Quiet hours begin at 11 PM every night.".into(),
+        target_atom: AtomId::from_raw("claim-0002"),
+        target_kind: TensionSide::Claim,
+        target_text: "Quiet hours begin at 10 PM on weeknights.".into(),
+        shared_entity_name: Some("quiet hours".into()),
+        shared_entity_id: Some(AtomId::from_raw("entity-0001")),
+        evidence: vec![ChunkRef::new("sec-0002", None)],
+    }
+}
+
+/// The maple-house pipeline exactly as `enrich init` builds it: recipe →
+/// `Recipe::custom_atlas_spec` → `with_custom_ontology`.
+fn maple_house_pipeline() -> LiteraryAtlasPipeline {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(MAPLE_HOUSE_RECIPE);
+    let recipe =
+        Recipe::from_file(&path).unwrap_or_else(|e| panic!("parse {}: {e}", path.display()));
+    let spec = recipe
+        .custom_atlas_spec()
+        .expect("maple-house declares a non-empty [enrichment.ontology]");
+    LiteraryAtlasPipeline::with_custom_ontology(&spec)
+}
+
+// ── I1: maple-house, version 0 ──────────────────────────────────────────
+
+#[test]
+fn maple_house_phase1_matches_golden() {
+    let prompt = maple_house_pipeline().compose_phase1(&fixed_chapter(), &[]);
+    assert_snapshot("maple_house.phase1", &prompt);
+}
+
+#[test]
+fn maple_house_phase1_terse_matches_golden() {
+    let prompt = maple_house_pipeline()
+        .compose_phase1_terse(&fixed_chapter())
+        .expect("custom atlas composes a terse retry");
+    assert_snapshot("maple_house.phase1_terse", &prompt);
+}
+
+#[test]
+fn maple_house_phase6_classifier_matches_golden() {
+    let prompt = maple_house_pipeline()
+        .compose_phase6_atlas_classifier(&fixed_candidate())
+        .expect("custom atlas composes its own Phase 6 classifier");
+    assert_snapshot("maple_house.phase6_classifier", &prompt);
+}
+
+/// I1, second half. The maple-house recipe migrated to `version = 1`
+/// (`Recipe::migrate_ontology_version` — one inserted line, nothing else
+/// changes) declares no types, so all three prompts must match the SAME
+/// `maple_house.*` goldens the version-0 tests above pin — not a second set.
+/// This is the structural half of I1: the P2 composer and parser hang off
+/// `OntologyPolicies::has_declarations()`, which is false here.
+#[test]
+fn maple_house_v1_without_declarations_matches_v0_goldens() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(MAPLE_HOUSE_RECIPE);
+    let v0 =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let migrated = Recipe::migrate_ontology_version(&v0, 1)
+        .expect("migration yields a loadable recipe")
+        .expect("maple-house is version 0, so migrating to 1 changes it");
+    let recipe = Recipe::from_toml(&migrated).expect("migrated maple-house parses");
+    let spec = recipe
+        .custom_atlas_spec()
+        .expect("still a custom ontology after migration");
+    assert_eq!(spec.ontology_version, 1);
+    assert!(
+        !spec.policies().has_declarations(),
+        "the migration adds only the version line; no types are declared"
+    );
+    let pipeline = LiteraryAtlasPipeline::with_custom_ontology(&spec);
+
+    assert_snapshot(
+        "maple_house.phase1",
+        &pipeline.compose_phase1(&fixed_chapter(), &[]),
+    );
+    assert_snapshot(
+        "maple_house.phase1_terse",
+        &pipeline
+            .compose_phase1_terse(&fixed_chapter())
+            .expect("custom atlas composes a terse retry"),
+    );
+    assert_snapshot(
+        "maple_house.phase6_classifier",
+        &pipeline
+            .compose_phase6_atlas_classifier(&fixed_candidate())
+            .expect("custom atlas composes its own Phase 6 classifier"),
+    );
+}
+
+// ── I2: prebuilt genres declare nothing and send no different bytes ─────
+
+#[test]
+fn prebuilt_genres_phase1_match_goldens() {
+    let registry = PipelineRegistry::builtin();
+    let chapter = fixed_chapter();
+    for id in [
+        literary_atlas::PIPELINE_ID,
+        philosophy_atlas::PIPELINE_ID,
+        referential_atlas::PIPELINE_ID,
+        engineering_atlas::PIPELINE_ID,
+    ] {
+        let pipeline = registry
+            .get(id)
+            .unwrap_or_else(|| panic!("`{id}` is a built-in pipeline"));
+        let prompt = pipeline.compose_phase1(&chapter, &[]);
+        assert_snapshot(&format!("{id}.phase1"), &prompt);
+    }
+}

@@ -1297,9 +1297,13 @@ pub const CHUNK_JUDGE_PASSAGE_CHARS: usize = 2_400;
 ///
 /// # Why it matters beyond tidiness
 ///
-/// The engine's pinned-prefix cache keys a request family on the first 48
-/// tokens of the RENDERED prompt and restores only on a strict token-prefix
-/// match, so byte identity across sibling calls is not a nicety — it is the
+/// The engine's pinned-prefix cache keys a DECLARED family — every call that
+/// passes `stable_prefix_len`, which is every call in this module — on the
+/// CONTENT of the declared prefix, and restores only when the declaration
+/// matches that entry exactly (`prefix_state::directed_key`, 2026-09-01; it
+/// keyed on the first 48 rendered tokens until then, which made two turns over
+/// one corpus collide and pin at their common prefix — issue #57). Byte
+/// identity across sibling calls is therefore not a nicety — it is the
 /// difference between restoring a ~5,500-token prefix in ~26 ms and
 /// re-prefilling it for ~7.7 s (measured 2026-08-13,
 /// `bench/chaos_monkey/results/gate_call_census_20260813.txt`). A mismatch

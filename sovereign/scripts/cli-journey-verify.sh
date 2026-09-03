@@ -338,6 +338,18 @@ fix_value() {
   # {claims} is where `enrich spec-intel` writes its output —
   # <data.dir>/specs/<corpus>/<spec-stem>/claims.json — read back by
   # check-spec, so the two values must agree on the spec's file stem.
+  # ── ontology-author ────────────────────────────────────────────────────
+  # The repo's OWN declaration, not a second invented fixture: a real recipe
+  # with an exhaustive truth.json beside it, whose acquire path is relative to
+  # its own directory (so no @FIXTURE_DIR@ rewrite). {ontology_corpus} is the
+  # id that recipe declares — the two must agree or `enrich init` opens
+  # nothing.
+  ontology_recipe)   printf '%s' "${SOVEREIGN_JOURNEY_ONTOLOGY_RECIPE:-}" ;;
+  ontology_corpus)   printf '%s' "${SOVEREIGN_JOURNEY_ONTOLOGY_CORPUS:-wessex-hoard}" ;;
+  # truth.json's `enumeration_probe.question`. Asked over a DECLARED atlas it
+  # must classify as an enumeration of the author's `coin`, and the answer
+  # carries `sceatta` because `sceatta specializes coin`.
+  ontology_question) printf '%s' "${SOVEREIGN_JOURNEY_ONTOLOGY_QUESTION:-Which coins are in this catalogue, and what metal is each?}" ;;
   spec)   printf '%s' "${SOVEREIGN_JOURNEY_SPEC:-}" ;;
   claims) printf '%s' "${SOVEREIGN_JOURNEY_CLAIMS:-}" ;;
   # Distinctive and single-token so the read-back assertion survives any

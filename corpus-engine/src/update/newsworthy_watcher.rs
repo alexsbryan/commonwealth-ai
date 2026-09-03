@@ -36,11 +36,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Datelike, NaiveDate, TimeZone, Utc};
+use corpus_engine_yield::DeferralBudget;
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
 
 use crate::chunkers::portal_event_bullet::extract_bullet_links;
+use crate::engine::yield_gate::{self, YieldExit};
 use crate::engine::CorpusEngine;
 use crate::error::{Error, Result};
 use crate::recipe::{ChunkerConfig, ExtractorConfig};
@@ -268,6 +270,12 @@ pub struct TickReport {
     /// means its fold FAILED (warned in the log) and its fragments wait
     /// for the hourly maintenance sweep.
     pub folded_corpora: Vec<String>,
+    /// Issue #57 rec 4: how many per-article checkpoints actually parked
+    /// for foreground inference this tick, and the wall clock they spent
+    /// parked. Zero on an idle box. A tick that overlapped a user turn
+    /// shows it here rather than only in the user's latency.
+    pub yield_deferrals: usize,
+    pub yield_deferred_ms: u64,
     pub elapsed_ms: u64,
 }
 
@@ -283,6 +291,10 @@ pub struct NewsworthyConfig {
     pub parent_corpus_id: String,
     pub mediawiki_base_url: String,
     pub user_agent: String,
+    /// How often a parked per-article checkpoint re-asks the yield hook.
+    /// The ingest pipeline's own interval by default
+    /// (`engine::yield_gate::YIELD_POLL_INTERVAL`); tests shorten it.
+    pub yield_poll: Duration,
 }
 
 impl Default for NewsworthyConfig {
@@ -291,6 +303,7 @@ impl Default for NewsworthyConfig {
             window_days: 30,
             tick_interval: Duration::from_secs(24 * 3600),
             jitter_max: Duration::from_secs(15 * 60),
+            yield_poll: yield_gate::YIELD_POLL_INTERVAL,
             // Drop to 1 in-flight request. Earlier 4-way concurrency
             // triggered HTTP 429 cascades from MediaWiki on cold-
             // start refresh waves (~48/57 articles rejected in
@@ -647,6 +660,8 @@ impl WikipediaNewsworthyWatcher {
                             stale_marked = report.stale_marked,
                             errors = report.errors,
                             portal_ingested = report.portal_ingested,
+                            yield_deferrals = report.yield_deferrals,
+                            yield_deferred_ms = report.yield_deferred_ms,
                             elapsed_ms = report.elapsed_ms,
                             "newsworthy.tick",
                         ),
@@ -794,6 +809,7 @@ impl WikipediaNewsworthyWatcher {
                     report.rev_checked += revs.len();
                     for (article, rev) in batch.iter().zip(revs) {
                         if Some(rev.latest_revid) != article.last_known_rev_id {
+                            self.yield_to_foreground(&mut report).await;
                             let _permit = sem.clone().acquire_owned().await.ok();
                             tracing::info!(
                                 title = %article.title,
@@ -836,6 +852,7 @@ impl WikipediaNewsworthyWatcher {
         }
 
         for article in to_fetch {
+            self.yield_to_foreground(&mut report).await;
             let _permit = sem.clone().acquire_owned().await.ok();
             tracing::info!(
                 title = %article.title,
@@ -931,6 +948,11 @@ impl WikipediaNewsworthyWatcher {
         // Pruning is destructive and stays the maintenance sweep's decision:
         // `None` is passed deliberately.
         for c in &committed {
+            // The fold rewrites index files under any reader (G4, 2026-09-02:
+            // a claim search failed with "Unable to open file …_invert.lance"
+            // while a fold ran). It stands aside for a user turn exactly as
+            // each article does.
+            self.yield_to_foreground(&mut report).await;
             // TRANSIENT: a per-tick fold over every corpus committed this
             // tick is a walker, and the caching wrapper would make each one
             // resident forever after a single tick.
@@ -968,6 +990,42 @@ impl WikipediaNewsworthyWatcher {
 
         self.publish_status(&report, true, now);
         Ok(report)
+    }
+
+    /// Per-article yield checkpoint (issue #57 rec 4).
+    ///
+    /// The gate at the top of [`Self::tick`] answers "may this tick
+    /// start"; a tick then runs for as long as its article list — 18
+    /// minutes for 182 articles, measured 2026-09-02 — and a user turn
+    /// arriving inside it used to contend with every remaining article's
+    /// embed batch (one tokio mutex, held per whole batch) and index
+    /// commit. This parks BEFORE each article and before the tick-end
+    /// fold, in the same bounded wait
+    /// the ingest pipeline uses before each embed batch
+    /// (`engine::yield_gate`), so the cap, the poll and the three log
+    /// lines are the ingest's, not a second copy (ARCH §10.6). It applies
+    /// under a forced tick too: `force` expresses the operator's intent
+    /// that the tick runs NOW, not that it may race a user who shows up
+    /// mid-tick.
+    async fn yield_to_foreground(&self, report: &mut TickReport) {
+        let Some(hook) = self.engine.yield_hook() else {
+            return;
+        };
+        let started = std::time::Instant::now();
+        let exit = yield_gate::defer_to_foreground(
+            hook.as_ref(),
+            &self.config.parent_corpus_id,
+            "article",
+            DeferralBudget::new(),
+            self.config.yield_poll,
+            || false,
+            || {},
+        )
+        .await;
+        if exit != YieldExit::NotDeferred {
+            report.yield_deferrals += 1;
+            report.yield_deferred_ms += started.elapsed().as_millis() as u64;
+        }
     }
 
     /// Persist a `TickStatusSnapshot` so the daemon's
@@ -1470,7 +1528,7 @@ mod tests {
     /// + LWW semantics without the SQLite backend. Two instances can
     /// share a `Mutex<HashMap>` via `Arc` to simulate gossip
     /// convergence in two-node tests.
-    struct StubHost {
+    pub(super) struct StubHost {
         node_label: String,
         is_leader: bool,
         owned_keys: std::collections::HashSet<String>,
@@ -1478,7 +1536,7 @@ mod tests {
     }
 
     impl StubHost {
-        fn new(label: &str, is_leader: bool) -> Self {
+        pub(super) fn new(label: &str, is_leader: bool) -> Self {
             Self {
                 node_label: label.to_string(),
                 is_leader,
@@ -1487,7 +1545,7 @@ mod tests {
             }
         }
 
-        fn own_all(mut self) -> Self {
+        pub(super) fn own_all(mut self) -> Self {
             // Convenience for single-node tests.
             self.owned_keys.clear();
             self
@@ -1709,7 +1767,7 @@ mod tests {
 
     /// MediaWiki client that errors on every call. Lets us instantiate
     /// a watcher for tests that don't drive the HTTP path.
-    struct NoopMediaWikiClient;
+    pub(super) struct NoopMediaWikiClient;
     #[async_trait::async_trait]
     impl MediaWikiClient for NoopMediaWikiClient {
         async fn fetch_parse(&self, _page: &str) -> Result<String> {
@@ -1835,3 +1893,6 @@ mod tests {
         assert!(report.elapsed_ms < 5_000);
     }
 }
+
+#[cfg(test)]
+mod yield_tests;

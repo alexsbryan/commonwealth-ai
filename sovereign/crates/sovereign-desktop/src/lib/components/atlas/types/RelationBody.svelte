@@ -2,6 +2,7 @@
 <script lang="ts">
   import type { RelationData } from "../../../types";
   import AtomLink from "../AtomLink.svelte";
+  import AttributesRows from "./AttributesRows.svelte";
 
   interface Props {
     data: RelationData;
@@ -37,6 +38,8 @@
       {/if}
     </dd>
   </dl>
+
+  <AttributesRows attributes={data.attributes} />
 </div>
 
 <style>

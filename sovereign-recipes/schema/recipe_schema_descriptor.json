@@ -172,6 +172,150 @@
     "knowledge_density",
     "boilerplate"
   ],
+  "ontology": {
+    "attribute": [
+      "name",
+      "description"
+    ],
+    "attribute_families": [
+      {
+        "fields": [
+          "values"
+        ],
+        "key": "text",
+        "required": []
+      },
+      {
+        "fields": [
+          "unit"
+        ],
+        "key": "quantity",
+        "required": []
+      },
+      {
+        "fields": [
+          "range"
+        ],
+        "key": "time",
+        "required": []
+      },
+      {
+        "fields": [
+          "of"
+        ],
+        "key": "ref",
+        "required": [
+          "of"
+        ]
+      }
+    ],
+    "attribute_family": [
+      "text",
+      "quantity",
+      "time",
+      "ref"
+    ],
+    "block": [
+      "version"
+    ],
+    "change": [
+      "clock",
+      "supersedes"
+    ],
+    "claim_scope": [
+      "in_work",
+      "about_work"
+    ],
+    "clock": [
+      "document_date",
+      "narrative",
+      "none"
+    ],
+    "deontic": [
+      "require",
+      "forbid",
+      "permit",
+      "request"
+    ],
+    "derive": [
+      "configurations",
+      "arguments"
+    ],
+    "force": [
+      "assertive",
+      "directive",
+      "declaration",
+      "commissive"
+    ],
+    "kind": [
+      "entity",
+      "relation",
+      "claim",
+      "event",
+      "state"
+    ],
+    "source": [
+      "file",
+      "from",
+      "to",
+      "attributes"
+    ],
+    "tension": [
+      "label",
+      "between",
+      "same",
+      "not_conflicts"
+    ],
+    "type": [
+      "name",
+      "kind",
+      "description",
+      "attributes",
+      "specializes",
+      "role_of",
+      "from",
+      "to",
+      "participants",
+      "of",
+      "source",
+      "label",
+      "identity",
+      "identity_fallback",
+      "force",
+      "deontic",
+      "subject",
+      "grades",
+      "anchors",
+      "scope"
+    ],
+    "v1": [
+      "guidance",
+      "vocabulary",
+      "must_not",
+      "types",
+      "voices",
+      "change",
+      "tension",
+      "derive",
+      "patterns"
+    ],
+    "versions": [
+      0,
+      1
+    ],
+    "vocabulary": [
+      "concern_term",
+      "position_term",
+      "tension_term",
+      "absence_term",
+      "evidence_term"
+    ],
+    "voices": [
+      "not_entities",
+      "self",
+      "attributed_to"
+    ]
+  },
   "pattern": [
     "circular_flow",
     "role_overlap",

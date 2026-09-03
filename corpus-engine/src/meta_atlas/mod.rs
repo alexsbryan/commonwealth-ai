@@ -37,5 +37,7 @@ pub use builder::{
     build_meta_atlas, default_meta_atlas_path, read_meta_atlas, rebuild_for_corpus,
     write_meta_atlas, Anchor, AtlasSeen, MetaAtlasFile, MetaAtom,
 };
-pub use classifier::{classify_articulation, classify_by_chunk_preview};
+pub use classifier::{
+    classify_articulation, classify_articulation_with, classify_by_chunk_preview,
+};
 pub use index::MetaAtlasIndex;

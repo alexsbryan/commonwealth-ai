@@ -13,7 +13,15 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    include: ["src/**/*.{test,spec}.{ts,js}"],
+    // The shared chat-render package is consumed as SOURCE through the alias
+    // below, so its tests belong to whichever app runs them — and this is the
+    // app the pre-push hook gates. Without this line `packages/chat-ui/src`
+    // could hold tests that no runner ever executes, which reads exactly like
+    // coverage and is not (ARCH §18.1).
+    include: [
+      "src/**/*.{test,spec}.{ts,js}",
+      "../../../packages/chat-ui/src/**/*.{test,spec}.{ts,js}",
+    ],
     setupFiles: ["./src/test-setup.ts"],
     // `@xstate/svelte` v5 ships a broken `exports.import` that
     // points at a `.cjs.mjs` wrapper around its CJS bundle, which
@@ -27,6 +35,17 @@ export default defineConfig({
           include: ["@xstate/svelte"],
         },
       },
+    },
+  },
+  server: {
+    fs: {
+      // The shared package lives OUTSIDE this crate, so Vite's default
+      // serve-root confinement refuses to load its test files ("Cannot find
+      // module", not a permission error — which reads like a missing file).
+      allow: [
+        fileURLToPath(new URL(".", import.meta.url)),
+        resolve(fileURLToPath(new URL(".", import.meta.url)), "../../../packages"),
+      ],
     },
   },
   resolve: {

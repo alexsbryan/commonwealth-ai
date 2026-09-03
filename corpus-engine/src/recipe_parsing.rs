@@ -83,6 +83,131 @@ pub(crate) fn check_schema_version(v: u32) -> Result<()> {
     Ok(())
 }
 
+/// The three ontology-version rules, at the load boundary
+/// (`ONTOLOGY_MIGRATION.md` §0; ARCH §18.3 never silently substitute):
+///
+/// 1. **Unknown version refuses naming the max** — `OntologyBlock::language`.
+/// 2. **A later version's key without its version line refuses naming the
+///    fix.** Serde would otherwise drop `types = […]` from a version-0 block
+///    without a sound, and the author would enrich a corpus that hears none of
+///    their declarations. The key→version map is the registry's own key lists
+///    (`first_version_defining`), never a second list here.
+/// 3. **Structural errors surface at load** — the block is parsed eagerly
+///    through its language, so a claim type without `force` or an unknown
+///    `kind` fails `Recipe::from_toml`, not `enrich extract`.
+///
+/// Keys NO version defines are a `validate` warning, not a load error:
+/// community recipes must keep loading (`deny_unknown_fields` was rejected
+/// for that reason), and a typo cannot change what the pipeline does.
+pub(crate) fn check_ontology_block(recipe: &Recipe) -> Result<()> {
+    let Some(block) = recipe.enrichment.as_ref().and_then(|e| e.ontology.as_ref()) else {
+        return Ok(());
+    };
+    let lang = block.language()?;
+    let registry = crate::enrichment::ontology::OntologyLanguageRegistry::builtin();
+    let mut later: Vec<(u32, &String)> = block
+        .body
+        .keys()
+        .filter(|k| !lang.keys().contains(&k.as_str()))
+        .filter_map(|k| {
+            registry
+                .first_version_defining(k)
+                .filter(|v| *v > block.version)
+                .map(|v| (v, k))
+        })
+        .collect();
+    later.sort();
+    if let Some((needed, key)) = later.first() {
+        let absent = if block.version == 0 {
+            " (no `version` line, so version 0)"
+        } else {
+            ""
+        };
+        return Err(Error::Recipe(format!(
+            "[enrichment.ontology] uses `{key}`, which belongs to ontology version {needed}, \
+             but the block declares version {}{absent}. Add `version = {needed}` directly \
+             under `[enrichment.ontology]`, or run `svrn recipe migrate --ontology-version \
+             {needed} <recipe.toml>`. Version {} accepts: {}.",
+            block.version,
+            block.version,
+            lang.keys().join(", ")
+        )));
+    }
+    lang.parse(&block.body)?;
+    Ok(())
+}
+
+/// Text-level migration behind `Recipe::migrate_ontology_version`. Works on
+/// the source text (a recipe that NEEDS migrating fails `from_toml` by rule 2
+/// above, so it cannot be parsed first): find the `[enrichment.ontology]`
+/// header, then within its table either replace an existing `version = N`
+/// line or insert one directly under the header. The result is verified
+/// through `Recipe::from_toml` before it is returned.
+pub(crate) fn migrate_ontology_version(toml_str: &str, target: u32) -> Result<Option<String>> {
+    let lines: Vec<&str> = toml_str.lines().collect();
+    let is_header = |l: &str| {
+        let t = l.trim();
+        t.starts_with('[') && !t.starts_with("[[")
+    };
+    let header_idx = lines
+        .iter()
+        .position(|l| {
+            let t = l.trim();
+            let t = t.split('#').next().unwrap_or("").trim();
+            t == "[enrichment.ontology]"
+        })
+        .ok_or_else(|| {
+            Error::Recipe(
+                "recipe has no `[enrichment.ontology]` table header to attach `version` to \
+                 (dotted-key or inline forms are not rewritten; add the line by hand)"
+                    .to_string(),
+            )
+        })?;
+    // The block's own scalar lines run until the next table header of any kind.
+    let block_end = lines[header_idx + 1..]
+        .iter()
+        .position(|l| is_header(l) || l.trim().starts_with("[["))
+        .map(|i| header_idx + 1 + i)
+        .unwrap_or(lines.len());
+    let version_line = (header_idx + 1..block_end).find(|&i| {
+        let t = lines[i].trim();
+        t.starts_with("version") && t[7..].trim_start().starts_with('=')
+    });
+    let mut out: Vec<String> = lines.iter().map(|l| l.to_string()).collect();
+    match version_line {
+        Some(i) => {
+            let current: u32 = lines[i]
+                .split('=')
+                .nth(1)
+                .and_then(|v| v.split('#').next())
+                .and_then(|v| v.trim().parse().ok())
+                .ok_or_else(|| {
+                    Error::Recipe(format!(
+                        "could not read the existing ontology version from line {}: {}",
+                        i + 1,
+                        lines[i]
+                    ))
+                })?;
+            if current >= target {
+                return Ok(None);
+            }
+            out[i] = format!("version = {target}");
+        }
+        None => out.insert(header_idx + 1, format!("version = {target}")),
+    }
+    let mut migrated = out.join("\n");
+    if toml_str.ends_with('\n') {
+        migrated.push('\n');
+    }
+    Recipe::from_toml(&migrated).map_err(|e| {
+        Error::Recipe(format!(
+            "adding `version = {target}` does not yield a loadable recipe — fix the block \
+             first: {e}"
+        ))
+    })?;
+    Ok(Some(migrated))
+}
+
 /// Refuse a `field_model` recipe whose `[enrichment] domain` names
 /// something the field-model domain registry does not carry.
 ///

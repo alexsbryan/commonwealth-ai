@@ -77,6 +77,26 @@ fn gb(bytes: u64) -> f64 {
     bytes as f64 / 1_073_741_824.0
 }
 
+/// `--prune-days N` as the operator supplied it. `None` = REFUSED.
+///
+/// There is no default and no zero. Pruning DELETES superseded dataset
+/// versions irreversibly, and a retention window below the age of any
+/// in-flight reader can break a concurrent query — so the window is a
+/// decision the operator has to state, and a value that states nothing
+/// (absent, zero, negative, unparseable) is refused rather than filled in.
+///
+/// A function rather than an inline `match` so the constraint can be
+/// exercised without an installed corpus (ARCH §18.1).
+fn parse_prune_days(raw: Option<&String>) -> Option<i64> {
+    raw.and_then(|v| v.parse::<i64>().ok()).filter(|d| *d >= 1)
+}
+
+/// `--keep-versions N` as the operator supplied it. `None` = REFUSED.
+/// Same rule, same reason: keeping zero versions is not a retention policy.
+fn parse_keep_versions(raw: Option<&String>) -> Option<usize> {
+    raw.and_then(|v| v.parse::<usize>().ok()).filter(|n| *n >= 1)
+}
+
 pub async fn run_optimize(args: &[String]) -> i32 {
     let mut target: Option<String> = None;
     let mut all = false;
@@ -88,9 +108,9 @@ pub async fn run_optimize(args: &[String]) -> i32 {
             "--all" => all = true,
             "--prune-days" => {
                 i += 1;
-                match args.get(i).and_then(|v| v.parse::<i64>().ok()) {
-                    Some(d) if d >= 1 => prune_days = Some(d),
-                    _ => {
+                match parse_prune_days(args.get(i)) {
+                    Some(d) => prune_days = Some(d),
+                    None => {
                         eprintln!("error: --prune-days requires an integer >= 1");
                         eprintln!(
                             "  pruning DELETES superseded dataset versions. A value below the age\n\
@@ -103,9 +123,9 @@ pub async fn run_optimize(args: &[String]) -> i32 {
             }
             "--keep-versions" => {
                 i += 1;
-                match args.get(i).and_then(|v| v.parse::<usize>().ok()) {
-                    Some(n) if n >= 1 => keep_versions = Some(n),
-                    _ => {
+                match parse_keep_versions(args.get(i)) {
+                    Some(n) => keep_versions = Some(n),
+                    None => {
                         eprintln!("error: --keep-versions requires an integer >= 1");
                         return 2;
                     }
@@ -321,4 +341,84 @@ pub async fn run_optimize(args: &[String]) -> i32 {
         return 1;
     }
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// covers: ST-15
+    ///
+    /// Compaction is non-destructive; pruning is not. It DELETES superseded
+    /// dataset versions, irreversibly, and a value below the age of any
+    /// in-flight reader breaks a concurrent query. So the flag has no default
+    /// and no zero — an operator has to state a retention window, and the one
+    /// they state has to be a real window.
+    ///
+    /// The refusal happens in argument parsing, before an engine is built or
+    /// an index is opened, which is what these assertions rely on: none of
+    /// these calls needs an installed corpus to exist. A regression that let a
+    /// zero through would instead reach `CorpusEngine::installed_indexes` and
+    /// return 1 ("no installed corpus matched") on this host — a different
+    /// code, from a different place, which is exactly what makes it visible
+    /// here rather than only in production.
+    #[tokio::test]
+    async fn a_prune_with_no_real_retention_window_is_refused_before_any_index_is_opened() {
+        for bad in ["0", "-1", "-7", "seven", "1.5", "", "0x1"] {
+            let code = run_optimize(&[
+                "some-corpus".to_string(),
+                "--prune-days".to_string(),
+                bad.to_string(),
+            ])
+            .await;
+            assert_eq!(
+                code, 2,
+                "--prune-days {bad:?} must be refused as a contract violation, not run"
+            );
+        }
+
+        // The flag with nothing after it at all — the shape a shell typo
+        // produces, and the one most likely to be read as "use the default".
+        // There is no default.
+        assert_eq!(
+            run_optimize(&["some-corpus".to_string(), "--prune-days".to_string()]).await,
+            2
+        );
+
+        // Same rule for the count bound: `--keep-versions 0` would keep no
+        // versions at all.
+        for bad in ["0", "-1", "all"] {
+            assert_eq!(
+                run_optimize(&[
+                    "some-corpus".to_string(),
+                    "--keep-versions".to_string(),
+                    bad.to_string(),
+                ])
+                .await,
+                2,
+                "--keep-versions {bad:?} must be refused"
+            );
+        }
+    }
+
+    /// covers: ST-15
+    ///
+    /// The control for the test above (§18.4): the refusals come from the
+    /// retention constraint, not from a parser that refuses everything.
+    /// Asserted on the deciders directly so it needs no installed corpus and
+    /// touches no data directory.
+    #[test]
+    fn a_stated_retention_window_is_accepted_and_carried_through_verbatim() {
+        assert_eq!(parse_prune_days(Some(&"1".to_string())), Some(1));
+        assert_eq!(parse_prune_days(Some(&"7".to_string())), Some(7));
+        assert_eq!(parse_prune_days(Some(&"365".to_string())), Some(365));
+        // 1 is the smallest window the flag accepts — the boundary, stated,
+        // because it is also the floor `--keep-versions` alone stands on.
+        assert_eq!(parse_prune_days(Some(&"0".to_string())), None);
+
+        assert_eq!(parse_keep_versions(Some(&"1".to_string())), Some(1));
+        assert_eq!(parse_keep_versions(Some(&"500".to_string())), Some(500));
+        assert_eq!(parse_keep_versions(Some(&"0".to_string())), None);
+        assert_eq!(parse_keep_versions(None), None);
+    }
 }

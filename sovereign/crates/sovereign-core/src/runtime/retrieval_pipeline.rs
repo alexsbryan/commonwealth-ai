@@ -858,11 +858,7 @@ fn step_governance_active_set<'a, 'ctx>(
                     "{warning}"
                 );
             }
-            for (chunk_id, section) in joined.map {
-                if dead_sections.contains(&section) {
-                    dead_chunks.insert(chunk_id);
-                }
-            }
+            dead_chunks.extend(dead_law_chunk_ids(joined.map, &dead_sections));
         }
         if dead_chunks.is_empty() {
             // Glass-box: a governance turn with dead-law sections but no
@@ -877,26 +873,58 @@ fn step_governance_active_set<'a, 'ctx>(
             }
             return StepOutcome::default();
         }
-        let before = st.chunks.len();
-        st.chunks.retain(|c| {
-            c.chunk_id
-                .map(|id| !dead_chunks.contains(&id))
-                .unwrap_or(true)
-        });
-        let dropped = before - st.chunks.len();
-        if dropped > 0 {
-            tracing::info!(
-                dropped,
-                dead_law_chunks = dead_chunks.len(),
-                dead_sections = dead_section_total,
-                "{}: governance active-set dropped dead-law chunks (amended sections)",
-                st.label
-            );
-        }
-        StepOutcome {
-            note: (dropped > 0).then(|| format!("dropped {dropped} dead-law chunk(s)")),
-        }
+        drop_dead_law_chunks(&mut st.chunks, &dead_chunks, st.label, dead_section_total)
     })
+}
+
+/// The section → chunk half of the active-set filter: which retrieved chunk
+/// ids belong to a dead-law section.
+///
+/// Extracted from [`step_governance_active_set`] because THIS is the link the
+/// step's own comment names as the silent failure — when the join is missing
+/// or its section ids don't match the rule citations, the set comes back empty,
+/// every amended rule stays live, and the governance answer is reported clean.
+/// Inline it could only be exercised through an on-disk atlas.
+fn dead_law_chunk_ids(
+    joined: impl IntoIterator<Item = (u64, String)>,
+    dead_sections: &std::collections::HashSet<String>,
+) -> std::collections::HashSet<u64> {
+    joined
+        .into_iter()
+        .filter(|(_, section)| dead_sections.contains(section))
+        .map(|(chunk_id, _)| chunk_id)
+        .collect()
+}
+
+/// Drop the dead-law chunks from the retrieved pool and report the count.
+///
+/// A chunk with no `chunk_id` is KEPT: it cannot be attributed to a section,
+/// and silently dropping unattributable evidence would substitute a guess for
+/// an absence (ARCH §18.3).
+fn drop_dead_law_chunks(
+    chunks: &mut Vec<corpus_engine::ScoredChunk>,
+    dead_chunks: &std::collections::HashSet<u64>,
+    label: &str,
+    dead_section_total: usize,
+) -> StepOutcome {
+    let before = chunks.len();
+    chunks.retain(|c| {
+        c.chunk_id
+            .map(|id| !dead_chunks.contains(&id))
+            .unwrap_or(true)
+    });
+    let dropped = before - chunks.len();
+    if dropped > 0 {
+        tracing::info!(
+            dropped,
+            dead_law_chunks = dead_chunks.len(),
+            dead_sections = dead_section_total,
+            "{label}: governance active-set dropped dead-law chunks (amended sections)"
+        );
+    }
+    StepOutcome {
+        note: (dropped > 0).then(|| format!("dropped {dropped} dead-law chunk(s)")),
+    }
 }
 
 fn shared_core_steps() -> Vec<RetrievalStep> {
@@ -2476,6 +2504,133 @@ mod tests {
     /// the shared 14-step core (incl. the FR-9 governance active-set
     /// filter), deep grounding at the KQ (post-floor) position, and
     /// dedupe on both paths.
+    /// covers: EN-20
+    ///
+    /// No dead law. Driven from a real [`GovernanceView`] so the section ids
+    /// come from the same place production reads them — a superseded rule's
+    /// citation — rather than being invented by the test.
+    ///
+    /// The failure this catches is the one the step's own comment names: the
+    /// join matches nothing, every amended rule stays live, and an answer
+    /// built on repealed text ships reported-clean. Both halves must hold —
+    /// the repealed chunks leave `st.chunks`, AND the outcome note reports
+    /// how many left, because a silent drop is as unreadable as no drop.
+    #[test]
+    fn a_superseded_rules_chunks_leave_the_pool_and_the_note_says_how_many() {
+        use corpus_engine::enrichment::atlas::atoms::AtomId;
+        use corpus_engine::enrichment::atlas::atoms::ChunkRef;
+        use corpus_engine::enrichment::governance::RuleStatus;
+        use corpus_engine::enrichment::governance_view::{GovernanceView, RuleView};
+        use corpus_engine::oplog::OpId;
+
+        fn rule(id: usize, section: &str, status: RuleStatus) -> RuleView {
+            RuleView {
+                id: AtomId::claim(id),
+                text: format!("rule {id}"),
+                deontic: Some("must".into()),
+                scope: None,
+                citation: Some(ChunkRef::new(section.to_string(), None)),
+                status,
+                // The clock axis (ontology-v1 P4) is not what this test
+                // exercises; the log's own supersession is.
+                superseded_by_clock: None,
+            }
+        }
+        // sec-old carries a rule the log superseded; sec-new carries the
+        // superseding rule; sec-live is untouched.
+        let view = GovernanceView {
+            rules: vec![
+                rule(
+                    1,
+                    "sec-old",
+                    RuleStatus::Superseded {
+                        by: OpId::from_raw("op-1"),
+                        by_rules: vec![AtomId::claim(2)],
+                    },
+                ),
+                rule(2, "sec-new", RuleStatus::Active),
+                rule(3, "sec-live", RuleStatus::Active),
+            ],
+            tensions: Vec::new(),
+            issues: Vec::new(),
+        };
+        let dead_sections = view.dead_law_sections();
+        assert_eq!(
+            dead_sections.len(),
+            1,
+            "only the superseded rule's section is dead law"
+        );
+        assert!(dead_sections.contains("sec-old"));
+
+        // The chapters.json join, as `chunk_to_section_map_status` returns it.
+        let joined = vec![
+            (10u64, "sec-old".to_string()),
+            (11, "sec-old".to_string()),
+            (20, "sec-new".to_string()),
+            (30, "sec-live".to_string()),
+        ];
+        let dead_chunks = super::dead_law_chunk_ids(joined, &dead_sections);
+        assert_eq!(
+            dead_chunks,
+            [10u64, 11].into_iter().collect(),
+            "the join must resolve the dead SECTION to its chunk rows"
+        );
+
+        fn chunk(id: Option<u64>) -> corpus_engine::ScoredChunk {
+            corpus_engine::ScoredChunk {
+                content: format!("{id:?}"),
+                title: None,
+                url: None,
+                corpus_id: "charter".into(),
+                score: 1.0,
+                metadata: Default::default(),
+                chunk_id: id,
+                source_doc_id: None,
+                vector_distance: None,
+                provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            }
+        }
+        // 11 is retrieved and repealed; 10 is not retrieved this turn; the
+        // id-less chunk cannot be attributed to a section and must survive.
+        let mut chunks = vec![
+            chunk(Some(11)),
+            chunk(Some(20)),
+            chunk(Some(30)),
+            chunk(None),
+        ];
+        let outcome = super::drop_dead_law_chunks(&mut chunks, &dead_chunks, "KnowledgeQuery", 1);
+
+        let surviving: Vec<Option<u64>> = chunks.iter().map(|c| c.chunk_id).collect();
+        assert!(
+            !surviving.contains(&Some(11)),
+            "a chunk of a superseded section must not reach synthesis"
+        );
+        assert_eq!(
+            surviving,
+            vec![Some(20), Some(30), None],
+            "current law and unattributable evidence are both kept"
+        );
+        assert_eq!(
+            outcome.note.as_deref(),
+            Some("dropped 1 dead-law chunk(s)"),
+            "the drop must be reported, not silent"
+        );
+
+        // The no-op posture: no dead sections means no filter and no note.
+        let mut untouched = vec![chunk(Some(11)), chunk(Some(20))];
+        let none = super::drop_dead_law_chunks(
+            &mut untouched,
+            &std::collections::HashSet::new(),
+            "KnowledgeQuery",
+            0,
+        );
+        assert_eq!(untouched.len(), 2);
+        assert!(
+            none.note.is_none(),
+            "a turn that dropped nothing says nothing"
+        );
+    }
+
     /// I4-A dark-first: the demand planner must be OFF unless explicitly
     /// enabled — every existing surface + bench changes behaviour only by
     /// opt-in (RETRIEVAL_REDESIGN §7).

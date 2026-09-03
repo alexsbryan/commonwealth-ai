@@ -44,7 +44,6 @@
 1	sovereign/crates/sovereign-cli-llm/src/alignment_cmd.rs
 2	sovereign/crates/sovereign-cli-llm/src/bench_cmd/live_runner.rs
 1	sovereign/crates/sovereign-cli-llm/src/corpus_watch_cmd.rs
-2	sovereign/crates/sovereign-cli-llm/src/enrich_cmd/extract.rs
 6	sovereign/crates/sovereign-cli-llm/src/eval_cmd/runner.rs
 1	sovereign/crates/sovereign-cli-llm/src/inner_chaos/rejudge.rs
 1	sovereign/crates/sovereign-cli-llm/src/inner_chaos/replay.rs

@@ -184,7 +184,7 @@ test.describe("orphaned streaming turn (navigate away & back)", () => {
     return start.messageId;
   }
 
-  test("returning mid-stream restores the loading affordance and partial text", async ({
+  test("returning mid-stream restores the loading affordance and partial text", { tag: ["@UI-8"] }, async ({
     sovereignPage: page,
     chat,
   }) => {

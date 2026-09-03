@@ -49,8 +49,10 @@ pub mod pii;
 pub mod progress;
 pub mod recipe;
 pub mod recipe_builtin;
+pub mod recipe_ontology;
 mod recipe_parsing;
 pub mod recipe_schema;
+pub mod recipe_templates;
 pub mod registry;
 pub mod safety;
 pub mod sharding;
@@ -117,7 +119,10 @@ pub mod notes_sync;
 // without the bound in reach (and need not take a second direct dep on the
 // leaf — ARCH §8.3).
 pub use corpus::{Corpus, CORPUS_META_FILENAME};
-pub use corpus_engine_yield::{DeferralBudget, DeferralStep, YieldHook, MAX_FOREGROUND_DEFERRAL};
+pub use corpus_engine_yield::{
+    DeferralBudget, DeferralStep, ForegroundLease, ForegroundSignal, YieldHook,
+    MAX_FOREGROUND_DEFERRAL,
+};
 pub use engine::{
     CancellationFlag, CancellationRegistry, CorpusDiskStatus, CorpusEngine, CustomAcquirerFn,
     CustomExtractorFn,

@@ -1,0 +1,4 @@
+clock: narrative — supersession folds on order within the work
+tension selector: embedding top-k (k = 10, floor = 0.5) over reading — cross-document declared corpora select the embedding net; the classifier judges each pair
+identity: character → canonical name (default; declare `identity = [...]` for an external key)
+question shapes: enumerate [character]; relations [(none)]; events [(none)]; aggregate [(none — a claim type with a `ref` attribute can be counted by it)]

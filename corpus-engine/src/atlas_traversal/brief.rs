@@ -74,6 +74,7 @@ pub fn assemble_brief(result: &TraversalResult) -> Brief {
         "tension_list" => assemble_tension_list(result),
         "configuration_list" => assemble_configuration_list(result),
         "corpus_overview" => assemble_corpus_overview(result),
+        "enumerate" | "aggregate" => assemble_declared_listing(result),
         other => Brief {
             headline: format!("Traversal kind '{other}' has no brief assembler yet."),
             body: String::new(),
@@ -393,6 +394,47 @@ fn assemble_configuration_list(result: &TraversalResult) -> Brief {
     }
 }
 
+/// The `enumerate` / `aggregate` brief: the headline the engine computed,
+/// then one line per atom carrying its DECLARED attributes.
+///
+/// The attributes are the point. "Which coins are in this catalogue, and what
+/// metal is each" is answered by the list plus `metal=silver` — a bare list of
+/// names answers only half the question. Attributes render in the map's own
+/// (sorted) key order so the brief is deterministic.
+fn assemble_declared_listing(result: &TraversalResult) -> Brief {
+    fn attrs(map: &serde_json::Map<String, serde_json::Value>) -> String {
+        if map.is_empty() {
+            return String::new();
+        }
+        let rendered = map
+            .iter()
+            .map(|(k, v)| match v {
+                serde_json::Value::String(s) => format!("{k}={s}"),
+                other => format!("{k}={other}"),
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+        format!(" — {rendered}")
+    }
+
+    let mut body = String::new();
+    for e in &result.entities {
+        body.push_str(&format!(
+            "- {} {}{}\n",
+            depth_tag(e.enrichment_depth),
+            e.canonical_name,
+            attrs(&e.attributes)
+        ));
+    }
+    for c in &result.claims {
+        body.push_str(&format!("- {}{}\n", c.content, attrs(&c.attributes)));
+    }
+    Brief {
+        headline: result.headline.clone(),
+        body,
+    }
+}
+
 fn assemble_corpus_overview(result: &TraversalResult) -> Brief {
     let mut body = String::new();
     if !result.entities.is_empty() {
@@ -554,6 +596,8 @@ mod tests {
         let mut e = extracted_entity("Alyosha");
         e.salience = 1.0;
         let low_conf_claim = crate::enrichment::atlas::atoms::Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(1),
             content: "Faith is a habit".into(),
             discourse_act: crate::enrichment::pipeline::atlas::DiscourseAct::Assert,

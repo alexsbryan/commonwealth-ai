@@ -260,9 +260,11 @@ impl CorpusIndex {
     /// per open dataset version (see the `gate_cache` field doc — the
     /// uncached reads cost ~1.1-2.3s per SEARCH on a 1.9M-row table and
     /// dominated retrieval wall time before 2026-07-16).
-    async fn gate_info(&self) -> (usize, bool, bool) {
+    pub(crate) async fn gate_info(&self) -> (usize, bool, bool) {
         if let Some(cached) = self.gate_cache.lock().ok().and_then(|g| *g) {
-            return cached;
+            if cached.computed_at.elapsed() < super::GATE_CACHE_TTL {
+                return (cached.row_count, cached.ivf_built, cached.fts_built);
+            }
         }
         let row_count = self.table.count_rows(None).await.unwrap_or(usize::MAX);
         let indices = self.table.list_indices().await.unwrap_or_default();
@@ -272,11 +274,15 @@ impl CorpusIndex {
         let fts_built = indices
             .iter()
             .any(|idx| idx.columns.iter().any(|c| c == "content" || c == "title"));
-        let info = (row_count, ivf_built, fts_built);
         if let Ok(mut g) = self.gate_cache.lock() {
-            *g = Some(info);
+            *g = Some(super::GateInfo {
+                computed_at: std::time::Instant::now(),
+                row_count,
+                ivf_built,
+                fts_built,
+            });
         }
-        info
+        (row_count, ivf_built, fts_built)
     }
 
     pub async fn nearest_vector_distance(

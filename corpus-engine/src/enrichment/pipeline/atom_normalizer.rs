@@ -500,6 +500,10 @@ mod tests {
 
     fn claim(content: &str, anchor: &str) -> ClaimSketch {
         ClaimSketch {
+            attributes: Default::default(),
+            claim_kind: None,
+            subject: None,
+            scope: None,
             content: content.into(),
             discourse_act: DiscourseAct::Assert,
             epistemic_status: EpistemicStatus::Confident,

@@ -219,6 +219,30 @@ probe test was written for.*
   unchanged (no declarations there); `enrich schema-report` on the
   fixture lists the new rows.
 
+**As built (2026-09-02).** Four departures from the paragraphs above,
+each because the code said so:
+
+- `resolution.rs` keeps `resolve_step_3b` and
+  `resolve_entities_and_events` as shims; the declared passes live in a
+  sibling `atlas/resolution_ontology.rs` and read a `ResolutionPolicy`.
+  Nothing is re-plumbed for a corpus that declares nothing.
+- A `ref` attribute snaps by NAME and the resolved atom's type is NOT
+  checked against the `of`. A second, stricter gate would refuse a
+  correct snap whenever Phase 1 typed the target as one of the generic
+  six, which is the common case on a first extraction. `of` still earns
+  its keep in the prompt and in `recipe validate`.
+- Every merge in a declared corpus is reified, not only the non-strict
+  ones — one rule is cheaper to hold than two, and the strict merges are
+  the ones a reader most wants to see. The grade is `external` or
+  `signal_gated`; the primitives note calls the second "judged" and it
+  is not, because no judge is wired into `svrn enrich reconcile`.
+  Grading a merge "judged" when nothing judged it is the well-formed
+  false claim §18.3 forbids; when a judge lands, its grade is a third
+  value.
+- The reified merges attach `Involves` + `Grounds`, NOT `Grounding` —
+  that is the cross-corpus edge family, and a merge inside one corpus is
+  not a cross-corpus link. (The paragraph above says `Grounding`.)
+
 ### P4 — Change and derivation
 
 *Axes 4 and 5. Size: medium. The phase governance already proves.*

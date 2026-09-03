@@ -1,0 +1,96 @@
+# DST invariant pack — hand-authored, NOT model-generated.
+#
+# The six invariants in sovereign-mesh/src/dst.rs each already carry a
+# falsifier test (`every_invariant_in_the_pack_has_a_falsifier` enforces that).
+# These mutants ask the next question: is the falsifier LOAD-BEARING? Each one
+# stubs an invariant's `check` to return Ok(()) — the invariant stops detecting
+# its own violation — and names the falsifier that must then go red.
+#
+# WHY THESE TESTS WERE INVISIBLE UNTIL NOW. `dst` is a non-default feature.
+# sabotage.py hardcoded `corpus-engine/treesitter,sovereign-cli/dev-tools`
+# while scripts/lib/cargo-scope.sh (what the actual gate resolves) also carries
+# `sovereign-mesh/dst` and `sovereign-mesh/mesh-sim`. Every test in this file
+# was absent from the adjudicator's report and would have resolved
+# COULD-NOT-JUDGE as "not a test in this workspace". Fixed 2026-09-01 by
+# deriving FEATURES from that one helper (ARCH §10.6).
+#
+# MAPPINGS REJECTED, and why — the inherited frame proposed twelve FE clauses
+# for these invariants and five were word-collisions, not spirit matches:
+#   FE-60  "replay MUST split scorer agreement from policy agreement" — the
+#          word "split", not split-brain. Different subsystem entirely.
+#   FE-72  "the split the preview shows and the split the load executes MUST
+#          be one function" — same word-collision.
+#   FE-135 anchor advertisement + candidate filtering for eligibility; the
+#          invariant checks leader agreement, not who is eligible to lead.
+#   FE-86  bench validity guards ("earned by an observed false result").
+#   FE-23  signed per-node reachability with a monotonic version; admission
+#          safety here is an in-flight ceiling, not signature verification.
+# Kept as partial and marked so: FE-138 (the invariant defends "no split brain
+# once converged", not the eligibility-settle/quorum BOUND the clause names),
+# FE-96 (the ceiling-and-leak half, not "local admits unconditionally" or the
+# busy-response shape), FE-80 (liveness as a membership property, not the
+# "do not probe a saturated link" half).
+#
+# no_ghost_members has NO FE clause. It is a real invariant defending nothing
+# the requirements register asks for — a spec gap, not a mutant.
+
+
+[[mutant]]
+id = "dst-fe137-no-split-brain"
+requirement = "FE-137"
+target = "sovereign/crates/sovereign-mesh/src/dst.rs"
+find = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let mut leader: Option<Option<NodeId>> = None;\n        let mut owner: Option<Option<NodeId>> = None;\n        for v in &snap.views {\n            let live: Vec<NodeId> = v\n                .members\n                .iter()\n                .filter(|(_, m)| m.live)\n                .map(|(k, _)| *k)\n                .collect();\n            let l = partition::elect_leader(&live);\n            let o = partition::rendezvous_owner(\"dst-probe\", &live);\n            match leader {\n                None => leader = Some(l),\n                Some(prev) if prev != l => {\n                    return Err(Violation {\n                        invariant: \"no_split_brain\",\n                        detail: format!(\n                            \"leader disagreement: {prev:?} vs {l:?} (node {})\",\n                            v.self_id\n                        ),\n                    });\n                }\n                _ => {}\n            }\n            match owner {\n                None => owner = Some(o),\n                Some(prev) if prev != o => {\n                    return Err(Violation {\n                        invariant: \"no_split_brain\",\n                        detail: format!(\n                            \"owner disagreement: {prev:?} vs {o:?} (node {})\",\n                            v.self_id\n                        ),\n                    });\n                }\n                _ => {}\n            }\n        }\n        Ok(())\n    }"
+replace = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let _ = snap;\n        Ok(())\n    }"
+mustFail = ["no_split_brain_falsifier_disjoint_live_sets_elect_different_leaders"]
+breaks = "Host election MUST be re-evaluated each cycle over replicated membership, with a pinned host winning while eligible, and the elected host MUST be published so a soak test can assert a no-split-brain invariant."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "dst-fe138-no-split-brain"
+requirement = "FE-138"
+target = "sovereign/crates/sovereign-mesh/src/dst.rs"
+find = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let mut leader: Option<Option<NodeId>> = None;\n        let mut owner: Option<Option<NodeId>> = None;\n        for v in &snap.views {\n            let live: Vec<NodeId> = v\n                .members\n                .iter()\n                .filter(|(_, m)| m.live)\n                .map(|(k, _)| *k)\n                .collect();\n            let l = partition::elect_leader(&live);\n            let o = partition::rendezvous_owner(\"dst-probe\", &live);\n            match leader {\n                None => leader = Some(l),\n                Some(prev) if prev != l => {\n                    return Err(Violation {\n                        invariant: \"no_split_brain\",\n                        detail: format!(\n                            \"leader disagreement: {prev:?} vs {l:?} (node {})\",\n                            v.self_id\n                        ),\n                    });\n                }\n                _ => {}\n            }\n            match owner {\n                None => owner = Some(o),\n                Some(prev) if prev != o => {\n                    return Err(Violation {\n                        invariant: \"no_split_brain\",\n                        detail: format!(\n                            \"owner disagreement: {prev:?} vs {o:?} (node {})\",\n                            v.self_id\n                        ),\n                    });\n                }\n                _ => {}\n            }\n        }\n        Ok(())\n    }"
+replace = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let _ = snap;\n        Ok(())\n    }"
+mustFail = ["no_split_brain_falsifier_disjoint_live_sets_elect_different_leaders"]
+breaks = "Split-brain during convergence MUST be bounded by the eligibility settle plus a quorum gate, with consumers falling back locally."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "dst-fe19-convergence"
+requirement = "FE-19"
+target = "sovereign/crates/sovereign-mesh/src/dst.rs"
+find = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let mut iter = snap.views.iter();\n        let Some(first) = iter.next() else {\n            return Ok(());\n        };\n        let key0: BTreeSet<NodeId> = first.members.keys().copied().collect();\n        for v in iter {\n            let key: BTreeSet<NodeId> = v.members.keys().copied().collect();\n            if key != key0 {\n                return Err(Violation {\n                    invariant: \"convergence\",\n                    detail: format!(\n                        \"node {} knows {:?}; node {} knows {:?}\",\n                        first.self_id, key0, v.self_id, key\n                    ),\n                });\n            }\n        }\n        Ok(())\n    }"
+replace = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let _ = snap;\n        Ok(())\n    }"
+mustFail = ["convergence_falsifier_two_nodes_know_different_member_sets"]
+breaks = "Shared state MUST converge by epidemic replication: a periodic round to a small random peer sample, three-phase digest/delta/response, last-writer-wins on timestamp."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "dst-fe96-admission-safety"
+requirement = "FE-96"
+target = "sovereign/crates/sovereign-mesh/src/dst.rs"
+find = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        for v in &snap.views {\n            if v.peer_inflight > v.inflight_ceiling {\n                return Err(Violation {\n                    invariant: \"admission_safety\",\n                    detail: format!(\n                        \"node {}: peer_inflight {} > ceiling {}\",\n                        v.self_id, v.peer_inflight, v.inflight_ceiling\n                    ),\n                });\n            }\n            if v.peer_inflight != 0 {\n                return Err(Violation {\n                    invariant: \"admission_safety\",\n                    detail: format!(\n                        \"node {}: peer_inflight {} != 0 at quiescence (guard leak?)\",\n                        v.self_id, v.peer_inflight\n                    ),\n                });\n            }\n        }\n        Ok(())\n    }"
+replace = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let _ = snap;\n        Ok(())\n    }"
+mustFail = ["admission_safety_falsifier_inflight_over_the_ceiling", "admission_safety_falsifier_a_leaked_guard_at_quiescence"]
+breaks = "Peer requests MUST pass an admission gate; local requests MUST admit unconditionally. Refusal MUST be a standard busy response with a retry hint."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "dst-fe80-liveness"
+requirement = "FE-80"
+target = "sovereign/crates/sovereign-mesh/src/dst.rs"
+find = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        for v in &snap.views {\n            for truth in &snap.online_truth {\n                match v.members.get(truth) {\n                    Some(m) if m.live => {}\n                    _ => {\n                        return Err(Violation {\n                            invariant: \"liveness\",\n                            detail: format!(\n                                \"node {} does not see up node {} as live\",\n                                v.self_id, truth\n                            ),\n                        });\n                    }\n                }\n            }\n        }\n        Ok(())\n    }"
+replace = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let _ = snap;\n        Ok(())\n    }"
+mustFail = ["liveness_falsifier_an_up_node_is_not_seen_at_all"]
+breaks = "Liveness of a participant already resolved MUST be read from membership, not from a probe over the link that participant's own bulk traffic is saturating."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "dst-fe8-unique-endpoint-key"
+requirement = "FE-8"
+target = "sovereign/crates/sovereign-mesh/src/dst.rs"
+find = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        for v in &snap.views {\n            // Delegate, don't re-derive. `aliased_endpoint_keys` is the ONE\n            // implementation of this rule; the admission guard in\n            // `merge_from_authenticated` asks the same function. A checker and\n            // an admitter with separate opinions is the §10.6 duplicated\n            // decider, and this is the last place you want a second one.\n            let claims = v.members.iter().map(|(id, m)| EndpointClaim {\n                node_id: *id,\n                name: String::new(),\n                node_pubkey: m.node_pubkey,\n                active: m.active,\n            });\n            if let Some(alias) = aliased_endpoint_keys(claims).into_iter().next() {\n                let ids: Vec<NodeId> = alias.members.iter().map(|(id, _)| *id).collect();\n                return Err(Violation {\n                    invariant: \"unique_endpoint_key\",\n                    detail: format!(\n                        \"node {:?} sees {} ACTIVE members claiming endpoint key {}: {:?} \\\n                         — a cloned node identity; their liveness is split across rows \\\n                         and neither will read online\",\n                        v.self_id,\n                        ids.len(),\n                        &alias.node_pubkey.to_string()[..16],\n                        ids\n                    ),\n                });\n            }\n        }\n        Ok(())\n    }"
+replace = "fn check(&self, snap: &MeshSnapshot) -> Result<(), Violation> {\n        let _ = snap;\n        Ok(())\n    }"
+mustFail = ["a_cloned_node_identity_is_caught"]
+breaks = "Writing a membership does not make it active. Activation MUST be a separate step used only by the two operations that establish a membership, plus the explicit switch."
+expected = "CAUGHT"

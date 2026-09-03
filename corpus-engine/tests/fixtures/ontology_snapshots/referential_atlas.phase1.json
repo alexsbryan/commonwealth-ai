@@ -1,0 +1,366 @@
+{
+  "phase_id": "phase1",
+  "response_schema": {
+    "$defs": {
+      "argument_reconstruction_sketch": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor": {
+            "maxLength": 800,
+            "type": "string"
+          },
+          "conclusion": {
+            "maxLength": 400,
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "objections": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "content": {
+                  "maxLength": 400,
+                  "type": "string"
+                },
+                "name": {
+                  "maxLength": 120,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "type": "object"
+            },
+            "maxItems": 6,
+            "type": "array"
+          },
+          "premises": {
+            "items": {
+              "maxLength": 400,
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
+          },
+          "proponent": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "premises",
+          "conclusion"
+        ],
+        "type": "object"
+      },
+      "claim_sketch": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor": {
+            "maxLength": 800,
+            "type": "string"
+          },
+          "attributed_to": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "items": {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "maxItems": 8,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "content": {
+            "maxLength": 800,
+            "type": "string"
+          },
+          "discourse_act": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "epistemic_status": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "quotable_excerpt": {
+            "anyOf": [
+              {
+                "maxLength": 220,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "content",
+          "discourse_act"
+        ],
+        "type": "object"
+      },
+      "entity_sketch": {
+        "additionalProperties": false,
+        "properties": {
+          "aliases": {
+            "items": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 5,
+            "type": "array"
+          },
+          "anchor": {
+            "maxLength": 800,
+            "type": "string"
+          },
+          "canonical_name": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "defining_quote": {
+            "anyOf": [
+              {
+                "maxLength": 220,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "maxLength": 600,
+            "type": "string"
+          },
+          "entity_type": {
+            "enum": [
+              "person",
+              "concept",
+              "institution",
+              "work",
+              "place",
+              "initiative"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "canonical_name",
+          "entity_type"
+        ],
+        "type": "object"
+      },
+      "entity_state_sketch": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor": {
+            "maxLength": 800,
+            "type": "string"
+          },
+          "entity_name": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_name",
+          "label"
+        ],
+        "type": "object"
+      },
+      "event_sketch": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor": {
+            "maxLength": 800,
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 600,
+            "type": "string"
+          },
+          "participants": {
+            "items": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "type": "object"
+      },
+      "question_sketch": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor": {
+            "maxLength": 800,
+            "type": "string"
+          },
+          "content": {
+            "maxLength": 800,
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "type": "object"
+      },
+      "relation_sketch": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor": {
+            "maxLength": 800,
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "participants": {
+            "items": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
+          }
+        },
+        "required": [
+          "participants",
+          "label"
+        ],
+        "type": "object"
+      },
+      "relation_state_sketch": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor": {
+            "maxLength": 800,
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "participants": {
+            "items": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
+          }
+        },
+        "required": [
+          "participants",
+          "label"
+        ],
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "argument_reconstructions": {
+        "items": {
+          "$ref": "#/$defs/argument_reconstruction_sketch"
+        },
+        "maxItems": 6,
+        "type": "array"
+      },
+      "claims": {
+        "items": {
+          "$ref": "#/$defs/claim_sketch"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "entities_developed": {
+        "items": {
+          "$ref": "#/$defs/entity_state_sketch"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "entities_introduced": {
+        "items": {
+          "$ref": "#/$defs/entity_sketch"
+        },
+        "maxItems": 15,
+        "type": "array"
+      },
+      "events": {
+        "items": {
+          "$ref": "#/$defs/event_sketch"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "questions_raised": {
+        "items": {
+          "$ref": "#/$defs/question_sketch"
+        },
+        "maxItems": 25,
+        "minItems": 1,
+        "type": "array"
+      },
+      "relations_developed": {
+        "items": {
+          "$ref": "#/$defs/relation_state_sketch"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "relations_introduced": {
+        "items": {
+          "$ref": "#/$defs/relation_sketch"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "section_id": {
+        "maxLength": 200,
+        "type": "string"
+      }
+    },
+    "required": [
+      "section_id",
+      "questions_raised"
+    ],
+    "type": "object"
+  },
+  "response_schema_name": "phase1_section_extraction",
+  "system": "# Phase 1 — per-section atlas extraction (referential)\n\nYou are reading one section of a referential text — an encyclopedia\narticle, wiki page, or reference work — and extracting the typed\nknowledge it carries: who and what is being described, what claims\nthe section makes, what events it records, and what questions a\nreader would arrive here to answer.\n\nYou are not summarising. You are building a typed graph a downstream\nreader will use to retrieve and navigate the article without\nre-reading it.\n\nReferential prose is editorial third-person description. The atoms\nyou surface will cluster differently than a novel's or a\nphilosophical argument's: many entities (people, places, works,\nconcepts), many factual claims, many events (especially in\nhistorical and biographical articles), and the section's\nquestions are *retrieval shapes* — the natural-language phrasings a\nreader would use to seek out this content.\n\nYour job is to list the atoms at the right level of granularity and\ndrop a short anchor keyphrase per atom so a reviewer can locate it\nin the source.\n\n## The six facets\n\nFor this section, produce typed records in any of these fields you\nfind real support for. Omit a field rather than inventing entries\nto fill it.\n\n### 1. `entities_introduced`\n\nPeople, places, organisations, concepts, works, events entering\nthe frame for the first time.\n\n- `canonical_name` — reader-facing reference form. Use the form the\n  section itself uses (typically a Wikipedia-style title).\n- `aliases` — other names the section uses for this entity. Common\n  for people (full name + given name), places (city + country\n  shorthand), and concepts that have multiple terms. Omit if none.\n- `entity_type` — one of `person`, `place`, `concept`, `institution`,\n  `work`, `event`. If a thing fits two types, pick the one that\n  best fits how the section uses it.\n- `description` — one sentence drawn from this section. A routing\n  aid for clustering, not an encyclopedia definition.\n- `anchor` — 3–8 word keyphrase from the text that introduces the\n  entity. Just enough to grep for.\n\n**Person split.** When the section names a person AND a work they\nauthored AND a concept they introduced — these are three separate\natoms, not one collapsed entry. Lift the person, the work, and the\nconcept as their own typed atoms even when the section's main\nsubject is one of them.\n\n**Concepts get their own atoms.** Each load-bearing technical term\nnamed in the section is its own `{entity_type: concept}` atom — not\nfolded into the entity that bears it. The bar is generous: lift any\nnamed concept the section *uses* — named theories, named methods,\nnamed goods, named periods, named movements. Don't re-extract on\nevery later mention; lift on first appearance. **When in doubt, lift it.**\n\n**Cross-conceptual labels matter.** When an article describes a\nconcept whose canonical name in this section differs from how\nreaders might query for it (e.g. *Nirvana* is the Buddhist concept\na reader might query as \"Buddhist afterlife\" or \"Buddhist\nliberation\"), capture the alternate phrasings in `aliases`. This is\nthe highest-value signal for retrieval — every alias becomes a\nqueryable surface.\n\n### 2. `entities_developed`\n\nChanges or transitions an entity undergoes within this section.\nCommon shapes for referential prose: biographical events\n(*Einstein moved to Princeton*), state changes (*the empire was\ndivided*, *the species went extinct*), structural transitions\n(*the company was acquired*).\n\n- `entity_name` — must match a known canonical name or alias.\n- `label` — the change as a concise phrase. \"Moved from Berlin to\n  Princeton in 1933\" is useful; \"relocated\" is not.\n- `anchor` — 3–8 word keyphrase.\n\n### 3. `relations_introduced`\n\nStructural relationships entering the frame. Common referential\nflavors: `caused`, `influenced`, `preceded`, `succeeded`,\n`includes`, `member_of`, `married_to`, `studied_under`,\n`contemporaneous_with`, `derived_from`, `subspecies_of`,\n`bordered_by`.\n\n- `participants` — list of canonical names or aliases. Typically 2;\n  occasionally 3.\n- `relation_type` — short verb-phrase from the relation flavors\n  above or a section-derived equivalent.\n- `description` — one short sentence summarising the relation as the\n  section frames it.\n- `anchor` — 3–8 word keyphrase.\n\n### 4. `events_described`\n\nEvents the section records. This is where referential corpora are\ndensest — historical articles, biographies, and timelines are\nmostly events.\n\n- `description` — one sentence, drawn from the section.\n- `participants` — entities involved (canonical names or aliases).\n- `time` — date, era, or period the section associates with the\n  event. A bare year is fine.\n- `anchor` — 3–8 word keyphrase.\n\n### 5. `claims_made`\n\nEditorial assertions of fact the section makes. Referential\ncorpora aim for neutrality, but every assertion is still a claim\n— we capture what the article *says is the case*.\n\n- `content` — the claim as a single declarative sentence.\n- `subject` — what the claim is about (canonical name, alias, or\n  short phrase).\n- `attributed_to` — if the section attributes the claim to a\n  source (\"according to historian X\"), record that source. If the\n  section asserts the claim editorially without attribution, leave\n  empty.\n- `anchor` — 3–8 word keyphrase.\n\nA note on contested sections: if the section presents *multiple*\npositions on a question (e.g. a Debate or Criticism section),\nextract each position as a separate claim with its own\n`attributed_to`. Don't synthesise the disagreement away.\n\n### 6. `questions_raised`\n\nQuestions a reader would arrive at this section to answer. This is\nthe most retrieval-shaped facet — write the questions in\nnatural-language form, the way a curious reader would type them.\n\n- `content` — the question itself, in user-shaped phrasing. \"What\n  did Einstein contribute to physics?\" — not \"Einstein's\n  contributions to physics\".\n- `kind` — one of `factual` (single-fact lookup),\n  `definitional` (what is X?), `causal` (why did X happen?),\n  `comparative` (how do X and Y differ?), `procedural` (how does\n  X work?).\n- `anchor` — 3–8 word keyphrase tying back to the source.\n\n**Generosity here matters most.** A single Wikipedia section often\nanswers 3–10 distinct questions a reader might bring. Extract\ngenerously. Phrase each question as a *user* would type it, not as\na librarian would index it. If the section has a \"Debate\" or\n\"Criticism\" header, lift the comparative / contested phrasings\nexplicitly (\"What are the major arguments for and against X?\").\n\nThis facet is the highest retrieval-value output. Tags here become\nthe natural-language surface that closes the gap between a user's\nphrasing and the article's editorial language.\n\n## What to skip\n\n- Don't extract atoms for navigational text (table of contents\n  entries, \"See also\" headers without substantive content).\n- Don't lift atoms from infobox-only data unless the body of the\n  section also discusses them.\n- Don't paraphrase claims into your own framing — quote the\n  section's own language for `content`.\n\n## Output\n\nRespond with a single JSON object matching the schema in the\nruntime. Omit any facet that has no entries rather than padding\nwith synthesised content.\n",
+  "user": "# Chapter to analyse\n\n**Section id:** sec-0002\n**Title:** Article II — Quiet hours\n**Position:** chapter 2\n\n**Body:**\n\nArticle II — Quiet hours. Quiet hours begin at 11 PM every night. Members may not play amplified music in the common spaces after that time. Guests are bound by the same rule as the member who invited them.\n\n---\n\nUse `section_id = \"sec-0002\"` in your response. Respond with a single JSON object per the schema in the system message."
+}

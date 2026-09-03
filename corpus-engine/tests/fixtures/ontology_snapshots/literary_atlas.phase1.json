@@ -1,0 +1,366 @@
+{
+  "phase_id": "phase1",
+  "response_schema": {
+    "$defs": {
+      "argument_reconstruction_sketch": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor": {
+            "maxLength": 800,
+            "type": "string"
+          },
+          "conclusion": {
+            "maxLength": 400,
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "objections": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "content": {
+                  "maxLength": 400,
+                  "type": "string"
+                },
+                "name": {
+                  "maxLength": 120,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "type": "object"
+            },
+            "maxItems": 6,
+            "type": "array"
+          },
+          "premises": {
+            "items": {
+              "maxLength": 400,
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
+          },
+          "proponent": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "premises",
+          "conclusion"
+        ],
+        "type": "object"
+      },
+      "claim_sketch": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor": {
+            "maxLength": 800,
+            "type": "string"
+          },
+          "attributed_to": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "items": {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                "maxItems": 8,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "content": {
+            "maxLength": 800,
+            "type": "string"
+          },
+          "discourse_act": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "epistemic_status": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "quotable_excerpt": {
+            "anyOf": [
+              {
+                "maxLength": 220,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "content",
+          "discourse_act"
+        ],
+        "type": "object"
+      },
+      "entity_sketch": {
+        "additionalProperties": false,
+        "properties": {
+          "aliases": {
+            "items": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 5,
+            "type": "array"
+          },
+          "anchor": {
+            "maxLength": 800,
+            "type": "string"
+          },
+          "canonical_name": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "defining_quote": {
+            "anyOf": [
+              {
+                "maxLength": 220,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "maxLength": 600,
+            "type": "string"
+          },
+          "entity_type": {
+            "enum": [
+              "person",
+              "concept",
+              "institution",
+              "work",
+              "place",
+              "initiative"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "canonical_name",
+          "entity_type"
+        ],
+        "type": "object"
+      },
+      "entity_state_sketch": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor": {
+            "maxLength": 800,
+            "type": "string"
+          },
+          "entity_name": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_name",
+          "label"
+        ],
+        "type": "object"
+      },
+      "event_sketch": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor": {
+            "maxLength": 800,
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 600,
+            "type": "string"
+          },
+          "participants": {
+            "items": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "type": "object"
+      },
+      "question_sketch": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor": {
+            "maxLength": 800,
+            "type": "string"
+          },
+          "content": {
+            "maxLength": 800,
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "type": "object"
+      },
+      "relation_sketch": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor": {
+            "maxLength": 800,
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "participants": {
+            "items": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
+          }
+        },
+        "required": [
+          "participants",
+          "label"
+        ],
+        "type": "object"
+      },
+      "relation_state_sketch": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor": {
+            "maxLength": 800,
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "participants": {
+            "items": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
+          }
+        },
+        "required": [
+          "participants",
+          "label"
+        ],
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "argument_reconstructions": {
+        "items": {
+          "$ref": "#/$defs/argument_reconstruction_sketch"
+        },
+        "maxItems": 6,
+        "type": "array"
+      },
+      "claims": {
+        "items": {
+          "$ref": "#/$defs/claim_sketch"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "entities_developed": {
+        "items": {
+          "$ref": "#/$defs/entity_state_sketch"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "entities_introduced": {
+        "items": {
+          "$ref": "#/$defs/entity_sketch"
+        },
+        "maxItems": 15,
+        "type": "array"
+      },
+      "events": {
+        "items": {
+          "$ref": "#/$defs/event_sketch"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "questions_raised": {
+        "items": {
+          "$ref": "#/$defs/question_sketch"
+        },
+        "maxItems": 25,
+        "minItems": 1,
+        "type": "array"
+      },
+      "relations_developed": {
+        "items": {
+          "$ref": "#/$defs/relation_state_sketch"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "relations_introduced": {
+        "items": {
+          "$ref": "#/$defs/relation_sketch"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "section_id": {
+        "maxLength": 200,
+        "type": "string"
+      }
+    },
+    "required": [
+      "section_id",
+      "questions_raised"
+    ],
+    "type": "object"
+  },
+  "response_schema_name": "phase1_section_extraction",
+  "system": "# Phase 1 — per-section atlas extraction (literary)\n\nYou are reading one chapter or section of a literary work and\nextracting the structural knowledge it carries: who appears, how they\nchange, how their relationships move, what events occur, what the\ntext argues through its structure, and what questions the section\nraises.\n\nYou are not summarising. You are building a typed graph a downstream\nreader will use to navigate the work without re-reading it.\n\nLater phases will classify types (psychological vs social state,\ndecision vs encounter) and ground evidence to exact passages. Your\njob here is to list the atoms at the right level of granularity and\ndrop a short anchor keyphrase per atom so a reviewer can locate it\nin the source. Keep each record to a handful of fields.\n\n## The six facets\n\nFor this section, produce typed records in any of these fields you\nfind real support for. Omit a field rather than inventing entries\nto fill it.\n\n### 1. `entities_introduced`\n\nCharacters, places, objects, ideas entering the frame for the first\ntime.\n\n- `canonical_name` — reader-facing reference form (e.g. `\"Alyosha\"`,\n  not the full patronymic unless the section itself uses it).\n- `aliases` — other names the section uses for this entity. Omit if\n  none.\n- `entity_type` — one of `person`, `concept`, `institution`, `work`,\n  `place`.\n- `description` — one sentence drawn from this section. A routing\n  aid for clustering, not a wiki definition.\n- `anchor` — 3–8 word keyphrase from the text that introduces or\n  establishes the entity. Not a 25-word quote; just enough to grep\n  for.\n\n**Narrator / author ≠ entity.** A first-person narrator is the\nvoice, not a Person atom. Do NOT emit `\"the narrator\"`, `\"the boy\"`,\n`\"narrator\"`, or the author. Test: if the section only says \"I saw\n/ I felt / I heard\" of the candidate, they're the narrator — no atom.\nTheir events and states get recorded without a participant id, or\nattached to named characters they interact with.\n\n**Single-mention named characters get Person atoms.** Naming is the\nthreshold, not on-page page-count.\n\n**Cited works are Work atoms.** A book on a shelf, a poem quoted in\ndialogue, a play named in allusion — each is its own Work atom.\n\n**Abstract concepts get their own Concept atoms — generously.**\nLift any named theme, motif, named condition, or load-bearing\nliterary term the section uses. Italics aren't required; recurrence\nisn't required; a term that names a *thing the work is about* counts.\nForm: *grace under pressure* (Hemingway), *the figure in the carpet*\n(James), *the horror* (Conrad) — drawn from areas unrelated to\nwhatever you are processing. Lift on first mention. **When in doubt,\nlift it** — abstract atoms are the anchors downstream phases use to\njoin claims across sections.\n\n### 2. `entities_developed`\n\nInner states an entity occupies or enters in this section.\n\n- `entity_name` — must match a known canonical name or alias.\n- `label` — the state as a concise phrase, not a single adjective.\n  \"Guarded watchfulness after being slighted\" is useful; \"sad\" is\n  not.\n- `anchor` — 3–8 word keyphrase.\n\n### 3. `relations_introduced`\n\nPersistent interactions that open here — dynamics with their own\nidentity beyond either participant's individual state.\n\n- `participants` — entity names, ordered when asymmetric (mentor →\n  student, employer → employee).\n- `label` — what the relationship *is*, not what they feel.\n- `anchor` — 3–8 word keyphrase.\n\n### 4. `relations_developed`\n\nStates a relation occupies or enters in this section — shifts in a\ndynamic, public demonstrations of the bond, ruptures.\n\n- `participants` — same ordering rules.\n- `label` — the relational state as a phrase.\n- `anchor` — 3–8 word keyphrase.\n\n### 5. `events`\n\nThings that happen — not mood, not background. Causes transitions,\ncreates or dissolves relationships, grounds a claim.\n\n- `description` — one sentence naming what happens.\n- `participants` — entity names involved.\n- `anchor` — 3–8 word keyphrase.\n\n### 6. `claims`\n\nKnowledge-carrying acts the text performs. Attribute to a character\nwhen the content states their commitment — even when the narrator's\nvoice carries it. \"Alyosha believes that...\" attributes to Alyosha\neven though no quotation marks frame it. Reserve `attributed_to:\nomit` for true text-level structural argument that doesn't pin a\ncommitment on a named character. Attribution is the join key\ndownstream phases use to surface character-vs-character tension.\n\n- `content` — the claim in propositional form. Not the event that\n  carries it.\n- `discourse_act` — one of:\n  - `argue` — reasons + evidence marshalled\n  - `assert` — stated as fact\n  - `enact` — demonstrated through narrative structure\n  - `hypothesize` — proposed without committing\n  - `warn` — predicts negative consequences\n  - `commit` — declaration of intent or resolution\n  - `object` — challenges another claim\n  - `interpret` — offers a reading\n  - `imply` — available from context without being stated\n- `epistemic_status` — one of `confident`, `tentative`, `contested`,\n  `retracted`, `attributed`.\n- `attributed_to` — entity name, or omit for text-level claims.\n- `anchor` — 3–8 word keyphrase.\n\n### 7. `questions_raised`\n\nQuestions this section first poses or makes salient. Skip\ncross-section advancement tracking — later clustering recovers those\nlinks more reliably than you can from a single section.\n\n- `content` — the question in natural language.\n- `anchor` — 3–8 word keyphrase.\n\n## Output schema (strict JSON)\n\nReturn exactly one JSON object. No prose before or after. No\ncode-fence markers. All string fields take real prose — never `null`,\nempty strings, or `\"...\"` / `\"TODO\"` placeholders.\n\nEvery top-level field is optional — omit entire keys you cannot\npopulate with real content rather than returning empty arrays.\n\n## Shape example\n\nIllustration only. It mixes Austen's *Pride and Prejudice* with\nCamus's *L'Étranger* and Cervantes's *Don Quixote* so no single\nchapter could plausibly carry these atoms. Match the *shape* — note\nthe mix of person, concept, and work entity types — and produce\nyour own atoms from the actual text in the user message.\n\n```json\n{\n  \"section_id\": \"EXAMPLE_ONLY_REPLACE_ME\",\n  \"entities_introduced\": [\n    {\n      \"canonical_name\": \"Mrs. Bennet\",\n      \"entity_type\": \"person\",\n      \"description\": \"Excitable matriarch whose project is marrying her daughters advantageously.\",\n      \"anchor\": \"a single man of good fortune\"\n    },\n    {\n      \"canonical_name\": \"the absurd\",\n      \"entity_type\": \"concept\",\n      \"description\": \"The condition of confronting a silent, indifferent universe — the section's load-bearing term.\",\n      \"anchor\": \"Maman died today\"\n    },\n    {\n      \"canonical_name\": \"Amadis of Gaul\",\n      \"entity_type\": \"work\",\n      \"description\": \"Chivalric romance Don Quixote cites as the model for his self-fashioning.\",\n      \"anchor\": \"in the manner of Amadis\"\n    }\n  ],\n  \"relations_introduced\": [\n    {\n      \"participants\": [\"Mr. Bennet\", \"Mrs. Bennet\"],\n      \"label\": \"Long-married couple — wife's agitation meets husband's ironic distance\",\n      \"anchor\": \"You take delight in vexing me\"\n    }\n  ],\n  \"claims\": [\n    {\n      \"content\": \"A single man in possession of a good fortune is seen as the rightful property of some family's daughter.\",\n      \"discourse_act\": \"assert\",\n      \"epistemic_status\": \"confident\",\n      \"anchor\": \"truth universally acknowledged\"\n    }\n  ],\n  \"questions_raised\": [\n    {\n      \"content\": \"What does marriage-for-advantage cost the people negotiated around it?\",\n      \"anchor\": \"business of her life\"\n    }\n  ]\n}\n```\n\n## Hard constraints\n\n- Never emit `\"...\"`, `\"…\"`, `\"null\"`, or `\"TODO\"` as any field value.\n- Omit whole keys rather than returning empty arrays.\n- Every claim carries `discourse_act` and `epistemic_status` — these\n  are load-bearing for downstream language calibration and are hard\n  to recover after the claim leaves its passage.\n- `anchor` is a 3–8 word keyphrase, NOT a quoted passage. Short.\n- Do not restate the schema or narrate your reasoning. Return the\n  JSON object and nothing else.\n",
+  "user": "# Chapter to analyse\n\n**Section id:** sec-0002\n**Title:** Article II — Quiet hours\n**Position:** chapter 2\n\n**Body:**\n\nArticle II — Quiet hours. Quiet hours begin at 11 PM every night. Members may not play amplified music in the common spaces after that time. Guests are bound by the same rule as the member who invited them.\n\n---\n\nUse `section_id = \"sec-0002\"` in your response. Respond with a single JSON object per the schema in the system message."
+}

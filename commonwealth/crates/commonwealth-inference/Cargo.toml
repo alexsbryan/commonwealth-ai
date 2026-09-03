@@ -23,6 +23,13 @@ bytes = { workspace = true }
 chrono = { version = "0.4", features = ["serde"] }
 tokio-stream = "0.1"
 tokio-util = { workspace = true }
+# `libc::kill` for SIGTERM-before-SIGKILL in `orchestrator::process::stop`.
+# tokio's `Child::start_kill` is SIGKILL on unix, which makes a graceful
+# window unreachable. Same usage pattern as commonwealth-api's
+# `pipeline_pause` handler. Unix-only; the `#[cfg(unix)]` arm is the only
+# reader.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [lints]
 workspace = true

@@ -73,7 +73,7 @@ const HELP: Help = Help {
         ),
         HelpSection::Flags(&[
             ("--daemon <url>",    "Override the daemon base URL (default http://localhost:9741)."),
-            ("--data-dir <path>", "State-store root (default: SetupConfig.data.dir, else ~/.svrnmesh)."),
+            ("--data-dir <path>", "State-store root for the LOCAL verbs — inspect/list/show (default: SetupConfig.data.dir, else ~/.svrnmesh). `ask` and `session` run on the daemon and ignore it; scope those with `--corpus <id>`."),
             ("--chat-model <id>", "Force a specific chat model ID (default: SetupConfig.models.primary stem; fallback to first non-embed /v1/models entry)."),
             ("--embed-model <id>","Force a specific embedding model ID (default: SetupConfig.models.embed stem; fallback to first embedding-like /v1/models entry)."),
             ("--temperature <f>", "Override sampling temperature for this session (range [0.0, 2.0]). Default: runtime default (0.7)."),
@@ -83,7 +83,10 @@ const HELP: Help = Help {
         HelpSection::Notes(
             "Requires `svrn daemon` at the configured client port (default 9741). \
              Bootstrap probes /v1/models before any subcommand runs — if the probe fails \
-             the command exits 2 with a remediation hint.",
+             the command exits 2 with a remediation hint.\n\n\
+             `ask` and `session` are surfaces: the whole turn runs on the daemon, so \
+             SOVEREIGN_GATE_* knobs take effect in the daemon's environment (not this shell) \
+             and retrieval is scoped with `--corpus`, not `--data-dir`.",
         ),
     ],
 };

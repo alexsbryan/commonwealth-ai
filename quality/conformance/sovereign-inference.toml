@@ -1,0 +1,18 @@
+# Conformance tags in `sovereign-inference` — GENERATED. DO NOT EDIT BY HAND.
+#
+#   UPDATE_CONFORMANCE_TAGS=1 cargo test -p kernel-types --test conformance_tags
+#
+# Each claim maps a requirement id from research/clean-room/REQUIREMENTS.md
+# to the test that proves it. `test` is `<junit classname>::<junit name>`, so
+# `svrn conformance` can join a claim to a real per-test verdict without
+# guessing.
+#
+# `asserts` counts falsifiable exits in the test body. It is never zero: a
+# covers: tag over a body that cannot fail is refused by the generator.
+
+[[claim]]
+requirement = "FE-77"
+test = "sovereign-inference::embedded::rpc_distribution::rpc_prune_tests::a_per_device_overflow_is_its_own_refusal_and_advises_lowering_headroom"
+file = "sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs"
+line = 3027
+asserts = 12

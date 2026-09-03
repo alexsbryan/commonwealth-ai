@@ -43,6 +43,13 @@ sovereign-core = { workspace = true }
 # The enrichment store below every host that reads it — `enrich_cmd::{config,
 # paths, catalog}` are re-exports of this crate (rung nc-16-shared-capability).
 sovereign-enrichment-catalog = { workspace = true }
+# The atlas build orchestrator + its phase drivers, moved DOWN out of this
+# crate 2026-09-01 (ontology-v1 P0.5) so the daemon and the desktop can reach
+# them without linking this host — and with it `bench_cmd`'s grandfathered
+# `sovereign-eval` edge. `enrich_cmd` keeps the `cmd_*` + HELP halves and
+# calls down; five modules with no CLI half are re-exported wholesale from
+# `enrich_cmd/mod.rs`.
+sovereign-enrichment-build = { workspace = true }
 sovereign-contracts = { workspace = true }
 # Phase 6: the chat surface asks the daemon for a turn instead of building
 # a Runtime to run one itself (TOPOLOGY §10).
@@ -156,6 +163,13 @@ awareness = [
     "dep:corpus-engine-atos",
     "dep:rusqlite",
 ]
+
+[dev-dependencies]
+# First dev-dependency this crate has needed. `test-support` exposes the ONE
+# `test_env::scoped_home` HOME lock: it moved down with `providers`' tests
+# and four test modules here still take it (egress_reds, errors, reset,
+# integration_tests). A feature rather than a second copy of the lock (§10.6).
+sovereign-enrichment-build = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true

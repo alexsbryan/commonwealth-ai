@@ -121,6 +121,18 @@ async fn extract_answer_value(
             let v = resp.text.trim().trim_matches('"').trim();
             let low = v.to_lowercase();
             // A declined / empty / no-value extraction is nothing to ground.
+            //
+            // KNOWN DIVERGENCE from `kernel_types::is_absent_marker`, which is
+            // the one decider for "does this text name an absence" and which
+            // the atlas extractor uses. This chain is a bare `starts_with`, so
+            // it reads a judge answering "unknown-type sceatta series" as a
+            // DECLINE and grounds nothing — the same §18.1 defect that was
+            // fixed in the extractor. It is not switched here in a cleanup
+            // commit because this is a GATE input: making it stricter about
+            // declines sends more answers to the presence check, which changes
+            // what the grounding gate suppresses. That is a §18.6 change and
+            // needs the grounding battery reported in both directions, not a
+            // one-line substitution. Tracked in note `d61eb8d4` item 11.
             if v.is_empty()
                 || low == "none"
                 || low.starts_with("none")

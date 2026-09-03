@@ -61,7 +61,7 @@ weights (created by `svrn setup`, gitignored).
 | `corpus-engine-notes`| `Note` + its value types (`note.rs`, plain data — the published surface), the `NoteStore` that persists them (`notes.rs`), project-docs index + notes↔alignment sync (carved out of corpus-engine for blast-radius control) | `rusqlite` |
 | `corpus-engine-atos` | ATOS feature store + plan items + DESIGN.md design signals (carved out). **ATOS is an opt-in experiment** behind the `atos` Cargo feature — the recipe-author workspace uses `sovereign-store::RecipeProjectStore` instead, and default product builds (server/desktop/daemon/cli) carry zero ATOS | `rusqlite` |
 | `corpus-engine-archaeology` | Git history mining + rough-edge surfacing + atom-provenance eval (carved out) | — |
-| `corpus-engine-yield` | `YieldHook` cooperative foreground-yield contract — a Tier-0 leaf (one trait, zero deps) shared by the data plane and the watchers so the daemon's `Arc<dyn YieldHook>` has one trait identity on both. Also carries the seam's **liveness bound**: `MAX_FOREGROUND_DEFERRAL` (300 s) + `DeferralBudget`, because `should_yield()` is a level predicate that any request cadence shorter than the yield window pins true forever — see "Foreground yield is bounded" below | — |
+| `corpus-engine-yield` | `YieldHook` cooperative foreground-yield contract — a Tier-0 leaf (one trait, zero deps) shared by the data plane and the watchers so the daemon's `Arc<dyn YieldHook>` has one trait identity on both. Also carries the seam's **liveness bound**: `MAX_FOREGROUND_DEFERRAL` (300 s) + `DeferralBudget`, because `should_yield()` is a level predicate that any request cadence shorter than the yield window pins true forever — see "Foreground yield is bounded" below. Since 2026-09-02 it also carries the WRITE side, `ForegroundSignal` + `ForegroundLease`: the daemon installs both halves on the corpus engine, and every `Runtime` turn holds a lease on its stream handle for the turn's whole life, so ingest, enrichment and the newsworthy tick park for the entire turn (measured: background commits inside one grounded turn 42 → 1). Until then the only bump site was `chat_completions`, which the product's own chat paths never cross. | — |
 | `corpus-engine-sections` | Section detectors (`SectionDetector`, `DetectedSection`, `ChapterRegexDetector`, `TocAnchoredDetector`) — corpus-engine's own segmentation vocabulary, carved into a `regex`-only leaf so the studio `SectionTool` shares the ONE implementation by reaching DOWN, instead of corpus-engine reaching UP into `sovereign-contracts` (noun-convergence rung 2) | `regex` |
 | `corpus-engine-watchers` | Lint/test/project-index watchers + their SQLite result stores + coordinator (carved out of corpus-engine, R4 Step 1 — cuts the watcher-edit rebuild set 22→12 crates, measured). Compiles unconditionally; the SCIP `CodeWatcher` stays in corpus-engine | `corpus-engine-notes`, `corpus-engine-yield`, `rusqlite`, `notify` |
 | `sovereign-recipes`  | Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build) | —                                       |
@@ -208,7 +208,7 @@ crates/
 ├── sovereign-work-atlas     # Coordination atlas for agents on the mesh
 ├── sovereign-enrichment-catalog # The enrichment store below every host that reads it: the `<data-root>/enrichment/<corpus>/` layout, the `config.json` schema (`EnrichConfig`) and the inventory. Minted 2026-08-20 (rung nc-16-shared-capability) — the schema lived in `sovereign-cli-llm`, a BINARY, so the daemon's watched-folder driver mirrored it by hand in `sovereign-tools` (four fields behind) and the desktop hand-parsed the same file. All three now read one definition; the CLI's `enrich_cmd::{config,paths}` are re-exports
 ├── sovereign-runtime-recipe # THE recipe that commissions a `Runtime`: the router classifier stack, the turn tool registry and the enrichment lane, below every host. Minted 2026-08-25 (TOPOLOGY.md §10 phase 5c) — the recipe needs `sovereign-tools` + `sovereign-gliner` and every crate that could already see both was a host BINARY, so `svrn chat`, the desktop and `sovereign-server` each carried their own ~600-line copy and only ONE of eleven optional slots was wired by all three. **All four hosts are on it as of 2026-08-26** (phase 7): `sovereign daemon run`, `svrn chat`, the desktop and the hub server, so `runtime_commission_census.rs`'s `UNSHARED_RECIPES` list is EMPTY. A host now supplies `RecipeInputs` — inference, store, corpus engine, skills, `Vec<Box<dyn ToolBundle>>`, `ToolSwitches`, `LaneWarmth`, `RerankWiring` — and struct-updates only the slots that are its own. `common_parts` returns the parts, the shared `AtlasContextManager` and the MCP manager; `commission` is the only `Runtime::new` in first-party production code
-├── sovereign-turn-client  # THE client half of the turn protocol — how a surface asks a serving host for a turn. Minted 2026-08-25 (TOPOLOGY.md §10 phase 6) in the **contract** layer beside `oicp-client`, the existing precedent for "protocol types plus the client that speaks them"; its only non-leaf dependency is `sovereign-contracts`, so it cannot see a `Runtime`, a store or a corpus — which is what lets a surface depend on it without dragging a serving host's world along. `TurnClient::run_turn` is the client-side mirror of `sovereign_core::runtime::serve_turn`: ONE implementation of "drive a turn to completion and tell me what it did", where five CLI ask commands each had their own and each ended by re-reading the store — which only works from inside the process that owns it. `svrn chat ask` and `svrn chat session` are its first callers and hold no `Runtime`. Before it, the only Rust code that had ever SENT a `TurnRequest` was two integration tests, each with its own hand-rolled WebSocket dance
+├── sovereign-turn-client  # THE client half of the turn protocol — how a surface asks a serving host for a turn. Minted 2026-08-25 (TOPOLOGY.md §10 phase 6) in the **contract** layer beside `oicp-client`, the existing precedent for "protocol types plus the client that speaks them"; its only non-leaf dependency is `sovereign-contracts`, so it cannot see a `Runtime`, a store or a corpus — which is what lets a surface depend on it without dragging a serving host's world along. `TurnClient::run_turn` is the client-side mirror of `sovereign_core::runtime::serve_turn`: ONE implementation of "drive a turn to completion and tell me what it did", where five CLI ask commands each had their own and each ended by re-reading the store — which only works from inside the process that owns it. `svrn chat ask` and `svrn chat session` are its first callers and hold no `Runtime`. Before it, the only Rust code that had ever SENT a `TurnRequest` was two integration tests, each with its own hand-rolled WebSocket dance `TurnClient::create_conversation(skill_id, enabled_corpora)` (2026-09-01, issue #57) carries the per-conversation corpus allow-list on the create body — `svrn chat ask/session --corpus <id>` — which the host validates in `Runtime::seed_conversation` against the corpora it would actually search and refuses with a 400 naming the unknown id and the installed list; the key is omitted when unset, so an unscoped create is byte-identical to before.
 ├── sovereign-mesh           # In-process cmnwlth embed
 ├── sovereign-compute        # Supervised compute-child process boundary (P1): child-process supervisor + native lossless wire + child server/entrypoint + daemon-side single-child routing facade. Value = crash isolation + distributed case, NOT parallelism (see doc)
 ├── sovereign-server         # Axum REST + WebSocket, multi-tenant + approvals
@@ -264,7 +264,7 @@ only the OICP contract crates, enforced by the xtask `boundary-gate`
 ```
 crates/
 ├── sovereign-workflow       # Step·Artifact·Runner — typed dataflow over local-model steps (P0+P1 + content cache + `for_each` collection-map; `svrn workflow run`). Diffed byte-for-byte against the real corpus chunk→embed stage. Owns the `StepKind`/`WireKind` wire-kind catalog the authoring schema derives from (§2.1 source of truth).
-├── sovereign-workflow-host  # Daemon-runnable workflow host — assembles the standard tool registry + daemon inference + content cache to run a workflow in-process; the catalog/resolve surface; the living trigger; the `recipe:` corpus-ingest stage; and the NL workflow-author tool bundle (`workflow_write`/`_write_structured`/`validate`/`test`, the JSON-Schema-constrained author mirroring recipe-author). Two run entries: `run_workflow_in_process` (builds a daemon-routed provider from a URL — the CLI + living trigger) and `run_workflow_with_provider` (takes an **injected** provider + optional `StepObserver` — the desktop **Run a workflow** view feeds its own `AppState.inference` and streams per-step progress to the UI).
+├── sovereign-workflow-host  # Daemon-runnable workflow host — assembles the standard tool registry + daemon inference + content cache to run a workflow in-process; the catalog/resolve surface; the living trigger; the `recipe:` corpus-ingest stage; and the NL workflow-author tool bundle (`workflow_write`/`_write_structured`/`validate`/`test`, the JSON-Schema-constrained author mirroring recipe-author). Two run entries: `run_workflow_in_process` (builds a daemon-routed provider from a URL — the CLI + living trigger) and `run_workflow_with_provider` (takes an **injected** provider + optional `StepObserver` — the desktop **Run a workflow** view feeds its own `AppState.inference` and streams per-step progress to the UI). Also the ONE decider for "which embed model, and does the daemon answer with it" — `daemon_models::resolve_embed_model` (explicit → configured stem → embedding-like `/v1/models` id, then a `POST /v1/embeddings` probe as the verdict), shared by `run_workflow_in_process` (`svrn corpus ingest`), `svrn corpus search`, `svrn recipe test --enrich` and `svrn chat` bootstrap since 2026-09-01; before that three copies disagreed and a daemon whose listing carried only chat ids served chat but refused ingest.
 ├── sovereign-tools-base     # Pure leaf workflow tools (shell/web/chunk/file/json/csv/zip/vector/MCP) — the tool set the studio package ships without sovereign-tools
 ├── sovereign-recipe-author  # Recipe-authoring tool bundle + RecipeProject model + project store (re-exported as `sovereign_tools::recipe_author` for legacy paths)
 └── sovereign-studio         # Headless studio CLI — authors/tests recipes + runs workflows against any OICP daemon; the proof the package is independently usable
@@ -764,15 +764,18 @@ identical schema for a full index or a shard.
     │   ├── <hh>/<sha256>                # raw bytes, sharded by leading 2 hex
     │   └── parsed/<sha256>.<ext>        # typed parsed cache (parquet/ical/…)
     └── atlas/
-        ├── atoms.json                   # AtomsFile SCHEMA_VERSION 2.3 (canonical export)
+        ├── atoms.json                   # AtomsFile SCHEMA_VERSION 2.4 (canonical export)
         ├── atoms.lance/                 # ATLAS_STORAGE_V2 columnar atom store — the
         │                                # query-path reader (hot scalar columns + a
         │                                # lossless payload). Replaced atoms.rkyv; the
         │                                # sole atom backend. See docs/specs/ATLAS_STORAGE_V2.md
         ├── edges.csr                    # mmap'd CSR adjacency — sync, paged BFS
-        ├── atoms_ann.lance/             # ANN seed table (atom_id → embedding), built at
-        │                                # enrich/backfill; seeds atlas grounding (only
-        │                                # on embedding-bearing corpora)
+        ├── atoms_ann.lance/             # ANN seed table (atom_id → embedding); seeds atlas
+        │                                # grounding. Written by ONE function,
+        │                                # `sovereign_tools::atlas_context_manager::backfill_ann`,
+        │                                # from `enrich build`'s last step (`backfill`, skipped
+        │                                # while `ann_table_is_fresh` — table mtime ≥ atoms.json)
+        │                                # or `svrn atlas backfill-ann <id>`
         ├── asset_atoms.jsonl            # AD-2 Asset envelopes (sidecar union'd
         │                                # into atoms.json on next atlas write)
         ├── asset_edges.jsonl            # EdgeType::Attaches edges
@@ -1168,8 +1171,194 @@ means one thing.
   ArgumentReconstruction, Configuration, Asset). `Pipeline` trait +
   registry + `ExemplarBank` + `PhaseCache`. Pipelines: `literary`,
   `literary_atlas`, `philosophy_atlas`, `referential_atlas`,
-  `engineering_atlas`, `conversation_atlas`. State at
-  `~/.svrnmesh/indexes/<corpus>/atlas/`. Deep-dive:
+  `engineering_atlas`, `conversation_atlas`, and `custom_atlas` — the
+  recipe-declared genre (`pipelines/configurable_atlas.rs`), built from a
+  recipe's versioned `[enrichment.ontology]` block. `version` (absent = 0)
+  selects an `OntologyLanguage` in `enrichment/ontology/language.rs`
+  (registry keyed by the integer; unknown version refuses naming the max; a
+  later version's key without its version line refuses naming the fix); every
+  version parses to `enrichment::ontology::OntologyPolicies` (five axes +
+  prose), which is all the pipeline reads. Version 0 is the prose
+  `OntologyConfig`; version 1 declares types with typed attributes
+  (`OntologyTypeDecl`, `AttrDecl`) plus `voices`/`change`/`tension`/`derive`.
+  `recipe validate` resolves every reference and prints the derived facets;
+  `recipe new --ontology <name>` scaffolds one of the ten PRIMITIVES §1
+  templates from `sovereign-recipes/_templates/ontology-v1/`
+  (`recipe_templates.rs`; each template's derived facets are pinned under
+  `corpus-engine/tests/fixtures/recipe_templates/`);
+  `recipe migrate --ontology-version 1` adds the version line as a diff.
+  `CustomAtlasSpec.policies` carries the parsed policies into `config.json`;
+  `CustomOntology::from_policies` composes the Phase-1 prompt (the declared
+  block and the Phase-6 extras render in `pipelines/ontology_prompt.rs`) and,
+  when types are declared, the generated response schema (`pipelines/ontology_schema.rs`
+  — it EDITS the shipped `phase1_section_extraction_schema`, extending the
+  entity enum, adding a type slot plus one union `attributes` object per kind
+  — the object REQUIRED, its slots optional, since a strict grammar omits an
+  optional object at will and enforces only `required`; and `subject`
+  inserted BEFORE the bag, because property order is the model's generation
+  order under llguidance and a `subject` asked for after an empty `{}` was
+  skipped (note 5c06bc92; `corpus-engine` declares serde_json
+  `preserve_order` for the same reason) — requiring
+  `claim_kind`, and dropping `argument_reconstructions` unless
+  `derivation.arguments`) and the reader's `ParsePolicy`
+  (`pipelines/parse_policy.rs`), enforced by `pipelines/ontology_parse.rs`:
+  a declared `EntityType::Other` is kept, attributes validate by family and
+  store normalised, a declared voice is neither an entity nor an attribution,
+  and a declared claim takes its `discourse_act` from the type's `force` and
+  is dropped when anchorless. All three compose/parse hooks return `None`
+  when nothing is declared, which is how I1 (a version-1 block with no
+  declarations composes version-0 bytes) is structural rather than
+  remembered; the pin is `tests/main/ontology_prompt_snapshots.rs`.
+  `enrichment/ontology/type_index.rs` is the one `specializes` walk
+  (`is_a`, `effective_attributes`, plus `rigid_type_of` / `endpoints` /
+  `participants` / `effective_identity*` / `generic_ancestor`), read by the
+  schema generator, the parser, the resolver, the reconciler and the
+  enumeration planner.
+  **Axes 4 and 5 reach the pipeline at Phase 6, Phase 8 and the
+  governance fold (ontology-v1 P4).** Three small modules under
+  `atlas/analysis/` carry it: `tension_policy.rs` (what the DECLARATION
+  removes), `tension_fields.rs` (how a `same` field is read off a claim and
+  compared) and `tension_shape.rs` (what the CORPUS selects).
+  `restrict_claims_to_types` applies `tension.between` BEFORE selection and
+  `drop_non_comparable_pairs` applies `tension.same` (defaulting to subject
+  plus the type's clock) after it. **Both degrade by REPORTING, never by
+  enforcing a criterion the extraction did not fill** — `between` returns
+  `BetweenOutcome::Inert` when NO claim carries a `claim_kind` (enforcing
+  the allow-list there empties the pool and turns the axis off on a corpus
+  whose author asked for it), and a `same` field rules a pair out only when
+  BOTH sides carry it and they differ, with one-sided absence counted as
+  `ComparabilityReport::one_sided` rather than treated as a mismatch. Both
+  rules were settled by measurement against the real `wessex-hoard` atlas
+  on 2026-09-02, not by argument: excluding on one-sided absence drops 40
+  of 158 candidates and removes 0 of that corpus's 3 known false positives,
+  because all three are pairs the criterion is blind to on BOTH sides. The
+  `subject` field falls back to `attributed_to` only when that is NOT a
+  Person or Institution — the same voice-vs-referent distinction
+  `drop_same_named_speaker_pairs` already makes, and without it two
+  attributions of one coin by two different scholars (the tension the
+  numismatics corpus plants) become non-comparable. A `time` attribute
+  compares by interval OVERLAP, not equality. The pass prints per-field
+  coverage and warns when a declared field is carried by no claim, because
+  a criterion nothing fills is silently doing nothing (ARCH §18.1).
+  `CorpusShape::of` + `derive_declared_strategy` derive the selector the
+  pipeline is asked for through `Pipeline::derive_tension_strategy` — whose
+  default ignores the shape and answers `tension_strategy()`, so nothing
+  that has not opted in moves, and whose declared branch keeps the measured
+  `EmbeddingTopK { k: 10, floor: 0.5 }` unless the corpus is a single
+  densely-attributed unit. `ontology_schema::render_phase6_extras` fills
+  the `{ontology_extras}` slot in `custom_phase6_classifier_system.md` with
+  the author's `not_conflicts`, the deontic interdefinition (`forbid X` is
+  `require not-X`, so two surface forms of one rule are not a conflict) and
+  the `relation` instruction; it is EMPTY for an undeclared corpus, which
+  is what keeps the `maple_house.phase6_classifier` golden byte-identical.
+  A declared corpus is handed
+  `phase6_classifier_response_schema_with_relation` and its `equivalent`
+  verdict becomes ONE `same_as` Claim (grade `classifier`,
+  `classification_to_same_as_claim`, folded in by `merge_same_as_claims`)
+  on `atoms.json` instead of a Tension edge —
+  `Phase6Classification::verdict` is the one place `is_tension` and
+  `relation` are reconciled, and `is_tension` stays authoritative so a
+  self-contradicting response never silently merges a real conflict.
+  `AtlasGenre::runs_configuration_phase` makes Phase 8 a genre opt-in:
+  `derive.configurations` defaults to `true` for an undeclared corpus (I1)
+  and to `false` for one that declares its own types, because the Phase-8
+  prompt is written in the literary frame.
+  `enrichment/governance_change.rs` holds axis 4:
+  `derive_active_with_policy` is `derive_active` plus a third pass,
+  returning the act-fold's `ActiveSet` UNCHANGED alongside a separate
+  `ClockSupersessions` map — per claim type in `change.supersedes`, grouped
+  by subject, an older rule LINKED to a newer one (by a reified `same_as`
+  or a declared `ref`) is retired by the clock. **Recency ALONE never
+  folds**, which is what keeps the Maple House decoys standing, and the map
+  is deliberately NOT a `RuleStatus` variant: `ActiveSet` is what the ACTS
+  decided, and a derivation inside that enum would need an invented `OpId`
+  for an act nobody performed (ARCH §18.3).
+  `GovernanceView::from_atlas_dir` calls it when `atlas/ontology.json`
+  declares a `supersedes`, and `RuleView.superseded_by_clock` renders it
+  beside `status`. `enrichment/ontology/clock.rs::section_date` reads the
+  document date out of a section heading (ISO-8601 only, deliberately).
+  Axis 5's `patterns` run over the same atlas via
+  `atlas/analysis/patterns_adapter.rs`, which PROJECTS `atoms.json` into
+  the graph `investigation::patterns::detect_all` already reads (a
+  `Relation` atom with exactly two participants becomes a `Relationship`;
+  the rest are counted, not swallowed) and writes
+  `atlas/pattern_findings.json` from the Gaps step. The resolve step writes
+  `atlas/ontology.json`
+  (`writer::write_atlas_ontology`) so the atlas dir records what it was
+  extracted under, and `_summary.json` (SCHEMA_VERSION 3) carries an
+  `OntologySummary` read back from it. **Retrieval reads that file back
+  (P5).** `AtlasGraph::load_lance_from_disk` attaches the policies to the
+  graph, dropping a set with no declared types to `None` — so `ontology()`
+  being `Some` IS the "this corpus declared something" gate, checked once at
+  the load rather than remembered at four call sites, and
+  `AtlasGraph::is_subtype_of` (the graph-side accessor for `TypeIndex::is_a`)
+  is inert for every corpus that declared nothing. Four readers: the
+  enumeration classifier's type enum is the six generic kinds ∪ the declared
+  ENTITY types, capped at 24 (`enumerable_types`,
+  `sovereign-core/src/runtime/retrieval/atom_enum.rs`), and its atom compare
+  walks `specializes`, so "which coins" returns the sceattas too;
+  `atlas_traversal` gains `QueryPlan::Enumerate` / `Aggregate`, minted only by
+  `classify_query_with` when a vocabulary is present and refused by the engine
+  when it is not; `governance_view::project_claim` scopes a rule on the
+  claim's `subject` (what it is about) falling back to `attributed_to` (whose
+  voice it is), and takes its deontic from the reserved `deontic` attribute the
+  ontology parser already validated; and `meta_atlas`'s
+  `classify_articulation_with` places a declared `EntityType::Other(name)` by
+  the generic kind it descends from instead of guessing from the chunk preview.
+  Two levers ship DARK with `DEFAULTS_LEDGER.md` rows and no measurement:
+  `SOVEREIGN_ATLAS_EMBED_ATTRIBUTES` (attributes appended to embed text, in
+  `atom_attributes_suffix` — called by BOTH renderers, since the daemon's bag
+  loader forks `render_atom_entry`) and `SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS`
+  (`AtlasContextFilter.include_declared_claim_types`, keyed into `signature()`).
+  Resolution reads the same policies
+  through `ResolutionPolicy` (`atlas/resolution_ontology.rs`), which is what
+  makes a declaration RESOLVE (ontology-v1 P3): a mention typed as a
+  `role_of` role produces an atom of the rigid type and a `State` carrying
+  the role (so the existing trajectory pass chains repeat mentions into
+  `Transition`s); a declared relation's `from`/`to` and a declared event's
+  `participants` are type-checked against the atoms they resolved to, with a
+  mismatch dropped and recorded as `PhaseFailureKind::EndpointTypeMismatch`;
+  a claim's `subject` resolves among atoms of the kind's declared `subject`
+  type — the general salience hit is kept only if it IS that type, else the
+  name is resolved again within the type's atoms (`resolution_identity::
+  declared_subject_type`, `UnresolvedClaimSubject` names the declared type);
+  every entity merge the name rules propose passes `merge_permitted`
+  (`atlas/resolution_identity.rs`): a declared type never folds across
+  types, two mentions carrying different declared identity keys are two
+  things, and a type identified by an external key merges on fuzzy name
+  shape only when a key agrees (`MergeEvidence`); and declared
+  `ref` attributes snap to atom ids, an unresolvable one keeping the name
+  plus an `UnresolvedAttributeRef` record. `resolve_step_3b` /
+  `resolve_entities_and_events` stay as shims over the `_with` forms, so
+  every version-0 corpus runs the code it always did. Identity is the
+  reconciler's half: `ReconciliationPolicy.identity` carries the per-type
+  keys flattened through `specializes`
+  (`TypeIndex::effective_identity_policy`), `signals_for_policy` adds
+  `ExternalIdSignal` (STRICT — it alone satisfies the cross-origin gate) and
+  `DescriptiveKeySignal` (one ordinary signal), the blocking pass buckets on
+  declared key values so an identifier match survives entirely different
+  names, and each merge is reified as a `same_as` Claim with `Involves` /
+  `Grounds` edges (`reify_merges` → `writer::append_atoms_and_edges`) — for
+  a DECLARED corpus only, which is why `bench enron` B³ is a leak detector
+  for this phase. `enrich schema-report` gains a ninth dimension
+  (`SchemaValidationReport.ontology`, report SCHEMA_VERSION 2.1): per-type
+  counts with and without subtypes, the identity criterion per type, merges,
+  `same_as` claims, claims of a subject-declaring type with no subject, and a
+  `coverage:zero:<type>` gap signature. Since 2026-09-02 it also carries
+  `attribute_fill` — one row per (declared type × declared attribute) giving
+  `atoms` / `with_slot` / `filled`, with `attribute:zero:<type>:<attribute>`
+  and `attribute:unlandable:<type>` signatures. The type counts alone reported
+  `coin` as fully covered on 14 atoms carrying none of its seven attributes,
+  which is how that gap survived four merged phases; `with_slot` is counted
+  from the atom rather than the declaration so a `role_of` type — which lands
+  as a State, and States have no attributes map — reads as a declaration with
+  nowhere to land rather than as a model failure (§18.3). `projection::
+  attributes_of` is the one accessor, beside `subtype_of` (§10.6). The resolve step writes
+  `atlas/ontology.json` (`writer::write_atlas_ontology`) so the atlas dir
+  records what it was extracted under, and `_summary.json` (SCHEMA_VERSION 3)
+  carries an `OntologySummary` read back from it. Design:
+  `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md`, `ONTOLOGY_MIGRATION.md`.
+  State at `~/.svrnmesh/indexes/<corpus>/atlas/`. Deep-dive:
   [`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md). Beyond the LLM
   pipelines, the deterministic **`structure_first`** strategy lifts a SCIP-indexed
   **code** corpus into this same typed-atom graph (content-hash atoms, code-intel
@@ -1280,11 +1469,22 @@ it. Generic primitives:
   (project model), `situated_context.rs` (per-turn renderer),
   `svrn recipe-agent {new,show,list,live-trial}` CLI. Skill
   manifest at `sovereign/modes/recipe-author/skill.toml`
-  (privacy = `local_only`). The project model carries an
+  (privacy = `local_only`); its interview is the five
+  `ONTOLOGY_PRIMITIVES.md` §4 questions (shape, assertion, identity,
+  change, derivation), asked only where the charter is silent, and it
+  points at `recipe new --ontology <name>` rather than a blank block.
+  The project model carries an
   `ArtifactKind` (recipe | workflow), so the same checkpoints /
   decision log / desktop workspace back **workflow** authoring too
   (checkpoints snapshot `recipe.toml` or `workflow.toml` by kind) —
   the recipes×workflows merge.
+- **Recipe validation card** — `recipe_author_commands::validate_artifact_toml`
+  parses, then runs `corpus_engine::testing::validate_recipe_offline`, so
+  `RecipeValidationReport` carries the same three lists `svrn recipe validate`
+  prints: `errors` (blocking — an unresolved ontology reference blocks like a
+  parse failure), `warnings`, and `notes`, the derived facets (clock, tension
+  selector, identity criterion per type, question shapes).
+  `RecipeValidationCard.svelte` renders them as three sections, never merged.
 
 ### Schema back-compat
 
@@ -2027,6 +2227,57 @@ It PASSES the full bank (secret-agent 0.67/0.82/0.18 production-config;
 holdout honesty 0.91/0.09). Mechanism: **hold → verify → corrective retry
 (short answers) / per-claim audit → **mark** (long-form) → grounded
 abstention**, fail-open on judge failure.
+**Fail-open is accounted per claim** (2026-09-01, issue #57): a per-claim
+judge that returns no verdict (provider error, admission-queue shed) marks its
+claim `unjudged` on the `GateClaim` record; the audit then exits
+`judge_failed_open` instead of `released`, the journal verdict projects
+could-not-judge, and the epistemic ledger renders the holding `FailOpen` —
+never `Verified`. Before that date eight shed judges released as eight verified
+holdings on a `grounded` turn.
+**The claim-search triage is RETIRED; the fan-out is concurrent and bounded**
+(2026-09-02, issue #57). The batched `claims_support_batched` call no longer
+runs as a triage deciding which claims get a corpus search: it was a model call
+spent to avoid deterministic work, it measured 185 s on the reporter's 4B
+against 518 ms of searching, and two attempts to price it per turn each
+rebuilt the inversion (a bar measured here, then a per-search cost carried
+across corpora — a per-corpus quantity stored under the identity of the
+process). Nothing in the pass now thresholds on a model-produced claim count.
+The batched pass survives only behind the `SOVEREIGN_GATE_BATCH_VERIFY` /
+`SOVEREIGN_GATE_BATCH_SHADOW` study flags. What replaced it is deterministic:
+**the fan-out itself is concurrent, bounded by ONE permit.** `claims x corpora`
+was serial on BOTH axes, the only multiplicative term in the turn. A claim's
+hits depend on that claim alone, so the searches are hoisted out of the
+sequential judging loop and run `buffered` — never `buffer_unordered`, because
+the round-robin interleaves per corpus and the output must stay byte-identical,
+which makes this a scheduling change and not a semantic one. Measured over
+wikipedia+sep at ten claims: eight searches in 9,837 ms at concurrency 3
+against a 3,352 ms mean per search. **Concurrency is DERIVED, never declared:**
+`claim_search_concurrency()` is cores/4 clamped to `1..=4`, so a 12-core host
+runs three and the reporter's 4-core laptop runs one — its previous serial
+behaviour, inheriting no new concurrency and no new memory risk. **The bound is
+ONE process-wide semaphore** (`claim_search_permits`), not one per level:
+bounding each level separately bounds NEITHER — four claims by four corpora is
+sixteen concurrent `open_index` + hybrid searches against indexes that reach
+88 GB on a host holding a 17.7 GB model resident, and that product caused a
+memory event on 2026-09-02. The permit is taken at the innermost point and
+covers the OPEN as well as the search (every task opens a DIFFERENT corpus, so
+the engine's index cache cannot dedupe them). Any future nested fan-out here
+takes that permit rather than adding its own.
+**The audit pass is a module with a plan and an outcome** (`grounding/audit_pass.rs`,
+same date). What was a 650-line closure run twice per turn is `AuditPass::run`.
+What each claim gets is decided ONCE, before any IO, as a `ClaimDisposition`
+(`Exempt` / `Vetoed` / `Judge`) — one pure decider read by both the fan-out and
+the judging loop, so there is no second predicate to keep in step. The pass
+returns an `AuditPassOutcome` (`ExtractionFailed` / `Judged`), so a caller
+cannot forget a case. `ClaimSearcher` reaches its indexes through the two-method
+`SealedIndexSource` seam rather than a concrete `CorpusEngine`, which is what
+lets `search_corpus`'s deciders — the allow-list seal, the kind filter, the
+round-robin cap and permit-before-open — be tested against a fake
+(`search.rs` tests; zero existed before). **Every generation of the daemon is
+keyed:** `svrn daemon is running` carries `run`, `pid`, `exe`, `exe_mtime` and
+`version` (`sovereign_core::run_identity`), and the gate's `claim_search_fanout`
+event and `audit` forensics record carry the same `run`, because `daemon.err`
+is append-only across restarts and a line without that key is not attributable.
 **The long-form repair ladder is TOMBSTONED as of 2026-08-14** (Phase 4 of
 `NATIVE_GROUNDING_ECONOMY.md`, order `gate-tombstone-ladder`). On the default
 configuration a long-form draft whose audit found failures is **released with
@@ -2134,16 +2385,54 @@ the independent check: on the 2026-08-13 rewrite turn the arms agreed 15 == 15
 within ~20 ms per call, which is what licensed trusting NAMED at all), and
 **PIN** (`prefix_state` HIT lines joined by absolute time). The PIN arm is the
 load-proof one: a call that restored carries
-`key=<family hash> restored_tokens=N restore_ms=M` and a call that did not
-carries no line at all, so "do these two mechanisms share a prefix family" is
-answered by comparing KEYS rather than by hoping a duration shrank — which
-matters because a mis-declared `stable_prefix_len` does not error, it silently
-full-prefills. Measured 2026-08-13, one clean turn: the five per-claim judges
+`key=<family hash> restored_tokens=N restore_ms=M`, so "do these two
+mechanisms share a prefix family" is answered by comparing KEYS rather than by
+hoping a duration shrank — which matters because a mis-declared
+`stable_prefix_len` does not error, it silently full-prefills.
+**A call that did NOT restore used to carry no line at all**, and that silence
+was itself a defect: it made "not eligible", "first sighting", "family
+drifted" and "refused a pin it should have taken" indistinguishable, so the
+undirected path could decline forever without anything to read (ARCH §9.1).
+Since 2026-09-02 every `Pass` return names its reason and its arithmetic
+(`key`, `prompt_tokens`, `lcp`, `pin`, `min_pin`) at `debug` on target
+`prefix_state`. Turning that on is what found the refusal below, so treat the
+DEBUG lines as part of the PIN arm, not as noise:
+`RUST_LOG=info,prefix_state=debug`. Measured 2026-08-13, one clean turn: the five per-claim judges
 all restored `key=3b4389a9d12c54fd`, 5,508 tokens in 26-32 ms (including the
-one declaring the shorter 26,089 B window — the two declared lengths collapse
-to ONE family, because the family probe is the first 48 tokens); the specifics
+one declaring the shorter 26,089 B window — under the 48-token probe key of
+the day, two declared lengths collapsed to ONE family; since 2026-09-01 a
+declared prefix keys on its own CONTENT, so those two are two entries and each
+restores its whole declaration — issue #57); the specifics
 scan restored nothing and paid 10,881 ms for 7,817 tokens. Implied primary
 prefill ≈ 719 tok/s, which back-predicts the judge calls.
+
+**Two identical prompts now form a family** (2026-09-02, issue #57). The
+UNDIRECTED planner learns a boundary from two sightings, and its guard was
+`lcp >= min_pin && lcp < tokens.len()` — so the one case where two sightings
+share EVERYTHING fell through to `Pass`, permanently. Anything that re-sent a
+byte-identical prompt therefore re-prefilled it in full, every time, forever.
+Measured on the live daemon: a DeepQuery turn discarded ~16.3k tokens of
+prefill per turn across three families — the synthesis call (9,891 tokens,
+`lcp=9891 len=9891 min_pin=384`), the citation judge (5,134) and the
+topic/route pass (1,278) — while the gate's per-claim judges beside them
+restored 4,881 tokens in 45 ms off the DIRECTED path, which had always backed
+off two tokens instead of refusing. Both paths now take the margin from one
+`PIN_TAIL_MARGIN`, and `pin_with_tail(lcp, len)` is what the undirected
+branches call. Effect on three repeats of one question, warm model: synthesis
+TTFT 34.0 s → 11.9 s (learn) → **0.2 s** (restore), wall 59.4 s → 27.8 s →
+**8.8 s**. State files are 145-171 MB per family against the 2,048 MB budget,
+committed in 215-721 ms.
+
+**What this does NOT fix, and the shape of the next win.** A pin only forms
+over a prefix that actually repeats, so a turn whose prompt is stable-first
+benefits and one whose volatile part leads does not. `citation.rs` builds
+`PASSAGES:\n{passages}\n\nQUESTION: …` — stable-first by construction — but
+`build_passages` emits chunks in RETRIEVAL RANK order, so a different question
+over the *same ten chunks* reorders them and the shared prefix collapses:
+measured `lcp=49` against a 5,132-token entry, dropping the family. Ordering
+the passage block by a stable key (document position) while carrying relevance
+separately would make it pin across questions; it is a PROMPT change, so it
+belongs behind `sovereign-ci-bench.sh`, not behind a latency argument.
 **Deliberately NOT the stage ledger**: per-call rows in `TurnStageLedger`
 would make `sum(rows)` exceed `gate_ms` and saturate the `gate_unattributed`
 residual to zero, destroying the detector described above. The funnel is
@@ -3061,7 +3350,7 @@ traversal). The desktop app registers as the system handler.
 | TDD machine | [`docs/TDD_MACHINE.md`](./docs/TDD_MACHINE.md), [`docs/TDD_MACHINE_DESIGN.md`](./docs/TDD_MACHINE_DESIGN.md) |
 | Solver design | [`docs/SOLVER_DESIGN.md`](./docs/SOLVER_DESIGN.md) |
 | Local corpora / Obsidian / watched folders | `sovereign-tools/src/local_corpus/` — invariants pinned via tests in that crate |
-| Wikipedia freshness layer | `corpus-engine/src/update/newsworthy*.rs` + `sovereign-recipes/wikipedia-newsworthy/` |
+| Wikipedia freshness layer | `corpus-engine/src/update/newsworthy*.rs` + `sovereign-recipes/wikipedia-newsworthy/`. A tick parks for foreground inference before EVERY article and before its tick-end fold (`yield_to_foreground`, the ingest pipeline's `engine::yield_gate` wait), not only at tick start; the tick line reports `yield_deferrals` / `yield_deferred_ms`. |
 | Per-document index recency (Atlas fresh-first) | `corpus-engine/src/freshness.rs` — source-agnostic `source_doc_id → unix` sidecar (`_doc_freshness.json`) stamped at the single reindex convergence point (`engine::reindex::reindex_by_source_doc_id`); `ChunkRef.source_doc_id` carries the join key onto atoms, and `sovereign-tools::atlas_view::atom_browse` sorts atoms fresh-first + sets `AtomSummary.updated_at`. ANY re-indexing source (newsworthy, watched-folder edit, delta) makes its content "fresh" with no per-source code — freshness is emergent from indexing. |
 | Pinned worker pods as inference peers | [`docs/PINNED_WORKER_AS_INFERENCE_PEER.md`](./docs/PINNED_WORKER_AS_INFERENCE_PEER.md), [`docs/EPHEMERAL_WORKER_PODS.md`](./docs/EPHEMERAL_WORKER_PODS.md) |
 | Cloud peer deploy | [`docs/CLOUD_PEER_DEPLOY.md`](./docs/CLOUD_PEER_DEPLOY.md) |
@@ -3121,6 +3410,8 @@ with `Polarity::{MaximizePassing, GenerateOneFailing}`
 `tasks::solve` is the verbless goal entry: failing tests → fix;
 none → pin-then-green via `bdd_cycle`; explicit verbs `fix` / `pin`
 / `split`. See [`docs/TDD_MACHINE.md`](./docs/TDD_MACHINE.md).
+
+`commonwealth-tdd/src/recur/` — rec-1, the explicit stack (research, 2026-09-02): SICP 5.4 over a model. A recursive PROCESS run by an ITERATIVE driver — the frame is a record (`Continuation` tag + goal path + tree hash), the stack is `scratch/stack.json`, the driver pops and never waits, and the `Evaluator` (scripted in ring 0, the local model in ring 2) is the primitive the loop calls. Goals are tests; the oracle decides verdicts (`kernel_types::Verdict`, worst-rank fold), the evaluator decides moves (push / edit / split / give_up). Memo keyed on (goal, tree hash); occurs check on the goal path; Combine merges sibling worktrees and runs the goal on the merged tree, which is the only place a branch-local fix that breaks the merge can be caught. Bars and rings: `.sovereign/features/rec-1-explicit-stack/order.md`.
 
 **SOLVE surface** (`docs/specs/SOLVE_UX.md`) — the daemon hosts the
 solver as an async job API on `:9741`: `POST /v1/solve/jobs` (202 +
@@ -3911,23 +4202,44 @@ the standalone-daemon topology — flagged for its own liveness
 investigation in OICP_RATIONALIZATION.md):
 
 - `ManagedProcess` tracks lifecycle states (`Starting | Running |
-  Unhealthy | Failed | Stopped`); graceful SIGTERM with timeout,
-  then SIGKILL.
+  Unhealthy | Failed | Stopped`); SIGTERM, then `SpawnConfig::stop_timeout`
+  (default 10s), then SIGKILL. Both halves of that were untrue until
+  2026-09-02: `stop()` reached straight for tokio's `start_kill` (SIGKILL on
+  unix) and waited out a hard-coded 5s that no signal had been sent to earn.
 - `HealthTracker` polls every 5s; 20-sample latency window;
   `Unresponsive` after 3 consecutive failures.
-- `GracefulDeparture` — 30s countdown state machine
-  (`Announced → Rebalancing → Draining → Complete`).
-- `FaultDetector` collapses health changes into `FaultEvent`s.
+- `GracefulDeparture` — countdown state machine
+  (`Announced → Rebalancing → Draining → Complete`), driven by
+  `Orchestrator::depart_gracefully` / `announce_departure` +
+  `complete_departure`. From the announcement the node refuses new shard
+  plans, which is the state machine's only externally visible consequence
+  and the thing that keeps it from being a log line. `stop_all` is the
+  ABRUPT path and says so; the standby transition in `apply_mesh_plan`
+  departs instead. Nothing constructed a `GracefulDeparture` before
+  2026-09-02 — it was unit-tested, wired to nothing, and `stop_all`'s doc
+  comment claimed its job (FE-139).
+- `FaultDetector` collapses health changes into `FaultEvent`s. STILL
+  UNWIRED: nothing outside its own tests constructs one.
 
 ### HTTP API
 
 Two listeners, two trust domains.
 
-**Client API — :9741, binds 0.0.0.0** (federated inference needs peer
-reachability). Loopback callers pass free; non-loopback callers go
-through a bearer-token layer (`client_auth`, `[daemon] client_token`,
-with exempt paths for federation/health) — added with the SaaS
-hardening, 2026-07.
+**Client API — :9741, binds 127.0.0.1 by default.** Secure by default:
+the wildcard bind is reached only when something explicit asks for it —
+an explicit `[daemon] client_bind`, or the `client-exposed` marker
+`expose_client_api` writes on `mesh create`/`join` (federated inference
+needs peer reachability). An ENCRYPTED mesh forces it back to loopback
+whatever the config says: the iroh acceptor is the sole ingress. The one
+decider is `sovereign-mesh::daemon::resolve_client_bind_posture`.
+
+A non-loopback bind carries a bearer token or serves nobody — the token
+chain is env → `[daemon] client_token` → generate-and-persist, and when
+even that fails the posture installs NONE, which makes `client_auth`
+refuse every remote caller rather than serve unauthenticated. Loopback
+callers pass free; the layer has exempt paths for federation/health.
+Added with the SaaS hardening, 2026-07; extracted out of `start_daemon`
+and given a test 2026-09-02 (UI-22).
 
 A non-loopback caller can now present one of **two** bearers, matched in
 that order. `client_token` is the daemon-wide one and unlocks everything.
@@ -5096,6 +5408,7 @@ Default ports:
 | Understand index storage on disk                 | `corpus-engine/src/index/mod.rs`                                    |
 | Understand the v2 atlas pipeline                 | [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md) + `corpus-engine/src/enrichment/pipeline/mod.rs` |
 | Drive v2 enrichment from the CLI                 | `sovereign-cli-llm/src/enrich_cmd/`                                 |
+| Run an atlas build INSIDE the daemon (a shipped desktop has no CLI on PATH) | `enrich_now` (`sovereign-tools/src/local_corpus/manager.rs`) routes `[enrichment] type = "atlas"` recipes to `EnrichmentDriver::start_atlas_build` → the host-installed `watched::enrich::AtlasBuildRunner` (`sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs::in_process_atlas_builder`, which links `sovereign-cli-llm` as a library); progress lands in `_enrichment_state.json`. `tiered` and recipe-less folders keep `start_tiered_build`. The subprocess runner (`sovereign-tools/src/enrich.rs`) is the fallback where no builder is installed. (ontology-v1 P0.4) |
 | Understand the recipe registry                   | `corpus-engine/src/registry.rs` (+ `recipe.rs::bundled_recipe_toml`) |
 | Understand delta updates                         | `corpus-engine/src/update/delta.rs`                                 |
 | Understand scope expansion (filter delta)        | `corpus-engine/src/engine/expand.rs`                                |
@@ -5109,7 +5422,8 @@ Default ports:
 | Understand local-corpus snapshot/rollback        | `sovereign-tools/src/local_corpus/writeback.rs` + `frontmatter.rs`  |
 | Pick the next daemon test to write               | [`docs/TESTING_SURFACE.md`](./docs/TESTING_SURFACE.md)              |
 | Add a binary-bearing corpus (email / .docx / .xlsx / future calendar / transactions) | `corpus-engine/src/extractors/described_asset.rs` — register an `AssetSubExtractor` via `CorpusEngine::set_asset_sub_extractors`; the in-tree defaults cover xlsx / docx / plaintext / opaque |
-| Read or extend the multi-origin reconciliation primitive | `corpus-engine/src/enrichment/reconciliation/{mod,multi_origin,oplog,signals}.rs` — operates on `Vec<Entity>` with `Provenance` (AD-4); writes `atlas/reconciliation_oplog.jsonl` reversible op log |
+| Read or extend the multi-origin reconciliation primitive | `corpus-engine/src/enrichment/reconciliation/{mod,multi_origin,oplog,signals}.rs` — operates on `Vec<Entity>` with `Provenance` (AD-4); writes `atlas/reconciliation_oplog.jsonl`. `oplog::reverse_merge` is the actual undo: it matches an `OpId` against the log and restores the merge's RECORDED inputs, stamping `reverts` on the Split (the governance `Revert { targets }` shape). `multi_origin::split_atom` is the operator's own judgement — caller-supplied outputs, no lookup — and is not undo |
+| Add an atom to an atlas after `write_atlas_full` ran | `writer::append_atoms_and_edges` — reads both JSON files, extends, rewrites, and rebuilds the v2 store from the merged set (the store is the read path; writing only `atoms.json` leaves it short). Ids are the caller's problem |
 | Score a clustering of mention-ids vs ground truth (B³ + pairwise-F1) | `sovereign-eval/src/entity_resolution_score.rs` (scorer) + `entity_resolution_bench.rs` (Split/peek-budget) |
 | Run the Phase 5 Enron measurement loop | `svrn bench enron run --corpus enron-sample-onemailbox --split train --policy {pre_reconciliation\|tuned}` → `sovereign-cli-llm/src/bench_cmd/enron.rs` |
 | Add another typed Entity column-extractor for tabular asset kinds | `corpus-engine/src/extractors/column_aware.rs` — extend `ColumnHeaderMap` or write a per-asset-kind extractor reading the parquet parsed-form cache directly |
@@ -5471,11 +5785,7 @@ now) and the row is dropped — or trimmed to the still-open residual.
 | `sqlite/conv_tiered.rs` residual (was the `sqlite.rs` split) | `sovereign-store/src/sqlite/conv_tiered.rs` (~1,100 lines) | The 2026-07-12 split landed `sqlite.rs` (4,097 lines) as a 582-line parent + 14 per-concern modules; the largest child holds the ConvTieredReader + skeleton/RAPTOR/motif methods. Next growth splits the chunk-entity methods out. |
 | `scoring.rs` residual (was the `oicp-types` lib split) | `oicp-types/src/scoring.rs` (~1,260 lines) | The residual of the 2026-07-11 quality-program R2 split (lib.rs 3,005 → 68 + 9 family modules): the §6/§7 reference-scoring implementation — 15 tuning constants, the scorer chain, `NodeObservations` — coheres as one auditable algorithm today. Next seam if it grows: node-observation/locality signals vs the scorer itself. |
 | ~~`document_asset.rs` split~~ **DONE 2026-08-27** | `sovereign-tools/src/document_asset/` (9 files, largest 828) | DocumentAssetManager — split along the three phases its own module doc declares: `manager` (ingest) + `routing` + `execution`, with `skeleton` / `artifacts` / `motifs` / `atoms` / `self_reference` carved off the free functions. Routing and execution are separate `impl DocumentAssetManager` blocks — inherent impls may span modules within a crate, so a phase gets a file without the type moving. NOT the tier boundary this row predicted: the tiers are interleaved through `run_ingest`, and the phases are what the file was actually organised by. |
-<<<<<<< HEAD
-| ~~`found.rs` split~~ **MOOT 2026-08-28** | `sovereign-cli-dev/src/project_cmd/mod.rs` (`cmd_found`, line 416) | The split debt is gone because the file is: `found.rs` (2,802 lines) was DELETED by `2dd18bd0b` (Totality ratchet, #50) when `svrn project found` was retired. The verb still dispatches — `project_cmd/mod.rs:87` — against a stub. Row kept rather than dropped so the four-stage founding conversation is not silently re-planned; the citation now names a path that exists, which is what docs-gate asks (§1.1). |
-=======
-| ~~`found.rs` split~~ **RETIRED 2026-08-28** | `sovereign-cli-dev/src/project_cmd/mod.rs` | The split is moot: `svrn project found` is retired and its 2,802-line `found.rs` was deleted in `2dd18bd0b`. `cmd_found` is now a retirement announcement — founding is implicit (`svrn init` plus a committed spec), with `svrn charter` for team conventions and `svrn plan` to write PHASES.md. Row kept per this table's convention so the deleted path is not re-cited. |
->>>>>>> 66dbf8133 (the moves)
+| ~~`found.rs` split~~ **RETIRED 2026-08-28** | `sovereign-cli-dev/src/project_cmd/mod.rs` (`cmd_found`, line 416; dispatched from line 87) | The split debt is gone because the file is: `found.rs` (2,802 lines) was DELETED by `2dd18bd0b` (Totality ratchet, #50) when `svrn project found` was retired. The verb still dispatches, to a `deprecation::announce_retired` call — founding is implicit now (`svrn init` plus a committed spec), with `svrn charter` for team conventions and `svrn plan` to write PHASES.md from a design doc. Row kept rather than dropped so the four-stage founding conversation is not silently re-planned, and the citation names paths that exist, which is what docs-gate asks (§1.1). |
 | `MemberRecord.client_port` wire field | `commonwealth-core/src/mesh.rs` + `commonwealth-discovery/src/membership.rs` + `sovereign-mesh/src/daemon.rs::peer_inference_endpoints` + `sovereign-mesh/src/auto_ingest.rs` | Local-side port plumbing landed; **peer-uniformity assumption** remains: `peer_inference_endpoints` rewrites every peer URL with this daemon's client_port, and `auto_ingest` pins port `9742`. Mixed-port mesh deployments need a `client_port` field on `MemberRecord` and a matching slot in the join handshake. Until then, operators who set a non-default `client_port` should configure every peer the same. |
 | Atlas inspector Phase 2 — curation overlay | `sovereign-tools/src/atlas_view/` | Phase 1 ships read-only inspection. Phase 2 adds an `atlas/overlay.sqlite` keyed by `StableAtomKey` (content-hash) so user edits and approval state survive re-extraction. Forward-compat fields (`curation_status`, `overlay_supports`) already on every DTO. |
 | Imports tab — Gemini extractor | `corpus-engine/src/extractors/` + `sovereign-recipes/conversations-gemini/` | Library → Add → Conversations ships **Anthropic + ChatGPT** (2026-06) **+ email-archive** (2026-07: mbox/maildir/.eml via the parameterized recipe, no staging copy, no auto-enrich). Gemini (Google Takeout) remains: the plumbing is source-agnostic — a new `<source>_export` extractor + recipe + `ImportSource` arm + `<ConversationImportCard>` is all it takes. ChatGPT pattern (mapping-tree walk-up, PUA marker cleaning, source-aware `import_commands.rs`) is the template. |
@@ -5492,6 +5802,7 @@ now) and the row is dropped — or trimmed to the still-open residual.
 | `pipeline/runner.rs` split | `corpus-engine/src/enrichment/pipeline/runner.rs` (~3100 lines) | v2 atlas orchestrator. Phase dispatch + ExemplarBank + PhaseCache + step retry all touch the same state. |
 | `engine/mod.rs` split | `corpus-engine/src/engine/mod.rs` (~3000 lines) | `CorpusEngine` façade. Plausible after watcher-driven recipes settle and `ingest_driver` enumify lands. |
 | `pipelines/literary_atlas.rs` split | `corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs` (~2900 lines) | Splits naturally along phase boundaries (extract, cluster, name, resolve, synthesize). |
+| `pipeline/atlas.rs` split (partial, 2026-09-01) | `corpus-engine/src/enrichment/pipeline/atlas.rs` (1,680 → 1,373 lines) | Pure Phase-1 data shapes: core sketches, the open-enum vocabulary macro, and six per-genre extension families. The descriptive/reflective/procedural/lyric families moved to `atlas_extensions.rs` (341 lines) to clear the ARCH §3.1 growth ratchet. The remaining cut — core sketches, vocabulary enums, and all six families as peers each under the 800 approach floor — is deferred because it cannot be taken in one step: the arch-gate's approach band (800-1200, no slack) rejects any residual that lands inside it, so the file must go from >1200 to <800 in a single move, and both the macro and the core sketches are live surface for the in-flight ontology-v1 waves. Due when those land. |
 
 ### 10.1c Size-debt acceptance — 2026-07-30 red-gate sweep
 
@@ -5549,6 +5860,230 @@ What the re-freeze accepted, all of it already on `origin/main`:
 | Daemon bootstrap | `sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs` (2,672 → 2,786) | Child-process supervision + RPC-worker spawn + manifest refresh cohere as one startup state machine; splits when the compute-child boundary takes the worker half. |
 | corpus-engine engine | `corpus-engine/src/engine/mod.rs` (3,804 → 3,879) | Under the 10-crate decomposition (`corpus-engine/DECOMPOSITION.md`); this file shrinks by carve-out, not by a local split. |
 | Newly oversized, no prior row | `commonwealth-api/src/server.rs` (1,253), `sovereign-cli-daemon/src/setup_cmd/mod.rs` (1,287), `sovereign-mesh/src/oicp_synthesis.rs` (1,266), `sovereign-cli/tests/main/cli_contract_journeys.rs` (1,201) | Four files crossed 1,200 during the 2026-08 arcs. All are within 90 lines of the ceiling and each splits along an obvious seam (route families, setup targets, synthesis stages, journey families) — first candidates when the queue is worked. |
+
+### 10.1e Placement — 2026-09-01 the orchestrator moved below the hosts (ontology-v1 P0.4 → P0.5)
+
+**History, one line, because the cheaper option was tried and named rather
+than overlooked.** P0.4 gave the daemon the atlas `enrich build` orchestrator
+by linking `sovereign-cli-llm`'s library target — host → host, layer-legal,
+accepted as a NAMED substitution (ARCH §18.3) with this row recording it as
+outstanding debt. The operator adjudicated the fork on 2026-09-01 and funded
+the split. P0.5 landed it: the orchestrator is now
+`sovereign-enrichment-build`, a `capabilities` crate (17 modules / ~9,900
+lines) beside `sovereign-enrichment-catalog`, and the daemon depends on it
+rather than on a host.
+
+**What the rung delivered, measured.** The bar was that `sovereign-eval` —
+grandfathered into `sovereign-cli-llm` by `bench_cmd`, and therefore linked
+into the daemon and into every desktop bundle that embeds it — must leave both
+dependency graphs.
+
+| `cargo tree -p <bin> -i sovereign-eval -e normal` | before (`e05381a9d`) | after (`d6c1c48d6`) |
+|---|---|---|
+| `sovereign-cli-daemon` | prints the chain via `sovereign-cli-llm` | `error: package ID specification `sovereign-eval` did not match any packages` |
+| `sovereign-desktop` | prints the chain via `sovereign-cli-daemon` | same error |
+
+That error string IS the evidence, and it is quoted here so the next reader
+does not file it as a broken command: `cargo tree -i` filters to the target's
+graph FIRST, so "did not match any packages" means the package is not in that
+binary's graph at all. Also delivered: the daemon no longer depends on any
+`hosts` crate, the P0.4 substitution is retired rather than left standing, and
+`sovereign-cli-shared` — the last `hosts` edge inside the orchestrator's
+closure — is gone, because the `cmd_*` entry points and their `HELP` consts
+stayed in `sovereign-cli-llm` where the user interface belongs.
+
+**What the rung did NOT deliver: the size.** The second bar condition was that
+the +12.3 MB the library edge cost must come back down. It did not. Measured
+with one identical, staleness-guarded command (`rm -f` the binary first, so a
+stale file cannot be read at all — an earlier run of this same measurement
+returned the previous value with a fresh-looking exit code):
+
+| `target/debug/sovereign-cli-daemon` | bytes |
+|---|---|
+| before the flip (`e05381a9d`) | 863,517,536 |
+| after the flip (`d6c1c48d6`) | 863,657,464 |
+| delta | **+139,928 (+0.133 MiB, +0.016%)** |
+
+The binary is 140 KB LARGER. Nothing of the 12.3 MB was recovered.
+
+The reason, and it invalidates the premise the bar was written on: **the
+12.3 MB was never `sovereign-eval`.** It was the orchestrator's own code —
+~9,900 lines and its transitive deps — which the daemon genuinely runs and
+still links. The split changed WHERE the daemon reaches that code from (a
+`capabilities` crate instead of a `hosts` crate); it removed nothing the
+daemon uses. The size win was not available because nothing being carried was
+dead. The small increase is consistent with a new crate boundary costing a
+compilation unit's own metadata and losing cross-crate inlining, but that is a
+plausible reading of a 0.016% delta, not a measured cause.
+
+**The ratchet this cost, accepted 2026-09-02.** `layer-gate` reported four
+fan-in growths, each exactly `+1 crate`:
+
+| god-crate | fan-in before | after |
+|---|---|---|
+| `corpus-engine` | 18 | 19 |
+| `sovereign-contracts` | 23 | 24 |
+| `sovereign-core` | 18 | 19 |
+| `sovereign-tools` | 8 | 9 |
+
+All four are the same crate. `sovereign-enrichment-build/Cargo.toml` declares
+those four dependencies and no others among the eight the ratchet watches, so
+the four `+1`s are one new node, not four new edges of independent origin —
+checked in the manifest rather than inferred from the arithmetic. Nothing
+started depending on a god-crate that did not already; a body of code that
+already depended on all four moved from inside `sovereign-cli-llm` to beside
+it, and a crate boundary made its existing appetite countable.
+
+Accepted by re-baselining `layer-gate`, which is what this row buys: the
+growth is the price of the split the operator funded, and refusing to pay it
+would mean either leaving the orchestrator in a host crate or inventing
+narrower façades for four crates in the same commit as the move. The bill to
+watch is that this makes the god-crates marginally harder to break up later,
+and `sovereign-tools` at 9 is the one closest to being severable.
+
+**The judgement this leaves.** The boundary was worth funding on architectural
+grounds alone: a capability three hosts need is out of a host binary, the
+back-of-house crate is out of the shipped desktop bundle, and the layer map is
+true rather than excepted. Anyone re-running this argument for another
+extraction should NOT expect binary size to move — and should check whether
+the weight they mean to shed is actually dead before making it a bar. This one
+was assumed severable by the coordinator and by the worker, and the
+measurement said otherwise.
+
+### 10.1f Size debt owed, measured on the P5 branch — ontology-v1 P5 (2026-09-02; ACCEPTED in §10.1h)
+
+P5 grew eight files and the arch-gate baselines are **not** re-pinned in the
+P5 branch. That is deliberate: three ontology-v1 phases (P3, P4, P5) were in
+flight in separate worktrees at the same time, and `quality/baselines/` is one
+set of files. Three workers each running `arch-gate --update-baseline` on their
+own tree produces three divergent freezes whose merge silently reverts whichever
+lands first — the exact failure mode `--update-baseline` on a working tree is
+warned against in `AGENTS.md`. The re-pin belongs to whoever merges the wave,
+run ONCE over the merged tree. What P5 owes, measured (`wc -l`, HEAD of
+`ontology-v1-p5`):
+
+| File | Baseline | After P5 | Why |
+|------|----------|----------|-----|
+| `corpus-engine/src/enrichment/atlas/context.rs` | 1,989 | 2,195 | The vocabulary carrier on `AtlasGraph` + the `EMBED_ATTRIBUTES` renderer and their two tests. Already an oversized row; splits with the ATLAS_STORAGE_V2 read path, not locally. |
+| `sovereign-core/src/runtime/retrieval/atom_enum.rs` | 1,605 | 1,791 | `enumerable_types` + its five tests + the hoisted scope/graph/vocabulary block. Already oversized; the enumerate and overview paths are the obvious seam and neither is settled. |
+| `corpus-engine/src/enrichment/governance_view.rs` | 1,249 | 1,340 | `project_claim` reading `subject` + the declared deontic, and one test. Already oversized. |
+
+Files also entered the 800–1200 approach band that were under it
+(`atlas_traversal/engine.rs` 772 → 1,072; `atlas_traversal/classifier.rs`
+574 → 934; `meta_atlas/classifier.rs` 696 → 867), and two already in it grew
+(`meta_atlas/builder.rs` → 833, `sovereign-tools/src/atlas_context_manager.rs`
+→ 993). The gate's own figure for the net, which is the one to cite: **files
+162 → 163 (+1), lines 157,275 → 158,796 (+1,521)** (`cargo run -p xtask --
+arch-gate`, 2026-09-02, exit 1 with five size failures and zero doc failures).
+
+Roughly half of every one of those numbers is test code, and it stays in the
+module rather than moving to `tests/main/` to make a ratchet green: three of
+the five test the module's PRIVATE surface (`render_attributes`,
+`project_claim`, `enumerable_types`), and moving the rest out to shrink a line
+count would be teaching to the test. The real seam, when the phase settles, is
+`atlas_traversal/engine.rs` → the six pre-ontology walks and the two
+declared-type walks as peers.
+
+**That condition is now MET** (2026-09-03). P6 landed and was proven end to
+end on 2026-09-02, and the ontology-v1 cleanup pass has closed; the file is
+1,096 lines, under the 1,200 smell line, so the split is UNBLOCKED and
+UNURGENT — it is waiting on an owner, not on a phase. Stated as met rather
+than left as "when P6 stops moving", because a condition nobody is watching
+for is not a schedule (a review on 2026-09-03 read this line as an unowned
+gate, correctly).
+
+### 10.1g Size — `resolution.rs` is +217 and P3 could not buy that back (ontology-v1 P3, 2026-09-02; ACCEPTED in §10.1h)
+
+**The number.** `arch-gate` reports
+`corpus-engine/src/enrichment/atlas/resolution.rs 5173 → 5390 (+217, slack
+50)`. Split three ways: the baseline snapshot is 5173, the file was **5217** at
+P3's branch point `cf160813f` (P0-P2 spent 44 of the 50-line slack before P3
+started), and P3's own net is **+173**.
+
+**What was tried, and what it bought.** P3 moved everything it could out of the
+file rather than growing it and asking for the baseline:
+
+| move | out of `resolution.rs` | into |
+|---|---|---|
+| the four declared-resolution behaviour tests | −343 | `tests/main/ontology_resolution_e2e.rs` (418) |
+| `emit_role_states` (the State + Involves + Grounds emission) | −31 | `atlas/resolution_ontology.rs` (711) |
+
+Two more cuts were taken in the same phase for the same reason, and they
+cleared the OTHER arch-gate failure outright — the 800-1200 approach band went
+from `157588` (+313 over baseline) back to **155760**, its value at the branch
+point and 1,515 lines *below* the baseline:
+
+| move | out of | into |
+|---|---|---|
+| the two declared-identity signals | `reconciliation/signals.rs` 875 → 720 | `reconciliation/identity_signals.rs` (164) |
+| `reify_merges` | `reconciliation/multi_origin.rs` 950 → 654 | `reconciliation/reified.rs` (137) |
+| the three identity behaviour tests | (same file) | `tests/main/ontology_identity_e2e.rs` (228) |
+| the ninth schema dimension | `atlas/schema_validation.rs` 1666 → 1488 | `atlas/ontology_coverage.rs` (186) |
+
+**Why the residual stands.** What is left in `resolution.rs` is the
+declared-ontology logic that is INSIDE `resolve_step_3b_with`'s existing loops
+— the claim `subject` resolution, the relation endpoint check, the ref-snap
+call — plus the doc comments on the two `_with` entry points. Moving those
+would push `resolution_ontology.rs` from 711 to ~792, one line under the
+approach band's floor, trading a named overage for an unnamed one. And even a
+P3 that added ZERO lines would leave the file at 5217, six lines inside slack:
+the honest fix is not a smaller P3, it is a split of a 5,390-line file that has
+been 4.5x ARCH §3.1's ceiling since before this program began.
+
+**The decision this row asks for.** Accept the +217 with `arch-gate
+--update-baseline` and schedule the `resolution.rs` split as its own order —
+the same disposition §10 already carries for `pipeline/atlas.rs`, and for the
+same reason: the gate's approach band rejects any residual that lands inside
+it, so the file has to go from >1200 to <800 in one move and cannot be taken
+in steps while ontology-v1's waves are in flight.
+
+
+### 10.1h Size ACCEPTED at the wave merge — 2026-09-02 (ontology-v1 P3 · P4 · P5)
+
+§10.1f and §10.1g are the two workers' halves of one bill, each measured on
+its own branch and each deliberately left un-repinned so three worktrees
+sharing `quality/baselines/` could not clobber one another. This row is the
+decision they asked for, taken once over the merged tree, with the gate's own
+numbers rather than either worker's arithmetic:
+
+| File | Baseline | Merged | Δ | Slack |
+|------|----------|--------|---|-------|
+| `corpus-engine/src/enrichment/atlas/resolution.rs` | 5,173 | 5,390 | +217 | 50 |
+| `corpus-engine/src/enrichment/atlas/context.rs` | 1,989 | 2,211 | +222 | 50 |
+| `sovereign-core/src/runtime/retrieval/atom_enum.rs` | 1,605 | 1,791 | +186 | 50 |
+| `corpus-engine/src/enrichment/governance_view.rs` | 1,249 | 1,380 | +131 | 50 |
+
+Approach band: **files 159 → 162 (+3), lines 154,564 → 157,600 (+3,036)**.
+Tracked oversized files went 171 → **170**, banked with `--tighten` earlier in
+the same merge, so this acceptance is measured against a baseline that already
+absorbed every real cut on offer.
+
+**Accepted rather than split, for one reason stated once.** Every one of the
+four was ALREADY over 1,200 before this wave; none crossed the ceiling here.
+The gate's approach band refuses a residual that lands between 800 and 1,200,
+so each of these has to go from >1,200 to <800 in a single move — a split
+cannot be taken in steps while the waves that keep reshaping these files are
+in flight. §10 already carries that exact disposition for `pipeline/atlas.rs`.
+Roughly half of every delta is test code that tests the module's PRIVATE
+surface (`render_attributes`, `project_claim`, `enumerable_types`,
+`emit_role_states`), and moving it to `tests/main/` to shrink a line count
+would be teaching to the test, not a cut.
+
+**What was actually paid before asking.** P3 moved 343 lines of behaviour
+tests and `emit_role_states` out of `resolution.rs`, and took four further
+cuts that cleared the approach-band failure outright on its own branch
+(157,588 → 155,760, 1,515 BELOW baseline). The residual is the declared-
+ontology logic living inside `resolve_step_3b_with`'s existing loops, which
+cannot leave without taking the loops with it. §10.1g has the table.
+
+**The splits this schedules**, each as its own order once ontology-v1 stops
+moving these files: `resolution.rs` (the largest and the one §10.1g argues
+for first); `atlas_traversal/engine.rs` — six pre-ontology walks and two
+declared-type walks as peers, whose condition was met on 2026-09-03 (see
+§10.1f) and which now needs an owner;
+`context.rs`, which splits with the ATLAS_STORAGE_V2 read path rather than
+locally.
+
 
 ### 10.2 cmnwlth deferrals
 

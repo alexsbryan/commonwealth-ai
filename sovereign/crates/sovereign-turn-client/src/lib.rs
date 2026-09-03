@@ -102,6 +102,9 @@ pub struct CreatedConversation {
     pub id: String,
     /// Unix seconds the host recorded.
     pub created_at: i64,
+    /// The corpus allow-list the host seeded, as it echoed it. `None` when
+    /// none was requested.
+    pub enabled_corpora: Option<Vec<String>>,
 }
 
 impl TurnClient {
@@ -121,13 +124,22 @@ impl TurnClient {
     ///
     /// Seeding is what makes `skill_id` load-bearing: the host tags the
     /// conversation so its very first turn routes into that agent loop,
-    /// rather than one untagged turn happening first.
-    pub async fn create_conversation(&self, skill_id: Option<&str>) -> Result<CreatedConversation> {
+    /// rather than one untagged turn happening first. `enabled_corpora` is
+    /// the retrieval allow-list (`Conversation::enabled_corpora`) for the
+    /// same reason — it has to be on the row before the first turn reads
+    /// it. `None` searches every installed corpus; the host validates a
+    /// `Some` and refuses an unknown id with its installed list, which this
+    /// returns verbatim as the error text.
+    pub async fn create_conversation(
+        &self,
+        skill_id: Option<&str>,
+        enabled_corpora: Option<&[String]>,
+    ) -> Result<CreatedConversation> {
         let url = format!("{}/v1/conversations", self.base);
         let resp = self
             .http
             .post(&url)
-            .json(&serde_json::json!({ "skill_id": skill_id }))
+            .json(&create_conversation_body(skill_id, enabled_corpora))
             .send()
             .await
             .map_err(|e| Error::Inference(format!("POST {url}: {e}")))?;
@@ -141,10 +153,14 @@ impl TurnClient {
             // The host's own words, not a generic status line: a daemon that
             // serves no turns says so ("this daemon serves no turns
             // (mesh-admin)") and that is the sentence the operator needs.
-            return Err(Error::Inference(format!(
-                "POST {url}: {status}: {}",
-                body.trim()
-            )));
+            // Both hosts wrap it as `{"error": "..."}`; unwrap that so the
+            // sentence reads as prose, and fall back to the raw body when
+            // the shape is anything else.
+            let reason = serde_json::from_str::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
+                .unwrap_or_else(|| body.trim().to_string());
+            return Err(Error::Inference(format!("POST {url}: {status}: {reason}")));
         }
 
         let v: serde_json::Value = serde_json::from_str(&body)
@@ -155,7 +171,16 @@ impl TurnClient {
             .ok_or_else(|| Error::Inference(format!("POST {url}: response carried no id")))?
             .to_string();
         let created_at = v.get("created_at").and_then(|x| x.as_i64()).unwrap_or(0);
-        Ok(CreatedConversation { id, created_at })
+        let echoed: Option<Vec<String>> = v
+            .get("enabled_corpora")
+            .and_then(|e| serde_json::from_value(e.clone()).ok());
+        verify_allow_list_echo(enabled_corpora, echoed.as_deref())
+            .map_err(|why| Error::Inference(format!("POST {url}: {why}")))?;
+        Ok(CreatedConversation {
+            id,
+            created_at,
+            enabled_corpora: echoed,
+        })
     }
 
     /// `POST /v1/conversations/{id}/end` — run the conversation-end
@@ -222,6 +247,89 @@ impl TurnClient {
         let mut stream = self.connect(conversation_id).await?;
         stream.send_message(content, mode, intent).await?;
         stream.drain_turn(observer).await
+    }
+}
+
+/// A host that scoped the conversation echoes the allow-list; one that
+/// predates the field drops the unknown key and answers 200 with an
+/// UNSCOPED row. The echo is the only way to tell them apart, and telling
+/// them apart is the whole point: `--corpus` that silently did nothing is
+/// the failure this field was added to close (§18.3).
+fn verify_allow_list_echo(
+    requested: Option<&[String]>,
+    echoed: Option<&[String]>,
+) -> std::result::Result<(), String> {
+    match (requested, echoed) {
+        (None, _) => Ok(()),
+        (Some(want), Some(got)) if want == got => Ok(()),
+        (Some(want), got) => Err(format!(
+            "the host accepted the conversation but did not seed the corpus allow-list \
+             {want:?} (it echoed {got:?}) — it predates `enabled_corpora` support or ignored \
+             it, and NOTHING was scoped. Rebuild and restart the daemon (`svrn daemon stop && \
+             svrn daemon start`), or drop --corpus."
+        )),
+    }
+}
+
+/// The `POST /v1/conversations` body. Pure so the wire shape is pinned by a
+/// test: `enabled_corpora` is OMITTED when `None`, so a client that never
+/// scopes sends byte-for-byte what it sent before the field existed — the
+/// same discipline `TurnMode` keeps on `TurnRequest`.
+fn create_conversation_body(
+    skill_id: Option<&str>,
+    enabled_corpora: Option<&[String]>,
+) -> serde_json::Value {
+    let mut body = serde_json::json!({ "skill_id": skill_id });
+    if let Some(allow) = enabled_corpora {
+        body["enabled_corpora"] = serde_json::json!(allow);
+    }
+    body
+}
+
+#[cfg(test)]
+mod create_body_tests {
+    use super::{create_conversation_body, verify_allow_list_echo};
+
+    fn s(items: &[&str]) -> Vec<String> {
+        items.iter().map(|x| x.to_string()).collect()
+    }
+
+    /// The stale-daemon shape: 200, an id, and no echo. Must be an error,
+    /// because the alternative is a turn that searched everything under a
+    /// flag that said otherwise.
+    #[test]
+    fn a_host_that_drops_the_allow_list_is_refused() {
+        let err = verify_allow_list_echo(Some(&s(&["sep"])), None).unwrap_err();
+        assert!(err.contains("NOTHING was scoped"), "{err}");
+        assert!(err.contains("svrn daemon stop"), "{err}");
+        let err = verify_allow_list_echo(Some(&s(&["sep"])), Some(&s(&["gutenberg"]))).unwrap_err();
+        assert!(err.contains("[\"sep\"]"), "{err}");
+    }
+
+    #[test]
+    fn a_faithful_echo_and_an_unscoped_create_both_pass() {
+        verify_allow_list_echo(Some(&s(&["sep"])), Some(&s(&["sep"]))).unwrap();
+        verify_allow_list_echo(None, None).unwrap();
+        verify_allow_list_echo(None, Some(&s(&["sep"]))).unwrap();
+    }
+
+    #[test]
+    fn an_unscoped_create_omits_the_allow_list_key() {
+        let body = create_conversation_body(None, None);
+        assert_eq!(body, serde_json::json!({ "skill_id": null }));
+    }
+
+    #[test]
+    fn a_scoped_create_carries_the_allow_list_verbatim() {
+        let allow = vec!["sep".to_string(), "gutenberg".to_string()];
+        let body = create_conversation_body(Some("recipe-author"), Some(&allow));
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "skill_id": "recipe-author",
+                "enabled_corpora": ["sep", "gutenberg"],
+            })
+        );
     }
 }
 

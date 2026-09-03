@@ -47,8 +47,32 @@ function loadLedger(file) {
   return counts;
 }
 
-const ledgerFiles = process.argv.slice(2).length
-  ? process.argv.slice(2).map((p) => path.resolve(p))
+// argv: ledger paths, plus an optional `--min-percent N` ratchet for CI.
+// Prefer RAISING the floor as coverage lands over setting it aspirationally
+// high and muting the failure.
+const argv = process.argv.slice(2);
+let minPercent = null;
+const positional = [];
+for (let i = 0; i < argv.length; i += 1) {
+  if (argv[i] === "--min-percent") {
+    minPercent = Number(argv[i + 1]);
+    i += 1;
+    if (!Number.isFinite(minPercent)) {
+      console.error("coverage-report: --min-percent needs a number");
+      process.exit(2);
+    }
+  } else if (argv[i].startsWith("--min-percent=")) {
+    minPercent = Number(argv[i].split("=")[1]);
+    if (!Number.isFinite(minPercent)) {
+      console.error("coverage-report: --min-percent needs a number");
+      process.exit(2);
+    }
+  } else {
+    positional.push(argv[i]);
+  }
+}
+const ledgerFiles = positional.length
+  ? positional.map((p) => path.resolve(p))
   : [DEFAULT_LEDGER];
 const ledgers = ledgerFiles.map((file) => ({
   label: path.basename(file).replace(/^ledger-|\.jsonl$/g, ""),
@@ -136,3 +160,28 @@ fs.writeFileSync(
   ),
 );
 console.log(`\nWrote ${path.relative(CRATE_ROOT, OUT_PATH)}`);
+
+// The ratchet. A run that read NO ledger rows at all is could-not-judge, not a
+// zero: reporting 0% for a missing ledger is the same substitution the retired
+// second reader made, and it would fail CI for the wrong reason (ARCH §18.1's
+// four verdicts, §18.3's absence-is-not-a-result).
+if (minPercent !== null) {
+  const rowsRead = ledgers.reduce((n, l) => n + l.counts.size, 0);
+  if (rowsRead === 0) {
+    console.error(
+      `\ncoverage-report: COULD-NOT-JUDGE — no ledger rows in ${ledgerFiles
+        .map((f) => path.relative(CRATE_ROOT, f))
+        .join(", ")}. ` +
+        "The suite did not run, or it ran without the ledger. Not reporting 0%.",
+    );
+    process.exit(3);
+  }
+  const pct = (exercised.length / total) * 100;
+  if (pct < minPercent) {
+    console.error(
+      `\ncoverage-report: FAIL — ${pct.toFixed(1)}% reached, floor is ${minPercent}%`,
+    );
+    process.exit(1);
+  }
+  console.log(`Ratchet: ${pct.toFixed(1)}% >= ${minPercent}% floor`);
+}

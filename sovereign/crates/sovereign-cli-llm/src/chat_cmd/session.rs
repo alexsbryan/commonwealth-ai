@@ -22,7 +22,10 @@ use std::io::{self, BufRead, Write};
 use sovereign_contracts::types::TurnMode;
 use sovereign_turn_client::{TurnClient, TurnObserver};
 
-use crate::chat_cmd::config::parse_globals_for_chat as parse_globals;
+use crate::chat_cmd::ask::{parse_corpus_flag_value, CORPUS_WITH_CONVERSATION};
+use crate::chat_cmd::config::{
+    parse_globals_for_chat as parse_globals, print_daemon_served_turn_notes,
+};
 use crate::chat_cmd::render;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
@@ -33,8 +36,14 @@ const HELP: Help = Help {
         HelpSection::Usage("svrn chat session [flags]"),
         HelpSection::Flags(&[
             (
+                "--corpus <id>",
+                "Restrict every turn's retrieval to this corpus (repeatable). The daemon refuses \
+                 an id it has not installed and lists the ones it has. Not combinable with \
+                 --conversation.",
+            ),
+            (
                 "--conversation <id>",
-                "Resume an existing conversation id (default: fresh uuid).",
+                "Resume an existing conversation id (default: the daemon mints one).",
             ),
             (
                 "--show-reasoning",
@@ -43,7 +52,10 @@ const HELP: Help = Help {
             ("--help, -h", "Show this message."),
         ]),
         HelpSection::Notes(
-            "Type `quit` or `exit` to end. Ctrl-D also works. Blank lines are ignored.",
+            "Type `quit` or `exit` to end. Ctrl-D also works. Blank lines are ignored.\n\n\
+             Every turn runs ON THE DAEMON (--daemon, default http://localhost:9741): \
+             `--data-dir` does not scope it (use --corpus), and SOVEREIGN_GATE_* knobs must be \
+             exported where the daemon is launched, not in this shell.",
         ),
     ],
 };
@@ -61,44 +73,44 @@ pub async fn cmd_session(args: &[String]) -> i32 {
             return 2;
         }
     };
-
-    let mut conversation_id: Option<String> = None;
-    let mut show_reasoning = false;
-    let mut i = 0;
-    while i < rest.len() {
-        match rest[i].as_str() {
-            "--conversation" => {
-                i += 1;
-                conversation_id = rest.get(i).cloned();
-            }
-            "--show-reasoning" => {
-                show_reasoning = true;
-            }
-            extra => {
-                eprintln!("error: unexpected argument `{extra}`");
-                return 2;
-            }
+    let parsed = match parse_session_args(&rest) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 2;
         }
-        i += 1;
-    }
+    };
+    let show_reasoning = parsed.show_reasoning;
+
+    // What this shell set that the daemon will not see — see `chat_cmd::ask`.
+    print_daemon_served_turn_notes(&globals);
 
     let client = TurnClient::new(&globals.daemon_base);
 
-    // The daemon mints the id and seeds the row in the same call — see
-    // `chat_cmd::ask` for why the client no longer invents one.
-    let conversation_id = match conversation_id {
+    // The daemon mints the id and seeds the row (and the corpus allow-list)
+    // in the same call — see `chat_cmd::ask` for why the client no longer
+    // invents one.
+    let conversation_id = match parsed.conversation_id {
         Some(id) => id,
-        None => match client.create_conversation(None).await {
-            Ok(c) => c.id,
-            Err(e) => {
-                eprintln!("could not start a conversation on the daemon: {e}");
-                eprintln!("hint: is the daemon running? `svrn daemon start`");
-                return 1;
+        None => {
+            let allow = (!parsed.corpora.is_empty()).then_some(parsed.corpora.as_slice());
+            match client.create_conversation(None, allow).await {
+                Ok(c) => c.id,
+                Err(e) => {
+                    eprintln!("could not start a conversation on the daemon: {e}");
+                    if parsed.corpora.is_empty() {
+                        eprintln!("hint: is the daemon running? `svrn daemon start`");
+                    }
+                    return 1;
+                }
             }
-        },
+        }
     };
     eprintln!();
     eprintln!("conversation: {conversation_id}");
+    if !parsed.corpora.is_empty() {
+        eprintln!("corpora: {}", parsed.corpora.join(", "));
+    }
     eprintln!("Type `quit` to exit.");
     eprintln!();
 
@@ -138,6 +150,45 @@ pub async fn cmd_session(args: &[String]) -> i32 {
     }
 
     0
+}
+
+/// `svrn chat session`'s own flags, after the shared globals are taken out.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct SessionArgs {
+    conversation_id: Option<String>,
+    show_reasoning: bool,
+    /// `--corpus`, repeated. Empty means "every installed corpus".
+    corpora: Vec<String>,
+}
+
+fn parse_session_args(rest: &[String]) -> Result<SessionArgs, String> {
+    let mut parsed = SessionArgs::default();
+    let mut i = 0;
+    while i < rest.len() {
+        match rest[i].as_str() {
+            "--conversation" => {
+                i += 1;
+                parsed.conversation_id = Some(
+                    rest.get(i)
+                        .cloned()
+                        .ok_or_else(|| "--conversation needs a value".to_string())?,
+                );
+            }
+            "--corpus" => {
+                i += 1;
+                parsed.corpora.push(parse_corpus_flag_value(rest.get(i))?);
+            }
+            "--show-reasoning" => {
+                parsed.show_reasoning = true;
+            }
+            extra => return Err(format!("unexpected argument `{extra}`")),
+        }
+        i += 1;
+    }
+    if !parsed.corpora.is_empty() && parsed.conversation_id.is_some() {
+        return Err(CORPUS_WITH_CONVERSATION.to_string());
+    }
+    Ok(parsed)
 }
 
 /// One streaming turn. Returns `Err(code)` for hard failures that
@@ -212,4 +263,32 @@ async fn run_one(
     }
     eprintln!();
     Ok(())
+}
+
+#[cfg(test)]
+mod arg_tests {
+    use super::*;
+
+    fn svec(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn session_corpus_repeats() {
+        let p = parse_session_args(&svec(&["--corpus", "sep", "--corpus", "crs_reports"])).unwrap();
+        assert_eq!(p.corpora, vec!["sep", "crs_reports"]);
+    }
+
+    #[test]
+    fn session_corpus_without_an_id_is_refused() {
+        let err = parse_session_args(&svec(&["--corpus"])).unwrap_err();
+        assert!(err.contains("--corpus needs a corpus id"), "{err}");
+    }
+
+    #[test]
+    fn session_corpus_with_conversation_is_refused() {
+        let err =
+            parse_session_args(&svec(&["--corpus", "sep", "--conversation", "c1"])).unwrap_err();
+        assert_eq!(err, CORPUS_WITH_CONVERSATION);
+    }
 }

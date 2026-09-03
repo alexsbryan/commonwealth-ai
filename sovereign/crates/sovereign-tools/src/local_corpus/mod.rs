@@ -23,6 +23,7 @@
 //! `sovereign/*`. See the plan at
 //! `/Users/user/.claude/plans/binary-scribbling-babbage.md`.
 
+pub mod atlas_dispatch;
 pub mod clusterer;
 pub mod config;
 pub mod excerpt;

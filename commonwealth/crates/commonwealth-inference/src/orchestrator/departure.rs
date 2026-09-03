@@ -19,8 +19,14 @@ pub enum DepartureState {
     Complete,
 }
 
-/// Manages a graceful departure — 30-second countdown during which the
-/// mesh rebalances so there are zero 503s.
+/// The default departure countdown — the window the mesh gets to rebalance
+/// away from this node before its processes stop. Named once, so the value
+/// `GracefulDeparture::new` uses and the value a caller passes explicitly
+/// cannot drift apart (ARCH §10.6).
+pub const DEFAULT_COUNTDOWN: Duration = Duration::from_secs(30);
+
+/// Manages a graceful departure — a countdown during which the mesh
+/// rebalances so there are zero 503s.
 pub struct GracefulDeparture {
     pub node_id: NodeId,
     pub announced_at: Instant,
@@ -34,7 +40,7 @@ impl GracefulDeparture {
         Self {
             node_id,
             announced_at: Instant::now(),
-            countdown: Duration::from_secs(30),
+            countdown: DEFAULT_COUNTDOWN,
             state: DepartureState::Announced,
         }
     }

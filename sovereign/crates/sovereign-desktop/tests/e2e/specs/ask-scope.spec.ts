@@ -65,7 +65,7 @@ test.describe("Ask scope bar", () => {
     await expect(page.locator(".corpus-filter-strip .kb-tag")).toHaveCount(2);
   });
 
-  test("a notebook's Ask states scope in the header, not a bar", async ({
+  test("a notebook's Ask states scope in the header, not a bar", { tag: ["@UI-6"] }, async ({
     sovereignPage: page,
     chat,
   }) => {

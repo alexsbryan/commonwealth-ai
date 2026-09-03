@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Every self-test for the release drivers in scripts/.
+# Every shell self-test in scripts/tests/ — the release drivers, and the
+# pre-push hook's own range derivation.
 #
-# These exercise the REAL release scripts with `gh` and `podman` stubbed, in a
-# mktemp repo — so they prove behaviour rather than restating it, and nothing
-# is uploaded, started, or written outside the temp dir (ARCH §12.4).
+# These exercise the REAL scripts with `gh`, `podman` and `git push`'s stdin
+# stubbed, in a mktemp repo — so they prove behaviour rather than restating it,
+# and nothing is uploaded, started, or written outside the temp dir (ARCH §12.4).
 #
 # They are shell, not `cargo test`, for the same reason .claude/hooks/tests
 # are: the thing under test IS a shell script plus a subprocess boundary, and
@@ -13,7 +14,10 @@
 #   bash scripts/tests/release-provenance-gate.sh     # one suite
 #
 # Wired into scripts/pre-push.sh, which runs this whenever a release driver or
-# one of these suites changes. An opt-in guard decays into decoration.
+# one of these suites changes. An opt-in guard decays into decoration. Note
+# that pre-push-fail-closed.sh runs the hook FROM the hook: it copies the
+# script into a mktemp repo and drives it there, so the nesting is one level
+# deep and touches nothing in this working tree.
 #
 # Cost: a couple of seconds. No cargo, no network, no containers, no models.
 set -u

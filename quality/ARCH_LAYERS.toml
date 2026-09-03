@@ -167,6 +167,21 @@ crates = [
     # the other two could only re-derive it, and both had (rung
     # nc-16-shared-capability, 2026-08-20).
     "sovereign-enrichment-catalog",
+    # The atlas `enrich build` orchestrator + its phase drivers. Here for the
+    # SAME reason as the catalog above, one rung further: the catalog moved the
+    # store's SCHEMA below the hosts, and this moves the thing that FILLS it.
+    # Three hosts run this build — `svrn enrich build`, the daemon's in-process
+    # build for an `[enrichment] type = "atlas"` recipe, and the desktop, which
+    # ships no CLI to shell out to — and until 2026-09-01 the only way down was
+    # `sovereign-cli-daemon -> sovereign-cli-llm`, host to host. That edge
+    # carried `bench_cmd`'s grandfathered `sovereign-eval` dependency (the
+    # [[exception]] below) into the daemon AND the desktop bundle, which is the
+    # precise failure the back-of-house rule warns it cannot see: the boundary
+    # was drawn in the wrong place, and this is the split being paid for.
+    # Nothing here reaches above this layer — the `sovereign-cli-shared` edge
+    # stayed up with the `cmd_*`/HELP halves, and the one `sovereign-mesh` edge
+    # was a daemon-session lookup that moved up into the CLI wrapper.
+    "sovereign-enrichment-build",
     # THE `Runtime` recipe — router stack, turn tool registry, enrichment
     # lane. Here rather than with the hosts for the same reason as the
     # catalog above: THREE hosts commissioned a Runtime and each carried

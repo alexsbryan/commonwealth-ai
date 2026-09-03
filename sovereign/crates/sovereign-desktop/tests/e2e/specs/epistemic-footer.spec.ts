@@ -9,7 +9,7 @@ import { test, expect, bootToChat } from "../fixtures/test-base";
 // the SourceAttribution rendering — pinned by the third test.
 
 test.describe("epistemic footer", () => {
-  test("grounded turn renders the verdict receipt + source badges", async ({
+  test("grounded turn renders the verdict receipt + source badges", { tag: ["@GR-44"] }, async ({
     sovereignPage: page,
     chat,
   }) => {

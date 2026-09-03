@@ -63,6 +63,26 @@ const GOV_ATLAS_FIXTURE = path.join(__dirname, "fixtures/governance-atlas");
 const GOV_DISPLAY_NAME = "Maple House (E2E)";
 /** Specs read this to learn the governance corpus id. */
 export const GOV_FIXTURE_INFO = path.join(RESULTS, "real-gov-fixture.json");
+
+// Numismatics fixture: the same shape as the governance one — a tiny real
+// folder ingest with a checked-in atlas overlaid on top — but the atlas also
+// carries `ontology.json`, which is what makes the corpus DECLARED. Without
+// that third file the summary reports no `declared_types` and the browse view
+// falls back to the generic atom kinds, so the overlay list below is
+// load-bearing, not a convenience.
+//
+// `ontology.json` is the real one from the operator's `wessex-hoard` build; the
+// atoms are a hand-cut 12 that exercise the four cases the pills and the
+// inspector have to get right: a parent type with a specialization
+// (`sceatta` ⊂ `coin`), a `role_of` type that lands as a State (`ruler`), a
+// declared claim type with a `subject` (`attribution`), and a `ref` attribute
+// that resolves next to one that is just what the source said.
+const NUM_CORPUS_DIR = path.join(__dirname, "fixtures/numismatics-corpus");
+const NUM_ATLAS_FIXTURE = path.join(__dirname, "fixtures/numismatics-atlas");
+const NUM_DISPLAY_NAME = "Marlow Field (E2E)";
+/** Specs read this to learn the numismatics corpus id. */
+export const NUM_FIXTURE_INFO = path.join(RESULTS, "real-num-fixture.json");
+
 const BRIDGE = "http://127.0.0.1:9745";
 const DAEMON_BIN = path.join(REPO_ROOT, "target/debug/sovereign-cli-daemon");
 const DAEMON_LOG = path.join(RESULTS, "real-daemon.log");
@@ -433,47 +453,103 @@ async function waitForIngest(jobId: string, label: string): Promise<void> {
   }
 }
 
+/** One "real folder ingest + checked-in atlas overlay" fixture.
+ *
+ *  Both planted corpora are the same manoeuvre: ingest a tiny folder for
+ *  real so it appears in the Library shelf, then drop a deterministic atlas
+ *  on top so the surface under test has KNOWN content without an LLM enrich.
+ *  They differ only in which folder, which atlas files, and what a spec later
+ *  needs to read back. */
+interface OverlaidCorpusFixture {
+  /** Short name used in every log line and error for this fixture. */
+  label: string;
+  /** Folder ingested for real. */
+  corpusDir: string;
+  /** Checked-in atlas directory the overlay is copied FROM. */
+  atlasFixtureDir: string;
+  /** Which files to copy. Named per fixture rather than globbed: a
+   *  numismatics atlas is only DECLARED because `ontology.json` is in this
+   *  list, so the list is the contract and a silent omission would leave the
+   *  spec asserting generic kinds and passing for the wrong reason. */
+  overlayFiles: string[];
+  displayName: string;
+  /** Where the corpus id is written for the spec to read back. */
+  infoFile: string;
+  /** Chunk floor for the promotion gate. */
+  minChunks: number;
+  /** Why the floor matters — printed when it is not met. */
+  why: string;
+}
+
+/// Ingest one fixture folder as a REAL corpus, then overlay its checked-in
+/// atlas.
+///
+/// Gates on promotion, not on `fs.existsSync(indexRoot)`. That older check
+/// passed for a STRANDED corpus — the canonical directory exists and is full
+/// of sidecars, it just has no chunks — and then this function would overlay
+/// an atlas into it, cementing exactly the atlas-without-_corpus_meta.json
+/// shape found on the operator's real install
+/// (~/.svrnmesh/indexes/enron-sample-tiny, 2026-07-27).
+async function plantOverlaidCorpus(f: OverlaidCorpusFixture): Promise<void> {
+  const existing = await invoke<Array<{ corpus_id: string; display_name?: string }>>("lc_list");
+  let corpusId = existing.find((c) => c.display_name === f.displayName)?.corpus_id;
+
+  if (!corpusId) {
+    const validation = await invoke<{ exists: boolean; is_dir: boolean }>("lc_validate_path", {
+      path: f.corpusDir,
+    });
+    if (!validation.exists || !validation.is_dir) {
+      throw new Error(`${f.label} dir invalid: ${f.corpusDir}`);
+    }
+    const pre = await invoke<{ corpus_id: string; job_id: string }>(
+      "lc_pre_scan",
+      { path: f.corpusDir, sourceType: "folder", displayName: f.displayName },
+      60_000,
+    );
+    corpusId = pre.corpus_id;
+    const jobId = await invoke<string>("lc_ingest", { corpusId, withOcr: false }, 60_000);
+    await waitForIngest(jobId, f.label);
+    console.log(`[real-setup] ${f.label} ingested ✓ (${corpusId})`);
+  } else {
+    console.log(`[real-setup] ${f.label} already present (${corpusId})`);
+  }
+
+  await assertCorpusPromoted(corpusId, f.label, { minChunks: f.minChunks, why: f.why });
+
+  // Path mirrors the desktop's `atlas_dir(corpus_id)` =
+  // `<data.dir>/indexes/<id>/atlas`, where data.dir is the test HOME's
+  // `.sovereign` (see the managed daemon config in bakeProfile).
+  const indexRoot = path.join(HOME, ".sovereign", "indexes", corpusId);
+  const atlasDir = path.join(indexRoot, "atlas");
+  fs.mkdirSync(atlasDir, { recursive: true });
+  for (const name of f.overlayFiles) {
+    fs.copyFileSync(path.join(f.atlasFixtureDir, name), path.join(atlasDir, name));
+  }
+  // The atlas summary sidecar is keyed on atoms.json mtime+size, so a
+  // leftover one from a previous run would be invalidated anyway — but
+  // deleting it makes the recompute unconditional rather than relying on the
+  // copy having changed the key.
+  fs.rmSync(path.join(atlasDir, "_summary.json"), { force: true });
+  fs.writeFileSync(
+    f.infoFile,
+    JSON.stringify({ corpus_id: corpusId, display_name: f.displayName }, null, 2),
+  );
+  console.log(`[real-setup] ${f.label} atlas overlaid ✓ (${atlasDir})`);
+}
+
 /// Ingest the governance folder as a REAL corpus, then overlay the
 /// deterministic post-build atlas so it carries KNOWN conflicts without an
 /// LLM enrich. After this, `notebook_list` reports `open_conflicts` for it
 /// (the shelf chip + Conflicts tab gate) and `governance_get_view` returns
 /// the four planted tensions — the surface `governance.real.spec.ts` drives.
-async function plantGovernanceCorpus(): Promise<void> {
-  const existing = await invoke<Array<{ corpus_id: string; display_name?: string }>>("lc_list");
-  let corpusId = existing.find((c) => c.display_name === GOV_DISPLAY_NAME)?.corpus_id;
-
-  if (!corpusId) {
-    const validation = await invoke<{ exists: boolean; is_dir: boolean }>("lc_validate_path", {
-      path: GOV_CORPUS_DIR,
-    });
-    if (!validation.exists || !validation.is_dir) {
-      throw new Error(`governance corpus dir invalid: ${GOV_CORPUS_DIR}`);
-    }
-    const pre = await invoke<{ corpus_id: string; job_id: string }>(
-      "lc_pre_scan",
-      { path: GOV_CORPUS_DIR, sourceType: "folder", displayName: GOV_DISPLAY_NAME },
-      60_000,
-    );
-    corpusId = pre.corpus_id;
-    const jobId = await invoke<string>("lc_ingest", { corpusId, withOcr: false }, 60_000);
-    await waitForIngest(jobId, "governance corpus");
-    console.log(`[real-setup] governance corpus ingested ✓ (${corpusId})`);
-  } else {
-    console.log(`[real-setup] governance corpus already present (${corpusId})`);
-  }
-
-  // Overlay the checked-in post-build atlas. Path mirrors the desktop's
-  // `atlas_dir(corpus_id)` = `<data.dir>/indexes/<id>/atlas`, where
-  // data.dir is the test HOME's `.sovereign` (see the managed daemon config
-  // in bakeProfile).
-  //
-  // Gate on promotion, not on `fs.existsSync(indexRoot)`. That older
-  // check passed for a STRANDED corpus — the canonical directory exists
-  // and is full of sidecars, it just has no chunks — and then this
-  // function would overlay an atlas into it, cementing exactly the
-  // atlas-without-_corpus_meta.json shape found on the operator's real
-  // install (~/.svrnmesh/indexes/enron-sample-tiny, 2026-07-27).
-  await assertCorpusPromoted(corpusId, "governance corpus", {
+function plantGovernanceCorpus(): Promise<void> {
+  return plantOverlaidCorpus({
+    label: "governance corpus",
+    corpusDir: GOV_CORPUS_DIR,
+    atlasFixtureDir: GOV_ATLAS_FIXTURE,
+    overlayFiles: ["atoms.json", "edges.json", "governance_oplog.jsonl"],
+    displayName: GOV_DISPLAY_NAME,
+    infoFile: GOV_FIXTURE_INFO,
     // charter.md + minutes.md. These ingested ZERO chunks until
     // `document_folder` was given the same extension breadth as
     // `watched_folder` — this minimum is the regression guard for that.
@@ -483,18 +559,29 @@ async function plantGovernanceCorpus(): Promise<void> {
       "overlaid on top of it is checked in, so the tab renders even when the corpus " +
       "underneath ingested nothing — which is exactly how this stayed invisible.",
   });
-  const indexRoot = path.join(HOME, ".sovereign", "indexes", corpusId);
-  const atlasDir = path.join(indexRoot, "atlas");
-  fs.mkdirSync(atlasDir, { recursive: true });
-  for (const f of ["atoms.json", "edges.json", "governance_oplog.jsonl"]) {
-    fs.copyFileSync(path.join(GOV_ATLAS_FIXTURE, f), path.join(atlasDir, f));
-  }
-  fs.writeFileSync(
-    GOV_FIXTURE_INFO,
-    JSON.stringify({ corpus_id: corpusId, display_name: GOV_DISPLAY_NAME }, null, 2),
-  );
-  console.log(`[real-setup] governance atlas overlaid ✓ (${atlasDir})`);
 }
+
+/// Ingest the numismatics folder as a REAL corpus, then overlay an atlas that
+/// includes `ontology.json` — the file that makes it a DECLARED corpus and so
+/// the only reason `numismatics.real.spec.ts` sees `coin` / `sceatta` /
+/// `attribution` instead of `Entity` / `Claim`.
+function plantNumismaticsCorpus(): Promise<void> {
+  return plantOverlaidCorpus({
+    label: "numismatics corpus",
+    corpusDir: NUM_CORPUS_DIR,
+    atlasFixtureDir: NUM_ATLAS_FIXTURE,
+    overlayFiles: ["atoms.json", "edges.json", "ontology.json"],
+    displayName: NUM_DISPLAY_NAME,
+    infoFile: NUM_FIXTURE_INFO,
+    // hoard-report.md + catalogue.md.
+    minChunks: 2,
+    why:
+      "numismatics.real.spec.ts drives the Explore pills over this corpus. Its atlas " +
+      "is overlaid, so the pills render even when the corpus underneath ingested " +
+      "nothing — the same way the governance tab once did.",
+  });
+}
+
 
 /** The operator's `[[meshapp_installs]]` blocks, verbatim, from the host
  *  desktop.toml — or "" when there are none / the file is unreadable.
@@ -1070,16 +1157,19 @@ export default async function globalSetup(): Promise<void> {
     );
   }
   // Demo mode (tests/e2e/demo) attaches to the operator's REAL daemon to
-  // film real corpora. Planting the fixture + governance corpora there
-  // would both pollute that index and put "E2E Fixture Corpus" / "Maple
-  // House (E2E)" on camera in the Library shelf. Skip them; no demo beat
-  // reads either fixture.
+  // film real corpora. Planting the fixture corpora there would both
+  // pollute that index and put "E2E Fixture Corpus" / "Maple House (E2E)"
+  // / "Marlow Field (E2E)" on camera in the Library shelf. Skip them; no
+  // demo beat reads any of them.
   if (process.env.SOVEREIGN_DEMO === "1") {
-    console.log("[real-setup] SOVEREIGN_DEMO=1 — skipping fixture + governance corpus plants");
+    console.log("[real-setup] SOVEREIGN_DEMO=1 — skipping fixture corpus plants");
     return;
   }
+
   // Outside the readiness retry loop: an ingest failure is a hard
   // setup error, never silently retried.
   await ingestFixtureCorpus();
   await plantGovernanceCorpus();
+  await plantNumismaticsCorpus();
 }
+

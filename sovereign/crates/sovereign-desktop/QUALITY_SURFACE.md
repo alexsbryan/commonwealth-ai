@@ -138,7 +138,7 @@ anything you export reaches the desktop process.
 
 | Env var | Effect |
 |---|---|
-| `SOVEREIGN_INVOKE_COVERAGE=<path>` | Records which of the 251 Tauri commands a run actually reached, newline-delimited, first sighting only. Off entirely when unset. Diff against the registry with `scripts/desktop-invoke-coverage.py`. |
+| `SOVEREIGN_INVOKE_COVERAGE=<path>` | Records which of the 260 Tauri commands a run actually reached, **JSONL** (`{"cmd": "<name>"}`), first sighting only. Off entirely when unset. Read it with `node tests/e2e/scripts/coverage-report.mjs <path>` — the same reader the synthetic and real ledgers use. |
 
 Note: the desktop does **not** call `promote_legacy_env()`, so `SOVEREIGN_*` is
 the correct prefix for desktop-only vars and no `SVRNMESH_*` bridging happens
@@ -177,8 +177,17 @@ runs, then restores the resident daemon).
 Three instruments, added because "the suite is green" and "the app works" are
 different claims:
 
-1. **Invoke coverage** — `SOVEREIGN_INVOKE_COVERAGE` + `scripts/desktop-invoke-coverage.py`.
-   Measures reach across the 251-command surface (14.3% at last measurement).
+1. **Invoke coverage** — `npm run report:coverage` (add `:real` to merge the
+   real-mode ledger). Measures reach across the 260-command surface:
+   **94/260 (36%) from the synthetic suite, measured 2026-09-02** over 287
+   passing specs. Zero-reach modules are where the surface is genuinely dark —
+   `crash_report` 0/4, `insight_commands` 0/6, `workflow_commands` 0/3,
+   `update_commands` 0/2 — and `watched_folder_commands` (3/17) and
+   `local_corpus_commands` (4/19) are the thinnest of the large ones.
+   `--min-percent N` turns it into a CI ratchet; prefer RAISING the floor as
+   coverage lands over setting it aspirationally high and muting the failure.
+   A run that read no ledger rows at all exits **3** as could-not-judge rather
+   than reporting 0% — a missing ledger is an absence, not a measurement.
    Deliberately a coverage-of-surface number rather than an assertion count:
    assertion counts inflate for free, surface reach cannot move without reaching
    a new command.

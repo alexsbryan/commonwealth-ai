@@ -766,6 +766,47 @@ fn emit_entities(
 
     // Items.
     for (key, item) in &groups.by_item {
+        // ARCH §10.6 — one decider, one name. A `mod X;` declaration is a
+        // tree-sitter symbol of kind `module`, so it arrives here as an
+        // item, but it DENOTES the same entity the module tier already
+        // minted: `item_canonical(k, p, X)` == `module_canonical(k, p::X)`
+        // and `entity_type_for_item("module")` == `entity_type_for_module()`,
+        // so both tiers derive the same content-hash id. Emitting a second
+        // record under that id is a silent overwrite — `atoms_delta` upserts
+        // by id, so one body wins and the other is lost with no diagnostic.
+        // Measured on this repo 2026-09-01: 232 records, 205 distinct ids,
+        // 27 collisions (11.6%), every one of them this case.
+        //
+        // Resolve the item to the module's atom rather than minting a rival,
+        // so the Module→Item containment pass — which is what links a parent
+        // module to its child — still finds a target.
+        //
+        // A module with no chunks of its own (empty, or not indexed) has no
+        // module-tier atom; the item tier is then its only carrier, so fall
+        // through and emit normally.
+        if key.symbol_kind == "module" {
+            let child_path = if key.module_path.is_empty() {
+                key.symbol_name.clone()
+            } else {
+                format!("{}::{}", key.module_path, key.symbol_name)
+            };
+            let module_atom = idx
+                .modules
+                .get(&(key.crate_name.clone(), child_path.clone()))
+                .cloned();
+            if let Some(module_atom) = module_atom {
+                tracing::debug!(
+                    target: "atlas::code_walk",
+                    crate_name = %key.crate_name,
+                    module = %child_path,
+                    atom = %module_atom.as_str(),
+                    "mod-decl item resolved to its module atom (no rival minted)"
+                );
+                idx.items.insert(key.clone(), module_atom);
+                continue;
+            }
+        }
+
         let canonical = item_canonical(&key.crate_name, &key.module_path, &key.symbol_name);
         let entity_type = entity_type_for_item(&key.symbol_kind);
 
@@ -1903,5 +1944,186 @@ mod tests {
             docs.as_deref(),
             Some("First line of crate docs.\nSecond line.")
         );
+    }
+
+    /// Fixture: a crate whose `lib.rs` carries `mod engine;` — the
+    /// declaration is a tree-sitter symbol of kind `module`, so it
+    /// lands in `by_item`, while the module's own chunks land in
+    /// `by_module`. Both tiers then derive the SAME canonical name
+    /// (`mycrate::engine`) and the SAME entity_type (`Other("module")`),
+    /// which is what made their content-hash ids collide.
+    fn module_decl_fixture() -> (WorkspaceMap, ChunkGroups) {
+        let mut workspace = WorkspaceMap::default();
+        workspace.crates.insert(
+            "mycrate".to_string(),
+            CrateRecord {
+                name: "mycrate".to_string(),
+                abs_root: PathBuf::from("/tmp/mycrate"),
+                rel_root: PathBuf::from(""),
+                crate_rustdoc: None,
+                cargo_description: None,
+                dependencies: BTreeSet::new(),
+            },
+        );
+        let mut groups = ChunkGroups::default();
+        groups.by_crate.insert(
+            "mycrate".to_string(),
+            CrateGroup {
+                first_chunk_id: 1,
+                first_preview: "crate".to_string(),
+            },
+        );
+        for (path, chunk) in [("", 1u64), ("engine", 2)] {
+            groups.by_module.insert(
+                ("mycrate".to_string(), path.to_string()),
+                ModuleGroup {
+                    first_chunk_id: chunk,
+                    primary_file: format!(
+                        "src/{}",
+                        if path.is_empty() {
+                            "lib.rs"
+                        } else {
+                            "engine/mod.rs"
+                        }
+                    ),
+                    first_preview: format!("mod {path}"),
+                    rustdoc: None,
+                },
+            );
+        }
+        // The `mod engine;` declaration, seen as an item in the crate root.
+        groups.by_item.insert(
+            ItemKey {
+                crate_name: "mycrate".to_string(),
+                module_path: String::new(),
+                symbol_name: "engine".to_string(),
+                symbol_kind: "module".to_string(),
+            },
+            ItemRecord {
+                chunk_id: 1,
+                content_preview: "mod engine;".to_string(),
+                doc_comment: None,
+                qualified_name: None,
+                file_path: "src/lib.rs".to_string(),
+            },
+        );
+        // An ordinary item inside that module, to prove the fix does
+        // not disturb the normal path.
+        groups.by_item.insert(
+            ItemKey {
+                crate_name: "mycrate".to_string(),
+                module_path: "engine".to_string(),
+                symbol_name: "Engine".to_string(),
+                symbol_kind: "struct".to_string(),
+            },
+            ItemRecord {
+                chunk_id: 2,
+                content_preview: "pub struct Engine;".to_string(),
+                doc_comment: None,
+                qualified_name: None,
+                file_path: "src/engine/mod.rs".to_string(),
+            },
+        );
+        (workspace, groups)
+    }
+
+    /// ARCH §10.6 — one decider, one name. Two atoms carrying different
+    /// bodies must never share an id: `atoms_delta` upserts by id, so a
+    /// collision means one body silently wins and the other is lost.
+    /// Measured 2026-09-01 on this repo's own atlas: 232 records, 205
+    /// distinct ids, 27 collisions (11.6%), every one module-tier.
+    #[test]
+    fn no_two_emitted_atoms_share_an_id() {
+        let (workspace, groups) = module_decl_fixture();
+        let (entities, _idx) = emit_entities(
+            &workspace,
+            &groups,
+            &BTreeSet::new(),
+            "corpus-a",
+            &HashMap::new(),
+        );
+        let distinct: BTreeSet<&AtomId> = entities.iter().map(|e| &e.id).collect();
+        assert_eq!(
+            entities.len(),
+            distinct.len(),
+            "{} atoms emitted but only {} distinct ids — module-tier collision",
+            entities.len(),
+            distinct.len()
+        );
+    }
+
+    /// The `mod engine;` item must RESOLVE to the module's atom, not
+    /// vanish: the Module→Item containment pass reads `idx.items`, and
+    /// that edge is what links a parent module to its child module.
+    #[test]
+    fn a_module_decl_item_resolves_to_the_module_atom() {
+        let (workspace, groups) = module_decl_fixture();
+        let (entities, idx) = emit_entities(
+            &workspace,
+            &groups,
+            &BTreeSet::new(),
+            "corpus-a",
+            &HashMap::new(),
+        );
+        let decl_key = ItemKey {
+            crate_name: "mycrate".to_string(),
+            module_path: String::new(),
+            symbol_name: "engine".to_string(),
+            symbol_kind: "module".to_string(),
+        };
+        let item_atom = idx
+            .items
+            .get(&decl_key)
+            .expect("mod decl must still resolve");
+        let module_atom = idx
+            .modules
+            .get(&("mycrate".to_string(), "engine".to_string()))
+            .expect("module atom exists");
+        assert_eq!(
+            item_atom, module_atom,
+            "the decl and the module are one entity"
+        );
+        // And exactly one Entity record carries that id.
+        let carriers = entities.iter().filter(|e| &e.id == module_atom).count();
+        assert_eq!(
+            carriers, 1,
+            "expected one atom record for the module, got {carriers}"
+        );
+    }
+
+    /// A `mod X;` whose module has no chunks of its own (empty or
+    /// unindexed) has NO module-tier atom, so the item tier stays its
+    /// only carrier and must still emit.
+    #[test]
+    fn a_module_decl_with_no_module_group_still_emits_its_own_atom() {
+        let (workspace, mut groups) = module_decl_fixture();
+        groups
+            .by_module
+            .remove(&("mycrate".to_string(), "engine".to_string()));
+        groups.by_item.remove(&ItemKey {
+            crate_name: "mycrate".to_string(),
+            module_path: "engine".to_string(),
+            symbol_name: "Engine".to_string(),
+            symbol_kind: "struct".to_string(),
+        });
+        let (entities, idx) = emit_entities(
+            &workspace,
+            &groups,
+            &BTreeSet::new(),
+            "corpus-a",
+            &HashMap::new(),
+        );
+        let decl_key = ItemKey {
+            crate_name: "mycrate".to_string(),
+            module_path: String::new(),
+            symbol_name: "engine".to_string(),
+            symbol_kind: "module".to_string(),
+        };
+        assert!(
+            idx.items.contains_key(&decl_key),
+            "orphan mod decl must keep its atom"
+        );
+        let distinct: BTreeSet<&AtomId> = entities.iter().map(|e| &e.id).collect();
+        assert_eq!(entities.len(), distinct.len(), "still no collisions");
     }
 }

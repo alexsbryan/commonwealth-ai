@@ -23,7 +23,6 @@
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::time::Duration;
 
 use oicp_client::SplitInferenceProvider;
 use sovereign_contracts::registry::ToolRegistry;
@@ -126,51 +125,15 @@ pub fn first_comment_line(toml: &str) -> String {
 }
 
 // ── Inference discovery ─────────────────────────────────────────────────
+// Lives in `daemon_models`: the ONE decider for "which embed model, and
+// does the daemon actually answer with it" (ARCH §10.6), shared with
+// `svrn corpus search`, `svrn recipe test --enrich` and `svrn chat`.
 
-/// The chat + embed model ids the daemon advertises.
-pub struct DaemonModels {
-    pub chat: Option<String>,
-    pub embed: Option<String>,
-}
-
-/// GET `<v1>/models` and split the advertised ids into chat vs. embed (by the
-/// `embed` substring convention — the same one `/embeddings` routing uses).
-/// Doubles as the daemon liveness probe (a connection error → "start the daemon").
-pub async fn discover_models(v1: &str) -> std::result::Result<DaemonModels, String> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(3))
-        .build()
-        .map_err(|e| e.to_string())?;
-    let resp = client
-        .get(format!("{v1}/models"))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    if !resp.status().is_success() {
-        return Err(format!("/v1/models → HTTP {}", resp.status()));
-    }
-    let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-    let models = body
-        .get("data")
-        .and_then(|d| d.as_array())
-        .ok_or_else(|| "malformed /v1/models response".to_string())?;
-    let ids: Vec<&str> = models
-        .iter()
-        .filter_map(|m| m.get("id").and_then(|v| v.as_str()))
-        .collect();
-    let embed = ids
-        .iter()
-        .find(|id| id.to_lowercase().contains("embed"))
-        .map(|s| s.to_string());
-    let chat = ids
-        .iter()
-        .find(|id| !id.to_lowercase().contains("embed"))
-        .map(|s| s.to_string());
-    if chat.is_none() && embed.is_none() {
-        return Err("the daemon advertises no models".to_string());
-    }
-    Ok(DaemonModels { chat, embed })
-}
+pub mod daemon_models;
+pub use daemon_models::{
+    discover_models, embed_candidate, looks_like_embed_model, resolve_embed_model,
+    resolve_embed_model_with, DaemonModels, EmbedSource, ResolvedEmbedModel,
+};
 
 /// Whether any step needs daemon-routed inference (so the daemon provider is
 /// assembled). Classifies via the typed `StepKind::resources()` — the exhaustive
@@ -321,14 +284,25 @@ pub async fn run_workflow_in_process(
                  start it with `sovereign daemon`."
             )
         })?;
-        if uses_embed(wf) && models.embed.is_none() {
-            return Err(format!(
-                "The daemon at {daemon} advertises no embedding model, but this workflow has an \
-                 `embed:` step. Load an embed model (see `sovereign setup`) and retry."
-            ));
-        }
+        // An `embed:` step needs an embed model the daemon ANSWERS with, so
+        // it is resolved through the probe, not read off the listing: a
+        // daemon whose `/v1/models` carries only chat ids can still embed
+        // (observed 2026-09-01), and refusing it on the listing alone is
+        // what turned `svrn corpus ingest` away from a working daemon.
+        let embed = if uses_embed(wf) {
+            resolve_embed_model(&v1, None)
+                .await
+                .map_err(|e| {
+                    format!(
+                    "This workflow has an `embed:` step, but the daemon at {daemon} cannot serve \
+                     it — {e}"
+                )
+                })?
+                .id
+        } else {
+            models.embed_candidate.clone().unwrap_or_default()
+        };
         let chat = models.chat.clone().unwrap_or_default();
-        let embed = models.embed.clone().unwrap_or_default();
         // B:P9a — source the chat slot's context window AND the embed slot's
         // query-instruction prefix from the host's own OICP capabilities
         // manifest (v0.4 §7 / §4) rather than a hardcoded 8192 + a caller-

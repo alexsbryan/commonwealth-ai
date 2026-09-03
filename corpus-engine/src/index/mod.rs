@@ -216,18 +216,44 @@ pub struct CorpusIndex {
     table: lancedb::Table,
     corpus_id: String,
     embedding_dimensions: usize,
-    /// Cached search-gate metadata: `(row_count, ivf_built, fts_built)`.
-    /// `count_rows(None)` + `list_indices()` cost ~1.1-2.3s per call on a
-    /// 1.9M-row table (measured 2026-07-16 — they dominated search wall
-    /// time), and their answers are static for an open dataset version.
-    /// Shared across clones (`CorpusEngine::open_index` hands out clones,
-    /// keyed on the on-disk version mtime, so a committed external write
-    /// yields a fresh instance and a fresh cache). Write methods on THIS
-    /// instance (`insert_*`, `delete_*`, `build_indexes`) clear it so
-    /// ingest-time self-mutation can't leave a stale gate — a stale
-    /// "no IVF" on a >10k-row corpus would silently skip the vector leg.
-    gate_cache: std::sync::Arc<std::sync::Mutex<Option<(usize, bool, bool)>>>,
+    /// The model named in `_corpus_meta.json`, read once at open so callers
+    /// (the engine's model-mismatch warning) need not pay `info()` — whose
+    /// `dir_size` walk over a 113 GB index cost seconds per re-open.
+    embedding_model: String,
+    /// Cached search-gate metadata: `(row_count, ivf_built, fts_built)`,
+    /// stamped with when it was computed. `count_rows(None)` +
+    /// `list_indices()` cost ~1.1-2.3s per call on a 1.9M-row table
+    /// (measured 2026-07-16) and 4.4-9.7s on a 2.0M-row table under
+    /// concurrent background writes (measured 2026-09-02, issue #57).
+    /// Shared across clones AND across the engine's re-opens of the same
+    /// path (`CorpusEngine::open_index` carries it forward when a committed
+    /// external write changes the version key) — otherwise a reindexer
+    /// committing one document every few seconds made every claim search
+    /// re-list the indexes cold. Bounded by [`GATE_CACHE_TTL`]: an index
+    /// built or dropped by ANOTHER handle is seen within that window rather
+    /// than at once, which is stated staleness in exchange for not re-listing
+    /// on every append. Write methods on THIS instance (`insert_*`,
+    /// `delete_*`, `build_indexes`) still clear it immediately, so
+    /// ingest-time self-mutation can't leave a stale gate — a stale "no IVF"
+    /// on a >10k-row corpus would silently skip the vector leg.
+    gate_cache: std::sync::Arc<std::sync::Mutex<Option<GateInfo>>>,
 }
+
+/// One computed search gate and when it was computed.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GateInfo {
+    pub(crate) computed_at: std::time::Instant,
+    pub(crate) row_count: usize,
+    pub(crate) ivf_built: bool,
+    pub(crate) fts_built: bool,
+}
+
+/// How long a cached search gate may be believed when the handle that
+/// computed it did not perform the write. Two minutes: long enough that a
+/// continuously appended corpus re-lists its indexes once per window instead
+/// of once per commit, short enough that an index rebuilt by a maintenance
+/// pass is seen the same minute.
+pub(crate) const GATE_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(120);
 
 /// Build the Arrow schema for a corpus index table.
 ///
@@ -785,8 +811,41 @@ impl CorpusIndex {
             table,
             corpus_id: meta.corpus_id,
             embedding_dimensions: meta.embedding_dimensions,
+            embedding_model: meta.embedding_model,
             gate_cache: Default::default(),
         })
+    }
+
+    /// The embedding model this index was written with, from its meta.
+    pub fn embedding_model(&self) -> &str {
+        &self.embedding_model
+    }
+
+    /// Adopt `prev`'s search-gate cache. Called by the engine when a
+    /// re-open replaces a handle on the SAME path whose on-disk version moved
+    /// under it (a committed external write): the gate's answer — is there an
+    /// IVF index, an FTS index, more than the flat-scan threshold of rows — is
+    /// not what an append changes, so the new handle starts warm and
+    /// [`GATE_CACHE_TTL`] bounds how long that belief may stand.
+    pub(crate) fn share_gate_cache_from(&mut self, prev: &CorpusIndex) {
+        self.gate_cache = std::sync::Arc::clone(&prev.gate_cache);
+    }
+
+    /// Test seam: the cached gate, if any.
+    #[cfg(test)]
+    pub(crate) fn gate_cache_snapshot(&self) -> Option<GateInfo> {
+        self.gate_cache.lock().ok().and_then(|g| *g)
+    }
+
+    /// Test seam: age the cached gate so TTL expiry can be exercised without
+    /// waiting for it.
+    #[cfg(test)]
+    pub(crate) fn gate_cache_backdate(&self, by: std::time::Duration) {
+        if let Ok(mut g) = self.gate_cache.lock() {
+            if let Some(info) = g.as_mut() {
+                info.computed_at -= by;
+            }
+        }
     }
 
     // ── Info ───────────────────────────────────────────────

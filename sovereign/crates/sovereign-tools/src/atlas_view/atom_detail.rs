@@ -106,6 +106,19 @@ pub struct EvidenceExcerpt {
 pub struct RelatedAtom {
     pub atom_id: AtomId,
     pub atom_type: AtomType,
+    /// Serialised as `canonical_name` — the wire name the other two
+    /// producers of this shape (`sovereign_mesh::RelatedAtom` and the
+    /// desktop's `RelatedAtomDto`) already emit, and the one the TS
+    /// `RelatedAtom` interface declares. Emitting `display_name` here
+    /// made the atlas Explore path the odd one out: the related-name
+    /// chip read `r.canonical_name`, got `undefined`, and rendered a
+    /// row of blank buttons. The Rust-side field keeps its name
+    /// because that is what a related atom IS to this module — the
+    /// rename is about converging ONE wire key (ARCH §10.6), not
+    /// about renaming the concept. Do NOT extend this to
+    /// `AtomDetail::display_name`: that is the FOCAL atom's name and
+    /// its wire key is correct.
+    #[serde(rename = "canonical_name")]
     pub display_name: String,
     pub edge_type: EdgeType,
     /// `"source"` or `"target"` — describes the *other* atom's role
@@ -448,6 +461,38 @@ fn build_referenced_atoms(
         // Unresolved (dangling ref) — leave absent. The frontend renders the
         // raw id as fallback text.
     }
+
+    // A `ref`-typed declared attribute (ontology v1) holds a bare string:
+    // an atom id when extraction resolved it (`"entity-0013"`), the source's
+    // own words when it did not (`"unidentified continental mint"`). Nothing
+    // on the wire says which, and the declaration that would is not on the
+    // atom — so RESOLUTION is the test: a value that names an atom in this
+    // atlas is a reference, everything else is text.
+    //
+    // Deliberately not folded into `AtomEnvelope::referenced_atom_ids`, which
+    // is the atom's own shape and has no atlas to ask. Doing it there would
+    // mean guessing from the id's spelling, and a guess is what would put
+    // "unidentified continental mint" in a link chip.
+    if let Some(attributes) = corpus_engine::enrichment::atlas::projection::attributes_of(atom) {
+        for value in attributes.values() {
+            let Some(candidate) = value.as_str() else {
+                continue;
+            };
+            if out.contains_key(candidate) {
+                continue;
+            }
+            if let Some(target) = by_id.get(candidate).copied() {
+                out.insert(
+                    candidate.to_string(),
+                    ReferencedAtom {
+                        display_name: target.display_name(Some(DISPLAY_NAME_TRUNCATION)),
+                        atom_type: target.atom_type(),
+                    },
+                );
+            }
+        }
+    }
+
     out
 }
 
@@ -545,6 +590,8 @@ mod tests {
 
     fn claim_with_evidence(id: usize, content: &str, chunks: &[&str]) -> AtomEnvelope {
         AtomEnvelope::Claim(Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(id),
             content: content.into(),
             discourse_act: DiscourseAct::Assert,
@@ -751,6 +798,64 @@ mod tests {
         assert_eq!(detail.related[1].role, "source");
     }
 
+    /// The related-atom NAME travels as `canonical_name` on the wire.
+    ///
+    /// Every other test in this module asserts the Rust field
+    /// (`related[0].display_name`), which a `#[serde(rename)]` does not
+    /// touch — so the whole suite stayed green while the desktop's
+    /// Explore tab rendered a column of nameless buttons. Three
+    /// producers emit this shape (`sovereign_mesh::RelatedAtom`, the
+    /// desktop's `RelatedAtomDto`, and this one) and the TS
+    /// `RelatedAtom` interface reads `canonical_name` from all three;
+    /// this module was the one that disagreed. The assertion is on
+    /// serialised JSON because the wire key IS the contract here.
+    #[tokio::test]
+    async fn related_atom_serialises_its_name_as_canonical_name() {
+        let tmp = tempfile::tempdir().unwrap();
+        let atlas_dir = tmp.path().join("wiki").join("atlas");
+        write_atoms(
+            &atlas_dir,
+            vec![entity(1, "Knowledge", 0.9), entity(2, "Belief", 0.6)],
+        );
+        write_edges(
+            &atlas_dir,
+            vec![Edge {
+                id: EdgeId::new(1),
+                edge_type: EdgeType::Grounds,
+                source: AtomId::entity(1),
+                target: AtomId::entity(2),
+                evidence: vec![],
+                trigger_event: None,
+                sub_question: None,
+                confidence: 0.85,
+                provenance: EdgeProvenance::LlmExtraction,
+            }],
+        );
+        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        let detail = reader
+            .get_atom_detail("wiki", "entity-0001")
+            .await
+            .unwrap()
+            .unwrap();
+
+        let json = serde_json::to_value(&detail).unwrap();
+        let related = &json["related"][0];
+        assert_eq!(
+            related["canonical_name"], "Belief",
+            "the desktop reads r.canonical_name; anything else renders blank",
+        );
+        assert!(
+            related.get("display_name").is_none(),
+            "two keys for one name is how the frontend ends up reading the wrong one",
+        );
+
+        // The FOCAL atom keeps `display_name` — it is a different
+        // field with a different consumer, and the rename above must
+        // not spread to it.
+        assert_eq!(json["display_name"], "Knowledge");
+        assert!(json.get("canonical_name").is_none());
+    }
+
     #[tokio::test]
     async fn get_atom_detail_handles_missing_edges_file() {
         // No edges.json on disk — detail still works, related list
@@ -781,6 +886,8 @@ mod tests {
         // Lift the underlying atom_id text so the claim points at it.
         let hume_id = hume.id().clone();
         let claim_with_attribution = AtomEnvelope::Claim(Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(1),
             content: "Custom is the great guide of human life.".into(),
             discourse_act: DiscourseAct::Assert,
@@ -825,6 +932,8 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let atlas_dir = tmp.path().join("wiki").join("atlas");
         let dangling_claim = AtomEnvelope::Claim(Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(1),
             content: "x".into(),
             discourse_act: DiscourseAct::Assert,
@@ -898,5 +1007,95 @@ mod tests {
         );
         assert_eq!(detail.cross_corpus[0].edge_type, EdgeType::Grounding);
         assert_eq!(detail.cross_corpus[0].signal, "canonical_exact");
+    }
+
+    /// A declared claim type names a `subject` — the atom the claim is ABOUT,
+    /// as opposed to `attributed_to`, which is who said it. Both must reach
+    /// `referenced_atoms` or the desktop renders a raw `entity-0002` where the
+    /// is-about link belongs, and the whole point of declaring the type is
+    /// invisible.
+    ///
+    /// Falsifier: drop `subject` from `AtomEnvelope::referenced_atom_ids`'s
+    /// Claim arm and `entity-0002` disappears from the map.
+    #[tokio::test]
+    async fn a_claims_subject_resolves_alongside_its_voice() {
+        let mut claim = match claim_with_evidence(1, "struck at Canterbury", &["sec_0001"]) {
+            AtomEnvelope::Claim(c) => c,
+            _ => unreachable!("the helper builds a Claim"),
+        };
+        claim.attributed_to = Some(AtomId::entity(1));
+        claim.subject = Some(AtomId::entity(2));
+        claim.claim_kind = Some("attribution".into());
+
+        let (_tmp, reader, _dir) = make_reader_with_atoms(vec![
+            entity(1, "Metcalf", 0.4),
+            entity(2, "Wessex Down 2", 0.9),
+            AtomEnvelope::Claim(claim),
+        ]);
+        let detail = reader
+            .get_atom_detail("wiki", "claim-0001")
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            detail.referenced_atoms["entity-0001"].display_name, "Metcalf",
+            "the voice still resolves",
+        );
+        assert_eq!(
+            detail.referenced_atoms["entity-0002"].display_name,
+            "Wessex Down 2",
+            "and so does the referent: {:?}",
+            detail.referenced_atoms.keys().collect::<Vec<_>>(),
+        );
+    }
+
+    /// A `ref` attribute holds a bare string, and whether that string is a
+    /// reference or the source's own words is not on the wire. Resolution is
+    /// the test: `"entity-0002"` names an atom here, `"an unidentified
+    /// continental mint"` does not, and a viewer must not chip the second one
+    /// as a broken link.
+    ///
+    /// Falsifier: resolve attribute values by id SHAPE rather than by lookup
+    /// and the free-text value joins the map (or, dropping the pass entirely,
+    /// the resolved one leaves it).
+    #[tokio::test]
+    async fn a_ref_attribute_resolves_and_free_text_does_not() {
+        let mut coin = match entity(3, "Wessex Down 2", 0.9) {
+            AtomEnvelope::Entity(e) => e,
+            _ => unreachable!("the helper builds an Entity"),
+        };
+        coin.attributes.insert(
+            "ruler".into(),
+            serde_json::Value::String("entity-0002".into()),
+        );
+        coin.attributes.insert(
+            "mint".into(),
+            serde_json::Value::String("an unidentified continental mint".into()),
+        );
+        coin.attributes
+            .insert("weight".into(), serde_json::json!(0.95));
+
+        let (_tmp, reader, _dir) = make_reader_with_atoms(vec![
+            entity(1, "Canterbury", 0.5),
+            entity(2, "Offa", 0.8),
+            AtomEnvelope::Entity(coin),
+        ]);
+        let detail = reader
+            .get_atom_detail("wiki", "entity-0003")
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            detail.referenced_atoms["entity-0002"].display_name, "Offa",
+            "the resolved ref is linkable",
+        );
+        assert_eq!(
+            detail.referenced_atoms.len(),
+            1,
+            "and nothing else is: {:?}",
+            detail.referenced_atoms.keys().collect::<Vec<_>>(),
+        );
     }
 }

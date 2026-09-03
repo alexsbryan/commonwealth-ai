@@ -1,0 +1,251 @@
+{
+  "corpus_id": "wessex-hoard",
+  "note": "Ground truth for the ontology-v1 end-to-end probe. The point is not tension recall (maple-house already covers that) \u2014 it is whether a DECLARED ontology reaches the atoms: does an atom come out typed `coin`/`sceatta`/`ruler`/`mint` rather than as one of the six generic kinds, do declared attributes land, and does a declared external identity key merge two names for one coin, do `attribution` claims carry a grade. Invented scholars and an invented hoard; the coin types are real numismatic categories. NOT shipped into the corpus.",
+  "schema_version": 1,
+  "declared_types": [
+    "coin",
+    "sceatta",
+    "ruler",
+    "mint",
+    "attribution"
+  ],
+  "entities": {
+    "coin": [
+      {
+        "id": "C1",
+        "section": "Catalogue entry 1",
+        "name": "Aldfrith penny, Series Y",
+        "subtype": "sceatta",
+        "ruler": "Aldfrith",
+        "mint": "Eoforwic",
+        "metal": "silver",
+        "weight_g": 1.21,
+        "struck": "685/704",
+        "catalogue_ref": "Wessex Down 1"
+      },
+      {
+        "id": "C2",
+        "section": "Catalogue entry 2",
+        "name": "Series R sceatta",
+        "subtype": "sceatta",
+        "ruler": null,
+        "mint": "Gipeswic",
+        "metal": "silver",
+        "weight_g": 0.95,
+        "struck": null,
+        "catalogue_ref": "Wessex Down 2"
+      },
+      {
+        "id": "C3",
+        "section": "Catalogue entry 3",
+        "name": "Beonna penny",
+        "subtype": "coin",
+        "ruler": "Beonna",
+        "mint": "Gipeswic",
+        "metal": "silver",
+        "weight_g": 1.05,
+        "struck": "749/760",
+        "catalogue_ref": "Wessex Down 3"
+      },
+      {
+        "id": "C4",
+        "section": "Catalogue entry 4",
+        "name": "Offa gold dinar",
+        "subtype": "coin",
+        "ruler": "Offa",
+        "mint": "Lundenwic",
+        "metal": "gold",
+        "weight_g": 4.28,
+        "struck": "773/796",
+        "catalogue_ref": "Wessex Down 4"
+      },
+      {
+        "id": "C5",
+        "section": "Catalogue entry 5",
+        "name": "Coenwulf mancus",
+        "subtype": "coin",
+        "ruler": "Coenwulf",
+        "mint": "Lundenwic",
+        "metal": "gold",
+        "weight_g": 4.33,
+        "struck": "805/810",
+        "catalogue_ref": "Wessex Down 5"
+      },
+      {
+        "id": "C6",
+        "section": "Catalogue entry 6",
+        "name": "Series X sceatta",
+        "subtype": "sceatta",
+        "ruler": null,
+        "mint": null,
+        "metal": "silver",
+        "weight_g": 1.14,
+        "struck": null,
+        "catalogue_ref": "Wessex Down 6"
+      },
+      {
+        "id": "C7",
+        "section": "Catalogue entry 7",
+        "name": "Series E porcupine sceatta",
+        "subtype": "sceatta",
+        "ruler": null,
+        "mint": null,
+        "metal": "billon",
+        "weight_g": 0.88,
+        "struck": null,
+        "catalogue_ref": "Wessex Down 7"
+      }
+    ],
+    "mint": [
+      {
+        "id": "M1",
+        "name": "Eoforwic"
+      },
+      {
+        "id": "M2",
+        "name": "Gipeswic"
+      },
+      {
+        "id": "M3",
+        "name": "Lundenwic"
+      }
+    ],
+    "ruler": [
+      {
+        "id": "R1",
+        "name": "Aldfrith",
+        "reigned": "685/704",
+        "role_of": "person"
+      },
+      {
+        "id": "R2",
+        "name": "Offa",
+        "reigned": "757/796",
+        "role_of": "person"
+      },
+      {
+        "id": "R3",
+        "name": "Coenwulf",
+        "reigned": "796/821",
+        "role_of": "person"
+      },
+      {
+        "id": "R4",
+        "name": "Beonna",
+        "reigned": "749/",
+        "role_of": "person"
+      }
+    ]
+  },
+  "attributions": [
+    {
+      "id": "A1",
+      "section": "Halstead 2014 \u2014 the die-link case",
+      "subject": "C1",
+      "by": "Halstead",
+      "proposed_date": "685/690",
+      "grade": "die-link"
+    },
+    {
+      "id": "A2",
+      "section": "Ferreira 2021 \u2014 the hoard context",
+      "subject": "C1",
+      "by": "Ferreira",
+      "proposed_date": "695/704",
+      "grade": "hoard-context"
+    },
+    {
+      "id": "A3",
+      "section": "Nkemdirim 2018 \u2014 weight standards",
+      "subject": "C3",
+      "by": "Nkemdirim",
+      "proposed_date": "757/760",
+      "grade": "metrological"
+    },
+    {
+      "id": "A4",
+      "section": "Vasquez 2020 \u2014 the style of the Series R runic dies",
+      "subject": "C2",
+      "by": "Vasquez",
+      "proposed_date": "710/725",
+      "grade": "stylistic"
+    },
+    {
+      "id": "A5",
+      "section": "Ferreira 2021 \u2014 Series R in the Wessex Down hoard",
+      "subject": "C2",
+      "by": "Ferreira",
+      "proposed_date": "715/740",
+      "grade": "hoard-context"
+    },
+    {
+      "id": "A6",
+      "section": "Halstead 2014 and Nkemdirim 2018 on the Coenwulf mancus",
+      "subject": "C5",
+      "by": "Halstead",
+      "proposed_date": "805/810",
+      "grade": "die-link"
+    },
+    {
+      "id": "A7",
+      "section": "Halstead 2014 and Nkemdirim 2018 on the Coenwulf mancus",
+      "subject": "C5",
+      "by": "Nkemdirim",
+      "proposed_date": "805/810",
+      "grade": "die-link"
+    }
+  ],
+  "planted_tensions": [
+    {
+      "id": "T1",
+      "a": "A1",
+      "b": "A2",
+      "why": "Same coin (C1). 685-690 and 695-704 are disjoint ranges, and Ferreira says Halstead's die chain must be reversed. `tension.between = [\"attribution\"]` should pair these."
+    }
+  ],
+  "expected_non_tensions": [
+    {
+      "id": "N1",
+      "a": "A4",
+      "b": "A5",
+      "why": "Same coin (C2), overlapping ranges, and Ferreira states agreement with Vasquez on the early end. A widening, not a conflict."
+    },
+    {
+      "id": "N2",
+      "a": "A6",
+      "b": "A7",
+      "why": "Same coin (C5), identical range, identical evidence. If the tension axis fires here it is a false positive; P4's `equivalent` reading should make this one `same_as` claim, not a Tension."
+    },
+    {
+      "id": "N3",
+      "a": "A1",
+      "b": "A3",
+      "why": "Different coins. `tension.between` restricts to attribution pairs but the pair must still share a subject."
+    }
+  ],
+  "enumeration_probe": {
+    "question": "Which coins are in this catalogue, and what metal is each?",
+    "expected_coin_count": 7,
+    "why": "Link 5 of the chain. The answer must enumerate the author's noun (`coin`), not fall back to the six generic kinds."
+  },
+  "planted_merges": [
+    {
+      "id": "M1",
+      "a_section": "Catalogue entry 1",
+      "a_name": "Aldfrith penny, Series Y",
+      "b_section": "Halstead 2014 \u2014 the die-link case",
+      "b_name": "Series Y sceattas of Aldfrith",
+      "catalogue_ref": "Wessex Down 1",
+      "why": "Two names for one coin, both carrying `catalogue_ref = Wessex Down 1`. `identity = [\"catalogue_ref\"]` is an EXTERNAL key, so the reconciler must merge these strictly and reify the merge as a `same_as` Claim \u2014 no judgement, no name similarity."
+    },
+    {
+      "id": "M2",
+      "a_section": "Catalogue entry 5",
+      "a_name": "Coenwulf mancus",
+      "b_section": "Halstead 2014 and Nkemdirim 2018 on the Coenwulf mancus",
+      "b_name": "gold mancus of Coenwulf",
+      "catalogue_ref": "Wessex Down 5",
+      "why": "The pre-identity build produced 'Coenwulf mancus' and 'gold mancus' as two atoms. Same reference, so one coin."
+    }
+  ]
+}

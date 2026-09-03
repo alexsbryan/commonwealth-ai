@@ -69,6 +69,22 @@
             "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/prior-art-warn.py",
             "type": "command",
             "timeout": 15
+          },
+          {
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/intent-warn.py",
+            "type": "command",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/commit-smells.py",
+            "type": "command",
+            "timeout": 15,
+            "statusMessage": "Checking the staged diff against the ARCH §15 smell rows"
           }
         ]
       }

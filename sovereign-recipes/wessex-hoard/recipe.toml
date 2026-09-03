@@ -1,0 +1,104 @@
+# Numismatics — an ontology-v1 recipe template.
+#
+# Scanned catalogues, hoard reports, journal articles. The questions it is
+# built to answer: which mints struck for a ruler; what is the weight range of
+# a series; who disputes a dating and on what grounds. The declaration is
+# Follows ONTOLOGY_PRIMITIVES.md §1.1, plus `catalogue_ref` and the
+# `identity` key that §1.1 does not carry — this corpus's own, and the reason
+# there is a worked external-key example at all.
+#
+# Scaffold:  svrn recipe new --ontology numismatics --id my-coins --out my-coins.toml
+# Then fill the REPLACE_ME fields, and:
+#   svrn recipe validate my-coins.toml      # prints what the ontology derives
+#   svrn corpus install my-coins.toml
+#   svrn enrich init my-coins --from-corpus my-coins
+#   svrn enrich build my-coins --full
+
+[corpus]
+# REQUIRED: a stable, repo-scoped id.
+id = "wessex-hoard"
+# REQUIRED: human-readable name.
+name = "The Wessex Down Hoard (numismatics ontology probe)"
+description = "Coin catalogues, hoard reports and articles, extracted as coins, mints, rulers and dated attributions."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# Markdown is the working format: convert scans and PDFs to .md first
+# (one file, `## ` headings per catalogue entry or article section).
+[acquire]
+type = "local_file"
+# REQUIRED: the markdown file — absolute, or relative to this recipe.
+path = "wessex-hoard.md"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "numismatics"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is numismatic scholarship: coin catalogues, hoard reports and dating
+arguments. Each coin type is a thing in its own right — ruler, mint, denomination,
+metal, weight, and when it was struck. Attributions are claims about a coin made by
+a scholar, graded by the kind of evidence offered; later articles may dispute earlier
+attributions, and the dispute is worth surfacing.
+"""
+
+[[enrichment.ontology.types]]
+name = "coin"
+kind = "entity"
+description = "A coin type: ruler, mint, denomination, metal."
+attributes = [
+  { name = "ruler",        type = "ref",      of = "ruler" },
+  { name = "mint",         type = "ref",      of = "mint" },
+  { name = "denomination", type = "text" },
+  { name = "metal",        type = "text",     values = ["gold", "silver", "billon", "copper"] },
+  { name = "weight",       type = "quantity", unit = "g" },
+  { name = "struck",       type = "time",     range = true },
+  { name = "catalogue_ref", type = "text" },
+]
+# The external identifier a numismatic catalogue actually uses. Two mentions
+# carrying the same reference are one coin however differently they are named
+# ("Coenwulf mancus" in the catalogue, "the gold mancus of Coenwulf" in the
+# article) — which is what an external key merges strictly on.
+identity = ["catalogue_ref"]
+
+[[enrichment.ontology.types]]
+name = "sceatta"
+kind = "entity"
+specializes = "coin"
+
+[[enrichment.ontology.types]]
+name = "ruler"
+kind = "entity"
+role_of = "person"
+
+[[enrichment.ontology.types]]
+name = "mint"
+kind = "entity"
+description = "A place where coins were struck."
+
+[[enrichment.ontology.types]]
+name = "attribution"
+kind = "claim"
+force = "assertive"
+subject = "coin"
+attributes = [{ name = "proposed_date", type = "time", range = true }]
+grades = ["die-link", "hoard-context", "stylistic", "metrological"]
+
+[enrichment.ontology.tension]
+between = ["attribution"]

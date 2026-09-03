@@ -13,6 +13,17 @@
   // - ok=false + no_recipe=true → muted "no recipe drafted yet"
   // - ok=false + errors.length  → red "needs attention" + each error
   //                                in its own block, copy-friendly
+  //
+  // Under any of them (except "no recipe") the report's `warnings` and `notes`
+  // render as their own sections, because they are three different things and
+  // collapsing them would lose the distinction the partner needs:
+  //   errors   — it will not do what you declared. Fix before building.
+  //   warnings — it will build, but something you wrote is being ignored.
+  //   notes    — the DERIVED facets (clock, tension selector, identity
+  //              criterion per type, the question shapes). Not a defect: what
+  //              the recipe will do, printed so a wrong inference is visible
+  //              and can be overridden in the recipe (PRIMITIVES §6).
+  // Same three lists `svrn recipe validate` prints, from the same engine call.
   import Card from "./Card.svelte";
   import {
     artifactNoun,
@@ -29,6 +40,9 @@
 
   const noun = $derived(artifactNoun(artifactKind));
   const Title = $derived(artifactTitle(artifactKind));
+  // Tolerate a report from an older backend that predates the two fields.
+  const warnings = $derived(validation.warnings ?? []);
+  const notes = $derived(validation.notes ?? []);
 
   let copiedIdx: number | null = $state(null);
 
@@ -119,6 +133,34 @@
       <button type="button" class="why" onclick={askWhy}>Explain</button>
     </div>
   {/if}
+
+  {#if !validation.no_recipe && warnings.length > 0}
+    <div class="row section-head">
+      <span class="pill warn" data-testid="recipe-validation-warning-pill">
+        {warnings.length === 1 ? "1 warning" : `${warnings.length} warnings`}
+      </span>
+      <span class="muted">Builds anyway — but something you wrote is ignored.</span>
+    </div>
+    <ul class="warnings" data-testid="recipe-validation-warnings">
+      {#each warnings as w}
+        <li>{w}</li>
+      {/each}
+    </ul>
+  {/if}
+
+  {#if !validation.no_recipe && notes.length > 0}
+    <div class="row section-head">
+      <span class="pill note" data-testid="recipe-validation-derived-pill">derived</span>
+      <span class="muted">
+        What your declarations imply. Wrong? Say it in the {noun}, not in chat.
+      </span>
+    </div>
+    <ul class="notes" data-testid="recipe-validation-notes">
+      {#each notes as n}
+        <li>{n}</li>
+      {/each}
+    </ul>
+  {/if}
 </Card>
 
 <style>
@@ -153,6 +195,13 @@
     background: var(--amber-flash);
     color: var(--amber);
   }
+  .section-head {
+    margin-top: 0.7rem;
+  }
+  .pill.note {
+    background: var(--bg-elevated);
+    color: var(--muted, #8a8c93);
+  }
   .errors {
     list-style: none;
     margin: 0.5rem 0 0;
@@ -160,6 +209,27 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+  }
+  .warnings,
+  .notes {
+    list-style: none;
+    margin: 0.35rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--fg, #e6e6e8);
+  }
+  .warnings li {
+    border-left: 2px solid var(--amber, #d9a441);
+    padding-left: 0.5rem;
+  }
+  .notes li {
+    border-left: 2px solid var(--border, #2a2c33);
+    padding-left: 0.5rem;
+    color: var(--muted, #8a8c93);
   }
   .errors li {
     position: relative;

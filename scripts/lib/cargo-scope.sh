@@ -97,6 +97,20 @@ keep_members() {
 # sovereign-cli are both workspace members and no external crate can depend on
 # them, so the workspace-internal closure is the whole answer.
 #
+# THE CLOSURE IS NECESSARY BUT NOT SUFFICIENT (2026-09-01). Cargo's rule is
+# narrower than "somewhere in the closure": `<pkg>/<feat>` needs <pkg> to be a
+# DIRECT dependency of a selected package, or a selected package itself. A
+# transitive one is still the hard error above — `--package sovereign-cli`
+# reaches sovereign-mesh through sovereign-cli-llm, so the closure named it,
+# cargo refused all three mesh flags, and the run died in 101 with zero tests.
+# Two agents and a maintainer hit that on one day, each reading it as a broken
+# feature rather than a mis-scoped flag. `nameable` below is the cargo rule.
+#
+# A flag the selection cannot name is REPORTED, never silently dropped
+# (ARCH §18.3): the crate still builds as a dependency, under whatever the
+# graph unifies, and only its own targets go uncompiled — so the run is
+# narrower than the workspace gate and the banner has to say so.
+#
 # For an unscoped run every member is selected, so both flags apply. And because
 # nothing depends on the leaf crate sovereign-cli, "in the closure" reduces to
 # "explicitly selected" for dev-tools — matching the hand-rolled special case
@@ -126,13 +140,21 @@ members = {p["name"] for p in meta["packages"]}
 edges = {p["name"]: {d["name"] for d in p.get("dependencies", []) if d["name"] in members}
          for p in meta["packages"]}
 
-seen, stack = set(), list(sys.argv[1:])
+selected = list(sys.argv[1:])
+seen, stack = set(), list(selected)
 while stack:
     pkg = stack.pop()
     if pkg in seen or pkg not in edges:
         continue
     seen.add(pkg)
     stack.extend(edges[pkg])
+
+# What THIS selection may legally name in `--features <pkg>/<feat>`: a
+# selected package, or a DIRECT dependency of one. Anything else is a hard
+# cargo error, not a no-op.
+nameable = set(selected)
+for pkg in selected:
+    nameable |= edges.get(pkg, set())
 
 want = []
 if "corpus-engine" in seen:
@@ -160,7 +182,24 @@ if "sovereign-mesh" in seen:
     # in-process compute — no GPU, no network, no weights (§12.4).
     want.append("sovereign-mesh/mesh-sim")
     want.append("sovereign-mesh/dst")
-print(",".join(want))
+    # `treesitter` gates 30+ integration files of sovereign-mesh
+    # (the `#![cfg(feature = "treesitter")]` crate-gate: turn_surface.rs, knowledge_*,
+    # reading_http_e2e.rs, ...). A --workspace run gets it by unification
+    # from sovereign-cli-llm; a scoped `--package sovereign-mesh` run did
+    # not, so those files compiled to NOTHING and a filter naming one of
+    # their tests exited 4 ("no tests matched") with 880 others skipped —
+    # observed 2026-09-01. Same value both gates, so no fingerprint flip.
+    want.append("sovereign-mesh/treesitter")
+legal = [f for f in want if f.split("/", 1)[0] in nameable]
+dropped = [f for f in want if f not in legal]
+if dropped:
+    print(
+        "  scope: %s not nameable from this selection (cargo needs a DIRECT dep) — "
+        "dropped; their own targets are NOT compiled by this run. "
+        "The workspace gate covers them." % ", ".join(dropped),
+        file=sys.stderr,
+    )
+print(",".join(legal))
 ' "$@"
 }
 

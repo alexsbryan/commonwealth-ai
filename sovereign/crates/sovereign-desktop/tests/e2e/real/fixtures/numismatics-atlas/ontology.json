@@ -1,0 +1,225 @@
+{
+  "schema_version": "1.0",
+  "ontology_version": 1,
+  "policies": {
+    "shape": {
+      "types": [
+        {
+          "name": "coin",
+          "kind": "entity",
+          "description": "A coin type: ruler, mint, denomination, metal.",
+          "attributes": [
+            {
+              "name": "ruler",
+              "type": "ref",
+              "of": "ruler",
+              "description": ""
+            },
+            {
+              "name": "mint",
+              "type": "ref",
+              "of": "mint",
+              "description": ""
+            },
+            {
+              "name": "denomination",
+              "type": "text",
+              "values": [],
+              "description": ""
+            },
+            {
+              "name": "metal",
+              "type": "text",
+              "values": [
+                "gold",
+                "silver",
+                "billon",
+                "copper"
+              ],
+              "description": ""
+            },
+            {
+              "name": "weight",
+              "type": "quantity",
+              "unit": "g",
+              "description": ""
+            },
+            {
+              "name": "struck",
+              "type": "time",
+              "range": true,
+              "description": ""
+            },
+            {
+              "name": "catalogue_ref",
+              "type": "text",
+              "values": [],
+              "description": ""
+            }
+          ],
+          "specializes": null,
+          "role_of": null,
+          "from": null,
+          "to": null,
+          "participants": {},
+          "of": null,
+          "source": null,
+          "label": null,
+          "identity": [
+            "catalogue_ref"
+          ],
+          "identity_fallback": [],
+          "force": null,
+          "deontic": [],
+          "subject": null,
+          "grades": [],
+          "anchors": [],
+          "scope": null
+        },
+        {
+          "name": "sceatta",
+          "kind": "entity",
+          "description": "",
+          "attributes": [],
+          "specializes": "coin",
+          "role_of": null,
+          "from": null,
+          "to": null,
+          "participants": {},
+          "of": null,
+          "source": null,
+          "label": null,
+          "identity": [],
+          "identity_fallback": [],
+          "force": null,
+          "deontic": [],
+          "subject": null,
+          "grades": [],
+          "anchors": [],
+          "scope": null
+        },
+        {
+          "name": "ruler",
+          "kind": "entity",
+          "description": "",
+          "attributes": [],
+          "specializes": null,
+          "role_of": "person",
+          "from": null,
+          "to": null,
+          "participants": {},
+          "of": null,
+          "source": null,
+          "label": null,
+          "identity": [],
+          "identity_fallback": [],
+          "force": null,
+          "deontic": [],
+          "subject": null,
+          "grades": [],
+          "anchors": [],
+          "scope": null
+        },
+        {
+          "name": "mint",
+          "kind": "entity",
+          "description": "A place where coins were struck.",
+          "attributes": [],
+          "specializes": null,
+          "role_of": null,
+          "from": null,
+          "to": null,
+          "participants": {},
+          "of": null,
+          "source": null,
+          "label": null,
+          "identity": [],
+          "identity_fallback": [],
+          "force": null,
+          "deontic": [],
+          "subject": null,
+          "grades": [],
+          "anchors": [],
+          "scope": null
+        },
+        {
+          "name": "attribution",
+          "kind": "claim",
+          "description": "",
+          "attributes": [
+            {
+              "name": "proposed_date",
+              "type": "time",
+              "range": true,
+              "description": ""
+            }
+          ],
+          "specializes": null,
+          "role_of": null,
+          "from": null,
+          "to": null,
+          "participants": {},
+          "of": null,
+          "source": null,
+          "label": null,
+          "identity": [],
+          "identity_fallback": [],
+          "force": "assertive",
+          "deontic": [],
+          "subject": "coin",
+          "grades": [
+            "die-link",
+            "hoard-context",
+            "stylistic",
+            "metrological"
+          ],
+          "anchors": [],
+          "scope": null
+        }
+      ]
+    },
+    "assertion": {
+      "voices": {
+        "not_entities": [],
+        "self": null,
+        "attributed_to": []
+      },
+      "must_not": []
+    },
+    "identity": {
+      "identity": {
+        "coin": [
+          "catalogue_ref"
+        ]
+      },
+      "identity_fallback": {}
+    },
+    "change": {
+      "clock": "document_date",
+      "supersedes": {}
+    },
+    "derivation": {
+      "tension": {
+        "label": null,
+        "between": [
+          "attribution"
+        ],
+        "same": [],
+        "not_conflicts": []
+      },
+      "patterns": [],
+      "configurations": false,
+      "arguments": false
+    },
+    "prose": {
+      "guidance": "This corpus is numismatic scholarship: coin catalogues, hoard reports and dating\narguments. Each coin type is a thing in its own right — ruler, mint, denomination,\nmetal, weight, and when it was struck. Attributions are claims about a coin made by\na scholar, graded by the kind of evidence offered; later articles may dispute earlier\nattributions, and the dispute is worth surfacing.\n",
+      "terms": {
+        "concern_term": null,
+        "position_term": null,
+        "tension_term": null,
+        "absence_term": null,
+        "evidence_term": null
+      }
+    }
+  }
+}

@@ -61,7 +61,17 @@ impl Runtime {
         // `LocalOnly` (the spec default) and block every cross-mesh
         // route, so we copy through explicitly.
         let sharding = from_skills.sharding();
-        let mut out = crate::oicp::InferenceRequirements::new().with_sharding(sharding);
+        // Issue #57 rec 3: every caller of this builder is prose composed
+        // for the user (the draft, KnowledgeQuery, simple/complex/attached
+        // synthesis), so the envelope is the Synthesize class's — which is
+        // what mints the `wl-synthesize-<uuid8>` request id the routing
+        // outcome and the soft-landing continuations (they clone this
+        // request) are joined on. Until now the draft's routing line read
+        // `oicp_request_id=` and its continuations were untagged. The
+        // hint and latency class below overwrite the class defaults
+        // exactly as they overwrote the empty envelope before, so the slot
+        // pick is unchanged (DeepQuery → Extended → Slow).
+        let mut out = crate::slot_policy::Workload::Synthesize.requirements(sharding);
 
         // Hint: skill-declared wins; intent fills in.
         let hint = from_skills

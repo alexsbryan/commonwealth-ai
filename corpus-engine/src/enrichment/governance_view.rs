@@ -34,11 +34,12 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use super::governance::{
-    derive_active, ActiveSet, GovernanceOpKind, PairKey, RuleStatus, TensionStatus,
-};
+use super::governance::{ActiveSet, GovernanceOpKind, PairKey, RuleStatus, TensionStatus};
+use super::governance_change::{derive_active_with_policy, read_rule_facts, RuleFacts};
 use crate::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim};
 use crate::enrichment::atlas::edges::{Edge, EdgeId, EdgeType, EdgesFile};
+use crate::enrichment::atlas::read_atlas_ontology;
+use crate::enrichment::ontology::ChangePolicy;
 use crate::error::{Error, Result};
 use crate::oplog::{Op, OpId, Oplog};
 
@@ -52,13 +53,21 @@ pub struct RuleAtom {
     pub id: AtomId,
     /// The normative statement (Claim `content`).
     pub text: String,
-    /// Deontic force — `requires` | `forbids` | `permits` — carried on
-    /// the Claim's `claim_kind`. `None` until the recipe ontology and
-    /// extraction populate it.
+    /// Deontic force. For a corpus that DECLARED a directive claim type this
+    /// is the declared normal form — `require` | `forbid` | `permit` |
+    /// `request` — read off the reserved `deontic` attribute, which the
+    /// ontology parser already validated against the type's declared modes.
+    /// For an undeclared corpus it is the Claim's `claim_kind` verbatim,
+    /// exactly as before ontology v1.
     pub deontic: Option<String>,
-    /// The scope-entity the rule attaches to (Claim `attributed_to`).
-    /// Two rules sharing a scope-entity are what atlas Phase-6 pairs for
-    /// tension, so this is the load-bearing modeling field.
+    /// The scope-entity the rule attaches to: the claim's `subject` (what it
+    /// is ABOUT) when the corpus declared one, else `attributed_to` (whose
+    /// voice it is). Two rules sharing a scope-entity are what atlas Phase-6
+    /// pairs for tension, so this is the load-bearing modeling field — and on
+    /// a declared corpus the subject is the correct pairing key, since two
+    /// scholars dating the SAME coin are the tension, not two claims by the
+    /// same scholar. `subject` is `None` on every claim of an undeclared
+    /// corpus, so that path still reads `attributed_to`.
     pub scope: Option<AtomId>,
     /// First evidence chunk — the rule's source citation.
     pub citation: Option<ChunkRef>,
@@ -90,6 +99,11 @@ pub struct RuleView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub citation: Option<ChunkRef>,
     pub status: RuleStatus,
+    /// Newer rules that retired this one on the DECLARED clock (axis 4).
+    /// Separate from `status` because that is what the ACTS decided and
+    /// this is what the clock infers — see [`super::governance_change`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub superseded_by_clock: Option<Vec<AtomId>>,
 }
 
 /// Whether a surfaced tension is open or how it was adjudicated. Like
@@ -206,7 +220,7 @@ impl GovernanceView {
                 matches!(
                     r.status,
                     RuleStatus::Superseded { .. } | RuleStatus::Retracted { .. }
-                )
+                ) || r.superseded_by_clock.is_some()
             })
             .filter_map(|r| r.citation.as_ref().map(|c| c.chunk_id.clone()))
             .collect()
@@ -220,7 +234,24 @@ impl GovernanceView {
         let rules = read_rule_atoms(dir)?;
         let tensions = read_tensions(dir)?;
         let ops = Oplog::<GovernanceOpKind>::new(dir).read_all()?;
-        Ok(build_view(&rules, &tensions, &ops))
+        // Axis 4: when the corpus declared which claim types supersede,
+        // the fold gains the clock pass. `atlas/ontology.json` is absent
+        // for every corpus that declared nothing and for every atlas built
+        // before ontology v1, and absence reads as "declares nothing".
+        let policies = read_atlas_ontology(dir)
+            .map(|f| f.policies)
+            .unwrap_or_default();
+        if policies.change.supersedes.is_empty() {
+            return Ok(build_view(&rules, &tensions, &ops));
+        }
+        let facts = read_rule_facts(dir, &policies)?;
+        Ok(build_view_with(
+            &rules,
+            &tensions,
+            &ops,
+            &facts,
+            &policies.change,
+        ))
     }
 }
 
@@ -445,7 +476,22 @@ pub fn build_view(
     tensions: &[RuleTension],
     ops: &[Op<GovernanceOpKind>],
 ) -> GovernanceView {
-    let active = derive_active(ops);
+    build_view_with(rules, tensions, ops, &[], &ChangePolicy::default())
+}
+
+/// [`build_view`] with axis 4's declared supersession applied. `build_view`
+/// is a shim over it, so the existing tests and the callers with no
+/// ontology are untouched (ARCH §10.2): empty `facts` plus a default
+/// [`ChangePolicy`] make `derive_active_with_policy` return exactly
+/// `derive_active`.
+pub fn build_view_with(
+    rules: &[RuleAtom],
+    tensions: &[RuleTension],
+    ops: &[Op<GovernanceOpKind>],
+    facts: &[RuleFacts],
+    change: &ChangePolicy,
+) -> GovernanceView {
+    let (active, by_clock) = derive_active_with_policy(ops, facts, change);
     let by_id: BTreeMap<&AtomId, &RuleAtom> = rules.iter().map(|r| (&r.id, r)).collect();
 
     let mut issues = Vec::new();
@@ -462,6 +508,7 @@ pub fn build_view(
                 scope: r.scope.clone(),
                 citation: r.citation.clone(),
                 status: status.clone(),
+                superseded_by_clock: by_clock.get(rid).cloned(),
             }),
             None => {
                 issues.push(GovernanceIssue::RuleHasNoAtom { rule: rid.clone() });
@@ -472,6 +519,7 @@ pub fn build_view(
                     scope: None,
                     citation: None,
                     status: status.clone(),
+                    superseded_by_clock: by_clock.get(rid).cloned(),
                 });
             }
         }
@@ -606,10 +654,31 @@ fn project_claim(c: &Claim) -> RuleAtom {
     RuleAtom {
         id: c.id.clone(),
         text: c.content.clone(),
-        deontic: c.claim_kind.clone(),
-        scope: c.attributed_to.clone(),
+        deontic: declared_deontic(c).or_else(|| c.claim_kind.clone()),
+        scope: c.subject.clone().or_else(|| c.attributed_to.clone()),
         citation: c.evidence.first().cloned(),
     }
+}
+
+/// The declared deontic normal form, or `None`.
+///
+/// The value is NOT re-normalised here. `parse_policy::validated_choice`
+/// already accepted it only when it named one of the claim type's declared
+/// modes, so it is in the closed `Deontic` wire set by construction; a second
+/// normaliser would be a second answer to the same question (§10.6). Absent
+/// key, non-string value, or blank ⇒ `None`, and the caller falls back to
+/// `claim_kind` — which is what every undeclared corpus does, unchanged.
+fn declared_deontic(c: &Claim) -> Option<String> {
+    let raw = c
+        .attributes
+        .get(crate::enrichment::pipeline::pipelines::parse_policy::ATTR_DEONTIC)?
+        .as_str()?
+        .trim();
+    if raw.is_empty() {
+        return None;
+    }
+    tracing::debug!(claim = %c.id.as_str(), deontic = %raw, "governance view: declared deontic");
+    Some(raw.to_string())
 }
 
 fn read_tensions(dir: &Path) -> Result<Vec<RuleTension>> {
@@ -1100,6 +1169,8 @@ mod tests {
 
         // Two rule Claims → atoms.json.
         let make_claim = |n: usize, content: &str| Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(n),
             content: content.into(),
             discourse_act: DiscourseAct::Enact,
@@ -1156,6 +1227,66 @@ mod tests {
         assert_eq!(open[0].text_b, "new rule");
         assert_eq!(open[0].why.as_deref(), Some("why?"));
         assert!(view.issues.is_empty());
+    }
+
+    /// ontology-v1 P5. The projection reads what the DECLARED claim carries:
+    /// `subject` as the scope (the coin being dated, not the scholar dating
+    /// it) and the validated `deontic` attribute as the force.
+    #[test]
+    fn project_claim_prefers_subject_and_the_declared_deontic() {
+        use crate::enrichment::pipeline::atlas::{
+            ClaimScope, DiscourseAct, EnrichmentDepth, EpistemicStatus,
+        };
+
+        let base =
+            |subject: Option<AtomId>, attrs: serde_json::Map<String, serde_json::Value>| Claim {
+                attributes: attrs,
+                subject,
+                id: AtomId::claim(1),
+                content: "the mancus was struck 805/810".into(),
+                discourse_act: DiscourseAct::Assert,
+                epistemic_status: EpistemicStatus::Confident,
+                scope: ClaimScope::Contextual,
+                evidence: vec![ChunkRef::new("chunk-1", None)],
+                quotable_excerpt: None,
+                // The VOICE: the scholar making the attribution.
+                attributed_to: Some(AtomId::entity(7)),
+                confidence: None,
+                anchor: None,
+                claim_kind: Some("attribution".into()),
+                concession_outcome: None,
+                evidence_kind: None,
+                enrichment_depth: EnrichmentDepth::Extracted,
+            };
+
+        // Declared: subject wins over attributed_to, deontic off the attribute.
+        let mut attrs = serde_json::Map::new();
+        attrs.insert("deontic".into(), serde_json::Value::String("forbid".into()));
+        let declared = project_claim(&base(Some(AtomId::entity(42)), attrs));
+        assert_eq!(declared.scope, Some(AtomId::entity(42)));
+        assert_ne!(declared.scope, Some(AtomId::entity(7)));
+        assert_eq!(declared.deontic.as_deref(), Some("forbid"));
+
+        // I5: no subject and no deontic attribute — an undeclared corpus's
+        // claim projects exactly as it did before ontology v1.
+        let undeclared = project_claim(&base(None, serde_json::Map::new()));
+        assert_eq!(undeclared.scope, Some(AtomId::entity(7)));
+        assert_eq!(undeclared.deontic.as_deref(), Some("attribution"));
+
+        // A blank or non-string reserved value is an absence, not a value:
+        // it falls back rather than projecting an empty deontic.
+        let mut blank = serde_json::Map::new();
+        blank.insert("deontic".into(), serde_json::Value::String("  ".into()));
+        assert_eq!(
+            project_claim(&base(None, blank)).deontic.as_deref(),
+            Some("attribution")
+        );
+        let mut wrong_type = serde_json::Map::new();
+        wrong_type.insert("deontic".into(), serde_json::json!(3));
+        assert_eq!(
+            project_claim(&base(None, wrong_type)).deontic.as_deref(),
+            Some("attribution")
+        );
     }
 
     #[test]

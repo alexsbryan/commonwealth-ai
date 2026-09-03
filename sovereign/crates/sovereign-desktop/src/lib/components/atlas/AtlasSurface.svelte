@@ -14,8 +14,13 @@
   import AtlasConvCorpusView from "./AtlasConvCorpusView.svelte";
   import AtomDetail from "./AtomDetail.svelte";
   import ConvDetail from "./ConvDetail.svelte";
-  import type { AtomType } from "../../types";
-  import { atlasListConvCorpora, atlasListMembers } from "../../api";
+  import type { AtlasCorpusSummary } from "../../types";
+
+  import {
+    atlasListCorpora,
+    atlasListConvCorpora,
+    atlasListMembers,
+  } from "../../api";
   import { atlasNavigation } from "../../stores/atlasNavigation.svelte";
 
   type CorpusKind = "atom" | "conv" | "collection";
@@ -28,10 +33,13 @@
      *  "collection" → AtlasCollectionView (an article picker over
      *  `<id>-<slug>` member atlases; SEP). */
     kind: CorpusKind;
-    /** Per-type counts captured from the picker, so the corpus view
-     *  can render tab badges without re-fetching the summary. */
-    atomCounts?: Partial<Record<AtomType, number>>;
-    totalAtoms?: number;
+    /** The picker's own row for this corpus, so the browse view can
+     *  render its pills (declared types + subtype census + per-kind
+     *  counts) without re-fetching the listing. Absent on the scoped
+     *  notebook mount, which never shows the picker — the browse view
+     *  fetches its own row there. */
+    summary?: AtlasCorpusSummary;
+
     /** When set + kind=collection, the member atlas being explored.
      *  Every atlas call below addresses THIS id, not `corpusId` —
      *  `corpusId` stays the collection so "back" returns to the
@@ -109,24 +117,52 @@
 
   /** Which Explore surface a corpus wants.
    *
-   *  Conv corpora (SQLite tiered enrichment) are listed by
-   *  `atlasListConvCorpora`. Collection corpora own no atoms of their
-   *  own — their map lives in `<id>-<slug>` member atlases — and
-   *  `atlasListMembers` returns those; a non-empty result IS the
-   *  signal. Everything else (the common case — folders, documents,
-   *  catalog corpora) routes to the atom browser. Best-effort: any
-   *  failure defaults to "atom". */
+   *  A corpus that DECLARED an ontology wins the atom browser outright —
+   *  see the comment in the body. Otherwise:
+   *
+   *  Collection corpora own no atoms of their own — their map lives in
+   *  `<id>-<slug>` member atlases — and `atlasListMembers` returns
+   *  those; a non-empty result IS the signal. Conv corpora (SQLite
+   *  tiered enrichment) are listed by `atlasListConvCorpora`.
+   *  Everything else (the common case — folders, documents, catalog
+   *  corpora) routes to the atom browser. Best-effort: any failure
+   *  defaults to "atom".
+   *
+   *  MEMBERS ARE CHECKED FIRST, and the order is the decision. The two
+   *  signals are not exclusive: a partial tiered-enrichment run over a
+   *  collection leaves `conv_skeletons` rows for the PARENT id, so the
+   *  parent answers yes to both. Sibling member atlases are the more
+   *  specific signal — they only exist because someone extracted atoms
+   *  per entry — whereas a handful of parent-level conv rows can be
+   *  the residue of a run that stopped before it did any LLM work.
+   *  Asking conv first let 14 hollow rows hide SEP's 1,770 member
+   *  atlases behind a "14 conversations" list. */
   async function resolveCorpusKind(corpusId: string): Promise<CorpusKind> {
+    // A DECLARED ontology outranks the conv listing. Both can be true of
+    // one corpus — a folder of markdown gets conversation skeletons from
+    // the importer whatever else it is — and when the author has said
+    // "this corpus is coins, sceattas and attributions", opening it as a
+    // list of conversations is this whole program failing at its last
+    // step. Nothing else changes: a corpus that declares nothing is
+    // resolved exactly as before.
     try {
-      const convs = await atlasListConvCorpora();
-      if (convs.some((c) => c.corpus_id === corpusId)) return "conv";
+      const row = (await atlasListCorpora()).find(
+        (c) => c.corpus_id === corpusId,
+      );
+      if (row?.declared_types?.length) return "atom";
     } catch {
-      // Fall through — a conv-listing failure shouldn't hide a
-      // perfectly good atom or collection atlas.
+      // Fall through — the conv/collection checks below still apply.
     }
     try {
       const members = await atlasListMembers(corpusId);
       if (members.length > 0) return "collection";
+    } catch {
+      // Fall through — a member-listing failure shouldn't hide a
+      // perfectly good conv or atom atlas.
+    }
+    try {
+      const convs = await atlasListConvCorpora();
+      if (convs.some((c) => c.corpus_id === corpusId)) return "conv";
     } catch {
       // Fall through to the atom default.
     }
@@ -145,18 +181,24 @@
     }
   }
 
-  async function handleSelectCorpus(corpusId: string, kind: CorpusKind) {
+  async function handleSelectCorpus(
+    corpusId: string,
+    kind: CorpusKind,
+    summary?: AtlasCorpusSummary,
+  ) {
+
     // Show the corpus immediately with the picker's own classification,
     // then upgrade to "collection" if this corpus turns out to keep its
     // map in member atlases. Without the re-resolve, picking a
     // collection from the standalone index lands on the empty atom
     // browser — the exact dead end this surface exists to remove.
-    selection = { corpusId, kind };
+    selection = { corpusId, kind, summary };
     if (kind !== "atom") return;
     const resolved = await resolveCorpusKind(corpusId);
     if (resolved === "collection" && selection?.corpusId === corpusId) {
       selection = { corpusId, kind: "collection" };
     }
+
   }
 
   /** Open one article's atlas inside a collection. */
@@ -190,9 +232,9 @@
       corpusId: selection.corpusId,
       kind: selection.kind,
       memberId: selection.memberId,
-      atomCounts: selection.atomCounts,
-      totalAtoms: selection.totalAtoms,
+      summary: selection.summary,
     };
+
   }
 
   function handleBackFromConv() {
@@ -247,8 +289,8 @@
 {:else if selection}
   <AtlasCorpusView
     corpusId={selection.corpusId}
-    atomCountsHint={selection.atomCounts}
-    totalAtomsHint={selection.totalAtoms}
+    summary={selection.summary}
+
     onBack={resetToRoot}
     showBack={!startingCorpusId}
     onSelectAtom={handleSelectAtom}

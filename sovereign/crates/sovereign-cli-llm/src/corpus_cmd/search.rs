@@ -35,21 +35,19 @@ pub async fn cmd_corpus_search(args: &[String]) -> i32 {
         return 1;
     }
 
-    // Embed the query via the daemon's embed slot — reuses the workflow command's
-    // model discovery so the `embed` model convention lives in one place.
+    // Embed the query via the daemon's embed slot, resolved through the ONE
+    // decider (`sovereign_workflow_host::daemon_models`): configured stem →
+    // advertised id, proved by a `/v1/embeddings` probe. The refusal names
+    // what was probed; "advertises no embedding model" is no longer a
+    // verdict anything here reaches from an id substring.
     let v1 = format!("{DEFAULT_DAEMON}/v1");
-    let models = match sovereign_workflow_host::discover_models(&v1).await {
-        Ok(m) => m,
+    let embed_model = match sovereign_workflow_host::resolve_embed_model(&v1, None).await {
+        Ok(r) => r.id,
         Err(e) => {
-            eprintln!(
-                "Daemon not reachable at {DEFAULT_DAEMON} ({e}). Start it with `svrn daemon`."
-            );
+            eprintln!("Cannot embed the query via the daemon at {DEFAULT_DAEMON}: {e}");
+            eprintln!("Start it with `svrn daemon` if it is not running.");
             return 1;
         }
-    };
-    let Some(embed_model) = models.embed else {
-        eprintln!("The daemon advertises no embedding model — cannot embed the query.");
-        return 1;
     };
     let provider = RemoteApiProvider::new(&v1, None, &embed_model, 8192);
     let embedding = match provider.embed(&query).await {

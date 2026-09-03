@@ -164,7 +164,7 @@ pub async fn run(args: &[String]) -> i32 {
         }
     };
 
-    let report = load_junit(&root);
+    let (reports, ignored_reports) = load_reports(&root);
 
     // The journey side. A missing manifest or a lane that has never run are
     // both real states, not errors: every journey claim reads never-ran, which
@@ -221,7 +221,7 @@ pub async fn run(args: &[String]) -> i32 {
             }
         };
         for c in mine {
-            consider(resolve(&root, c, report.as_ref()));
+            consider(resolve(&root, c, &reports));
         }
         for jc in &journeyed {
             consider(resolve_journey(&root, jc, steps.as_ref()));
@@ -278,16 +278,28 @@ pub async fn run(args: &[String]) -> i32 {
         // Both instruments name themselves, including when they are absent.
         // "no report" is the state most likely to be misread as "nothing to
         // prove", so it gets a line rather than a silence.
-        match &report {
-            Some(r) => println!(
-                "tests    {} — {} testcase(s), run {}",
+        if reports.is_empty() {
+            println!(
+                "tests    no report on disk — every test claim reads never-ran until something runs"
+            );
+        }
+        for r in &reports {
+            println!(
+                "tests    {} — {} testcase(s){}",
                 rel(&r.path, &root),
                 r.results.len(),
-                &r.uuid
-            ),
-            None => println!(
-                "tests    no report on disk — every test claim reads never-ran until something runs"
-            ),
+                if r.uuid.is_empty() {
+                    String::new()
+                } else {
+                    format!(", run {}", r.uuid)
+                }
+            );
+        }
+        // A report that exists and was passed over is named. Silence here would
+        // make a deliberately-ignored sabotage report indistinguishable from no
+        // report at all.
+        for (p, why) in &ignored_reports {
+            println!("tests    {} — IGNORED, {why}", rel(p, &root));
         }
         match &steps {
             Some(st) if st.status.is_empty() => println!(
@@ -613,16 +625,22 @@ fn journey_sequence_verdict(
 }
 
 /// The verdict for one claim, and why.
-fn resolve(root: &Path, c: &Claim, report: Option<&Report>) -> Row {
-    let Some(report) = report else {
+fn resolve(root: &Path, c: &Claim, reports: &[Report]) -> Row {
+    if reports.is_empty() {
         return Row {
             id: String::new(),
             claimed: true,
             verdict: Verdict::NeverRan,
             detail: format!("{} — no test report on disk", c.test),
         };
-    };
-    let Some(passed) = report.results.get(&c.test) else {
+    }
+    // The report that actually ran this test decides its verdict, and lends its
+    // own timestamp to the staleness rule below. A claim in neither report is
+    // never-ran whichever suite was supposed to carry it.
+    let Some((report, passed)) = reports
+        .iter()
+        .find_map(|r| r.results.get(&c.test).map(|p| (r, p)))
+    else {
         return Row {
             id: String::new(),
             claimed: true,
@@ -670,6 +688,8 @@ fn resolve(root: &Path, c: &Claim, report: Option<&Report>) -> Row {
 const REGISTRY: &str = kernel_types::conformance::REGISTRY_PATH;
 const CLAIMS_DIR: &str = "quality/conformance";
 const MANIFEST: &str = "sovereign/docs/cli-contract.toml";
+/// Where the desktop app's Playwright run leaves its JUnit report.
+const PLAYWRIGHT_JUNIT: &str = "sovereign/crates/sovereign-desktop/test-results/junit.xml";
 
 /// What the last journey lane recorded, keyed by `(journey id, step index)`.
 struct StepReport {
@@ -854,22 +874,113 @@ struct Report {
 /// would cost more than it buys. The scan VALIDATES ITSELF against the
 /// `tests="N"` attribute the producer writes, so a shape change is refused
 /// rather than silently under-reported (ARCH §18.4).
-fn load_junit(root: &Path) -> Option<Report> {
+/// Every JUnit report on disk — nextest's, and the desktop app's Playwright
+/// run. Two writers, one shape, one reader.
+///
+/// Kept as a LIST rather than merged into one map, because staleness is
+/// per-report: the desktop suite and the Rust suite are run at different times,
+/// and folding them would let the older run's timestamp demote the newer one's
+/// claims to could-not-judge. A claim resolves against the report that actually
+/// contains its test.
+fn load_reports(root: &Path) -> (Vec<Report>, Vec<(PathBuf, &'static str)>) {
+    let mut out = Vec::new();
+    let scan = load_junit(root);
+    if let Some(r) = scan.report {
+        out.push(r);
+    }
+    // Playwright writes here (playwright.config.ts `junit` reporter). Its
+    // absence is ordinary — the desktop suite has simply not been run.
+    let pw = root.join(PLAYWRIGHT_JUNIT);
+    if let Ok(text) = std::fs::read_to_string(&pw) {
+        if let Some(mut r) = parse_junit(&text, &pw) {
+            r.path = pw.clone();
+            r.modified = std::fs::metadata(&pw).and_then(|m| m.modified()).ok();
+            out.push(r);
+        }
+    }
+    (out, scan.ignored)
+}
+
+/// The nextest profiles whose reports are ORDINARY VERIFICATION and may
+/// therefore settle a conformance claim.
+///
+/// This is an ALLOW-list, and the direction matters. `target/nextest/` is a
+/// directory per profile, and `scripts/sabotage.py` runs the whole suite under
+/// `--profile sabotage` with a mutation applied — a report whose reds are
+/// MANUFACTURED. Taking the newest report across all profiles (what this did
+/// until 2026-09-01) meant the first `svrn conformance` after any mutation run
+/// read the sabotage report and rendered every test the mutant killed as a
+/// genuine `failed` requirement. A false red, invented by the instrument, with
+/// nothing on screen to say where it came from.
+///
+/// A deny-list would have fixed that one case and left the next adversarial
+/// profile to be included by default. Allowing only the profiles that are
+/// verification runs degrades the other way: an unknown profile's report is
+/// ignored and its claims read `never-ran` — absence, which this command
+/// already renders honestly, rather than a failure nobody's code caused
+/// (ARCH §18.3). Ignored reports are NAMED on the `tests` line, so "ignored"
+/// never looks like "absent".
+const VERIFICATION_PROFILES: &[&str] = &["default", "ci"];
+
+/// The newest verification report, plus any report deliberately passed over.
+struct Scan {
+    report: Option<Report>,
+    /// `(path, why)` for each junit.xml that exists and was NOT read.
+    ignored: Vec<(PathBuf, &'static str)>,
+}
+
+fn load_junit(root: &Path) -> Scan {
     let dir = root.join("target/nextest");
     let mut best: Option<(std::time::SystemTime, PathBuf)> = None;
-    for e in std::fs::read_dir(&dir).ok()?.filter_map(|e| e.ok()) {
+    let mut ignored = Vec::new();
+    let entries = match std::fs::read_dir(&dir) {
+        Ok(rd) => rd,
+        Err(_) => {
+            return Scan {
+                report: None,
+                ignored,
+            }
+        }
+    };
+    for e in entries.filter_map(|e| e.ok()) {
         let p = e.path().join("junit.xml");
         let Ok(m) = std::fs::metadata(&p).and_then(|m| m.modified()) else {
             continue;
         };
+        let profile = e.file_name().to_string_lossy().to_string();
+        if !VERIFICATION_PROFILES.contains(&profile.as_str()) {
+            ignored.push((
+                p,
+                if profile == "sabotage" {
+                    "mutation run — its reds are manufactured"
+                } else {
+                    "not a verification profile"
+                },
+            ));
+            continue;
+        }
         if best.as_ref().is_none_or(|(bm, _)| m > *bm) {
             best = Some((m, p));
         }
     }
-    let (modified, path) = best?;
-    let text = std::fs::read_to_string(&path).ok()?;
-    let uuid = attr(&text, "uuid").unwrap_or_default();
-    let declared: usize = attr(&text, "tests")
+    let report = best.and_then(|(modified, path)| {
+        let text = std::fs::read_to_string(&path).ok()?;
+        let mut r = parse_junit(&text, &path)?;
+        r.path = path;
+        r.modified = Some(modified);
+        Some(r)
+    });
+    Scan { report, ignored }
+}
+
+/// Parse one JUnit document. The ONE parser, shared by nextest's report and
+/// Playwright's — two writers, one shape, and a second implementation here
+/// would be a second chance to disagree about what a testcase is (ARCH §10.6).
+///
+/// `path` is used only for the refusal message; the caller sets the real one.
+fn parse_junit(text: &str, path: &Path) -> Option<Report> {
+    let uuid = attr(text, "uuid").unwrap_or_default();
+    let declared: usize = attr(text, "tests")
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
 
@@ -886,7 +997,7 @@ fn load_junit(root: &Path) -> Option<Report> {
             results.insert(format!("{class}::{name}"), !failed);
         }
     }
-    if declared > 0 && results.len() + count(&text, "<skipped") != declared {
+    if declared > 0 && results.len() + count(text, "<skipped") != declared {
         eprintln!(
             "conformance: refusing {} — it declares tests=\"{declared}\" but {} testcase(s) \
              parsed. The report's shape changed; fix the reader rather than trusting a \
@@ -897,9 +1008,9 @@ fn load_junit(root: &Path) -> Option<Report> {
         return None;
     }
     Some(Report {
-        path,
+        path: path.to_path_buf(),
         uuid,
-        modified: Some(modified),
+        modified: None,
         results,
     })
 }
@@ -934,7 +1045,26 @@ fn attr(s: &str, key: &str) -> Option<String> {
     let pat = format!("{key}=\"");
     let i = s.find(&pat)? + pat.len();
     let rest = &s[i..];
-    Some(rest[..rest.find('"')?].to_string())
+    Some(unescape_xml(&rest[..rest.find('"')?]))
+}
+
+/// Decode the five predefined XML entities.
+///
+/// JUnit is XML and its attributes are escaped; this reader read them raw until
+/// a Playwright report arrived, because Rust test names contain none of these
+/// characters and nextest never exercised it. A desktop spec titled "a
+/// notebook's Ask …" is written `&apos;` and would never match its claim — and
+/// a claim key that matches nothing renders as never-ran, which is
+/// indistinguishable from a requirement nobody claimed.
+///
+/// `&amp;` is replaced LAST so `&amp;lt;` decodes to the literal `&lt;` rather
+/// than to `<`.
+fn unescape_xml(s: &str) -> String {
+    s.replace("&apos;", "'")
+        .replace("&quot;", "\"")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
 }
 
 fn esc(s: &str) -> String {
@@ -975,3 +1105,106 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
         ),
     ],
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    /// Write a junit doc that `parse_junit` accepts, at `target/nextest/<profile>/`.
+    fn junit_at(root: &Path, profile: &str, uuid: &str, failed: bool) -> PathBuf {
+        let dir = root.join("target/nextest").join(profile);
+        fs::create_dir_all(&dir).unwrap();
+        let body = if failed {
+            "<failure message=\"m\"/>"
+        } else {
+            ""
+        };
+        let doc = format!(
+            "<?xml version=\"1.0\"?>\n<testsuites tests=\"1\" uuid=\"{uuid}\">\n  \
+             <testsuite name=\"s\">\n    \
+             <testcase name=\"a_declared_test\" classname=\"c::m\">{body}</testcase>\n  \
+             </testsuite>\n</testsuites>\n"
+        );
+        let p = dir.join("junit.xml");
+        fs::write(&p, doc).unwrap();
+        p
+    }
+
+    /// Make `p` older than everything written after it, without sleeping.
+    fn age(p: &Path) {
+        let f = fs::File::options().write(true).open(p).unwrap();
+        let then = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000);
+        f.set_times(fs::FileTimes::new().set_modified(then))
+            .unwrap();
+    }
+
+    /// THE FAILING INPUT THIS GATE EXISTS FOR. `scripts/sabotage.py` leaves a
+    /// report under `target/nextest/sabotage/` in which a test is red BY
+    /// CONSTRUCTION — that is the mutation working. Before 2026-09-01 this
+    /// reader took the newest junit.xml across every profile directory, so the
+    /// first `svrn conformance` after a mutation run adopted that report and
+    /// rendered the mutant's kill as a genuine `failed` requirement.
+    ///
+    /// Watched failing: delete `sabotage` from `VERIFICATION_PROFILES`' guard
+    /// (i.e. restore newest-wins) and this reports uuid `run-sabotage`.
+    #[test]
+    fn a_mutation_runs_report_never_settles_a_conformance_claim() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let good = junit_at(root, "default", "run-default", false);
+        age(&good); // the verification run is the OLDER of the two
+        junit_at(root, "sabotage", "run-sabotage", true);
+
+        let scan = load_junit(root);
+        let r = scan
+            .report
+            .expect("the default profile's report is readable");
+        assert_eq!(
+            r.uuid, "run-default",
+            "the newer sabotage report must not win — it is a mutation run"
+        );
+        assert_eq!(
+            r.results.get("c::m::a_declared_test"),
+            Some(&true),
+            "the verification run's verdict, not the mutant's"
+        );
+        // Ignored is not the same as absent, and the command says which.
+        let (p, why) = scan
+            .ignored
+            .iter()
+            .find(|(p, _)| p.to_string_lossy().contains("sabotage"))
+            .expect("the sabotage report is named as ignored, not silently dropped");
+        assert!(p.ends_with("junit.xml"));
+        assert!(why.contains("manufactured"), "the reason is stated: {why}");
+    }
+
+    /// An unknown profile degrades to `never-ran`, never to a verdict. A future
+    /// profile is ignored-and-named rather than trusted by default.
+    #[test]
+    fn an_unknown_profile_is_ignored_and_named_rather_than_trusted() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        junit_at(root, "quick", "run-quick", false);
+
+        let scan = load_junit(root);
+        assert!(
+            scan.report.is_none(),
+            "no verification report on disk — absence, not the quick run's word for it"
+        );
+        assert_eq!(scan.ignored.len(), 1);
+        assert_eq!(scan.ignored[0].1, "not a verification profile");
+    }
+
+    /// The XML entity decode that the Playwright reader needs. A desktop spec
+    /// titled "a notebook's Ask …" arrives as `&apos;`; an undecoded key
+    /// matches no claim and renders as never-ran — indistinguishable from a
+    /// requirement nobody claimed.
+    #[test]
+    fn junit_attributes_are_xml_unescaped_so_playwright_titles_match_their_claims() {
+        assert_eq!(unescape_xml("a notebook&apos;s Ask"), "a notebook's Ask");
+        assert_eq!(unescape_xml("a &lt;tag&gt; &amp; more"), "a <tag> & more");
+        // `&amp;` decodes last, so an escaped entity survives as literal text.
+        assert_eq!(unescape_xml("&amp;lt;"), "&lt;");
+    }
+}

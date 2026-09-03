@@ -35,6 +35,14 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 
+/// The ONE `atoms.json` → embedded-bag loader (ontology-v1 P0.2). Lives in
+/// `atlas_context_loader.rs` to keep this file under the §3.1 ceiling;
+/// re-exported so `atlas_context_manager::load_atlas_context` is the name
+/// every caller — CLI wrapper, daemon hook, eval harness — uses.
+pub use crate::atlas_context_loader::{
+    backfill_ann, load_atlas_context, BackfillOutcome, LoadAtlasError,
+};
+
 /// Filename of the per-corpus query-bump map. Lives alongside
 /// `atoms.json` so it travels with the atlas (mesh transfer brings
 /// it along) and the operator can inspect it without poking inside
@@ -77,6 +85,17 @@ pub struct AtlasContextFilter {
     /// Should lift `argument_depth` on essay-readiness — Configurations
     /// articulate the interpretive shape the article enacts as a whole.
     pub include_configurations: bool,
+    /// DARK (ontology-v1 P5, default **OFF**) —
+    /// `SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS`. Narrower than
+    /// [`Self::include_claims`]: it admits only Claim atoms whose `claim_kind`
+    /// names a type the corpus DECLARED, so an undeclared corpus admits
+    /// nothing new however it is set. The declared claim is where a
+    /// numismatics corpus keeps "who dated this coin to when, on what
+    /// evidence" — content the entity bag cannot carry.
+    ///
+    /// Baked into [`Self::signature`], so a cache built with it off is
+    /// correctly ignored when it flips on.
+    pub include_declared_claim_types: bool,
 }
 
 impl Default for AtlasContextFilter {
@@ -129,6 +148,16 @@ impl Default for AtlasContextFilter {
                 v == "1" || v.eq_ignore_ascii_case("true")
             })
             .unwrap_or(false);
+        // DARK: declared-type claims as virtual chunks (ontology-v1 P5).
+        // Off by default; see the `DEFAULTS_LEDGER.md` row for the flip
+        // conditions.
+        let include_declared_claim_types = std::env::var("SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS")
+            .ok()
+            .map(|v| {
+                let v = v.trim();
+                v == "1" || v.eq_ignore_ascii_case("true")
+            })
+            .unwrap_or(false);
         Self {
             min_description_chars: min_chars,
             depth_allowlist,
@@ -137,6 +166,7 @@ impl Default for AtlasContextFilter {
             include_claims,
             include_tensions: false,
             include_configurations: false,
+            include_declared_claim_types,
         }
     }
 }
@@ -149,7 +179,7 @@ impl AtlasContextFilter {
         let mut depths = self.depth_allowlist.clone();
         depths.sort();
         format!(
-            "min_chars={};depth=[{}];max={};claims={};tensions={};configs={}",
+            "min_chars={};depth=[{}];max={};claims={};tensions={};configs={};declared_claims={}",
             self.min_description_chars,
             depths.join(","),
             self.max_entries
@@ -158,6 +188,7 @@ impl AtlasContextFilter {
             self.include_claims,
             self.include_tensions,
             self.include_configurations,
+            self.include_declared_claim_types,
         )
     }
 }
@@ -352,8 +383,37 @@ impl AtlasContextManager {
         if let Ok(mut dirs) = self.graph_dirs.write() {
             dirs.insert(corpus_id.to_string(), atlas_dir.to_path_buf());
         }
-        if !corpus_engine::enrichment::atlas::ann_store::ann_table_present(atlas_dir) {
+        // ontology-v1 P0.3 — a silent `false` here was the whole failure:
+        // a corpus with resolved atoms and no seed table simply never
+        // grounded, and nothing said so. Warn — with the fix — when the v2
+        // atom store is present (so the corpus COULD ground) and the table is
+        // missing or older than `atoms.json`. Never embed here: `init()` walks
+        // every installed atlas (1,770 SEP articles) at boot.
+        use corpus_engine::enrichment::atlas::ann_store::{ann_table_is_fresh, ann_table_present};
+        use corpus_engine::enrichment::atlas::store::ATOMS_LANCE_DIRNAME;
+        if !ann_table_present(atlas_dir) {
+            if atlas_dir.join(ATOMS_LANCE_DIRNAME).is_dir() {
+                tracing::warn!(
+                    corpus = corpus_id,
+                    atlas = %atlas_dir.display(),
+                    "atlas-context: atom store present but no ANN seed table — this corpus cannot ground; \
+                     run `svrn atlas backfill-ann {corpus_id}` (or `svrn enrich build {corpus_id}`)"
+                );
+            } else {
+                tracing::debug!(
+                    corpus = corpus_id,
+                    "atlas-context: no atom store and no ANN seed table; nothing to ground from"
+                );
+            }
             return false;
+        }
+        if !ann_table_is_fresh(atlas_dir) {
+            tracing::warn!(
+                corpus = corpus_id,
+                atlas = %atlas_dir.display(),
+                "atlas-context: ANN seed table is older than atoms.json — grounding seeds from a stale atom set; \
+                 run `svrn atlas backfill-ann {corpus_id}`"
+            );
         }
         let load_started = std::time::Instant::now();
         // Load the v2 store (atoms.lance + edges.csr). A corpus without one
@@ -722,6 +782,24 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(a.signature(), b.signature());
+    }
+
+    /// DARK (`SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS`). Off by default, and
+    /// baked into the cache key — a bag built without declared claims must not
+    /// be served when the knob flips on.
+    #[test]
+    fn declared_claim_types_are_dark_and_keyed_into_the_signature() {
+        assert!(
+            std::env::var("SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS").is_err(),
+            "this test asserts the DEFAULT; unset SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS to run it"
+        );
+        let off = AtlasContextFilter::default();
+        assert!(!off.include_declared_claim_types);
+        let on = AtlasContextFilter {
+            include_declared_claim_types: true,
+            ..Default::default()
+        };
+        assert_ne!(off.signature(), on.signature());
     }
 
     #[test]

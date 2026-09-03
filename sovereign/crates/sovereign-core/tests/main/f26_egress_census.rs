@@ -35,8 +35,10 @@
 //! At HEAD (the red, before the boundary exists) the census counts
 //! five egress-class construction sites outside the boundary, the
 //! enrich providers path named first:
-//!   - sovereign/crates/sovereign-cli-llm/src/enrich_cmd/inference_client.rs
-//!     (RemotePayload — the `--provider` chat client)
+//!   - sovereign/crates/sovereign-enrichment-build/src/inference_client/
+//!     (RemotePayload — the `--provider` chat client; at
+//!     sovereign-cli-llm/src/enrich_cmd/inference_client.rs until P0's
+//!     crate split, 2026-09-02)
 //!   - sovereign/crates/sovereign-core/src/deep_research/port.rs
 //!     (QueryEgress — the web_search client)
 //!   - sovereign/crates/sovereign-tools/src/knowledge_lookup/mod.rs
@@ -251,15 +253,26 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-desktop/src-tauri/src/bootstrap.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/attach_watch.rs", Class::LocalDaemon, 1),
 
-    // ---- sovereign-cli-llm ----
+    // ---- sovereign-enrichment-build ----
     // R-5's named path: the enrich --provider dispatch. The chat
     // client (complete_inner → complete_openai_compatible /
     // complete_anthropic) moved into BOUNDARY_MODULE (egress.rs
     // model_client) with the boundary — a remote provider now passes
     // the release gate (default custody Personal, no grant →
-    // typed refusal). The file's three remaining sites are local:
-    // the embed one-shot client + two /v1/models probes.
-    ("sovereign/crates/sovereign-cli-llm/src/enrich_cmd/inference_client.rs", Class::LocalDaemon, 3),
+    // typed refusal). The three remaining sites are local: the embed
+    // one-shot client + two /v1/models probes.
+    //
+    // 2026-09-02: these were one row at
+    // `sovereign-cli-llm/src/enrich_cmd/inference_client.rs` until P0's
+    // crate split moved the file, whole, into `sovereign-enrichment-build`
+    // and left the CLI crate holding only help text and flag parsing. Two
+    // rows now, because the move also split the module in two. Same three
+    // sites, same class, same total — the census caught the stale path, which
+    // is what a per-file count is for.
+    ("sovereign/crates/sovereign-enrichment-build/src/inference_client/discovery.rs", Class::LocalDaemon, 2),
+    ("sovereign/crates/sovereign-enrichment-build/src/inference_client/mod.rs", Class::LocalDaemon, 1),
+
+    // ---- sovereign-cli-llm ----
     // 7 -> 10 (2026-08-27): `mesh rotate`, `mesh leave` and `mesh switch` each
     // now prefer the running daemon over an in-process fallback (the `cmd_join`
     // pattern), so each builds a client for 127.0.0.1 loopback. `mesh rotate`
@@ -295,7 +308,6 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-llm/src/workflow_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/solve_cmd.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-llm/src/recipe_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/pipeline_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/mobile_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/mesh_travel.rs", Class::Mesh, 1),
@@ -501,7 +513,15 @@ const REGISTRY: &[(&str, Class, usize)] = &[
 
     // ---- studio/sovereign-workflow-host (LocalDaemon) ----
     ("studio/crates/sovereign-workflow-host/src/installer.rs", Class::LocalDaemon, 2),
-    ("studio/crates/sovereign-workflow-host/src/lib.rs", Class::LocalDaemon, 1),
+    // The embed-model resolution that lived here and in
+    // `sovereign-cli-llm/src/recipe_cmd.rs` (one site each) became ONE
+    // decider in `daemon_models.rs` on 2026-09-01 (issue #57: the listing
+    // check refused a daemon that could embed). Both sites moved with it —
+    // same class, same total, one path instead of two. The second site is
+    // the /v1/embeddings probe that replaced the id-substring test: it
+    // asks the LOCAL daemon to embed a short fixed string, so nothing
+    // leaves the machine and no estate content is in the payload.
+    ("studio/crates/sovereign-workflow-host/src/daemon_models.rs", Class::LocalDaemon, 2),
 
     // ---- studio/sovereign-recipe-author ----
     ("studio/crates/sovereign-recipe-author/src/probe_url.rs", Class::InboundOnly, 1),

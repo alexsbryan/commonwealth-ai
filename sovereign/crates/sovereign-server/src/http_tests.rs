@@ -432,6 +432,54 @@ async fn body_json(resp: axum::response::Response) -> serde_json::Value {
     serde_json::from_slice(&bytes).unwrap()
 }
 
+// ─── REST: the create body's corpus allow-list ────────────────
+
+/// Same wire form as the daemon's `turn_http` (one client speaks to both):
+/// `enabled_corpora` is validated by `Runtime::seed_conversation`, and an
+/// id this hub cannot search is a 400 naming it. This runtime carries no
+/// corpus engine, so EVERY id is unknown and the message says nothing is
+/// installed — the hub's honest answer, not an empty `installed:`.
+#[tokio::test]
+async fn rest_create_conversation_refuses_an_unknown_corpus_with_400() {
+    let inference: Arc<dyn InferenceProvider> = Arc::new(StreamingMockInference);
+    let (runtime, store, approval) = build_runtime(inference);
+    let app = build_app(
+        runtime,
+        store.clone() as Arc<dyn StateStore>,
+        approval,
+        FairScheduler::new(4, 1, 32, 2),
+    );
+
+    let body = serde_json::json!({ "enabled_corpora": ["nope"] }).to_string();
+    let req = axum::http::Request::builder()
+        .method("POST")
+        .uri("/v1/conversations")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(body))
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), axum::http::StatusCode::BAD_REQUEST);
+    let json = body_json(resp).await;
+    let err = json["error"].as_str().expect("refusal carries a reason");
+    assert!(err.contains("unknown corpus id: nope"), "{err}");
+    assert!(err.contains("no corpus index installed"), "{err}");
+
+    // And the unscoped create still works — the field is optional on the wire.
+    let req = axum::http::Request::builder()
+        .method("POST")
+        .uri("/v1/conversations")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from("{}"))
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), axum::http::StatusCode::OK);
+    let json = body_json(resp).await;
+    assert!(
+        json.get("enabled_corpora").is_none(),
+        "no allow-list requested, none echoed — the unscoped wire form is unchanged"
+    );
+}
+
 // ─── REST: provenance on a real turn ──────────────────────────
 
 #[tokio::test]

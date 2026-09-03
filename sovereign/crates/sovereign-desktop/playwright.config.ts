@@ -25,7 +25,14 @@ export default defineConfig({
   // saturates the shared dev server on high-core dev boxes and drives the
   // flakes above. CI stays at 2.
   workers: process.env.CI ? 2 : 4,
-  reporter: process.env.CI ? "github" : "list",
+  // JUnit alongside the human reporter so `svrn conformance` can read what
+  // these specs actually did. Same shape nextest emits, same reader — a
+  // Playwright spec tagged `@GR-11` becomes a requirement verdict with no new
+  // machinery on either side.
+  reporter: [
+    [process.env.CI ? "github" : "list"],
+    ["junit", { outputFile: "test-results/junit.xml" }],
+  ],
   timeout: 30_000,
   expect: { timeout: 5_000 },
 

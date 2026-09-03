@@ -2014,6 +2014,7 @@ dependencies = [
  "commonwealth-core",
  "commonwealth-state",
  "corpus-engine",
+ "libc",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -2063,6 +2064,7 @@ version = "0.6.0"
 dependencies = [
  "async-trait",
  "commonwealth-agent-tools",
+ "kernel-types",
  "regex",
  "reqwest 0.12.28",
  "serde",
@@ -12129,6 +12131,7 @@ dependencies = [
  "sovereign-compute",
  "sovereign-contracts",
  "sovereign-core",
+ "sovereign-enrichment-build",
  "sovereign-gliner",
  "sovereign-inference",
  "sovereign-mesh",
@@ -12229,6 +12232,7 @@ dependencies = [
  "sovereign-cli-shared",
  "sovereign-contracts",
  "sovereign-core",
+ "sovereign-enrichment-build",
  "sovereign-enrichment-catalog",
  "sovereign-eval",
  "sovereign-gliner",
@@ -12413,6 +12417,28 @@ dependencies = [
  "uuid",
  "walkdir",
  "zip 8.6.0",
+]
+
+[[package]]
+name = "sovereign-enrichment-build"
+version = "0.6.0"
+dependencies = [
+ "chrono",
+ "corpus-engine",
+ "oicp-client",
+ "oicp-types",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sovereign-contracts",
+ "sovereign-core",
+ "sovereign-enrichment-catalog",
+ "sovereign-inference",
+ "sovereign-tools",
+ "tempfile",
+ "tokio",
+ "toml 0.8.2",
+ "tracing",
 ]
 
 [[package]]
@@ -12864,6 +12890,7 @@ name = "sovereign-workflow-host"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "axum",
  "oicp-client",
  "reqwest 0.12.28",
  "serde_json",

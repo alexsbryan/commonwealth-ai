@@ -41,7 +41,9 @@ use sovereign_contracts::types::projection::{Citation, Provenance};
 use sovereign_contracts::types::TurnMode;
 use sovereign_turn_client::{TurnClient, TurnObserver, TurnOutcome};
 
-use crate::chat_cmd::config::parse_globals_for_chat as parse_globals;
+use crate::chat_cmd::config::{
+    parse_globals_for_chat as parse_globals, print_daemon_served_turn_notes,
+};
 use crate::chat_cmd::render;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
@@ -52,8 +54,14 @@ const HELP: Help = Help {
         HelpSection::Usage("svrn chat ask \"<question>\" [flags]"),
         HelpSection::Flags(&[
             (
+                "--corpus <id>",
+                "Restrict retrieval to this corpus (repeatable: --corpus sep --corpus gutenberg). \
+                 The daemon refuses an id it has not installed and lists the ones it has. \
+                 Not combinable with --conversation, whose allow-list is already set.",
+            ),
+            (
                 "--conversation <id>",
-                "Reuse an existing conversation id (default: fresh uuid).",
+                "Reuse an existing conversation id (default: the daemon mints one).",
             ),
             (
                 "--format text|json",
@@ -63,12 +71,24 @@ const HELP: Help = Help {
                 "--show-reasoning",
                 "Render <think> blocks inline instead of a collapsed handle.",
             ),
+            (
+                "--naked",
+                "Raw model: retrieval, router, grounding gate, tools and atlas all bypassed.",
+            ),
             ("--help, -h", "Show this message."),
         ]),
+        HelpSection::Examples(&[(
+            "svrn chat ask --corpus sep \"what is compatibilism?\"",
+            "Answer from the `sep` corpus only.",
+        )]),
         HelpSection::Notes(
             "The question is taken from the first non-flag positional argument. \
              Wrap it in quotes. Prints a `▶ reasoning ...` line after the answer \
-             summarizing how much was hidden (override with `--show-reasoning`).",
+             summarizing how much was hidden (override with `--show-reasoning`).\n\n\
+             The turn runs ON THE DAEMON (--daemon, default http://localhost:9741), not in \
+             this process: `--data-dir` does not scope it (use --corpus), and \
+             SOVEREIGN_GATE_* knobs must be exported where the daemon is launched, not \
+             in this shell. Both are reported on stderr when they apply.",
         ),
     ],
 };
@@ -86,79 +106,50 @@ pub async fn cmd_ask(args: &[String]) -> i32 {
             return 2;
         }
     };
-
-    let mut question: Option<String> = None;
-    let mut conversation_id: Option<String> = None;
-    let mut format = OutputFormat::Text;
-    let mut show_reasoning = false;
-    let mut naked_mode = false;
-
-    let mut i = 0;
-    while i < rest.len() {
-        match rest[i].as_str() {
-            "--conversation" => {
-                i += 1;
-                conversation_id = rest.get(i).cloned();
-            }
-            "--format" => {
-                i += 1;
-                match rest.get(i).map(String::as_str) {
-                    Some("text") => format = OutputFormat::Text,
-                    Some("json") => format = OutputFormat::Json,
-                    Some(other) => {
-                        eprintln!("error: --format expects text|json, got `{other}`");
-                        return 2;
-                    }
-                    None => {
-                        eprintln!("error: --format needs a value");
-                        return 2;
-                    }
-                }
-            }
-            "--show-reasoning" => {
-                show_reasoning = true;
-            }
-            // Raw model ("naked") — bypass every Sovereign affordance
-            // (retrieval, router, grounding gate, tools, atlas); mirrors
-            // the desktop "Raw model" setting via handle_message_stream_naked.
-            "--naked" => {
-                naked_mode = true;
-            }
-            arg if question.is_none() => {
-                question = Some(arg.to_string());
-            }
-            extra => {
-                eprintln!("error: unexpected argument `{extra}`");
-                return 2;
-            }
+    let parsed = match parse_ask_args(&rest) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 2;
         }
-        i += 1;
-    }
-
-    let Some(question) = question else {
+    };
+    let Some(question) = parsed.question else {
         eprintln!("error: missing question. Usage: svrn chat ask \"<question>\"");
         return 2;
     };
+
+    // Before anything reaches the daemon: what this shell set that the
+    // daemon will not see (gate knobs, --data-dir). Stderr only.
+    print_daemon_served_turn_notes(&globals);
 
     let client = TurnClient::new(&globals.daemon_base);
 
     // A caller-supplied id is reused as-is; otherwise the DAEMON mints one,
     // because minting it here and hoping the host agrees is how an id and the
     // row it names come into existence separately. `POST /v1/conversations`
-    // seeds the row and returns the id it seeded.
-    let conversation_id = match conversation_id {
+    // seeds the row — and the corpus allow-list, validated against what the
+    // daemon has installed — and returns the id it seeded.
+    let conversation_id = match parsed.conversation_id {
         Some(id) => id,
-        None => match client.create_conversation(None).await {
-            Ok(c) => c.id,
-            Err(e) => {
-                eprintln!("could not start a conversation on the daemon: {e}");
-                eprintln!("hint: is the daemon running? `svrn daemon start`");
-                return 1;
+        None => {
+            let allow = (!parsed.corpora.is_empty()).then_some(parsed.corpora.as_slice());
+            match client.create_conversation(None, allow).await {
+                Ok(c) => c.id,
+                Err(e) => {
+                    eprintln!("could not start a conversation on the daemon: {e}");
+                    if parsed.corpora.is_empty() {
+                        eprintln!("hint: is the daemon running? `svrn daemon start`");
+                    }
+                    return 1;
+                }
             }
-        },
+        }
     };
+    if !parsed.corpora.is_empty() {
+        eprintln!("corpora: {}", parsed.corpora.join(", "));
+    }
 
-    let mode = if naked_mode {
+    let mode = if parsed.naked {
         TurnMode::Naked
     } else {
         TurnMode::Grounded
@@ -167,15 +158,97 @@ pub async fn cmd_ask(args: &[String]) -> i32 {
         &client,
         &question,
         &conversation_id,
-        format,
-        show_reasoning,
+        parsed.format,
+        parsed.show_reasoning,
         mode,
     )
     .await
 }
 
-#[derive(Copy, Clone, Debug)]
+/// What `svrn chat ask` was asked to do, after the shared globals were
+/// taken out of argv. Separated from `cmd_ask` so every flag has a failing
+/// input a test can name without a daemon.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct AskArgs {
+    question: Option<String>,
+    conversation_id: Option<String>,
+    format: OutputFormat,
+    show_reasoning: bool,
+    naked: bool,
+    /// `--corpus`, repeated, in the order given. Empty means "every
+    /// installed corpus" and is NOT sent on the wire.
+    corpora: Vec<String>,
+}
+
+fn parse_ask_args(rest: &[String]) -> Result<AskArgs, String> {
+    let mut parsed = AskArgs::default();
+    let mut i = 0;
+    while i < rest.len() {
+        match rest[i].as_str() {
+            "--conversation" => {
+                i += 1;
+                parsed.conversation_id = Some(
+                    rest.get(i)
+                        .cloned()
+                        .ok_or_else(|| "--conversation needs a value".to_string())?,
+                );
+            }
+            "--corpus" => {
+                i += 1;
+                parsed.corpora.push(parse_corpus_flag_value(rest.get(i))?);
+            }
+            "--format" => {
+                i += 1;
+                parsed.format = match rest.get(i).map(String::as_str) {
+                    Some("text") => OutputFormat::Text,
+                    Some("json") => OutputFormat::Json,
+                    Some(other) => {
+                        return Err(format!("--format expects text|json, got `{other}`"));
+                    }
+                    None => return Err("--format needs a value".to_string()),
+                };
+            }
+            "--show-reasoning" => {
+                parsed.show_reasoning = true;
+            }
+            // Raw model ("naked") — bypass every Sovereign affordance
+            // (retrieval, router, grounding gate, tools, atlas); mirrors
+            // the desktop "Raw model" setting via handle_message_stream_naked.
+            "--naked" => {
+                parsed.naked = true;
+            }
+            arg if parsed.question.is_none() => {
+                parsed.question = Some(arg.to_string());
+            }
+            extra => return Err(format!("unexpected argument `{extra}`")),
+        }
+        i += 1;
+    }
+    if !parsed.corpora.is_empty() && parsed.conversation_id.is_some() {
+        return Err(CORPUS_WITH_CONVERSATION.to_string());
+    }
+    Ok(parsed)
+}
+
+/// One `--corpus` value, shared with `chat session`: present and non-blank,
+/// or an error that names the flag.
+pub(crate) fn parse_corpus_flag_value(value: Option<&String>) -> Result<String, String> {
+    match value.map(|v| v.trim()) {
+        Some(v) if !v.is_empty() && !v.starts_with('-') => Ok(v.to_string()),
+        _ => Err("--corpus needs a corpus id (repeat the flag for several)".to_string()),
+    }
+}
+
+/// Refused rather than silently dropping the allow-list: `--conversation`
+/// reuses a row whose `enabled_corpora` is already what it is, and a
+/// `--corpus` that changed nothing would read as having applied (§18.3).
+pub(crate) const CORPUS_WITH_CONVERSATION: &str =
+    "--corpus applies when the daemon mints the conversation; \
+     --conversation reuses one whose corpus allow-list is already set. Drop one of them.";
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 enum OutputFormat {
+    #[default]
     Text,
     Json,
 }
@@ -352,3 +425,68 @@ fn citation_json(c: &Citation) -> serde_json::Value {
 }
 
 const BAR: &str = "─────────────────────────────────────────────────────────────";
+
+#[cfg(test)]
+mod arg_tests {
+    use super::*;
+
+    fn svec(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn corpus_repeats_in_order_and_the_question_survives() {
+        let p = parse_ask_args(&svec(&[
+            "--corpus",
+            "sep",
+            "what is compatibilism?",
+            "--corpus",
+            "gutenberg",
+        ]))
+        .unwrap();
+        assert_eq!(p.corpora, vec!["sep", "gutenberg"]);
+        assert_eq!(p.question.as_deref(), Some("what is compatibilism?"));
+        assert!(p.conversation_id.is_none());
+    }
+
+    #[test]
+    fn no_corpus_flag_means_an_empty_list_not_a_default() {
+        let p = parse_ask_args(&svec(&["hi"])).unwrap();
+        assert!(p.corpora.is_empty());
+    }
+
+    /// The failing inputs: a bare flag, and a flag that swallowed the next
+    /// flag as its value.
+    #[test]
+    fn a_corpus_flag_without_an_id_is_refused() {
+        let err = parse_ask_args(&svec(&["hi", "--corpus"])).unwrap_err();
+        assert!(err.contains("--corpus needs a corpus id"), "{err}");
+        let err = parse_ask_args(&svec(&["--corpus", "--naked", "hi"])).unwrap_err();
+        assert!(err.contains("--corpus needs a corpus id"), "{err}");
+    }
+
+    #[test]
+    fn corpus_with_conversation_is_refused_not_ignored() {
+        let err =
+            parse_ask_args(&svec(&["--conversation", "c1", "--corpus", "sep", "hi"])).unwrap_err();
+        assert_eq!(err, CORPUS_WITH_CONVERSATION);
+    }
+
+    #[test]
+    fn the_other_flags_still_parse() {
+        let p = parse_ask_args(&svec(&[
+            "--format",
+            "json",
+            "--show-reasoning",
+            "--naked",
+            "--conversation",
+            "c1",
+            "q",
+        ]))
+        .unwrap();
+        assert_eq!(p.format, OutputFormat::Json);
+        assert!(p.show_reasoning && p.naked);
+        assert_eq!(p.conversation_id.as_deref(), Some("c1"));
+        assert_eq!(p.question.as_deref(), Some("q"));
+    }
+}

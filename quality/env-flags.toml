@@ -119,9 +119,9 @@ purpose = "Manifest versions a corpus may retain before the maintenance sweep re
 [[flag]]
 name = "SOVEREIGN_GATE_CLAIM_SEARCH_LADDER"
 cluster = "grounding"
-default = "on"
-status = "shipped"
-purpose = "Two-stage claim audit: batched triage against the prompt window FIRST (claims_support_batched, triage only — the released verdict stays the calibrated per-claim forced-choice), per-claim corpus fan-out only for claims the window fails. DEFAULT ON since 2026-08-14 (order audit-economy D6, the registered flip bar met non-vacuously on the 21-turn shadow arm: lost_rescue 0/160 with 8 REAL rescues present in the bank and the skip set disjoint from all of them; newly_failed 0/160; 96/160 searches skippable, ~-3.5s/turn at healthy search prices). =0 (also false/off) opts out and restores search-every-claim. Flip record + reversal condition: sovereign/DEFAULTS_LEDGER.md."
+default = "unset"
+status = "deprecated"
+purpose = "RETIRED 2026-09-02 (issue #57); no longer read. It gated a batched model-call triage that decided which claims got a corpus search. The triage measured 185 s on the reporter's box against 518 ms of searching, and two attempts to price it per turn each reproduced that inversion. The per-claim fan-out is now concurrent under one derived, process-wide permit (claim_search_permits) instead, with no model in the loop. Setting this has no effect. Record: sovereign/DEFAULTS_LEDGER.md."
 
 [[flag]]
 name = "SOVEREIGN_GATE_BATCH_VERIFY"
@@ -135,7 +135,7 @@ name = "SOVEREIGN_GATE_BATCH_MIN_CLAIMS"
 cluster = "grounding"
 default = "6"
 status = "experiment"
-purpose = "Minimum extracted-claim count for the batched support pre-pass (SOVEREIGN_GATE_BATCH_VERIFY, and the ladder's triage read) to fire; below it the per-claim path runs unchanged. The single batched prefill only amortises when it replaces enough per-claim calls — measured break-even ~6 claims (audit#1 median is exactly 6, range 3-12)."
+purpose = "Minimum extracted-claim count for the batched support pre-pass (SOVEREIGN_GATE_BATCH_VERIFY / SOVEREIGN_GATE_BATCH_SHADOW) to fire; below it the per-claim path runs unchanged. The single batched prefill only amortises when it replaces enough per-claim calls — measured break-even ~6 claims (audit#1 median is exactly 6, range 3-12)."
 
 [[flag]]
 name = "SOVEREIGN_GATE_CLAIM_SEARCH_SHADOW"
@@ -250,6 +250,20 @@ cluster = "retrieval"
 default = "on"
 status = "shipped"
 purpose = "Atlas graph-walk grounding: cosine seeds → BFS over typed edges → FTS-fetch evidence chunks. =0/false/off/no disables."
+
+[[flag]]
+name = "SOVEREIGN_ATLAS_EMBED_ATTRIBUTES"
+cluster = "retrieval"
+default = "off"
+status = "experiment"
+purpose = "Append a declared atom's `attributes` to its embed text (`attr: metal=silver; …`) so attribute questions have something to match. Atoms with no attributes render identically, so an undeclared corpus is unaffected. Flip conditions: sovereign/DEFAULTS_LEDGER.md."
+
+[[flag]]
+name = "SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS"
+cluster = "retrieval"
+default = "off"
+status = "experiment"
+purpose = "Admit Claim atoms whose `claim_kind` names a DECLARED claim type into the atlas embedding bag. Narrower than SOVEREIGN_ATLAS_INCLUDE_CLAIMS; inert for a corpus that declares nothing. Flip conditions: sovereign/DEFAULTS_LEDGER.md."
 
 [[flag]]
 name = "SOVEREIGN_DEMAND_PLAN"
@@ -1285,6 +1299,12 @@ default = "sovereign-vulkan"
 status = "guard"
 purpose = "The toolbox container scripts/lib/release-host.sh runs native build legs inside. The default matches the container this repo's native deps (cmake, clang, vulkan) are installed in; the knob exists because the container name is a property of the HOST, not of the release. Resolution is guarded, not assumed: the driver uses `toolbox run -c $SOVEREIGN_TOOLBOX` only when the `toolbox` binary exists AND `toolbox list --containers` actually names it, so a missing or renamed container degrades loudly instead of producing a leg that silently built on the host."
 
+[[flag]]
+name = "SOVEREIGN_NO_COMMIT_SMELLS"
+cluster = "dev-gates"
+default = "off"
+status = "guard"
+purpose = """Set to 1 to silence .claude/hooks/commit-smells.py, the PreToolUse hook that runs the model-free ARCH §15 smell gate (scripts/co-arch.py over quality/arch-probes.toml) on what a `git commit` would record and blocks the agent once per site per session. A kill-switch for a false-positive storm or a fixture-heavy commit; the nightly co-arch audit still judges the commit afterwards, so nothing is lost by opting out, only the in-session placement of the principle next to the diff."""
 [[flag]]
 name = "SOVEREIGN_FAST_SHORT_QUEUE_CAP"
 cluster = "inference"

@@ -99,7 +99,10 @@ pub(crate) fn assemble_epistemic_state(inputs: EpistemicInputs<'_>) -> Epistemic
     // (glassbox), not in holdings.
     if !abstained {
         for c in inputs.gate_claims.unwrap_or_default() {
-            let verification = if fail_open {
+            // A per-claim `unjudged` outranks the gate's action string: a
+            // claim nobody judged is FailOpen even on a `released` turn
+            // (issue #57 — eight shed judges rendered as eight Verified).
+            let verification = if fail_open || c.unjudged {
                 Verification::FailOpen
             } else if c.supported {
                 Verification::Verified
@@ -792,6 +795,7 @@ mod tests {
         assert!(corpus_in_probe_scope("wikipedia", Some(&[])));
     }
 
+    /// covers: GR-47
     #[test]
     fn tool_derived_verdicts() {
         // Tool-only → Mixed (never overclaims Grounded; the figures are
@@ -846,6 +850,106 @@ mod tests {
         assert_eq!(state.verdict, TurnVerdict::CannotKnowFromHere);
     }
 
+    /// covers: GR-46
+    ///
+    /// The three halves of the ledger are assembled in ONE pass and must agree
+    /// with each other. Every other test here exercises a single slice —
+    /// verdict truth table, holdings-only, gaps-only — so the failure this one
+    /// catches is invisible to all of them: a change that populates `gaps`
+    /// correctly while leaving `holdings` stale, or a verdict that disagrees
+    /// with the holdings it is derived from.
+    #[test]
+    fn one_assembly_returns_holdings_verdict_and_gaps_that_agree_with_each_other() {
+        let meta = serde_json::json!({"action": "released", "retried": false});
+        let claims = vec![GateClaim {
+            text: "The ferry leaves Ardrossan at 07:00".into(),
+            supported: true,
+            failed_once: false,
+            unjudged: false,
+            violation_prob: Some(0.02),
+            address: None,
+        }];
+        // Two demands: one the answer actually covered, one nothing in the
+        // pool reached. The gap row names the second by index.
+        let demands = vec![
+            Demand {
+                facet: DemandFacet::Query,
+                text: "when does the ferry leave Ardrossan".into(),
+                covered: CoverageLevel::Supported,
+            },
+            Demand {
+                facet: DemandFacet::Entity,
+                text: "Brodick pier reconstruction".into(),
+                covered: CoverageLevel::Absent,
+            },
+        ];
+        let gaps = vec![Gap {
+            demand_idx: 1,
+            statement: "no installed corpus covers the Brodick pier works".into(),
+            coverage: GapCoverage::TopicUncovered,
+            routes: Vec::new(),
+        }];
+
+        let state = assemble_epistemic_state(EpistemicInputs {
+            gate_meta: Some(&meta),
+            gate_claims: Some(&claims),
+            pool_corpora: vec!["arran-ferries".into()],
+            demands,
+            gaps,
+            ..Default::default()
+        });
+
+        // 1. All three are populated by the SAME call. A ledger carrying gaps
+        //    but no holdings (or the reverse) is the stale-half failure.
+        assert_eq!(
+            state.holdings.len(),
+            1,
+            "the audited claim must reach holdings in the same pass that carries the gaps"
+        );
+        assert_eq!(state.demands.len(), 2);
+        assert_eq!(state.gaps.len(), 1);
+
+        // 2. The verdict agrees with the holdings it derives from: one
+        //    corpus holding, verified, single-corpus pool.
+        assert_eq!(state.holdings[0].verification, Verification::Verified);
+        assert!(matches!(
+            state.holdings[0].provenance,
+            Provenance::Corpus { .. }
+        ));
+        assert_eq!(
+            state.verdict,
+            derive_verdict(&state.holdings, false, false, true, false),
+            "the verdict must be the derivation over the holdings actually shipped, not a stale one"
+        );
+        assert_eq!(state.verdict, TurnVerdict::Grounded);
+
+        // 3. Every gap resolves to a real demand, and that demand is not one
+        //    the same assembly called covered. A gap pointing at a Supported
+        //    demand is the two halves disagreeing.
+        for gap in &state.gaps {
+            let demand = state
+                .demands
+                .get(gap.demand_idx)
+                .expect("every gap must index a demand in the same ledger");
+            assert_ne!(
+                demand.covered,
+                CoverageLevel::Supported,
+                "gap {:?} points at a demand this same assembly reported covered",
+                gap.statement
+            );
+        }
+
+        // 4. And the converse: nothing marked covered acquires a gap row.
+        for (i, demand) in state.demands.iter().enumerate() {
+            if demand.covered == CoverageLevel::Supported {
+                assert!(
+                    !state.gaps.iter().any(|g| g.demand_idx == i),
+                    "covered demand {i} must not also be reported as a gap"
+                );
+            }
+        }
+    }
+
     #[test]
     fn abstained_turn_asserts_nothing() {
         let meta = serde_json::json!({"action": "abstained", "retried": true});
@@ -853,6 +957,7 @@ mod tests {
             text: "Heat's first name is Vernon".into(),
             supported: false,
             failed_once: true,
+            unjudged: false,
             violation_prob: Some(0.97),
             address: None,
         }];
@@ -864,6 +969,52 @@ mod tests {
         });
         assert!(state.holdings.is_empty());
         assert_eq!(state.verdict, TurnVerdict::CannotKnowFromHere);
+    }
+
+    /// Issue #57: eight per-claim judges were shed by the admission queue,
+    /// the gate exited `released`, and every holding rendered Verified. The
+    /// per-claim record now carries `unjudged`, and it wins over the gate's
+    /// action string: a claim nobody judged is FailOpen even on a `released`
+    /// turn, and such a turn is never `Grounded`.
+    #[test]
+    fn an_unjudged_claim_is_fail_open_even_when_the_gate_action_is_released() {
+        let meta = serde_json::json!({"action": "released", "retried": false});
+        let claims = vec![
+            GateClaim {
+                text: "The shop is on Harbour Row".into(),
+                supported: true,
+                failed_once: false,
+                unjudged: false,
+                violation_prob: Some(0.1),
+                address: None,
+            },
+            GateClaim {
+                text: "The shop opens at dawn".into(),
+                supported: false,
+                failed_once: false,
+                unjudged: true,
+                violation_prob: None,
+                address: None,
+            },
+        ];
+        let state = assemble_epistemic_state(EpistemicInputs {
+            gate_meta: Some(&meta),
+            gate_claims: Some(&claims),
+            pool_corpora: vec!["shop".into()],
+            ..Default::default()
+        });
+        assert_eq!(state.holdings.len(), 2);
+        assert_eq!(state.holdings[0].verification, Verification::Verified);
+        assert_eq!(
+            state.holdings[1].verification,
+            Verification::FailOpen,
+            "a claim the judge never reached must not read as verified"
+        );
+        assert_ne!(
+            state.verdict,
+            TurnVerdict::Grounded,
+            "one unjudged holding is enough to withhold Grounded"
+        );
     }
 
     /// The released passages reach the ledger as structured rows a reading
@@ -950,6 +1101,7 @@ mod tests {
             text: "The knife was a carving knife".into(),
             supported: true,
             failed_once: false,
+            unjudged: false,
             violation_prob: Some(0.02),
             address: None,
         }];
@@ -975,6 +1127,7 @@ mod tests {
             text: "x".into(),
             supported: true,
             failed_once: false,
+            unjudged: false,
             violation_prob: None,
             address: None,
         }];
@@ -1156,6 +1309,7 @@ mod tests {
             text: "supported claim".into(),
             supported: true,
             failed_once: false,
+            unjudged: false,
             violation_prob: None,
             address: None,
         }];

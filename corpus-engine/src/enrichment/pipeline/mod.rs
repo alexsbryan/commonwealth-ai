@@ -28,6 +28,7 @@
 pub mod assemble;
 pub mod atlas;
 pub mod atlas_clustering;
+pub mod atlas_extensions;
 pub mod atom_normalizer;
 pub mod chapter_manifest;
 pub mod exemplar_bank;

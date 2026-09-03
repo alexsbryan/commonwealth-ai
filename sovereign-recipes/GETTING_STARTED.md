@@ -56,6 +56,14 @@ first hit:
 3. The published catalog (`registry.toml` → each entry's `toml_url`).
 4. The copy bundled into the binary at build time (offline fallback).
 
+`svrn corpus install <path-to-recipe.toml>` writes into slot 1 for you: it
+reads the `[corpus] id`, copies the file to `~/.svrnmesh/recipes/<id>/`, and
+installs that id — printing both, so you can see where it landed. That is the
+form `svrn recipe new --out my-corpus.toml` leads into, and it saves the
+`mkdir`/`cp` below. A relative `[acquire] path` is resolved against the
+recipe's own directory at that point, so a recipe and its source file can sit
+in one folder and travel together.
+
 ---
 
 ## 2. Author the recipe
@@ -149,7 +157,8 @@ choices produce sensible text. Iterate here until the chunks look right.
 ## 5. Build the full corpus
 
 ```bash
-svrn corpus install my-corpus
+svrn corpus install my-corpus              # by id, once it is in ~/.svrnmesh/recipes/
+svrn corpus install ./my-corpus.toml       # or by path — registers it, then installs
 ```
 
 Runs the whole pipeline and embeds + indexes every chunk (daemon must be

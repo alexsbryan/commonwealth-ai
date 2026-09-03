@@ -21,7 +21,9 @@
   // `custom_atlas` recipes has no in-process daemon endpoint yet — follow-up.
   import { onMount } from "svelte";
   import Card from "./Card.svelte";
+  import BuildReportCard from "./BuildReportCard.svelte";
   import StarterChips from "../StarterChips.svelte";
+
   import {
     installCorpus,
     enrichmentStatus,
@@ -238,6 +240,12 @@
         <span class="pill ok">done</span>
         <span class="muted">{detail || "corpus built + enriched"}</span>
       </div>
+      <!-- What the build made of the author's declared nouns. Renders
+           nothing at all for a corpus that declares none, which is the
+           common case — same shape as `loadStarters` above, where a
+           missing atlas is silence, not an error. -->
+      <BuildReportCard corpusId={recipeId} />
+
       <!-- Land-in-use handoff: the corpus is built + installed, so a
            question mined from its atlas grounds in it the moment chat
            retrieves. Chips seed + navigate; "Open in chat" just

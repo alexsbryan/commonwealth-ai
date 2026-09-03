@@ -59,6 +59,11 @@ members = [
     # 2026-08-20 (noun-convergence rung nc-16-shared-capability) after the
     # schema was found implemented three times because it lived in a binary.
     "sovereign/crates/sovereign-enrichment-catalog",
+    # The atlas `enrich build` orchestrator + its phase drivers. Minted
+    # 2026-09-01 (ontology-v1 P0.5) so the daemon and the desktop reach the
+    # orchestrator without linking `sovereign-cli-llm` — and with it
+    # `bench_cmd`'s grandfathered `sovereign-eval` edge — as a library.
+    "sovereign/crates/sovereign-enrichment-build",
     # THE recipe that commissions a `Runtime` — the router stack, the turn
     # tool registry and the enrichment lane, below every host. Minted
     # 2026-08-25 (TOPOLOGY.md §10 phase 5c) after the same recipe was found
@@ -217,6 +222,7 @@ sovereign-time = { path = "sovereign/crates/sovereign-time" }
 sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
 sovereign-gliner = { path = "sovereign/crates/sovereign-gliner" }
 sovereign-enrichment-catalog = { path = "sovereign/crates/sovereign-enrichment-catalog" }
+sovereign-enrichment-build = { path = "sovereign/crates/sovereign-enrichment-build" }
 sovereign-runtime-recipe = { path = "sovereign/crates/sovereign-runtime-recipe" }
 sovereign-turn-client = { path = "sovereign/crates/sovereign-turn-client" }
 sovereign-tools-base = { path = "studio/crates/sovereign-tools-base" }

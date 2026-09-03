@@ -8,6 +8,7 @@ use commonwealth_core::capabilities::ProcessKind;
 use commonwealth_core::ids::{ModelId, ProcessId};
 use commonwealth_core::Error;
 
+use super::departure::{DepartureState, GracefulDeparture, DEFAULT_COUNTDOWN};
 use super::health::{HealthCheckConfig, HealthStatus, HealthTracker};
 use super::process::{ManagedProcess, ProcessState, SpawnConfig};
 
@@ -33,6 +34,14 @@ pub enum OrchestratorEvent {
         old_status: HealthStatus,
         new_status: HealthStatus,
     },
+    /// This node advanced one step through its graceful departure. Emitted
+    /// once per transition so the whole sequence is observable from outside —
+    /// a departure that skipped a state would otherwise look identical to one
+    /// that ran it, since both end with the processes gone.
+    DepartureAdvanced {
+        node_id: commonwealth_core::NodeId,
+        state: DepartureState,
+    },
 }
 
 /// Manages the lifecycle of inference processes on this node.
@@ -50,6 +59,14 @@ pub struct Orchestrator {
     spawn_config: SpawnConfig,
     health_config: HealthCheckConfig,
     events: Vec<OrchestratorEvent>,
+    /// The departure in progress, if this node is leaving.
+    ///
+    /// `Some` from the moment a departure is announced until its processes
+    /// are stopped. Its presence is load-bearing, not decorative:
+    /// `apply_shard_plan` refuses while it is set, so the scheduler cannot
+    /// place new work on a node that is on its way out — which is the whole
+    /// point of announcing before stopping.
+    departure: Option<GracefulDeparture>,
 }
 
 impl Orchestrator {
@@ -62,6 +79,7 @@ impl Orchestrator {
             spawn_config,
             health_config,
             events: Vec::new(),
+            departure: None,
         }
     }
 
@@ -75,6 +93,17 @@ impl Orchestrator {
         plan: &ShardPlan,
         model_path: &str,
     ) -> Result<(), Error> {
+        // A departing node takes no new work. This is what the Announced →
+        // Rebalancing states MEAN: the scheduler is moving plans off this
+        // node, and accepting one back mid-countdown would put a shard on a
+        // process that is about to be stopped.
+        if let Some(dep) = &self.departure {
+            return Err(Error::Orchestrator(format!(
+                "node is departing ({:?}) — refusing to place {} ",
+                dep.state(),
+                plan.model
+            )));
+        }
         // Check if we already have processes for this model.
         if self.model_processes.contains_key(&plan.model) {
             // Model already loaded — skip.
@@ -158,7 +187,16 @@ impl Orchestrator {
         Ok(())
     }
 
-    /// Stop all managed processes (graceful departure).
+    /// Stop all managed processes IMMEDIATELY.
+    ///
+    /// This is the abrupt path — every process is terminated as fast as its
+    /// own stop window allows, with no announcement and no drain. Correct for
+    /// a host shutting down; wrong for a node leaving a mesh that is still
+    /// serving, which is what [`Self::depart_gracefully`] is for.
+    ///
+    /// Its doc comment used to say "(graceful departure)" while doing exactly
+    /// this, which is how `GracefulDeparture` came to exist, be unit-tested,
+    /// and never be constructed by anything.
     pub async fn stop_all(&mut self) -> Result<(), Error> {
         let proc_ids: Vec<ProcessId> = self.processes.keys().copied().collect();
 
@@ -177,6 +215,133 @@ impl Orchestrator {
 
         info!("all processes stopped");
         Ok(())
+    }
+
+    /// Leave the mesh without dropping anyone's request: announce, let the
+    /// scheduler rebalance, drain what is in flight, then stop.
+    ///
+    /// Walks [`GracefulDeparture`] through `Announced → Rebalancing →
+    /// Draining → Complete`, emitting a [`OrchestratorEvent::DepartureAdvanced`]
+    /// at each step, and only then calls [`Self::stop_all`]. The countdown is
+    /// the total budget for the whole sequence; `Draining` holds whatever is
+    /// left of it, because that is the state during which in-flight requests
+    /// on the old plan are still being served.
+    ///
+    /// From the announcement onward the node takes no new work — see the
+    /// `departure` field. That is the difference between a state machine and
+    /// a log line: `apply_shard_plan` fails while this runs.
+    ///
+    /// Returns the state sequence actually observed, so a caller (and a test)
+    /// can assert the departure ran rather than inferring it from the
+    /// processes being gone — which an abrupt kill also produces.
+    pub async fn depart_gracefully(
+        &mut self,
+        node_id: commonwealth_core::NodeId,
+        countdown: std::time::Duration,
+    ) -> Result<Vec<DepartureState>, Error> {
+        let announced = self.announce_departure(node_id, countdown)?;
+        let rest = self.complete_departure().await?;
+        Ok(std::iter::once(announced).chain(rest).collect())
+    }
+
+    /// Announce a departure WITHOUT draining or stopping.
+    ///
+    /// Split from [`Self::depart_gracefully`] because the announcement is the
+    /// half with an immediate effect — from here the node takes no new shard
+    /// plans — while the drain is a wait. A caller that wants to tell the mesh
+    /// now and stop on its own schedule uses this pair; one that just wants to
+    /// leave calls `depart_gracefully`.
+    ///
+    /// Returns the state entered ([`DepartureState::Announced`]).
+    pub fn announce_departure(
+        &mut self,
+        node_id: commonwealth_core::NodeId,
+        countdown: std::time::Duration,
+    ) -> Result<DepartureState, Error> {
+        if self.departure.is_some() {
+            return Err(Error::Orchestrator(
+                "a graceful departure is already in progress".into(),
+            ));
+        }
+        // ONE departure, held on `self`, so the clock the countdown reads and
+        // the state peers observe are the same object. Set BEFORE any wait:
+        // from here on `apply_shard_plan` refuses, which is what makes
+        // "announced" mean something to the rest of the system.
+        self.departure = Some(GracefulDeparture::with_countdown(node_id, countdown));
+        self.events.push(OrchestratorEvent::DepartureAdvanced {
+            node_id,
+            state: DepartureState::Announced,
+        });
+        info!(%node_id, ?countdown, "graceful departure announced");
+        Ok(DepartureState::Announced)
+    }
+
+    /// Finish an announced departure: rebalance, drain what is left of the
+    /// countdown, then stop every process.
+    ///
+    /// Returns the states entered AFTER the announcement, so the caller can
+    /// assert the departure ran rather than inferring it from the processes
+    /// being gone — which an abrupt kill also produces.
+    pub async fn complete_departure(&mut self) -> Result<Vec<DepartureState>, Error> {
+        let node_id = match &self.departure {
+            Some(d) => d.node_id,
+            None => {
+                return Err(Error::Orchestrator(
+                    "no departure has been announced".into(),
+                ))
+            }
+        };
+        let mut observed = Vec::new();
+
+        loop {
+            let (state, remaining) = {
+                let dep = self
+                    .departure
+                    .as_mut()
+                    .expect("the departure was just installed");
+                (dep.advance(), dep.remaining())
+            };
+            observed.push(state);
+            self.events
+                .push(OrchestratorEvent::DepartureAdvanced { node_id, state });
+            match state {
+                // In-flight requests on the old plan are still being served.
+                // This is the only point in the sequence where waiting buys
+                // anything, so the whole remaining budget is spent here.
+                DepartureState::Draining if !remaining.is_zero() => {
+                    tokio::time::sleep(remaining).await;
+                }
+                DepartureState::Complete => break,
+                _ => {}
+            }
+        }
+
+        let ready = self
+            .departure
+            .as_ref()
+            .is_some_and(|d| d.is_ready_to_stop());
+        if !ready {
+            self.departure = None;
+            return Err(Error::Orchestrator(
+                "departure reached its last state without being ready to stop".into(),
+            ));
+        }
+
+        let result = self.stop_all().await;
+        self.departure = None;
+        info!(%node_id, "graceful departure complete — processes stopped");
+        result.map(|()| observed)
+    }
+
+    /// Whether a graceful departure is in progress. While true this node
+    /// accepts no new shard plans.
+    pub fn is_departing(&self) -> bool {
+        self.departure.is_some()
+    }
+
+    /// The departure's current state, if one is in progress.
+    pub fn departure_state(&self) -> Option<DepartureState> {
+        self.departure.as_ref().map(|d| d.state())
     }
 
     /// Run a single health check cycle across all managed processes.
@@ -321,19 +486,23 @@ impl Orchestrator {
                 )
             })
         {
-            // Node is standby-only — stop all inference processes.
-            info!("Node assigned Standby — stopping all inference processes");
+            // Node is standby-only — this is a DEPARTURE, not a shutdown: the
+            // mesh is still serving and the scheduler is moving our plans
+            // elsewhere. Announce and drain rather than killing mid-request,
+            // which is what this call did until 2026-09-02.
+            info!("Node assigned Standby — departing gracefully");
             // `apply_mesh_plan` is best-effort by design (per the
             // docstring above): individual process failures are
             // logged, never propagated. Surface the error at `warn`
-            // so the operator can grep `orchestrator: stop_all` for
+            // so the operator can grep `orchestrator: depart` for
             // a stuck process — silently dropping the Result was
             // hiding genuine "process refused to stop" cases from
             // logs.
-            if let Err(e) = self.stop_all().await {
+            if let Err(e) = self.depart_gracefully(my_node_id, DEFAULT_COUNTDOWN).await
+            {
                 warn!(
                     error = %e,
-                    "orchestrator: stop_all returned error during standby transition"
+                    "orchestrator: graceful departure returned error during standby transition"
                 );
             }
         }

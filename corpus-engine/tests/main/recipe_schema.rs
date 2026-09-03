@@ -26,6 +26,8 @@ use syn::{Attribute, Fields, Item};
 /// Source files parsed for recipe-facing config types, in render order.
 const SOURCES: &[&str] = &[
     "src/recipe.rs",
+    "src/recipe_ontology.rs",
+    "src/enrichment/ontology/language.rs",
     "src/filters/mod.rs",
     "src/filters/boilerplate.rs",
     "src/filters/knowledge_density.rs",
@@ -37,7 +39,9 @@ const SKIP_TYPES: &[&str] = &["ResolvedParameters", "ParameterValue"];
 
 const HEADER: &str = "# Recipe schema reference\n\
 \n\
-> **Generated** from `corpus-engine/src/recipe.rs` (+ the filter config types) by\n\
+> **Generated** from `corpus-engine/src/recipe.rs` (+ `recipe_ontology.rs`, the\n\
+> ontology declaration languages in `enrichment/ontology/language.rs`, and the\n\
+> filter config types) by\n\
 > the `recipe_schema` test. Do not edit by hand — regenerate with\n\
 > `UPDATE_RECIPE_SCHEMA=1 cargo test -p corpus-engine --test main recipe_schema`.\n\
 >\n\
@@ -55,6 +59,8 @@ acquire → extract → filter → chunk → embed → index pipeline:\n\
 - `[chunk]` — documents → chunks (`ChunkerConfig`, tagged by `type`)\n\
 - `[index]` — FTS + vector index settings (`IndexConfig`)\n\
 - `[enrichment]` — optional atlas/field-model enrichment (`EnrichmentConfig`)\n\
+- `[enrichment.ontology]` — a versioned declared ontology (`OntologyBlock`; the\n\
+  per-version languages are described at the end of this file)\n\
 - `[prebuilt]`, `[update]`, `[catalog]`, `[parameters]` — optional advanced blocks\n\
 \n\
 ---\n";
@@ -81,6 +87,30 @@ fn recipe_schema_is_fresh() {
                 _ => {}
             }
         }
+    }
+
+    // One section per shipped ontology declaration language, from the
+    // registry itself: a new version's `schema_doc()` lands here without a
+    // second list to update (§10.6).
+    md.push_str("---\n\n# Ontology declaration languages\n\n");
+    md.push_str(
+        "`[enrichment.ontology] version` selects one of these. Absent means 0. The \
+         pipeline reads the policies a version parses to, never the version itself, \
+         so every shipped version keeps loading.\n\n",
+    );
+    for lang in corpus_engine::enrichment::ontology::OntologyLanguageRegistry::builtin().versions()
+    {
+        md.push_str(&format!("## `version = {}`\n\n", lang.version()));
+        md.push_str(&format!(
+            "Keys: {}\n\n",
+            lang.keys()
+                .iter()
+                .map(|k| format!("`{k}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+        md.push_str(lang.schema_doc().trim_end());
+        md.push_str("\n\n");
     }
 
     let out_path = manifest.join("../sovereign-recipes/SCHEMA.md");
@@ -222,8 +252,15 @@ fn field_rows(fields: &Fields) -> Vec<FieldRow> {
             continue;
         }
         let ident = f.ident.as_ref().map(|i| i.to_string()).unwrap_or_default();
-        let key = capture(r#"rename = "([^"]+)""#, &sd).unwrap_or(ident);
         let tystr = type_str(&f.ty);
+        // A `#[serde(flatten)]` field has no key of its own: its type's keys
+        // appear inline at this level (an enum's `type` tag + variant fields,
+        // or every remaining key for a `toml::Table`).
+        let key = if sd.contains("flatten") {
+            format!("(inline: {tystr})")
+        } else {
+            capture(r#"rename = "([^"]+)""#, &sd).unwrap_or(ident)
+        };
         let optional = tystr.starts_with("Option<");
         let has_default = sd.contains("default");
         let default = if let Some(f) = capture(r#"default = "([^"]+)""#, &sd) {
@@ -330,7 +367,7 @@ fn render_enum(e: &syn::ItemEnum) -> String {
 }
 
 /// First differing line, for a readable failure message.
-fn first_diff(a: &str, b: &str) -> String {
+pub(crate) fn first_diff(a: &str, b: &str) -> String {
     for (i, (x, y)) in a.lines().zip(b.lines()).enumerate() {
         if x != y {
             return format!(
@@ -362,26 +399,64 @@ fn first_diff(a: &str, b: &str) -> String {
 fn recipe_schema_descriptor_is_fresh() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let recipe_file = descriptor::parse(&manifest.join("src/recipe.rs"));
+    // `OntologyBlock`/`OntologyVocabulary` moved to their own module (ARCH
+    // §3.1 size ratchet); they are re-exported from `recipe`, but this gate
+    // parses SOURCE, so it reads them where they are declared.
+    let recipe_ont_file = descriptor::parse(&manifest.join("src/recipe_ontology.rs"));
     let filters_file = descriptor::parse(&manifest.join("src/filters/mod.rs"));
+    let ontology_file = descriptor::parse(&manifest.join("src/enrichment/ontology/language.rs"));
+    let registry = corpus_engine::enrichment::ontology::OntologyLanguageRegistry::builtin();
+    let versions: Vec<u32> = registry.versions().map(|l| l.version()).collect();
+    // The `[enrichment.ontology]` surface, for the recipe-author tool schema's
+    // `tool_schema_matches_recipe_ast` gate: field names of every version-1
+    // struct and the wire values of every closed enum. Alphabetical, as above.
+    let ontology = serde_json::json!({
+        "attribute":          descriptor::struct_fields(&ontology_file, "AttrDecl"),
+        "attribute_families": descriptor::variants_with_fields(&ontology_file, "AttrFamily"),
+        "attribute_family":   descriptor::variant_keys(&ontology_file, "AttrFamily"),
+        "block":              descriptor::struct_fields(&recipe_ont_file, "OntologyBlock"),
+        "change":             descriptor::struct_fields(&ontology_file, "ChangeDecl"),
+        "claim_scope":        descriptor::variant_keys(&ontology_file, "ClaimScopeDecl"),
+        "clock":              descriptor::variant_keys(&ontology_file, "Clock"),
+        "deontic":            descriptor::variant_keys(&ontology_file, "Deontic"),
+        "derive":             descriptor::struct_fields(&ontology_file, "DeriveDecl"),
+        "force":              descriptor::variant_keys(&ontology_file, "Force"),
+        "kind":               descriptor::variant_keys(&ontology_file, "TypeKind"),
+        "source":             descriptor::struct_fields(&ontology_file, "SourceDecl"),
+        "tension":            descriptor::struct_fields(&ontology_file, "TensionDecl"),
+        "type":               descriptor::struct_fields(&ontology_file, "OntologyTypeDecl"),
+        "v1":                 descriptor::struct_fields(&ontology_file, "OntologyV1"),
+        "versions":           versions,
+        "vocabulary":         descriptor::struct_fields(&recipe_ont_file, "OntologyVocabulary"),
+        "voices":             descriptor::struct_fields(&ontology_file, "VoicesDecl"),
+    });
 
-    // Keys inserted in ALPHABETICAL order on purpose. serde_json's object
-    // ordering depends on the `preserve_order` feature: a scoped `-p
-    // corpus-engine` build (no preserve_order) sorts keys via BTreeMap, while a
-    // `--workspace` build unifies in `serde_json/preserve_order` and keeps
-    // insertion order. Inserting alphabetically makes both configs emit
-    // byte-identical output, so the bless command's feature set can't skew the
-    // gate. (The array values below are Vec — insertion order always.)
+    // Keys inserted in ALPHABETICAL order by convention, so the source reads
+    // in the order the file does. It is NOT what makes the gate stable: the
+    // `canonical_json` call below is. serde_json's object ordering depends on
+    // the `preserve_order` feature — a scoped `-p corpus-engine` build (no
+    // preserve_order) sorts keys via BTreeMap, a `--workspace` build unifies
+    // it in and keeps insertion order — and alphabetical insertion only ever
+    // covered these two outer objects. The nested ones `variants_with_fields`
+    // and `variants_with_required` build are ordered by whatever the helper
+    // inserted, which is how a descriptor blessed scoped stayed red under the
+    // workspace run (2026-09-01).
     let desc = serde_json::json!({
         "acquire":    descriptor::variants_with_required(&recipe_file, "AcquirerConfig"),
         "chunk":      descriptor::variant_keys(&recipe_file, "ChunkerConfig"),
         "comparison": descriptor::variant_keys(&recipe_file, "Comparison"),
         "extract":    descriptor::variants_with_required(&recipe_file, "ExtractorConfig"),
         "filter":     descriptor::variant_keys(&filters_file, "FilterConfig"),
+        "ontology":   ontology,
         "pattern":    descriptor::variant_keys(&recipe_file, "PatternDecl"),
     });
-    // Pretty-print + a trailing newline (checked-in-file hygiene). The consumer
-    // parses with `serde_json::from_str`, which ignores trailing whitespace.
-    let generated = serde_json::to_string_pretty(&desc).unwrap() + "\n";
+    // Sorted keys at EVERY depth, pretty-printed, trailing newline (checked-in
+    // file hygiene; the consumer uses `serde_json::from_str`, which ignores
+    // trailing whitespace). One canonicaliser, shared with the prompt-snapshot
+    // gate — see `ontology_prompt_snapshots::canonical_json`.
+    let generated =
+        crate::ontology_prompt_snapshots::canonical_json(&serde_json::to_string(&desc).unwrap())
+            .expect("the descriptor is JSON");
 
     let out_dir = manifest.join("../sovereign-recipes/schema");
     let out_path = out_dir.join("recipe_schema_descriptor.json");
@@ -392,7 +467,12 @@ fn recipe_schema_descriptor_is_fresh() {
         return;
     }
 
-    let committed = std::fs::read_to_string(&out_path).unwrap_or_default();
+    // Canonicalise the committed side too, so a descriptor blessed under a
+    // different feature set is judged on content, not key order. A file that
+    // is missing or not JSON falls through as raw bytes and mismatches.
+    let committed_raw = std::fs::read_to_string(&out_path).unwrap_or_default();
+    let committed =
+        crate::ontology_prompt_snapshots::canonical_json(&committed_raw).unwrap_or(committed_raw);
     if committed != generated {
         let (cl, gl) = (committed.lines().count(), generated.lines().count());
         panic!(
@@ -427,6 +507,65 @@ mod descriptor {
                 _ => None,
             })
             .unwrap_or_else(|| panic!("enum `{name}` not found"))
+    }
+
+    fn find_struct<'a>(file: &'a syn::File, name: &str) -> &'a syn::ItemStruct {
+        file.items
+            .iter()
+            .find_map(|it| match it {
+                Item::Struct(s) if s.ident == name => Some(s),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("struct `{name}` not found"))
+    }
+
+    /// Wire names of a struct's own fields, in declaration order. A
+    /// `#[serde(flatten)]` field contributes no name of its own (its type's
+    /// keys appear inline; list that type separately), and `skip` fields are
+    /// not on the wire.
+    pub fn struct_fields(file: &syn::File, name: &str) -> Vec<String> {
+        let s = find_struct(file, name);
+        let Fields::Named(named) = &s.fields else {
+            return Vec::new();
+        };
+        named
+            .named
+            .iter()
+            .filter(|f| {
+                let (keys, _) = serde_meta(&f.attrs);
+                !keys.contains("flatten") && !keys.contains("skip")
+            })
+            .filter_map(field_wire_name)
+            .collect()
+    }
+
+    /// Wire key + every named field (+ which are required) per variant, for
+    /// enums whose variant fields are inlined next to the tag (`AttrFamily`).
+    pub fn variants_with_fields(file: &syn::File, name: &str) -> Vec<serde_json::Value> {
+        let e = find_enum(file, name);
+        let (_, kv) = serde_meta(&e.attrs);
+        let rename_all = kv.get("rename_all").map(String::as_str);
+        e.variants
+            .iter()
+            .map(|v| {
+                let (fields, required): (Vec<String>, Vec<String>) = match &v.fields {
+                    Fields::Named(n) => (
+                        n.named.iter().filter_map(field_wire_name).collect(),
+                        n.named
+                            .iter()
+                            .filter(|f| field_required(f))
+                            .filter_map(field_wire_name)
+                            .collect(),
+                    ),
+                    _ => (Vec::new(), Vec::new()),
+                };
+                serde_json::json!({
+                    "key": wire_key(v, rename_all),
+                    "fields": fields,
+                    "required": required,
+                })
+            })
+            .collect()
     }
 
     /// Just the wire-form discriminator strings of a tagged enum.

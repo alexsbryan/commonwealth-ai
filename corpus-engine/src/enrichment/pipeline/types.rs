@@ -1029,6 +1029,17 @@ pub enum PhaseFailureKind {
     UnresolvedRelationParticipant,
     UnresolvedClaimAttribution,
 
+    // Declared-ontology resolution drops (ontology v1, P3)
+    /// A relation endpoint, or an event participant, is not of the
+    /// declared type at that position.
+    EndpointTypeMismatch,
+    /// A declared claim type names a `subject` and the name the model
+    /// gave for it did not resolve to any Entity atom.
+    UnresolvedClaimSubject,
+    /// A declared `ref` attribute's value did not resolve to any Entity
+    /// atom. The attribute keeps the NAME the model wrote.
+    UnresolvedAttributeRef,
+
     // Clustering / naming
     NoClusterableItems,
     ClusterNamingFailed,
@@ -1077,6 +1088,15 @@ impl PhaseFailureKind {
             }
             Self::UnresolvedClaimAttribution => {
                 "Claim `attributed_to` didn't match any Entity. The claim keeps its content; only attribution is lost. Same fix path as UnresolvedEntityName."
+            }
+            Self::EndpointTypeMismatch => {
+                "The recipe declares this position's type (`from`/`to` on a relation, `participants` on an event) and the resolved atom is a different one. Either widen the declaration or check whether Phase 1 typed the entity correctly."
+            }
+            Self::UnresolvedClaimSubject => {
+                "Claim `subject` didn't match any Entity. The claim keeps its content and its type; only the is-about link is lost. Same fix path as UnresolvedEntityName."
+            }
+            Self::UnresolvedAttributeRef => {
+                "A `ref` attribute's value didn't match any Entity. The attribute keeps the name the model wrote, so nothing is lost — but the graph has no edge. Usually the referenced entity missed Phase 1 extraction."
             }
             Self::NoClusterableItems => {
                 "Facet had 0 sketches. Structural — not a bug. If unexpected, check whether the corpus genuinely exercises this facet (e.g. philosophical essays vs. narrative fiction)."

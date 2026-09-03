@@ -9,6 +9,8 @@
   // type, size by salience, Tension edges drawn as bold red "fault lines"
   // carrying their crux on hover.
   import { onDestroy } from "svelte";
+  import { atomTypeColor } from "./atomKinds";
+
 
   interface AtlasNode {
     id: string;
@@ -44,20 +46,8 @@
   let rafId = 0;
   let destroyed = false;
 
-  const TYPE_COLOR: Record<string, string> = {
-    Entity: "#7c9cff",
-    Claim: "#caa45a",
-    Question: "#5ec8c8",
-    ArgumentReconstruction: "#b98cff",
-    Position: "#7ed492",
-    Opposition: "#e0764a",
-    Event: "#d98ab0",
-    State: "#9aa0b5",
-    Relation: "#8a7fbd",
-    Configuration: "#c0c8d8",
-    Asset: "#6b7280",
-  };
-  const colorFor = (t: string) => TYPE_COLOR[t] ?? "#9aa0b5";
+  const colorFor = atomTypeColor;
+
 
   function svgEl(tag: string, attrs: Record<string, string | number> = {}): SVGElement {
     const n = document.createElementNS("http://www.w3.org/2000/svg", tag);

@@ -53,7 +53,7 @@
   } from "./starterQuestions";
   import BrandMark from "./BrandMark.svelte";
   import { MAX_TURN_MESSAGE_CHARS, OVERSIZE_MESSAGE_HINT } from "../types";
-  import { WordBufferedStream, completionAnnouncement } from "@sovereign/chat-ui";
+  import { WordBufferedStream, completionAnnouncer } from "@sovereign/chat-ui";
   import { chatMachine } from "../machines/chat.machine";
   import { routingStore } from "../stores/routing.svelte";
   import MessageBubble from "./MessageBubble.svelte";
@@ -648,20 +648,20 @@
   // so the falling-edge effect below can word the announcement correctly.
   // Plain `let` (not $state): effect-local memory, never a render dep.
   let lastTurnErrored = false;
-  let wasStreaming = false;
   function announce(text: string) {
     announceText = text;
     announceNonce += 1;
   }
+  // Falling edge (streaming -> idle: MESSAGE_COMPLETE, MESSAGE_ERROR, or a
+  // redirect that completed). The edge detector is shared rather than a local
+  // `wasStreaming` here, for the same reason the wording is — see
+  // `completionAnnouncer`.
+  const announcer = completionAnnouncer(announce);
   $effect(() => {
     const streaming = $snapshot.matches({ turn: "streaming" });
-    // Falling edge: a turn that was streaming has returned to idle —
-    // MESSAGE_COMPLETE, MESSAGE_ERROR, or a redirect that completed.
-    if (wasStreaming && !streaming) {
-      announce(completionAnnouncement({ errored: lastTurnErrored }));
+    if (announcer.observe(streaming, { errored: lastTurnErrored })) {
       lastTurnErrored = false;
     }
-    wasStreaming = streaming;
   });
 
   // PR2e — size ceiling for chat-pipeline messages. When the user

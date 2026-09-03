@@ -35,7 +35,7 @@ use sovereign_inference::remote::RemoteApiProvider;
 use super::baselines::{baseline_dir, write_dated_and_update_latest_at};
 use super::gate::chaos_lane_baseline;
 use super::lane_baseline::{render_and_exit_code, LaneBaseline};
-use super::live_runner::{classify_abstain, classify_caveat, run_live};
+use super::live_runner::{caveat_credit, classify_abstain, classify_caveat, run_live};
 use super::scaffolding_param::{
     decide, AutoApplyPolicy, PromoteDecision, RerankSettings, ScaffoldingParam,
 };
@@ -457,11 +457,9 @@ async fn run_and_verify(
     };
     let caveat_present =
         if probe.qtype == QuestionType::AbsentOutOfDomain && action == AgentAction::Answered {
-            Some(
-                classify_caveat(judge, judge_model, &visible)
-                    .await
-                    .unwrap_or(false),
-            )
+            Some(caveat_credit(
+                classify_caveat(judge, judge_model, &visible).await,
+            ))
         } else {
             None
         };

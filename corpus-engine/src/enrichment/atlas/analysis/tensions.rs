@@ -835,6 +835,8 @@ mod tests {
 
     fn claim(id: u32, attributed_to: Option<u32>) -> Claim {
         Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::from_raw(format!("claim-{id:04}")),
             content: format!("claim {id}"),
             discourse_act: DiscourseAct::Assert,

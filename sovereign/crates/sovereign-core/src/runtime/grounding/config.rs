@@ -215,6 +215,74 @@ pub(crate) fn gate_batch_min_claims() -> usize {
         .unwrap_or(6)
 }
 
+/// How many per-claim corpus searches the gate runs at once — DERIVED from the
+/// host, not fixed.
+///
+/// A hard number cannot survive the hardware range this ships to, and that is
+/// the same lesson as the retired 4 s triage floor and the retired cost ratio:
+/// `cores / 4`, clamped to 1..=4. A 12-core workstation gets 3; the 4-core
+/// laptop in the issue report gets 1, which is EXACTLY the serial behaviour it
+/// had before — so weak hardware sees no new concurrency, and no new memory
+/// risk, from this change.
+///
+/// The audit's fan-out was `claims x corpora` SEQUENTIAL round trips, each one
+/// an embed call plus a hybrid index search — the only multiplicative term in
+/// the whole turn: measured 2026-09-02 on wikipedia+sep, ten claims at ~9.6 s
+/// each, 77 s spent one search after another. Concurrency changes wall time,
+/// never work, and it is what retired the model-call triage that used to guard
+/// this cost (issue #57): a bound you can derive beats a decision you have to
+/// price.
+///
+/// The turn's OWN retrieval solved this in 2026-06 and the gate never got the
+/// same treatment (`corpus_search.rs`, `SOVEREIGN_KQ_FANOUT_CONCURRENCY`,
+/// default 4): "concurrency changes only WALL-TIME, never results". The same
+/// argument holds here and is in fact stronger — each claim's hits depend on
+/// that claim alone, they are merged per claim, and the judge that consumes
+/// them still runs in claim order. So this collapses the worst case toward the
+/// SLOWEST SINGLE SEARCH instead of their sum, without any claim losing a
+/// search or a verdict.
+///
+/// Bounded rather than unbounded for the reason the retrieval path gives: a
+/// wide fan-out must not thundering-herd the big indexes (sep/wikipedia) on
+/// open + search, and every search also wants the embed slot. A plain constant
+/// rather than an env read — it is a resource bound, not a tuning surface, and
+/// a new env var would need a `quality/env-flags.toml` row to earn its keep.
+pub(crate) fn claim_search_concurrency() -> usize {
+    static N: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    *N.get_or_init(|| {
+        std::thread::available_parallelism()
+            .map(|n| concurrency_for_cores(n.get()))
+            .unwrap_or(1)
+    })
+}
+
+/// The derivation itself, separated from the host it reads, because a test
+/// that re-derives `(cores / 4).clamp(1, 4)` to check `(cores / 4).clamp(1, 4)`
+/// cannot fail — change the formula and both sides move together (§18.1). As
+/// a function of a NAMED core count it is falsifiable on any host.
+pub(crate) fn concurrency_for_cores(cores: usize) -> usize {
+    (cores / 4).clamp(1, 4)
+}
+
+/// The ONE bound on in-flight claim searches, shared by both fan-out levels.
+///
+/// The fan-out is nested — claims on the outside, corpora within each claim —
+/// and bounding each level separately bounds neither: 4 x 4 is sixteen
+/// concurrent `open_index` + hybrid searches against indexes that reach 88 GB,
+/// on a host that is also holding a 17.7 GB model resident. That product is a
+/// memory event waiting to happen, and it caused one on 2026-09-02.
+///
+/// So the permit is taken around the index search itself, at the innermost
+/// point, from a semaphore shared process-wide. Whatever the nesting, total
+/// in-flight searches are `CLAIM_SEARCH_CONCURRENCY`. Process-global rather
+/// than per-turn because the resource it protects — page cache, file handles,
+/// the box — is global: two concurrent turns must share the bound, not get one
+/// each.
+pub(crate) fn claim_search_permits() -> &'static tokio::sync::Semaphore {
+    static SEM: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::OnceLock::new();
+    SEM.get_or_init(|| tokio::sync::Semaphore::new(claim_search_concurrency()))
+}
+
 /// Kill-switch for the gate's per-claim corpus re-search
 /// (`SOVEREIGN_GATE_CLAIM_SEARCH=0`, default ON). `ClaimSearcher::search_corpus`
 /// runs one hybrid search PER ALLOWED CORPUS PER CLAIM and keeps
@@ -264,58 +332,6 @@ pub(crate) fn claim_search_shadow_enabled() -> bool {
     std::env::var("SOVEREIGN_GATE_CLAIM_SEARCH_SHADOW")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
-}
-
-/// THE LADDER (`SOVEREIGN_GATE_CLAIM_SEARCH_LADDER`, default ON — the knob
-/// is the opt-out): in `gate_longform`, decide which claims are already
-/// supported by the prompt window and issue the per-claim corpus fan-out
-/// only for the rest.
-///
-/// Stage 1 is [`claims_support_batched`](super::judge::claims_support_batched)
-/// — ONE generation covering every claim off a single evidence prefill — used
-/// here as TRIAGE ONLY; it never becomes the released verdict, which stays the
-/// calibrated per-claim forced-choice. That separation is why the ladder may
-/// use a mechanism still marked STUDY for verdict purposes. An earlier shape
-/// used one per-claim judge as stage 1 and measured NET-NEGATIVE (+5.0s wall);
-/// see note a4be8afd.
-///
-/// WHY IT IS STILL DEFAULT OFF: the safety argument that justified it was
-/// withdrawn. It ran — a "rescue" is by definition a claim that fails without
-/// re-search and passes with it, so every rescue has a stage-1 `vp >= tau` and
-/// always reaches stage 2 — and that is sound only while stage 1 is the
-/// CALIBRATED per-claim judge. It is not: stage 1 is the batched text A/B, a
-/// different instrument with different tau semantics, so a batch
-/// false-"supported" can skip stage 2 and drop a real rescue. Agreement between
-/// the two is an empirical property of the sample, not of the definition.
-/// `summary_cosmological_argument` (18 claims, 2026-08-05) kept 7/7 rescues
-/// while searching 11 of 18 — evidence from one specimen, not proof. The
-/// promotion gate is a bank-level `lost_rescue == 0` from the
-/// `claim_search_shadow` event (run with SHADOW=1 and LADDER=0, which is the
-/// only configuration where a skipped claim's rescue is still observable).
-///
-/// Why it is worth doing: that fan-out is one hybrid search PER ALLOWED CORPUS
-/// PER CLAIM, and on a pool containing `wikipedia` it measured 2218ms per call
-/// — 25% of total wall-clock on `bench sep/summarize --synth`.
-///
-/// The one behaviour change is named in full at the call site: a re-searched
-/// hit can currently DILUTE a claim the prompt window alone supported (the
-/// longform judge scores all passages in one joint forced-choice — no per-chunk
-/// max, no rescue floor), and the ladder releases such claims on stage 1
-/// instead. Measured `newly_failed = 0` on the specimen.
-pub(crate) fn claim_search_ladder_enabled() -> bool {
-    // DEFAULT ON since 2026-08-14 (order audit-economy D6; flip bar
-    // lost_rescue = 0 met non-vacuously: 0/160 lost with 8 real rescues in
-    // the bank and the skip set disjoint from all of them, newly_failed
-    // 0/160, 96/160 searches skippable — runs/audit-economy-ladder-shadow).
-    // This knob is now the OPT-OUT: =0/false/off disables; anything else,
-    // including unset, leaves it on. Ledger: sovereign/DEFAULTS_LEDGER.md.
-    !matches!(
-        std::env::var("SOVEREIGN_GATE_CLAIM_SEARCH_LADDER")
-            .ok()
-            .as_deref()
-            .map(str::trim),
-        Some("0") | Some("false") | Some("off") | Some("False") | Some("OFF") | Some("Off")
-    )
 }
 
 /// AUDIT FORENSICS (`SOVEREIGN_GATE_AUDIT_FORENSICS=<path>`, default unset).
@@ -627,14 +643,6 @@ pub fn grounding_gate_flags() -> Vec<(&'static str, EnvFlag)> {
                 name: "SOVEREIGN_GATE_CLAIM_SEARCH",
                 default: "on",
                 purpose: "Per-claim corpus re-search that widens the audit's evidence beyond the prompt chunks. Set =0 to audit against the prompt chunks alone (the documented no-searcher fallback). Exists to price the fan-out: measured 2026-08-05 on bench sep/summarize --synth at 608.9s across 14 questions — 25% of run wall-clock — because it runs one hybrid search per allowed corpus per claim and keeps only CLAIM_SEARCH_K chunks total.",
-            },
-        ),
-        (
-            "gate",
-            EnvFlag {
-                name: "SOVEREIGN_GATE_CLAIM_SEARCH_LADDER",
-                default: "on",
-                purpose: "Spend the per-claim corpus fan-out only on claims the prompt window FAILS: batched triage against the shared window first, re-search and judge only on failure. DEFAULT ON since 2026-08-14 (audit-economy D6 shadow arm: lost_rescue 0/160 with 8 real rescues in the bank and the skip set disjoint from all of them, newly_failed 0/160, 96/160 searches skippable, ~-3.5s/turn at healthy search prices); =0 opts out.",
             },
         ),
         (
