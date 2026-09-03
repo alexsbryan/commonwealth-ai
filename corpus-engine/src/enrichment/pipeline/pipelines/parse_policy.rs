@@ -394,7 +394,15 @@ pub(super) fn is_absent_marker(s: &str) -> bool {
         "unspecified",
         "not applicable",
     ];
-    EXACT.contains(&t.as_str()) || t.starts_with("unknown") || t.starts_with("not stated")
+    if EXACT.contains(&t.as_str()) {
+        return true;
+    }
+    // A PREFIX needs a word boundary: "unknown" and "unknown (not stated in
+    // text)" are absent values; "unknown-type sceatta series" is a real one.
+    ["unknown", "not stated"].iter().any(|p| {
+        t.strip_prefix(p)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace()))
+    })
 }
 
 /// The leading decimal number of a string, ignoring a trailing unit or range
@@ -603,7 +611,14 @@ mod absent_marker_tests {
         }
     }
 
-    /// Falsifier: a real value that merely CONTAINS a marker word stays.
+    /// Falsifier: a real value that merely CONTAINS a marker word stays. The
+    /// prefix rule needs a word boundary for that — without one,
+    /// "unknown-type sceatta series" reads as an absent value and the coin
+    /// loses a real attribute.
+    ///
+    /// This assertion shipped with an `|| s.starts_with("unknown")` escape,
+    /// which made the single case it exists to defend pass for free: a gate
+    /// nobody had watched fail (§18.1).
     #[test]
     fn real_values_are_not_markers() {
         for s in [
@@ -612,10 +627,9 @@ mod absent_marker_tests {
             "c. 720",
             "Wessex Down 1",
             "unknown-type sceatta series",
+            "not stated-in-catalogue variant",
         ] {
-            assert!(!is_absent_marker(s) || s.starts_with("unknown"), "{s}");
+            assert!(!is_absent_marker(s), "{s}");
         }
-        assert!(!is_absent_marker("Nkemdirim 2018"));
-        assert!(!is_absent_marker("die study"));
     }
 }

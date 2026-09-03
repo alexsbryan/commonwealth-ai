@@ -478,12 +478,14 @@ impl DaemonInferenceClient {
         // Build a one-shot client with the embed timeout so callers
         // don't share the long chat timeout on what should be <1s.
         let short_client = reqwest::Client::builder().timeout(EMBED_TIMEOUT).build()?;
-        let resp = short_client.post(&url).json(&body).send().await?;
-        let status = resp.status();
-        let payload = resp
-            .text()
-            .await
-            .map_err(|e| Error::Embed(format!("embed read: {e}")))?;
+        // The embed route sheds under load like the chat route does, and a
+        // backfill drops an atom's vector when it treats that as an error.
+        let (status, payload) = wire::send_honouring_shed(
+            &short_client.post(&url).json(&body),
+            "daemon embed",
+            "embed",
+        )
+        .await?;
         if !status.is_success() {
             let hint = if status.as_u16() == 404 {
                 " (the daemon does not expose an embeddings route — upgrade the daemon \

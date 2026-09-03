@@ -145,21 +145,17 @@ fn same_name_modulo_plural(a: &str, b: &str) -> bool {
     !na.is_empty() && na == nb
 }
 
-/// An identity key's value, folded for comparison. Strings and numbers only;
-/// a value already snapped to an atom id says nothing about identity.
+/// An identity key's value, folded the way the RECONCILER folds it, so a
+/// merge this veto refuses is one `ExternalIdSignal` would also refuse
+/// (§10.6). `Wessex-Down 1` and `Wessex Down 1` are ONE key on both sides;
+/// a plain lowercase made them two here and one there. A value already
+/// snapped to an atom id says nothing about identity, so it is not compared.
 fn identity_value(attrs: &serde_json::Map<String, serde_json::Value>, key: &str) -> Option<String> {
-    match attrs.get(key)? {
-        serde_json::Value::String(s) => {
-            let t = s.trim();
-            if t.is_empty() || t.starts_with("entity-") {
-                None
-            } else {
-                Some(t.to_lowercase())
-            }
-        }
-        serde_json::Value::Number(n) => Some(n.to_string()),
-        _ => None,
+    let v = attrs.get(key)?;
+    if v.as_str().is_some_and(|s| s.trim().starts_with("entity-")) {
+        return None;
     }
+    crate::enrichment::reconciliation::identity_signals::identity_value_of(v)
 }
 
 // ── 3b: a declared claim is about something of a declared type ───
@@ -659,6 +655,47 @@ mod tests {
             "person",
             "Aldfrith",
             &none
+        )
+        .is_err());
+    }
+
+    /// The fold is the RECONCILER's, so this veto and `ExternalIdSignal`
+    /// cannot disagree about whether two coins carry one catalogue number.
+    /// Falsifier: swap `identity_value` back to `trim().to_lowercase()` and
+    /// the punctuation case below becomes two keys here and one there.
+    #[test]
+    fn an_identity_key_folds_the_way_the_reconciler_folds_it() {
+        let p = policies(vec![with_identity(
+            entity_decl("coin", None),
+            &["catalogue_ref"],
+        )]);
+        let policy = ResolutionPolicy::new(&p);
+        let hyphen = attrs(&[("catalogue_ref", "Wessex-Down 1")]);
+        let plain = attrs(&[("catalogue_ref", "Wessex Down 1")]);
+        assert!(
+            merge_permitted(
+                &policy,
+                MergeEvidence::Exact,
+                "coin",
+                "a",
+                &hyphen,
+                "coin",
+                "b",
+                &plain
+            )
+            .is_ok(),
+            "punctuation is not identity"
+        );
+        let other = attrs(&[("catalogue_ref", "Wessex Down 2")]);
+        assert!(merge_permitted(
+            &policy,
+            MergeEvidence::Exact,
+            "coin",
+            "a",
+            &plain,
+            "coin",
+            "b",
+            &other
         )
         .is_err());
     }

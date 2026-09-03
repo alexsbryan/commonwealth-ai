@@ -3,7 +3,9 @@
 # Scanned catalogues, hoard reports, journal articles. The questions it is
 # built to answer: which mints struck for a ruler; what is the weight range of
 # a series; who disputes a dating and on what grounds. The declaration is
-# ONTOLOGY_PRIMITIVES.md §1.1 verbatim.
+# Follows ONTOLOGY_PRIMITIVES.md §1.1, plus `catalogue_ref` and the
+# `identity` key that §1.1 does not carry — this corpus's own, and the reason
+# there is a worked external-key example at all.
 #
 # Scaffold:  svrn recipe new --ontology numismatics --id my-coins --out my-coins.toml
 # Then fill the REPLACE_ME fields, and:

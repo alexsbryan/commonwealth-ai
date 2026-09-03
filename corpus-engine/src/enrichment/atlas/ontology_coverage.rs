@@ -148,6 +148,11 @@ pub fn build_ontology_coverage(
     merges: Option<usize>,
 ) -> OntologyCoverage {
     let index = TypeIndex::from_policies(&ontology.policies);
+    // The same tally `_summary.json`'s census reads (§10.6) — the pills a
+    // reader sees and the coverage report they open cannot disagree.
+    let (counts, _unsubtyped) = super::projection::subtype_tally(atoms);
+    // The per-atom subtype, kept for the attribute-fill pass below, which
+    // walks atoms and their subtype together rather than counting them.
     let subtypes: Vec<String> = atoms.iter().map(subtype_of).collect();
 
     let by_type = ontology
@@ -161,11 +166,12 @@ pub fn build_ontology_coverage(
                 .trim_matches('"')
                 .to_string(),
             name: t.name.clone(),
-            count: subtypes.iter().filter(|s| *s == &t.name).count(),
-            count_with_subtypes: subtypes
+            count: counts.get(&t.name).copied().unwrap_or(0) as usize,
+            count_with_subtypes: counts
                 .iter()
-                .filter(|s| *s == &t.name || index.is_a(s, &t.name))
-                .count(),
+                .filter(|(s, _)| *s == &t.name || index.is_a(s, &t.name))
+                .map(|(_, n)| *n as usize)
+                .sum(),
         })
         .collect();
 

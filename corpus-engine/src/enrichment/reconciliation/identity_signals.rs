@@ -42,12 +42,30 @@ fn identity_key_value(entity: &Entity, key: &str) -> Option<String> {
         "name" | "canonical_name" => Some(entity.canonical_name.clone()),
         "employer" | "affiliation" => entity.affiliation.clone(),
         "role" => entity.role.clone(),
-        _ => entity.attributes.get(key).map(|v| match v {
-            serde_json::Value::String(s) => s.clone(),
-            other => other.to_string(),
-        }),
+        _ => return identity_value_of(entity.attributes.get(key)?),
     }?;
-    let folded = fold_name(&raw);
+    fold_identity_value(&raw)
+}
+
+/// One declared identity key's value, read from an ATTRIBUTE bag alone.
+///
+/// The resolver's merge veto (`atlas::resolution_identity`) compares the same
+/// keys before these signals ever run, and comparing them differently is how
+/// one pass refuses a merge the other would confirm: `Wessex-Down 1` and
+/// `Wessex Down 1` are one key to [`fold_name`] and two to a plain lowercase.
+/// So both go through here (§10.6).
+pub(crate) fn identity_value_of(value: &serde_json::Value) -> Option<String> {
+    let raw = match value {
+        serde_json::Value::String(s) => s.clone(),
+        other => other.to_string(),
+    };
+    fold_identity_value(&raw)
+}
+
+/// The fold every identity comparison uses. Empty after folding means the key
+/// is absent, not that it is the empty string.
+pub(crate) fn fold_identity_value(raw: &str) -> Option<String> {
+    let folded = fold_name(raw);
     (!folded.is_empty()).then_some(folded)
 }
 

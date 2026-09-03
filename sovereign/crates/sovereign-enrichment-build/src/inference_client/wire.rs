@@ -217,49 +217,17 @@ impl DaemonInferenceClient {
         if let Some(secret) = provider.auth_secret.as_deref() {
             request_builder = request_builder.bearer_auth(secret);
         }
-        // A 503 `local_queue_full` is the daemon saying "not now, ask again
-        // in N seconds" — it names the wait. Treating it as a failure threw
-        // away 5 of 65 tension candidates twice on one build (2026-09-02).
-        // Bounded, and every retry is traced.
-        let mut queue_full_retries: u32 = 0;
-        let outcome = loop {
-            let attempt = request_builder
-                .try_clone()
-                .expect("a JSON-bodied request is cloneable");
-            match attempt.send().await {
-                Ok(resp) => {
-                    let status = resp.status();
-                    match resp.text().await {
-                        Ok(text) if !status.is_success() => {
-                            if let Some(wait) = queue_full_retry_after(status.as_u16(), &text) {
-                                if queue_full_retries < QUEUE_FULL_RETRIES {
-                                    queue_full_retries += 1;
-                                    tracing::warn!(
-                                        phase = %phase_label,
-                                        model = %model_label,
-                                        retry = queue_full_retries,
-                                        wait_secs = wait.as_secs(),
-                                        "inference_client: daemon queue full; retrying after the wait it asked for"
-                                    );
-                                    tokio::time::sleep(wait).await;
-                                    continue;
-                                }
-                            }
-                            break Err(Error::Serialization(format!(
-                                "daemon chat error {status}: {text}"
-                            )));
-                        }
-                        Ok(text) => break Ok(text),
-                        Err(e) => {
-                            break Err(Error::Serialization(format!(
-                                "chat response read error: {e}"
-                            )))
-                        }
-                    }
+        let outcome = send_honouring_shed(&request_builder, "daemon chat", &phase_label)
+            .await
+            .and_then(|(status, text)| {
+                if status.is_success() {
+                    Ok(text)
+                } else {
+                    Err(Error::Serialization(format!(
+                        "daemon chat error {status}: {text}"
+                    )))
                 }
-                Err(e) => break Err(Error::from(e)),
-            }
-        };
+            });
 
         heartbeat.abort();
 
@@ -494,21 +462,18 @@ impl DaemonInferenceClient {
                 provider.name
             )));
         }
-        let outcome = match req.send().await {
-            Ok(resp) => {
-                let status = resp.status();
-                match resp.text().await {
-                    Ok(text) if !status.is_success() => Err(Error::Serialization(format!(
+        let outcome = send_honouring_shed(&req, "anthropic chat", &phase_label)
+            .await
+            .and_then(|(status, text)| {
+                if status.is_success() {
+                    Ok(text)
+                } else {
+                    Err(Error::Serialization(format!(
                         "anthropic chat error {status}: {text}"
-                    ))),
-                    Ok(text) => Ok(text),
-                    Err(e) => Err(Error::Serialization(format!(
-                        "anthropic response read error: {e}"
-                    ))),
+                    )))
                 }
-            }
-            Err(e) => Err(Error::from(e)),
-        };
+            });
+
         heartbeat.abort();
 
         let elapsed_ms = started.elapsed().as_millis();
@@ -623,70 +588,66 @@ impl DaemonInferenceClient {
     }
 }
 
-/// How many times a request is re-sent after the daemon answers 503
-/// `local_queue_full`. Three waits of the daemon's own estimate (≤60 s each)
-/// spans a slow slot handover; past that the queue is not draining.
-const QUEUE_FULL_RETRIES: u32 = 3;
-/// Cap on one wait, whatever the daemon estimates.
-const QUEUE_FULL_MAX_WAIT_SECS: u64 = 60;
-
-/// The wait a daemon 503 asks for, or `None` when the response is anything
-/// else. The body carries `"reason": "local_queue_full"` (or the same code
-/// under `error.code`) and `retry_after_secs`; a queue-full without a number
-/// waits the daemon's documented default of 30 s. Only a 503 qualifies — a
-/// 4xx or 500 is not a queue.
-pub(crate) fn queue_full_retry_after(status: u16, body: &str) -> Option<Duration> {
-    if status != 503 {
-        return None;
-    }
-    let v: serde_json::Value = serde_json::from_str(body).ok()?;
-    let code = v["reason"]
-        .as_str()
-        .or_else(|| v["error"]["code"].as_str())?;
-    if code != "local_queue_full" {
-        return None;
-    }
-    let secs = v["retry_after_secs"].as_u64().unwrap_or(30);
-    Some(Duration::from_secs(secs.clamp(1, QUEUE_FULL_MAX_WAIT_SECS)))
-}
-
-#[cfg(test)]
-mod queue_full_tests {
-    use super::queue_full_retry_after;
-
-    const BODY: &str = r#"{"error":{"message":"host busy: ~30000 ms predicted wait at queue position 2","type":"server_error","code":"local_queue_full"},"reason":"local_queue_full","retry_after_secs":30}"#;
-
-    #[test]
-    fn a_queue_full_503_names_its_wait() {
-        assert_eq!(
-            queue_full_retry_after(503, BODY).map(|d| d.as_secs()),
-            Some(30)
+/// Send a request, honouring a daemon shed rather than reporting it as a
+/// failure. The DECISION — is this 503 a shed, and for how long — belongs to
+/// [`oicp_client::shed_retry_after`], the one decider (§10.6); this function
+/// owns only the loop and the tracing.
+///
+/// Before this existed, every non-success status became an error here, and
+/// Phase 6 lost 5 of 65 tension candidates to `local_queue_full` on two
+/// consecutive builds (2026-09-02) against a body that named the wait.
+///
+/// Returns the final `(status, body)` — including a non-success one once the
+/// budget is spent — so each caller keeps its own error wording.
+pub(super) async fn send_honouring_shed(
+    request: &reqwest::RequestBuilder,
+    what: &str,
+    phase: &str,
+) -> Result<(reqwest::StatusCode, String)> {
+    let mut waited = std::time::Duration::ZERO;
+    let mut attempt = 0u32;
+    loop {
+        let send = request
+            .try_clone()
+            .expect("a JSON-bodied request is cloneable")
+            .send()
+            .await;
+        let resp = match send {
+            Ok(r) => r,
+            Err(e) => return Err(Error::from(e)),
+        };
+        let status = resp.status();
+        let body = resp
+            .text()
+            .await
+            .map_err(|e| Error::Serialization(format!("{what} response read error: {e}")))?;
+        if status.is_success() {
+            return Ok((status, body));
+        }
+        attempt += 1;
+        let Some(delay) = oicp_client::shed_retry_after(status, &body) else {
+            return Ok((status, body));
+        };
+        if attempt >= oicp_client::SHED_MAX_ATTEMPTS
+            || waited + delay > oicp_client::SHED_TOTAL_WAIT_CAP
+        {
+            tracing::warn!(
+                what,
+                phase,
+                attempt,
+                waited_s = waited.as_secs(),
+                "inference_client: shed budget spent; reporting the host's refusal"
+            );
+            return Ok((status, body));
+        }
+        tracing::warn!(
+            what,
+            phase,
+            attempt,
+            delay_s = delay.as_secs(),
+            "inference_client: host shed the request; honouring the wait it asked for"
         );
-    }
-
-    #[test]
-    fn the_wait_is_clamped_and_defaulted() {
-        let long = BODY.replace("\"retry_after_secs\":30", "\"retry_after_secs\":600");
-        assert_eq!(
-            queue_full_retry_after(503, &long).map(|d| d.as_secs()),
-            Some(60)
-        );
-        let none = BODY.replace(",\"retry_after_secs\":30", "");
-        assert_eq!(
-            queue_full_retry_after(503, &none).map(|d| d.as_secs()),
-            Some(30)
-        );
-    }
-
-    /// Falsifier: a 500 with the same body, or a 503 for another reason,
-    /// must NOT be retried — that is how a real failure would hide.
-    #[test]
-    fn only_a_queue_full_503_is_retried() {
-        assert_eq!(queue_full_retry_after(500, BODY), None);
-        assert_eq!(
-            queue_full_retry_after(503, r#"{"reason":"model_not_loaded"}"#),
-            None
-        );
-        assert_eq!(queue_full_retry_after(503, "Service Unavailable"), None);
+        tokio::time::sleep(delay).await;
+        waited += delay;
     }
 }

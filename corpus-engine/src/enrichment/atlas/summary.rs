@@ -179,8 +179,6 @@ pub fn compute_summary(atlas_dir: &Path) -> io::Result<AtlasSummary> {
     // variants without a second pass.
     let mut tier2_count: u64 = 0;
     let mut atom_counts: BTreeMap<AtomType, u64> = BTreeMap::new();
-    let mut subtype_counts: BTreeMap<String, u64> = BTreeMap::new();
-    let mut unsubtyped: u64 = 0;
     for a in &atoms.atoms {
         if let AtomEnvelope::Entity(e) = a {
             if matches!(e.enrichment_depth, EnrichmentDepth::Extracted) {
@@ -188,16 +186,10 @@ pub fn compute_summary(atlas_dir: &Path) -> io::Result<AtlasSummary> {
             }
         }
         *atom_counts.entry(a.atom_type()).or_insert(0) += 1;
-        // Absence stays absent rather than bucketing under `""` — see the
-        // field's doc. `subtype_of` already folds the two on-disk spellings of
-        // "unclassified" to empty, so this is the only check needed.
-        let subtype = super::projection::subtype_of(a);
-        if subtype.is_empty() {
-            unsubtyped += 1;
-        } else {
-            *subtype_counts.entry(subtype).or_insert(0) += 1;
-        }
     }
+    // The declared-subtype census comes from the ONE tally, which the
+    // ontology-coverage rollup also calls — two readers, one count (§10.6).
+    let (subtype_counts, unsubtyped) = super::projection::subtype_tally(&atoms.atoms);
     // Traced as a total, not per atom (§9.1): the decision an operator needs
     // to see is "how many atoms this census does not account for", and this
     // loop runs over every atom in the corpus — 1.5M on the meta-atlas — so a

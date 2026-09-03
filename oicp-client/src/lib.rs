@@ -49,14 +49,14 @@ use sovereign_contracts::types::*;
 /// BACKPRESSURE with a stated delay, and the only honest response to
 /// "busy, come back in 32s" is to come back. A 500, a 404, a malformed body
 /// are FAILURES, and retrying those masks them.
-const SHED_MAX_ATTEMPTS: u32 = 3;
+pub const SHED_MAX_ATTEMPTS: u32 = 3;
 
 /// Total time this client will spend WAITING on sheds for one logical call.
 ///
 /// A cap rather than an unbounded honour of the hint: a host predicting a
 /// two-minute wait should hand control back to the caller, which can decide
 /// to route elsewhere, rather than have its client block silently.
-const SHED_TOTAL_WAIT_CAP: std::time::Duration = std::time::Duration::from_secs(90);
+pub const SHED_TOTAL_WAIT_CAP: std::time::Duration = std::time::Duration::from_secs(90);
 
 /// The delay a 503 ASKED FOR, when the 503 is a shed.
 ///
@@ -72,7 +72,15 @@ const SHED_TOTAL_WAIT_CAP: std::time::Duration = std::time::Duration::from_secs(
 /// retry loop at all, so every caller threw it away and reported backpressure
 /// as a hard error. Measured: three sub-requests of ONE turn refused inside
 /// 17 ms against a hint that said 32 seconds (note `bf432b4d`).
-fn shed_retry_after(status: reqwest::StatusCode, body: &str) -> Option<std::time::Duration> {
+/// PUBLIC because it is the ONE decider for "is this 503 a shed, and how
+/// long did the host ask for" (§10.6). Three other readings of the same field
+/// have existed in this workspace; a caller outside this crate calls THIS
+/// rather than parsing `retry_after_secs` again.
+///
+/// Known gap, one place instead of four: the daemon also sets a JITTERED
+/// `Retry-After` header (`commonwealth-api/src/admission.rs`), and this reads
+/// only the body, so callers lose the anti-thundering-herd spread.
+pub fn shed_retry_after(status: reqwest::StatusCode, body: &str) -> Option<std::time::Duration> {
     if status != reqwest::StatusCode::SERVICE_UNAVAILABLE {
         return None;
     }

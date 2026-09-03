@@ -124,6 +124,31 @@ pub fn subtype_of(atom: &AtomEnvelope) -> String {
         _ => String::new(),
     }
 }
+/// How many atoms carry each subtype, and how many carry none.
+///
+/// The ONE tally over [`subtype_of`] (§10.6). Two callers count declared
+/// types — the `_summary.json` census and the ontology-coverage rollup — and
+/// before this they walked the atom slice separately, so two numbers over one
+/// classifier could drift with nothing pinning them together.
+///
+/// Absence is counted, never bucketed: `subtype_of` folds both on-disk
+/// spellings of "unclassified" to `""`, and a reader that took them literally
+/// would call a corpus fully typed when nothing in it was typed at all.
+pub fn subtype_tally<'a>(
+    atoms: impl IntoIterator<Item = &'a AtomEnvelope>,
+) -> (std::collections::BTreeMap<String, u64>, u64) {
+    let mut counts: std::collections::BTreeMap<String, u64> = std::collections::BTreeMap::new();
+    let mut unsubtyped = 0u64;
+    for a in atoms {
+        let subtype = subtype_of(a);
+        if subtype.is_empty() {
+            unsubtyped += 1;
+        } else {
+            *counts.entry(subtype).or_insert(0) += 1;
+        }
+    }
+    (counts, unsubtyped)
+}
 
 /// Project an atom to its hot-field record. Shared by the v2 store writer
 /// (`super::store::write_store`) and the reader (`LancePreload`), so the

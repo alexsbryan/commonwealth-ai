@@ -56,6 +56,8 @@ sovereign-inference = { workspace = true }
 sovereign-contracts = { workspace = true }
 # The provider vocabulary `providers` speaks. Contract layer — down.
 oicp-types = { workspace = true }
+# For `shed_retry_after` — the one decider for a 503 shed (ARCH §10.6).
+oicp-client = { workspace = true }
 chrono = { workspace = true }
 # `DaemonInferenceClient` talks to the daemon over HTTP on the CLI path.
 reqwest = { workspace = true, features = ["stream"] }
