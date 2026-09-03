@@ -36,10 +36,11 @@ impl std::fmt::Display for GoalId {
 }
 
 /// The goals from the root to this frame. The frame's identity, the occurs
-/// check's subject, and the branch name all derive from it.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+/// check's subject, and the branch name all derive from it. Never empty:
+/// only `root` and `child` construct one.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct GoalPath(pub Vec<GoalId>);
+pub struct GoalPath(Vec<GoalId>);
 
 impl GoalPath {
     pub fn root(g: GoalId) -> Self {
@@ -61,12 +62,22 @@ impl GoalPath {
         self.0.len()
     }
 
+    pub fn goals(&self) -> &[GoalId] {
+        &self.0
+    }
+
     pub fn leaf(&self) -> &GoalId {
+        // Non-empty by construction (`root` / `child` are the only builders).
+        #[allow(clippy::expect_used)]
         self.0.last().expect("a GoalPath is never empty")
     }
 
     pub fn slug(&self) -> String {
-        self.0.iter().map(GoalId::slug).collect::<Vec<_>>().join("__")
+        self.0
+            .iter()
+            .map(GoalId::slug)
+            .collect::<Vec<_>>()
+            .join("__")
     }
 }
 
@@ -209,7 +220,10 @@ mod tests {
             fold([Verdict::CouldNotJudge, Verdict::Failed, Verdict::Passed]),
             Verdict::Failed
         );
-        assert_eq!(fold([Verdict::NeverRan, Verdict::CouldNotJudge]), Verdict::NeverRan);
+        assert_eq!(
+            fold([Verdict::NeverRan, Verdict::CouldNotJudge]),
+            Verdict::NeverRan
+        );
         assert_eq!(fold([]), Verdict::NeverRan);
     }
 

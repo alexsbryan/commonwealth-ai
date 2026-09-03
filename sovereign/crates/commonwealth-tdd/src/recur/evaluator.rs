@@ -98,7 +98,10 @@ impl ScriptedEvaluator {
 
     /// `(depth, prompt bytes)` per ask, in order.
     pub fn prompt_sizes(&self) -> Vec<(usize, usize)> {
-        self.prompts.lock().expect("prompt log poisoned").clone()
+        self.prompts
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
     }
 }
 
@@ -108,7 +111,7 @@ impl Evaluator for ScriptedEvaluator {
         let bytes = req.render().len();
         self.prompts
             .lock()
-            .expect("prompt log poisoned")
+            .unwrap_or_else(|p| p.into_inner())
             .push((req.path.depth(), bytes));
         Ok((self.script)(req))
     }

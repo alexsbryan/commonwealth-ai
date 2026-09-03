@@ -49,7 +49,10 @@ pub struct DriverConfig {
 impl DriverConfig {
     pub fn pytest(scratch: PathBuf) -> Self {
         Self {
-            test_command: "pytest -q -p no:cacheprovider {goal}".into(),
+            // No bytecode, no cache dir: the memo key is a tree hash and a merge
+            // is a tree merge, so nothing the oracle writes may land in either.
+            test_command:
+                "PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider {goal}".into(),
             language: Language::Python,
             asks_per_frame: 3,
             max_steps: 200,
@@ -119,7 +122,12 @@ pub struct Driver<E: Evaluator> {
 impl<E: Evaluator> Driver<E> {
     /// Begin a process at `root`, evaluated in the workdir itself. The
     /// `Workdir` gate is the only way in (ARCH §7.1).
-    pub fn start(workdir: &Workdir, root: GoalId, cfg: DriverConfig, eval: E) -> Result<Self, DriverError> {
+    pub fn start(
+        workdir: &Workdir,
+        root: GoalId,
+        cfg: DriverConfig,
+        eval: E,
+    ) -> Result<Self, DriverError> {
         std::fs::create_dir_all(&cfg.scratch)?;
         let env = Env {
             worktree: workdir.path().to_path_buf(),
@@ -160,7 +168,9 @@ impl<E: Evaluator> Driver<E> {
     fn persist(&self) -> Result<(), DriverError> {
         let path = Self::state_path(&self.cfg);
         let tmp = path.with_extension("json.tmp");
-        std::fs::write(&tmp, serde_json::to_vec_pretty(&self.state).expect("state serializes"))?;
+        let bytes = serde_json::to_vec_pretty(&self.state)
+            .map_err(|e| DriverError::State(e.to_string()))?;
+        std::fs::write(&tmp, bytes)?;
         std::fs::rename(tmp, path)?;
         Ok(())
     }
@@ -239,7 +249,9 @@ impl<E: Evaluator> Driver<E> {
     }
 
     /// Passed / Failed from the counts; CouldNotJudge when the run could not
-    /// judge (setup error, or nothing ran at all).
+    /// judge (setup error, or nothing ran at all). Only Passed is terminal on
+    /// its own — the other two are observations until the frame is out of
+    /// moves.
     fn classify(run: &TestRunResult) -> Verdict {
         let p = &run.parsed;
         let setup = p.failed_names.iter().any(|n| n.starts_with("<setup error"));
@@ -256,7 +268,13 @@ impl<E: Evaluator> Driver<E> {
         format!("{goal}@{before}")
     }
 
-    fn memoize(&mut self, goal: &GoalId, env: &Env, before: &str, value: &ReturnValue) -> Result<(), DriverError> {
+    fn memoize(
+        &mut self,
+        goal: &GoalId,
+        env: &Env,
+        before: &str,
+        value: &ReturnValue,
+    ) -> Result<(), DriverError> {
         let after = git::tree_hash(&env.worktree)?;
         let patch = git::diff_trees(&env.worktree, before, &after)?;
         self.state.memo.insert(
@@ -288,10 +306,7 @@ impl<E: Evaluator> Driver<E> {
                     path: path.clone(),
                     key,
                 });
-                return Ok(Outcome::Value(ReturnValue {
-                    goal,
-                    ..m.value
-                }));
+                return Ok(Outcome::Value(ReturnValue { goal, ..m.value }));
             }
         }
         let mut refused: Option<GoalId> = None;
@@ -304,15 +319,19 @@ impl<E: Evaluator> Driver<E> {
                 verdict,
                 reason,
             };
+            // Green is the base case. Anything else is an observation the
+            // evaluator gets to move on; the frame's verdict when it is out
+            // of moves is whatever the LAST oracle run showed — Failed, or
+            // CouldNotJudge for a setup error (ARCH §18.2, never collapsed).
             let done = match verdict {
                 Verdict::Passed => Some(terminal(verdict, "oracle green".into())),
-                Verdict::CouldNotJudge => Some(terminal(
-                    verdict,
-                    format!("oracle could not judge: {}", last_line(&run.tail)),
-                )),
                 _ if asks_left == 0 => Some(terminal(
-                    Verdict::Failed,
-                    format!("asks exhausted: {}", last_line(&run.tail)),
+                    verdict,
+                    format!(
+                        "asks exhausted, last run {}: {}",
+                        verdict.as_str(),
+                        last_line(&run.tail)
+                    ),
                 )),
                 _ => None,
             };
@@ -331,7 +350,7 @@ impl<E: Evaluator> Driver<E> {
             let req = EvalRequest {
                 instruction: RECUR_INSTRUCTION,
                 path: path.clone(),
-                on_stack: path.0.clone(),
+                on_stack: path.goals().to_vec(),
                 observation: run.tail.clone(),
                 refused: refused.take(),
                 asks_left,
@@ -361,7 +380,10 @@ impl<E: Evaluator> Driver<E> {
                     self.state.stack.push(StackItem::Goal { path: child, env });
                     return Ok(Outcome::Suspended);
                 }
-                EvalResponse::Edit { path: file, content } => {
+                EvalResponse::Edit {
+                    path: file,
+                    content,
+                } => {
                     let target = env.worktree.join(&file);
                     if let Some(p) = target.parent() {
                         std::fs::create_dir_all(p)?;
@@ -404,7 +426,7 @@ impl<E: Evaluator> Driver<E> {
                     return Ok(Outcome::Suspended);
                 }
                 EvalResponse::GiveUp { reason } => {
-                    let v = terminal(Verdict::Failed, format!("gave up: {reason}"));
+                    let v = terminal(verdict, format!("gave up ({}): {reason}", verdict.as_str()));
                     self.memoize(&goal, &env, &before, &v)?;
                     self.event(Event::Evaluated {
                         path,
@@ -442,7 +464,12 @@ impl<E: Evaluator> Driver<E> {
                                 let out = ReturnValue {
                                     goal: f.goal().clone(),
                                     verdict: v.verdict,
-                                    reason: format!("sub-goal {} {}: {}", v.goal, v.verdict.as_str(), v.reason),
+                                    reason: format!(
+                                        "sub-goal {} {}: {}",
+                                        v.goal,
+                                        v.verdict.as_str(),
+                                        v.reason
+                                    ),
                                 };
                                 self.memoize(f.goal(), &f.env, &f.before, &out)?;
                                 self.event(Event::Evaluated {
@@ -454,7 +481,10 @@ impl<E: Evaluator> Driver<E> {
                                 v = out;
                                 continue;
                             }
-                            match self.evaluate(f.path, f.env, f.before, asks_left, false).await? {
+                            match self
+                                .evaluate(f.path, f.env, f.before, asks_left, false)
+                                .await?
+                            {
                                 Outcome::Value(v2) => {
                                     v = v2;
                                     continue;
@@ -463,7 +493,10 @@ impl<E: Evaluator> Driver<E> {
                             }
                         }
                         Continuation::Combine { mut slots, next } => {
-                            if let Some(s) = slots.iter_mut().find(|s| s.goal == v.goal && s.value.is_none()) {
+                            if let Some(s) = slots
+                                .iter_mut()
+                                .find(|s| s.goal == v.goal && s.value.is_none())
+                            {
                                 s.value = Some(v.clone());
                             }
                             if next < slots.len() {
@@ -472,7 +505,10 @@ impl<E: Evaluator> Driver<E> {
                                     path: f.path.clone(),
                                     env: f.env,
                                     before: f.before,
-                                    k: Continuation::Combine { slots, next: next + 1 },
+                                    k: Continuation::Combine {
+                                        slots,
+                                        next: next + 1,
+                                    },
                                 }));
                                 self.state.stack.push(StackItem::Goal {
                                     path: f.path.child(s.goal),
@@ -491,12 +527,20 @@ impl<E: Evaluator> Driver<E> {
 
     /// All siblings delivered: commit each branch, merge them into the
     /// frame's env, run the goal on the merged tree, fold.
-    async fn combine(&mut self, f: &StackFrame, slots: &[Slot]) -> Result<ReturnValue, DriverError> {
+    async fn combine(
+        &mut self,
+        f: &StackFrame,
+        slots: &[Slot],
+    ) -> Result<ReturnValue, DriverError> {
         for s in slots {
             git::commit_all(&s.env.worktree, &format!("recur: leaf {}", s.goal))?;
         }
         let branches: Vec<String> = slots.iter().map(|s| s.env.branch.clone()).collect();
-        let sibling_fold = fold(slots.iter().filter_map(|s| s.value.as_ref().map(|v| v.verdict)));
+        let sibling_fold = fold(
+            slots
+                .iter()
+                .filter_map(|s| s.value.as_ref().map(|v| v.verdict)),
+        );
         let (verdict, reason) = match git::merge(&f.env.worktree, &branches)? {
             Err(conflict) => (
                 Verdict::Failed,
@@ -508,13 +552,36 @@ impl<E: Evaluator> Driver<E> {
                 if merged == Verdict::Passed {
                     (Verdict::Passed, "merged tree green".into())
                 } else if sibling_fold == Verdict::Passed {
-                    (merged, format!("passed in every branch, {} in merge: {}", merged.as_str(), last_line(&run.tail)))
+                    (
+                        merged,
+                        format!(
+                            "passed in every branch, {} in merge: {}",
+                            merged.as_str(),
+                            last_line(&run.tail)
+                        ),
+                    )
                 } else {
                     let slot_summary: Vec<String> = slots
                         .iter()
-                        .map(|s| format!("{}={}", s.goal, s.value.as_ref().map(|v| v.verdict.as_str()).unwrap_or("never-ran")))
+                        .map(|s| {
+                            format!(
+                                "{}={}",
+                                s.goal,
+                                s.value
+                                    .as_ref()
+                                    .map(|v| v.verdict.as_str())
+                                    .unwrap_or("never-ran")
+                            )
+                        })
                         .collect();
-                    (fold([sibling_fold, merged]), format!("siblings [{}], merge {}", slot_summary.join(", "), merged.as_str()))
+                    (
+                        fold([sibling_fold, merged]),
+                        format!(
+                            "siblings [{}], merge {}",
+                            slot_summary.join(", "),
+                            merged.as_str()
+                        ),
+                    )
                 }
             }
         };
@@ -534,8 +601,22 @@ impl<E: Evaluator> Driver<E> {
     }
 }
 
+/// The oracle's summary line with pytest's wall-time suffix (` in 0.03s`)
+/// removed: a reason is part of the memoized, persisted, compared record,
+/// and timing is not part of the verdict.
 fn last_line(s: &str) -> String {
-    s.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("").trim().to_string()
+    let line = s
+        .lines()
+        .rev()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or("")
+        .trim();
+    match line.rfind(" in ") {
+        Some(i) if line.ends_with('s') && line[i + 4..line.len() - 1].parse::<f64>().is_ok() => {
+            line[..i].to_string()
+        }
+        _ => line.to_string(),
+    }
 }
 
 /// Read-only view for reports: the slot verdicts recorded under each

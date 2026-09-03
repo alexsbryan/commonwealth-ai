@@ -16,7 +16,13 @@ pub struct GitError {
     pub stderr: String,
 }
 
+/// Trimmed stdout — for hashes and names.
 pub fn git(dir: &Path, args: &[&str]) -> Result<String, GitError> {
+    git_raw(dir, args).map(|s| s.trim().to_string())
+}
+
+/// Untrimmed stdout — a patch's final newline is load-bearing.
+pub fn git_raw(dir: &Path, args: &[&str]) -> Result<String, GitError> {
     let out = Command::new("git")
         .arg("-C")
         .arg(dir)
@@ -35,7 +41,7 @@ pub fn git(dir: &Path, args: &[&str]) -> Result<String, GitError> {
             stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
         });
     }
-    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
 pub fn head(dir: &Path) -> Result<String, GitError> {
@@ -67,7 +73,7 @@ pub fn diff_trees(dir: &Path, a: &str, b: &str) -> Result<String, GitError> {
     if a == b {
         return Ok(String::new());
     }
-    git(dir, &["diff", "--binary", a, b])
+    git_raw(dir, &["diff", "--binary", a, b])
 }
 
 /// Apply a patch to the working tree. An empty patch is a no-op.
@@ -89,12 +95,13 @@ pub fn apply(dir: &Path, patch: &str) -> Result<(), GitError> {
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| err(e.to_string()))?;
-    child
-        .stdin
-        .take()
-        .expect("piped stdin")
+    let Some(mut stdin) = child.stdin.take() else {
+        return Err(err("no stdin pipe".into()));
+    };
+    stdin
         .write_all(patch.as_bytes())
         .map_err(|e| err(e.to_string()))?;
+    drop(stdin);
     let out = child.wait_with_output().map_err(|e| err(e.to_string()))?;
     if !out.status.success() {
         return Err(err(String::from_utf8_lossy(&out.stderr).into_owned()));
@@ -109,20 +116,22 @@ pub fn add_worktree(from: &Path, path: &Path, branch: &str, commit: &str) -> Res
         let _ = std::fs::create_dir_all(p);
     }
     let path_s = path.display().to_string();
-    git(from, &["worktree", "add", "-q", "-b", branch, &path_s, commit])?;
+    git(
+        from,
+        &["worktree", "add", "-q", "-b", branch, &path_s, commit],
+    )?;
     Ok(())
 }
 
-/// Merge `branches` into the checked-out branch of `dir`. `Ok(Err(msg))` is
-/// a conflict (aborted, tree restored); `Err` is git itself failing.
+/// Merge `branches` into the checked-out branch of `dir`, one at a time so
+/// a conflict names its branch. `Ok(Err(msg))` is a conflict (aborted, tree
+/// restored); `Err` is git itself failing.
 pub fn merge(dir: &Path, branches: &[String]) -> Result<Result<(), String>, GitError> {
-    let mut args = vec!["merge", "-q", "--no-edit"];
-    args.extend(branches.iter().map(String::as_str));
-    match git(dir, &args) {
-        Ok(_) => Ok(Ok(())),
-        Err(e) => {
+    for b in branches {
+        if let Err(e) = git(dir, &["merge", "-q", "--no-edit", b]) {
             let _ = git(dir, &["merge", "--abort"]);
-            Ok(Err(e.stderr))
+            return Ok(Err(format!("{b}: {}", e.stderr.trim())));
         }
     }
+    Ok(Ok(()))
 }
