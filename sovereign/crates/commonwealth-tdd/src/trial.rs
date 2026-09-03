@@ -607,6 +607,9 @@ impl CandidateOutcome {
                     Some(p) => format!("write_file→{p}"),
                     None => "write_file".to_string(),
                 },
+                EditAction::MoveLines { start, end, dest, .. } => {
+                    format!("move {start}-{end}→{dest}")
+                }
             };
             // `~` marks a header-inferred action (model emitted only
             // the source block) — keeps inference-rescued candidates

@@ -44,7 +44,7 @@ pub fn split_file(args: SplitFileArgs) -> Trial {
     write_structural_test(workdir_path, framework, args.max_lines);
 
     let prompt = format!(
-        "Goal: split `{}` until every source file is ≤ {} lines.\n\nThe generated `max_file_size` test ladder (in the project's test directory) enforces this at descending thresholds — each extraction that shrinks the largest file flips another rung. Make them pass without breaking the behavior tests. Extract cohesive helpers to new files (emit multiple action+block pairs in one response when the step needs coordinated changes); you don't need to plan the whole refactor up front.",
+        "Goal: split `{}` until every source file is ≤ {} lines.\n\nThe generated `max_file_size` test ladder (in the project's test directory) enforces this at descending thresholds — each extraction that shrinks the largest file flips another rung. Make them pass without breaking the behavior tests. Extract cohesive helpers to new files (emit multiple action+block pairs in one response when the step needs coordinated changes); you don't need to plan the whole refactor up front.\n\nRELOCATION RULE: moving existing code (a tests module, a concern, a set of helpers) is a move_lines action, NEVER a write_file — re-emitting thousands of moved lines truncates and parse-fails. Cut the span with {{\"action\": \"move_lines\", \"start\": N, \"end\": M, \"dest\": \"<file>\"}}, then (if needed) a small write_file for the new file's module declaration + re-exports. Tests modules move whole, verbatim.",
         args.path.display(),
         args.max_lines,
     );

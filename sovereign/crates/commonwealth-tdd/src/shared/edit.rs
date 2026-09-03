@@ -32,6 +32,23 @@ pub enum EditAction {
         #[serde(default)]
         path: Option<String>,
     },
+    /// RELOCATE lines without emitting them. `start`/`end` (1-based,
+    /// inclusive) are cut from `src` (default: the focused source file)
+    /// and appended to `dest` (parent dirs created; an existing dest is
+    /// appended to). The model emits the DECISION, never the content —
+    /// moving a 1,200-line tests module as a WriteFile needs ~40k output
+    /// tokens and truncates every candidate (measured 2026-09-02, the
+    /// grounding judge.rs split: 10/10 candidates parse-failed under the
+    /// 4,000-token emit budget). This is the tool the hand refactor used
+    /// `sed` for. Needs NO source block — `parse_response` accepts a
+    /// bare action header for this variant.
+    MoveLines {
+        #[serde(default)]
+        src: Option<String>,
+        start: u32,
+        end: u32,
+        dest: String,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -46,6 +63,16 @@ pub struct ParsedResponse {
 
 pub fn parse_response(content: &str) -> Option<ParsedResponse> {
     if let Some(action) = parse_action_json(content) {
+        // MoveLines is a relocation DECISION — it carries no source
+        // block, and demanding one would parse-fail every honest
+        // emission of it.
+        if matches!(action, EditAction::MoveLines { .. }) {
+            return Some(ParsedResponse {
+                action,
+                body: String::new(),
+                inferred: false,
+            });
+        }
         let body = parse_source_block(content)?;
         return Some(ParsedResponse {
             action,
@@ -188,6 +215,20 @@ pub fn parse_response_edits(content: &str) -> Vec<ParsedResponse> {
             || (body.trim_start().starts_with('{') && body.contains("\"action\""));
         if is_json {
             if let Ok(a) = serde_json::from_str::<EditAction>(body.trim()) {
+                // Consecutive actions are legal when the pending one
+                // carries no source block (MoveLines): a split round
+                // emits a SEQUENCE of relocations, json after json.
+                // Flush a pending body-less edit; otherwise the new
+                // action replaces the pending one (the old contract).
+                if let Some(a0) = pending.take() {
+                    if matches!(a0, EditAction::MoveLines { .. }) {
+                        pairs.push(ParsedResponse {
+                            action: a0,
+                            body: String::new(),
+                            inferred: false,
+                        });
+                    }
+                }
                 pending = Some(a);
             }
             continue;
@@ -196,6 +237,17 @@ pub fn parse_response_edits(content: &str) -> Vec<ParsedResponse> {
             pairs.push(ParsedResponse {
                 action: a,
                 body,
+                inferred: false,
+            });
+        }
+    }
+    // A trailing body-less action (a lone MoveLines with no following
+    // block) is still a complete edit — flush it before the fallback.
+    if let Some(a0) = pending.take() {
+        if matches!(a0, EditAction::MoveLines { .. }) {
+            pairs.push(ParsedResponse {
+                action: a0,
+                body: String::new(),
                 inferred: false,
             });
         }
