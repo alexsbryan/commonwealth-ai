@@ -185,6 +185,86 @@ jobs:
       # change, small and actionable.
       - run: cargo fmt --all --check
 
+  # ---------------------------------------------------------------
+  # The xtask ratchets. MOVED HERE from scripts/pre-push.sh on 2026-09-03,
+  # where they were the only automatic run of these gates anywhere — a
+  # --no-verify push, or a contributor who never installed the hook, was
+  # gated by nothing. They stay in the hook too (17s there); this is the
+  # copy that cannot be skipped.
+  # ---------------------------------------------------------------
+  gates:
+    name: Ratchets (xtask gates)
+    runs-on: ubuntu-latest
+    # Deliberately NOT gated on `changes`. These read .rs, the narrative
+    # docs, quality/*.toml and Cargo.lock, so very nearly any diff can break
+    # one — and a filter that has to predict WHICH is exactly the drift this
+    # workflow keeps getting bitten by (see the `rust` filter's own comments).
+    # The job is cheap enough not to need one: xtask pulls four small crates,
+    # and the seven gates run in ~12s with no workspace compile.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p xtask
+      # concept-gate is NOT in this list, and cannot be. It counts nothing
+      # itself — it relays `svrn code converge status`, which reads a SCIP
+      # graph that exists only on an indexed working machine. On a clean
+      # checkout its only possible answers are COULD-NOT-JUDGE (3) and
+      # NEVER-RAN (4). A gate that can never say "pass" here is decoration,
+      # so it stays local-only where the graph is real.
+      - name: docs / arch / boundary / layer / lock / layout / env
+        run: |
+          set -uo pipefail
+          rc=0
+          for g in docs-gate arch-gate boundary-gate layer-gate lock-gate layout-gate env-gate; do
+            printf '\n──── %s\n' "$g"
+            ./target/debug/xtask "$g" || rc=1
+          done
+          exit $rc
+      # Advisory here for the same reason they are warn_gate in the hook:
+      # size-gate has not yet run a clean week of pushes, and the deletion
+      # campaign is genuinely in arrears. Printed every push, blocking neither.
+      # Promote by deleting the continue-on-error, one at a time, on evidence.
+      - name: size + deletion ratchets (advisory)
+        continue-on-error: true
+        run: |
+          ./target/debug/xtask size-gate
+          python3 scripts/deletion-manifest.py --verify
+
+  # ---------------------------------------------------------------
+  # The shell + hook self-tests. Shell suites MOVED HERE from the pre-push
+  # hook on 2026-09-03 (10.3s there); the hook suites moved with them and
+  # were costing 45.0s — 75% of that file's one-minute budget on their own,
+  # for a warn_gate that could not fail a push anyway.
+  # ---------------------------------------------------------------
+  suites:
+    name: Self-tests (shell + hooks)
+    runs-on: ubuntu-latest
+    # Unconditional, like `gates` above, and here it is also a COVERAGE GAIN:
+    # in the hook both suites were diff-scoped, so they ran only when the diff
+    # happened to touch scripts/ or .claude/hooks/. The thing a self-test
+    # guards against is a change ELSEWHERE breaking the harness, which is
+    # precisely the case that scoping skipped.
+    steps:
+      - uses: actions/checkout@v7
+      # BLOCKING: this suite is fully green, so it can hold the line. It
+      # covers the release drivers — the scripts that decide which bytes
+      # reach users, which no cargo test can reach, and where two defects
+      # (a glob over an uncleaned dist/, a stopped podman VM misdiagnosed)
+      # shipped silently for weeks.
+      - name: release / shell suites (scripts/tests)
+        run: bash scripts/tests/run-all.sh
+      # ADVISORY: sits at 16 known failures (inject-boot-block 11,
+      # inject-budget 3, inject-notes 2 — seat-sidecar cases whose subject
+      # was removed from the hook while its tests stayed). Blocking it today
+      # would wedge every PR, which is how a gate gets deleted. Reported so
+      # the backlog is visible on every push instead of only when someone
+      # edits a hook; drop continue-on-error the day it reaches zero.
+      - name: hook suites (.claude/hooks/tests — 16 known failures)
+        continue-on-error: true
+        run: bash .claude/hooks/tests/run-all.sh
+
   # Node-only gate for the Svelte/TS desktop frontend. No Rust toolchain, no
   # llama.cpp, no native stack — just the webview code the workspace
   # `cargo check` is blind to. `npm run check` is svelte-check
@@ -480,7 +560,7 @@ jobs:
   ci-ok:
     name: CI OK
     if: always()
-    needs: [changes, fmt, desktop, test]
+    needs: [changes, fmt, gates, suites, desktop, test]
     runs-on: ubuntu-latest
     steps:
       - name: Verify every gate passed or was legitimately skipped
@@ -496,6 +576,8 @@ jobs:
           echo "Gate results:"
           check changes '${{ needs.changes.result }}'
           check fmt     '${{ needs.fmt.result }}'
+          check gates   '${{ needs.gates.result }}'
+          check suites  '${{ needs.suites.result }}'
           check desktop '${{ needs.desktop.result }}'
           check test    '${{ needs.test.result }}'
           exit "$fail"

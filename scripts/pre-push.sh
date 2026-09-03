@@ -32,18 +32,53 @@
 # they pass HERE", run when you mean to rather than on every push.
 #
 # What is left is the set of checks that are fast, deterministic, and cannot
-# be answered by reading the diff. Measured on this host 2026-08-30:
+# be answered by reading the diff. Re-measured on this host 2026-09-03, after
+# a run came in at 100s and blew the budget by two thirds:
 #
-#   cargo check (--all-targets, real features)  14-58s   CONCURRENT
+#   cargo check (--all-targets, real features)  16-67s   CONCURRENT
 #   ─── everything below runs while that does ─────────
-#   rustfmt                                        4s    (Rust pushes only)
-#   xtask build freshness check                    1s
-#   eight xtask gates, one binary                  5s
-#   CLI journey self-test                          3s    (harness changes)
-#   release script self-test                       2s    (release changes)
-#   desktop svelte-check + vitest                  9s    (desktop changes)
+#   rustfmt                                        6s    (Rust pushes only)
+#   xtask build freshness check                  0.2s    (cached)
+#   eight xtask gates, one binary                 21s
+#     standalone: docs 2.2 · arch 4.2 · layout 2.6 · env 2.6 · concept 5.3
+#     boundary/layer/lock < 0.1 each
+#   size ratchet + deletion manifest             4-5s
 #   ───────────────────────────────────────────────────
-#   wall clock = max(cargo check, ~21s) — NOT their sum
+#   wall clock = max(cargo check, ~32s) — NOT their sum
+#
+# Two cautions on those numbers, both learned the hard way on 2026-09-03:
+#
+#   * cargo check's range is the DIFF's, not this file's. 16s over 4 crates,
+#     67s over the 34 a merge touched. It is the only term here that scales
+#     with what you are pushing, and on a big merge it IS the budget.
+#   * every number above assumes a quiet machine. A run measured at 261s the
+#     same afternoon was not a slow gate: load average was 12.85 with
+#     rust-analyzer, a 35GB-RSS daemon and a second agent harness resident,
+#     and sovereign-lint.sh had derived `jobs: 2` from 5GB free. Read the
+#     `jobs:` line on its banner before concluding anything about this file.
+#
+# ## What left on 2026-09-03, and why the 100s run happened
+#
+# The 2026-08-30 table above was honest and became wrong, because three of its
+# rows were DIFF-SCOPED: they cost nothing on most pushes and all fired at once
+# on a push that touched hooks, scripts and the frontend together. A budget
+# that only holds for the average diff is not a budget. Measured, that push:
+#
+#   hook suites (.claude/hooks/tests)           45.0s -> CI job `suites`
+#   release/shell suites (scripts/tests)        10.3s -> CI job `suites`
+#   desktop svelte-check + vitest              ~10.0s -> CI job `desktop` (already there)
+#   CLI journey self-test                       ~3.0s -> CI job `test` (already there)
+#
+# Two of those four were ALREADY duplicated in CI, so removing them costs no
+# coverage at all. The other two had no CI equivalent and gained one — the
+# hook suites in particular now run on every push instead of only when a hook
+# changed, which is strictly more coverage than this file ever gave them.
+#
+# The eight xtask gates stay. They are 17s, they are the only place in the
+# repo that runs them, and they are the checks a diff genuinely cannot answer.
+# They are ALSO added to CI (`gates`) so a --no-verify push and a contributor
+# without this hook installed are gated too — belt and braces on purpose, and
+# cheap in both places.
 #
 # The compile check is the one gate that can exceed the budget on its own, and
 # what drives that is NOT the size of the diff — it is FREE MEMORY. The script
@@ -70,7 +105,6 @@
 #
 #   git push --no-verify           # skip every hook, one push
 #   SOVEREIGN_SKIP_PREPUSH=1 git push
-#   SOVEREIGN_PREPUSH_QUICK=1 git push   # skip the desktop node gates
 #
 # Use them when you mean to (pushing a WIP branch for a colleague to look at,
 # racing a hotfix). Do not use them to push red code to main — CI will catch
@@ -95,7 +129,6 @@ if [[ -n "${SOVEREIGN_SKIP_PREPUSH:-}" ]]; then
     exit 0
 fi
 
-QUICK="${SOVEREIGN_PREPUSH_QUICK:-}"
 
 # ── Colours (only when attached to a terminal) ─────────────────────────────
 if [[ -t 2 ]]; then
@@ -173,9 +206,6 @@ say "gating ${n_changed} changed file(s) in ${C_BOLD}${RANGE}${C_RESET}"
 match() { printf '%s\n' "$CHANGED" | grep -Eq "$1"; }
 
 RUST=0
-DESKTOP=0
-JOURNEY=0
-RELEASE=0
 # The non-.rs entries are TEST INPUTS. `sovereign/docs/cli-contract.toml` is
 # read by cli_contract_{code,docs,journeys} and cli_journey_dispatch, so
 # editing the manifest alone can turn the suite red without touching a line of
@@ -189,31 +219,10 @@ RELEASE=0
 # rustfmt cares about" would make the two lists diverge for a few seconds of
 # saving on a non-Rust push.
 match '(\.rs$|(^|/)Cargo\.toml$|^Cargo\.lock$|^rust-toolchain\.toml$|^\.cargo/|^vendor/|^scripts/sovereign-test\.sh$|^scripts/lib/|^sovereign/crates/sovereign-tools/src/code/test_adapters/|^sovereign/docs/cli-contract\.toml$|^sovereign/scripts/cli-journey-.*\.sh$|^sovereign/scripts/tests/)' && RUST=1
-match '^sovereign/crates/sovereign-desktop/' && DESKTOP=1
-# The journey harness's own negative controls: the runner SCRIPT, which no
-# cargo test covers. Every path here is also a RUST path above, so the static
-# and offline tiers ride the workspace test run and are not re-run here.
-match '(^sovereign/docs/cli-contract\.toml$|^sovereign/scripts/cli-journey-.*\.sh$|^sovereign/scripts/tests/|^sovereign/crates/sovereign-cli/tests/cli_(contract|journey))' && JOURNEY=1
-# The release drivers, which decide what bytes reach users and which no cargo
-# test can reach. Same shape as JOURNEY above: shell that gates a shipping
-# decision is itself ungated unless something like this runs it.
-# scripts/lib/release-host.sh and the two build-desktop-* drivers are in this
-# set for a reason: they are SOURCED or exec'd by the release drivers, so a
-# change there changes what a release does while leaving every path this
-# pattern used to match untouched — the gate would sit out the one commit
-# most able to break a release.
-# .containerignore and the desktop Containerfiles join them on the same
-# argument. .containerignore decides what podman streams into every container
-# build — a dropped line there costs minutes per build and reports nothing (it
-# is not a build failure, just a stall), which is exactly why the guard exists.
-# The Containerfiles are the single decider of which paths the build genuinely
-# needs, so a new COPY is the one change that can turn a lean context into a
-# broken build.
-# `scripts/tests/` also holds the CI-bench lane-verdict suite, so the two files
-# it guards are named here too. Without them, editing the verdict logic would
-# not run the only gate on it — which is the "opt-in guard decays into
-# decoration" failure that `scripts/tests/run-all.sh`'s own header warns about.
-match '(^scripts/release-.*\.sh$|^scripts/tests/|^scripts/lib/release-host\.sh$|^scripts/lib/ci-bench-verdict\.sh$|^scripts/sovereign-ci-bench\.sh$|^scripts/sabotage\.py$|^scripts/build-desktop-.*\.sh$|^\.containerignore$|/containerfiles/)' && RELEASE=1
+# DESKTOP / JOURNEY / RELEASE detection was removed on 2026-09-03 with the
+# gates it fed (see Gates 4 and 5 below). CI's `changes` job still carries the
+# equivalent filters, which is where those gates now live — so the "mirror the
+# CI filters" rule above still holds for RUST, the only scope this file reads.
 
 FAILED=()        # gates that ran and said no — these block
 UNVERIFIED=()    # gates that could not run here — these warn
@@ -498,23 +507,14 @@ size_gate() {
 warn_gate "size ratchet (code lines per crate)" size_gate
 warn_gate "deletion manifest ratchet" python3 "${REPO_ROOT}/scripts/deletion-manifest.py" --verify
 
-# The awareness layer had no gate at all, which is why its own suite rotted:
-# `scripts/tests/run-all.sh` is gated below, `.claude/hooks/tests/run-all.sh`
-# was gated by nothing, and it sits at 16 failures at HEAD (inject-boot-block
-# 11, inject-budget 3, inject-notes 2 — seat-sidecar cases whose subject was
-# removed from the hook while its tests stayed). Nothing surfaced that, so
-# nothing surfaced the injector defects underneath it either: there was no
-# green to break.
-#
-# DIFF-SCOPED because the suite is ~50s and this file holds a one-minute
-# budget — free on the pushes that do not touch a hook, present on the ones
-# that do. warn_gate for the reason above it: a 16-failure wall at the push is
-# how a gate teaches people to reach for --no-verify.
-# Promote to run_gate the day the backlog reaches zero.
-if match '^\.claude/hooks/'; then
-    warn_gate "hook suites (.claude/hooks/tests — 16 known failures)" \
-        bash "${REPO_ROOT}/.claude/hooks/tests/run-all.sh"
-fi
+# The hook suites MOVED TO CI on 2026-09-03 (job `suites`). Measured 45.0s
+# here — the single largest cost in this file and 75% of the budget on its
+# own, for a warn_gate that cannot fail the push because the suite sits at 16
+# known failures. Paying 45s to reprint a known-red wall is how a budget goes,
+# and CI had no equivalent at all, so the coverage is strictly better there:
+# it now runs on EVERY push rather than only when the diff touches a hook.
+# Non-blocking in CI for the same reason it was warn_gate here; promote it the
+# day the backlog reaches zero.
 
 # ── Gate 3: NOT HERE. The workspace test suite runs in CI, not at the push. ─
 #
@@ -534,78 +534,23 @@ fi
 # feature contract) concurrently for a fraction of the cost. What is genuinely
 # gone is behaviour: nothing here now runs a single test.
 
-# ── Gate 4: the journey harness's own negative controls. ───────────────────
+# ── Gate 4: journey + release self-tests. BOTH IN CI NOW. ─────────────────
 #
-# Tiers 1 and 2 of the journey harness are Rust tests and ride Gate 3. Tier 3
-# is a shell RUNNER, and no cargo test can reach it — so without this gate the
-# thing that decides whether every journey passed or failed is itself ungated.
+# The journey self-test was ALREADY duplicated: `.github/workflows/ci.yml`
+# runs `sovereign/scripts/tests/cli-journey-selftest.sh` in the `test` job, so
+# paying ~3s for it here bought a second opinion on a clean-checkout gate.
 #
-# That is not hypothetical. The runner this replaced, cli-contract-live-verify.sh,
-# was written, documented as "safe to call unconditionally in CI", and then
-# never called once: SOVEREIGN_LIVE_CONTRACT appears nowhere in the repo except
-# inside the script that reads it. An opt-in guard decays into decoration, and
-# a harness nobody has seen FAIL is not evidence of anything.
-#
-# Cost is a few seconds: a stub binary and a loopback stub daemon, no models,
-# no real daemon, nothing written outside a mktemp dir (ARCH_PRINCIPLES §12.4).
-if (( JOURNEY )); then
-    if command -v python3 >/dev/null 2>&1; then
-        run_gate "CLI journey self-test (harness negative controls)" \
-            sovereign/scripts/tests/cli-journey-selftest.sh
-    else
-        # The stub daemon is a python3 one-liner. No python3 is a property of
-        # this shell, not of the push — same reasoning as the third-party build
-        # break above: block only on what an edit here could actually fix.
-        warn "python3 not found — cannot run the journey self-test (its stub daemon needs it)"
-        UNVERIFIED+=("CLI journey self-test")
-    fi
-else
-    say "no journey-harness changes — skipping journey self-test"
-fi
+# The release self-test (`scripts/tests/run-all.sh`, measured 10.3s) had no CI
+# equivalent and moved to the `suites` job. It is BLOCKING there — unlike the
+# hook suites it is fully green, so it can hold the line rather than warn.
 
-# ── Gate 4b: the release drivers' own negative controls. ───────────────────
-#
-# scripts/release-*.sh decide which bytes reach users, and no cargo test can
-# reach them. Both defects these suites cover shipped silently for weeks and
-# were found only by a release that happened to trip them:
-#
-#   • the upload list is a GLOB over an uncleaned dist/, so a leftover tarball
-#     ships under today's tag with a filename and checksum that both verify.
-#     desktop-v0.3.5 actually did this (0.3.3 payload under a 0.3.5 name);
-#     cli-v0.5.0 came one build leg from repeating it with Jul-29 binaries.
-#   • a stopped podman VM was reported as "container image missing", sending
-#     you to rebuild a 3.3GB image that was already present.
-#   • every driver hard-gated on `uname -sm == "Darwin arm64"`, so the x86_64
-#     Linux workstation could not cut the three legs it builds NATIVELY while
-#     the Mac emulates them. The capability suite asserts the split both ways:
-#     a Linux host announces the Apple skip and never calls xcrun, and a Mac
-#     host does NOT get auto-skipped into shipping a release with no .dmg.
-#
-# Seconds to run: `gh` and `podman` are stubbed, nothing is uploaded or
-# started, everything happens in a mktemp dir.
-if (( RELEASE )); then
-    run_gate "release script self-test (provenance + podman diagnosis + host capability)" \
-        scripts/tests/run-all.sh
-else
-    say "no release-driver changes — skipping release script self-test"
-fi
 
-# ── Gate 5: the desktop webview surface, which cargo is blind to. ──────────
-if (( DESKTOP )); then
-    if [[ -n "$QUICK" ]]; then
-        warn "SKIPPING desktop gates (SOVEREIGN_PREPUSH_QUICK set) — CI will run them"
-    else
-        desktop_dir="sovereign/crates/sovereign-desktop"
-        if [[ -d "$desktop_dir/node_modules" ]]; then
-            run_gate "desktop svelte-check" npm --prefix "$desktop_dir" run check
-            run_gate "desktop vitest"       npm --prefix "$desktop_dir" run test
-        else
-            warn "$desktop_dir/node_modules missing — run 'npm ci' there; skipping desktop gates"
-        fi
-    fi
-else
-    say "no desktop changes — skipping svelte-check / vitest"
-fi
+# ── Gate 5: the desktop webview surface. IN CI, NOT HERE. ─────────────────
+#
+# `ci.yml`'s `desktop` job runs `npm run check` and `npm run test` — the same
+# two commands, blocking, on every push that touches the frontend. Measured
+# ~10s here for a verdict CI already owns. Run them by hand while working on
+# the frontend: npm --prefix sovereign/crates/sovereign-desktop run check
 
 # ── Collect Gate 1b, started before everything above. ──────────────────────
 if [[ -n "$LINT_PID" ]]; then
