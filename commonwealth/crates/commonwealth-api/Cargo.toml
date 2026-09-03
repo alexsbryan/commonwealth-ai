@@ -23,7 +23,7 @@ corpus-engine = { workspace = true, features = ["treesitter"] }
 # Parser for `next_edit_syntax`. The GRAMMARS come from corpus-engine's
 # registry — this is only the engine that runs them, so there is one
 # place where `.tsx` vs `.ts` is decided.
-tree-sitter = "0.26"
+tree-sitter = "0.27"
 corpus-engine-notes = { workspace = true }
 # The SCIP call graph, for `next_edit_symbols` (call-site navigation).
 # A DIRECT dep by the carve-out's own rule: corpus-engine deliberately
@@ -113,7 +113,7 @@ tokio-stream = "0.1"
 # Home-dir lookup for the alignment projector hook in auto_recover
 # and corpus_sync. Already a transitive dep via sovereign-cli; pulling
 # it in directly here avoids reaching across crates for a single call.
-dirs = "5"
+dirs = "6"
 
 [features]
 default = []
