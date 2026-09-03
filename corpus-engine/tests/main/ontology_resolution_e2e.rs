@@ -13,7 +13,6 @@
 //! here rather than inside `resolution.rs`, which is 4.5x ARCH §3.1's ceiling
 //! and does not need another 340 lines.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use corpus_engine::enrichment::atlas::atoms::AtomId;
@@ -23,7 +22,7 @@ use corpus_engine::enrichment::atlas::{
     resolve_step_3b_with, ResolutionOutput, ResolutionPolicy, Step3bOutput,
 };
 use corpus_engine::enrichment::ontology::{
-    AttrDecl, AttrFamily, Force, OntologyPolicies, OntologyTypeDecl, ShapePolicy, TypeKind,
+    OntologyPolicies, OntologyTypeDecl, TypeKind,
 };
 use corpus_engine::enrichment::pipeline::atlas::{
     ClaimSketch, DiscourseAct, EnrichmentDepth, EntitySketch, EntityType, EpistemicStatus,
@@ -86,52 +85,20 @@ fn event(desc: &str, participants: &[&str]) -> EventSketch {
     }
 }
 
-/// The shipped numismatics shape, plus the one relation type the
+/// The shipped numismatics declaration, plus the one relation type the
 /// template leaves to the author (there is nothing to check endpoints
 /// against otherwise).
 fn numismatics() -> OntologyPolicies {
-    let entity = |name: &str, specializes: Option<&str>| OntologyTypeDecl {
-        name: name.into(),
-        kind: TypeKind::Entity,
-        specializes: specializes.map(str::to_string),
+    let mut p = corpus_engine::recipe_templates::policies("numismatics")
+        .expect("numismatics is a shipped ontology template");
+    p.shape.types.push(OntologyTypeDecl {
+        name: "struck_at".into(),
+        kind: TypeKind::Relation,
+        from: Some("coin".into()),
+        to: Some("mint".into()),
         ..Default::default()
-    };
-    let mut coin = entity("coin", None);
-    coin.attributes = vec![AttrDecl {
-        name: "mint".into(),
-        family: AttrFamily::Ref { of: "mint".into() },
-        description: String::new(),
-    }];
-    OntologyPolicies {
-        shape: ShapePolicy {
-            types: vec![
-                coin,
-                entity("sceatta", Some("coin")),
-                entity("mint", None),
-                OntologyTypeDecl {
-                    name: "ruler".into(),
-                    kind: TypeKind::Entity,
-                    role_of: Some("person".into()),
-                    ..Default::default()
-                },
-                OntologyTypeDecl {
-                    name: "struck_at".into(),
-                    kind: TypeKind::Relation,
-                    from: Some("coin".into()),
-                    to: Some("mint".into()),
-                    ..Default::default()
-                },
-                OntologyTypeDecl {
-                    name: "attribution".into(),
-                    kind: TypeKind::Claim,
-                    force: Some(Force::Assertive),
-                    subject: Some("coin".into()),
-                    ..Default::default()
-                },
-            ],
-        },
-        ..Default::default()
-    }
+    });
+    p
 }
 
 fn typed(name: &str, ty: &str) -> EntitySketch {

@@ -669,6 +669,8 @@ For debugging, partial re-runs, and iterating on a single prompt. `build` orches
 
 | Subcommand | Description |
 |---|---|
+| `atlas-query <corpus-id> "<question>" [--depth N] [--callers] [--json]` | Classify and traverse a question against a resolved atlas. Over a corpus with a declared `[enrichment.ontology]` this is where the author's own nouns come back: the answer to "which coins are in this catalogue" is an enumeration of the declared type, and `--json` emits the `TraversalResult` with each atom's `entity_type`. Over a code atlas it walks the scip call chain (`--depth`, `--callers`). |
+| `schema-report <corpus-id> [--json]` | The §12 validation table for one corpus: coverage per declared type, depth, confidence, orphans, gaps. Needs a resolved atlas; also writes `atlas/schema_validation.json`. |
 | `status <corpus-id>` | Per-phase cache-freshness table (fresh / stale / never-run). |
 | `show <corpus-id> <target> [--chapter <id>] [--concern <id>]` | Formatted view of any cached phase output. |
 | `exemplars <corpus-id>` | Report per-phase exemplar-bank counts + lint findings. |

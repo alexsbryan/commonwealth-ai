@@ -375,23 +375,10 @@ mod tests {
         }
     }
 
-    /// A numismatics-shaped ontology: one declared claim type with a time
-    /// attribute, `between = ["attribution"]`, no `same`.
-    fn numismatics() -> OntologyPolicies {
-        let mut p = OntologyPolicies::default();
-        p.shape.types.push(OntologyTypeDecl {
-            name: "attribution".into(),
-            kind: TypeKind::Claim,
-            attributes: vec![AttrDecl {
-                name: "proposed_date".into(),
-                family: AttrFamily::Time { range: true },
-                description: String::new(),
-            }],
-            ..Default::default()
-        });
-        p.derivation.tension.between = vec!["attribution".into()];
-        p
-    }
+    /// The shipped numismatics declaration: one claim type (`attribution`)
+    /// with a `proposed_date` time attribute, `between = ["attribution"]`,
+    /// no `same`.
+    use crate::recipe_templates::numismatics_policies as numismatics;
 
     #[test]
     fn drop_non_comparable_pairs_keeps_same_subject_and_clock() {

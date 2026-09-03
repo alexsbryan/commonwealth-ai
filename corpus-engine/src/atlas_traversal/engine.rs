@@ -459,6 +459,23 @@ const ENUMERATE_MAX: usize = 64;
 
 /// Every Entity of a declared type, including its `specializes` descendants.
 ///
+/// What a headline calls instances of a declared type: the author's `label`
+/// when they declared one, else the type name. One accessor, so the
+/// enumeration and the tally cannot call the same type two different things.
+///
+/// `label` is SINGULAR by its own contract ("what the UI calls instances of
+/// this type"), and an author's noun cannot be pluralised by a rule we own —
+/// so the enumeration headline names the type and then counts
+/// (`coin: 7 in this atlas`) rather than trying to agree in number. Until
+/// 2026-09-03 it read `7 coin in this atlas` for every shipped template; the
+/// only test that covered it declared a plural `label` no template carries.
+fn declared_label(index: &TypeIndex, entity_type: &str) -> String {
+    index
+        .get(entity_type)
+        .and_then(|d| d.label.clone())
+        .unwrap_or_else(|| entity_type.to_string())
+}
+
 /// This is why an enumeration of `coin` returns the sceattas too: the atlas
 /// stores each atom under its OWN declared subtype, and `sceatta specializes
 /// coin` is what makes a sceatta a coin. The walk goes through
@@ -502,11 +519,13 @@ fn traverse_enumerate(entity_type: &str, atlas: AtlasView<'_>) -> TraversalResul
             format!("No {entity_type} atoms in this atlas."),
         );
     }
-    let label = index
-        .get(entity_type)
-        .and_then(|d| d.label.clone())
-        .unwrap_or_else(|| entity_type.to_string());
-    let mut result = TraversalResult::hit("enumerate", format!("{total} {label} in this atlas"));
+    let mut result = TraversalResult::hit(
+        "enumerate",
+        format!(
+            "{}: {total} in this atlas",
+            declared_label(&index, entity_type)
+        ),
+    );
     result.entities = matched;
     result
 }
@@ -574,7 +593,10 @@ fn traverse_aggregate(entity_type: &str, over: &str, atlas: AtlasView<'_>) -> Tr
         .map(|(k, n)| format!("{k}: {n}"))
         .collect::<Vec<_>>()
         .join(", ");
-    result.headline = format!("{total} {entity_type} by {over} — {breakdown}");
+    result.headline = format!(
+        "{total} {} by {over} — {breakdown}",
+        declared_label(&index, entity_type)
+    );
     result.entities.truncate(ENUMERATE_MAX);
     result.claims.truncate(ENUMERATE_MAX);
     result
@@ -643,7 +665,7 @@ mod tests {
 
     // ── ontology-v1 P5: declared-type walks ──────────────────
 
-    use crate::enrichment::ontology::{OntologyTypeDecl, ShapePolicy, TypeKind};
+    use crate::recipe_templates::numismatics_policies as numismatics;
 
     /// A coin atom typed under the AUTHOR'S noun, with declared attributes.
     fn coin(idx: usize, name: &str, subtype: &str, metal: &str, salience: f32) -> Entity {
@@ -653,28 +675,6 @@ mod tests {
         e.attributes
             .insert("metal".into(), serde_json::Value::String(metal.into()));
         e
-    }
-
-    fn numismatics() -> OntologyPolicies {
-        OntologyPolicies {
-            shape: ShapePolicy {
-                types: vec![
-                    OntologyTypeDecl {
-                        name: "coin".into(),
-                        kind: TypeKind::Entity,
-                        label: Some("coins".into()),
-                        ..Default::default()
-                    },
-                    OntologyTypeDecl {
-                        name: "sceatta".into(),
-                        kind: TypeKind::Entity,
-                        specializes: Some("coin".into()),
-                        ..Default::default()
-                    },
-                ],
-            },
-            ..Default::default()
-        }
     }
 
     fn declared_view<'a>(entities: &'a [Entity], vocab: &'a OntologyPolicies) -> AtlasView<'a> {
@@ -726,8 +726,9 @@ mod tests {
             result.entities[0].canonical_name,
             "Aldfrith penny, Series Y"
         );
-        // The declared label is what the headline calls them.
-        assert_eq!(result.headline, "7 coins in this atlas");
+        // The shipped template declares no `label`, so the headline names the
+        // author's type and counts. It does not try to pluralise `coin`.
+        assert_eq!(result.headline, "coin: 7 in this atlas");
 
         // The narrower type returns only its own.
         let sceattas = traverse(
@@ -737,6 +738,29 @@ mod tests {
             declared_view(&entities, &vocab),
         );
         assert_eq!(sceattas.entities.len(), 4);
+    }
+
+    /// A declared `label` is what the headline calls the type. No shipped
+    /// template declares one for an entity type, which is why the fixture is
+    /// the shipped declaration with the facet added rather than invented.
+    #[test]
+    fn a_declared_label_names_the_type_in_the_headline() {
+        let mut vocab = numismatics();
+        vocab
+            .shape
+            .types
+            .iter_mut()
+            .find(|t| t.name == "coin")
+            .expect("the template declares coin")
+            .label = Some("penny".into());
+        let entities = vec![coin(1, "Beonna penny", "coin", "silver", 0.7)];
+        let result = traverse(
+            &QueryPlan::Enumerate {
+                entity_type: "coin".into(),
+            },
+            declared_view(&entities, &vocab),
+        );
+        assert_eq!(result.headline, "penny: 1 in this atlas");
     }
 
     /// A declared type with no atoms is a miss, not an empty hit — the caller

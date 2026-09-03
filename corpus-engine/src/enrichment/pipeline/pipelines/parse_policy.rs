@@ -499,13 +499,13 @@ pub(super) fn validated_choice(
 
 #[cfg(test)]
 mod tests {
-    use super::super::numismatics_policies;
+    use crate::recipe_templates::numismatics_policies as numismatics;
     use super::*;
 
     #[test]
     fn default_policy_declares_nothing() {
         assert!(ParsePolicy::default().is_empty());
-        assert!(!ParsePolicy::from_policies(&numismatics_policies()).is_empty());
+        assert!(!ParsePolicy::from_policies(&numismatics()).is_empty());
     }
     /// The declared-name match is the SAME rule the generic variants get:
     /// lowercase, separators folded. Exact match wins first so two names that
@@ -563,7 +563,7 @@ mod tests {
     }
     #[test]
     fn declared_attributes_of_an_undeclared_name_is_empty() {
-        let p = ParsePolicy::from_policies(&numismatics_policies());
+        let p = ParsePolicy::from_policies(&numismatics());
         assert!(!declared_attributes(&p.entity_types, "coin").is_empty());
         assert!(declared_attributes(&p.entity_types, "hoard").is_empty());
     }

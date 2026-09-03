@@ -362,7 +362,7 @@ mod tests {
         }
     }
 
-    use super::super::numismatics_policies as numismatics;
+    use crate::recipe_templates::numismatics_policies as numismatics;
 
     fn chapter() -> ChapterInput {
         ChapterInput {
@@ -466,7 +466,7 @@ mod tests {
 
         // The shipped numismatics template declares types and no
         // `derive.configurations`.
-        let declared = super::super::numismatics_policies();
+        let declared = numismatics();
         assert!(declared.has_declarations());
         assert!(
             !declared.derivation.configurations,
@@ -509,7 +509,7 @@ mod tests {
         use super::super::genre::AtlasGenre;
         use crate::enrichment::atlas::analysis::CorpusShape;
 
-        let ont = CustomOntology::from_policies("n", &super::super::numismatics_policies());
+        let ont = CustomOntology::from_policies("n", &numismatics());
         let catalogue = CorpusShape {
             claims: 7,
             doc_count: 7,
@@ -561,7 +561,7 @@ mod tests {
             "no declaration, no relation field"
         );
 
-        let declared = CustomOntology::from_policies("n", &super::super::numismatics_policies())
+        let declared = CustomOntology::from_policies("n", &numismatics())
             .compose_phase6_classifier(&content)
             .expect("composes");
         assert!(declared.system.contains("## Relation"));

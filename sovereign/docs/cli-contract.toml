@@ -989,6 +989,18 @@ path = "enrich configure"
 binary = "llm"
 classification = "daemon"
 [[command]]
+path = "enrich atlas-query"
+binary = "llm"
+flags = [
+  { name = "--depth", takes_value = true },
+  { name = "--callers" },
+  { name = "--json" },
+]
+[[command]]
+path = "enrich schema-report"
+binary = "llm"
+flags = [{ name = "--json" }]
+[[command]]
 path = "enrich status"
 binary = "llm"
 [[command]]
@@ -2277,6 +2289,79 @@ stdout_contains = "{corpus}"
 run = "recipe publish {recipe}"
 mutates = true
 skip_live = "publishes to the shared catalog"
+
+[[journey]]
+id = "ontology-author"
+title = "Declare your own nouns in a recipe, and get them back out of the atlas"
+persona = "author"
+experience = "knowledge-corpora"
+tier = 3
+doc = "sovereign/docs/ENRICH_A_CORPUS.md#declare-your-own-nouns"
+# THE OBJECTIVE OF ontology-v1, AS A CONTRACT CLAIM. Until 2026-09-03 the only
+# thing that asserted it was `scripts/setup-numismatics-corpus.sh`, which the
+# census and pre-push cannot see: `enrich atlas-query` and `enrich schema-report`
+# appeared ZERO times in this file, and the script re-walked `recipe-author`
+# steps 0-3 and `enrich-atlas` steps 0-3 to reach the one assertion that is its
+# own. That assertion is step [4] here.
+#
+# NOT a duplicate of `enrich-atlas`. That journey enriches a corpus that
+# declares NO ontology, so it must name `--pipeline` (init's default is the
+# legacy `literary` one and `enrich build` refuses it). This one declares an
+# ontology, so the pipeline is DERIVED from the declaration — `enrich init`
+# with no `--pipeline` resolving to the custom atlas is itself part of the
+# claim, and a regression that lost the derivation would turn step [1] red.
+#
+# The recipe is the repo's own `sovereign-recipes/wessex-hoard/` — a real
+# declaration over a real corpus, with an exhaustive `truth.json` beside it —
+# rather than a second invented fixture. Its `acquire.path` is relative to the
+# recipe's own directory, so unlike the journey-corpus fixture it needs no
+# `@FIXTURE_DIR@` substitution.
+[[journey.step]]
+run = "corpus install {ontology_recipe} --wait"
+mutates = true
+note = """by PATH, not by id — this is the author's own recipe and it has never \
+been published to a registry. `--wait` is the barrier for the reason given in \
+enrich-atlas[0]: a bare install returns on ACCEPT, and the index `enrich init` \
+opens is materialised by the finalise step ~20s later."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "installed"
+[[journey.step]]
+run = "enrich init {ontology_corpus} --from-corpus {ontology_corpus}"
+mutates = true
+note = """NO `--pipeline`, deliberately. The recipe declares \
+`[enrichment.ontology]`, so the custom-atlas pipeline is derived from the \
+declaration; naming one here would prove the flag and hide the derivation."""
+[journey.step.expect]
+exit = 0
+[[journey.step]]
+run = "enrich build {ontology_corpus} --full"
+mutates = true
+[journey.step.expect]
+exit = 0
+[[journey.step]]
+run = "enrich schema-report {ontology_corpus}"
+note = """the §12 coverage table over the DECLARED types — how many atoms \
+landed under each noun the author wrote. Read-only and proves itself inline."""
+[journey.step.expect]
+exit = 0
+stdout_non_empty = true
+[[journey.step]]
+run = "enrich atlas-query {ontology_corpus} {ontology_question} --json"
+note = """THE PAYLOAD, and the only step in this file that speaks to the \
+objective: the answer to the author's own question carries the author's own \
+noun. `sceatta` is not one of the six generic atom kinds and is not in any \
+prompt this pipeline ships — it can only be in this output because the \
+declaration reached the extractor, the resolver and the classifier. Asserting \
+the JSON field rather than the headline: a headline is prose and gets \
+rephrased, `entity_type` is the wire. The exhaustive scoring against \
+`sovereign-recipes/wessex-hoard/truth.json` — every catalogued coin under its \
+declared identity key, every named mint and ruler — stays in \
+`scripts/setup-numismatics-corpus.sh`, which is where a recall bar belongs; \
+this step is the contract-visible floor under it."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "\"entity_type\": \"sceatta\""
 
 [[journey]]
 id = "meshapp-author"

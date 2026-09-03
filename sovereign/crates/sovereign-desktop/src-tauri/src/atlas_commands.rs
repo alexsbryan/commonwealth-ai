@@ -838,7 +838,7 @@ mod tests {
         let names: Vec<&str> = page.items.iter().map(|a| a.display_name.as_str()).collect();
         assert_eq!(
             names,
-            vec!["Wessex Down 1", "Wessex Down 2", "Wessex Down 3"],
+            vec!["Marlow Field 1", "Marlow Field 2", "Marlow Field 3"],
             "the three coins, NOT the two sceattas the badge counts",
         );
 
@@ -870,7 +870,7 @@ mod tests {
             .unwrap()
             .expect("the attribution claim is in the fixture");
         assert_eq!(
-            detail.referenced_atoms["entity-0008"].display_name, "Wessex Down 4",
+            detail.referenced_atoms["entity-0008"].display_name, "Marlow Field 4",
             "the claim's subject resolves",
         );
         let sceatta = reader

@@ -614,48 +614,7 @@ mod tests {
 
     // ── ontology-v1 P5: declared-type plans ──────────────────
 
-    use crate::enrichment::ontology::{
-        AttrDecl, AttrFamily, OntologyTypeDecl, ShapePolicy, TypeKind,
-    };
-
-    fn decl(name: &str, specializes: Option<&str>, attrs: &[&str]) -> OntologyTypeDecl {
-        OntologyTypeDecl {
-            name: name.to_string(),
-            kind: TypeKind::Entity,
-            specializes: specializes.map(str::to_string),
-            attributes: attrs
-                .iter()
-                .map(|a| AttrDecl {
-                    name: (*a).to_string(),
-                    family: AttrFamily::Text { values: Vec::new() },
-                    description: String::new(),
-                })
-                .collect(),
-            ..Default::default()
-        }
-    }
-
-    /// The wessex-hoard vocabulary: coin, sceatta (specializes coin), ruler,
-    /// mint, and an `attribution` claim.
-    fn numismatics() -> OntologyPolicies {
-        let mut p = OntologyPolicies {
-            shape: ShapePolicy {
-                types: vec![
-                    decl("coin", None, &["metal", "weight", "mint"]),
-                    decl("sceatta", Some("coin"), &[]),
-                    decl("ruler", None, &[]),
-                    decl("mint", None, &[]),
-                ],
-            },
-            ..Default::default()
-        };
-        p.shape.types.push(OntologyTypeDecl {
-            name: "attribution".to_string(),
-            kind: TypeKind::Claim,
-            ..Default::default()
-        });
-        p
-    }
+    use crate::recipe_templates::numismatics_policies as numismatics;
 
     /// The wessex-hoard enumeration probe. This is link 5 of the chain: the
     /// question has to reach the AUTHOR'S noun, not one of the six kinds.

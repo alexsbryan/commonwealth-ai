@@ -79,7 +79,7 @@ export const GOV_FIXTURE_INFO = path.join(RESULTS, "real-gov-fixture.json");
 // that resolves next to one that is just what the source said.
 const NUM_CORPUS_DIR = path.join(__dirname, "fixtures/numismatics-corpus");
 const NUM_ATLAS_FIXTURE = path.join(__dirname, "fixtures/numismatics-atlas");
-const NUM_DISPLAY_NAME = "Wessex Down (E2E)";
+const NUM_DISPLAY_NAME = "Marlow Field (E2E)";
 /** Specs read this to learn the numismatics corpus id. */
 export const NUM_FIXTURE_INFO = path.join(RESULTS, "real-num-fixture.json");
 
@@ -1159,7 +1159,7 @@ export default async function globalSetup(): Promise<void> {
   // Demo mode (tests/e2e/demo) attaches to the operator's REAL daemon to
   // film real corpora. Planting the fixture corpora there would both
   // pollute that index and put "E2E Fixture Corpus" / "Maple House (E2E)"
-  // / "Wessex Down (E2E)" on camera in the Library shelf. Skip them; no
+  // / "Marlow Field (E2E)" on camera in the Library shelf. Skip them; no
   // demo beat reads any of them.
   if (process.env.SOVEREIGN_DEMO === "1") {
     console.log("[real-setup] SOVEREIGN_DEMO=1 — skipping fixture corpus plants");

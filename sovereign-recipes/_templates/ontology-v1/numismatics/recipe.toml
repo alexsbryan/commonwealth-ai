@@ -3,8 +3,10 @@
 # Scanned catalogues, hoard reports, journal articles. The questions it is
 # built to answer: which mints struck for a ruler; what is the weight range of
 # a series; who disputes a dating and on what grounds. The declaration is
-# Follows ONTOLOGY_PRIMITIVES.md §1.1, extended with `catalogue_ref` and an
-# `identity` key that §1.1 does not carry.
+# ONTOLOGY_PRIMITIVES.md §1.1's, plus a `guidance` block and a description on
+# `mint`. It does NOT carry `catalogue_ref` or an `identity` key — those are
+# `sovereign-recipes/wessex-hoard`'s own, added by a corpus whose entries have
+# a catalogue reference to be identified by.
 #
 # Scaffold:  svrn recipe new --ontology numismatics --id my-coins --out my-coins.toml
 # Then fill the REPLACE_ME fields, and:

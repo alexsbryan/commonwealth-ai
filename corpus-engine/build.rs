@@ -114,6 +114,17 @@ fn vendor_recipes(recipes_root: &Path, dest_root: &Path) {
         std::fs::copy(&recipe, &dest)
             .unwrap_or_else(|e| panic!("copy {} -> {}: {e}", recipe.display(), dest.display()));
         println!("cargo:rerun-if-changed={}", recipe.display());
+
+        // A recipe may ship an exhaustive ground-truth manifest beside it
+        // (`wessex-hoard/truth.json`). Vendored on the same path so a test can
+        // `include_str!` the ONE copy instead of re-typing its rows in Rust.
+        let truth = path.join("truth.json");
+        if truth.is_file() {
+            let dest = dest_dir.join("truth.json");
+            std::fs::copy(&truth, &dest)
+                .unwrap_or_else(|e| panic!("copy {} -> {}: {e}", truth.display(), dest.display()));
+            println!("cargo:rerun-if-changed={}", truth.display());
+        }
     }
 }
 

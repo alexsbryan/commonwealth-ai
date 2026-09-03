@@ -365,7 +365,7 @@ fn set_attribute_property(defs: &mut Defs, sketch: &str, key: &str, value: Value
 mod tests {
     use super::*;
 
-    use super::super::numismatics_policies as numismatics;
+    use crate::recipe_templates::numismatics_policies as numismatics;
 
     fn sketch<'a>(schema: &'a Value, name: &str) -> &'a Value {
         &schema["$defs"][name]

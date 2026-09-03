@@ -80,7 +80,7 @@ test("real stack: a declared corpus browses by the author's own nouns", async ({
   // every descendant explicitly (`AtomFilter::subtypes`); the server
   // still never walks the hierarchy.
   await expect(rows).toHaveCount(5);
-  for (const name of ["Wessex Down 1", "Wessex Down 2", "Wessex Down 3"]) {
+  for (const name of ["Marlow Field 1", "Marlow Field 2", "Marlow Field 3"]) {
     await expect(rows.getByText(name, { exact: true })).toBeVisible();
   }
 
@@ -97,7 +97,7 @@ test("real stack: a declared corpus browses by the author's own nouns", async ({
   // ── A sceatta's declared attributes are rows in the inspector. ──
   await pill("subtype:sceatta").click();
   await expect(rows).toHaveCount(2);
-  await rows.filter({ hasText: "Wessex Down 4" }).getByRole("button").first().click();
+  await rows.filter({ hasText: "Marlow Field 4" }).getByRole("button").first().click();
 
   await expect(page.getByTestId("atom-attributes")).toBeVisible();
   const attrNames = page.getByTestId("atom-attribute-name");
@@ -133,7 +133,7 @@ test("real stack: an attribution claim links to the coin it is about", async ({
   const rows = page.locator('[data-testid="atlas-atom-row"]');
   await expect(rows).toHaveCount(2);
   await rows
-    .filter({ hasText: "Wessex Down 4 was struck at Canterbury" })
+    .filter({ hasText: "Marlow Field 4 was struck at Canterbury" })
     .getByRole("button")
     .first()
     .click();
@@ -149,7 +149,7 @@ test("real stack: an attribution claim links to the coin it is about", async ({
   // `entity-0008`.
   const about = page.getByTestId("claim-subject");
   await expect(about).toBeVisible();
-  await expect(about).toContainText("Wessex Down 4");
+  await expect(about).toContainText("Marlow Field 4");
   // And the voice is still its own, different atom.
   await expect(page.getByText("Michael Metcalf")).toBeVisible();
 });

@@ -94,3 +94,29 @@ pub fn instantiate(template: &str, id: Option<&str>) -> String {
         .join("\n")
         + if template.ends_with('\n') { "\n" } else { "" }
 }
+
+/// The [`crate::enrichment::ontology::OntologyPolicies`] a shipped template
+/// declares — the one derive from a template name to the policies retrieval,
+/// resolution and the prompt builders actually read.
+///
+/// This is the surface every ontology test uses in place of a hand-rolled
+/// declaration, so no test can pass against an ontology nobody ships. Before
+/// 2026-09-03 six fixtures each re-typed a subset of `numismatics` in Rust,
+/// and one of them invented a `label` the template does not carry.
+pub fn policies(name: &str) -> Result<crate::enrichment::ontology::OntologyPolicies> {
+    Ok(crate::recipe::Recipe::from_toml(load_builtin(name)?)?
+        .custom_atlas_spec()
+        .ok_or_else(|| {
+            Error::InvalidInput(format!(
+                "built-in template '{name}' declares no [enrichment.ontology] block"
+            ))
+        })?
+        .policies())
+}
+
+/// The shipped `numismatics` declaration, for the crate's own ontology tests.
+/// Integration tests call [`policies`] directly.
+#[cfg(test)]
+pub(crate) fn numismatics_policies() -> crate::enrichment::ontology::OntologyPolicies {
+    policies("numismatics").expect("numismatics is a shipped ontology template")
+}

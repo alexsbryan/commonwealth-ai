@@ -147,7 +147,7 @@ mod tests {
     use super::*;
     use crate::enrichment::pipeline::atlas::{DiscourseAct, EntityType, SectionExtraction};
 
-    use super::super::numismatics_policies as numismatics;
+    use crate::recipe_templates::numismatics_policies as numismatics;
 
     fn policy() -> ParsePolicy {
         ParsePolicy::from_policies(&numismatics())

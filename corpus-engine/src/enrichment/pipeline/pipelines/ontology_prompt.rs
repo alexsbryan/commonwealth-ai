@@ -402,7 +402,7 @@ fn render_attr(a: &AttrDecl) -> String {
 mod tests {
     use super::*;
 
-    use super::super::numismatics_policies as numismatics;
+    use crate::recipe_templates::numismatics_policies as numismatics;
     use super::super::ontology_schema::{
         phase1_schema_for, report_added_prompt_size, MAX_ADDED_PROMPT_CHARS,
     };
@@ -450,13 +450,8 @@ mod tests {
 
     #[test]
     fn phase6_extras_render_non_conflicts_and_the_deontic_reading_when_declared() {
-        let toml = crate::recipe_templates::load_builtin("governance")
+        let policies = crate::recipe_templates::policies("governance")
             .expect("governance is a shipped ontology template");
-        let policies = crate::recipe::Recipe::from_toml(toml)
-            .expect("the shipped template parses")
-            .custom_atlas_spec()
-            .expect("it declares an [enrichment.ontology] block")
-            .policies();
 
         let extras = render_phase6_extras(&policies);
         assert!(extras.contains("## Declared non-conflicts"));

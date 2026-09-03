@@ -10,7 +10,7 @@
         "first_appearance": {
           "chunk_id": "sec_hoard_i"
         },
-        "description": "Offa, from the Wessex Down hoard report.",
+        "description": "Offa, from the Marlow Field hoard report.",
         "salience": 0.9,
         "enrichment_depth": "extracted"
       }
@@ -24,7 +24,7 @@
         "first_appearance": {
           "chunk_id": "sec_catalogue_i"
         },
-        "description": "Michael Metcalf, from the Wessex Down hoard report.",
+        "description": "Michael Metcalf, from the Marlow Field hoard report.",
         "salience": 0.5,
         "enrichment_depth": "extracted"
       }
@@ -38,7 +38,7 @@
         "first_appearance": {
           "chunk_id": "sec_hoard_i"
         },
-        "description": "Canterbury, from the Wessex Down hoard report.",
+        "description": "Canterbury, from the Marlow Field hoard report.",
         "salience": 0.8,
         "enrichment_depth": "extracted"
       }
@@ -52,7 +52,7 @@
         "first_appearance": {
           "chunk_id": "sec_hoard_i"
         },
-        "description": "London, from the Wessex Down hoard report.",
+        "description": "London, from the Marlow Field hoard report.",
         "salience": 0.6,
         "enrichment_depth": "extracted"
       }
@@ -61,12 +61,12 @@
       "atom_type": "Entity",
       "data": {
         "id": "entity-0005",
-        "canonical_name": "Wessex Down 1",
+        "canonical_name": "Marlow Field 1",
         "entity_type": "coin",
         "first_appearance": {
           "chunk_id": "sec_hoard_i"
         },
-        "description": "Wessex Down 1, from the Wessex Down hoard report.",
+        "description": "Marlow Field 1, from the Marlow Field hoard report.",
         "salience": 0.9,
         "enrichment_depth": "extracted",
         "attributes": {
@@ -76,7 +76,7 @@
           "metal": "silver",
           "weight": 1.21,
           "struck": "757-796",
-          "catalogue_ref": "Wessex Down 1"
+          "catalogue_ref": "Marlow Field 1"
         }
       }
     },
@@ -84,12 +84,12 @@
       "atom_type": "Entity",
       "data": {
         "id": "entity-0006",
-        "canonical_name": "Wessex Down 2",
+        "canonical_name": "Marlow Field 2",
         "entity_type": "coin",
         "first_appearance": {
           "chunk_id": "sec_hoard_i"
         },
-        "description": "Wessex Down 2, from the Wessex Down hoard report.",
+        "description": "Marlow Field 2, from the Marlow Field hoard report.",
         "salience": 0.8,
         "enrichment_depth": "extracted",
         "attributes": {
@@ -98,7 +98,7 @@
           "denomination": "penny",
           "metal": "silver",
           "weight": 1.32,
-          "catalogue_ref": "Wessex Down 2"
+          "catalogue_ref": "Marlow Field 2"
         }
       }
     },
@@ -106,19 +106,19 @@
       "atom_type": "Entity",
       "data": {
         "id": "entity-0007",
-        "canonical_name": "Wessex Down 3",
+        "canonical_name": "Marlow Field 3",
         "entity_type": "coin",
         "first_appearance": {
           "chunk_id": "sec_hoard_i"
         },
-        "description": "Wessex Down 3, from the Wessex Down hoard report.",
+        "description": "Marlow Field 3, from the Marlow Field hoard report.",
         "salience": 0.7,
         "enrichment_depth": "extracted",
         "attributes": {
           "denomination": "mancus",
           "metal": "gold",
           "weight": 4.28,
-          "catalogue_ref": "Wessex Down 3"
+          "catalogue_ref": "Marlow Field 3"
         }
       }
     },
@@ -126,12 +126,12 @@
       "atom_type": "Entity",
       "data": {
         "id": "entity-0008",
-        "canonical_name": "Wessex Down 4",
+        "canonical_name": "Marlow Field 4",
         "entity_type": "sceatta",
         "first_appearance": {
           "chunk_id": "sec_hoard_i"
         },
-        "description": "Wessex Down 4, from the Wessex Down hoard report.",
+        "description": "Marlow Field 4, from the Marlow Field hoard report.",
         "salience": 0.85,
         "enrichment_depth": "extracted",
         "attributes": {
@@ -139,7 +139,7 @@
           "metal": "silver",
           "weight": 0.95,
           "struck": "between 710 and 725",
-          "catalogue_ref": "Wessex Down 4"
+          "catalogue_ref": "Marlow Field 4"
         }
       }
     },
@@ -147,19 +147,19 @@
       "atom_type": "Entity",
       "data": {
         "id": "entity-0009",
-        "canonical_name": "Wessex Down 5",
+        "canonical_name": "Marlow Field 5",
         "entity_type": "sceatta",
         "first_appearance": {
           "chunk_id": "sec_hoard_i"
         },
-        "description": "Wessex Down 5, from the Wessex Down hoard report.",
+        "description": "Marlow Field 5, from the Marlow Field hoard report.",
         "salience": 0.6,
         "enrichment_depth": "extracted",
         "attributes": {
           "mint": "an unidentified continental mint",
           "metal": "billon",
           "weight": 0.88,
-          "catalogue_ref": "Wessex Down 5"
+          "catalogue_ref": "Marlow Field 5"
         }
       }
     },
@@ -186,7 +186,7 @@
       "atom_type": "Claim",
       "data": {
         "id": "claim-0001",
-        "content": "Wessex Down 4 was struck at Canterbury between 710 and 725.",
+        "content": "Marlow Field 4 was struck at Canterbury between 710 and 725.",
         "discourse_act": "assert",
         "epistemic_status": "confident",
         "scope": "particular",
@@ -209,7 +209,7 @@
       "atom_type": "Claim",
       "data": {
         "id": "claim-0002",
-        "content": "Wessex Down 1 was struck for Offa at London.",
+        "content": "Marlow Field 1 was struck for Offa at London.",
         "discourse_act": "assert",
         "epistemic_status": "confident",
         "scope": "particular",

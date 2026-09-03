@@ -21,41 +21,25 @@ use corpus_engine::atlas_traversal::{
 };
 use corpus_engine::enrichment::atlas::atoms::{AtomId, ChunkRef, Entity};
 use corpus_engine::enrichment::atlas::{read_atlas_ontology, write_atlas_ontology};
-use corpus_engine::enrichment::ontology::{
-    AttrDecl, AttrFamily, OntologyPolicies, OntologyTypeDecl, TypeKind,
-};
+use corpus_engine::enrichment::ontology::OntologyPolicies;
 use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
 
-/// The numismatics template's declaration, reduced to what retrieval reads:
-/// the four entity types, `sceatta specializes coin`, and the `attribution`
-/// claim. Mirrors `sovereign-recipes/_templates/ontology-v1/numismatics`.
+/// The shipped numismatics declaration, read from the template itself so no
+/// test here can pass against an ontology nobody ships.
 fn numismatics_policies() -> OntologyPolicies {
-    let attr = |name: &str| AttrDecl {
-        name: name.to_string(),
-        family: AttrFamily::Text { values: Vec::new() },
-        description: String::new(),
-    };
-    let entity = |name: &str, specializes: Option<&str>, attrs: Vec<AttrDecl>| OntologyTypeDecl {
-        name: name.to_string(),
-        kind: TypeKind::Entity,
-        specializes: specializes.map(str::to_string),
-        attributes: attrs,
-        ..Default::default()
-    };
-    let mut p = OntologyPolicies::default();
-    p.shape.types = vec![
-        entity("coin", None, vec![attr("metal"), attr("mint")]),
-        entity("sceatta", Some("coin"), Vec::new()),
-        entity("ruler", None, Vec::new()),
-        entity("mint", None, Vec::new()),
-        OntologyTypeDecl {
-            name: "attribution".to_string(),
-            kind: TypeKind::Claim,
-            ..Default::default()
-        },
-    ];
-    p
+    corpus_engine::recipe_templates::policies("numismatics")
+        .expect("numismatics is a shipped ontology template")
 }
+
+/// `sovereign-recipes/wessex-hoard/truth.json`, vendored by `build.rs` beside
+/// the recipe it belongs to. THE truth file, not a transcription of it: until
+/// 2026-09-03 the seven catalogue rows were re-typed here, so an edit to the
+/// manifest the eval bank and the chain proof both read left this test
+/// asserting the old hoard.
+const TRUTH_JSON: &str = include_str!(concat!(
+    env!("OUT_DIR"),
+    "/recipes/wessex-hoard/truth.json"
+));
 
 /// One catalogue coin, typed under the author's noun.
 fn coin(idx: usize, name: &str, subtype: &str, metal: &str, salience: f32) -> Entity {
@@ -80,17 +64,45 @@ fn coin(idx: usize, name: &str, subtype: &str, metal: &str, salience: f32) -> En
     }
 }
 
-/// The wessex-hoard catalogue, `truth.json` C1..C7.
+/// The wessex-hoard catalogue, read from `truth.json`'s `entities.coin` rows
+/// in file order. Salience descends so the walk's sort is deterministic; it is
+/// not a truth field.
 fn wessex_hoard() -> Vec<Entity> {
-    vec![
-        coin(1, "Aldfrith penny, Series Y", "sceatta", "silver", 0.90),
-        coin(2, "Series R sceatta", "sceatta", "silver", 0.80),
-        coin(3, "Beonna penny", "coin", "silver", 0.70),
-        coin(4, "Offa gold dinar", "coin", "gold", 0.60),
-        coin(5, "Coenwulf mancus", "coin", "gold", 0.50),
-        coin(6, "Series X sceatta", "sceatta", "silver", 0.40),
-        coin(7, "Series E porcupine sceatta", "sceatta", "billon", 0.30),
-    ]
+    let truth: serde_json::Value =
+        serde_json::from_str(TRUTH_JSON).expect("truth.json parses");
+    let coins = truth["entities"]["coin"]
+        .as_array()
+        .expect("truth.json declares entities.coin");
+    coins
+        .iter()
+        .enumerate()
+        .map(|(i, c)| {
+            coin(
+                i + 1,
+                c["name"].as_str().expect("every truth coin has a name"),
+                c["subtype"].as_str().expect("every truth coin has a subtype"),
+                c["metal"].as_str().expect("every truth coin has a metal"),
+                0.90 - 0.10 * i as f32,
+            )
+        })
+        .collect()
+}
+
+/// `truth.json`'s `enumeration_probe`: the question the chain must answer, and
+/// how many coins the answer must carry.
+fn enumeration_probe() -> (String, usize) {
+    let truth: serde_json::Value =
+        serde_json::from_str(TRUTH_JSON).expect("truth.json parses");
+    let probe = &truth["enumeration_probe"];
+    (
+        probe["question"]
+            .as_str()
+            .expect("the probe declares a question")
+            .to_string(),
+        probe["expected_coin_count"]
+            .as_u64()
+            .expect("the probe declares expected_coin_count") as usize,
+    )
 }
 
 fn view<'a>(entities: &'a [Entity], vocab: Option<&'a OntologyPolicies>) -> AtlasView<'a> {
@@ -124,10 +136,10 @@ fn the_enumeration_probe_answers_with_the_authors_noun() {
         .expect("a declared ontology round-trips through atlas/ontology.json");
 
     let entities = wessex_hoard();
-    let question = "Which coins are in this catalogue, and what metal is each?";
+    let (question, expected_coins) = enumeration_probe();
 
     // 1. The classifier reaches the author's noun.
-    let plan = classify_query_with(question, &entities, Some(&policies));
+    let plan = classify_query_with(&question, &entities, Some(&policies));
     assert_eq!(
         plan,
         QueryPlan::Enumerate {
@@ -142,8 +154,14 @@ fn the_enumeration_probe_answers_with_the_authors_noun() {
     assert_eq!(result.kind, "enumerate");
     assert_eq!(
         result.entities.len(),
-        7,
-        "truth.json expected_coin_count is 7: `sceatta specializes coin`"
+        expected_coins,
+        "truth.json expected_coin_count: `sceatta specializes coin`"
+    );
+    assert_eq!(
+        expected_coins,
+        entities.len(),
+        "the probe's count and the catalogue it is asked over come from the \
+         same manifest, so a coin added to truth.json cannot pass unnoticed"
     );
 
     // 3. The brief names every coin and its metal — the second half of the
@@ -176,9 +194,9 @@ fn an_undeclared_atlas_is_unchanged() {
     );
 
     let entities = wessex_hoard();
-    let question = "Which coins are in this catalogue, and what metal is each?";
-    let with_none = classify_query_with(question, &entities, None);
-    assert_eq!(with_none, classify_query(question, &entities));
+    let (question, _) = enumeration_probe();
+    let with_none = classify_query_with(&question, &entities, None);
+    assert_eq!(with_none, classify_query(&question, &entities));
     assert!(
         !matches!(
             with_none,
