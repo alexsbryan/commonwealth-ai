@@ -29,6 +29,14 @@ mutation, not because anyone judged it uncovered.
   scripts/test-queue.py --kind tag      one kind
   scripts/test-queue.py --tier 1        one tier
   scripts/test-queue.py --counts        the arithmetic only
+  scripts/test-queue.py --next          ONE file's self-contained order
+
+--next is the burndown loop's unit of work: it renders the top-ranked file's
+records WHOLE — failure, observable, mutation, and for a tag the existing test —
+so an iteration is one command and one production read, never a note lookup.
+`--avoid <fragment,...>` skips files a peer session holds; `--skip N` takes the
+next-ranked one when the top is blocked. scripts/test-close.py is the only
+write path back.
 """
 import argparse, collections, glob, re, tomllib
 from pathlib import Path
@@ -61,7 +69,8 @@ def load():
         if r.get("landed"):
             continue                        # mutation watched red: not queue work
         items.append(dict(id=r["id"], kind="write", tier=r["tier"], path=norm(r["target"]),
-                          why=one_line(r["failure"].split(". ")[0]), witness="note " + r["note"]))
+                          why=one_line(r["failure"].split(". ")[0]), witness="note " + r["note"],
+                          raw=r))
     d = tomllib.load(open(ROOT / "quality/conformance-specs.toml", "rb"))
     for s in d["spec"]:
         if s["status"] == "exists-untagged":
@@ -73,9 +82,9 @@ def load():
         items.append(dict(id=s["id"], kind=kind,
                           tier=3 if s["family"] in TIER3_FAMILIES else 1,
                           path=norm(s.get("target")), why=one_line(s["clause"].split(". ")[0]),
-                          witness="clause " + s["id"]))
+                          witness="clause " + s["id"], raw=s))
     items.append(dict(id=d["id"], kind="decide", tier=1, path=norm(d.get("target")),
-                      why=one_line(d["clause"].split(". ")[0]), witness="clause " + d["id"]))
+                      why=one_line(d["clause"].split(". ")[0]), witness="clause " + d["id"], raw=d))
     return items
 
 
@@ -96,16 +105,85 @@ def cluster(items):
     return ranked, order
 
 
+def wrap(label, body, w=76):
+    """A field, indented under its label, wrapped — never truncated."""
+    body = re.sub(r"\s+", " ", (body or "")).strip()
+    if not body:
+        return
+    out, line = [], ""
+    for word in body.split(" "):
+        if len(line) + len(word) + 1 > w:
+            out.append(line); line = word
+        else:
+            line = (line + " " + word).strip()
+    out.append(line)
+    print(f"  {label:<12}{out[0]}")
+    for extra in out[1:]:
+        print(f"  {'':<12}{extra}")
+
+
+def order(path, items):
+    """ONE file's whole brief, self-contained. TEST_LEDGER.md: an agent picking
+    up a record must never need to open the witness note."""
+    print(f"ORDER   {path}")
+    print(f"        {len(items)} item(s): " + ", ".join(
+        f"{i['id']}({i['kind']})" for i in sorted(items, key=lambda x: x["id"])))
+    print("        interlock 5: one agent per file. Take all of them or none.")
+    for i in sorted(items, key=lambda x: (x["kind"] != "tag", x["id"])):
+        r = i["raw"]
+        print(f"\n── {i['id']}   {i['kind']}   {i['witness']}")
+        if i["kind"] == "write":
+            wrap("class", f"{r.get('class')}   surface {r.get('surface')}   found {r.get('found')}")
+            wrap("target", r.get("target"))
+            wrap("failure", r.get("failure"))
+            wrap("observable", r.get("observable"))
+            wrap("mutation", r.get("mutation"))
+        else:
+            wrap("clause", r.get("clause"))
+            wrap("target", r.get("target"))
+            wrap("existing", r.get("existing") or "(none named — this is a write, not a tag)")
+            wrap("asserts", r.get("asserts"))
+            wrap("catches", r.get("catches"))
+    print("\nCLOSE   watch the mutation redden the test THIS record names, then:")
+    print("        scripts/test-close.py " + " ".join(
+        f"{i['id']}=<junit-key>" for i in sorted(items, key=lambda x: x["id"])))
+    print("        A mutation that reddens a test the record does not name is")
+    print("        could-not-judge, never covered (TEST_LEDGER.md §Closure).")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--kind"); ap.add_argument("--tier", type=int)
     ap.add_argument("--counts", action="store_true")
+    ap.add_argument("--next", action="store_true",
+                    help="print ONE file's self-contained order — the loop's unit of work")
+    ap.add_argument("--skip", type=int, default=0,
+                    help="with --next: take the Nth-ranked file instead of the top one")
+    ap.add_argument("--avoid", default="",
+                    help="with --next: comma-separated path fragments to skip "
+                         "(a peer holds the file, or it is blocked)")
     a = ap.parse_args()
     items = load()
     if a.kind: items = [i for i in items if i["kind"] == a.kind]
     if a.tier: items = [i for i in items if i["tier"] == a.tier]
     ranked, kinds = cluster(items)
+
+    if a.next:
+        avoid = [x.strip() for x in a.avoid.split(",") if x.strip()]
+        live = [(p, its) for p, its in ranked
+                if not any(x in (p or "") for x in avoid)]
+        if not live:
+            print("QUEUE EMPTY — nothing left that is not avoided.")
+            return
+        if a.skip >= len(live):
+            print(f"ONLY {len(live)} file(s) available; --skip {a.skip} is past the end.")
+            return
+        path, its = live[a.skip]
+        print(f"OPEN {len(items)} items in {len(ranked)} files "
+              f"— {dict(kinds.most_common())}\n")
+        order(path, its)
+        return
 
     print(f"OPEN {len(items)} items in {len(ranked)} files "
           f"— {dict(kinds.most_common())}")
