@@ -262,6 +262,197 @@ pub fn retrieval_pipeline_flags() -> Vec<(&'static str, EnvFlag)> {
 
 // ─── Pipeline plumbing ───────────────────────────────────────────
 
+/// What a step is DECLARED to do to the pool.
+///
+/// Data on the step list, checked by the runner against what the step
+/// actually did. Declaring it costs one token per step and turns a whole
+/// class of "that step should not have been able to do that" into a runtime
+/// assertion — a filter that adds, an injector that removes, a sort that
+/// changes membership.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StepKind {
+    /// May ADD chunks; never removes. Must ledger `considered`.
+    Injector,
+    /// May REMOVE chunks; never adds. Carries the reason it removes for —
+    /// the runner derives the COUNT from the delta it already measures, so a
+    /// filter needs no ledger code at all. A filter with more than one reason
+    /// returns its own [`StepLedger`] and the runner checks it sums.
+    Filter(DropReason),
+    /// May reorder or rescore; pool MEMBERSHIP is invariant.
+    Reorder,
+    /// Does not touch the pool at all — spawns a lane, snapshots state,
+    /// records an audit.
+    Inert,
+}
+
+/// Why a candidate never became a chunk, or why a chunk left the pool.
+///
+/// Closed set (ARCH §2). Collapsed from the 49 distinct guards across the 27
+/// steps: the granularity that matters is not "which line rejected it" but
+/// "does this zero indicate a defect", which is what
+/// [`DropReason::is_resolution_failure`] answers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum DropReason {
+    // ── capability absent — a legitimate zero ──
+    /// Lane provider, corpus engine, or index handle not attached.
+    ProviderAbsent,
+    /// The step's env gate is off.
+    FeatureDisabled,
+    /// Intent excluded this step (e.g. SimpleQuery on demand_plan).
+    IntentExcluded,
+
+    // ── scope — a legitimate zero ──
+    /// Outside `enabled_corpora`, `corpus_ceiling`, expansion scope, the
+    /// personal-scope filter, the wrong corpus kind, or sensitive.
+    OutOfScope,
+    /// Corpus exists but cannot serve: not built, no vector index, or an
+    /// embedding-dimension mismatch.
+    CorpusUnavailable,
+
+    // ── the producer had nothing to offer ──
+    /// No entities, empty embedding, shape not matched, planner returned None.
+    NoCandidates,
+    /// An LLM call, a parse, or the rerank contract failed.
+    ProducerFailed,
+
+    // ── quality gates — a legitimate zero ──
+    /// Below a scoring floor: cosine, axis weight, topic grip, yes-logit.
+    BelowThreshold,
+    /// Noise floor: no substantive query token in title or content.
+    NoQueryOverlap,
+
+    // ── resolution — SUSPICIOUS, see `is_resolution_failure` ──
+    /// The corpus the fetch was scoped to has no searchable index. THE SEP
+    /// defect: grounding scoped to an atlas id that holds no chunks.
+    CorpusNotSearchable,
+    /// The chunk the atom pointed at could not be fetched.
+    EvidenceUnresolvable,
+    /// Fetched, but the title did not match the one asked for.
+    TitleMismatch,
+
+    // ── identity ──
+    /// Already in the pool, or already emitted this turn.
+    Duplicate,
+
+    // ── budgets and objectives ──
+    /// A hard numeric bound: per-corpus K, top-M, fetch budget, query caps.
+    BudgetExhausted,
+    /// A per-article, per-section, or per-corpus cap.
+    CapExceeded,
+    /// The merge objective did not select it.
+    NotSelectedByObjective,
+
+    // ── lifecycle ──
+    /// A concurrent lane overran its join deadline or failed.
+    LaneAbandoned,
+
+    // ── domain rule ──
+    /// Governance: the chunk belongs to an amended (dead-law) section.
+    DeadLaw,
+}
+
+impl DropReason {
+    /// Does this reason mean the step TRIED to realize a candidate and could
+    /// not — as opposed to deciding it should not?
+    ///
+    /// The distinction the SEP defect turned on. A step whose every candidate
+    /// dies for one of these is not filtering; it is broken. Scope, threshold
+    /// and budget drops are decisions; these three are failures.
+    pub fn is_resolution_failure(self) -> bool {
+        matches!(
+            self,
+            DropReason::CorpusNotSearchable
+                | DropReason::EvidenceUnresolvable
+                | DropReason::TitleMismatch
+        )
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DropReason::ProviderAbsent => "provider_absent",
+            DropReason::FeatureDisabled => "feature_disabled",
+            DropReason::IntentExcluded => "intent_excluded",
+            DropReason::OutOfScope => "out_of_scope",
+            DropReason::CorpusUnavailable => "corpus_unavailable",
+            DropReason::NoCandidates => "no_candidates",
+            DropReason::ProducerFailed => "producer_failed",
+            DropReason::BelowThreshold => "below_threshold",
+            DropReason::NoQueryOverlap => "no_query_overlap",
+            DropReason::CorpusNotSearchable => "corpus_not_searchable",
+            DropReason::EvidenceUnresolvable => "evidence_unresolvable",
+            DropReason::TitleMismatch => "title_mismatch",
+            DropReason::Duplicate => "duplicate",
+            DropReason::BudgetExhausted => "budget_exhausted",
+            DropReason::CapExceeded => "cap_exceeded",
+            DropReason::NotSelectedByObjective => "not_selected_by_objective",
+            DropReason::LaneAbandoned => "lane_abandoned",
+            DropReason::DeadLaw => "dead_law",
+        }
+    }
+}
+
+/// A step's account of what it did to the pool.
+///
+/// Exists because `delta = 0` was ambiguous between "nothing was relevant" and
+/// "every candidate failed to resolve", and that ambiguity is what let atlas
+/// grounding contribute zero to every SEP answer for months without one line
+/// of evidence in any log (note `81feaf78`). Absence is now reported, never
+/// defaulted — ARCH §18.3, enforced at the runner rather than remembered at
+/// 27 call sites.
+#[derive(Debug, Default, Clone)]
+pub struct StepLedger {
+    /// Candidates generated before the step tried to realize them.
+    /// `None` means this step generates no candidates (filters, sorts).
+    pub considered: Option<usize>,
+    /// Candidates dropped / chunks removed, by reason. For an
+    /// [`StepKind::Injector`] this must satisfy
+    /// `considered == added + sum(accounted)`; for a [`StepKind::Filter`],
+    /// `removed == sum(accounted)`.
+    pub accounted: std::collections::BTreeMap<DropReason, usize>,
+}
+
+impl StepLedger {
+    /// An injector's ledger: candidates in, drops by reason.
+    pub fn injected(considered: usize) -> Self {
+        Self {
+            considered: Some(considered),
+            accounted: Default::default(),
+        }
+    }
+
+    /// A filter's ledger: every removal carries one reason.
+    pub fn removed(reason: DropReason, n: usize) -> Self {
+        let mut accounted = std::collections::BTreeMap::new();
+        if n > 0 {
+            accounted.insert(reason, n);
+        }
+        Self {
+            considered: None,
+            accounted,
+        }
+    }
+
+    pub fn drop(mut self, reason: DropReason, n: usize) -> Self {
+        if n > 0 {
+            *self.accounted.entry(reason).or_insert(0) += n;
+        }
+        self
+    }
+
+    pub fn total_accounted(&self) -> usize {
+        self.accounted.values().sum()
+    }
+
+    /// Render as `reason=n,reason=n` for the trace line.
+    fn render(&self) -> String {
+        self.accounted
+            .iter()
+            .map(|(r, n)| format!("{}={}", r.as_str(), n))
+            .collect::<Vec<_>>()
+            .join(",")
+    }
+}
+
 /// What a step reports back to the runner. The runner computes the
 /// chunk-count delta itself from the state.
 #[derive(Debug, Default)]
@@ -269,6 +460,14 @@ pub struct StepOutcome {
     /// Optional human note surfaced on the per-step trace line
     /// (e.g. "late-inject mode — skipped").
     pub note: Option<String>,
+    /// The step's account of what it did. See [`StepLedger`].
+    pub ledger: StepLedger,
+}
+
+impl StepOutcome {
+    pub fn with_ledger(ledger: StepLedger) -> Self {
+        Self { note: None, ledger }
+    }
 }
 
 pub type StepFuture<'a> =
@@ -279,6 +478,9 @@ pub type StepFn = for<'a, 'ctx> fn(&'a Runtime, &'a mut PipelineState<'ctx>) -> 
 
 pub struct RetrievalStep {
     pub name: &'static str,
+    /// What this step is allowed to do to the pool. Checked against what it
+    /// actually did — see [`RetrievalPipeline::run`].
+    pub kind: StepKind,
     /// The step's primary `SOVEREIGN_*` gate, if any — registry entry +
     /// surfaced on the trace line. Phase 1: the gate is still *checked
     /// inside the helper* (behavior-preserving); this field documents it.
@@ -286,8 +488,18 @@ pub struct RetrievalStep {
     pub run: StepFn,
 }
 
-pub fn step(name: &'static str, flag: Option<EnvFlag>, run: StepFn) -> RetrievalStep {
-    RetrievalStep { name, flag, run }
+pub fn step(
+    name: &'static str,
+    kind: StepKind,
+    flag: Option<EnvFlag>,
+    run: StepFn,
+) -> RetrievalStep {
+    RetrievalStep {
+        name,
+        kind,
+        flag,
+        run,
+    }
 }
 
 /// A stance contrast the demand planner detected — the axis two
@@ -679,19 +891,134 @@ impl RetrievalPipeline {
             let before = state.chunks.len();
             let outcome = (s.run)(rt, state).await;
             let after = state.chunks.len();
+            let delta = after as i64 - before as i64;
+            // A filter that removed chunks and said nothing is accounted for
+            // from its DECLARED reason — the count is the delta, which the
+            // runner already has. One place, so no filter can forget.
+            let mut ledger = outcome.ledger;
+            if let StepKind::Filter(reason) = s.kind {
+                if ledger.accounted.is_empty() && delta < 0 {
+                    ledger = StepLedger::removed(reason, (-delta) as usize);
+                }
+            }
+            let led = &ledger;
             tracing::info!(
                 target: "retrieval.pipeline",
                 pipeline = self.name,
                 step = s.name,
+                kind = ?s.kind,
                 chunks_before = before,
                 chunks_after = after,
-                delta = after as i64 - before as i64,
+                delta,
+                considered = led.considered.map(|c| c as i64).unwrap_or(-1),
+                accounted = %led.render(),
                 flag = s.flag.map(|f| f.name).unwrap_or(""),
                 note = outcome.note.as_deref().unwrap_or(""),
                 "retrieval.pipeline: step"
             );
+            self.audit_step(s, delta, led);
         }
     }
+
+    /// The invariants the ledger buys. One site, sees every step — so no step
+    /// has to REMEMBER to be honest about a zero (ARCH §7: structural, not
+    /// remembered).
+    ///
+    /// Each of these is an `error!` rather than a panic on purpose: a
+    /// retrieval turn that trips one still returns an answer, and a
+    /// user-facing crash would be a worse failure than the one being
+    /// reported. The CI-bench gate is what turns them red.
+    fn audit_step(&self, s: &RetrievalStep, delta: i64, led: &StepLedger) {
+        if led.considered.is_none() && matches!(s.kind, StepKind::Injector) {
+            // Not a violation — this injector has not been taught to ledger
+            // yet. Named at debug so the gap is greppable rather than
+            // invisible, which is the whole point of the exercise.
+            tracing::debug!(
+                target: "retrieval.pipeline",
+                pipeline = self.name, step = s.name,
+                "retrieval.pipeline: injector has no ledger yet"
+            );
+        }
+        for why in ledger_violations(s.kind, delta, led) {
+            tracing::error!(
+                target: "retrieval.pipeline",
+                pipeline = self.name,
+                step = s.name,
+                kind = ?s.kind,
+                delta,
+                considered = led.considered.map(|c| c as i64).unwrap_or(-1),
+                accounted = %led.render(),
+                "retrieval.pipeline: LEDGER VIOLATION — {why}"
+            );
+        }
+    }
+}
+
+/// The pure decision behind [`RetrievalPipeline::audit_step`]: given what a
+/// step was DECLARED to do, what it actually did to the pool, and what it says
+/// it did, what is wrong?
+///
+/// Pure and separately tested, because a check nobody has watched fail is not
+/// a check (ARCH §18.1). The tests at the bottom of this file drive each arm
+/// with an input that trips it.
+///
+/// Returns every violation, not the first: a step can both exceed its kind and
+/// fail to account, and reporting one would hide the other.
+pub fn ledger_violations(kind: StepKind, delta: i64, led: &StepLedger) -> Vec<&'static str> {
+    let mut out = Vec::new();
+    let accounted = led.total_accounted();
+
+    // 1. The step did something its declared kind forbids.
+    match kind {
+        StepKind::Injector if delta < 0 => out.push("injector REMOVED chunks"),
+        StepKind::Filter(_) if delta > 0 => out.push("filter ADDED chunks"),
+        StepKind::Reorder | StepKind::Inert if delta != 0 => {
+            out.push("non-mutating step changed pool membership")
+        }
+        _ => {}
+    }
+
+    match kind {
+        StepKind::Injector => {
+            let Some(considered) = led.considered else {
+                return out;
+            };
+            let added = delta.max(0) as usize;
+            // 2. Candidates must be fully accounted for: realised, or dropped
+            //    for a named reason. A residual means candidates vanished and
+            //    nothing recorded why.
+            if added + accounted != considered {
+                out.push("candidates unaccounted for (added + dropped != considered)");
+            }
+            // 3. The shape the SEP defect had: candidates existed, none
+            //    survived, and every drop was a failure to RESOLVE rather than
+            //    a decision not to admit.
+            if considered > 0 && added == 0 {
+                if led.accounted.is_empty() {
+                    out.push("every candidate vanished with no reason recorded");
+                } else if led.accounted.keys().all(|r| r.is_resolution_failure()) {
+                    out.push(
+                        "every candidate died at resolution — the step is not filtering, it is failing",
+                    );
+                }
+            }
+        }
+        StepKind::Filter(_) => {
+            // An empty ledger is not a gap here: the runner synthesises it
+            // from the declared reason before this runs. A MISMATCH means the
+            // step supplied its own ledger and it does not add up.
+            let removed = (-delta).max(0) as usize;
+            if removed != accounted {
+                out.push("removals unaccounted for (removed != sum of reasons)");
+            }
+        }
+        StepKind::Reorder | StepKind::Inert => {
+            if accounted != 0 {
+                out.push("non-mutating step reported drops");
+            }
+        }
+    }
+    out
 }
 
 // ─── The two pipelines, as data ──────────────────────────────────
@@ -924,6 +1251,7 @@ fn drop_dead_law_chunks(
     }
     StepOutcome {
         note: (dropped > 0).then(|| format!("dropped {dropped} dead-law chunk(s)")),
+        ledger: StepLedger::removed(DropReason::DeadLaw, dropped),
     }
 }
 
@@ -933,7 +1261,12 @@ fn shared_core_steps() -> Vec<RetrievalStep> {
         // sub-queries fan out into the pool and its entities are on the
         // state before `entity_boost` merges them. Dark until
         // `SOVEREIGN_DEMAND_PLAN=1`; skips simple/factual turns.
-        step("demand_plan", Some(FLAG_DEMAND_PLAN), step_demand_plan),
+        step(
+            "demand_plan",
+            StepKind::Injector,
+            Some(FLAG_DEMAND_PLAN),
+            step_demand_plan,
+        ),
         // Spawned FIRST in the core (the lane extracts its own
         // entities from the message and seeds from head-pool titles —
         // it does not need `entity_boost`'s products) and joined at
@@ -941,51 +1274,111 @@ fn shared_core_steps() -> Vec<RetrievalStep> {
         // entity-boost's per-entity embed+searches, grounding,
         // reweight — is the overlap window that hides the lane's
         // ~1.2s walk/prerank/fetch/gate instead of adding wall.
-        step("ppr_struct_spawn", Some(FLAG_PPR_EXPAND), step_ppr_spawn),
-        step("entity_boost", None, step_entity_boost),
-        step("meta_atlas_boost", None, step_meta_atlas_boost),
-        step("bridge_boost", Some(FLAG_META_BRIDGE), step_bridge_boost),
-        step("query_decomp", Some(FLAG_QUERY_DECOMP), step_query_decomp),
-        step("title_expand", Some(FLAG_TITLE_EXPAND), step_title_expand),
-        step("noise_floor", None, step_noise_floor),
+        step(
+            "ppr_struct_spawn",
+            StepKind::Inert,
+            Some(FLAG_PPR_EXPAND),
+            step_ppr_spawn,
+        ),
+        step("entity_boost", StepKind::Injector, None, step_entity_boost),
+        step(
+            "meta_atlas_boost",
+            StepKind::Injector,
+            None,
+            step_meta_atlas_boost,
+        ),
+        step(
+            "bridge_boost",
+            StepKind::Injector,
+            Some(FLAG_META_BRIDGE),
+            step_bridge_boost,
+        ),
+        step(
+            "query_decomp",
+            StepKind::Injector,
+            Some(FLAG_QUERY_DECOMP),
+            step_query_decomp,
+        ),
+        step(
+            "title_expand",
+            StepKind::Injector,
+            Some(FLAG_TITLE_EXPAND),
+            step_title_expand,
+        ),
+        step(
+            "noise_floor",
+            StepKind::Filter(DropReason::NoQueryOverlap),
+            None,
+            step_noise_floor,
+        ),
         // The bleed-audit baseline: the last point at which every chunk
         // arrived via SEARCH. Must stay ahead of every injector.
         step(
             "searched_corpora_snapshot",
+            StepKind::Inert,
             None,
             step_searched_corpora_snapshot,
         ),
         step(
             "raptor_grounding_early",
+            StepKind::Injector,
             Some(FLAG_RAPTOR_GROUNDING),
             step_raptor_grounding_early,
         ),
         step(
             "atlas_grounding",
+            StepKind::Injector,
             Some(FLAG_ATLAS_GROUNDING),
             step_atlas_grounding,
         ),
-        step("reweight_and_sort", None, step_reweight_and_sort),
+        step(
+            "reweight_and_sort",
+            StepKind::Filter(DropReason::CapExceeded),
+            None,
+            step_reweight_and_sort,
+        ),
         // AFTER the reweight, deliberately (2026-08-05, audit D1). This is the
         // first stage at which the pool carries a relevance signal that
         // separates on-topic from off-topic, and atom-enum scopes itself from
         // that ranking. Ahead of it, scope was drawn from RRF-fused noise.
-        step("atom_enum", Some(FLAG_ATOM_ENUM), step_atom_enum),
+        step(
+            "atom_enum",
+            StepKind::Injector,
+            Some(FLAG_ATOM_ENUM),
+            step_atom_enum,
+        ),
         step(
             "graph_neighbor_expand",
+            StepKind::Injector,
             Some(FLAG_GRAPH_NEIGHBOR_EXPAND),
             step_graph_neighbor_expand,
         ),
         step(
             "ppr_struct_expand",
+            StepKind::Injector,
             Some(FLAG_PPR_EXPAND),
             step_ppr_struct_expand,
         ),
-        step("dedupe_merged", None, step_dedupe_merged),
-        step("cap_and_reserve", None, step_cap_and_reserve),
+        step(
+            "dedupe_merged",
+            StepKind::Filter(DropReason::Duplicate),
+            None,
+            step_dedupe_merged,
+        ),
+        step(
+            "cap_and_reserve",
+            StepKind::Filter(DropReason::NotSelectedByObjective),
+            None,
+            step_cap_and_reserve,
+        ),
         // FR-9: drop dead-law chunks for governance corpora; inert
         // elsewhere. After the cap, before truncate (see fn doc).
-        step("governance_active_set", None, step_governance_active_set),
+        step(
+            "governance_active_set",
+            StepKind::Filter(DropReason::DeadLaw),
+            None,
+            step_governance_active_set,
+        ),
         // Last core step: sees the FINAL post-retrieval state, so an EMPTY
         // result here means a scoped corpus may have been skipped because it
         // isn't ready (index not built, vector index missing, or embed-model/
@@ -1001,9 +1394,14 @@ fn shared_core_steps() -> Vec<RetrievalStep> {
 pub fn kq_pipeline() -> RetrievalPipeline {
     let mut steps = shared_head_steps();
     steps.extend(shared_core_steps());
-    steps.push(step("truncate_merged", None, kq_truncate_merged));
+    steps.push(step(
+        "truncate_merged",
+        StepKind::Filter(DropReason::BudgetExhausted),
+        None,
+        kq_truncate_merged,
+    ));
     // Last: audit the FINAL pool, after every injector and the truncate.
-    steps.push(step("scope_audit", None, step_scope_audit));
+    steps.push(step("scope_audit", StepKind::Inert, None, step_scope_audit));
     RetrievalPipeline {
         name: "knowledge_query",
         steps,
@@ -1020,9 +1418,19 @@ pub fn kq_pipeline() -> RetrievalPipeline {
 /// planner was carved out later and never inherited it).
 fn shared_head_steps() -> Vec<RetrievalStep> {
     vec![
-        step("main_retrieval_mesh", None, step_main_retrieval_mesh),
-        step("scope_personal_filter", None, step_scope_personal_filter),
-        step("store_search", None, step_store_search),
+        step(
+            "main_retrieval_mesh",
+            StepKind::Injector,
+            None,
+            step_main_retrieval_mesh,
+        ),
+        step(
+            "scope_personal_filter",
+            StepKind::Filter(DropReason::OutOfScope),
+            None,
+            step_scope_personal_filter,
+        ),
+        step("store_search", StepKind::Injector, None, step_store_search),
     ]
 }
 
@@ -1056,10 +1464,20 @@ pub fn deep_pipeline(include_corpus_search: bool) -> RetrievalPipeline {
         });
     }
     steps.extend(core);
-    steps.push(step("truncate_merged", None, deep_truncate_merged));
-    steps.push(step("top_sources_expand", None, deep_top_sources_expand));
+    steps.push(step(
+        "truncate_merged",
+        StepKind::Filter(DropReason::BudgetExhausted),
+        None,
+        deep_truncate_merged,
+    ));
+    steps.push(step(
+        "top_sources_expand",
+        StepKind::Injector,
+        None,
+        deep_top_sources_expand,
+    ));
     // Last: audit the FINAL pool, after every injector and the truncate.
-    steps.push(step("scope_audit", None, step_scope_audit));
+    steps.push(step("scope_audit", StepKind::Inert, None, step_scope_audit));
     RetrievalPipeline {
         name: "deep_query",
         steps,
@@ -1087,6 +1505,7 @@ fn step_bridge_boost<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
             .await;
         StepOutcome {
             note: (added > 0).then(|| format!("bridge: +{added} cross-corpus chunks")),
+            ..Default::default()
         }
     })
 }
@@ -1196,6 +1615,7 @@ fn step_demand_plan<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) 
             } else {
                 "demand plan (ledger-only)".to_string()
             }),
+            ..Default::default()
         }
     })
 }
@@ -1494,6 +1914,7 @@ fn step_raptor_grounding_early<'a, 'ctx>(
         } else {
             StepOutcome {
                 note: Some("late-inject mode — early injection skipped".into()),
+                ..Default::default()
             }
         }
     })
@@ -1507,17 +1928,18 @@ fn step_atlas_grounding<'a, 'ctx>(
         // Atlas grounding — graph-walk navigation when the provider
         // exposes the graph layer; bag-of-atoms top-K fallback
         // otherwise. See `apply_atlas_grounding` for the full design.
-        rt.apply_atlas_grounding(
-            st.message,
-            &st.embedding,
-            &mut st.chunks,
-            st.label,
-            st.scope,
-            st.enabled_corpora,
-            st.corpus_ceiling,
-            &st.lane,
-        )
-        .await;
+        let ledger = rt
+            .apply_atlas_grounding(
+                st.message,
+                &st.embedding,
+                &mut st.chunks,
+                st.label,
+                st.scope,
+                st.enabled_corpora,
+                st.corpus_ceiling,
+                &st.lane,
+            )
+            .await;
         // Per-corpus snapshot RIGHT AFTER apply_atlas_grounding
         // returns. Paired with the graph-walk trace inside apply and
         // the post-truncate trace downstream — if counts here match
@@ -1537,7 +1959,7 @@ fn step_atlas_grounding<'a, 'ctx>(
             label = st.label,
             "retrieval: post-apply_atlas_grounding (per-corpus)"
         );
-        StepOutcome::default()
+        StepOutcome::with_ledger(ledger)
     })
 }
 
@@ -1630,7 +2052,10 @@ fn step_ppr_spawn<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) ->
             (false, true) => Some("obligations spawned".to_string()),
             (false, false) => None,
         };
-        StepOutcome { note: spawned }
+        StepOutcome {
+            note: spawned,
+            ..Default::default()
+        }
     })
 }
 
@@ -1889,6 +2314,7 @@ fn step_cap_and_reserve<'a, 'ctx>(
             audit_pipeline_stage(&st.chunks, "after_cap_and_reserve", st.message);
             return StepOutcome {
                 note: Some("merge_demand_select".to_string()),
+                ..Default::default()
             };
         }
         st.chunks = cap_chunks_per_article(take(&mut st.chunks), MAX_CHUNKS_PER_ARTICLE_AT_MERGE);
@@ -3072,5 +3498,196 @@ mod tests {
                 }
             }
         }
+    }
+}
+
+/// The ledger invariants, driven by inputs that trip them.
+///
+/// ARCH §18.1: a check with no failing input you can name is not a check.
+/// Every arm of [`ledger_violations`] gets one here, and the SEP regression
+/// gets its own by name.
+#[cfg(test)]
+mod ledger_tests {
+    use super::*;
+
+    fn led(considered: Option<usize>, drops: &[(DropReason, usize)]) -> StepLedger {
+        let mut l = StepLedger {
+            considered,
+            accounted: Default::default(),
+        };
+        for (r, n) in drops {
+            l = l.drop(*r, *n);
+        }
+        l
+    }
+
+    #[test]
+    fn injector_that_removed_chunks_is_a_violation() {
+        let v = ledger_violations(StepKind::Injector, -3, &led(Some(0), &[]));
+        assert!(v.contains(&"injector REMOVED chunks"), "{v:?}");
+    }
+
+    #[test]
+    fn filter_that_added_chunks_is_a_violation() {
+        let v = ledger_violations(StepKind::Filter(DropReason::Duplicate), 2, &led(None, &[]));
+        assert!(v.contains(&"filter ADDED chunks"), "{v:?}");
+    }
+
+    #[test]
+    fn inert_step_that_changed_membership_is_a_violation() {
+        let v = ledger_violations(StepKind::Inert, 1, &led(None, &[]));
+        assert!(
+            v.contains(&"non-mutating step changed pool membership"),
+            "{v:?}"
+        );
+        let v = ledger_violations(StepKind::Reorder, -1, &led(None, &[]));
+        assert!(
+            v.contains(&"non-mutating step changed pool membership"),
+            "{v:?}"
+        );
+    }
+
+    #[test]
+    fn injector_with_unaccounted_candidates_is_a_violation() {
+        // 10 candidates, 2 admitted, 3 explained. Five vanished.
+        let v = ledger_violations(
+            StepKind::Injector,
+            2,
+            &led(Some(10), &[(DropReason::OutOfScope, 3)]),
+        );
+        assert!(
+            v.contains(&"candidates unaccounted for (added + dropped != considered)"),
+            "{v:?}"
+        );
+    }
+
+    #[test]
+    fn the_sep_shape_every_candidate_died_at_resolution() {
+        // THE REGRESSION. Atlas grounding on SEP: 49 candidates, none
+        // admitted, every one lost to a fetch scoped at a corpus that holds
+        // no chunks. Under the old code this was `delta=0` and nothing else.
+        let v = ledger_violations(
+            StepKind::Injector,
+            0,
+            &led(Some(49), &[(DropReason::TitleMismatch, 49)]),
+        );
+        assert!(
+            v.iter().any(|s| s.contains("died at resolution")),
+            "the SEP shape must be reported, got {v:?}"
+        );
+    }
+
+    #[test]
+    fn every_candidate_vanished_with_no_reason_is_a_violation() {
+        let v = ledger_violations(StepKind::Injector, 0, &led(Some(7), &[]));
+        assert!(
+            v.contains(&"every candidate vanished with no reason recorded"),
+            "{v:?}"
+        );
+    }
+
+    #[test]
+    fn scope_drops_are_a_decision_not_a_failure() {
+        // Zero admitted because every candidate was out of scope is a
+        // LEGITIMATE zero — the step decided, it did not fail. Getting this
+        // wrong would make the gate cry wolf on every scoped turn.
+        let v = ledger_violations(
+            StepKind::Injector,
+            0,
+            &led(Some(12), &[(DropReason::OutOfScope, 12)]),
+        );
+        assert!(v.is_empty(), "expected a clean legitimate zero, got {v:?}");
+    }
+
+    #[test]
+    fn a_healthy_injector_and_a_true_zero_are_clean() {
+        // 49 considered, 12 admitted, 37 explained.
+        let v = ledger_violations(
+            StepKind::Injector,
+            12,
+            &led(
+                Some(49),
+                &[
+                    (DropReason::BudgetExhausted, 30),
+                    (DropReason::Duplicate, 7),
+                ],
+            ),
+        );
+        assert!(v.is_empty(), "{v:?}");
+        // Nothing to work with is not a violation.
+        assert!(ledger_violations(StepKind::Injector, 0, &led(Some(0), &[])).is_empty());
+    }
+
+    #[test]
+    fn a_filter_ledger_must_sum_to_what_it_removed() {
+        let ok = ledger_violations(
+            StepKind::Filter(DropReason::Duplicate),
+            -4,
+            &led(None, &[(DropReason::Duplicate, 4)]),
+        );
+        assert!(ok.is_empty(), "{ok:?}");
+        let bad = ledger_violations(
+            StepKind::Filter(DropReason::Duplicate),
+            -4,
+            &led(None, &[(DropReason::Duplicate, 1)]),
+        );
+        assert!(
+            bad.contains(&"removals unaccounted for (removed != sum of reasons)"),
+            "{bad:?}"
+        );
+    }
+
+    #[test]
+    fn an_unledgered_injector_is_reported_but_not_a_violation() {
+        // The incremental state: kind is declared and checked, `considered`
+        // is not wired yet. Must not cry wolf.
+        assert!(ledger_violations(StepKind::Injector, 5, &led(None, &[])).is_empty());
+    }
+
+    #[test]
+    fn resolution_failures_are_exactly_the_three_that_mean_a_defect() {
+        for r in [
+            DropReason::CorpusNotSearchable,
+            DropReason::EvidenceUnresolvable,
+            DropReason::TitleMismatch,
+        ] {
+            assert!(r.is_resolution_failure(), "{r:?} should be a failure");
+        }
+        for r in [
+            DropReason::OutOfScope,
+            DropReason::BudgetExhausted,
+            DropReason::BelowThreshold,
+            DropReason::Duplicate,
+            DropReason::FeatureDisabled,
+            DropReason::DeadLaw,
+        ] {
+            assert!(
+                !r.is_resolution_failure(),
+                "{r:?} is a decision, not a failure"
+            );
+        }
+    }
+
+    #[test]
+    fn every_step_in_both_pipelines_declares_a_kind_and_the_set_is_total() {
+        // The totality claim: all 27 steps are classified, and the two
+        // pipelines between them cover injector / filter / reorder / inert.
+        let mut kinds: Vec<std::mem::Discriminant<StepKind>> = Vec::new();
+        let mut n = 0;
+        for p in [kq_pipeline(), deep_pipeline(true)] {
+            for s in &p.steps {
+                n += 1;
+                let d = std::mem::discriminant(&s.kind);
+                if !kinds.contains(&d) {
+                    kinds.push(d);
+                }
+            }
+        }
+        assert!(n >= 27, "expected at least 27 declared steps, saw {n}");
+        assert!(
+            kinds.len() >= 3,
+            "the classification collapsed to {} kind(s)",
+            kinds.len()
+        );
     }
 }

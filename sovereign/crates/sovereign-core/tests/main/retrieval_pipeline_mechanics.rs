@@ -11,7 +11,7 @@
 
 use crate::harness::TestHarness;
 use sovereign_core::runtime::retrieval_pipeline::{
-    step, PipelineState, RetrievalPipeline, StepFuture, StepOutcome,
+    step, PipelineState, RetrievalPipeline, StepFuture, StepKind, StepOutcome,
 };
 use sovereign_core::runtime::Runtime;
 use sovereign_core::types::*;
@@ -90,6 +90,7 @@ fn step_drop_all<'a, 'ctx>(_rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) ->
         st.chunks.clear();
         StepOutcome {
             note: Some("dropped everything".to_string()),
+            ..Default::default()
         }
     })
 }
@@ -114,8 +115,8 @@ async fn runner_executes_steps_in_order_threading_state() {
     let pipeline = RetrievalPipeline {
         name: "test",
         steps: vec![
-            step("push_a", None, step_push_a),
-            step("push_b", None, step_push_b_after_a),
+            step("push_a", StepKind::Injector, None, step_push_a),
+            step("push_b", StepKind::Injector, None, step_push_b_after_a),
         ],
     };
     pipeline.run(&h.runtime, &mut state).await;
@@ -150,9 +151,16 @@ async fn runner_survives_steps_that_shrink_the_pool() {
     let pipeline = RetrievalPipeline {
         name: "test",
         steps: vec![
-            step("push_a", None, step_push_a),
-            step("drop_all", None, step_drop_all),
-            step("push_a", None, step_push_a),
+            step("push_a", StepKind::Injector, None, step_push_a),
+            step(
+                "drop_all",
+                StepKind::Filter(
+                    sovereign_core::runtime::retrieval_pipeline::DropReason::NotSelectedByObjective,
+                ),
+                None,
+                step_drop_all,
+            ),
+            step("push_a", StepKind::Injector, None, step_push_a),
         ],
     };
     pipeline.run(&h.runtime, &mut state).await;

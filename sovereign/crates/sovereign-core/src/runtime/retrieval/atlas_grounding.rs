@@ -76,15 +76,16 @@ impl Runtime {
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
         lane: &crate::runtime::Lane,
-    ) {
+    ) -> crate::runtime::retrieval_pipeline::StepLedger {
+        use crate::runtime::retrieval_pipeline::{DropReason, StepLedger};
         if !atlas_grounding_enabled() {
-            return;
+            return StepLedger::injected(0).drop(DropReason::FeatureDisabled, 0);
         }
         let Some(provider) = lane.atlas_context.as_ref() else {
-            return;
+            return StepLedger::injected(0);
         };
         if embedding.is_empty() {
-            return;
+            return StepLedger::injected(0);
         }
 
         // Scope atlas grounding to the corpora retrieval actually hit — not
@@ -146,6 +147,7 @@ impl Runtime {
             .filter_map(|id| provider.graph(id))
             .collect();
 
+        let mut ledger = StepLedger::default();
         if !graphs.is_empty() {
             // Graph-walk: cosine seeds → BFS expand 1-2 hops over
             // typed edges (Tension / Grounds / Configures /
@@ -314,6 +316,24 @@ impl Runtime {
                 dropped_duplicate,
                 "atlas-grounding: fetch ledger"
             );
+            ledger = StepLedger::injected(considered)
+                .drop(DropReason::OutOfScope, dropped_not_allowed)
+                .drop(DropReason::EvidenceUnresolvable, dropped_not_found)
+                .drop(DropReason::TitleMismatch, dropped_no_title_match)
+                .drop(DropReason::Duplicate, dropped_duplicate)
+                // Candidates past the fetch budget were never attempted. They
+                // are a DECISION, not a failure, and the accounting identity
+                // requires them named.
+                .drop(
+                    DropReason::BudgetExhausted,
+                    considered.saturating_sub(
+                        graph_added
+                            + dropped_not_allowed
+                            + dropped_not_found
+                            + dropped_no_title_match
+                            + dropped_duplicate,
+                    ),
+                );
 
             // Adaptive triage: bump article slug per atlas to climb
             // the Tier-2 enrichment queue.
@@ -362,7 +382,11 @@ impl Runtime {
                     "atlas-grounding: bag-of-atoms fused (graph layer absent)"
                 );
             }
+            // The bag path realises every candidate it builds, so
+            // considered == added and the identity holds with no drops.
+            ledger = StepLedger::injected(bag_added);
         }
+        ledger
     }
 }
 
