@@ -17,6 +17,19 @@ archived path.
 
 Current in-flight:
 
+- [`ONTOLOGY_PRIMITIVES.md`](ONTOLOGY_PRIMITIVES.md) — ontology
+  declaration v1: ten users, five axes (shape, assertion, identity,
+  change, derivation) as the interface the pipeline reads, a version as
+  the parser that fills them. Kinds fixed, types declared.
+- [`ONTOLOGY_MIGRATION.md`](ONTOLOGY_MIGRATION.md) — the plan that
+  wires v1 from recipe to inspector in eight phases, each with a gate;
+  version-gated, SEP / Wikipedia / Enron never re-extracted.
+- [`CUSTOM_ONTOLOGIES_AS_BUILT.md`](CUSTOM_ONTOLOGIES_AS_BUILT.md) —
+  what a recipe-authored ontology actually changes today (two of nine
+  phases; six entity types enforced at schema + parser despite the
+  prompt's "any label" promise, reproduced 2026-09-01), how a non-coder
+  finds it, and seven ranked moves to a general mechanism over the
+  `AtlasGenre` seam. Companion to `CUSTOM_ATLAS.md`.
 - [`TIERED_RETRIEVAL_PHASE_B.md`](TIERED_RETRIEVAL_PHASE_B.md) —
   per-corpus port matrix for the tiered-retrieval architecture.
 - [`TYPED_EXTENSION_PASS.md`](TYPED_EXTENSION_PASS.md) — design

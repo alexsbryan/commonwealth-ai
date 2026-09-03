@@ -143,7 +143,10 @@ mod tests {
         let parsed: serde_json::Value =
             serde_json::from_str(&row).expect("a ledger row must be JSON");
         assert_eq!(parsed["cmd"], "send_message_stream");
-        assert!(!row.contains('\n'), "one row per line, or appends interleave");
+        assert!(
+            !row.contains('\n'),
+            "one row per line, or appends interleave"
+        );
     }
 
     /// The reason this uses serde_json and not `format!`.

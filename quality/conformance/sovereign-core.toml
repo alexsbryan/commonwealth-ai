@@ -56,7 +56,7 @@ asserts = 5
 requirement = "GR-2"
 test = "sovereign-core::runtime::grounding::tests::rewrite_note_includes_corrective_passages"
 file = "sovereign/crates/sovereign-core/src/runtime/grounding/tests.rs"
-line = 2190
+line = 2180
 asserts = 3
 
 [[claim]]
@@ -105,7 +105,7 @@ asserts = 8
 requirement = "GR-4"
 test = "sovereign-core::runtime::grounding::tests::the_audit_window_is_derived_from_the_retrieved_leaf_set_not_a_constant"
 file = "sovereign/crates/sovereign-core/src/runtime/grounding/tests.rs"
-line = 6
+line = 5
 asserts = 6
 
 [[claim]]
@@ -140,7 +140,7 @@ asserts = 2
 requirement = "GR-6"
 test = "sovereign-core::runtime::grounding::tests::tombstoned_repair_releases_the_audited_draft_with_its_claims_marked"
 file = "sovereign/crates/sovereign-core/src/runtime/grounding/tests.rs"
-line = 1200
+line = 1197
 asserts = 8
 
 [[claim]]

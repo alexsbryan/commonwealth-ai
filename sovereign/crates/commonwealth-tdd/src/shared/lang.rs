@@ -96,7 +96,7 @@ impl Language {
 mod tests {
     use super::*;
 
-        /// The regression this exists for: a cargo command must never be
+    /// The regression this exists for: a cargo command must never be
     /// parsed as Python just because the workdir's shallowest source
     /// file is one. Table names the runner, not the repo shape.
     #[test]
@@ -109,7 +109,10 @@ mod tests {
             Language::from_verify_cmd("cargo nextest run"),
             Some(Language::Rust)
         );
-        assert_eq!(Language::from_verify_cmd("go test ./..."), Some(Language::Go));
+        assert_eq!(
+            Language::from_verify_cmd("go test ./..."),
+            Some(Language::Go)
+        );
         assert_eq!(
             Language::from_verify_cmd("npx vitest run"),
             Some(Language::TypeScript)

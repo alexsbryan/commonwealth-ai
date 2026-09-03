@@ -365,9 +365,7 @@ mod tests {
             })
             // The struct DEFINITION carries the same three tokens. Only a
             // construction counts.
-            .filter(|(_, line)| {
-                line.contains("CacheModelIdentity {") && !line.contains("struct ")
-            })
+            .filter(|(_, line)| line.contains("CacheModelIdentity {") && !line.contains("struct "))
             .map(|(i, line)| (i + 1, line.trim()))
             .collect();
         assert_eq!(

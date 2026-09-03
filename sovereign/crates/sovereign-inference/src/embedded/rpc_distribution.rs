@@ -3110,7 +3110,9 @@ mod rpc_prune_tests {
             "the refusal must advise lowering headroom; got: {text}"
         );
         assert!(
-            !text.to_lowercase().contains("raise `[shared_model] headroom`")
+            !text
+                .to_lowercase()
+                .contains("raise `[shared_model] headroom`")
                 && !text.to_lowercase().contains("raise the headroom"),
             "raising headroom multiplies `need` and makes the overflow worse; got: {text}"
         );

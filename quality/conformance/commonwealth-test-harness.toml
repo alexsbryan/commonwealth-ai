@@ -21,5 +21,5 @@ asserts = 6
 requirement = "FE-139"
 test = "commonwealth-test-harness::integration::a_node_that_has_announced_its_departure_refuses_new_shard_plans"
 file = "commonwealth/crates/commonwealth-test-harness/tests/integration.rs"
-line = 650
+line = 653
 asserts = 9

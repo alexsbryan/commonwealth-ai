@@ -1,0 +1,6 @@
+clock: document_date — supersession folds on document dates (the default; set `change.clock = "narrative"` for order within a work)
+tension selector: embedding top-k (k = 10, floor = 0.5) over measurement — cross-document declared corpora select the embedding net; the classifier judges each pair
+identity: material → cas_number (external key, strict merge)
+identity: catalyst → cas_number (external key, strict merge) — inherited from `material`
+identity: method → canonical name (default; declare `identity = [...]` for an external key)
+question shapes: enumerate [material, catalyst, method]; relations [(none)]; events [(none)]; aggregate [measurement by method]

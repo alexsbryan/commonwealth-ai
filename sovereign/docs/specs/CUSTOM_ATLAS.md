@@ -123,6 +123,28 @@ Precedence when resolving the pipeline: `[enrichment.ontology].guidance` present
 - **CA7** — end-to-end: author a custom-domain recipe → install → init → build → `atoms.json`
   with domain-appropriate atoms (incl. `EntityType::Other`) → "Verify enrichment" → chat.
 
+## Correction, and what superseded this (ontology v1, 2026-09-01)
+
+**CA2's "entity `Other` labels survive" was wrong, and stayed wrong for as long
+as this doc stood.** The Phase-1 reader dropped every `EntityType::Other` as a
+model hedge (`literary_atlas.rs`, the `Some(EntityType::Other(s)) => return
+None` arm), so a custom atlas could ask for `coin` in its guidance and get back
+nothing typed `coin` — a probe on 2026-09-01 measured 0 of 1 surviving. Guidance
+prose alone could never have fixed it: the drop was in code the guidance does
+not reach.
+
+The fix is the versioned `[enrichment.ontology]` block. `version = 1` DECLARES
+types, and a declared type is the thing the reader keeps. What this doc calls
+the ontology is now the `version = 0` prose language — still supported, still
+the guidance-only path — and it is one of several: every version parses to
+`OntologyPolicies`, which is all the pipeline reads. Declared types generate
+the Phase-1 response schema and the `## Declared types` prompt block, and drive
+a `ParsePolicy` that keeps declared `Other` types, validates attributes by
+family, enforces `voices`, and takes a claim's discourse act from its declared
+`force`. See `ONTOLOGY_PRIMITIVES.md` (the declaration language),
+`ONTOLOGY_MIGRATION.md` (the phase plan) and `corpus-engine/ENRICHMENT.md`
+§"Custom ontology (version 1)".
+
 ## Verification
 
 Workspace lint + `svelte-check` green each increment; CA7 proves a corpus that did NOT

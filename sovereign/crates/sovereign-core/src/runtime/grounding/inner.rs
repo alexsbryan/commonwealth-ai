@@ -3,7 +3,6 @@
 
 use super::*;
 
-
 /// The gate ladder itself. Callers go through
 /// [`gate_answer_with_progress`], which journals the decision — calling
 /// this directly would be an unrecorded gate decision, which is the

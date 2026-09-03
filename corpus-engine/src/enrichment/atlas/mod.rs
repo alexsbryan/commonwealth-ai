@@ -37,9 +37,12 @@ pub mod edges;
 pub mod embeddings;
 pub mod ingestion;
 pub mod migrate_ids;
+pub mod ontology_coverage;
 pub mod projection;
 pub mod registry;
 pub mod resolution;
+pub mod resolution_identity;
+pub mod resolution_ontology;
 pub mod schema_validation;
 pub mod section_cache;
 pub mod stable_key;
@@ -67,9 +70,11 @@ pub use embeddings::atoms_content_hash;
 pub use ingestion::{AtlasData, AtlasIngestion, AtlasIngestionConfig};
 pub use registry::AtlasIngestionRegistry;
 pub use resolution::{
-    fold, resolve_entities_and_events, resolve_step_3b, ResolutionOutput, Step3bOutput, Trajectory,
-    TrajectoryState, TrajectoryTransition,
+    fold, resolve_entities_and_events, resolve_entities_and_events_with, resolve_step_3b,
+    resolve_step_3b_with, ResolutionOutput, Step3bOutput, Trajectory, TrajectoryState,
+    TrajectoryTransition,
 };
+pub use resolution_ontology::ResolutionPolicy;
 pub use schema_validation::{
     build_report as build_schema_validation_report, compare_across_corpora, count_open_questions,
     count_transitions_without_trigger, count_ungrounded_claims, SchemaComparison,
@@ -78,14 +83,16 @@ pub use schema_validation::{
 pub use stable_key::StableAtomKey;
 pub use summary::{
     compute_summary as compute_atlas_summary,
-    read_or_compute_summary as read_or_compute_atlas_summary, AtlasSummary,
+    read_or_compute_summary as read_or_compute_atlas_summary, AtlasSummary, OntologySummary,
 };
 pub use vital_tier::{tier_sizes as vital_tier_sizes, vital_tier};
 pub use writer::{
-    read_atlas_atoms, read_atlas_cross_corpus_edges, read_atlas_edges, read_tension_candidates,
-    write_atlas, write_atlas_configurations, write_atlas_cross_corpus_edges, write_atlas_edges,
-    write_atlas_failures, write_atlas_full, write_atlas_gaps, write_tension_candidates,
-    AtlasWritten, ResolutionFailuresFile, TrajectoriesFile, ATLAS_DIRNAME,
+    append_atoms_and_edges, read_atlas_atoms, read_atlas_cross_corpus_edges, read_atlas_edges,
+    read_atlas_ontology, read_schema_validation_report, read_tension_candidates, write_atlas,
+    write_atlas_atoms, write_atlas_configurations, write_atlas_cross_corpus_edges,
+    write_atlas_edges, write_atlas_failures, write_atlas_full, write_atlas_gaps,
+    write_atlas_ontology, write_atlas_pattern_findings, write_tension_candidates,
+    AtlasOntologyFile, AtlasWritten, ResolutionFailuresFile, TrajectoriesFile, ATLAS_DIRNAME,
 };
 
 use std::path::Path;

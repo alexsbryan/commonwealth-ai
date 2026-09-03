@@ -15,6 +15,9 @@ export interface CommandArgs {
     question: unknown;
     conversationId: unknown;
   };
+  atlas_build_report: {
+    corpusId: unknown;
+  };
   atlas_check_gliner_model: Record<string, never>;
   atlas_download_gliner_model: {
     modelId?: unknown;

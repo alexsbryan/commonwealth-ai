@@ -32,6 +32,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use crate::enrichment::atlas::AtomEnvelope;
+use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
 use crate::enrichment::pipeline::atlas::{DiscourseAct, EntityType, EventType};
 use crate::stream_axes::ArticulationVector;
 
@@ -45,6 +46,26 @@ use crate::stream_axes::ArticulationVector;
 /// preview is available — the fallback will return
 /// [`ArticulationVector::balanced`].
 pub fn classify_articulation(env: &AtomEnvelope, chunk_preview: &str) -> ArticulationVector {
+    classify_articulation_with(env, chunk_preview, None)
+}
+
+/// [`classify_articulation`], with the corpus's DECLARED ontology in hand.
+///
+/// `vocab` changes exactly one arm: `EntityType::Other(name)`. Before ontology
+/// v1 that arm meant "a type tag the six kinds do not cover", and the only
+/// thing to do with it was scan the chunk preview for prose markers — the
+/// Wikipedia `Other("article")` case the fallback was built for. A DECLARED
+/// type is a different situation: the author said what a `coin` is, so it is
+/// classified as the kind it declares rather than guessed at from prose.
+///
+/// `None` — and a name the vocabulary does not know — both fall through to
+/// [`classify_by_chunk_preview`] unchanged. Wikipedia declares nothing, so its
+/// 1.6M `Other("article")` atoms are byte-identical (I5).
+pub fn classify_articulation_with(
+    env: &AtomEnvelope,
+    chunk_preview: &str,
+    vocab: Option<&OntologyPolicies>,
+) -> ArticulationVector {
     match env {
         AtomEnvelope::Entity(e) => {
             // defining_quote is the strongest single signal: the
@@ -57,29 +78,11 @@ pub fn classify_articulation(env: &AtomEnvelope, chunk_preview: &str) -> Articul
                 EntityType::Person
                 | EntityType::Place
                 | EntityType::Work
-                | EntityType::Institution => {
-                    // Public-noun. Strongly-attested anchors (many
-                    // aliases or high salience) are Inventory-leaning;
-                    // weakly-attested ones bleed toward Argument
-                    // (probably extracted opportunistically).
-                    if e.aliases.len() >= 2 || e.salience >= 0.5 {
-                        ArticulationVector::new(0.75, 0.20, 0.05)
-                    } else {
-                        ArticulationVector::new(0.55, 0.40, 0.05)
-                    }
-                }
-                EntityType::Concept => {
-                    // Concepts are articulated objects — defined and
-                    // argued about. Argument-leaning.
-                    ArticulationVector::new(0.25, 0.70, 0.05)
-                }
-                EntityType::Initiative => {
-                    // Personal/conversational domain "active project"
-                    // shape. Trace-leaning — projects are lived
-                    // activity over time.
-                    ArticulationVector::new(0.10, 0.30, 0.60)
-                }
-                EntityType::Other(_) => classify_by_chunk_preview(chunk_preview),
+                | EntityType::Institution => public_noun(e.aliases.len(), e.salience),
+                EntityType::Concept => concept(),
+                EntityType::Initiative => initiative(),
+                EntityType::Other(name) => declared_articulation(name, e, vocab)
+                    .unwrap_or_else(|| classify_by_chunk_preview(chunk_preview)),
             }
         }
         AtomEnvelope::Claim(c) => match c.discourse_act {
@@ -142,6 +145,77 @@ pub fn classify_articulation(env: &AtomEnvelope, chunk_preview: &str) -> Articul
         // those — the Asset only inventories the thing.
         AtomEnvelope::Asset(_) => ArticulationVector::new(0.90, 0.05, 0.05),
     }
+}
+
+/// Concepts are articulated objects — defined and argued about.
+/// Argument-leaning.
+fn concept() -> ArticulationVector {
+    ArticulationVector::new(0.25, 0.70, 0.05)
+}
+
+/// Personal/conversational domain "active project" shape. Trace-leaning —
+/// projects are lived activity over time.
+fn initiative() -> ArticulationVector {
+    ArticulationVector::new(0.10, 0.30, 0.60)
+}
+
+/// Public-noun. Strongly-attested anchors (many aliases or high salience) are
+/// Inventory-leaning; weakly-attested ones bleed toward Argument (probably
+/// extracted opportunistically).
+///
+/// ONE decider: the six-kind arm and the declared-type arm are the same rule,
+/// so they read the same function rather than repeating the four constants
+/// (§10.6).
+fn public_noun(aliases: usize, salience: f32) -> ArticulationVector {
+    if aliases >= 2 || salience >= 0.5 {
+        ArticulationVector::new(0.75, 0.20, 0.05)
+    } else {
+        ArticulationVector::new(0.55, 0.40, 0.05)
+    }
+}
+
+/// The articulation of a DECLARED entity type, or `None` when the name is not
+/// declared (Wikipedia's `Other("article")`, and every pre-ontology atlas).
+///
+/// A declared type is placed by the generic kind it descends from, so an
+/// author who writes `specializes = "concept"` gets the concept vector without
+/// having to name a vector. A declared type that specializes nothing generic
+/// is a thing in its own right — the public-noun rule, the same one `person` /
+/// `place` / `work` / `institution` get, because that is what a declared
+/// entity type is.
+fn declared_articulation(
+    name: &str,
+    e: &crate::enrichment::atlas::atoms::Entity,
+    vocab: Option<&OntologyPolicies>,
+) -> Option<ArticulationVector> {
+    let index = TypeIndex::from_policies(vocab?);
+    if !index.contains(name) {
+        return None;
+    }
+    // Two legal spellings of "this type is a kind of X": the author declared a
+    // type named `concept` and specialized it, or they wrote `specializes =
+    // "concept"` with no such declaration — `validate_block` accepts an
+    // unresolvable reference only when it names a generic entity kind, so the
+    // chain's terminal undeclared parent IS that kind. `is_a` answers the
+    // first, `generic_ancestor` the second; both read the one `specializes`
+    // walk in `TypeIndex`.
+    let descends_from =
+        |kind: &str| index.is_a(name, kind) || index.generic_ancestor(name) == Some(kind);
+    let v = if descends_from("concept") {
+        concept()
+    } else if descends_from("initiative") {
+        initiative()
+    } else {
+        public_noun(e.aliases.len(), e.salience)
+    };
+    tracing::debug!(
+        declared_type = name,
+        inventory = v.inventory,
+        argument = v.argument,
+        trace = v.trace,
+        "meta-atlas: declared type articulation"
+    );
+    Some(v)
 }
 
 /// Fallback for atoms whose `entity_type` round-trips as
@@ -294,8 +368,107 @@ mod tests {
         })
     }
 
+    // ── ontology-v1 P5: declared types ───────────────────────
+
+    fn declared(types: &[(&str, Option<&str>)]) -> OntologyPolicies {
+        use crate::enrichment::ontology::{OntologyTypeDecl, TypeKind};
+        let mut p = OntologyPolicies::default();
+        p.shape.types = types
+            .iter()
+            .map(|(name, specializes)| OntologyTypeDecl {
+                name: (*name).to_string(),
+                kind: TypeKind::Entity,
+                specializes: specializes.map(str::to_string),
+                ..Default::default()
+            })
+            .collect();
+        p
+    }
+
+    /// A declared entity type is a thing in its own right: it gets the same
+    /// public-noun treatment `person` / `place` / `work` / `institution` get,
+    /// not the Wikipedia prose fallback.
+    #[test]
+    fn a_declared_type_is_classified_as_a_public_noun() {
+        let vocab = declared(&[("coin", None), ("sceatta", Some("coin"))]);
+        let strong = entity(EntityType::Other("coin".into()), 0.9, vec![], None);
+        let v = classify_articulation_with(&strong, "", Some(&vocab));
+        assert_eq!(
+            v,
+            classify_articulation(&entity(EntityType::Person, 0.9, vec![], None), "")
+        );
+        assert_eq!(v.dominant(), Articulation::Inventory);
+
+        // Weakly attested → the same bleed the six kinds get.
+        let weak = entity(EntityType::Other("sceatta".into()), 0.1, vec![], None);
+        assert_eq!(
+            classify_articulation_with(&weak, "", Some(&vocab)),
+            classify_articulation(&entity(EntityType::Person, 0.1, vec![], None), "")
+        );
+    }
+
+    /// A declared type that says `specializes = "concept"` is placed by the
+    /// generic kind it descends from — the author never names a vector.
+    #[test]
+    fn a_declared_type_inherits_its_generic_kinds_articulation() {
+        let vocab = declared(&[
+            ("doctrine", Some("concept")),
+            ("school", Some("doctrine")),
+            ("campaign", Some("initiative")),
+        ]);
+        for name in ["doctrine", "school"] {
+            let env = entity(EntityType::Other(name.into()), 0.9, vec![], None);
+            assert_eq!(
+                classify_articulation_with(&env, "", Some(&vocab)),
+                classify_articulation(&entity(EntityType::Concept, 0.9, vec![], None), ""),
+                "{name} descends from concept"
+            );
+        }
+        let env = entity(EntityType::Other("campaign".into()), 0.9, vec![], None);
+        assert_eq!(
+            classify_articulation_with(&env, "", Some(&vocab)),
+            classify_articulation(&entity(EntityType::Initiative, 0.9, vec![], None), "")
+        );
+    }
+
+    /// I5, at the site. Wikipedia tags every article `Other("article")` and
+    /// declares nothing; with no vocabulary — and with a vocabulary that does
+    /// not know the name — the chunk-preview fallback runs exactly as before.
+    #[test]
+    fn an_undeclared_other_type_still_falls_back_to_the_preview() {
+        let vocab = declared(&[("coin", None)]);
+        let env = entity(EntityType::Other("article".into()), 0.9, vec![], None);
+        let preview = "'''Ceolwulf''' was a king of Mercia.";
+        let baseline = classify_by_chunk_preview(preview);
+        assert_eq!(classify_articulation(&env, preview), baseline);
+        assert_eq!(classify_articulation_with(&env, preview, None), baseline);
+        assert_eq!(
+            classify_articulation_with(&env, preview, Some(&vocab)),
+            baseline,
+            "a name the vocabulary does not declare must not take the declared path"
+        );
+    }
+
+    /// The two-argument name is the no-vocabulary case, for every atom kind.
+    #[test]
+    fn classify_articulation_is_the_none_vocabulary_case() {
+        for env in [
+            entity(EntityType::Person, 0.9, vec!["a", "b"], None),
+            entity(EntityType::Other("article".into()), 0.2, vec![], None),
+            claim(DiscourseAct::Argue),
+            event(EventType::Action),
+        ] {
+            assert_eq!(
+                classify_articulation(&env, "some preview"),
+                classify_articulation_with(&env, "some preview", None)
+            );
+        }
+    }
+
     fn claim(act: DiscourseAct) -> AtomEnvelope {
         AtomEnvelope::Claim(Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(1),
             content: "c".into(),
             discourse_act: act,
@@ -315,6 +488,7 @@ mod tests {
 
     fn event(et: EventType) -> AtomEnvelope {
         AtomEnvelope::Event(Event {
+            attributes: Default::default(),
             id: AtomId::event(1),
             description: "e".into(),
             event_type: et,
@@ -548,6 +722,7 @@ mod tests {
         );
 
         let rel = AtomEnvelope::Relation(Relation {
+            attributes: Default::default(),
             id: AtomId::relation(1),
             participants: vec![AtomId::entity(1), AtomId::entity(2)],
             label: "r".into(),

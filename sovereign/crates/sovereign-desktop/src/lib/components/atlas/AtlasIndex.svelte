@@ -13,12 +13,15 @@
     atlasListConvCorpora,
     atlasListCorpora,
   } from "../../api";
+  import { ATOM_TYPE_LABEL, ATOM_TYPE_ORDER_ALL } from "./atomKinds";
+
   import type {
     AtlasCorpusSummary,
     AtomType,
     ChunkEntityProgressRow,
     ConvCorpusSummary,
   } from "../../types";
+
 
   // Distinguish the two row shapes the index renders. Atom corpora
   // (atoms.json-backed) show per-atom-type counts; conv corpora
@@ -34,8 +37,18 @@
      *  call this with the corpus id + kind. Kind = "atom" routes to
      *  the legacy AtlasCorpusView; "conv" routes to
      *  AtlasConvCorpusView (conv_skeletons / conv_raptor_nodes
-     *  backed). When omitted, rows render read-only. */
-    onSelect?: (corpusId: string, kind: "atom" | "conv") => void;
+     *  backed). When omitted, rows render read-only.
+     *
+     *  The third argument is the row itself for an atom corpus — it
+     *  carries the declared types and the subtype census the browse
+     *  view's pills are built from, and the index has just fetched it,
+     *  so passing it down saves the corpus view a second listing. */
+    onSelect?: (
+      corpusId: string,
+      kind: "atom" | "conv",
+      summary?: AtlasCorpusSummary,
+    ) => void;
+
   }
 
   let { onSelect }: Props = $props();
@@ -55,29 +68,6 @@
    *  jobs settle. */
   let extractionPollIntervalId: ReturnType<typeof setInterval> | null = null;
 
-  const ATOM_TYPE_ORDER: AtomType[] = [
-    "Entity",
-    "Event",
-    "State",
-    "Relation",
-    "Claim",
-    "Question",
-    "Configuration",
-    "ArgumentReconstruction",
-  ];
-
-  // Compact glyph per atom type — keeps the per-corpus row scannable
-  // without burning horizontal space. Same labels used in Step 3 tabs.
-  const ATOM_TYPE_LABEL: Record<AtomType, string> = {
-    Entity: "Entity",
-    Event: "Event",
-    State: "State",
-    Relation: "Relation",
-    Claim: "Claim",
-    Question: "Question",
-    Configuration: "Config",
-    ArgumentReconstruction: "Argument",
-  };
 
   onMount(async () => {
     try {
@@ -206,7 +196,8 @@
   }
 
   function nonZeroCounts(s: AtlasCorpusSummary): Array<[AtomType, number]> {
-    return ATOM_TYPE_ORDER.flatMap<[AtomType, number]>((t) => {
+    return ATOM_TYPE_ORDER_ALL.flatMap<[AtomType, number]>((t) => {
+
       const n = s.atom_counts[t] ?? 0;
       return n > 0 ? [[t, n]] : [];
     });
@@ -392,7 +383,8 @@
                     class="row-button"
                     type="button"
                     disabled={!onSelect}
-                    onclick={() => onSelect?.(row.data.corpus_id, "atom")}
+                    onclick={() => onSelect?.(row.data.corpus_id, "atom", row.data)}
+
                     aria-label={`Open ${row.data.display_name}`}
                   >
                     <div class="row-header">

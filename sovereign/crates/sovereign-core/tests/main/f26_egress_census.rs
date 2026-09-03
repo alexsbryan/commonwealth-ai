@@ -35,8 +35,10 @@
 //! At HEAD (the red, before the boundary exists) the census counts
 //! five egress-class construction sites outside the boundary, the
 //! enrich providers path named first:
-//!   - sovereign/crates/sovereign-cli-llm/src/enrich_cmd/inference_client.rs
-//!     (RemotePayload — the `--provider` chat client)
+//!   - sovereign/crates/sovereign-enrichment-build/src/inference_client/
+//!     (RemotePayload — the `--provider` chat client; at
+//!     sovereign-cli-llm/src/enrich_cmd/inference_client.rs until P0's
+//!     crate split, 2026-09-02)
 //!   - sovereign/crates/sovereign-core/src/deep_research/port.rs
 //!     (QueryEgress — the web_search client)
 //!   - sovereign/crates/sovereign-tools/src/knowledge_lookup/mod.rs
@@ -251,15 +253,26 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-desktop/src-tauri/src/bootstrap.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-desktop/src-tauri/src/attach_watch.rs", Class::LocalDaemon, 1),
 
-    // ---- sovereign-cli-llm ----
+    // ---- sovereign-enrichment-build ----
     // R-5's named path: the enrich --provider dispatch. The chat
     // client (complete_inner → complete_openai_compatible /
     // complete_anthropic) moved into BOUNDARY_MODULE (egress.rs
     // model_client) with the boundary — a remote provider now passes
     // the release gate (default custody Personal, no grant →
-    // typed refusal). The file's three remaining sites are local:
-    // the embed one-shot client + two /v1/models probes.
-    ("sovereign/crates/sovereign-cli-llm/src/enrich_cmd/inference_client.rs", Class::LocalDaemon, 3),
+    // typed refusal). The three remaining sites are local: the embed
+    // one-shot client + two /v1/models probes.
+    //
+    // 2026-09-02: these were one row at
+    // `sovereign-cli-llm/src/enrich_cmd/inference_client.rs` until P0's
+    // crate split moved the file, whole, into `sovereign-enrichment-build`
+    // and left the CLI crate holding only help text and flag parsing. Two
+    // rows now, because the move also split the module in two. Same three
+    // sites, same class, same total — the census caught the stale path, which
+    // is what a per-file count is for.
+    ("sovereign/crates/sovereign-enrichment-build/src/inference_client/discovery.rs", Class::LocalDaemon, 2),
+    ("sovereign/crates/sovereign-enrichment-build/src/inference_client/mod.rs", Class::LocalDaemon, 1),
+
+    // ---- sovereign-cli-llm ----
     // 7 -> 10 (2026-08-27): `mesh rotate`, `mesh leave` and `mesh switch` each
     // now prefer the running daemon over an in-process fallback (the `cmd_join`
     // pattern), so each builds a client for 127.0.0.1 loopback. `mesh rotate`

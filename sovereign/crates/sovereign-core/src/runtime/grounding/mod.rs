@@ -107,24 +107,24 @@ mod repair;
 mod replay;
 // The orchestrator trio keep their historical `grounding::` paths: handlers,
 // collaboration, and the moved tests all reach them through this façade.
-pub(crate) use gate::{gate_answer, gate_answer_with_progress};
 pub(crate) use gate::{
     audit_forensics, audit_window, longform_claims, project_verdict, short_specifics_guard,
 };
+pub(crate) use gate::{gate_answer, gate_answer_with_progress};
 pub(crate) use inner::gate_answer_inner;
 pub(crate) use longform::gate_longform;
 // Repair text and the replay harness keep their `grounding::` paths via
 // these re-exports; `FailedClaim` and the note builders are consumed by
 // the gate modules through `super::*`.
-pub use replay::{
-    claim_chunk_support, extract_claim_list, replay_claim_violation_joint,
-    replay_claims_support_batched, replay_judge_system_turn, replay_render_batched_claims_prompt,
-    replay_render_claim_prompt, replay_scan_unsupported_specifics,
-};
 pub use repair::LONGFORM_REWRITE_PREFIX;
 pub(crate) use repair::{
     append_note, grounded_abstention, retry_system_note, rewrite_system_note, strip_gk_caveat,
     verification_note, FailedClaim,
+};
+pub use replay::{
+    claim_chunk_support, extract_claim_list, replay_claim_violation_joint,
+    replay_claims_support_batched, replay_judge_system_turn, replay_render_batched_claims_prompt,
+    replay_render_claim_prompt, replay_scan_unsupported_specifics,
 };
 // `ClaimSearcher` is constructed via `Runtime::claim_searcher`; the
 // type re-exports are for call sites that name them.
@@ -160,7 +160,6 @@ use judge::unwrap_unverified_excerpts;
 /// passed the verbatim check, so a larger budget can reveal more but never
 /// assert more.
 const CITATION_QUOTE_DISPLAY_CHARS: usize = 900;
-
 
 /// WHAT one released answer is verified against — the sealed evidence
 /// universe for one turn. Owned values throughout (the gate runs in
@@ -1171,7 +1170,6 @@ pub fn released_pure_decline(text: &str) -> bool {
     }
     answer_declines(&stripped)
 }
-
 
 #[cfg(test)]
 mod tests;

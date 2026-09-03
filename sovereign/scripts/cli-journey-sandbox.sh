@@ -278,6 +278,19 @@ echo
 # Only the recipe is registered here — `corpus install` is left to the journey
 # that asserts it, because pre-installing the corpus would make
 # `corpus-lifecycle` step 1 a no-op that passes without proving anything.
+# ── the ontology-author fixture ──────────────────────────────────────────
+# The repo's OWN declaration, not a copy: `sovereign-recipes/wessex-hoard/`
+# ships an ontology block, the markdown it acquires (by a path relative to the
+# recipe, so nothing needs rewriting) and an exhaustive `truth.json`. Left
+# UNINSTALLED here — `ontology-author` step [0] is the install, and
+# pre-installing would make its own first step a no-op that passes without
+# proving anything, the same rule the journey-corpus recipe follows below.
+ONTOLOGY_RECIPE="${SOVEREIGN_JOURNEY_ONTOLOGY_RECIPE:-$REPO_ROOT/sovereign-recipes/wessex-hoard/recipe.toml}"
+if [ ! -f "$ONTOLOGY_RECIPE" ]; then
+  echo "sandbox: ontology fixture recipe missing ($ONTOLOGY_RECIPE) — ontology-author cannot run" >&2
+  ONTOLOGY_RECIPE=""
+fi
+
 FIXTURE_DIR="$REPO_ROOT/sovereign/tests/fixtures/journey-corpus"
 FIXTURE_RECIPE="$REPO_ROOT/sovereign/tests/fixtures/journey-corpus.recipe.toml"
 JOURNEY_CORPUS="${JOURNEY_CORPUS:-journey-fixture}"
@@ -461,6 +474,7 @@ run_one() { # $1 = journey id; remaining = passthrough flags
       ${PROJECT_ROOT:+SOVEREIGN_JOURNEY_PROJECT_ROOT="$PROJECT_ROOT"} \
       ${PROJECT_ROOT:+SOVEREIGN_JOURNEY_SPEC="$SPEC_FILE"} \
       ${PROJECT_ROOT:+SOVEREIGN_JOURNEY_CLAIMS="$CLAIMS_FILE"} \
+      ${ONTOLOGY_RECIPE:+SOVEREIGN_JOURNEY_ONTOLOGY_RECIPE="$ONTOLOGY_RECIPE"} \
     "$RUNNER" --mutating "${SANDBOX_LACKS[@]}" --journey "$jid" "$@" \
     2>&1 | grep -vE '^cli-journey: |^ +steps +[0-9]|^ +coverage |^ +manifest |^$'
   return "${PIPESTATUS[0]}"

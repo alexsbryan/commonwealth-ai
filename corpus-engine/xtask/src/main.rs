@@ -28,11 +28,11 @@ mod docs_gate;
 mod env_gate;
 mod layer_gate;
 mod layout_gate;
-mod refactor_land;
 mod lint_gate;
 mod lock_gate;
 mod manifests;
 mod quality_cmd;
+mod refactor_land;
 mod size_gate;
 mod target_arch;
 

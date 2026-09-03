@@ -129,6 +129,12 @@ fn shape_summary(action: &EditAction) -> String {
         EditAction::PatchLines { start, end } => format!("patch {start}-{end}"),
         EditAction::InsertBefore { line } => format!("insert@{line}"),
         EditAction::WriteFile { .. } => "write_file".to_string(),
+        // Rendered, not refused: this is the receipt label, and an
+        // out-of-contract action still has to be attributable in the
+        // transcript. `apply_edit` is where it is rejected.
+        EditAction::MoveLines {
+            start, end, dest, ..
+        } => format!("move {start}-{end} -> {dest}"),
     }
 }
 

@@ -252,6 +252,20 @@ status = "shipped"
 purpose = "Atlas graph-walk grounding: cosine seeds → BFS over typed edges → FTS-fetch evidence chunks. =0/false/off/no disables."
 
 [[flag]]
+name = "SOVEREIGN_ATLAS_EMBED_ATTRIBUTES"
+cluster = "retrieval"
+default = "off"
+status = "experiment"
+purpose = "Append a declared atom's `attributes` to its embed text (`attr: metal=silver; …`) so attribute questions have something to match. Atoms with no attributes render identically, so an undeclared corpus is unaffected. Flip conditions: sovereign/DEFAULTS_LEDGER.md."
+
+[[flag]]
+name = "SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS"
+cluster = "retrieval"
+default = "off"
+status = "experiment"
+purpose = "Admit Claim atoms whose `claim_kind` names a DECLARED claim type into the atlas embedding bag. Narrower than SOVEREIGN_ATLAS_INCLUDE_CLAIMS; inert for a corpus that declares nothing. Flip conditions: sovereign/DEFAULTS_LEDGER.md."
+
+[[flag]]
 name = "SOVEREIGN_DEMAND_PLAN"
 cluster = "retrieval"
 default = "off"
@@ -1286,6 +1300,12 @@ status = "guard"
 purpose = "The toolbox container scripts/lib/release-host.sh runs native build legs inside. The default matches the container this repo's native deps (cmake, clang, vulkan) are installed in; the knob exists because the container name is a property of the HOST, not of the release. Resolution is guarded, not assumed: the driver uses `toolbox run -c $SOVEREIGN_TOOLBOX` only when the `toolbox` binary exists AND `toolbox list --containers` actually names it, so a missing or renamed container degrades loudly instead of producing a leg that silently built on the host."
 
 [[flag]]
+name = "SOVEREIGN_NO_COMMIT_SMELLS"
+cluster = "dev-gates"
+default = "off"
+status = "guard"
+purpose = """Set to 1 to silence .claude/hooks/commit-smells.py, the PreToolUse hook that runs the model-free ARCH §15 smell gate (scripts/co-arch.py over quality/arch-probes.toml) on what a `git commit` would record and blocks the agent once per site per session. A kill-switch for a false-positive storm or a fixture-heavy commit; the nightly co-arch audit still judges the commit afterwards, so nothing is lost by opting out, only the in-session placement of the principle next to the diff."""
+[[flag]]
 name = "SOVEREIGN_FAST_SHORT_QUEUE_CAP"
 cluster = "inference"
 default = "64"
@@ -1458,3 +1478,10 @@ cluster = "inference"
 default = "off"
 status = "experiment"
 purpose = """Bypass the device HOST buffer type for big local loads (llama.cpp `--no-host`), and with it the load-time prefetch: patch 0008 gates `init_mappings(!no_host)`, so this is also the only way to stop MAP_POPULATE making every CPU-placed weight resident before a single row is gathered. DEFAULT OFF BECAUSE IT WAS MEASURED HARMFUL ON THE CASE IT WAS WRITTEN FOR: on Qwen3.8-Flash-Next it turned the mmap-resident 26.8 GiB engram into an anonymous copy (RssAnon 8.85 -> 21.47 GiB, RssFile 0.29 -> 0.06 GiB) and the load OOM'd. Anonymous pages cannot be reclaimed; file-backed ones can. Kept as an opt-in because on a backend whose host buffer DOES accept the tensor's quant, CPU-placed weights really do land in pinned memory and this is the lever — measure RssAnon vs RssFile before turning it on. For placing ONE tensor on plain pageable CPU without this trade, use SOVEREIGN_TENSOR_BUFT_OVERRIDE instead."""
+
+[[flag]]
+name = "SOVEREIGN_ALLOW_STALE_SOLVE"
+cluster = "daemon-lifecycle"
+default = "off"
+status = "guard"
+purpose = """Opts a live daemon OUT of the stale-binary refusal in `run_identity::exe_rebuilt_since_start`, the guard `solve_http.rs` consults before serving a solve. Default OFF means the guard is ARMED: `run_identity::build()` captures `exe_mtime` at daemon startup (the banner), so a newer mtime on the same path proves a build landed UNDER a running process — every verb it serves then executes code the tree no longer contains, while `doctor` and the working tree both read fresh. The failure this prices is not hypothetical: six solve attempts on 2026-09-02 were served by a pre-dawn daemon, and the symptom was a fix that "did not work" rather than anything pointing at the binary. The refusal names its own repair (`sovereign daemon restart`), which is why the guard is a refusal and not a warning — a warning on a detached daemon goes to a log nobody is reading. Set =1 (exact match; no true/on spelling) to serve anyway, for the one legitimate case: deliberate archaeology against a build you have on purpose, e.g. reproducing a report on the binary that produced it. No DEFAULTS_LEDGER row: this is an opt-OUT of an already-default-on guard, so there is no flip-to-default pending — the desired end state is the guard staying armed."""

@@ -50,8 +50,10 @@ import type {
   DocumentAskResponse,
   LegacyDocumentEntry,
   BootstrapSnapshot,
+  AtlasBuildReport,
   AtlasCorpusSummary,
   AtlasMemberSummary,
+
   AtomFilter,
   AtomListPage,
   AtlasSubgraph,
@@ -2176,7 +2178,23 @@ export async function atlasListCorpora(): Promise<AtlasCorpusSummary[]> {
   return invoke("atlas_list_corpora");
 }
 
+/** What the LAST build found about this corpus's declared ontology,
+ *  plus whether atom-level grounding is present and fresh.
+ *
+ *  Read from artefacts the build already wrote, so it is a verdict
+ *  with an age rather than a live measurement. `reported: false` means
+ *  the report step never ran; `reported: true` with no `ontology`
+ *  means it ran and the corpus declares nothing. A viewer renders
+ *  nothing in both cases — the two are told apart in the payload, not
+ *  collapsed (§18.3). */
+export async function atlasBuildReport(
+  corpusId: string,
+): Promise<AtlasBuildReport> {
+  return invoke("atlas_build_report", { corpusId });
+}
+
 /** List a *collection* corpus's member atlases — the `<id>-<slug>`
+
  *  siblings that hold the map when the parent's own atlas is empty
  *  (SEP: one atlas per encyclopedia entry). Members with zero atoms
  *  are omitted server-side.

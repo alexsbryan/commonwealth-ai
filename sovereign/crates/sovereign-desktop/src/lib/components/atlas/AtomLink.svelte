@@ -1,6 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <script lang="ts" module>
-  import type { AtomType, ReferencedAtom } from "../../types";
+  import type { ReferencedAtom } from "../../types";
+  import { atomTypeLabel } from "./atomKinds";
 
   /** Shape of the context AtomDetail provides so every body
    *  subcomponent can render atom_id refs as clickable chips. */
@@ -10,22 +11,8 @@
   }
 
   export const ATOM_LINK_CONTEXT_KEY = Symbol("atom-link-resolver");
-
-  const ATOM_TYPE_LABEL: Record<AtomType, string> = {
-    Entity: "Entity",
-    Event: "Event",
-    State: "State",
-    Relation: "Relation",
-    Claim: "Claim",
-    Question: "Question",
-    Configuration: "Config",
-    ArgumentReconstruction: "Argument",
-  };
-
-  export function atomTypeLabel(t: AtomType): string {
-    return ATOM_TYPE_LABEL[t];
-  }
 </script>
+
 
 <script lang="ts">
   // AtomLink — clickable chip for one atom_id reference inside a

@@ -9,6 +9,7 @@
 //! ```text
 //! sovereign atlas list-corpora                         # what atlases exist?
 //! sovereign atlas list-atoms wikipedia --type=Claim    # what got extracted?
+//! sovereign atlas list-atoms wessex-hoard --subtype=coin  # the author's noun
 //! sovereign atlas show-atom wikipedia entity-0042      # full record
 //! ```
 //!
@@ -39,13 +40,17 @@ const LIST_ATOMS_HELP: Help = Help {
     summary: "Browse atoms within a corpus — filterable by type and substring.",
     sections: &[
         HelpSection::Usage(
-            "svrn atlas list-atoms <corpus_id> [--type=TYPE] [--query=Q] \
-             [--limit=N] [--offset=N] [--format=text|json]",
+            "svrn atlas list-atoms <corpus_id> [--type=TYPE] [--subtype=NAME] \
+             [--query=Q] [--limit=N] [--offset=N] [--format=text|json]",
         ),
         HelpSection::Notes(
             "TYPE is one of: Entity, Event, State, Relation, Claim, Question, \
-             Configuration, ArgumentReconstruction. Default limit is 50; pass \
-             --limit=0 to dump everything matching.",
+             Configuration, ArgumentReconstruction. NAME is a declared type \
+             from the corpus's own ontology (`coin`, `attribution`) or one of \
+             the generic entity kinds (`person`, `concept`). Each name matches \
+             exactly and nothing rolls up, so ask for the family by naming it: \
+             `--subtype=coin,sceatta`. Default limit is \
+             50; pass --limit=0 to dump everything matching.",
         ),
     ],
 };
@@ -142,6 +147,23 @@ pub async fn run_list_atoms(args: &[String]) -> i32 {
         None => None,
     };
     let name_query = parse_flag(args, "--query");
+    // The author's own noun. Separate from `--type` because a declared type is
+    // not an atom KIND: `--subtype=coin` and `--subtype=sceatta` are both
+    // Entities, and a `role_of` type lands as a State on a person atom, so
+    // folding the two flags together would make `ruler` unaskable.
+    // Comma-separated so the family is askable in one call — `--subtype=coin`
+    // is the type itself and `--subtype=coin,sceatta` is what "how many coins"
+    // means when one specializes the other. The server never walks the
+    // hierarchy; the caller names it.
+    let subtypes: Vec<String> = parse_flag(args, "--subtype")
+        .map(|s| {
+            s.split(',')
+                .map(str::trim)
+                .filter(|p| !p.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
     let limit: usize = parse_flag(args, "--limit")
         .and_then(|s| s.parse().ok())
         .unwrap_or(50);
@@ -162,6 +184,7 @@ pub async fn run_list_atoms(args: &[String]) -> i32 {
                 atom_type,
                 name_query: name_query.clone(),
                 min_salience: None,
+                subtypes: subtypes.clone(),
             },
             PageCursor {
                 offset,

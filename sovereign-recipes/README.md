@@ -39,7 +39,12 @@ sovereign-recipes/
 ├── GETTING_STARTED.md         # tutorial
 ├── _templates/                # copy-paste starting points
 │   ├── annotated/             #   fully-commented general template
-│   └── narrative-markdown/    #   template for stable markdown docs
+│   ├── narrative-markdown/    #   template for stable markdown docs
+│   └── ontology-v1/           #   `svrn recipe new --ontology <name>` — declared-type recipes,
+│       └── <name>/            #   one directory per ONTOLOGY_PRIMITIVES.md §1 user.
+│                              #   THE DIRECTORY IS THE CATALOG: build.rs discovers it,
+│                              #   `--ontology list` names them. Not listed here — a fourth
+│                              #   copy of the list is a fourth thing to forget.
 ├── wikipedia/recipe.toml      # one directory per corpus
 ├── sep/recipe.toml
 └── …

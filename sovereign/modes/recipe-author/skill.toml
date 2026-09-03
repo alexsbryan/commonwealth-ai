@@ -284,27 +284,51 @@ overlap_chars = 256
 # the partner verifies ("Verify enrichment"). Three ways to produce it, in
 # priority order:
 #
-#  • type = "atlas" + [enrichment.ontology]  — THE HEADLINE. Author a CUSTOM
-#    ontology for the partner's specific domain. Interview them: what kinds of
-#    things matter (entities), how do they relate, what claims/arguments and
-#    events does the corpus carry — IN THEIR OWN LANGUAGE. Capture that as prose
-#    `guidance`; a generic atlas pipeline extracts to it and writes the same
-#    atoms.json that feeds chat. No fixed schema, no Rust. Use this whenever the
-#    corpus is about a real domain (numismatics, a legal practice area, a
-#    research field, a company's internal docs):
+#  • type = "atlas" + [enrichment.ontology] version = 1  — THE HEADLINE.
+#    DECLARE the partner's domain rather than describing it: the kinds of thing
+#    that matter and what you'd want to know about each, what the sources
+#    assert about them, how you know two mentions are the same thing, when a
+#    later statement replaces an earlier one, and what should be noticed that
+#    no single document says. `version = 1` turns those declarations into the
+#    extraction schema, the identity rule and the tension selector; `guidance`
+#    prose still frames the material in the partner's own words. No Rust.
 #         [enrichment]
 #         enabled = true
 #         type = "atlas"
 #         domain = "medieval-numismatics"   # short label
 #         [enrichment.ontology]
-#         guidance = (one prose paragraph, in the domain's own words, e.g.:)
-#           Extract coins (note mint, ruler, denomination, metal), mints,
-#           rulers, hoards, scholars. Relations: minted_by, found_in_hoard,
-#           succeeds_ruler. Claims: attributions, datings, metrological
-#           arguments. Events: hoard finds, reforms. Prefer the document's own
-#           canonical names (e.g. Offa of Mercia), not generic ones.
-#    Entity/relation TYPES are open — use the domain's own words ("coin",
-#    "hoard"); the engine accepts them. Write guidance a colleague could follow.
+#         version = 1
+#         guidance = "..."                  # one paragraph, the domain's words
+#         [[enrichment.ontology.types]]
+#         name = "coin"
+#         kind = "entity"
+#         attributes = [
+#           { name = "ruler",  type = "ref",      of = "ruler" },
+#           { name = "weight", type = "quantity", unit = "g" },
+#           { name = "struck", type = "time",     range = true },
+#         ]
+#         [[enrichment.ontology.types]]
+#         name = "ruler"
+#         kind = "entity"
+#         role_of = "person"                # a part the base `person` kind plays
+#         [[enrichment.ontology.types]]
+#         name = "attribution"
+#         kind = "claim"
+#         force = "assertive"
+#         subject = "coin"                  # what the claim is about
+#         grades = ["die-link", "hoard-context", "stylistic"]
+#         [enrichment.ontology.tension]
+#         between = ["attribution"]         # where contradictions are sought
+#    Type names are the DOMAIN's words ("coin", "hoard"). `specializes`,
+#    `role_of`, `subject` and `ref … of` resolve to a declared name OR to a
+#    base kind the atlas already emits (person, concept, institution, work,
+#    place, initiative) — so `role_of = "person"` needs no `person`
+#    declaration, while a domain word like `mint` must be declared.
+#    Ten worked declarations ship as templates, one per PRIMITIVES §1 user:
+#    `svrn recipe new --ontology list` names them and `--ontology <name>`
+#    scaffolds a complete recipe. Start from the closest one instead of
+#    writing from scratch. Omitting `version` keeps the older
+#    guidance-and-vocabulary-only block; prefer version 1 for new work.
 #
 #  • type = "atlas" + domain only (NO ontology)  — QUICK fallback for generic
 #    corpora when the partner doesn't want to author an ontology. `domain =
@@ -312,11 +336,13 @@ overlap_chars = 256
 #    prebuilt genre pipeline; atoms are less domain-tuned. Prefer the custom
 #    ontology above for anything domain-specific.
 #
-#  • type = "investigation" — ADVANCED. A TYPED entity/relationship schema +
-#    pattern detectors (cycles, role-overlap, thresholds) for structured /
-#    analytical queries (the example below). Produces a separate reconciliation
-#    graph (entities.json/relationships.json), NOT the chat atoms.json — choose
-#    it only when the partner needs typed records + pattern detection by name.
+#  • type = "investigation" — ADVANCED; prefer declared patterns. A separate
+#    TYPED entity/relationship schema + pattern detectors (cycles,
+#    role-overlap, thresholds) writing its own reconciliation graph
+#    (entities.json/relationships.json), NOT the chat atoms.json (the example
+#    below). A version-1 ontology declares the same detectors under
+#    `[[enrichment.ontology.patterns]]` and keeps ONE graph — reach for
+#    `investigation` only when the partner needs the separate typed records.
 #
 # Default: author a custom [enrichment.ontology] for the partner's domain. The
 # desktop "Build & enrich" button runs install → atlas → atoms; "Verify
@@ -327,21 +353,35 @@ overlap_chars = 256
 #     domain = "literary"
 #
 # ── Eliciting the ontology (interview the partner) ──
-# The ontology is the PARTNER's domain knowledge — you can't write good
-# `guidance` from the charter alone. When a corpus would benefit from a
-# knowledge graph (almost always, for chat), INTERVIEW before drafting
-# enrichment. Ask 2–3 sharp questions, in their language — e.g.:
-#   • "What kinds of things does this material talk about that you'd want to
-#      look up or connect?"            (→ entities, with the domain's own types)
-#   • "How do those relate — what links between them matter?"   (→ relations)
-#   • "What claims, arguments, or decisions does it make that you'd want to
-#      find and weigh against each other?"               (→ claims / events)
+# The ontology is the PARTNER's domain knowledge — you cannot write it from the
+# charter alone. Five questions, one per axis (ONTOLOGY_PRIMITIVES.md §4). ASK
+# ONLY WHAT THE CHARTER DOESN'T ANSWER, and ask in their language, not the
+# schema's:
+#   • Shape — "What is this material about, and what would you want to know
+#     about each kind of thing? Is any of them a kind of another, or a part
+#     something plays? Do you already have any of it in a table?"
+#                        (→ types, attributes, specializes, role_of, source)
+#   • Assertion — "What do the sources say about those things — stating,
+#     requiring, deciding, asking? About what? How do you tell strong evidence
+#     from weak? Who is speaking, and are they part of the subject? What must
+#     it never do?"      (→ claim types with force/deontic/subject/grades,
+#                            voices, must_not)
+#   • Identity — "How do you know two mentions are the same thing? Is there an
+#     ID?"                              (→ identity, identity_fallback)
+#   • Change — "When does a later statement replace an earlier one, and from
+#     when?"                            (→ change.supersedes and its clock)
+#   • Derivation — "What should it notice that no single document says —
+#     contradictions, patterns, larger structures? What looks like a
+#     contradiction but isn't?"         (→ tension, patterns, derive)
 # Asking these IS the work, not stalling — but keep it focused (not a survey),
-# and don't re-ask what the charter already answers. Then capture their answers
-# as `[enrichment.ontology].guidance` (prose, their words) via
-# recipe_write_structured, with `type="atlas"` + a short `domain` label. If the
-# partner can't or won't specify a domain shape, fall back to the genre default
-# (`domain="literary"`/`"philosophy"`, no ontology) and tell them you did.
+# and skip any the charter already answers. Write the answers as declared types
+# via recipe_write_structured, then RUN `svrn recipe validate <path>` and READ
+# THE DERIVED FACETS BACK to the partner: it prints the clock, the tension
+# selector, the identity criterion each type resolved to, and the question
+# shapes the corpus will answer. Those are inferences — when one is wrong the
+# fix is a declaration, not a retry. If the partner can't or won't specify a
+# domain shape, fall back to the genre default (`domain="literary"` /
+# `"philosophy"`, no ontology) and tell them you did.
 #
 # ── Investigation example (advanced typed schema) ──
 [enrichment]

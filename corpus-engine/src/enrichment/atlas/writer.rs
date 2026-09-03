@@ -257,6 +257,106 @@ impl ResolutionFailuresFile {
     }
 }
 
+/// On-disk layout of `atlas/ontology.json` — the declared ontology this
+/// atlas was extracted under.
+///
+/// The atlas directory has to answer "what did this corpus declare" on its
+/// own: `corpus-engine` cannot read the enrich `config.json` (that type lives
+/// in `sovereign-enrichment-catalog`), and `_summary.json` is a derived cache
+/// that must be reproducible from the atlas dir alone. So the resolve step
+/// writes the policies down beside the atoms.
+///
+/// Absent for every corpus that declares no ontology, and for every atlas
+/// built before ontology v1 — readers treat absence as "no declaration",
+/// never as an error.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct AtlasOntologyFile {
+    pub schema_version: String,
+    /// The `[enrichment.ontology] version` the policies were parsed under.
+    #[serde(default)]
+    pub ontology_version: u32,
+    /// What the pipeline read. Same struct the recipe parses into, so a
+    /// reader never re-derives it.
+    pub policies: crate::enrichment::ontology::OntologyPolicies,
+}
+
+impl AtlasOntologyFile {
+    pub const SCHEMA_VERSION: &'static str = "1.0";
+    /// File name under `atlas/`. The ONE spelling — the writer and the
+    /// summary reader below both go through it.
+    pub const FILE: &'static str = "ontology.json";
+}
+
+/// Write `atlas/ontology.json`. Called from the resolve step after
+/// [`write_atlas_full`], which is the only place that knows both the atlas
+/// directory and the corpus's `EnrichConfig`.
+pub fn write_atlas_ontology(
+    atlas_dir: &Path,
+    ontology_version: u32,
+    policies: &crate::enrichment::ontology::OntologyPolicies,
+) -> io::Result<PathBuf> {
+    fs::create_dir_all(atlas_dir)?;
+    let path = atlas_dir.join(AtlasOntologyFile::FILE);
+    write_atomic(
+        &path,
+        &AtlasOntologyFile {
+            schema_version: AtlasOntologyFile::SCHEMA_VERSION.to_string(),
+            ontology_version,
+            policies: policies.clone(),
+        },
+    )?;
+    Ok(path)
+}
+
+/// Read `atlas/ontology.json`, or `None` when the atlas declares none or the
+/// file cannot be parsed. Companion to [`write_atlas_ontology`]; the summary
+/// reads it through this and nothing else opens the file by name.
+pub fn read_atlas_ontology(atlas_dir: &Path) -> Option<AtlasOntologyFile> {
+    let raw = fs::read(atlas_dir.join(AtlasOntologyFile::FILE)).ok()?;
+    match serde_json::from_slice(&raw) {
+        Ok(parsed) => Some(parsed),
+        Err(e) => {
+            tracing::warn!(
+                atlas_dir = %atlas_dir.display(),
+                error = %e,
+                "atlas ontology: ontology.json present but unreadable; treating as undeclared"
+            );
+            None
+        }
+    }
+}
+
+/// Read the stored `atlas/schema_validation.json` as the typed report, or
+/// `None` when the report step has not run or the file cannot be parsed.
+///
+/// The report is what the LAST build found — it is not recomputed here, so a
+/// caller showing it to a user is showing a build's verdict, not a live one.
+/// That is the point: it is the artefact `svrn enrich schema-report` writes,
+/// and re-deriving it would mean re-reading every atom.
+///
+/// The one typed door to this file. Two callers poke individual keys out of it
+/// as untyped JSON (`read_code_walk_visibility`, and the source-corpus lookup
+/// in `atlas_patch_code`) because they predate the report being deserializable
+/// as a whole; they are not folded in here, but nothing NEW should open this
+/// file by name (§10.6).
+pub fn read_schema_validation_report(
+    atlas_dir: &Path,
+) -> Option<super::schema_validation::SchemaValidationReport> {
+    let raw = fs::read(atlas_dir.join("schema_validation.json")).ok()?;
+    match serde_json::from_slice(&raw) {
+        Ok(parsed) => Some(parsed),
+        Err(e) => {
+            tracing::warn!(
+                atlas_dir = %atlas_dir.display(),
+                error = %e,
+                "atlas report: schema_validation.json present but unreadable; \
+                 treating as not-yet-reported"
+            );
+            None
+        }
+    }
+}
+
 /// Write a deterministic gaps file (Phase 7) to
 /// `atlas/gaps.json`. Atomic sibling-tmp + rename, same contract as
 /// the other atlas writers.
@@ -267,6 +367,18 @@ pub fn write_atlas_gaps(
     fs::create_dir_all(atlas_dir)?;
     let path = atlas_dir.join("gaps.json");
     write_atomic(&path, gaps)?;
+    Ok(path)
+}
+
+/// Write the declared-pattern findings to `atlas/pattern_findings.json`.
+/// Atomic sibling-tmp + rename, same contract as the other atlas writers.
+pub fn write_atlas_pattern_findings(
+    atlas_dir: &Path,
+    findings: &super::analysis::patterns_adapter::PatternFindingsOutput,
+) -> io::Result<PathBuf> {
+    fs::create_dir_all(atlas_dir)?;
+    let path = atlas_dir.join("pattern_findings.json");
+    write_atomic(&path, findings)?;
     Ok(path)
 }
 
@@ -372,6 +484,61 @@ pub fn read_atlas_edges(atlas_dir: &Path) -> io::Result<EdgesFile> {
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("parse edges.json: {e}")))
 }
 
+/// Replace `atlas/atoms.json` with the provided file, and rebuild the v2
+/// store from it. The atom-side companion to [`write_atlas_edges`]: Phase 6's
+/// classifier replaces the atom set with one carrying the `same_as` Claims an
+/// `equivalent` verdict reifies, dropping what a prior run wrote, so it cannot
+/// use [`append_atoms_and_edges`] — the contract is REPLACE, not append.
+///
+/// It rebuilds `atoms.lance` for the same reason that function does, and the
+/// reason is worth stating once for both: `atoms.json` is the export and the
+/// store is what the runtime reads. Writing only the JSON leaves the read path
+/// missing atoms the export claims are there, silently, until something
+/// queries for one. (Merging P3 and P4 on 2026-09-02 put the two writers side
+/// by side and made the omission visible; the appending one had it right.)
+///
+/// The JSON write is atomic — sibling `.tmp` + rename — so a crash leaves the
+/// pre-existing file intact rather than truncated. The pair is not atomic
+/// ACROSS the two artefacts: the store is rebuilt after the rename, which is
+/// the ordering `write_atlas_full` and `append_atoms_and_edges` both use.
+pub fn write_atlas_atoms(atlas_dir: &Path, atoms: &AtomsFile) -> io::Result<PathBuf> {
+    fs::create_dir_all(atlas_dir)?;
+    let path = atlas_dir.join("atoms.json");
+    write_atomic(&path, atoms)?;
+    let edges_file = read_atlas_edges(atlas_dir)?;
+    write_atlas_v2_store(atlas_dir, &atoms.atoms, &edges_file.edges)?;
+    Ok(path)
+}
+
+/// Append atoms and edges to a written atlas, keeping the v2 store in step.
+///
+/// The one supported way to add to an atlas after `write_atlas_full` ran.
+/// Reconciliation is the first caller: it runs over a resolved atlas and
+/// reifies each merge as a `same_as` Claim, which has to reach the same
+/// `atoms.lance` the runtime reads — writing only `atoms.json` would leave the
+/// read path missing atoms the export claims are there.
+///
+/// Not atomic ACROSS the three artefacts (JSON, JSON, store): each is written
+/// through its own rename, and the store is rebuilt last from the merged set,
+/// which is the same ordering `write_atlas_full` uses. Ids are the caller's
+/// problem — nothing here renumbers.
+pub fn append_atoms_and_edges(
+    atlas_dir: &Path,
+    atoms: &[AtomEnvelope],
+    edges: &[Edge],
+) -> io::Result<()> {
+    if atoms.is_empty() && edges.is_empty() {
+        return Ok(());
+    }
+    let mut atoms_file = read_atlas_atoms(atlas_dir)?;
+    let mut edges_file = read_atlas_edges(atlas_dir)?;
+    atoms_file.atoms.extend(atoms.iter().cloned());
+    edges_file.edges.extend(edges.iter().cloned());
+    write_atomic(&atlas_dir.join("atoms.json"), &atoms_file)?;
+    write_atomic(&atlas_dir.join("edges.json"), &edges_file)?;
+    write_atlas_v2_store(atlas_dir, &atoms_file.atoms, &edges_file.edges)
+}
+
 /// Replace `atlas/edges.json` with the provided file. Used by Phase
 /// 6's LLM Tension classifier to merge new edges into the resolved
 /// atlas without re-running the entire write_atlas pipeline. Atomic:
@@ -436,6 +603,7 @@ mod tests {
             concept_kind: None,
         };
         let event = Event {
+            attributes: Default::default(),
             id: AtomId::event(1),
             description: "an event".into(),
             event_type: EventType::Other("unspecified".into()),

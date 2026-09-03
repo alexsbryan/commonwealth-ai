@@ -28,6 +28,8 @@ mod atlas_narrative_markdown;
 mod atoms_schema_back_compat;
 #[path = "main/chatgpt_real_export.rs"]
 mod chatgpt_real_export;
+#[path = "main/custom_ontology_pipeline_e2e.rs"]
+mod custom_ontology_pipeline_e2e;
 #[path = "main/described_asset_e2e.rs"]
 mod described_asset_e2e;
 #[path = "main/enrichment_requested_flag.rs"]
@@ -46,6 +48,16 @@ mod investigation_pipeline_e2e;
 mod newsworthy_integration;
 #[path = "main/on_demand_guard.rs"]
 mod on_demand_guard;
+#[path = "main/ontology_identity_e2e.rs"]
+mod ontology_identity_e2e;
+#[path = "main/ontology_prompt_snapshots.rs"]
+mod ontology_prompt_snapshots;
+#[path = "main/ontology_recipe.rs"]
+mod ontology_recipe;
+#[path = "main/ontology_resolution_e2e.rs"]
+mod ontology_resolution_e2e;
+#[path = "main/ontology_retrieval_e2e.rs"]
+mod ontology_retrieval_e2e;
 #[path = "main/parquet_ingest_e2e.rs"]
 mod parquet_ingest_e2e;
 #[path = "main/probe_index_residency.rs"]
@@ -58,6 +70,8 @@ mod recipe_back_compat;
 mod recipe_domain_gate;
 #[path = "main/recipe_schema.rs"]
 mod recipe_schema;
+#[path = "main/recipe_templates.rs"]
+mod recipe_templates;
 #[path = "main/reindex_stamps_freshness.rs"]
 mod reindex_stamps_freshness;
 #[path = "main/sharding_round_trip_e2e.rs"]

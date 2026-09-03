@@ -79,18 +79,24 @@ pub async fn apply_edit(
                 content: response.body.clone(),
             })
         }
-        EditAction::MoveLines { src, start, end, dest } => {
+        EditAction::MoveLines {
+            src,
+            start,
+            end,
+            dest,
+        } => {
             // Relocation without generation — the model names the span,
             // this moves the bytes. Deterministic, so it is testable
             // without a model and cannot truncate.
             let src_path = src.clone().unwrap_or_else(|| source_file.to_string());
             let abs_src = ctx.workdir.join(&src_path);
-            let existing = tokio::fs::read_to_string(&abs_src).await.map_err(|e| {
-                ToolError::Filesystem {
-                    primitive: "move_lines",
-                    reason: format!("read {src_path}: {e}"),
-                }
-            })?;
+            let existing =
+                tokio::fs::read_to_string(&abs_src)
+                    .await
+                    .map_err(|e| ToolError::Filesystem {
+                        primitive: "move_lines",
+                        reason: format!("read {src_path}: {e}"),
+                    })?;
             let mut lines: Vec<&str> = existing.lines().collect();
             let s = (*start as usize).saturating_sub(1);
             let e = (*end as usize).min(lines.len());
@@ -106,27 +112,28 @@ pub async fn apply_edit(
             let moved_block = lines[s..e].join("\n");
             let dest_abs = ctx.workdir.join(dest);
             if let Some(parent) = dest_abs.parent() {
-                tokio::fs::create_dir_all(parent).await.map_err(|e| {
-                    ToolError::Filesystem {
+                tokio::fs::create_dir_all(parent)
+                    .await
+                    .map_err(|e| ToolError::Filesystem {
                         primitive: "move_lines",
                         reason: format!("mkdir {}: {e}", parent.display()),
-                    }
-                })?;
+                    })?;
             }
             // Existing dest → append; fresh dest → the block opens it.
-            let mut dest_content =
-                tokio::fs::read_to_string(&dest_abs).await.unwrap_or_default();
+            let mut dest_content = tokio::fs::read_to_string(&dest_abs)
+                .await
+                .unwrap_or_default();
             if !dest_content.is_empty() && !dest_content.ends_with('\n') {
                 dest_content.push('\n');
             }
             dest_content.push_str(&moved_block);
             dest_content.push('\n');
-            tokio::fs::write(&dest_abs, dest_content).await.map_err(|e| {
-                ToolError::Filesystem {
+            tokio::fs::write(&dest_abs, dest_content)
+                .await
+                .map_err(|e| ToolError::Filesystem {
                     primitive: "move_lines",
                     reason: format!("write {dest}: {e}"),
-                }
-            })?;
+                })?;
             lines.drain(s..e);
             tokio::fs::write(&abs_src, lines.join("\n") + "\n")
                 .await
@@ -212,7 +219,9 @@ mod tests {
             "```json\n{\"action\": \"move_lines\", \"start\": 1845, \"end\": 3010, \"dest\": \"src/x/judge_tests.rs\"}\n```\n```json\n{\"action\": \"move_lines\", \"start\": 100, \"end\": 240, \"dest\": \"src/x/prompts.rs\"}\n```",
         );
         assert_eq!(edits.len(), 2, "both relocations parse: {edits:?}");
-        assert!(edits.iter().all(|e| matches!(e.action, EditAction::MoveLines { .. })));
+        assert!(edits
+            .iter()
+            .all(|e| matches!(e.action, EditAction::MoveLines { .. })));
     }
 
     #[tokio::test]

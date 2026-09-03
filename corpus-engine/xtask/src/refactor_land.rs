@@ -20,13 +20,7 @@
 
 use std::process::Command;
 
-const CONFORMANCE_TARGET: &[&str] = &[
-    "test",
-    "-p",
-    "kernel-types",
-    "--test",
-    "conformance_tags",
-];
+const CONFORMANCE_TARGET: &[&str] = &["test", "-p", "kernel-types", "--test", "conformance_tags"];
 
 fn run_conformance(regen: bool) -> std::process::Output {
     let mut c = Command::new("cargo");
@@ -34,7 +28,8 @@ fn run_conformance(regen: bool) -> std::process::Output {
     if regen {
         c.env("UPDATE_CONFORMANCE_TAGS", "1");
     }
-    c.output().expect("failed to spawn cargo for conformance tags")
+    c.output()
+        .expect("failed to spawn cargo for conformance tags")
 }
 
 fn fail_with_tail(stage: &str, out: &std::process::Output) -> i32 {

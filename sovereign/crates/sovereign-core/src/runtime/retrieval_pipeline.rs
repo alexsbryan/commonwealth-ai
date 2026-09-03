@@ -2531,6 +2531,9 @@ mod tests {
                 scope: None,
                 citation: Some(ChunkRef::new(section.to_string(), None)),
                 status,
+                // The clock axis (ontology-v1 P4) is not what this test
+                // exercises; the log's own supersession is.
+                superseded_by_clock: None,
             }
         }
         // sec-old carries a rule the log superseded; sec-new carries the

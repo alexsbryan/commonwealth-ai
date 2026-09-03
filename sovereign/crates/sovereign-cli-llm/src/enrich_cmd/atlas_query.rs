@@ -17,10 +17,10 @@
 //! by meaning, preferring the persistent ANN table and cosine-falling-back.
 
 use corpus_engine::atlas_traversal::{
-    assemble_brief, classify_query, engine::AtlasView, traverse, QueryPlan,
+    assemble_brief, classify_query_with, engine::AtlasView, traverse, QueryPlan,
 };
 use corpus_engine::enrichment::atlas::{
-    read_atlas_atoms, read_atlas_edges, AtomEnvelope, ATLAS_DIRNAME,
+    read_atlas_atoms, read_atlas_edges, read_atlas_ontology, AtomEnvelope, ATLAS_DIRNAME,
 };
 use sovereign_core::atlas_context::{
     open_and_attach_ann_seed_table, render_call_chain_brief, seed_atom_by_meaning, AtlasGraph,
@@ -160,8 +160,15 @@ pub async fn cmd_atlas_query(args: &[String]) -> i32 {
     // Route: an explicit call intent (keywords / `--callers`), or a question the
     // prose classifier can't place, becomes a CallChain. Everything the
     // classifier DOES place (who-is / tensions / trajectory / …) stays legacy.
+    // The declared ontology this atlas was extracted under, if any. `None`
+    // for every corpus that declares nothing, which reproduces the
+    // pre-ontology classification exactly.
+    let ontology = read_atlas_ontology(&atlas_dir)
+        .map(|f| f.policies)
+        .filter(|p| p.has_declarations());
+
     let call_dir = detect_call_intent(&parsed.query, parsed.callers);
-    let legacy_plan = classify_query(&parsed.query, &entities);
+    let legacy_plan = classify_query_with(&parsed.query, &entities, ontology.as_ref());
     let do_callchain = call_dir.is_some() || matches!(legacy_plan, QueryPlan::Unknown { .. });
 
     if do_callchain {
@@ -180,6 +187,7 @@ pub async fn cmd_atlas_query(args: &[String]) -> i32 {
         edges: &edges_file,
         positions: &positions,
         oppositions: &oppositions,
+        vocab: ontology.as_ref(),
     };
     let result = traverse(&legacy_plan, view);
     if parsed.as_json {

@@ -49,7 +49,14 @@ corpus-engine-yield = { workspace = true }
 
 # Serialization
 serde = { workspace = true }
-serde_json = { workspace = true }
+# `preserve_order` is load-bearing, not cosmetic: the Phase-1 response schema
+# is handed to the daemon's llguidance grammar, which generates properties in
+# SCHEMA order. Alphabetical order puts the optional `claims` array first and
+# the model skips it (measured 2026-09-02: 0/2 claims sorted vs 2/2 authored,
+# same section, same model). Declared here so a build that resolves
+# serde_json without a unifying neighbour cannot silently change what the
+# model is asked for; `phase1_schema_keeps_its_authored_order` is the gate.
+serde_json = { workspace = true, features = ["preserve_order"] }
 toml = { workspace = true }
 
 # Error handling

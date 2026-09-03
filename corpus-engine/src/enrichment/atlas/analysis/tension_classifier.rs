@@ -42,6 +42,9 @@ use crate::enrichment::atlas::atoms::{
     AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim, Entity, State,
 };
 use crate::enrichment::atlas::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
+use crate::enrichment::pipeline::atlas::{
+    ClaimScope, DiscourseAct, EnrichmentDepth, EpistemicStatus,
+};
 
 // ── Resolved candidate content ──────────────────────────────────────
 
@@ -108,6 +111,64 @@ pub struct Phase6Classification {
     /// verdicts so a reviewer can audit a `is_tension: false`
     /// without rerunning the model.
     pub rationale: String,
+    /// What A and B are to each other, when the corpus DECLARES an
+    /// ontology and the classifier was given
+    /// [`phase6_classifier_response_schema_with_relation`]. `None` on
+    /// every undeclared corpus, whose schema has no such field — and on a
+    /// declared one whose model omitted it, which reads as "did not say"
+    /// and never as `Compatible` (ARCH §18.3).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relation: Option<Phase6Relation>,
+}
+
+/// What the classifier says two atoms are to each other. Orthogonal to
+/// `is_tension` on the wire and reconciled by
+/// [`Phase6Classification::verdict`]: a model that returns
+/// `is_tension: true` alongside `relation: "equivalent"` has contradicted
+/// itself, and the reconciliation is one place, not one per caller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Phase6Relation {
+    /// A genuine tension — the pair earns a `Tension` edge.
+    Conflict,
+    /// One statement in two surface forms. Earns a `same_as` Claim, NOT a
+    /// Tension: "must not host after 10pm" and "must end hosting by 10pm"
+    /// are one rule (ONTOLOGY_MIGRATION §P4).
+    Equivalent,
+    /// Both hold at once and they are not the same statement. Nothing is
+    /// materialised.
+    Compatible,
+}
+
+/// What one classification materialises. The ONE reconciliation of
+/// `is_tension` and `relation`, so no caller re-derives it (ARCH §10.6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Phase6Verdict {
+    /// Materialise a `Tension` edge.
+    Tension,
+    /// Materialise a `same_as` Claim.
+    SameAs,
+    /// Materialise nothing.
+    Neither,
+}
+
+impl Phase6Classification {
+    /// Reconcile the two fields into what this run should write.
+    ///
+    /// `is_tension` is the hard verdict and stays authoritative: a model
+    /// that says both "this is a tension" and "these are equivalent" has
+    /// contradicted itself, and promoting a contradiction to a silent
+    /// merge would delete a real conflict. Equivalence therefore requires
+    /// `is_tension: false` AND `relation: equivalent`.
+    pub fn verdict(&self) -> Phase6Verdict {
+        if self.is_tension {
+            return Phase6Verdict::Tension;
+        }
+        match self.relation {
+            Some(Phase6Relation::Equivalent) => Phase6Verdict::SameAs,
+            _ => Phase6Verdict::Neither,
+        }
+    }
 }
 
 fn default_confidence() -> f32 {
@@ -253,6 +314,137 @@ pub fn classification_to_edge(
     })
 }
 
+/// Turn an `equivalent` verdict into the reified merge it claims: one
+/// `same_as` Claim atom carrying both atom ids, the grade, the model's
+/// rationale and the candidate's evidence.
+///
+/// `None` for any verdict that is not [`Phase6Verdict::SameAs`], so the
+/// caller can hand every classification to both this and
+/// [`classification_to_edge`] and let the verdict decide — the same shape
+/// the edge builder already has.
+///
+/// **A merge is a hypothesis, so it is a claim** (ONTOLOGY_PRIMITIVES §2
+/// axis 3): this writes an atom a reviewer can read, disagree with and
+/// retire, not a silent collapse of two atoms into one. The two endpoint
+/// ids live in `attributes["merged"]` and the grade in
+/// `attributes["grade"]`, which is `"classifier"` here — the reconciler's
+/// own merges carry their own grade and are minted elsewhere.
+pub fn classification_to_same_as_claim(
+    classification: &Phase6Classification,
+    content: &CandidateContent,
+    claim_id: AtomId,
+) -> Option<Claim> {
+    if classification.verdict() != Phase6Verdict::SameAs {
+        return None;
+    }
+    let mut attributes = serde_json::Map::new();
+    attributes.insert(
+        SAME_AS_GRADE_KEY.to_string(),
+        serde_json::Value::String(SAME_AS_GRADE_CLASSIFIER.to_string()),
+    );
+    attributes.insert(
+        SAME_AS_MERGED_KEY.to_string(),
+        serde_json::Value::Array(vec![
+            serde_json::Value::String(content.source_atom.as_str().to_string()),
+            serde_json::Value::String(content.target_atom.as_str().to_string()),
+        ]),
+    );
+    Some(Claim {
+        id: claim_id,
+        content: format!(
+            "{} and {} state the same thing: {}",
+            content.source_atom.as_str(),
+            content.target_atom.as_str(),
+            classification.rationale.trim(),
+        ),
+        discourse_act: DiscourseAct::Assert,
+        epistemic_status: EpistemicStatus::Confident,
+        scope: ClaimScope::Universal,
+        evidence: content.evidence.clone(),
+        quotable_excerpt: None,
+        attributed_to: None,
+        subject: None,
+        attributes,
+        confidence: Some(classification.confidence.clamp(0.0, 1.0)),
+        anchor: None,
+        enrichment_depth: EnrichmentDepth::Extracted,
+        claim_kind: Some(SAME_AS_CLAIM_KIND.to_string()),
+        concession_outcome: None,
+        evidence_kind: None,
+    })
+}
+
+/// Highest existing claim ordinal in `atoms`. Reified `same_as` claims
+/// issue ordinals from `next_claim_ordinal(&atoms) + 1` — the same max+1
+/// rule the edge writers use, because the atom id space is ordinal by
+/// construction and a second scheme would be a second answer to "which
+/// atom is this".
+pub fn next_claim_ordinal(atoms: &AtomsFile) -> usize {
+    atoms
+        .atoms
+        .iter()
+        .filter_map(|a| match a {
+            AtomEnvelope::Claim(c) => {
+                c.id.as_str()
+                    .strip_prefix("claim-")
+                    .and_then(|s| s.parse::<usize>().ok())
+            }
+            _ => None,
+        })
+        .max()
+        .unwrap_or(0)
+}
+
+/// Fold this run's reified merges into `atoms`, replacing what a PRIOR
+/// classifier run wrote. Returns the new file and how many stale merges
+/// were replaced.
+///
+/// The mirror of the edges side's "drop prior `LlmPairwise` Tension edges,
+/// then append this run's": a re-run that now finds no equivalence must not
+/// leave the last run's merges standing, or the file records a verdict no
+/// run holds. Only CLASSIFIER-grade merges are replaced — a `same_as` claim
+/// carrying any other grade came from the reconciler and is left alone.
+pub fn merge_same_as_claims(atoms: AtomsFile, new_claims: Vec<Claim>) -> (AtomsFile, usize) {
+    let before = atoms.atoms.len();
+    let schema_version = atoms.schema_version.clone();
+    let mut kept: Vec<AtomEnvelope> = atoms
+        .atoms
+        .into_iter()
+        .filter(|a| match a {
+            AtomEnvelope::Claim(c) => {
+                let is_same_as = c.claim_kind.as_deref() == Some(SAME_AS_CLAIM_KIND);
+                let by_classifier = c
+                    .attributes
+                    .get(SAME_AS_GRADE_KEY)
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|g| g == SAME_AS_GRADE_CLASSIFIER);
+                !(is_same_as && by_classifier)
+            }
+            _ => true,
+        })
+        .collect();
+    let replaced = before - kept.len();
+    kept.extend(new_claims.into_iter().map(AtomEnvelope::Claim));
+    (
+        AtomsFile {
+            schema_version,
+            atoms: kept,
+        },
+        replaced,
+    )
+}
+
+/// `claim_kind` of a reified merge. The ONE spelling — the Phase-6
+/// classifier path here and the reconciler's merges must agree, or "is
+/// this two things or one" gets two answers.
+pub const SAME_AS_CLAIM_KIND: &str = "same_as";
+/// Attribute key holding the two merged atom ids.
+pub const SAME_AS_MERGED_KEY: &str = "merged";
+/// Attribute key holding how the merge was decided.
+pub const SAME_AS_GRADE_KEY: &str = "grade";
+/// The grade a Phase-6 `equivalent` verdict carries.
+pub const SAME_AS_GRADE_CLASSIFIER: &str = "classifier";
+
 // ── JSON schema for grammar-constrained generation ──────────────────
 
 const PHASE6_CLASSIFIER_RESPONSE_SCHEMA: &str = r##"{
@@ -269,12 +461,45 @@ const PHASE6_CLASSIFIER_RESPONSE_SCHEMA: &str = r##"{
   "required": ["is_tension", "rationale"]
 }"##;
 
+/// Declared-ontology variant — [`PHASE6_CLASSIFIER_RESPONSE_SCHEMA`] plus
+/// the optional `relation`. The two are separate strings on purpose: the
+/// undeclared schema's bytes are pinned by a golden and must not move when
+/// this one changes.
+const PHASE6_CLASSIFIER_RESPONSE_SCHEMA_WITH_RELATION: &str = r##"{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Phase6ClassifierResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "is_tension": { "type": "boolean" },
+    "relation": { "type": ["string", "null"], "enum": ["conflict", "equivalent", "compatible", null] },
+    "sub_question": { "type": ["string", "null"] },
+    "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+    "rationale": { "type": "string", "minLength": 1 }
+  },
+  "required": ["is_tension", "rationale"]
+}"##;
+
 /// Return the Phase 6 classifier response schema as a parsed
 /// `serde_json::Value` for `ChatPrompt::with_response_schema()`.
 /// Called by both pipelines' compose methods.
 pub fn phase6_classifier_response_schema() -> serde_json::Value {
     serde_json::from_str(PHASE6_CLASSIFIER_RESPONSE_SCHEMA)
         .expect("PHASE6_CLASSIFIER_RESPONSE_SCHEMA must be valid JSON")
+}
+
+/// The same schema with the optional `relation` field, for corpora that
+/// DECLARE an ontology.
+///
+/// Kept as a second const rather than a mutation of the first so the
+/// undeclared bytes cannot move: an undeclared corpus is handed
+/// [`phase6_classifier_response_schema`] and the two are compared by the
+/// `maple_house.phase6_classifier` golden. `relation` is optional on the
+/// wire — a model that omits it leaves `Phase6Classification::relation`
+/// `None`, which reads as "did not say".
+pub fn phase6_classifier_response_schema_with_relation() -> serde_json::Value {
+    serde_json::from_str(PHASE6_CLASSIFIER_RESPONSE_SCHEMA_WITH_RELATION)
+        .expect("PHASE6_CLASSIFIER_RESPONSE_SCHEMA_WITH_RELATION must be valid JSON")
 }
 
 // ── Cleanup helpers shared with the parser ──────────────────────────
@@ -325,6 +550,8 @@ mod tests {
 
     fn mk_claim(id: usize, content: &str, evidence_chunk: &str) -> Claim {
         Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(id),
             content: content.to_string(),
             discourse_act: DiscourseAct::Assert,
@@ -486,6 +713,7 @@ mod tests {
             sub_question: Some("Q?".into()),
             confidence: 0.9,
             rationale: "structural conflict".into(),
+            relation: None,
         };
         let edge = classification_to_edge(&cand, &cls, &content, EdgeId::new(1)).unwrap();
         assert_eq!(edge.edge_type, EdgeType::Tension);
@@ -522,6 +750,7 @@ mod tests {
             sub_question: None,
             confidence: 0.8,
             rationale: "co-occur".into(),
+            relation: None,
         };
         assert!(classification_to_edge(&cand, &cls, &content, EdgeId::new(1)).is_none());
     }

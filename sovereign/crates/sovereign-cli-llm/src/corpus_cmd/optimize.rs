@@ -94,7 +94,8 @@ fn parse_prune_days(raw: Option<&String>) -> Option<i64> {
 /// `--keep-versions N` as the operator supplied it. `None` = REFUSED.
 /// Same rule, same reason: keeping zero versions is not a retention policy.
 fn parse_keep_versions(raw: Option<&String>) -> Option<usize> {
-    raw.and_then(|v| v.parse::<usize>().ok()).filter(|n| *n >= 1)
+    raw.and_then(|v| v.parse::<usize>().ok())
+        .filter(|n| *n >= 1)
 }
 
 pub async fn run_optimize(args: &[String]) -> i32 {

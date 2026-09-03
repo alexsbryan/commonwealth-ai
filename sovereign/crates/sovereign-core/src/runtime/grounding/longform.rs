@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 /// Long-form ladder: per-claim audit → one rewrite → annotate.
 /// An essay with one bad claim is REWRITTEN, not abstained; if the
 /// rewrite still carries unsupported claims, they are listed in a

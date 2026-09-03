@@ -154,6 +154,24 @@ pub(crate) async fn apply_edit(
             path: source_file.to_string(),
             content: response.body.clone(),
         }),
+        // `move_lines` is NOT in this bench's action vocabulary: the
+        // prompt in `bare_metal.rs` offers rewrite_function,
+        // patch_lines and insert_before only, and bench problems are
+        // single-file while a relocation is by definition two. There
+        // is also no MoveLines primitive in the executor to dispatch
+        // to — commonwealth-tdd applies it with direct filesystem
+        // work. So refuse and name the reason rather than substitute
+        // a shape the model was never offered (§18.3): a silent
+        // rewrite here would score an out-of-contract response as if
+        // the model had answered the question asked.
+        EditAction::MoveLines { .. } => {
+            return Err(ToolError::InvalidArguments {
+                primitive: "move_lines",
+                reason: "move_lines is not offered by the bench prompt; \
+                         bench problems are single-file"
+                    .to_string(),
+            });
+        }
     };
     execute(ctx, &primitive).await.map(|_| ())
 }

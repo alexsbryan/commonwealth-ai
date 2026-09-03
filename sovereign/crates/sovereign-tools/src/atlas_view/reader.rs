@@ -47,6 +47,78 @@ pub struct AtlasCorpusSummary {
     /// to a generic glyph.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_icon: Option<String>,
+    /// The author's own nouns and how many atoms carry each — the declared
+    /// subtype census from `_summary.json` v4, copied through unchanged.
+    /// Empty for every corpus that declares nothing, which is the common case
+    /// and is why it is a plain map rather than an `Option`.
+    ///
+    /// Counts are OWN, not rolled up: a consumer showing "coin" for a corpus
+    /// that also declares `sceatta specializes coin` adds the two itself,
+    /// using [`Self::declared_types`]'s `specializes`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub subtype_counts: BTreeMap<String, u64>,
+    /// What this corpus declared, in declaration-independent form: one row per
+    /// declared type with its atom kind and its parent, if it has one. Empty
+    /// when nothing is declared — which is what tells a viewer to fall back to
+    /// the generic atom kinds rather than render an empty ontology.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub declared_types: Vec<DeclaredTypeRow>,
+}
+
+/// One declared type, as a viewer needs it: what to call it, which atom kind
+/// it belongs to, and what it specializes.
+///
+/// A flat row rather than the nested `OntologySummary` maps because every
+/// consumer so far wants to iterate types, and joining three maps by name at
+/// each call site is the shape that invites them to disagree (§10.6).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DeclaredTypeRow {
+    /// The author's noun, exactly as declared — also the key into
+    /// [`AtlasCorpusSummary::subtype_counts`].
+    pub name: String,
+    /// The atom kind this type specializes (`entity`, `claim`, …), so a
+    /// viewer can colour or group it like the generic kind it refines.
+    pub kind: String,
+    /// The declared type this one `specializes`, when it declares one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub specializes: Option<String>,
+    /// How two mentions of this type are judged the same thing
+    /// (`external:<keys>` / `fallback:<keys>`), or `None` when it resolves on
+    /// its canonical name — the reported default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_criterion: Option<String>,
+}
+
+/// What the last build found about a declared corpus, for the desktop's build
+/// report card.
+///
+/// Read from the artefacts a build already writes — `schema_validation.json`
+/// and the ANN table's freshness — rather than recomputed, so this is a
+/// VERDICT with an age, not a live measurement. A card showing it is showing
+/// what the last build said.
+///
+/// `ontology` is `None` for a corpus that declares nothing, which is what
+/// tells the card to render nothing at all rather than an empty ontology
+/// (§18.3). It is also `None` when the report step has not run yet, and those
+/// two are told apart by [`Self::reported`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AtlasBuildReport {
+    pub corpus_id: String,
+    /// Whether `schema_validation.json` exists and parsed. `false` means the
+    /// report step has not run — distinct from "ran and found no ontology".
+    pub reported: bool,
+    /// The declared-ontology dimension of the report: per-type coverage,
+    /// identity criteria, merges, `same_as` claims, claims of a
+    /// subject-declaring type with no subject, and the per-attribute fill
+    /// rate. Reused whole rather than re-flattened — the card wants exactly
+    /// what the CLI report prints (§19).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ontology: Option<corpus_engine::enrichment::atlas::ontology_coverage::OntologyCoverage>,
+    /// Whether the atom-level ANN table exists AND is newer than `atoms.json`.
+    /// `false` with `grounding_present` true means a rebuild left it stale, so
+    /// the card can say "re-run backfill" rather than "not grounded".
+    pub grounding_fresh: bool,
+    pub grounding_present: bool,
 }
 
 /// One row in a **collection** notebook's member picker.
@@ -97,6 +169,11 @@ pub enum CurationStatus {
 pub enum AtlasViewError {
     #[error("indexes dir not readable: {0}")]
     IndexesDir(#[source] std::io::Error),
+    /// Asked about a corpus with no `atlas/` directory. Distinct from a
+    /// corpus whose atlas exists but has not been reported on — that is a
+    /// successful answer, not an error (§18.3).
+    #[error("no atlas for corpus `{0}`")]
+    CorpusNotFound(String),
 }
 
 /// File-system-backed atlas reader.
@@ -144,6 +221,30 @@ impl FileAtlasReader {
     /// fan out onto the blocking-task pool — for a fleet of
     /// installed atlases, picker latency is now `max(per-corpus)`
     /// instead of `sum(per-corpus)`.
+    /// What the last build found about one corpus (ontology-v1 P6.4).
+    ///
+    /// Never an error for a corpus with no report: an absent
+    /// `schema_validation.json` is the answer `reported: false`, which the
+    /// card renders as "not built yet" rather than a failure. The only error
+    /// is a corpus with no atlas directory at all.
+    pub async fn build_report(&self, corpus_id: &str) -> Result<AtlasBuildReport, AtlasViewError> {
+        let Some(atlas_dir) = self.atlas_dir(corpus_id) else {
+            return Err(AtlasViewError::CorpusNotFound(corpus_id.to_string()));
+        };
+        let report = corpus_engine::enrichment::atlas::read_schema_validation_report(&atlas_dir);
+        Ok(AtlasBuildReport {
+            corpus_id: corpus_id.to_string(),
+            reported: report.is_some(),
+            ontology: report.and_then(|r| r.ontology),
+            grounding_fresh: corpus_engine::enrichment::atlas::ann_store::ann_table_is_fresh(
+                &atlas_dir,
+            ),
+            grounding_present: corpus_engine::enrichment::atlas::ann_store::ann_table_present(
+                &atlas_dir,
+            ),
+        })
+    }
+
     pub async fn list_corpora(&self) -> Result<Vec<AtlasCorpusSummary>, AtlasViewError> {
         let entries = match std::fs::read_dir(&self.indexes_dir) {
             Ok(rd) => rd,
@@ -398,6 +499,8 @@ fn summarise_corpus(
                 last_extracted_unix: None,
                 display_category,
                 display_icon,
+                subtype_counts: BTreeMap::new(),
+                declared_types: Vec::new(),
             });
         }
     };
@@ -410,6 +513,25 @@ fn summarise_corpus(
         None
     };
 
+    // The declared block was read and thrown away until ontology-v1 P6: the
+    // desktop could show how many Entities a corpus has but not how many
+    // COINS, which is the whole point of declaring the type.
+    let declared_types = summary
+        .ontology
+        .as_ref()
+        .map(|o| {
+            o.declared
+                .iter()
+                .map(|(name, kind)| DeclaredTypeRow {
+                    name: name.clone(),
+                    kind: kind.clone(),
+                    specializes: o.specializes.get(name).cloned(),
+                    identity_criterion: o.identity_criteria.get(name).cloned(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
     Ok(AtlasCorpusSummary {
         corpus_id: corpus_id.to_string(),
         // Phase 1: display_name == corpus_id. Hydrate from
@@ -421,6 +543,8 @@ fn summarise_corpus(
         last_extracted_unix,
         display_category,
         display_icon,
+        subtype_counts: summary.subtype_counts,
+        declared_types,
     })
 }
 
@@ -504,6 +628,8 @@ mod tests {
 
     fn sample_claim(id: usize, content: &str) -> AtomEnvelope {
         AtomEnvelope::Claim(Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(id),
             content: content.into(),
             discourse_act: DiscourseAct::Assert,
@@ -709,13 +835,110 @@ mod tests {
             last_extracted_unix: Some(1_700_000_000),
             display_category: Some("reference".into()),
             display_icon: Some("book".into()),
+            subtype_counts: BTreeMap::new(),
+            declared_types: Vec::new(),
         };
         let json = serde_json::to_string(&summary).unwrap();
         assert!(json.contains("\"corpus_id\":\"wikipedia\""));
         assert!(json.contains("\"total_atoms\":3"));
         assert!(json.contains("\"display_category\":\"reference\""));
+        // A corpus that declares nothing puts NOTHING on the wire — wikipedia
+        // is one of the three prebuilt genres, and its row must stay byte-
+        // identical to what the desktop already parses.
+        assert!(!json.contains("subtype_counts"), "{json}");
+        assert!(!json.contains("declared_types"), "{json}");
         let back: AtlasCorpusSummary = serde_json::from_str(&json).unwrap();
         assert_eq!(back, summary);
+    }
+
+    /// A declared corpus carries its nouns, their hierarchy and their identity
+    /// criterion across the IPC boundary — the three things the viewer needs
+    /// to render "coin 13" instead of "Entity 32" and to roll `sceatta` into
+    /// `coin`.
+    ///
+    /// Falsifier: drop `specializes` from the row and a viewer has counts with
+    /// no way to know that `sceatta` is a kind of `coin`.
+    #[test]
+    fn a_declared_corpus_carries_its_nouns_across_the_wire() {
+        let summary = AtlasCorpusSummary {
+            corpus_id: "wessex-hoard".into(),
+            display_name: "wessex-hoard".into(),
+            total_atoms: 100,
+            atom_counts: BTreeMap::from([(AtomType::Entity, 40)]),
+            last_extracted_unix: None,
+            display_category: None,
+            display_icon: None,
+            subtype_counts: BTreeMap::from([("coin".into(), 13), ("sceatta".into(), 2)]),
+            declared_types: vec![
+                DeclaredTypeRow {
+                    name: "coin".into(),
+                    kind: "entity".into(),
+                    specializes: None,
+                    identity_criterion: Some("external:catalogue_ref".into()),
+                },
+                DeclaredTypeRow {
+                    name: "sceatta".into(),
+                    kind: "entity".into(),
+                    specializes: Some("coin".into()),
+                    identity_criterion: Some("external:catalogue_ref".into()),
+                },
+            ],
+        };
+        let json = serde_json::to_string(&summary).unwrap();
+        let back: AtlasCorpusSummary = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, summary);
+
+        // The roll-up a viewer has to do, done here so the shape is proven to
+        // support it: coin = its own 13 plus the 2 sceattas that specialize it.
+        let family: u64 = back
+            .declared_types
+            .iter()
+            .filter(|t| t.name == "coin" || t.specializes.as_deref() == Some("coin"))
+            .filter_map(|t| back.subtype_counts.get(&t.name))
+            .sum();
+        assert_eq!(family, 15);
+    }
+
+    /// The three answers this must keep apart: no atlas at all is the only
+    /// ERROR; an atlas with no report yet is a successful `reported: false`;
+    /// and a report too broken to parse is also `reported: false`, never a
+    /// half-verdict shown to a user (§18.3). Collapsing the first two would
+    /// make an unbuilt corpus look like a missing one.
+    ///
+    /// Falsifier: return `reported: true` whenever the file exists, and the
+    /// truncated-file case starts reporting a verdict nobody computed.
+    #[tokio::test]
+    async fn build_report_separates_unbuilt_from_undeclared() {
+        let tmp = TempDir::new().unwrap();
+        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+
+        // No atlas dir at all is the one error case.
+        assert!(reader.build_report("nothing-here").await.is_err());
+
+        // Atlas dir, no report yet.
+        let atlas = tmp.path().join("fresh").join("atlas");
+        std::fs::create_dir_all(&atlas).unwrap();
+        let r = reader.build_report("fresh").await.unwrap();
+        assert!(!r.reported, "the report step has not run");
+        assert!(r.ontology.is_none());
+        assert!(!r.grounding_present, "no ANN table on a fresh atlas");
+
+        // A report that is PRESENT but unreadable reads as not-reported, with
+        // a warning — a half-written file must not be shown to a user as a
+        // verdict. (`reported: true` requires a report that actually parsed;
+        // whether a parsed one carries an ontology is the `Option` on the
+        // report itself, which this cannot get wrong.)
+        std::fs::write(
+            atlas.join("schema_validation.json"),
+            r#"{"schema_version": "2.1", "truncated": "#,
+        )
+        .unwrap();
+        let r = reader.build_report("fresh").await.unwrap();
+        assert!(
+            !r.reported,
+            "an unparseable report is not a verdict to show anyone"
+        );
+        assert!(r.ontology.is_none());
     }
 
     #[test]

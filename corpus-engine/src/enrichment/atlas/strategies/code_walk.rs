@@ -1968,14 +1968,24 @@ mod tests {
         let mut groups = ChunkGroups::default();
         groups.by_crate.insert(
             "mycrate".to_string(),
-            CrateGroup { first_chunk_id: 1, first_preview: "crate".to_string() },
+            CrateGroup {
+                first_chunk_id: 1,
+                first_preview: "crate".to_string(),
+            },
         );
         for (path, chunk) in [("", 1u64), ("engine", 2)] {
             groups.by_module.insert(
                 ("mycrate".to_string(), path.to_string()),
                 ModuleGroup {
                     first_chunk_id: chunk,
-                    primary_file: format!("src/{}", if path.is_empty() { "lib.rs" } else { "engine/mod.rs" }),
+                    primary_file: format!(
+                        "src/{}",
+                        if path.is_empty() {
+                            "lib.rs"
+                        } else {
+                            "engine/mod.rs"
+                        }
+                    ),
                     first_preview: format!("mod {path}"),
                     rustdoc: None,
                 },
@@ -2025,8 +2035,13 @@ mod tests {
     #[test]
     fn no_two_emitted_atoms_share_an_id() {
         let (workspace, groups) = module_decl_fixture();
-        let (entities, _idx) =
-            emit_entities(&workspace, &groups, &BTreeSet::new(), "corpus-a", &HashMap::new());
+        let (entities, _idx) = emit_entities(
+            &workspace,
+            &groups,
+            &BTreeSet::new(),
+            "corpus-a",
+            &HashMap::new(),
+        );
         let distinct: BTreeSet<&AtomId> = entities.iter().map(|e| &e.id).collect();
         assert_eq!(
             entities.len(),
@@ -2043,23 +2058,37 @@ mod tests {
     #[test]
     fn a_module_decl_item_resolves_to_the_module_atom() {
         let (workspace, groups) = module_decl_fixture();
-        let (entities, idx) =
-            emit_entities(&workspace, &groups, &BTreeSet::new(), "corpus-a", &HashMap::new());
+        let (entities, idx) = emit_entities(
+            &workspace,
+            &groups,
+            &BTreeSet::new(),
+            "corpus-a",
+            &HashMap::new(),
+        );
         let decl_key = ItemKey {
             crate_name: "mycrate".to_string(),
             module_path: String::new(),
             symbol_name: "engine".to_string(),
             symbol_kind: "module".to_string(),
         };
-        let item_atom = idx.items.get(&decl_key).expect("mod decl must still resolve");
+        let item_atom = idx
+            .items
+            .get(&decl_key)
+            .expect("mod decl must still resolve");
         let module_atom = idx
             .modules
             .get(&("mycrate".to_string(), "engine".to_string()))
             .expect("module atom exists");
-        assert_eq!(item_atom, module_atom, "the decl and the module are one entity");
+        assert_eq!(
+            item_atom, module_atom,
+            "the decl and the module are one entity"
+        );
         // And exactly one Entity record carries that id.
         let carriers = entities.iter().filter(|e| &e.id == module_atom).count();
-        assert_eq!(carriers, 1, "expected one atom record for the module, got {carriers}");
+        assert_eq!(
+            carriers, 1,
+            "expected one atom record for the module, got {carriers}"
+        );
     }
 
     /// A `mod X;` whose module has no chunks of its own (empty or
@@ -2068,22 +2097,32 @@ mod tests {
     #[test]
     fn a_module_decl_with_no_module_group_still_emits_its_own_atom() {
         let (workspace, mut groups) = module_decl_fixture();
-        groups.by_module.remove(&("mycrate".to_string(), "engine".to_string()));
+        groups
+            .by_module
+            .remove(&("mycrate".to_string(), "engine".to_string()));
         groups.by_item.remove(&ItemKey {
             crate_name: "mycrate".to_string(),
             module_path: "engine".to_string(),
             symbol_name: "Engine".to_string(),
             symbol_kind: "struct".to_string(),
         });
-        let (entities, idx) =
-            emit_entities(&workspace, &groups, &BTreeSet::new(), "corpus-a", &HashMap::new());
+        let (entities, idx) = emit_entities(
+            &workspace,
+            &groups,
+            &BTreeSet::new(),
+            "corpus-a",
+            &HashMap::new(),
+        );
         let decl_key = ItemKey {
             crate_name: "mycrate".to_string(),
             module_path: String::new(),
             symbol_name: "engine".to_string(),
             symbol_kind: "module".to_string(),
         };
-        assert!(idx.items.contains_key(&decl_key), "orphan mod decl must keep its atom");
+        assert!(
+            idx.items.contains_key(&decl_key),
+            "orphan mod decl must keep its atom"
+        );
         let distinct: BTreeSet<&AtomId> = entities.iter().map(|e| &e.id).collect();
         assert_eq!(entities.len(), distinct.len(), "still no collisions");
     }

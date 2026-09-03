@@ -154,6 +154,10 @@ fn parse_engineering_phase1(response: &str) -> Result<Phase1ChapterResult> {
             // remaining anchors from the content field.
             let anchor = c.code_anchors.into_iter().next().unwrap_or_default();
             ClaimSketch {
+                attributes: Default::default(),
+                claim_kind: None,
+                subject: None,
+                scope: None,
                 content: c.content,
                 discourse_act: DiscourseAct::Assert,
                 epistemic_status: EpistemicStatus::Confident,

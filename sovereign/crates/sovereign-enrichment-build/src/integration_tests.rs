@@ -16,9 +16,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use super::config::{EnrichConfig, CONFIG_SCHEMA_VERSION};
-use super::paths;
-use super::test_env::{scoped_home, HomeGuard};
+use crate::config::{EnrichConfig, CONFIG_SCHEMA_VERSION};
+use crate::paths;
+use crate::test_env::{scoped_home, HomeGuard};
 use corpus_engine::enrichment::pipeline::{
     ChapterManifest, ChapterSelection, ChatCompletionFn, ChatPrompt, Phase1Output, PhaseCache,
     PipelinePhase,
@@ -138,7 +138,7 @@ async fn full_run_writes_cache_and_run_file() {
     let cfg = scaffold_corpus("test-book", &source_path);
 
     // Run extract --full via the test entry point.
-    let (produced, cache_updated) = super::extract::run_with_closures_for_test(
+    let (produced, cache_updated) = crate::extract::run_with_closures_for_test(
         &cfg.corpus_id,
         ChapterSelection::Full,
         deterministic_embed(),
@@ -178,7 +178,7 @@ async fn subset_run_does_not_update_cache() {
     fs::write(&source_path, synthetic_book()).unwrap();
     let cfg = scaffold_corpus("subset-book", &source_path);
 
-    let (produced, cache_updated) = super::extract::run_with_closures_for_test(
+    let (produced, cache_updated) = crate::extract::run_with_closures_for_test(
         &cfg.corpus_id,
         ChapterSelection::Subset(vec!["sec_0001".into(), "sec_0003".into()]),
         deterministic_embed(),

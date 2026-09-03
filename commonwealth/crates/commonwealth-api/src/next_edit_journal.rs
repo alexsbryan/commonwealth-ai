@@ -196,7 +196,10 @@ mod tests {
         use tower::ServiceExt;
 
         let router = Router::new()
-            .route("/v1/edit_predictions/outcome", post(edit_prediction_outcome))
+            .route(
+                "/v1/edit_predictions/outcome",
+                post(edit_prediction_outcome),
+            )
             .with_state(crate::state::test_app_state());
 
         async fn post_body(router: &Router, body: &str) -> StatusCode {
@@ -219,9 +222,11 @@ mod tests {
         // by name — one silently rejected here is an episode counted as
         // `unknown` forever, which is the measurement this lane produces.
         for outcome in ["accepted", "dismissed", "diverged", "superseded"] {
-            let status =
-                post_body(&router, &format!(r#"{{"episode_id":"ep-1","outcome":"{outcome}"}}"#))
-                    .await;
+            let status = post_body(
+                &router,
+                &format!(r#"{{"episode_id":"ep-1","outcome":"{outcome}"}}"#),
+            )
+            .await;
             assert_eq!(
                 status,
                 StatusCode::NO_CONTENT,

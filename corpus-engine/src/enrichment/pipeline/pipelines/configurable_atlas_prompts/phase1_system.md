@@ -88,8 +88,8 @@ creates or dissolves a relation, or grounds a claim.
 
 Knowledge-carrying acts the text performs. Attribute to an entity when
 the content states that entity's commitment — even when the author's
-voice carries it ("Smith argues that…" attributes to Smith). Reserve
-`attributed_to: omit` for text-level statements that don't pin a
+voice carries it ("Smith argues that…" attributes to Smith). Leave
+`attributed_to` out for text-level statements that don't pin a
 commitment on a named entity. Attribution is the join key downstream
 phases use to surface claim-vs-claim tension.
 
@@ -103,7 +103,7 @@ phases use to surface claim-vs-claim tension.
   (available from context without being stated).
 - `epistemic_status` — one of `confident`, `tentative`, `contested`,
   `retracted`, `attributed`.
-- `attributed_to` — entity name, or omit for text-level claims.
+- `attributed_to` — entity name; leave the key out for text-level claims.
 - `anchor` — 3–8 word keyphrase.
 
 ### 7. `questions_raised`

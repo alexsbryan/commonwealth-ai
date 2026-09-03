@@ -69,11 +69,92 @@ pub struct AtomRecord {
     pub payload: Vec<u8>,
 }
 
+/// The atom's declared attributes, where its kind has a slot for them.
+///
+/// The ONE answer to "what did this atom carry under the author's declared
+/// attribute names" (§10.6). Four of the eleven atom kinds have an
+/// `attributes` map — Entity, Event, Relation, Claim — and the rest have no
+/// slot at all. `None` means "this kind cannot carry attributes", which is a
+/// different finding from `Some(empty)` ("it could and did not"): a `role_of`
+/// type lands as a State, and a State has nowhere to put a declared
+/// attribute, so reporting that as an unfilled attribute would blame the
+/// model for something the atom model decides (§18.3).
+pub fn attributes_of(atom: &AtomEnvelope) -> Option<&serde_json::Map<String, serde_json::Value>> {
+    match atom {
+        AtomEnvelope::Entity(e) => Some(&e.attributes),
+        AtomEnvelope::Event(e) => Some(&e.attributes),
+        AtomEnvelope::Relation(r) => Some(&r.attributes),
+        AtomEnvelope::Claim(c) => Some(&c.attributes),
+        _ => None,
+    }
+}
+
+/// The atom's subtype — the author's noun where there is one.
+///
+/// The ONE answer to "what type is this atom, within its kind" (§10.6): the
+/// store column, the resident record and the ontology-coverage rollup all read
+/// it here.
+///
+/// Absence is `""`, and absence has two spellings on disk. `resolution.rs`
+/// tags an unclassified relation `Other("unclassified")` and an unclassified
+/// event `Other("unspecified")` — those are the ABSENCE of a subtype, not
+/// subtypes with those names, and a reader that took them literally would
+/// report a corpus as fully typed when nothing in it was typed at all.
+pub fn subtype_of(atom: &AtomEnvelope) -> String {
+    /// The two placeholders `resolution.rs` writes when nothing classified the
+    /// atom. (The literals are spelled several times across the crate and were
+    /// before this function; folding every site into these is its own change.)
+    const ABSENT: [&str; 2] = ["unclassified", "unspecified"];
+    let named = |s: &str| {
+        if ABSENT.contains(&s) {
+            String::new()
+        } else {
+            s.to_string()
+        }
+    };
+    match atom {
+        AtomEnvelope::Entity(e) => e.entity_type.as_str_repr().to_string(),
+        AtomEnvelope::Relation(r) => named(r.relation_type.as_str_repr()),
+        AtomEnvelope::Event(e) => named(e.event_type.as_str_repr()),
+        AtomEnvelope::State(s) => named(s.state_type.as_str_repr()),
+        // `claim_kind` is the Claim's subtype under both vocabularies — the
+        // typed-extension qualifiers (`evidence`, `concession`, …) and a
+        // declared claim type (ontology v1).
+        AtomEnvelope::Claim(c) => c.claim_kind.clone().unwrap_or_default(),
+        _ => String::new(),
+    }
+}
+/// How many atoms carry each subtype, and how many carry none.
+///
+/// The ONE tally over [`subtype_of`] (§10.6). Two callers count declared
+/// types — the `_summary.json` census and the ontology-coverage rollup — and
+/// before this they walked the atom slice separately, so two numbers over one
+/// classifier could drift with nothing pinning them together.
+///
+/// Absence is counted, never bucketed: `subtype_of` folds both on-disk
+/// spellings of "unclassified" to `""`, and a reader that took them literally
+/// would call a corpus fully typed when nothing in it was typed at all.
+pub fn subtype_tally<'a>(
+    atoms: impl IntoIterator<Item = &'a AtomEnvelope>,
+) -> (std::collections::BTreeMap<String, u64>, u64) {
+    let mut counts: std::collections::BTreeMap<String, u64> = std::collections::BTreeMap::new();
+    let mut unsubtyped = 0u64;
+    for a in atoms {
+        let subtype = subtype_of(a);
+        if subtype.is_empty() {
+            unsubtyped += 1;
+        } else {
+            *counts.entry(subtype).or_insert(0) += 1;
+        }
+    }
+    (counts, unsubtyped)
+}
+
 /// Project an atom to its hot-field record. Shared by the v2 store writer
 /// (`super::store::write_store`) and the reader (`LancePreload`), so the
 /// columnar `atoms.lance` and the resident records derive from the *same*
 /// projection rather than two functions kept in sync.
-pub(crate) fn project(atom: &AtomEnvelope) -> AtomRecord {
+pub fn project(atom: &AtomEnvelope) -> AtomRecord {
     let id = atom.id().as_str().to_string();
     let kind = atom.atom_type();
     let mut name = String::new();
@@ -89,7 +170,7 @@ pub(crate) fn project(atom: &AtomEnvelope) -> AtomRecord {
     match atom {
         AtomEnvelope::Entity(e) => {
             name = e.canonical_name.clone();
-            subtype = e.entity_type.as_str_repr().to_string();
+            subtype = subtype_of(atom);
             description = e.description.clone();
             salience = e.salience;
             aliases = e.aliases.clone();
@@ -101,12 +182,20 @@ pub(crate) fn project(atom: &AtomEnvelope) -> AtomRecord {
                 .iter()
                 .map(|p| p.as_str().to_string())
                 .collect();
+            subtype = subtype_of(atom);
         }
         AtomEnvelope::Claim(c) => {
             content = c.content.clone();
             excerpt = c.quotable_excerpt.clone().unwrap_or_default();
             confidence = c.confidence.unwrap_or(0.5);
+            subtype = subtype_of(atom);
         }
+        // Event and State DO carry a subtype since P3 (a declared event type,
+        // a `role_of` role) and [`subtype_of`] returns it — but putting it in
+        // the store's column would change what an existing corpus reads back
+        // on its next rebuild, and the readers of that column are P5/P6's to
+        // move. The rule is one function; which kinds enter the column is this
+        // caller's decision.
         _ => {}
     }
     // `AtomEnvelope::evidence` is the canonical per-variant evidence accessor

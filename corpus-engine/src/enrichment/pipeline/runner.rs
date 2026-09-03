@@ -213,10 +213,35 @@ pub enum Phase1Progress<'a> {
     ChapterDone {
         chapter_id: &'a str,
         question_count: usize,
+        entity_count: usize,
+        /// The entity type names this chapter produced that are NOT one of
+        /// the six base kinds — i.e. the ones the recipe declared — deduped
+        /// in first-seen order. Empty for a corpus that declares nothing.
+        ///
+        /// Carried because it is the only question the author of a declared
+        /// ontology is actually asking while a build runs: did MY nouns come
+        /// out? Answering it needed the checkpoint jsonl opened by hand
+        /// (observed 2026-09-02: twenty chapters reported as `1 q`, and the
+        /// `sceatta` and `mint` atoms behind them were invisible).
+        declared_types: &'a [String],
     },
     ChapterFailed {
         chapter_id: &'a str,
         reason: &'a str,
+    },
+    /// `--dry-run`: the prompt this chapter WOULD have been sent, composed
+    /// through the same exemplar selection and seed lookup the real pass
+    /// uses. No chat call was made.
+    ///
+    /// This exists so the cheap probe loop and the run it predicts cannot
+    /// disagree. Until 2026-09-03 the probe was `examples/phase1_dump.rs`,
+    /// which re-implemented the runner's `ChapterInput` shaping by hand and
+    /// composed with an EMPTY exemplar list and no seed — which is why its
+    /// own doc had to tell you to diff it against the runner's debug log
+    /// before trusting a result (§18.4: validate the instrument first).
+    ChapterPrompt {
+        chapter_id: &'a str,
+        prompt: &'a ChatPrompt,
     },
     Done {
         produced: usize,
@@ -410,6 +435,9 @@ pub struct PhaseRunner {
     /// fall back to `chat` with its existing cap; the runner still
     /// swaps the prompt variant.
     chat_with_tokens: Option<ChatCompletionWithTokensFn>,
+    /// Compose every phase-1 prompt and dispatch none — `enrich extract
+    /// --dry-run`. Set through [`PhaseRunner::with_dry_run`].
+    dry_run: bool,
     cache: PhaseCache,
     runs: RunOutputWriter,
     exemplars_dir: PathBuf,
@@ -466,6 +494,7 @@ impl PhaseRunner {
             embed,
             chat,
             chat_with_tokens: None,
+            dry_run: false,
             cache,
             runs,
             exemplars_dir: exemplars_dir.as_ref().to_path_buf(),
@@ -569,6 +598,17 @@ impl PhaseRunner {
     /// budget for a single retry without rebuilding the chat client.
     pub fn with_chat_with_tokens(mut self, chat: ChatCompletionWithTokensFn) -> Self {
         self.chat_with_tokens = Some(chat);
+        self
+    }
+
+    /// Compose each selected chapter's phase-1 prompt, report it as
+    /// [`Phase1Progress::ChapterPrompt`], and make no chat call.
+    ///
+    /// Exemplar selection and the Stage-1a seed lookup still run, because
+    /// they are IN the prompt: a probe that skipped them would answer a
+    /// question about a prompt the real pass never sends.
+    pub fn with_dry_run(mut self, dry_run: bool) -> Self {
+        self.dry_run = dry_run;
         self
     }
 
@@ -852,6 +892,18 @@ impl PhaseRunner {
                 }
             };
 
+            // `--dry-run` stops here: the prompt is composed, nothing is
+            // dispatched, and no cache entry is consulted or written. The
+            // section cache below is keyed on the RESPONSE, so consulting it
+            // for a run that produces none would only be able to mislead.
+            if self.dry_run {
+                progress(Phase1Progress::ChapterPrompt {
+                    chapter_id: &chapter.chapter_id,
+                    prompt: &prompt,
+                });
+                continue;
+            }
+
             // ── Move 6 P4: section-cache lookup ──────────────
             // Cache key incorporates the chapter text + prompt
             // version + model id. Only the default retry mode
@@ -1066,9 +1118,28 @@ impl PhaseRunner {
                 }
             };
 
+            // `EntityType` is a closed set of six plus `Other(String)`, so a
+            // type the parser did not recognise as a base kind IS a declared
+            // one — no second list of names to keep in step (§10.6).
+            let sketches = parsed
+                .section_extraction
+                .as_ref()
+                .map_or(&[][..], |se| se.entities_introduced.as_slice());
+            let mut declared_types: Vec<String> = Vec::new();
+            for sketch in sketches {
+                if let crate::enrichment::pipeline::atlas::EntityType::Other(name) =
+                    &sketch.entity_type
+                {
+                    if !declared_types.iter().any(|seen| seen == name) {
+                        declared_types.push(name.clone());
+                    }
+                }
+            }
             progress(Phase1Progress::ChapterDone {
                 chapter_id: &chapter.chapter_id,
                 question_count: parsed.questions.len(),
+                entity_count: sketches.len(),
+                declared_types: &declared_types,
             });
 
             // Move 6 P4: persist the raw response under the cache
@@ -3105,6 +3176,10 @@ mod tests {
             enrichment_depth: EnrichmentDepth::Extracted,
             claims: vec![
                 ClaimSketch {
+                    attributes: Default::default(),
+                    claim_kind: None,
+                    subject: None,
+                    scope: None,
                     content: "love costs".into(),
                     discourse_act: DiscourseAct::Enact,
                     epistemic_status: EpistemicStatus::Confident,
@@ -3113,6 +3188,10 @@ mod tests {
                     anchor: String::new(),
                 },
                 ClaimSketch {
+                    attributes: Default::default(),
+                    claim_kind: None,
+                    subject: None,
+                    scope: None,
                     content: "love rewards".into(),
                     discourse_act: DiscourseAct::Enact,
                     epistemic_status: EpistemicStatus::Confident,

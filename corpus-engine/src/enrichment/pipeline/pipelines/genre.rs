@@ -36,7 +36,7 @@ use super::super::atlas::SeedStrategy;
 use super::super::exemplar_bank::Exemplar;
 use super::super::types::Phase1ChapterResult;
 use super::super::types::{ChapterInput, ChatPrompt, Vocabulary};
-use crate::enrichment::atlas::analysis::{CandidateContent, TensionStrategy};
+use crate::enrichment::atlas::analysis::{CandidateContent, CorpusShape, TensionStrategy};
 
 /// What one atlas genre changes about the shared 7-phase machinery.
 ///
@@ -79,9 +79,31 @@ pub trait AtlasGenre: Send + Sync + std::fmt::Debug + 'static {
         SeedStrategy::Llm
     }
 
+    /// Does this genre run Phase 8, the interpretive-configuration
+    /// rollup? Default `true` — the literary genre's behaviour, which is
+    /// what every genre had before Phase 8 became an opt-in. A
+    /// recipe-ontology genre answers from `derive.configurations`
+    /// (ONTOLOGY_MIGRATION §P4).
+    fn runs_configuration_phase(&self) -> bool {
+        true
+    }
+
     /// How Phase-6 finds candidate tension pairs.
     fn tension_strategy(&self) -> TensionStrategy {
         TensionStrategy::Graph
+    }
+
+    /// The same question, asked of a corpus whose shape has been measured.
+    ///
+    /// The selector is a DERIVED facet, not a declared one
+    /// (ONTOLOGY_PRIMITIVES §2 axis 5), so the genre gets the corpus's
+    /// shape and returns what it wants to run. The default ignores the
+    /// shape and answers [`tension_strategy`](Self::tension_strategy) — a
+    /// prebuilt genre's selector is a property of the genre, not of the
+    /// material it was pointed at, and I2 says a genre that declares
+    /// nothing behaves as it did.
+    fn derive_tension_strategy(&self, _shape: &CorpusShape) -> TensionStrategy {
+        self.tension_strategy()
     }
 
     /// Compose the genre's own Phase-1 prompt. `None` — the default — uses the

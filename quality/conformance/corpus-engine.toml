@@ -28,21 +28,21 @@ asserts = 4
 requirement = "EN-19"
 test = "corpus-engine::enrichment::governance_view::tests::pair_matched_disposition_survives_rebuild_edge_ids"
 file = "corpus-engine/src/enrichment/governance_view.rs"
-line = 915
+line = 984
 asserts = 4
 
 [[claim]]
 requirement = "EN-19"
 test = "corpus-engine::enrichment::governance_view::tests::tension_with_superseded_endpoint_is_moot_not_open"
 file = "corpus-engine/src/enrichment/governance_view.rs"
-line = 957
+line = 1026
 asserts = 3
 
 [[claim]]
 requirement = "EN-19"
 test = "corpus-engine::enrichment::governance_view::tests::vanished_pair_is_not_an_issue_but_missing_endpoint_atom_is"
 file = "corpus-engine/src/enrichment/governance_view.rs"
-line = 993
+line = 1062
 asserts = 2
 
 [[claim]]
@@ -56,7 +56,7 @@ asserts = 2
 requirement = "EN-5"
 test = "corpus-engine::main::tiered_entity_extractor_seam::ner_runs_before_the_provider_so_a_provider_failure_still_leaves_entities"
 file = "corpus-engine/tests/main/tiered_entity_extractor_seam.rs"
-line = 206
+line = 209
 asserts = 2
 
 [[claim]]
@@ -91,28 +91,28 @@ asserts = 5
 requirement = "ST-25"
 test = "corpus-engine::enrichment::governance_view::tests::a_populated_join_is_present_and_silent"
 file = "corpus-engine/src/enrichment/governance_view.rs"
-line = 1234
+line = 1365
 asserts = 4
 
 [[claim]]
 requirement = "ST-25"
 test = "corpus-engine::enrichment::governance_view::tests::an_absent_manifest_is_no_structure_not_a_missing_join"
 file = "corpus-engine/src/enrichment/governance_view.rs"
-line = 1193
+line = 1324
 asserts = 3
 
 [[claim]]
 requirement = "ST-25"
 test = "corpus-engine::enrichment::governance_view::tests::an_empty_chapter_list_is_no_structure_not_a_fault"
 file = "corpus-engine/src/enrichment/governance_view.rs"
-line = 1258
+line = 1389
 asserts = 1
 
 [[claim]]
 requirement = "ST-25"
 test = "corpus-engine::enrichment::governance_view::tests::sections_with_no_chunk_ids_are_a_missing_join_and_say_so"
 file = "corpus-engine/src/enrichment/governance_view.rs"
-line = 1209
+line = 1340
 asserts = 4
 
 [[claim]]

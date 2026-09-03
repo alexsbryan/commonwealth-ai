@@ -91,26 +91,26 @@ asserts = 3
 requirement = "ST-15"
 test = "sovereign-cli-llm::corpus_cmd::optimize::tests::a_prune_with_no_real_retention_window_is_refused_before_any_index_is_opened"
 file = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/optimize.rs"
-line = 366
+line = 367
 asserts = 3
 
 [[claim]]
 requirement = "ST-15"
 test = "sovereign-cli-llm::corpus_cmd::optimize::tests::a_stated_retention_window_is_accepted_and_carried_through_verbatim"
 file = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/optimize.rs"
-line = 411
+line = 412
 asserts = 8
 
 [[claim]]
 requirement = "ST-6"
-test = "sovereign-cli-llm::corpus_cmd::inventory::tests::a_stopped_ingest_that_never_built_indexes_is_not_ready"
-file = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/inventory.rs"
-line = 1177
+test = "sovereign-cli-llm::corpus_cmd::status::tests::a_stopped_ingest_that_never_built_indexes_is_not_ready"
+file = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/status.rs"
+line = 560
 asserts = 1
 
 [[claim]]
 requirement = "ST-7"
-test = "sovereign-cli-llm::corpus_cmd::inventory::tests::readiness_labels_are_stable_api"
-file = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/inventory.rs"
-line = 1157
+test = "sovereign-cli-llm::corpus_cmd::status::tests::readiness_labels_are_stable_api"
+file = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/status.rs"
+line = 540
 asserts = 4
