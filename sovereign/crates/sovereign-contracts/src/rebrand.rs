@@ -217,6 +217,55 @@ pub fn data_dir() -> PathBuf {
     }
 }
 
+/// The session-frame store, honoring the `SVRNMESH_SESSIONS_DIR` /
+/// `SOVEREIGN_SESSIONS_DIR` override and falling back to
+/// [`svrnmesh_root`]. THE derivation for "where do session frames live":
+/// the frame WRITER (`sovereign-tools::code::session_state`) and the
+/// boot-time READER (`sovereign-cli::session_cmd`) both resolve it here.
+///
+/// It lives in this crate because those two cannot see each other —
+/// `sovereign-cli` deliberately does not depend on `sovereign-tools`
+/// (its `Cargo.toml` says so), the same constraint that already put the
+/// shared frame combinators here. While each hand-rolled the override
+/// they drifted twice, the same split-brain one prefix deeper each time:
+///
+/// - until 2026-07-29 the writer ignored the override entirely, so a
+///   sandboxed end-to-end run wrote six junk frames into the live store;
+/// - after that fix they still disagreed when `SVRNMESH_SESSIONS_DIR`
+///   was set but EMPTY — the writer took the empty value and fell back
+///   to the live store, while the reader skipped it and honored
+///   `SOVEREIGN_SESSIONS_DIR`. Writer and reader again pointed at
+///   different directories, which is exactly what the override exists
+///   to prevent.
+///
+/// So a blank value under either prefix is "not set" here and falls
+/// through to the next prefix. One implementation is the point: the
+/// crates are structurally unable to host a test that compares two.
+pub fn sessions_root() -> PathBuf {
+    sessions_root_from_env(&[
+        std::env::var("SVRNMESH_SESSIONS_DIR").ok(),
+        std::env::var("SOVEREIGN_SESSIONS_DIR").ok(),
+    ])
+}
+
+/// The prefix precedence, split out pure so the drift that motivated this
+/// accessor is testable without mutating process environment inside a
+/// shared test binary. `candidates` is in preference order; a value that
+/// is absent OR blank is "not set" and falls through to the next.
+pub fn sessions_root_from_env(candidates: &[Option<String>]) -> PathBuf {
+    let pick = candidates.iter().flatten().find(|v| !v.trim().is_empty());
+    sessions_root_from(pick.map(String::as_str))
+}
+
+/// The pure half of [`sessions_root`], so the precedence is testable
+/// without mutating process environment inside a shared test binary.
+pub fn sessions_root_from(override_dir: Option<&str>) -> PathBuf {
+    match override_dir.map(str::trim).filter(|v| !v.is_empty()) {
+        Some(v) => PathBuf::from(v),
+        None => svrnmesh_root().join("sessions"),
+    }
+}
+
 /// The project registry written by `sovereign project register`
 /// (`sovereign-mesh/src/projects.rs`) and read by the daemon's startup
 /// re-registration and code-tool path resolution. Deliberately rooted at
@@ -566,5 +615,49 @@ mod tests {
         assert_eq!(unique.len(), reasons.len());
 
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// The frame WRITER (`sovereign-tools`) and the boot-time READER
+    /// (`sovereign-cli`) must resolve the same directory. Neither crate can
+    /// host this test: `sovereign-cli` deliberately does not depend on
+    /// `sovereign-tools`, so while each hand-rolled the override there was
+    /// nowhere to compare them and they drifted twice. Now there is one
+    /// implementation and this is where it is pinned.
+    ///
+    /// The blank-prefix case is the second drift, verbatim: writer took the
+    /// empty `SVRNMESH_SESSIONS_DIR` and fell back to the live store while
+    /// reader skipped it and honored `SOVEREIGN_SESSIONS_DIR`, so a
+    /// sandboxed run read the sandbox and wrote the live store.
+    #[test]
+    fn sessions_root_precedence_is_one_decider() {
+        let live = svrnmesh_root().join("sessions");
+        let s = |v: &str| Some(v.to_string());
+
+        // New prefix wins when both are set and meaningful.
+        assert_eq!(
+            sessions_root_from_env(&[s("/tmp/new"), s("/tmp/legacy")]),
+            PathBuf::from("/tmp/new"),
+        );
+        // Legacy prefix is honored when the new one is absent.
+        assert_eq!(
+            sessions_root_from_env(&[None, s("/tmp/legacy")]),
+            PathBuf::from("/tmp/legacy"),
+        );
+        // THE REGRESSION: a set-but-blank new prefix must not mask a
+        // meaningful legacy one, and must not silently select the live store.
+        assert_eq!(
+            sessions_root_from_env(&[s(""), s("/tmp/legacy")]),
+            PathBuf::from("/tmp/legacy"),
+            "a blank override must fall through, not fall back to the live store",
+        );
+        assert_eq!(
+            sessions_root_from_env(&[s("   "), s("/tmp/legacy")]),
+            PathBuf::from("/tmp/legacy"),
+            "whitespace is blank",
+        );
+        // Nothing meaningful anywhere: the live store, never a relative path.
+        assert_eq!(sessions_root_from_env(&[None, None]), live);
+        assert_eq!(sessions_root_from_env(&[s(""), s("  ")]), live);
+        assert!(sessions_root_from_env(&[None, None]).is_absolute() || live.is_relative());
     }
 }

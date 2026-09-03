@@ -144,30 +144,12 @@ const PREDECESSOR_FILE: &str = "predecessor";
 /// unbounded filesystem crawl.
 const MAX_LINEAGE_HOPS: usize = 8;
 
-/// Where frames live, honouring the same override the CLI reader uses
-/// (`sovereign-cli`'s `session_cmd::sessions_root`).
-///
-/// The two MUST agree. Until 2026-07-29 this side hardcoded
-/// `~/.svrnmesh/sessions` while the reader honoured `SESSIONS_DIR`, so
-/// setting the override moved the reader and left the writer pointed at
-/// the live store — a sandboxed end-to-end run silently wrote real
-/// frames, which is the exact failure the override exists to prevent.
-/// Found by trying to test the boot advisory without touching the live
-/// store, and getting six junk frames in it instead.
+/// Where frames live. Delegates to the ONE decider in
+/// `sovereign_contracts::rebrand` so this writer and the boot-time CLI
+/// reader cannot resolve different directories — see that function for
+/// the two drifts that forced it there.
 fn default_sessions_root() -> PathBuf {
-    let override_dir = ["SVRNMESH_", "SOVEREIGN_"]
-        .iter()
-        .find_map(|p| std::env::var(format!("{p}SESSIONS_DIR")).ok());
-    sessions_root_from(override_dir.as_deref())
-}
-
-/// The pure half, so the precedence is testable without mutating process
-/// environment inside a shared test binary.
-fn sessions_root_from(override_dir: Option<&str>) -> PathBuf {
-    match override_dir.map(str::trim).filter(|v| !v.is_empty()) {
-        Some(v) => PathBuf::from(v),
-        None => sovereign_contracts::rebrand::svrnmesh_root().join("sessions"),
-    }
+    sovereign_contracts::rebrand::sessions_root()
 }
 
 /// This session's predecessor, if the boot hand-off recorded one.
@@ -1450,7 +1432,7 @@ mod tests {
     #[test]
     fn the_sessions_root_override_wins_over_the_home_default() {
         assert_eq!(
-            sessions_root_from(Some("/tmp/sandbox")),
+            sovereign_contracts::rebrand::sessions_root_from(Some("/tmp/sandbox")),
             PathBuf::from("/tmp/sandbox")
         );
         // Compared against the SSOT, not a literal brand token: the root
@@ -1459,12 +1441,12 @@ mod tests {
         // this assert on the machine rather than on the code.
         let live = sovereign_contracts::rebrand::svrnmesh_root().join("sessions");
         assert_eq!(
-            sessions_root_from(None),
+            sovereign_contracts::rebrand::sessions_root_from(None),
             live,
             "no override falls back to the live store"
         );
         assert_eq!(
-            sessions_root_from(Some("   ")),
+            sovereign_contracts::rebrand::sessions_root_from(Some("   ")),
             live,
             "a blank override is not an override"
         );

@@ -36,6 +36,7 @@
 
 import type { Plugin, Hooks } from "@opencode-ai/plugin"
 import { spawnSync } from "node:child_process"
+import { randomBytes } from "node:crypto"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
 
@@ -50,6 +51,41 @@ const TOOL_NAME: Record<string, string> = {
   edit: "Edit",
   write: "Write",
   patch: "Edit",
+}
+
+// opencode >= 1.18 validates every part it persists against its own identifier
+// schema: `part.id` must carry the "prt" prefix and `part.messageID` the "msg"
+// prefix. The vendored @opencode-ai/plugin 1.14.41 types still declare both as
+// plain `string`, so a fabricated id type-checks and then takes the WHOLE
+// PROMPT down at runtime — SchemaError inside SessionPrompt.createUserMessage,
+// which the TUI surfaces only as "check the server logs" while ignoring every
+// keystroke. Mint the real shape instead of inventing one.
+//
+// Shape read off the installed binary's own generator, not guessed:
+// prefix + "_" + 12 hex chars of (Date.now() * 4096 + counter) + 14 base62
+// chars, 26 after the underscore. Parts are ASCENDING (verified: a live
+// `msg_0697ddad6001…` decodes as ascending, while `ses_f9ac62213ffe…` is the
+// bitwise-complement descending form).
+const ID_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+const ID_CHARS = 26
+
+let idLastMs = 0
+let idCounter = 0
+
+function partId(): string {
+  const now = Date.now()
+  if (now !== idLastMs) {
+    idLastMs = now
+    idCounter = 0
+  }
+  idCounter++
+  const n = BigInt(now) * 4096n + BigInt(idCounter)
+  const time = Buffer.alloc(6)
+  for (let i = 0; i < 6; i++) time[i] = Number((n >> BigInt(40 - 8 * i)) & 255n)
+  const rand = randomBytes(ID_CHARS - 12)
+  let tail = ""
+  for (let i = 0; i < rand.length; i++) tail += ID_ALPHABET[rand[i] % 62]
+  return `prt_${time.toString("hex")}${tail}`
 }
 
 type Envelope = Record<string, unknown>
@@ -120,10 +156,24 @@ export const plugin: Plugin = async ({ directory }) => {
       const text = blocks.filter((b) => b.length > 0).join("\n\n---\n\n")
       if (!text) return
 
+      // `input.messageID` is optional and is NOT populated on chat.message in
+      // 1.18 — the real id lives on the message being assembled.
+      const messageID = output.message?.id ?? input.messageID ?? ""
+      const sessionID = output.message?.sessionID ?? input.sessionID
+
+      if (!messageID.startsWith("msg")) {
+        // Degrade rather than take the turn down: fold the block into the
+        // user's own text part, which needs no identifier at all. Same content,
+        // different transport — never a silent drop.
+        const host = [...output.parts].reverse().find((p: any) => p.type === "text") as any
+        if (host) host.text = `${text}\n\n---\n\n${host.text}`
+        return
+      }
+
       output.parts.push({
-        id: `sovereign-hooks-${Date.now()}`,
-        sessionID: input.sessionID,
-        messageID: input.messageID ?? "",
+        id: partId(),
+        sessionID,
+        messageID,
         type: "text",
         text,
         synthetic: true,

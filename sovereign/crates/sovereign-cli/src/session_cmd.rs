@@ -2136,11 +2136,11 @@ fn run_attach(id: Option<&str>, flags: &BTreeMap<String, String>) -> i32 {
 fn sessions_root() -> Option<PathBuf> {
     // Overridable for the same reason as SOVEREIGN_LINEAGE_DIR: the handoff
     // path has to be exercisable end-to-end without writing into the live
-    // store the machine is actually using.
-    if let Some(d) = session_lineage::env_either("SESSIONS_DIR") {
-        return Some(PathBuf::from(d));
-    }
-    Some(sovereign_contracts::rebrand::svrnmesh_root().join("sessions"))
+    // store the machine is actually using. The derivation itself is the ONE
+    // decider in `rebrand` — the frame writer lives in `sovereign-tools`,
+    // which this crate cannot see, so a second copy here is how the two
+    // drifted before (see `rebrand::sessions_root`).
+    Some(sovereign_contracts::rebrand::sessions_root())
 }
 
 fn print_help() {

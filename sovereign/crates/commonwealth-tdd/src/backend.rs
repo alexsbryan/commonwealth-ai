@@ -74,10 +74,25 @@ pub trait ChatBackend: Send + Sync {
 pub struct ReqwestChatBackend {
     http: reqwest::Client,
     provider_url: String,
+    /// One seat for a LOOPBACK provider: the local daemon serves its
+    /// primary from a single model slot, so concurrent candidates gain
+    /// nothing and lose the shed — the slot's predicted-wait gate
+    /// rejects every request past the first with 503
+    /// `local_queue_full`, and each rejected candidate is a wasted
+    /// round slot (watched 2026-09-03: 4-5 of 6 candidates per round
+    /// died err:backend while candidate 1 generated). Serializing at
+    /// the client turns the queue into an orderly line; a REMOTE
+    /// provider (a mesh, a vLLM with real concurrency) keeps the
+    /// unsemaphored path.
+    seat: Option<tokio::sync::Mutex<()>>,
 }
 
 impl ReqwestChatBackend {
     pub fn new(provider_url: impl Into<String>) -> Self {
+        let url = provider_url.into();
+        let loopback = ["127.0.0.1", "localhost", "[::1]", "0.0.0.0"]
+            .iter()
+            .any(|h| url.contains(h));
         let http = reqwest::Client::builder()
             // Sized for QUEUED parallel candidates, not one request:
             // K=4 candidates (plus repair turns) serialize on a
@@ -90,7 +105,8 @@ impl ReqwestChatBackend {
             .unwrap_or_else(|_| reqwest::Client::new());
         Self {
             http,
-            provider_url: provider_url.into(),
+            provider_url: url,
+            seat: loopback.then(|| tokio::sync::Mutex::new(())),
         }
     }
 }
@@ -104,6 +120,13 @@ impl ChatBackend for ReqwestChatBackend {
         temperature: f32,
         max_tokens: u32,
     ) -> Result<ChatResponse, BackendError> {
+        // Loopback provider → one seat (see the field's doc). Held for
+        // the whole completion, so candidates line up instead of
+        // shedding each other.
+        let _seat = match &self.seat {
+            Some(m) => Some(m.lock().await),
+            None => None,
+        };
         let url = format!("{}/chat/completions", self.provider_url);
         let body = json!({
             "model": model,
