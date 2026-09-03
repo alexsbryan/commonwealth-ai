@@ -37,12 +37,12 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 // the separable lifecycle / workspace / provider / worker / tool-registry
 // concerns moved to submodules. `home_dir_buf` + `warn_orphaned_indexes`
 // stay here (the former is shared with submodules as an ancestor-private).
-mod vram_plan;
 mod atlas_builder;
 pub(crate) mod bootstrap;
 pub(crate) mod build;
 mod discovery_policy;
 mod rlimit;
+mod vram_plan;
 // `pub(crate)` so `setup_cmd::fim` can reach `restart_daemon` directly.
 // `svrn setup --fim` rewrites the model config and must bounce the
 // daemon itself — telling the operator to go run `svrn daemon restart`
