@@ -115,7 +115,6 @@
 1396	sovereign/crates/sovereign-core/src/runtime/epistemic.rs
 1653	sovereign/crates/sovereign-core/src/runtime/evidence.rs
 1694	sovereign/crates/sovereign-core/src/runtime/grounding/citation.rs
-1403	sovereign/crates/sovereign-core/src/runtime/grounding/citation_attribution.rs
 1846	sovereign/crates/sovereign-core/src/runtime/grounding/judge.rs
 2243	sovereign/crates/sovereign-core/src/runtime/grounding/tests.rs
 1432	sovereign/crates/sovereign-core/src/runtime/handlers/attached_doc.rs
