@@ -1192,6 +1192,11 @@ pub async fn bootstrap_with_progress(
         if let Ok(probe_vec) = inference.embed("probe").await {
             substep("embed_probe", t_embed_probe);
             let dims = probe_vec.len();
+            // Arm clause ST-8's geometry gate. Until this fires, `open_index`
+            // cannot tell a 768-dim corpus from a 1024-dim one and admits
+            // both; `oicp-types` on the maintainer's host is exactly that
+            // case, recording the SAME model name as the compatible corpora.
+            corpus_engine.set_expected_embedding_dimensions(dims);
             let t_validate = std::time::Instant::now();
             if let Err(e) = corpus_engine.validate_corpus_readiness(dims).await {
                 tracing::warn!(

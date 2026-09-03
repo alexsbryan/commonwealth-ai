@@ -67,13 +67,42 @@
 
 id = "ST-8"
 family = "ST"
-status = "CONFLICT"
-clause = '''The embedding model is a cross-node interoperability contract. A corpus MUST record the model, dimensionality, pooling, and normalisation used to build it. Opening with an incompatible model MUST fail loudly, never coerce.'''
-target = '''corpus-engine/src/engine/mod.rs:1897::open_index_inner'''
-existing = '''corpus-engine/src/engine/mod.rs:3001::open_index_allows_model_mismatch_with_warning ASSERTS THE OPPOSITE'''
-asserts = '''open_index on a recorded embedding_model differing from the engine's expected model returns Err rather than Ok with a warning.'''
-catches = '''STANDING CONFLICT — NOT A TEST GAP. corpus-engine/src/engine/mod.rs:3001::open_index_allows_model_mismatch_with_warning asserts the OPPOSITE, deliberately: 'mismatches are downgraded to warnings so indexes written before the embedding-model default was formalised remain searchable. A true dimensionality mismatch surfaces as a search error, so blocking open() adds no safety.' Either the clause relaxes or open_index fails closed. Operator decision; do not paper over with a test.'''
-
+status = "landed"
+clause = '''The embedding model is a cross-node interoperability contract. A corpus
+MUST record the model and the dimensionality used to build it. Opening a corpus
+whose GEOMETRY is incompatible — a vector width the loaded model does not
+produce — MUST fail loudly, never coerce. A difference in the recorded model
+NAME alone MUST NOT refuse the open: the same model appears under different
+file names and quantisations, and those vectors are comparable.'''
+target = '''corpus-engine/src/engine/mod.rs::geometry_verdict'''
+asserts = '''open_index (on the cache-MISS and cache-HIT paths alike) returns Err
+when the corpus's recorded embedding width differs from the width the loaded
+model produces, naming the corpus and both widths; and returns Ok with a warning
+when only the model name differs at equal width.'''
+catches = '''the two failures the pre-2026-09-03 check had backwards. It compared
+the model NAME exactly and only warned, so on the maintainer's host it produced
+three false alarms (`qwen-embedding-0.6b`, `qwen3-embedding-0.6b`,
+`Qwen3-Embedding-0.6B-Q8_0` — one model, three spellings) and could not see the
+only real conflict: `oicp-types` and `atos-experiment-oicp-types` are 768-dim
+against a 1024-dim model while recording the SAME name as the compatible
+corpora. Also catches the gate being armed but bypassed — the width is armed by
+a live embed probe that runs long after boot, so a check on the slow path alone
+lets every already-resident handle through for the life of the process.'''
+resolved = '''2026-09-03, operator direction. The clause as first written said
+"incompatible MODEL"; the operator's reading is that incompatible means
+FUNCTIONALLY incompatible — "we don't want to fail loudly when a model is
+usable — the same model with a different file name or quant should still work,
+but clearly incompatible from a functional standpoint is what we want to flag."
+So the clause now names GEOMETRY as the fail-closed set and the model name as
+advisory. Pooling and normalisation are dropped from the MUST-record list
+because nothing records them; re-add them with the mechanism, not before.
+RESIDUAL, named rather than papered over: a DIFFERENT base model at the SAME
+width is functionally incompatible and is NOT caught. Detecting it needs a
+stem -> (base model, quant) resolver, which exists as
+`sovereign_core::models_manifest::attribution_for_file` — in a crate
+corpus-engine cannot depend on without inverting the layer map. Sharing it
+down into `kernel-types` is the follow-up that would close this.'''
+landed = '''corpus-engine::engine::tests::open_index_fails_closed_on_a_geometry_mismatch (+ ::open_index_allows_model_mismatch_with_warning)'''
 [[spec]]
 id = "FE-100"
 family = "FE"

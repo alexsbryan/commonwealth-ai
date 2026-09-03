@@ -870,6 +870,15 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         bootstrap::advertise_embed_model(Arc::clone(&provider), &config, resolved_embed_family)
             .await;
 
+    // Arm clause ST-8's geometry gate from the width the probe just measured.
+    // Without this the daemon's `open_index` cannot tell a 768-dim corpus from
+    // a 1024-dim one and admits both — and the model NAME cannot substitute:
+    // on the maintainer's host `oicp-types` is 768-dim while recording the
+    // same `qwen-embedding-0.6b` string as the 1024-dim corpora.
+    if let Some(info) = advertise_embed.info() {
+        engine.set_expected_embedding_dimensions(info.dimensions);
+    }
+
     // Keep the reindexer alive for the lifetime of the daemon.
     // The variable binding is load-bearing — dropping the Arc
     // stops every supervised watcher.

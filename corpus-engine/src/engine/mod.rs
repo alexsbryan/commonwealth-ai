@@ -186,6 +186,26 @@ pub struct CorpusEngine {
     /// `primary_entities` per the Option-A path.
     chunk_entity_extractor: Option<crate::enrichment::tiered::ChunkEntityExtractorHandle>,
     expected_embedding_model: String,
+    /// Dimensionality the loaded embedding model produces, or 0 for
+    /// "not yet known".
+    ///
+    /// GEOMETRY, NOT NAME, IS THE COMPATIBILITY CONTRACT (clause ST-8).
+    /// Vectors of differing width cannot be compared at all; a model
+    /// re-quantised or re-spelled at the same width can. Measured on this
+    /// host 2026-09-03, 45 installed corpora: the model STRING has three
+    /// spellings of one model (`qwen-embedding-0.6b`,
+    /// `qwen3-embedding-0.6b`, `Qwen3-Embedding-0.6B-Q8_0`) — three false
+    /// alarms — while the two genuinely incompatible corpora (`oicp-types`
+    /// and `atos-experiment-oicp-types`, 768-dim against a 1024-dim model)
+    /// record the SAME string as the compatible ones. The name check had
+    /// zero true positives and could not see the only real conflict.
+    ///
+    /// An `AtomicUsize` set after construction rather than a builder arg,
+    /// because the width is only knowable from a live `embed("probe")` —
+    /// which every host runs long after the engine is built. 0 leaves the
+    /// gate INACTIVE and says so at `debug`, rather than defaulting a
+    /// verdict it has no data for (ARCH §18.3).
+    expected_embedding_dimensions: std::sync::atomic::AtomicUsize,
     /// Cache of opened read indexes, keyed by index path. The value pairs
     /// the open `CorpusIndex` (cheap to clone — shared LanceDB handles)
     /// with the mtime of the index's `chunks.lance/_versions` dir at open
@@ -370,6 +390,7 @@ impl CorpusEngine {
             // default and drifted from the real file stem
             // `"qwen-embedding-0.6b"` on every fresh install).
             expected_embedding_model: String::new(),
+            expected_embedding_dimensions: std::sync::atomic::AtomicUsize::new(0),
             index_cache: std::sync::Mutex::new(HashMap::new()),
             index_info_cache: std::sync::Mutex::new(HashMap::new()),
             corpus_allow_list: None,
@@ -745,6 +766,21 @@ impl CorpusEngine {
     /// which is also what the daemon advertises on `/v1/models`.
     /// Callers that lose track of the stem can derive it from
     /// `SetupConfig.models.embed.file_stem()`.
+    /// Tell the engine how wide the loaded model's vectors are, arming the
+    /// geometry gate in [`Self::open_index`]. Takes `&self` because the width
+    /// comes from a live embed probe that runs long after construction, and
+    /// the engine is shared behind an `Arc` by then.
+    pub fn set_expected_embedding_dimensions(&self, dims: usize) {
+        self.expected_embedding_dimensions
+            .store(dims, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The armed width, or 0 when no probe has reported one yet.
+    pub fn expected_embedding_dimensions(&self) -> usize {
+        self.expected_embedding_dimensions
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     pub fn with_embedding_model(mut self, model: &str) -> Self {
         self.expected_embedding_model = model.to_string();
         self
@@ -1918,6 +1954,56 @@ impl CorpusEngine {
         self.index_cache.lock().map(|c| c.len()).unwrap_or(0)
     }
 
+    /// Clause ST-8's fail-closed half: may this engine read this corpus's
+    /// vectors at all?
+    ///
+    /// Operator direction 2026-09-03, resolving the standing conflict the old
+    /// check carried: "we don't want to fail loudly when a model is usable —
+    /// the same model with a different file name or quant should still work,
+    /// but clearly incompatible from a functional standpoint is what we want
+    /// to flag."
+    ///
+    /// Width is that functional line. Vectors of different width cannot be
+    /// compared, so an open against one is not a degraded search but a
+    /// meaningless one — and until now NOTHING refused it: `open_index` only
+    /// warned, and `validate_corpus_readiness`, which does return `Err`, has a
+    /// single caller that catches the `Err` and warns
+    /// (`sovereign-desktop/src-tauri/src/state.rs`). The clause's "MUST fail
+    /// loudly" was enforced on no path at all.
+    ///
+    /// CALLED ON THE CACHE-HIT PATH TOO, and that is not incidental. The width
+    /// is armed by a live embed probe that runs LONG AFTER boot, so at least
+    /// one open of every corpus happens while the gate is still inactive. A
+    /// check on the slow path alone would let every already-resident handle
+    /// bypass it for the life of the process — which is this repo's
+    /// characteristic bug wearing the gate's own clothes. Caught by the test
+    /// below opening once unarmed before arming.
+    fn geometry_verdict(&self, index: &CorpusIndex) -> Result<()> {
+        let expected_dims = self.expected_embedding_dimensions();
+        let recorded_dims = index.embedding_dim();
+        if expected_dims != 0 && recorded_dims != 0 && expected_dims != recorded_dims {
+            return Err(crate::Error::Database(format!(
+                "Corpus '{}' was built with {} embedding dimensions but the \
+                 loaded model produces {}. Its vectors cannot be compared with \
+                 this model's, so searching it would return meaningless \
+                 results rather than degraded ones. To fix: rebuild the corpus \
+                 in Settings → Knowledge → Rebuild.",
+                index.corpus_id(),
+                recorded_dims,
+                expected_dims,
+            )));
+        }
+        if expected_dims == 0 {
+            tracing::debug!(
+                corpus_id = index.corpus_id(),
+                recorded_dims,
+                "open_index: geometry gate INACTIVE — no embed probe has \
+                 reported a width to this engine yet"
+            );
+        }
+        Ok(())
+    }
+
     async fn open_index_inner(&self, path: &Path, cache: CacheOnOpen) -> Result<CorpusIndex> {
         // Cheap freshness key: the mtime of the table's `_versions` dir,
         // which gains a new `<n>.manifest` on every committed write. `None`
@@ -1933,7 +2019,11 @@ impl CorpusEngine {
             if let Ok(cache) = self.index_cache.lock() {
                 if let Some((cached_mtime, index)) = cache.get(path) {
                     if *cached_mtime == mtime {
-                        return Ok(index.clone());
+                        let hit = index.clone();
+                        drop(cache);
+                        // Gate the HIT as well — see `geometry_verdict`.
+                        self.geometry_verdict(&hit)?;
+                        return Ok(hit);
                     }
                 }
             }
@@ -1960,15 +2050,22 @@ impl CorpusEngine {
             }
         }
 
-        // Warn on mismatch rather than hard-erroring so that indexes written
-        // before the model name was recorded correctly (they originally
-        // stored a placeholder default) remain searchable after the fix.
-        // A true incompatibility (different dimensionality) will surface as a
-        // search error anyway; the string check is informational only.
+        self.geometry_verdict(&index)?;
+
+        // The NAME, by contrast, is advisory. It is not a reliable identity:
+        // one model appears here under three spellings, and a re-quantised
+        // artefact of the same model is fully usable. Resolving a stem to its
+        // base model + quant is `sovereign_core::models_manifest::
+        // attribution_for_file`, which corpus-engine cannot reach without
+        // inverting the layer map — so this stays a warning, and the residual
+        // gap (a DIFFERENT base model at the same width) is named in clause
+        // ST-8 rather than pretended away.
         if index.embedding_model() != self.expected_embedding_model {
             tracing::warn!(
-                "Corpus '{}' was indexed with model '{}' but current engine expects '{}'. \
-                 Search results may be degraded if the models differ. Re-install the corpus to fix.",
+                "Corpus '{}' records embedding model '{}' but this engine expects \
+                 '{}'. The widths agree, so this is most likely the same model \
+                 under a different file name or quantisation and search is \
+                 fine. Re-install only if results look wrong.",
                 index.corpus_id(),
                 index.embedding_model(),
                 self.expected_embedding_model,
@@ -3038,12 +3135,20 @@ mod tests {
         assert!(indexes.is_empty());
     }
 
+    /// covers: ST-8
+    ///
+    /// The clause's advisory half: a difference in the recorded model NAME
+    /// alone must NOT refuse the open. Same width, different name is the same
+    /// model under another file name or quantisation, and its vectors are
+    /// comparable. Without this arm, failing closed on the name would break
+    /// three of the four naming variants on the maintainer's own host.
     #[tokio::test]
     async fn open_index_allows_model_mismatch_with_warning() {
-        // Model-name mismatches are downgraded to warnings so that indexes
-        // written before the embedding-model default was formalised
-        // remain searchable.  A true dimensionality mismatch surfaces as a
-        // search error, so blocking open() adds no safety.
+        // A NAME mismatch at the same width stays a warning, and after the
+        // 2026-09-03 operator direction that is the deliberate answer rather
+        // than a compatibility concession: one model appears on this host
+        // under three spellings, and a re-quantised artefact of the same
+        // model is fully usable. Width is asserted separately below.
         let dir = tempfile::tempdir().unwrap();
         let idx_dir = dir.path().join("indexes");
         std::fs::create_dir_all(&idx_dir).unwrap();
@@ -3053,10 +3158,62 @@ mod tests {
             .await
             .unwrap();
 
-        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn())
+            .with_embedding_model("expected-model");
+        // Same width, different name: usable.
+        engine.set_expected_embedding_dimensions(8);
 
-        // Should succeed (warn, not error) when model names differ.
-        assert!(engine.open_index(&idx_path).await.is_ok());
+        assert!(
+            engine.open_index(&idx_path).await.is_ok(),
+            "a differently-NAMED model at the same width must stay usable"
+        );
+    }
+
+    /// covers: ST-8
+    ///
+    /// The clause's fail-closed half, which until 2026-09-03 was enforced on
+    /// no path at all: `open_index` only warned, and `validate_corpus_
+    /// readiness` — which does return `Err` — has a single caller that catches
+    /// it and warns. Vectors of differing width cannot be compared, so opening
+    /// such a corpus yields meaningless results, not degraded ones.
+    #[tokio::test]
+    async fn open_index_fails_closed_on_a_geometry_mismatch() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(&idx_dir).unwrap();
+        let idx_path = idx_dir.join("narrow");
+        // Same model NAME, different width — the exact shape of `oicp-types`
+        // on this host: 768-dim while recording the same string as the
+        // 1024-dim corpora, which is why the name check could never see it.
+        CorpusIndex::create(&idx_path, "narrow", "Narrow", "same-model", 8, true, "MIT")
+            .await
+            .unwrap();
+
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn())
+            .with_embedding_model("same-model");
+
+        // INSTRUMENT CHECK (ARCH §18.4): unarmed, the gate must be inactive —
+        // otherwise the refusal below could come from the default rather than
+        // from the width, and this test would pass on an engine that refuses
+        // everything.
+        assert_eq!(engine.expected_embedding_dimensions(), 0);
+        assert!(
+            engine.open_index(&idx_path).await.is_ok(),
+            "with no probe reported, the geometry gate must not fire"
+        );
+
+        engine.set_expected_embedding_dimensions(1024);
+        // `match`, not `expect_err`: `CorpusIndex` has no `Debug`, and an Ok
+        // here is the finding rather than a panic message.
+        let msg = match engine.open_index(&idx_path).await {
+            Ok(_) => panic!("an 8-dim corpus under a 1024-dim model was opened"),
+            Err(e) => e.to_string(),
+        };
+        assert!(
+            msg.contains("narrow") && msg.contains("8") && msg.contains("1024"),
+            "the refusal must name the corpus and BOTH widths so the operator \
+             knows what to rebuild: {msg}"
+        );
     }
 
     /// PRE-REGISTERED u1/u2/u3 (issue #57 rec 2, scratchpad

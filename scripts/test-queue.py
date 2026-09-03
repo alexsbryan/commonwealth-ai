@@ -84,8 +84,13 @@ def load():
                           tier=3 if s["family"] in TIER3_FAMILIES else 1,
                           path=norm(s.get("target")), why=one_line(s["clause"].split(". ")[0]),
                           witness="clause " + s["id"], raw=s))
-    items.append(dict(id=d["id"], kind="decide", tier=1, path=norm(d.get("target")),
-                      why=one_line(d["clause"].split(". ")[0]), witness="clause " + d["id"], raw=d))
+    # The top-level spec/code conflict. Appended unconditionally until
+    # 2026-09-03, which meant a RESOLVED conflict still read as open — the
+    # view could not record the thing it exists to track closing.
+    if d["status"] != "landed":
+        items.append(dict(id=d["id"], kind="decide", tier=1, path=norm(d.get("target")),
+                          why=one_line(d["clause"].split(". ")[0]),
+                          witness="clause " + d["id"], raw=d))
     return items
 
 
