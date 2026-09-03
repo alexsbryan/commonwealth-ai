@@ -11,6 +11,41 @@
 # covers: tag over a body that cannot fail is refused by the generator.
 
 [[claim]]
+requirement = "FE-70"
+test = "sovereign-inference::embedded::rpc_warm_cache::tests::weighted_balances_clustered_mass_better_than_count"
+file = "sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs"
+line = 1570
+asserts = 3
+
+[[claim]]
+requirement = "FE-70"
+test = "sovereign-inference::embedded::rpc_warm_cache::tests::weighted_contiguous_and_gapless_on_heterogeneous_vram"
+file = "sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs"
+line = 1632
+asserts = 4
+
+[[claim]]
+requirement = "FE-74"
+test = "sovereign-inference::embedded::rpc_warm_cache::tests::pooled_memory_can_pass_where_a_device_fails"
+file = "sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs"
+line = 1790
+asserts = 2
+
+[[claim]]
+requirement = "FE-75"
+test = "sovereign-inference::embedded::rpc_warm_cache::tests::shard_fits_reports_every_device_not_just_the_failures"
+file = "sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs"
+line = 1762
+asserts = 5
+
+[[claim]]
+requirement = "FE-76"
+test = "sovereign-inference::embedded::rpc_warm_cache::tests::an_unread_tensor_table_is_never_a_pass"
+file = "sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs"
+line = 1730
+asserts = 4
+
+[[claim]]
 requirement = "FE-77"
 test = "sovereign-inference::embedded::rpc_distribution::rpc_prune_tests::a_per_device_overflow_is_its_own_refusal_and_advises_lowering_headroom"
 file = "sovereign/crates/sovereign-inference/src/embedded/rpc_distribution.rs"

@@ -53,8 +53,36 @@ line = 33
 asserts = 10
 
 [[claim]]
+requirement = "GR-35"
+test = "corpus-engine::enrichment::atlas::analysis::sec_facts::coverage::tests::every_period_the_card_advertises_is_answerable_by_the_tool"
+file = "corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs"
+line = 380
+asserts = 2
+
+[[claim]]
+requirement = "GR-36"
+test = "corpus-engine::enrichment::atlas::analysis::sec_facts::coverage::tests::card_carries_no_percentage_and_no_tag_ratio"
+file = "corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs"
+line = 308
+asserts = 5
+
+[[claim]]
 requirement = "ST-41"
 test = "corpus-engine::main::reindex_stamps_freshness::reindexing_a_document_stamps_its_recency_at_the_shared_convergence_point"
 file = "corpus-engine/tests/main/reindex_stamps_freshness.rs"
 line = 67
 asserts = 9
+
+[[claim]]
+requirement = "ST-5"
+test = "corpus-engine::engine::tests::installed_indexes_dedupes_corpus_id_collisions_preferring_canonical"
+file = "corpus-engine/src/engine/mod.rs"
+line = 3402
+asserts = 2
+
+[[claim]]
+requirement = "ST-9"
+test = "corpus-engine::sharding::tests::merge_shards_rejects_two_distinct_non_empty_embedding_models"
+file = "corpus-engine/src/sharding.rs"
+line = 1904
+asserts = 1

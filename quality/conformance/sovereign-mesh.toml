@@ -11,6 +11,62 @@
 # covers: tag over a body that cannot fail is refused by the generator.
 
 [[claim]]
+requirement = "FE-10"
+test = "sovereign-mesh::main::mesh_switch::leaving_clears_the_active_pointer_rather_than_stranding_it"
+file = "sovereign/crates/sovereign-mesh/tests/main/mesh_switch.rs"
+line = 181
+asserts = 3
+
+[[claim]]
+requirement = "FE-106"
+test = "sovereign-mesh::yield_backoff::tests::backoff_is_capped_however_long_the_peer_asks"
+file = "sovereign/crates/sovereign-mesh/src/yield_backoff.rs"
+line = 195
+asserts = 1
+
+[[claim]]
+requirement = "FE-133"
+test = "sovereign-mesh::worker_eligibility::tests::stable_worker_eligible_after_settle"
+file = "sovereign/crates/sovereign-mesh/src/worker_eligibility.rs"
+line = 748
+asserts = 3
+
+[[claim]]
+requirement = "FE-135"
+test = "sovereign-mesh::worker_eligibility::tests::anchor_profile_is_stricter_than_default"
+file = "sovereign/crates/sovereign-mesh/src/worker_eligibility.rs"
+line = 734
+asserts = 6
+
+[[claim]]
+requirement = "FE-15"
+test = "sovereign-mesh::main::rotate_pre_split_guard::the_refusal_tells_an_unconfirmed_peer_apart_from_an_old_build"
+file = "sovereign/crates/sovereign-mesh/tests/main/rotate_pre_split_guard.rs"
+line = 116
+asserts = 3
+
+[[claim]]
+requirement = "FE-17"
+test = "sovereign-mesh::main::rotate_pre_split_guard::rotate_refuses_while_an_unconfirmed_peer_is_online"
+file = "sovereign/crates/sovereign-mesh/tests/main/rotate_pre_split_guard.rs"
+line = 88
+asserts = 3
+
+[[claim]]
+requirement = "FE-7"
+test = "sovereign-mesh::main::join_parks_not_leaves::same_mesh_id_survives_a_failed_join_from_a_solo_mesh"
+file = "sovereign/crates/sovereign-mesh/tests/main/join_parks_not_leaves.rs"
+line = 91
+asserts = 3
+
+[[claim]]
+requirement = "FE-8"
+test = "sovereign-mesh::persist::tests::save_writes_into_the_meshs_own_directory_without_moving_the_pointer"
+file = "sovereign/crates/sovereign-mesh/src/persist.rs"
+line = 1086
+asserts = 3
+
+[[claim]]
 requirement = "UI-22"
 test = "sovereign-mesh::daemon::tests::the_client_api_binds_loopback_by_default_and_never_exposes_an_unauthenticated_listener"
 file = "sovereign/crates/sovereign-mesh/src/daemon.rs"

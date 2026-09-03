@@ -118,6 +118,44 @@ Two known ways to get a false red, both already witnessed:
 - **Two runs collided.** Concurrent nextest overwrites the shared JUnit report
   and the counts are not yours — exit 5. Never mutate under a peer's run.
 
+### And one way to get a false GREEN, which is worse
+
+A false red costs you a re-run. A false green closes nothing and leaves the
+record open, which is the answer you already expected — so nothing prompts you
+to look.
+
+**Cargo fingerprints a source file on MTIME.** A batch runner that does
+restore → mutate → build inside one second lets cargo reuse the previous
+build's artifact, so the suite runs WITHOUT the mutation, every test passes,
+and the runner reads that as *survived* — i.e. "the failure is uncovered".
+Measured 2026-09-02 on a 16-mutation sweep: FE-74 and FE-75 both read 465
+pass / 0 fail, and both reddened the test their record names when re-run one at
+a time (459/6 and 458/7). Two false survivors in sixteen. The tell was that
+FE-74's run listed the seven failures belonging to FE-75's mutant — a red set
+that belongs to the mutation before it.
+
+The fix in a runner is one line after the write:
+`os.utime(f, (time.time() + 2, time.time() + 2))`. Stamping the future is what
+cargo cannot miss.
+
+**The rule this generalises to** (§18.4, validate the instrument before the
+result): a mutation harness's characteristic failure is a false SURVIVOR, and a
+false survivor is invisible because it agrees with the null hypothesis. A sweep
+reporting zero survivors needs no check. A sweep reporting survivors has not yet
+distinguished *the test does not catch this* from *the test never saw this* —
+re-run at least one survivor ALONE before believing it.
+
+Two more instrument faults from that same sweep, both worth checking for in any
+batch runner:
+
+- `scripts/sovereign-test.sh` prints `pass: 0 fail: 0` when it cannot attribute
+  the JUnit report to its own run — real `FAIL` lines on stdout, no counts.
+  **Gate on the counts, not on the presence of FAIL lines.**
+- An inline `python3 -c` inside the loop died on a macOS codesign policy error
+  (`_posixsubprocess` load denied). The package variable came back empty and
+  `--package ""` ran the entire workspace for that entry. Inside a loop whose
+  failure mode is silent, use an explicit table in the shell, not a subprocess.
+
 ## The two sources of truth
 
 Both in git, both human-readable, both diffable in review.

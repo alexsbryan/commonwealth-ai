@@ -44,3 +44,17 @@ test = "sovereign-cli-llm::corpus_cmd::optimize::tests::a_stated_retention_windo
 file = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/optimize.rs"
 line = 411
 asserts = 8
+
+[[claim]]
+requirement = "ST-6"
+test = "sovereign-cli-llm::corpus_cmd::inventory::tests::a_stopped_ingest_that_never_built_indexes_is_not_ready"
+file = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/inventory.rs"
+line = 1177
+asserts = 1
+
+[[claim]]
+requirement = "ST-7"
+test = "sovereign-cli-llm::corpus_cmd::inventory::tests::readiness_labels_are_stable_api"
+file = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/inventory.rs"
+line = 1157
+asserts = 4

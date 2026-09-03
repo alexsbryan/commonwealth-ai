@@ -369,26 +369,29 @@ landed = '''sovereign-core::runtime::epistemic::tests::one_assembly_returns_hold
 [[spec]]
 id = "FE-10"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''Leaving MUST clear the pointer *and* remove the departed membership. Leaving a pointer naming deleted state reads as healthy at boot while making that membership permanently unforgettable.'''
 target = '''sovereign/crates/sovereign-mesh/src/daemon.rs:1459::stop_inner'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/mesh_switch.rs:179::leaving_clears_the_active_pointer_rather_than_stranding_it'''
+landed = '''sovereign-mesh::main::mesh_switch::leaving_clears_the_active_pointer_rather_than_stranding_it'''
 
 [[spec]]
 id = "FE-102"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''The client-fairness share rule MUST take **no weight argument**, so weight-ordering unfairness is *unexpressible* rather than merely avoided. A single caller alone on the host MUST be untouched.'''
 target = '''commonwealth/crates/commonwealth-core/src/fair_sched.rs:163::fair_share_cap'''
 existing = '''commonwealth/crates/commonwealth-core/src/fair_sched.rs:835::fair_share_cap_is_uncapped_for_a_lone_principal'''
+landed = '''commonwealth-core::fair_sched::tests::fair_share_cap_is_uncapped_for_a_lone_principal'''
 
 [[spec]]
 id = "FE-106"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''A peer that refuses with a stated retry delay MUST be excluded from candidacy for that delay, capped, and cleared by any success — **before** any manifest fetch, so a yielding peer costs nothing rather than a cheaper something.'''
 target = '''sovereign/crates/sovereign-mesh/src/yield_backoff.rs:79::record_refusal'''
 existing = '''sovereign/crates/sovereign-mesh/src/yield_backoff.rs:194::backoff_is_capped_however_long_the_peer_asks'''
+landed = '''sovereign-mesh::yield_backoff::tests::backoff_is_capped_however_long_the_peer_asks'''
 
 [[spec]]
 id = "FE-11"
@@ -419,18 +422,20 @@ landed = '''commonwealth-core::mesh::tests::gossip_auth::a_proof_cannot_be_repla
 [[spec]]
 id = "FE-133"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''A host preparing a distributed load MUST be able to ask a participant to seed its portion **before** the load begins, and MUST distribute only to participants that pass an eligibility profile — a settling period plus quarantine on instability, surfaced to the operator.'''
 target = '''sovereign/crates/sovereign-mesh/src/worker_eligibility.rs:625::eligible'''
 existing = '''sovereign/crates/sovereign-mesh/src/worker_eligibility.rs:746::stable_worker_eligible_after_settle'''
+landed = '''sovereign-mesh::worker_eligibility::tests::stable_worker_eligible_after_settle'''
 
 [[spec]]
 id = "FE-135"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''Where a topology stratifies into anchors (holding the split) and consumers, anchors MUST advertise their anchor profile, and the candidate filter MUST exclude non-anchors so a casual peer never joins the split. Anchors MUST get the stricter eligibility profile.'''
 target = '''sovereign/crates/sovereign-mesh/src/worker_eligibility.rs:218::EligibilityConfig::anchor'''
 existing = '''sovereign/crates/sovereign-mesh/src/worker_eligibility.rs:733::anchor_profile_is_stricter_than_default'''
+landed = '''sovereign-mesh::worker_eligibility::tests::anchor_profile_is_stricter_than_default'''
 
 [[spec]]
 id = "FE-137"
@@ -443,10 +448,11 @@ existing = '''sovereign/crates/sovereign-mesh/src/dst.rs:882::no_split_brain_fal
 [[spec]]
 id = "FE-15"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''Credential rotation MUST be refused while the fleet is mixed, and the refusal MUST distinguish **two populations** with different remedies: a peer that authorises on the legacy predicate needs *upgrading*; a peer simply not yet observed since start-up needs one *round*. Collapsing them tells operators their fleet is un-migrated when it is not.'''
 target = '''sovereign/crates/sovereign-mesh/src/daemon.rs:1763::rotate_invite'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/rotate_pre_split_guard.rs:112::the_refusal_tells_an_unconfirmed_peer_apart_from_an_old_build'''
+landed = '''sovereign-mesh::main::rotate_pre_split_guard::the_refusal_tells_an_unconfirmed_peer_apart_from_an_old_build'''
 
 [[spec]]
 id = "FE-16"
@@ -460,10 +466,11 @@ landed = '''commonwealth-core::mesh::tests::gossip_auth::a_peer_that_proves_poss
 [[spec]]
 id = "FE-17"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''Because that observation is in memory, the rotation refusal MUST run at least one round before it is willing to refuse. **It must never report a verdict from an instrument it has not run.**'''
 target = '''sovereign/crates/sovereign-mesh/src/daemon.rs:1763::rotate_invite'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/rotate_pre_split_guard.rs:86::rotate_refuses_while_an_unconfirmed_peer_is_online'''
+landed = '''sovereign-mesh::main::rotate_pre_split_guard::rotate_refuses_while_an_unconfirmed_peer_is_online'''
 
 [[spec]]
 id = "FE-19"
@@ -502,34 +509,38 @@ landed = '''commonwealth-core::mesh::tests::encryption_policy_never_downgrades''
 [[spec]]
 id = "FE-25"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''*How this node reaches a peer* MUST be decided in exactly one place: a seam resolving **(peer, traffic class) → ordered candidate endpoints**. Call sites keep their own clients and timeouts and append route paths.'''
 target = '''commonwealth/crates/commonwealth-transport/src/routed.rs:141::endpoints'''
 existing = '''commonwealth/crates/commonwealth-transport/src/routed.rs:245::routed_class_lists_primary_then_default_fallback'''
+landed = '''commonwealth-transport::routed::tests::routed_class_lists_primary_then_default_fallback'''
 
 [[spec]]
 id = "FE-26"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''At least two transports MUST be supportable behind that seam: a conventional address-based one, and a **key-addressed encrypted** one that dials a peer by its public key with no address, bridging to the ordinary local listeners.'''
 target = '''commonwealth/crates/commonwealth-transport/src/routed.rs:52::RoutedTransport::new'''
 existing = '''commonwealth/crates/commonwealth-transport/src/routed.rs:283::required_class_with_no_iroh_path_returns_empty_not_plaintext'''
+landed = '''commonwealth-transport::routed::tests::required_class_with_no_iroh_path_returns_empty_not_plaintext'''
 
 [[spec]]
 id = "FE-27"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''A routing transport MUST concatenate a chosen transport's candidates ahead of a default, so a failed or absent dial degrades to the fallback **on the same request**, automatically. Success feedback MUST route back to the producing transport.'''
 target = '''commonwealth/crates/commonwealth-transport/src/routed.rs:160::note_success'''
 existing = '''commonwealth/crates/commonwealth-transport/src/routed.rs:329::note_success_routes_to_the_transport_that_produced_the_endpoint'''
+landed = '''commonwealth-transport::routed::tests::note_success_routes_to_the_transport_that_produced_the_endpoint'''
 
 [[spec]]
 id = "FE-3"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''Every node MUST persist a durable asymmetric keypair. The identity MUST be **mesh-independent**: it survives leaving, joining, and switching, so a node is the same node in every trust ring it belongs to.'''
 target = '''commonwealth/crates/commonwealth-transport/src/identity.rs:90::load_or_generate_node_key'''
 existing = '''commonwealth/crates/commonwealth-transport/src/identity.rs:267::load_or_generate_round_trips'''
+landed = '''commonwealth-transport::identity::tests::load_or_generate_round_trips'''
 
 [[spec]]
 id = "FE-4"
@@ -550,10 +561,11 @@ existing = '''sovereign/crates/sovereign-mesh/tests/main/loopback_parity.rs:134:
 [[spec]]
 id = "FE-5"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''Join MUST include proof-of-possession of the node's identity key; a bad proof MUST be rejected.'''
 target = '''commonwealth/crates/commonwealth-transport/src/identity.rs:163::verify_join_proof'''
 existing = '''commonwealth/crates/commonwealth-transport/src/identity.rs:344::join_proof_binds_node_id_and_name'''
+landed = '''commonwealth-transport::identity::tests::join_proof_binds_node_id_and_name'''
 
 [[spec]]
 id = "FE-6"
@@ -567,50 +579,56 @@ landed = '''commonwealth-core::mesh::tests::merge_preserves_pubkey_when_old_peer
 [[spec]]
 id = "FE-7"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''A node MUST be able to belong to **many** trust rings and be active in exactly one. Parked memberships MUST retain their full roster and credentials, so returning to one is a **resume** — no handshake, no key redeemed.'''
 target = '''sovereign/crates/sovereign-mesh/src/daemon.rs:1062::join_mesh'''
 existing = '''sovereign/crates/sovereign-mesh/tests/main/join_parks_not_leaves.rs:89::same_mesh_id_survives_a_failed_join_from_a_solo_mesh'''
+landed = '''sovereign-mesh::main::join_parks_not_leaves::same_mesh_id_survives_a_failed_join_from_a_solo_mesh'''
 
 [[spec]]
 id = "FE-70"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''Where a model exceeds one node, the placement policy MUST apportion each device a **contiguous** range whose **bytes** — not unit count — are proportional to its memory.'''
 target = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:658::plan_shards_weighted'''
 existing = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1630::weighted_contiguous_and_gapless_on_heterogeneous_vram'''
+landed = '''sovereign-inference::embedded::rpc_warm_cache::tests::weighted_balances_clustered_mass_better_than_count + ::weighted_contiguous_and_gapless_on_heterogeneous_vram'''
 
 [[spec]]
 id = "FE-74"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''Per-device fit MUST be one decider used by both the preview and the load. Aggregate pooled memory is **not** sufficient: a cluster clearing the aggregate gate can still hand one device more than it has.'''
 target = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1042::shard_fits'''
 existing = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1765::pooled_memory_can_pass_where_a_device_fails'''
+landed = '''sovereign-inference::embedded::rpc_warm_cache::tests::pooled_memory_can_pass_where_a_device_fails'''
 
 [[spec]]
 id = "FE-75"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''The fit result MUST return **one row per device, fitting rows included** — a pass/fail return forces the preview to keep its own traversal, and a second traversal is the drift being removed.'''
 target = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1042::shard_fits'''
 existing = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1738::shard_fits_reports_every_device_not_just_the_failures'''
+landed = '''sovereign-inference::embedded::rpc_warm_cache::tests::shard_fits_reports_every_device_not_just_the_failures'''
 
 [[spec]]
 id = "FE-76"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''*Cannot judge* MUST be distinct from *pass* (X-EH-2): an unread metadata table would otherwise clear every device on the strength of zeros.'''
 target = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1042::shard_fits'''
 existing = '''sovereign/crates/sovereign-inference/src/embedded/rpc_warm_cache.rs:1727::an_unread_tensor_table_is_never_a_pass'''
+landed = '''sovereign-inference::embedded::rpc_warm_cache::tests::an_unread_tensor_table_is_never_a_pass'''
 
 [[spec]]
 id = "FE-8"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''**Writing a membership does not make it active.** The save operation MUST touch only that membership's own storage. Activation MUST be a separate step used only by the two operations that *establish* a membership, plus the explicit switch.'''
 target = '''sovereign/crates/sovereign-mesh/src/persist.rs:642::save'''
 existing = '''sovereign/crates/sovereign-mesh/src/persist.rs:1084::save_writes_into_the_meshs_own_directory_without_moving_the_pointer'''
+landed = '''sovereign-mesh::persist::tests::save_writes_into_the_meshs_own_directory_without_moving_the_pointer'''
 
 [[spec]]
 id = "FE-87"
@@ -623,18 +641,20 @@ existing = '''sovereign/crates/sovereign-cli-llm/src/mesh_bench/tests.rs:1045::a
 [[spec]]
 id = "FE-90"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''A record MUST carry the **pre-image of its own key**, so a reader can say what the number was *for*. The pre-image MUST be **checkable**: recomputing the key from the stored fields, with a mismatch treated as *absent* rather than quoted.'''
 target = '''sovereign/crates/sovereign-core/src/mesh_measurements.rs:460::PlacementWitness::explains'''
 existing = '''sovereign/crates/sovereign-core/src/mesh_measurements.rs:2290::a_witness_accounts_for_the_digest_it_was_built_from'''
+landed = '''sovereign-core::mesh_measurements::tests::a_witness_accounts_for_the_digest_it_was_built_from'''
 
 [[spec]]
 id = "FE-92"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''An empty co-resident list MUST render as the *finding* "nothing else was resident", not as silence. An older record MUST say "not recorded", never imply a quiet machine.'''
 target = '''sovereign/crates/sovereign-core/src/mesh_measurements.rs:778::RunConditions::describe'''
 existing = '''sovereign/crates/sovereign-core/src/mesh_measurements.rs:2950::no_co_residents_is_reported_as_a_finding_not_as_silence'''
+landed = '''sovereign-core::mesh_measurements::tests::no_co_residents_is_reported_as_a_finding_not_as_silence'''
 
 [[spec]]
 id = "FE-99"
@@ -767,34 +787,38 @@ existing = '''corpus-engine/tests/main/sharding_round_trip_e2e.rs:233::merged_se
 [[spec]]
 id = "ST-5"
 family = "ST"
-status = "exists-untagged"
+status = "landed"
 clause = '''The pair *(corpus identifier, passage identifier)* is the citation handle and MUST be globally unique. Enumeration of installed corpora MUST deduplicate deterministically and MUST exclude out-of-band directories.'''
 target = '''corpus-engine/src/engine/mod.rs:1676::dedupe_by_corpus_id'''
 existing = '''corpus-engine/src/engine/mod.rs:3263::installed_indexes_dedupes_corpus_id_collisions_preferring_canonical'''
+landed = '''corpus-engine::engine::tests::installed_indexes_dedupes_corpus_id_collisions_preferring_canonical'''
 
 [[spec]]
 id = "ST-6"
 family = "ST"
-status = "exists-untagged"
+status = "landed"
 clause = '''**A directory is not an installed corpus.** Readiness MUST be decided by a positive completion signal from the index itself, at the canonical location, by one decider shared by every reader (X-SD-1). In-flight ingests MUST write to a distinct location that no reader mistakes for an installed corpus.'''
 target = '''sovereign/crates/sovereign-cli-llm/src/corpus_cmd/inventory.rs:844::corpus_readiness'''
 existing = '''sovereign/crates/sovereign-cli-llm/src/corpus_cmd/inventory.rs:1173::a_stopped_ingest_that_never_built_indexes_is_not_ready'''
+landed = '''sovereign-cli-llm::corpus_cmd::inventory::tests::a_stopped_ingest_that_never_built_indexes_is_not_ready'''
 
 [[spec]]
 id = "ST-7"
 family = "ST"
-status = "exists-untagged"
+status = "landed"
 clause = '''Readiness MUST be a three-or-more-valued answer (**ready**, **building**, **absent**, and any further distinguishable states), never a boolean.'''
 target = '''sovereign/crates/sovereign-cli-llm/src/corpus_cmd/inventory.rs:809::CorpusReadiness'''
 existing = '''sovereign/crates/sovereign-cli-llm/src/corpus_cmd/inventory.rs:1155::readiness_labels_are_stable_api'''
+landed = '''sovereign-cli-llm::corpus_cmd::inventory::tests::readiness_labels_are_stable_api'''
 
 [[spec]]
 id = "ST-9"
 family = "ST"
-status = "exists-untagged"
+status = "landed"
 clause = '''Nodes sharing a corpus MUST produce bit-compatible vectors. Any operation that mixes vectors from two models MUST be impossible.'''
 target = '''corpus-engine/src/sharding.rs:598::merge_shards'''
 existing = '''corpus-engine/src/sharding.rs:1903::merge_shards_rejects_two_distinct_non_empty_embedding_models'''
+landed = '''corpus-engine::sharding::tests::merge_shards_rejects_two_distinct_non_empty_embedding_models'''
 
 [[spec]]
 id = "UI-18"
@@ -927,10 +951,11 @@ existing = '''sovereign/crates/sovereign-cli-llm/src/bench_cmd/lane_baseline.rs:
 [[spec]]
 id = "GR-2"
 family = "GR"
-status = "exists-untagged"
+status = "landed"
 clause = '''**The evidence universe is the load-bearing design decision.** Verification MUST run against the *sealed corpus* — per-claim search over the source of record — not merely against the prompt's snapshot of it. Failed claims' corrective passages MUST feed the repair, replacing rather than deleting.'''
 target = '''sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs:2547::rewrite_system_note'''
 existing = '''sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs:6633::rewrite_note_includes_corrective_passages'''
+landed = '''sovereign-core::runtime::grounding::tests::rewrite_note_includes_corrective_passages'''
 
 [[spec]]
 id = "GR-33"
@@ -943,18 +968,20 @@ existing = '''sovereign/crates/sovereign-core/src/runtime/authority_guard.rs:588
 [[spec]]
 id = "GR-35"
 family = "GR"
-status = "exists-untagged"
+status = "landed"
 clause = '''A user-facing **coverage card** MUST derive, from the same source the tool answers from: what the corpus answers, over what period, as of which version, and its named structural limits.'''
 target = '''corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs:179::coverage_card'''
 existing = '''corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs:376::every_period_the_card_advertises_is_answerable_by_the_tool'''
+landed = '''corpus-engine::enrichment::atlas::analysis::sec_facts::coverage::tests::every_period_the_card_advertises_is_answerable_by_the_tool'''
 
 [[spec]]
 id = "GR-36"
 family = "GR"
-status = "exists-untagged"
+status = "landed"
 clause = '''Three properties MUST be structural rather than remembered: - the card type MUST carry no coverage ratio, and MUST NOT carry the counts from which one could be computed; - a declared limit MUST carry no severity field, so no renderer can style a refusal as a fault; - capability and boundary MUST share one presentation rule, so neither can be demoted to fine print without visibly demoting the other.'''
 target = '''corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs:81::CoverageCard'''
 existing = '''corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs:306::card_carries_no_percentage_and_no_tag_ratio'''
+landed = '''corpus-engine::enrichment::atlas::analysis::sec_facts::coverage::tests::card_carries_no_percentage_and_no_tag_ratio'''
 
 [[spec]]
 id = "GR-49"

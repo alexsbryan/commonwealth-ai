@@ -185,6 +185,7 @@ mutation = """Re-introduce the per-chunk cap in `EvidenceFamily::new`
 CORRECTED 2026-09-02: this record was written expecting a cut-region
 `could-not-judge` ARM. The shipped remedy is stronger — land B removed the cut,
 so no absence is manufactured to report."""
+landed = "sovereign-core::runtime::grounding::judge::tests::the_gate_shares_one_prefix_family"
 
 [[test]]
 id = "GR-08"
@@ -210,6 +211,7 @@ held apart from ordinary evidence. The seat RULED against that (1aeadf1a) —
 land B stands. What holds the line is that the flip needed TWO defects, and the
 second (a composite clearing while carrying an unsupported specific) has an
 independent reader. That independence is the testable property."""
+landed = "sovereign-core::runtime::grounding::audit_pass::tests::the_specifics_scan_runs_when_every_claim_cleared"
 
 [[test]]
 id = "GR-09"
@@ -241,6 +243,7 @@ later rebindings of `full_text` — the quote guardrail, the unavailability
 marker, the lesson term-avoid pass and the authority guard — each of which
 changes the string's LENGTH, so every emitted `text_range` addressed a text
 the reader never saw. The block was moved below all four."""
+landed = "sovereign-core::runtime::grounding::native_grounding::segments::tests::the_strip_reads_the_released_string"
 
 [[test]]
 id = "GR-10"
@@ -269,6 +272,7 @@ is a scorer change owing ARCH §18.6 discipline. What shipped instead is the
 direction and the arity: fail closed, decided once. Before this, four lanes
 each wrote their own collapse (one `match`, three bare `.unwrap_or(false)`)
 and nothing stopped one drifting to `true`."""
+landed = "sovereign-cli-llm::bench_cmd::live_runner::tests::an_unconfirmed_caveat_never_earns_honesty_credit"
 
 [[test]]
 id = "GR-11"
@@ -289,6 +293,7 @@ own condition cannot read the typed verdict. Pinned by
 mutation = """Route the decline guard through the typed disposition:
 `let reclassify = (action == ACT_RELEASED && !claim_audited && native.is_some())`.
 That test must redden."""
+landed = "sovereign-core::runtime::grounding::tests::a_decline_is_still_recognised_while_the_typed_disposition_is_uncomputed"
 
 [[test]]
 id = "GR-12"
@@ -311,6 +316,7 @@ mutation = """Delete the short-path retry — its exit becomes a refusal
 (`action = ACT_ABSTAINED;` in place of `action = ACT_RETRY_RELEASED;`). The
 test must redden naming the missing state, not merely stop compiling: an
 unused `pub(crate) const` is not an error."""
+landed = "sovereign-core::runtime::grounding::tests::the_short_paths_retry_is_the_only_door_from_a_failed_claim_back_to_an_answer"
 
 [[test]]
 id = "GR-13"
@@ -384,6 +390,7 @@ branch condition in `handlers/knowledge_query.rs`; the admission event carries
 mutation = """Add a branch on the verdict at the `knowledge_query.rs` call site
 (`if native_verdict.as_ref().is_some_and(|v| v.answerability < 0.5) { ... }`).
 `the_admission_verdict_decides_nothing_in_the_turn` must redden."""
+landed = "sovereign-core::runtime::grounding::native_grounding::admission::tests::the_admission_verdict_decides_nothing_in_the_turn"
 
 [[test]]
 id = "GR-17"
@@ -709,6 +716,7 @@ caller with no bearer is admitted."""
 mutation = """Set `trust_loopback: true` in the guest policy. The
 no-bearer-refused case must redden. A test that only exercises the operator
 policy stays green under this mutation and is the original defect."""
+landed = "commonwealth-api::main::client_auth::the_guest_listener_refuses_a_loopback_caller_with_no_credential"
 
 [[test]]
 id = "SE-02"
@@ -727,6 +735,7 @@ observable = """A grant minted on a daemon with no client token is redeemable on
 that same daemon."""
 mutation = """Reintroduce the client-token requirement on the redemption path.
 The test must redden at redemption, not at mint."""
+landed = "commonwealth-api::main::client_auth::a_guest_grant_is_honoured_on_a_daemon_with_no_client_token"
 
 [[test]]
 id = "SE-03"
@@ -781,6 +790,7 @@ route table."""
 mutation = """Allow `/internal/*` in a Scope. The first assertion must redden.
 Separately, mount-check against a hardcoded list rather than the router — the
 second must redden when a route is renamed."""
+landed = "commonwealth-api::main::client_auth::every_scope_paths_are_mounted_and_never_privileged"
 
 [[test]]
 id = "SE-06"
@@ -2215,4 +2225,5 @@ re-attachment. Both tests must redden.
 
 FOUND AND FIXED 2026-09-02 by the test that reports it — the record is written
 from the failing run, not from a hypothesis."""
+landed = "sovereign-core::runtime::grounding::surgical::tests::a_repaired_paragraph_keeps_its_break + ::repaired_spans_are_the_new_prose_in_document_order"
 

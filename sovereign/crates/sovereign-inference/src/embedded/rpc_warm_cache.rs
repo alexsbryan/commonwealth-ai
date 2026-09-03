@@ -1565,6 +1565,7 @@ mod tests {
         );
     }
 
+    /// covers: FE-70
     #[test]
     fn weighted_balances_clustered_mass_better_than_count() {
         // A DeepSeek-shaped model: 3 tiny leading dense blocks, then 9 heavy MoE
