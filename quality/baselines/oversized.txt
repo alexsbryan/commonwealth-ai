@@ -50,7 +50,7 @@
 1269	oicp-types/src/scoring.rs
 2053	sovereign/crates/commonwealth-agent-tools/src/executor.rs
 1457	sovereign/crates/commonwealth-tdd/src/trial.rs
-2914	sovereign/crates/sovereign-agent-bench/src/runners/native.rs
+2891	sovereign/crates/sovereign-agent-bench/src/runners/native.rs
 2786	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs
 1391	sovereign/crates/sovereign-cli-daemon/src/daemon_cmd/mod.rs
 1343	sovereign/crates/sovereign-cli-daemon/src/setup_cmd/fim.rs

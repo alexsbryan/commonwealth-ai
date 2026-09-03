@@ -28,6 +28,7 @@ mod docs_gate;
 mod env_gate;
 mod layer_gate;
 mod layout_gate;
+mod refactor_land;
 mod lint_gate;
 mod lock_gate;
 mod manifests;
@@ -42,6 +43,7 @@ fn main() {
     let exit_code = match cmd {
         "quality" => quality_cmd::run(),
         "arch-gate" => arch_gate::run(&args[1..]),
+        "refactor-land" => refactor_land::run(&args[1..]),
         "docs-gate" => docs_gate::run(),
         "boundary-gate" => boundary_gate::run(),
         "clock-gate" => clock_gate::run(&args[1..]),
@@ -78,6 +80,9 @@ fn print_usage() {
     );
     eprintln!(
         "  arch-gate [--update-baseline|--tighten]   Enforce the §3.1 file-size ratchet + §1 doc-contract"
+    );
+    eprintln!(
+        "  refactor-land                             Post-split landing chain: conformance-tag regen when stale + arch-gate --tighten"
     );
     eprintln!(
         "  docs-gate                      Resolve every repo path cited by the narrative docs"

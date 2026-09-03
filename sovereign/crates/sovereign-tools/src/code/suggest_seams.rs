@@ -624,3 +624,201 @@ pub fn render_seam_report(r: &SeamReport) -> String {
 
     out
 }
+
+/// Render the seam report as a paste-ready split goal for
+/// `svrn solve <workdir> "goal" --verb split`. This is the bridge from
+/// ADVISORY (`render_seam_report`, a human does the extraction) to
+/// EXECUTABLE: the same facts, phrased as the instruction the solver
+/// loop consumes. Shape proven by hand on grounding/mod.rs (2026-09-02,
+/// 6,042 → 1,177 lines, three passes): name the façade rule, enumerate
+/// concerns with their members, name what stays, name the end state.
+/// Deterministic — same report, same goal text.
+pub fn render_split_goal(r: &SeamReport, max_lines: usize) -> String {
+    let extractable: Vec<&Cluster> = r.clusters.iter().filter(|c| c.members.len() > 1).collect();
+    let singletons: Vec<&Cluster> = r.clusters.iter().filter(|c| c.members.len() == 1).collect();
+
+    let mut out = String::new();
+    out.push_str(&format!(
+        "Split {} into concern submodules. Keep the file as a re-export façade: \
+         every existing path module::Item must keep compiling via pub/pub(crate)/pub(super) \
+         use re-exports — zero importer churn outside this module. Behavior-preserving \
+         (ARCH §3.2, §10): no signature changes; move tests with the code they test into \
+         each new module's #[cfg(test)] mod.\n\nConcern map, from the SCIP seam analysis",
+        r.file
+    ));
+    if extractable.is_empty() {
+        out.push_str(
+            ": the call graph found no multi-member clusters — this file's seams are not \
+             handler-shaped. A structural split is not indicated; do not force one.\n",
+        );
+        return out;
+    }
+    out.push_str(":\n");
+    for (i, c) in extractable.iter().enumerate() {
+        let members = c
+            .members
+            .iter()
+            .map(|m| format!("{} ({}L)", m.name, m.lines))
+            .collect::<Vec<_>>()
+            .join(", ");
+        out.push_str(&format!(
+            "({}) {} — seed {} + {} members, ~{} lines: {}.\n",
+            i + 1,
+            c.name,
+            c.seed,
+            c.members.len(),
+            c.total_lines,
+            members
+        ));
+        if c.oversized {
+            out.push_str(&format!(
+                "    NOTE: {} is itself oversized — sub-split it along its own seams.\n",
+                c.name
+            ));
+        }
+    }
+    if !r.shared.is_empty() {
+        let shared = r
+            .shared
+            .iter()
+            .map(|s| format!("{} ({}L)", s.member.name, s.member.lines))
+            .collect::<Vec<_>>()
+            .join(", ");
+        out.push_str(&format!(
+            "\nShared — stays in the façade (exclusive reach of: {}):\n  {}\n",
+            r.shared
+                .iter()
+                .map(|s| s.owners.join("/"))
+                .collect::<Vec<_>>()
+                .join("; "),
+            shared
+        ));
+    }
+    if let Some(d) = &r.dispatcher {
+        out.push_str(&format!("Dispatcher: {} — stays in the façade.\n", d));
+    }
+    if !singletons.is_empty() {
+        out.push_str(&format!(
+            "Singleton handlers (leave in the façade or fold; no separate module): {}\n",
+            singletons
+                .iter()
+                .map(|c| format!("{} ({}L)", c.seed, c.total_lines))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    for h in &r.merge_hints {
+        out.push_str(&format!(
+            "Merge candidate — {} co-own {}: one module at that coarser grain is acceptable.\n",
+            h.seeds.join(" + "),
+            h.shared_helpers.join(", ")
+        ));
+    }
+    if !r.dead_code.is_empty() {
+        out.push_str(&format!(
+            "Dead code — do NOT move it; list it for deletion review: {}\n",
+            r.dead_code.join(", ")
+        ));
+    }
+    out.push_str(&format!(
+        "\nEnd state: the façade holds only module declarations, re-exports and shared docs; \
+         no file exceeds {} lines (ARCH §3.1). Cross-module visibility: moved items keep \
+         their visibility; where a submodule needs a sibling's item, import it (pub(crate) \
+         within the module tree is acceptable). The full crate test suite must stay green.\n",
+        max_lines
+    ));
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture() -> SeamReport {
+        SeamReport {
+            file: "crates/app/src/cmd.rs".to_string(),
+            total_symbols: 12,
+            total_functions: 10,
+            skipped_unqualified: 0,
+            dispatcher: Some("run_cmd".to_string()),
+            clusters: vec![
+                Cluster {
+                    name: "ingest".to_string(),
+                    seed: "cmd_ingest".to_string(),
+                    members: vec![
+                        Member {
+                            name: "cmd_ingest".to_string(),
+                            qualified: "cmd_ingest".to_string(),
+                            is_function: true,
+                            line_start: 10,
+                            line_end: 90,
+                            lines: 80,
+                        },
+                        Member {
+                            name: "validate_recipe".to_string(),
+                            qualified: "validate_recipe".to_string(),
+                            is_function: true,
+                            line_start: 92,
+                            line_end: 120,
+                            lines: 28,
+                        },
+                    ],
+                    total_lines: 108,
+                    oversized: false,
+                    dead: false,
+                },
+                Cluster {
+                    name: "solo".to_string(),
+                    seed: "cmd_solo".to_string(),
+                    members: vec![],
+                    total_lines: 0,
+                    oversized: false,
+                    dead: false,
+                },
+            ],
+            shared: vec![SharedMember {
+                member: Member {
+                    name: "resolve_corpus".to_string(),
+                    qualified: "resolve_corpus".to_string(),
+                    is_function: true,
+                    line_start: 200,
+                    line_end: 220,
+                    lines: 20,
+                },
+                owners: vec!["cmd_ingest".to_string(), "cmd_solo".to_string()],
+            }],
+            merge_hints: vec![],
+            dead_code: vec!["old_helper".to_string()],
+        }
+    }
+
+    /// Determinism is the point: the goal text is the contract the solver
+    /// loop consumes, so the same report must render byte-identically.
+    #[test]
+    fn the_goal_render_is_deterministic_and_names_every_concern() {
+        let r = fixture();
+        let a = render_split_goal(&r, 1200);
+        let b = render_split_goal(&r, 1200);
+        assert_eq!(a, b);
+        assert!(a.contains("crates/app/src/cmd.rs"));
+        assert!(a.contains("(1) ingest — seed cmd_ingest + 2 members, ~108 lines"));
+        assert!(a.contains("validate_recipe (28L)"));
+        assert!(a.contains("Shared — stays in the façade"));
+        assert!(a.contains("resolve_corpus (20L)"));
+        assert!(a.contains("Dispatcher: run_cmd"));
+        assert!(a.contains("no file exceeds 1200 lines"));
+        assert!(a.contains("old_helper"));
+        assert!(a.contains("do NOT move"));
+    }
+
+    /// A file with no handler-shaped seams must say so rather than emit
+    /// an empty concern list a solver would have to improvise from.
+    #[test]
+    fn a_clusterless_report_declines_the_split() {
+        let mut r = fixture();
+        r.clusters = vec![];
+        let goal = render_split_goal(&r, 1200);
+        assert!(goal.contains("no multi-member clusters"));
+        assert!(goal.contains("do not force one"));
+    }
+}
