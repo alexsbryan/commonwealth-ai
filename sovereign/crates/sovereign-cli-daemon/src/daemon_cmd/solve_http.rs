@@ -376,6 +376,10 @@ pub enum SubmitError {
     Capacity { running: usize },
     /// Unknown verb, or `split` without `max_lines`.
     BadRequest(String),
+    /// The binary on disk was rebuilt after this daemon started — every
+    /// verb below would execute stale code. Refused with the repair;
+    /// `SOVEREIGN_ALLOW_STALE_SOLVE=1` opts out.
+    StaleBinary { exe: String },
 }
 
 impl SolveJobs {
@@ -394,6 +398,16 @@ impl SolveJobs {
     /// and spawn the runner. Returns the job (whose `detected` is
     /// the 202 payload) or a refusal.
     pub fn submit(&self, req: SubmitWire) -> Result<Arc<SolveJob>, SubmitError> {
+        // Before anything else: is THIS process the code the tree says it
+        // is? A rebuild under a live daemon served six 2026-09-02 solve
+        // attempts from a pre-dawn binary while every diagnostic on the
+        // box pointed at the fresh one. Refuse, name the repair.
+        if sovereign_core::run_identity::exe_rebuilt_since_start() {
+            let exe = std::env::current_exe()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|e| format!("<unreadable: {e}>"));
+            return Err(SubmitError::StaleBinary { exe });
+        }
         let canonical = std::fs::canonicalize(&req.workdir)
             .map_err(|e| SubmitError::BadWorkdir(format!("{}: {e}", req.workdir.display())))?;
         let vetted =
@@ -568,6 +582,16 @@ impl SubmitError {
             SubmitError::BadRequest(msg) => (
                 StatusCode::BAD_REQUEST,
                 serde_json::json!({ "error": "bad_request", "message": msg }),
+            ),
+            SubmitError::StaleBinary { exe } => (
+                StatusCode::CONFLICT,
+                serde_json::json!({
+                    "error": "stale_binary",
+                    "exe": exe,
+                    "message": "the daemon binary was rebuilt after this process started — \
+                                its verbs run stale code. Repair: `sovereign daemon restart`. \
+                                Opt out (deliberate archaeology only): SOVEREIGN_ALLOW_STALE_SOLVE=1",
+                }),
             ),
         }
     }

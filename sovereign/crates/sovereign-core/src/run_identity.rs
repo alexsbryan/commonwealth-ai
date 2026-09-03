@@ -54,6 +54,38 @@ pub fn build() -> &'static BuildIdentity {
     })
 }
 
+/// True when the binary on disk changed AFTER this process captured its
+/// build identity — i.e. the running process is older than the file it
+/// was loaded from. `build()` is initialized at daemon startup (the
+/// banner), so its `exe_mtime` is the file AS LOADED; a newer mtime means
+/// a build landed under a live process and every verb it serves executes
+/// stale code while the tree — and `doctor` — say fresh. Measured cost of
+/// that trap on 2026-09-02: six solve attempts served by a pre-dawn
+/// daemon. Callers REFUSE with the repair (`sovereign daemon restart`);
+/// `SOVEREIGN_ALLOW_STALE_SOLVE=1` opts out for deliberate archaeology.
+pub fn exe_rebuilt_since_start() -> bool {
+    if std::env::var("SOVEREIGN_ALLOW_STALE_SOLVE").as_deref() == Ok("1") {
+        return false;
+    }
+    let b = build();
+    let Some(started) = &b.exe_mtime else {
+        return false;
+    };
+    let Ok(started) = chrono::DateTime::parse_from_rfc3339(started) else {
+        return false;
+    };
+    let Ok(exe) = std::env::current_exe() else {
+        return false;
+    };
+    let Ok(meta) = std::fs::metadata(&exe) else {
+        return false;
+    };
+    let Ok(modified) = meta.modified() else {
+        return false;
+    };
+    chrono::DateTime::<chrono::Utc>::from(modified) > started
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -76,5 +108,14 @@ mod tests {
             b.exe_mtime.is_some(),
             "the test binary exists, so its mtime is readable"
         );
+    }
+
+    /// In a test process the identity is captured at first use from the
+    /// same file that is still on disk — nothing has rebuilt under us —
+    /// so the detector must read false. A true here would refuse every
+    /// verb the daemon serves (the caller treats true as stale).
+    #[test]
+    fn a_process_is_not_stale_against_its_own_binary() {
+        assert!(!exe_rebuilt_since_start());
     }
 }

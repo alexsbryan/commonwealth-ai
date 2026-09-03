@@ -65,6 +65,16 @@ fn pytest_available() -> bool {
         .unwrap_or(false)
 }
 
+fn cargo_available() -> bool {
+    Command::new("cargo")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
 fn tight_config(candidates: usize, rounds: usize, stall: u32) -> TrialConfig {
     TrialConfig {
         candidates_per_round: candidates,
@@ -233,6 +243,90 @@ async fn maximize_passing_no_baseline_when_no_tests_in_workdir() {
         0,
         "must not call backend without baseline"
     );
+}
+
+/// The monorepo regression, end to end: a workdir whose shallowest
+/// source file is a stray `.py` ABOVE a real cargo crate. Under
+/// shallowest-file language detection the cargo run was parsed with the
+/// pytest grammar, every baseline read 0p/0f, and the job returned
+/// `no_baseline` — six times on 2026-09-02 against one repo. The
+/// verify command names the runner, so the baseline parses, the
+/// already-green short-circuit fires, and no model round is spent.
+#[tokio::test]
+async fn maximize_passing_parses_cargo_baseline_on_a_monorepo_shaped_workdir() {
+    if !cargo_available() {
+        return;
+    }
+    let tmp = tempfile::tempdir().unwrap();
+    init_git(tmp.path());
+    write_committed(
+        tmp.path(),
+        "scripts/steps.py",
+        "print('stray, but shallowest')\n",
+    );
+    write_committed(
+        tmp.path(),
+        "Cargo.toml",
+        "[package]\nname = \"mini\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    );
+    write_committed(
+        tmp.path(),
+        "src/lib.rs",
+        "#[cfg(test)]\nmod tests {\n    #[test]\n    fn it_holds() {\n        assert_eq!(2 + 2, 4);\n    }\n}\n",
+    );
+    let workdir = Workdir::check_safe(tmp.path().to_path_buf(), false).unwrap();
+    let backend = Arc::new(DeterministicChatBackend::from_strs(Vec::<String>::new()));
+    let trial = Trial {
+        workdir,
+        model: "test".into(),
+        prompt: "make tests pass".into(),
+        test_command: "cargo test -q".into(),
+        polarity: Polarity::MaximizePassing,
+        config: tight_config(1, 1, 1),
+        syntax_validator: None,
+    };
+    let r = run_trial(trial, Arc::clone(&backend) as Arc<_>).await;
+    assert!(
+        matches!(r.status, TrialStatus::Reached),
+        "the cargo baseline must parse to 1 passing test — got: {:?}",
+        r.status
+    );
+    assert_eq!(
+        backend.call_count(),
+        0,
+        "an already-green baseline must not spend a model round"
+    );
+}
+
+/// The no-baseline report must carry the runner's own words. A bare
+/// `no tests found` collapsed six distinct failure modes (timeout,
+/// spawn failure, wrong-language parse) into one string; the tail is
+/// what makes the next attempt self-diagnosing instead of archaeological.
+#[tokio::test]
+async fn no_baseline_reason_carries_the_runner_report() {
+    let tmp = tempfile::tempdir().unwrap();
+    init_git(tmp.path());
+    let workdir = Workdir::check_safe(tmp.path().to_path_buf(), false).unwrap();
+    let backend = Arc::new(DeterministicChatBackend::from_strs(Vec::<String>::new()));
+    let trial = Trial {
+        workdir,
+        model: "test".into(),
+        prompt: "make tests pass".into(),
+        test_command: "echo hello-from-the-runner".into(),
+        polarity: Polarity::MaximizePassing,
+        config: tight_config(1, 1, 1),
+        syntax_validator: None,
+    };
+    let r = run_trial(trial, Arc::clone(&backend) as Arc<_>).await;
+    match r.status {
+        TrialStatus::NoBaseline { reason } => {
+            assert!(
+                reason.contains("hello-from-the-runner"),
+                "the reason must quote the runner's output, got: {reason}"
+            );
+        }
+        other => panic!("expected NoBaseline, got: {other:?}"),
+    }
 }
 
 // ── GenerateOneFailing — Red polarity ────────────────────────────────

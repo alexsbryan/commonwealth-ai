@@ -90,18 +90,25 @@ pub async fn run_trial_observed(
     // and the multi-file path (where the user prompt names targets).
     let source_files = discover_source_files(&base_workdir);
     let source_file = source_files.first().cloned();
-    let language = source_file
-        .as_deref()
-        .map(Language::from_path)
+    // The runner named in the command outranks workdir shape: discovery
+    // is shallowest-first, so a monorepo's stray scripts/*.py used to
+    // pick the Python parser for a cargo run (see `Language::from_verify_cmd`).
+    let language = Language::from_verify_cmd(&test_command)
+        .or_else(|| source_file.as_deref().map(Language::from_path))
         .unwrap_or(Language::Python);
+    // The configured budget is below ONE cold cargo build on a real
+    // workspace (feature-churn alone can pay ~80s), and a timed-out
+    // baseline reads as no tests — the quietest failure this loop has.
+    // Rust gets a floor; the other runners keep the configured budget.
+    let trial_timeout = if language == Language::Rust {
+        config
+            .candidate_test_timeout
+            .max(std::time::Duration::from_secs(300))
+    } else {
+        config.candidate_test_timeout
+    };
 
-    let baseline = run_tests(
-        &base_workdir,
-        &test_command,
-        language,
-        config.candidate_test_timeout,
-    )
-    .await;
+    let baseline = run_tests(&base_workdir, &test_command, language, trial_timeout).await;
     let tests_before = TestSummary {
         passed: baseline.parsed.passed,
         failed: baseline.parsed.failed,
@@ -130,14 +137,27 @@ pub async fn run_trial_observed(
                 diff: String::new(),
             };
         }
-        // No tests at all — no baseline fitness signal.
+        // No tests at all — no baseline fitness signal. The static
+        // sentence is not the diagnosis: `baseline.tail` carries EITHER
+        // the runner's own last 1.5KB (it ran, nothing parsed) OR the
+        // runner's failure reason (timeout-after-Ns, spawn failure) —
+        // the difference between "your output format is wrong" and
+        // "your command never ran". 2026-09-02: six solve attempts
+        // against one repo were indistinguishable under the bare
+        // string; this report is what would have ended it in one.
         if tests_before.total == 0 {
-            tracing::warn!("trial: no tests discovered — NoBaseline");
+            tracing::warn!(tail = %baseline.tail, "trial: no tests discovered — NoBaseline");
             return TrialResult {
                 status: TrialStatus::NoBaseline {
-                    reason: "test_command produced no test results — \
-                             write at least one test or check the verify_cmd"
-                        .into(),
+                    reason: format!(
+                        "test_command produced no test results — write at least one test \
+                         or check the verify_cmd. Runner report: {}",
+                        if baseline.tail.is_empty() {
+                            "<empty>".to_string()
+                        } else {
+                            baseline.tail.clone()
+                        }
+                    ),
                 },
                 tests_before: tests_before.clone(),
                 tests_after: tests_before,
@@ -258,7 +278,7 @@ pub async fn run_trial_observed(
             } else {
                 base_workdir.clone()
             };
-            let timeout = config.candidate_test_timeout;
+            let timeout = trial_timeout;
             let max_tokens = config.emit_max_tokens;
             let validator = syntax_validator.clone();
             let fut = async move {
