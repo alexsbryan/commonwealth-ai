@@ -7,7 +7,12 @@
 //! exactly what it was. Split from `resolution_ontology.rs` (ARCH §3.1) when
 //! it crossed 800 lines; it shares that module's [`ResolutionPolicy`].
 
-use super::atoms::Entity;
+use std::collections::HashMap;
+
+use tracing::debug;
+
+use super::atoms::{AtomId, Entity};
+use super::resolution::{build_name_index, build_token_index, resolve_entity_id_with_salience};
 use super::resolution_ontology::ResolutionPolicy;
 
 // ── 3a: what may fold into what ──────────────────────────────
@@ -172,6 +177,120 @@ pub fn declared_subject_type<'a>(
 /// declared` is about — the type itself or a specialisation of it.
 pub fn accepts_subject(policy: &ResolutionPolicy<'_>, declared: &str, entity: &Entity) -> bool {
     policy.accepts(declared, entity.entity_type.as_str_repr())
+}
+
+/// Whether an entity sketch may fold into an existing atom: [`merge_permitted`]
+/// over the pair, tracing the reason when it refuses. The one call site is the
+/// resolver's merge loop, which tries each name rule in turn and lets a
+/// refusal fall through to the next rather than end the search.
+pub fn sketch_may_merge_into(
+    policy: &ResolutionPolicy<'_>,
+    sketch: &crate::enrichment::pipeline::atlas::EntitySketch,
+    existing: &Entity,
+    evidence: MergeEvidence,
+) -> bool {
+    match merge_permitted(
+        policy,
+        evidence,
+        sketch.entity_type.as_str_repr(),
+        &sketch.canonical_name,
+        &sketch.attributes,
+        existing.entity_type.as_str_repr(),
+        &existing.canonical_name,
+        &existing.attributes,
+    ) {
+        Ok(()) => true,
+        Err(reason) => {
+            debug!(
+                %reason,
+                "atlas/resolution 3a: merge refused by the declared ontology"
+            );
+            false
+        }
+    }
+}
+
+// ── 3b: resolving a subject within its declared type ─────────
+/// Per-declared-type entity pools for claim-subject resolution, built once per
+/// type on first use so the per-claim cost is a map lookup.
+#[derive(Default)]
+pub struct TypedSubjectPools {
+    by_type: HashMap<String, TypedSubjectPool>,
+}
+
+struct TypedSubjectPool {
+    entities: Vec<Entity>,
+    name_index: HashMap<String, AtomId>,
+    token_index: HashMap<String, Vec<AtomId>>,
+}
+
+impl TypedSubjectPools {
+    fn pool_for(
+        &mut self,
+        declared: &str,
+        policy: &ResolutionPolicy<'_>,
+        entities: &[Entity],
+    ) -> &TypedSubjectPool {
+        self.by_type.entry(declared.to_string()).or_insert_with(|| {
+            let pool: Vec<Entity> = entities
+                .iter()
+                .filter(|e| accepts_subject(policy, declared, e))
+                .cloned()
+                .collect();
+            let name_index = build_name_index(&pool);
+            let token_index = build_token_index(&pool);
+            TypedSubjectPool {
+                entities: pool,
+                name_index,
+                token_index,
+            }
+        })
+    }
+}
+
+/// Resolve a claim's `subject`. Undeclared kinds take the general path. A kind
+/// declaring `subject = T` accepts a general hit only when it IS a `T` (or a
+/// specialisation); otherwise the name is resolved again among the `T` atoms
+/// alone. Measured before this existed: Halstead's "Series Y sceattas (Wessex
+/// Down 1)" resolved to the person Aldfrith on token salience, and the
+/// tension pass — which pairs claims by subject — never saw the dispute the
+/// corpus was written around.
+pub fn resolve_claim_subject(
+    name: &str,
+    declared: Option<&str>,
+    policy: &ResolutionPolicy<'_>,
+    entities: &[Entity],
+    name_index: &HashMap<String, AtomId>,
+    token_index: &HashMap<String, Vec<AtomId>>,
+    pools: &mut TypedSubjectPools,
+) -> Option<AtomId> {
+    let general = resolve_entity_id_with_salience(name, entities, name_index, token_index);
+    let Some(declared) = declared else {
+        return general;
+    };
+    if let Some(id) = &general {
+        let fits = entities
+            .iter()
+            .find(|e| &e.id == id)
+            .is_some_and(|e| accepts_subject(policy, declared, e));
+        if fits {
+            return general;
+        }
+        debug!(
+            subject = name,
+            declared,
+            resolved = ?id,
+            "atlas/resolution 3b: claim subject resolved outside its declared type; \
+             retrying among that type's atoms"
+        );
+    }
+    let pool = pools.pool_for(declared, policy, entities);
+    let typed =
+        resolve_entity_id_with_salience(name, &pool.entities, &pool.name_index, &pool.token_index);
+    if let Some(id) = &typed {
+        debug!(subject = name, declared, resolved = ?id, "atlas/resolution 3b: claim subject resolved within its declared type");
+    }
+    typed
 }
 
 #[cfg(test)]

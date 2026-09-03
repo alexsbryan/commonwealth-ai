@@ -43,7 +43,8 @@ use crate::types::EmbedFn;
 use super::atoms::{AtomId, ChunkRef, Entity, Event, SectionPosition};
 use super::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
 use super::resolution_identity::{
-    accepts_subject, declared_subject_type, merge_permitted, MergeEvidence,
+    declared_subject_type, merge_permitted, resolve_claim_subject, sketch_may_merge_into,
+    MergeEvidence, TypedSubjectPools,
 };
 use super::resolution_ontology::{
     check_event_participants, check_relation_endpoints, emit_role_states, rigid_entity_type,
@@ -640,31 +641,10 @@ async fn resolve_entities(
                 (embed_fn)(&sketch.description).await?
             };
 
-            // The declared ontology's veto on every proposed merge target —
-            // a declared type never folds across types, and two mentions
-            // carrying different declared identity keys stay two things.
+            // The declared ontology's veto on every proposed merge target.
             // Inert for an undeclared corpus (`merge_permitted` is `Ok`).
             let permit = |idx: usize, evidence: MergeEvidence| {
-                let existing = &entities[idx];
-                match merge_permitted(
-                    policy,
-                    evidence,
-                    sketch.entity_type.as_str_repr(),
-                    &sketch.canonical_name,
-                    &sketch.attributes,
-                    existing.entity_type.as_str_repr(),
-                    &existing.canonical_name,
-                    &existing.attributes,
-                ) {
-                    Ok(()) => true,
-                    Err(reason) => {
-                        debug!(
-                            %reason,
-                            "atlas/resolution 3a: merge refused by the declared ontology"
-                        );
-                        false
-                    }
-                }
+                sketch_may_merge_into(policy, sketch, &entities[idx], evidence)
             };
             let target = find_merge_target(
                 sketch,
@@ -1901,7 +1881,9 @@ pub fn resolve_step_3b_with(
 
 // ── Step 3b helpers ────────────────────────────────────────
 
-fn build_name_index(entities: &[super::atoms::Entity]) -> HashMap<String, super::atoms::AtomId> {
+pub(super) fn build_name_index(
+    entities: &[super::atoms::Entity],
+) -> HashMap<String, super::atoms::AtomId> {
     let mut index: HashMap<String, super::atoms::AtomId> = HashMap::new();
     for e in entities {
         index.insert(fold(&e.canonical_name), e.id.clone());
@@ -1918,7 +1900,7 @@ fn build_name_index(entities: &[super::atoms::Entity]) -> HashMap<String, super:
 /// `ENTITY_MERGE_TOKEN_MIN_LEN` are omitted (matches the
 /// shared-token-overlap guard). Built alongside `name_index` for
 /// fuzzy participant lookups in Step 3b.
-fn build_token_index(
+pub(super) fn build_token_index(
     entities: &[super::atoms::Entity],
 ) -> HashMap<String, Vec<super::atoms::AtomId>> {
     let mut idx: HashMap<String, Vec<super::atoms::AtomId>> = HashMap::new();
@@ -2051,88 +2033,6 @@ const SALIENCE_DOMINANCE_FACTOR: f32 = 2.0;
 /// opt-in for Phase 3b attribution/relation resolution, where
 /// coverage of cross-section connections matters more than a
 /// single wrong snap.
-/// Per-declared-type entity pools for claim-subject resolution, built once per
-/// type on first use so the per-claim cost is a map lookup.
-#[derive(Default)]
-struct TypedSubjectPools {
-    by_type: HashMap<String, TypedSubjectPool>,
-}
-
-struct TypedSubjectPool {
-    entities: Vec<super::atoms::Entity>,
-    name_index: HashMap<String, super::atoms::AtomId>,
-    token_index: HashMap<String, Vec<super::atoms::AtomId>>,
-}
-
-impl TypedSubjectPools {
-    fn pool_for(
-        &mut self,
-        declared: &str,
-        policy: &ResolutionPolicy<'_>,
-        entities: &[super::atoms::Entity],
-    ) -> &TypedSubjectPool {
-        self.by_type.entry(declared.to_string()).or_insert_with(|| {
-            let pool: Vec<super::atoms::Entity> = entities
-                .iter()
-                .filter(|e| accepts_subject(policy, declared, e))
-                .cloned()
-                .collect();
-            let name_index = build_name_index(&pool);
-            let token_index = build_token_index(&pool);
-            TypedSubjectPool {
-                entities: pool,
-                name_index,
-                token_index,
-            }
-        })
-    }
-}
-
-/// Resolve a claim's `subject`. Undeclared kinds take the general path. A kind
-/// declaring `subject = T` accepts a general hit only when it IS a `T` (or a
-/// specialisation); otherwise the name is resolved again among the `T` atoms
-/// alone. Measured before this existed: Halstead's "Series Y sceattas (Wessex
-/// Down 1)" resolved to the person Aldfrith on token salience, and the
-/// tension pass — which pairs claims by subject — never saw the dispute the
-/// corpus was written around.
-fn resolve_claim_subject(
-    name: &str,
-    declared: Option<&str>,
-    policy: &ResolutionPolicy<'_>,
-    entities: &[super::atoms::Entity],
-    name_index: &HashMap<String, super::atoms::AtomId>,
-    token_index: &HashMap<String, Vec<super::atoms::AtomId>>,
-    pools: &mut TypedSubjectPools,
-) -> Option<super::atoms::AtomId> {
-    let general = resolve_entity_id_with_salience(name, entities, name_index, token_index);
-    let Some(declared) = declared else {
-        return general;
-    };
-    if let Some(id) = &general {
-        let fits = entities
-            .iter()
-            .find(|e| &e.id == id)
-            .is_some_and(|e| accepts_subject(policy, declared, e));
-        if fits {
-            return general;
-        }
-        debug!(
-            subject = name,
-            declared,
-            resolved = ?id,
-            "atlas/resolution 3b: claim subject resolved outside its declared type; \
-             retrying among that type's atoms"
-        );
-    }
-    let pool = pools.pool_for(declared, policy, entities);
-    let typed =
-        resolve_entity_id_with_salience(name, &pool.entities, &pool.name_index, &pool.token_index);
-    if let Some(id) = &typed {
-        debug!(subject = name, declared, resolved = ?id, "atlas/resolution 3b: claim subject resolved within its declared type");
-    }
-    typed
-}
-
 pub(super) fn resolve_entity_id_with_salience(
     name: &str,
     entities: &[super::atoms::Entity],
