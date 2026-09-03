@@ -28,6 +28,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::enrichment::atlas::ann_store::AnnSeedTable;
+use crate::enrichment::atlas::evidence_site::{ChunkSelector, EvidenceSite};
 use crate::enrichment::atlas::projection::AtomRecord;
 use crate::enrichment::atlas::store::LancePreload;
 use crate::enrichment::atlas::{AtomEnvelope, AtomType, ChunkRef, EdgeProvenance, EdgeType};
@@ -80,11 +81,13 @@ pub struct AtlasContext {
 #[derive(Clone)]
 pub struct AtlasGraph {
     pub atlas_corpus_id: String,
-    /// Article slug after stripping the leading prefix used by the
-    /// extraction pipeline (e.g. `sep-` for SEP atlases). Used to
-    /// filter FTS lookups during chunk fetch — the right SEP corpus
-    /// chunk has `title == article_slug`.
-    pub article_slug: String,
+    /// Where this atlas's evidence chunks actually live, and whether a title
+    /// filter applies. Replaces the old `article_slug: String`, which carried
+    /// the article for a per-article atlas and the CORPUS ID for a self-hosted
+    /// one — a conflation that made `sep-freewill` look like a searchable
+    /// corpus and cost every SEP answer its atlas grounding. See
+    /// [`super::evidence_site`] for the incident and the reasoning.
+    pub site: EvidenceSite,
     /// The v2 store backend: `atoms.lance` atoms read resident (the projected
     /// [`AtomRecord`]s) + the `edges.csr` mmap. The sync query API reads
     /// straight off the resident records + the CSR mmap — no async ripple into
@@ -117,7 +120,7 @@ impl std::fmt::Debug for AtlasGraph {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AtlasGraph")
             .field("atlas_corpus_id", &self.atlas_corpus_id)
-            .field("article_slug", &self.article_slug)
+            .field("site", &self.site)
             .field("atoms", &self.atom_count())
             .field("edges", &self.edge_count())
             .finish()
@@ -163,10 +166,21 @@ impl AtlasGraph {
     /// Build a graph from an already-opened [`LancePreload`] — the v2 store
     /// (atoms resident from `atoms.lance`, edges from the `edges.csr` mmap).
     pub fn from_lance_preload(atlas_corpus_id: &str, preload: LancePreload) -> Self {
-        let article_slug = derive_article_slug(atlas_corpus_id);
+        Self::from_lance_preload_at(atlas_corpus_id, preload, None)
+    }
+
+    /// [`Self::from_lance_preload`] with the atlas's DECLARED evidence site,
+    /// when one was read off disk. `None` derives it from the atlas id — the
+    /// compat path for atlases written before the declaration existed.
+    pub fn from_lance_preload_at(
+        atlas_corpus_id: &str,
+        preload: LancePreload,
+        declared_site: Option<EvidenceSite>,
+    ) -> Self {
+        let site = EvidenceSite::declared_or_derived(atlas_corpus_id, declared_site);
         Self {
             atlas_corpus_id: atlas_corpus_id.to_string(),
-            article_slug,
+            site,
             preload: Arc::new(preload),
             ann: None,
             ontology: None,
@@ -182,6 +196,17 @@ impl AtlasGraph {
             .map_err(|e| format!("open v2 store for {atlas_corpus_id}: {e}"))?;
         let ontology = super::writer::read_atlas_ontology(atlas_dir).map(|f| f.policies);
         Ok(Self::from_lance_preload(atlas_corpus_id, preload).with_ontology(ontology))
+    }
+
+    /// The display label for this atlas's evidence site — the article for a
+    /// per-article atlas, the corpus id for a self-hosted one.
+    ///
+    /// This is what the old `article_slug` FIELD returned, kept as an accessor
+    /// so the six display/grouping sites read unchanged. It is deliberately
+    /// NOT a corpus: ask [`EvidenceSite::chunk_corpus`] for that. Conflating
+    /// the two is the defect `evidence_site` exists to prevent.
+    pub fn article_slug(&self) -> &str {
+        self.site.label()
     }
 
     /// Attach the declared ontology read from `atlas/ontology.json`. Policies
@@ -684,13 +709,6 @@ pub fn render_call_chain_brief(result: &CallChainResult) -> String {
     out
 }
 
-fn derive_article_slug(atlas_corpus_id: &str) -> String {
-    atlas_corpus_id
-        .strip_prefix("sep-")
-        .unwrap_or(atlas_corpus_id)
-        .to_string()
-}
-
 /// Is the v2 store (`atoms.lance` + `edges.csr`) present in `atlas_dir`? Both
 /// artifacts are required — a half-present store is treated as absent, so
 /// `load_from_disk` returns the clean "no v2 store" `Err` instead of reading a
@@ -794,6 +812,15 @@ impl<'a> EvidenceRef<'a> {
     }
 }
 
+impl ChunkRequest {
+    /// Display / grouping label for this request's article — the article name
+    /// for a per-article atlas, the corpus id for a self-hosted one. NOT a
+    /// corpus to search: ask `self.site.chunk_corpus()` for that.
+    pub fn article_slug(&self) -> &str {
+        self.site.label()
+    }
+}
+
 /// One step's worth of source-chunk targeting from atlas navigation.
 /// Each request says "atlas thinks the source-corpus section
 /// identified by `chunk_id` (in the per-article extraction corpus)
@@ -803,20 +830,22 @@ impl<'a> EvidenceRef<'a> {
 /// targeting within the larger section.
 #[derive(Debug, Clone)]
 pub struct ChunkRequest {
-    /// The corpus this atom (and therefore its source chunk) belongs to
-    /// — the `atlas_corpus_id` of the graph that produced it. Lets the
-    /// fetch scope its search to the one corpus the chunk lives in,
-    /// instead of FTS-scanning every enabled corpus per request (a
-    /// 1.9M-chunk wikipedia index would otherwise be searched once per
-    /// atom). The chunk lives here because the atlas was extracted from
-    /// this corpus, so scoping selects the same chunk the cross-corpus
-    /// title filter would — and avoids pulling a same-titled article
-    /// from the wrong corpus.
-    pub corpus_id: String,
-    pub article_slug: String,
-    /// The atom-evidence section id (e.g. `sec_0001`) in the
-    /// per-article extraction corpus. Direct key into chapters.json.
-    pub chunk_id: String,
+    /// Where this chunk lives and whether a title filter applies —
+    /// [`EvidenceSite::chunk_corpus`] is the ONE answer to "which corpus do I
+    /// search", and the consumer may not compute its own.
+    ///
+    /// Replaces a `corpus_id: String` that carried the ATLAS id while the
+    /// consumer read it as the CHUNK corpus. Those are the same string for a
+    /// self-hosted atlas and different for a per-article one, so the old field
+    /// scoped every SEP fetch to `sep-freewill` — an index holding no chunks —
+    /// and atlas grounding contributed zero to every SEP answer. The old doc
+    /// comment asserted the false premise outright: "the chunk lives here
+    /// because the atlas was extracted from this corpus."
+    pub site: EvidenceSite,
+    /// How to pick the chunk out of that corpus: a direct row id, or a section
+    /// slug resolved by search. Parsed ONCE here, at the producer, instead of
+    /// being re-derived at the consumer with `chunk_id.parse::<u64>()`.
+    pub selector: ChunkSelector,
     /// Snippet of the source passage the atom was extracted from.
     /// Used to home in on the specific paragraph within the
     /// (10-paragraph-wide) section.
@@ -962,7 +991,7 @@ pub fn atom_verbatim_excerpt(graph: &AtlasGraph, atom_id: &str) -> Option<String
                     }
                 }
             }
-            s.push_str(&format!(" [from {}]", graph.article_slug));
+            s.push_str(&format!(" [from {}]", graph.article_slug()));
             s.push('\n');
             for (i, p) in a.premises.iter().enumerate() {
                 s.push_str(&format!("  P{}. {}\n", i + 1, p.trim()));
@@ -997,7 +1026,9 @@ pub fn atom_verbatim_excerpt(graph: &AtlasGraph, atom_id: &str) -> Option<String
             // "Defining $name: $sentence" — keeps the term anchored.
             Some(format!(
                 "Defining {} ({}): \"{}\"",
-                e.canonical_name, graph.article_slug, q
+                e.canonical_name,
+                graph.article_slug(),
+                q
             ))
         }
         AtomEnvelope::Claim(c) => {
@@ -1031,11 +1062,16 @@ pub fn atom_verbatim_excerpt(graph: &AtlasGraph, atom_id: &str) -> Option<String
             match attribution {
                 Some(name) => Some(format!(
                     "[{} ({}){}]: \"{}\"",
-                    name, graph.article_slug, contested_tag, q
+                    name,
+                    graph.article_slug(),
+                    contested_tag,
+                    q
                 )),
                 None => Some(format!(
                     "[{}{}]: \"{}\"",
-                    graph.article_slug, contested_tag, q
+                    graph.article_slug(),
+                    contested_tag,
+                    q
                 )),
             }
         }
@@ -1230,9 +1266,13 @@ pub async fn atlas_navigate_ann(
     }
 
     // 3. Emit ChunkRequests — identical logic to atlas_navigate.
+    // Keyed by the SITE (not a bare slug) so two atlases that share an article
+    // name under different parents cannot collide, and by the parsed SELECTOR
+    // so the addressing scheme travels with the request instead of being
+    // re-derived downstream.
     let mut chunk_scores: HashMap<
-        (String, String),
-        (f32, String, Vec<String>, Vec<String>, String),
+        (EvidenceSite, ChunkSelector),
+        (f32, String, Vec<String>, Vec<String>),
     > = HashMap::new();
     for ((atlas_id, atom_id), atom_weight) in &neighborhood {
         let Some(graph) = graph_by_id.get(atlas_id.as_str()) else {
@@ -1246,13 +1286,12 @@ pub async fn atlas_navigate_ann(
                 continue;
             }
             let preview = ev.passage_preview().trim();
-            let key = (graph.article_slug.clone(), chunk_id.to_string());
+            let key = (graph.site.clone(), ChunkSelector::parse(chunk_id));
             let entry = chunk_scores.entry(key).or_insert((
                 0.0,
                 preview.to_string(),
                 Vec::new(),
                 Vec::new(),
-                graph.atlas_corpus_id.clone(),
             ));
             entry.0 += atom_weight;
             if preview.len() > entry.1.len() {
@@ -1270,16 +1309,13 @@ pub async fn atlas_navigate_ann(
     let mut requests: Vec<ChunkRequest> = chunk_scores
         .into_iter()
         .map(
-            |((article_slug, chunk_id), (score, preview, motivating, verbatim, corpus_id))| {
-                ChunkRequest {
-                    corpus_id,
-                    article_slug,
-                    chunk_id,
-                    passage_preview: preview,
-                    score,
-                    motivating_atoms: motivating,
-                    verbatim_excerpts: verbatim,
-                }
+            |((site, selector), (score, preview, motivating, verbatim))| ChunkRequest {
+                site,
+                selector,
+                passage_preview: preview,
+                score,
+                motivating_atoms: motivating,
+                verbatim_excerpts: verbatim,
             },
         )
         .collect();
@@ -1629,7 +1665,7 @@ pub async fn build_atlas_context_from_ann(
         let Some(envelope) = graph.atom(&atom_id).and_then(|v| v.atom_envelope()) else {
             continue;
         };
-        let Some((canonical_name, embed_text)) = render_atom_entry(&envelope, &graph.article_slug)
+        let Some((canonical_name, embed_text)) = render_atom_entry(&envelope, graph.article_slug())
         else {
             continue;
         };

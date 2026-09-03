@@ -35,6 +35,7 @@ pub mod cross_corpus;
 pub mod doc_to_atoms;
 pub mod edges;
 pub mod embeddings;
+pub mod evidence_site;
 pub mod ingestion;
 pub mod migrate_ids;
 pub mod ontology_coverage;

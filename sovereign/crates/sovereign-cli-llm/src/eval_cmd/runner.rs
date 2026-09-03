@@ -1189,13 +1189,13 @@ async fn run_question(
     let mut article_excerpts: std::collections::HashMap<String, Vec<String>> =
         std::collections::HashMap::new();
     for req in &atlas_chunk_requests {
-        let s = article_score.entry(req.article_slug.clone()).or_insert(0.0);
+        let s = article_score.entry(req.article_slug().to_string()).or_insert(0.0);
         if req.score > *s {
             *s = req.score;
         }
         if !req.verbatim_excerpts.is_empty() {
             let bucket = article_excerpts
-                .entry(req.article_slug.clone())
+                .entry(req.article_slug().to_string())
                 .or_default();
             // Three-tier priority for the dialectical_breadth axis:
             //   1. ArgumentReconstructions (`Argument: …`) — densest
@@ -1239,7 +1239,7 @@ async fn run_question(
             "  atlas-fetch: {} unique articles in atlas, fetching from top-{}: {:?}",
             atlas_chunk_requests
                 .iter()
-                .map(|r| &r.article_slug)
+                .map(|r| r.article_slug())
                 .collect::<HashSet<_>>()
                 .len(),
             articles_ranked.len(),

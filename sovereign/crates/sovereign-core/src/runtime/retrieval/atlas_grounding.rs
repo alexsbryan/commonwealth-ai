@@ -3,6 +3,7 @@
 //! with bag-of-atoms fallback, plus the direct chunk-by-id
 //! fetch it (and atom-enum) uses.
 
+use corpus_engine::enrichment::atlas::evidence_site::ChunkSelector;
 use std::sync::Arc;
 
 use super::super::*;
@@ -187,150 +188,133 @@ impl Runtime {
             let fetch_budget = ((KQ_PER_CORPUS_LIMIT as f32) * 0.6).ceil() as usize;
             let mut graph_added = 0usize;
             let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+            // Why candidates did not become chunks. Logged beside
+            // `graph_added` so a zero yield always says WHICH zero it is:
+            // "nothing was relevant" and "every fetch missed" were
+            // indistinguishable, and that is what let the SEP scope defect
+            // survive unnoticed (note 81feaf78). Lifted into the pipeline's
+            // StepOutcome ledger in the next commit.
+            let considered = requests.len();
+            let mut dropped_not_allowed = 0usize;
+            let mut dropped_not_found = 0usize;
+            let mut dropped_no_title_match = 0usize;
+            let mut dropped_duplicate = 0usize;
             for req in requests.iter().take(fetch_budget * 2) {
                 if graph_added >= fetch_budget {
                     break;
                 }
 
-                // Respect the conversation's corpus allow-list: an atom's
-                // source corpus must itself be enabled before we fetch from
-                // it. (Atlases load independently of the per-conversation
-                // allow-list, so an atom can originate from a corpus the
-                // conversation excluded.)
+                // The corpus that actually HOLDS this chunk — never the atlas
+                // the atom was extracted from. For a per-article atlas those
+                // differ (`sep-freewill` vs `sep`) and the old code used the
+                // former for both, so every SEP fetch searched an index with
+                // no chunks in it. See `corpus_engine::enrichment::atlas::
+                // evidence_site` for the incident.
+                //
+                // The allow-list is now checked against the SAME corpus the
+                // fetch will search, so the two cannot disagree.
+                let corpus = req.site.chunk_corpus();
                 if let Some(allowed) = enabled_corpora {
-                    if !allowed.iter().any(|c| c == &req.corpus_id) {
+                    if !allowed.iter().any(|c| c.as_str() == corpus.as_str()) {
+                        dropped_not_allowed += 1;
                         continue;
                     }
                 }
 
-                // Shape-aware fetch. ChunkRequest.chunk_id is the
-                // atom's first_appearance.chunk_id. For SEP/Wikipedia
-                // atoms it's a section slug (`sec_00001`) and the
-                // FTS-by-article-slug path below resolves it via
-                // title-match. For conversation / personal-vault
-                // atoms it's the numeric LanceDB row id — FTS+title-
-                // match yields zero because the chunk title is the
-                // conversation name, not the chunk_id. Detect
-                // numeric ids and do a direct chunks_by_ids lookup
-                // against the source corpus identified by
-                // `article_slug` (which for non-SEP atlases is the
-                // corpus_id itself, per AtlasGraph::load_from_disk
-                // construction). Surfaced by conversations-personal
-                // 2026-05-17: atlas atoms scored 0.7+ in
-                // atlas_navigate but the FTS-fetch path produced
-                // graph_added=0.
-                if let Ok(chunk_id_num) = req.chunk_id.parse::<u64>() {
-                    if let Some(mut boosted) = self
-                        .fetch_chunk_by_id(&req.article_slug, chunk_id_num)
-                        .await
-                    {
+                match &req.selector {
+                    // Direct key, no search — conversation / vault atoms.
+                    ChunkSelector::RowId(row) => {
+                        let Some(mut boosted) = self.fetch_chunk_by_id(corpus.as_str(), *row).await
+                        else {
+                            dropped_not_found += 1;
+                            continue;
+                        };
                         let key = format!(
                             "{}|{}",
                             boosted.title.clone().unwrap_or_default(),
                             truncate_chars(&boosted.content, 80)
                         );
-                        if seen.insert(key) {
-                            boosted.score = req.score * 0.05;
-                            // Make atlas-fetched chunks competitive
-                            // in `cross_corpus_sort_cmp` against
-                            // lance-fetched chunks (which carry
-                            // vector_distance from hybrid search).
-                            // Map atom relevance to a synthetic
-                            // distance: high atlas score → low
-                            // distance (sorted to top); the runtime's
-                            // cross-corpus sort then keeps atlas
-                            // chunks above lance fillers when
-                            // truncating to KQ_MERGED_LIMIT.
-                            boosted.vector_distance =
-                                Some((1.0_f32 - (req.score / 2.0).min(1.0)).max(0.0));
-                            if !req.verbatim_excerpts.is_empty() {
-                                let mut head = String::from("[Atlas highlights]\n");
-                                for ex in &req.verbatim_excerpts {
-                                    head.push_str(ex);
-                                    head.push('\n');
+                        if !seen.insert(key) {
+                            dropped_duplicate += 1;
+                            continue;
+                        }
+                        boosted.score = req.score * 0.05;
+                        // Make atlas-fetched chunks competitive in
+                        // `cross_corpus_sort_cmp` against lance-fetched chunks
+                        // (which carry vector_distance from hybrid search).
+                        boosted.vector_distance =
+                            Some((1.0_f32 - (req.score / 2.0).min(1.0)).max(0.0));
+                        prepend_atlas_highlights(&mut boosted, req);
+                        chunks.push(boosted);
+                        graph_added += 1;
+                    }
+
+                    // Section slug — resolved by search scoped to the chunk
+                    // corpus, then filtered to the article WHEN THE SITE HAS
+                    // ONE. A self-hosted atlas spans its whole corpus and has
+                    // no article to filter on; the old code filtered
+                    // unconditionally against a value that was the corpus id
+                    // in exactly that case.
+                    ChunkSelector::Section(_) => {
+                        let req_scope = [corpus.as_str().to_string()];
+                        let fts_hits = self
+                            .search_corpus_indexes_with_overrides(
+                                &[],
+                                &format!("{} {}", req.article_slug(), req.passage_preview),
+                                30,
+                                "AtlasNavigate",
+                                None,
+                                Some(&req_scope),
+                                corpus_ceiling,
+                                lane,
+                            )
+                            .await;
+                        let mut matched_any = false;
+                        for hit in fts_hits {
+                            if let Some(article) = req.site.article() {
+                                if hit.title.as_deref() != Some(article) {
+                                    continue;
                                 }
-                                head.push('\n');
-                                head.push_str(&boosted.content);
-                                boosted.content = head;
                             }
+                            matched_any = true;
+                            let key = format!(
+                                "{}|{}",
+                                hit.title.clone().unwrap_or_default(),
+                                truncate_chars(&hit.content, 80)
+                            );
+                            if !seen.insert(key) {
+                                dropped_duplicate += 1;
+                                continue;
+                            }
+                            let mut boosted = hit;
+                            boosted.score = req.score * 0.05;
+                            prepend_atlas_highlights(&mut boosted, req);
                             chunks.push(boosted);
                             graph_added += 1;
                             if graph_added >= fetch_budget {
                                 break;
                             }
                         }
-                    }
-                    continue;
-                }
-
-                // SEP/Wikipedia article-slug path. Scope the FTS fetch to
-                // the atom's OWN corpus — the chunk lives there (the atlas
-                // was extracted from it), so this selects the same chunk
-                // the title filter would, without searching every other
-                // enabled corpus per request (the 1.9M-chunk wikipedia
-                // index was otherwise opened once per atom). `enabled_corpora`
-                // (the host allow-list) still applies via installed_indexes,
-                // so an atom whose corpus isn't allow-listed yields nothing.
-                let req_scope = [req.corpus_id.clone()];
-                let fts_hits = self
-                    // Article slug + passage preview as FTS query
-                    // (see eval-side runner.rs comment). Title-bias
-                    // pulls intended-article chunks into the pool.
-                    .search_corpus_indexes_with_overrides(
-                        &[],
-                        &format!("{} {}", req.article_slug, req.passage_preview),
-                        30,
-                        "AtlasNavigate",
-                        None,
-                        Some(&req_scope),
-                        corpus_ceiling,
-                        lane,
-                    )
-                    .await;
-                for hit in fts_hits {
-                    let title_match = hit
-                        .title
-                        .as_deref()
-                        .map(|t| t == req.article_slug)
-                        .unwrap_or(false);
-                    if !title_match {
-                        continue;
-                    }
-                    let key = format!(
-                        "{}|{}",
-                        hit.title.clone().unwrap_or_default(),
-                        truncate_chars(&hit.content, 80)
-                    );
-                    if !seen.insert(key) {
-                        continue;
-                    }
-                    let mut boosted = hit;
-                    boosted.score = req.score * 0.05;
-                    // Prepend atlas verbatim excerpts harvested from
-                    // the atoms that motivated this fetch — concept
-                    // defining_quotes and claim quotable_excerpts.
-                    // Format `[Atlas highlights] …\n\n<chunk text>`
-                    // makes the article's exact words for the
-                    // grounded position visible at the head of the
-                    // passage. Skips when no excerpts carried (most
-                    // atoms have neither field set).
-                    if !req.verbatim_excerpts.is_empty() {
-                        let mut head = String::from("[Atlas highlights]\n");
-                        for ex in &req.verbatim_excerpts {
-                            head.push_str(ex);
-                            head.push('\n');
+                        if !matched_any {
+                            dropped_no_title_match += 1;
                         }
-                        head.push('\n');
-                        head.push_str(&boosted.content);
-                        boosted.content = head;
-                    }
-                    chunks.push(boosted);
-                    graph_added += 1;
-                    if graph_added >= fetch_budget {
-                        break;
                     }
                 }
             }
+
+            // The line whose absence hid the defect: candidates in, chunks
+            // out, and every drop accounted for by reason.
+            tracing::info!(
+                label,
+                considered,
+                graph_added,
+                dropped_not_allowed,
+                dropped_not_found,
+                dropped_no_title_match,
+                dropped_duplicate,
+                "atlas-grounding: fetch ledger"
+            );
+
             // Adaptive triage: bump article slug per atlas to climb
             // the Tier-2 enrichment queue.
             for ctx in &ctxs {
@@ -380,4 +364,25 @@ impl Runtime {
             }
         }
     }
+}
+
+/// Prepend the atlas verbatim excerpts harvested from the atoms that motivated
+/// this fetch — concept `defining_quote`s and claim `quotable_excerpt`s — so
+/// the article's exact words sit at the head of the passage. No-op when the
+/// motivating atoms carried neither field, which is most of them.
+fn prepend_atlas_highlights(
+    chunk: &mut corpus_engine::ScoredChunk,
+    req: &corpus_engine::enrichment::atlas::context::ChunkRequest,
+) {
+    if req.verbatim_excerpts.is_empty() {
+        return;
+    }
+    let mut head = String::from("[Atlas highlights]\n");
+    for ex in &req.verbatim_excerpts {
+        head.push_str(ex);
+        head.push('\n');
+    }
+    head.push('\n');
+    head.push_str(&chunk.content);
+    chunk.content = head;
 }
