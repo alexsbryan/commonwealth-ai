@@ -14,7 +14,7 @@
 requirement = "EN-20"
 test = "sovereign-core::runtime::retrieval_pipeline::tests::a_superseded_rules_chunks_leave_the_pool_and_the_note_says_how_many"
 file = "sovereign/crates/sovereign-core/src/runtime/retrieval_pipeline.rs"
-line = 2519
+line = 2643
 asserts = 8
 
 [[claim]]

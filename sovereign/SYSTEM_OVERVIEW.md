@@ -2305,8 +2305,9 @@ test module, whose `use super::*` resolves to the same grounding module it
 resolved to inline). Two source-text guards in `tests.rs` re-pointed from
 `include_str!("mod.rs")` to the module family — their subject was the gate's
 production surface, not one file. Remaining grounding tail, sequenced in
-§10 of this file: `judge.rs` (3,007), `citation.rs` (1,694),
-`citation_attribution.rs` (1,403).
+§10 of this file: `judge.rs` (1,846 — its 1,166-line tests module moved to
+`judge/tests.rs` on 2026-09-03; prompts, verify and scan extraction remain),
+`citation.rs` (1,694), `citation_attribution.rs` (1,403).
 **The long-form repair ladder is TOMBSTONED as of 2026-08-14** (Phase 4 of
 `NATIVE_GROUNDING_ECONOMY.md`, order `gate-tombstone-ladder`). On the default
 configuration a long-form draft whose audit found failures is **released with

@@ -116,7 +116,7 @@
 1653	sovereign/crates/sovereign-core/src/runtime/evidence.rs
 1694	sovereign/crates/sovereign-core/src/runtime/grounding/citation.rs
 1403	sovereign/crates/sovereign-core/src/runtime/grounding/citation_attribution.rs
-3011	sovereign/crates/sovereign-core/src/runtime/grounding/judge.rs
+1846	sovereign/crates/sovereign-core/src/runtime/grounding/judge.rs
 2243	sovereign/crates/sovereign-core/src/runtime/grounding/tests.rs
 1432	sovereign/crates/sovereign-core/src/runtime/handlers/attached_doc.rs
 2115	sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs
@@ -124,7 +124,7 @@
 1213	sovereign/crates/sovereign-core/src/runtime/retrieval/corpus_search.rs
 1369	sovereign/crates/sovereign-core/src/runtime/retrieval/history.rs
 1584	sovereign/crates/sovereign-core/src/runtime/retrieval/query_expansion.rs
-3201	sovereign/crates/sovereign-core/src/runtime/retrieval_pipeline.rs
+3200	sovereign/crates/sovereign-core/src/runtime/retrieval_pipeline.rs
 4616	sovereign/crates/sovereign-core/src/runtime/streaming.rs
 1263	sovereign/crates/sovereign-core/src/title.rs
 2522	sovereign/crates/sovereign-core/tests/main/core_tests.rs
@@ -166,7 +166,7 @@
 1311	sovereign/crates/sovereign-store/src/sqlite/conv_tiered.rs
 1552	sovereign/crates/sovereign-store/tests/main/store_tests.rs
 1618	sovereign/crates/sovereign-tools/src/atlas_postinstall.rs
-1493	sovereign/crates/sovereign-tools/src/code/session_state.rs
+1475	sovereign/crates/sovereign-tools/src/code/session_state.rs
 1421	sovereign/crates/sovereign-tools/src/conv_tiered_provider.rs
 1549	sovereign/crates/sovereign-tools/src/knowledge_view/manager.rs
 1394	sovereign/crates/sovereign-tools/src/local_corpus/config.rs
