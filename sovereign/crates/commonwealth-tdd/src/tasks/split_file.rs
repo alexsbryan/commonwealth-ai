@@ -9,6 +9,7 @@
 //! vitest / jest / go-test).
 
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use crate::tasks::framework::detect_framework;
 use crate::tasks::structural;
@@ -34,6 +35,19 @@ pub fn split_file(args: SplitFileArgs) -> Trial {
         .test_command
         .unwrap_or_else(|| framework.default_test_command().to_string());
 
+    // A split is a RECIPE EXECUTION, not a six-way fitness search: the
+    // goal names the seams, and move_lines makes each emission tiny —
+    // so a wide candidate pool only multiplies the dominant per-round
+    // cost (every candidate pays a FULL crate test run in its scratch
+    // copy; watched 2026-09-03: 25-40 min/round at 6 candidates on one
+    // local slot). Two candidates keep temperature variance without the
+    // tax, and split edits never need a 4,000-token emission.
+    let config = args.config.unwrap_or_else(|| TrialConfig {
+        candidates_per_round: 2,
+        emit_max_tokens: 1000,
+        ..TrialConfig::default()
+    });
+
     // Materialize the structural goal as a LADDER of tests the
     // loop's fitness signal can climb. A single threshold makes a
     // refactor a cliff (every extraction that shrinks the largest
@@ -55,7 +69,7 @@ pub fn split_file(args: SplitFileArgs) -> Trial {
         prompt,
         test_command,
         polarity: Polarity::MaximizePassing,
-        config: args.config.unwrap_or_default(),
+        config,
         syntax_validator: None,
     }
 }
@@ -175,5 +189,36 @@ mod tests {
         assert!(p.exists());
         cleanup_structural_test(tmp.path(), Framework::Pytest);
         assert!(!p.exists());
+    }
+}
+
+#[cfg(test)]
+mod thin_pool_tests {
+    use super::*;
+    use crate::types::TrialConfig;
+
+    /// The round-cost contract: every candidate pays a full crate test
+    /// run in its scratch copy, so the pool size IS the round wall
+    /// clock. A split — a recipe execution with tiny move_lines
+    /// emissions — defaults to a thin pool and a tight emit budget;
+    /// an explicit config always wins.
+    #[test]
+    fn the_split_default_thins_the_candidate_pool() {
+        let tmp = tempfile::tempdir().unwrap();
+        let _ = Command::new("git")
+            .args(["init", "-q", tmp.path().to_str().unwrap()])
+            .status();
+        let workdir = Workdir::check_safe(tmp.path().to_path_buf(), true).unwrap();
+        let trial = split_file(SplitFileArgs {
+            workdir,
+            model: "test".into(),
+            path: tmp.path().join("src/lib.rs"),
+            max_lines: 1200,
+            test_command: None,
+            config: None,
+        });
+        assert_eq!(trial.config.candidates_per_round, 2);
+        assert_eq!(trial.config.emit_max_tokens, 1000);
+        assert_eq!(trial.config.rounds_per_trial, TrialConfig::default().rounds_per_trial);
     }
 }
