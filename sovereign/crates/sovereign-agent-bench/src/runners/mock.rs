@@ -44,7 +44,7 @@ impl MockAgentRunner {
     /// Default canned script — a Light's Out-shaped no-op that returns
     /// `ExitReason::Completed`. Tests that need richer behaviour build
     /// their own `MockScript` and call `new`.
-    pub fn canned() -> Self {
+    pub(crate) fn canned() -> Self {
         Self {
             script: MockScript {
                 files: vec![],

@@ -34,18 +34,18 @@ pub struct ArtifactSink {
 
 impl ArtifactSink {
     /// `root` is the per-problem directory; caller creates it.
-    pub fn new(root: PathBuf) -> std::io::Result<Self> {
+    pub(crate) fn new(root: PathBuf) -> std::io::Result<Self> {
         fs::create_dir_all(&root)?;
         Ok(Self { root })
     }
 
-    pub fn root(&self) -> &Path {
+    pub(crate) fn root(&self) -> &Path {
         &self.root
     }
 
     /// Write the agent's per-run summary + raw stdout JSONL + full
     /// stderr + a deep copy of the workdir.
-    pub fn persist_agent_run(&self, artifact: &AgentRunArtifact) -> std::io::Result<()> {
+    pub(crate) fn persist_agent_run(&self, artifact: &AgentRunArtifact) -> std::io::Result<()> {
         let summary = AgentSummary {
             tokens_input: artifact.tokens.input,
             tokens_output: artifact.tokens.output,
@@ -102,7 +102,7 @@ impl ArtifactSink {
     /// cannot be told from sampling variance (measured 2026-08-19 —
     /// same-model drift is 6.4%, banked-vs-replay drift was 21%, and the
     /// gap was unattributable for exactly this reason).
-    pub fn persist_judge_trial(
+    pub(crate) fn persist_judge_trial(
         &self,
         dim_id: &str,
         trial: u8,

@@ -58,7 +58,7 @@ pub enum RunError {
     NoProblems(String),
 }
 
-pub async fn run_command(argv: &[String]) -> Result<(), RunError> {
+pub(crate) async fn run_command(argv: &[String]) -> Result<(), RunError> {
     let args = RunArgs::parse(argv)?;
     let started_at = Utc::now().to_rfc3339();
 
@@ -639,7 +639,7 @@ fn copy_dir_filtered(src: &Path, dst: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn list_problems(argv: &[String]) -> Result<(), RunError> {
+pub(crate) fn list_problems(argv: &[String]) -> Result<(), RunError> {
     let args = RunArgs::parse(argv)?;
     let problems = discover_problems(&args.bench_root, None)?;
     for p in &problems {
@@ -653,7 +653,7 @@ pub fn list_problems(argv: &[String]) -> Result<(), RunError> {
     Ok(())
 }
 
-pub fn show_problem(argv: &[String]) -> Result<(), RunError> {
+pub(crate) fn show_problem(argv: &[String]) -> Result<(), RunError> {
     let problem_id = argv
         .first()
         .cloned()

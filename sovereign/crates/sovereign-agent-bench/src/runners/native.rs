@@ -135,7 +135,7 @@ const EMPTY_TOOL_CALL_STREAK_THRESHOLD: u32 = 3;
 ///   apples-to-apples regression baseline so the role layer's
 ///   payoff is measurable as a delta against itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NativeMode {
+pub(crate) enum NativeMode {
     RoleAware,
     Monolithic,
 }
@@ -156,7 +156,7 @@ pub struct NativeRunner {
 }
 
 impl NativeRunner {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             provider_url: DEFAULT_PROVIDER_URL.to_string(),
             http: reqwest::Client::builder()
@@ -170,34 +170,11 @@ impl NativeRunner {
     }
 
     /// Construct the PR-1 baseline: single-role, all-tools-at-once.
-    pub fn monolithic() -> Self {
+    pub(crate) fn monolithic() -> Self {
         Self {
             mode: NativeMode::Monolithic,
             ..Self::new()
         }
-    }
-
-    pub fn with_provider_url(mut self, url: impl Into<String>) -> Self {
-        self.provider_url = url.into();
-        self
-    }
-
-    /// Bind per-problem build/verify commands. The bench passes the
-    /// problem's resolved commands here; the runner threads them
-    /// into ExecCtx so `build` / `smoke` primitives run the
-    /// language-appropriate shell.
-    pub fn with_problem_commands(
-        mut self,
-        build_cmd: impl Into<String>,
-        verify_cmd: impl Into<String>,
-    ) -> Self {
-        self.build_cmd = Some(build_cmd.into());
-        self.verify_cmd = Some(verify_cmd.into());
-        self
-    }
-
-    pub fn mode(&self) -> NativeMode {
-        self.mode
     }
 }
 

@@ -40,7 +40,7 @@ use crate::runners::pi::PI_TOOL_ALLOWLIST;
 use crate::runners::AgentRunnerRegistry;
 
 #[derive(Debug, Error)]
-pub enum SweError {
+pub(crate) enum SweError {
     #[error("unknown flag `{0}` (try --help)")]
     UnknownFlag(String),
     #[error("flag `{0}` requires a value")]
@@ -73,7 +73,7 @@ const PLATFORM: &str = "linux/amd64";
 /// The working record written by `prepare.py`. The gold patch is held
 /// out in `gold/gold.jsonl` and is deliberately absent here.
 #[derive(Debug, Clone, Deserialize)]
-pub struct Instance {
+pub(crate) struct Instance {
     pub instance_id: String,
     pub repo: String,
     pub base_commit: String,
@@ -110,7 +110,7 @@ struct RunLog {
     wall_seconds: f64,
 }
 
-pub struct SweArgs {
+pub(crate) struct SweArgs {
     pub root: PathBuf,
     pub agent: String,
     pub model: String,
@@ -123,7 +123,7 @@ pub struct SweArgs {
 }
 
 impl SweArgs {
-    pub fn parse(argv: &[String]) -> Result<Self, SweError> {
+    pub(crate) fn parse(argv: &[String]) -> Result<Self, SweError> {
         let mut a = SweArgs {
             root: PathBuf::from("sovereign/bench/external/swebench"),
             agent: "native".to_string(),
@@ -329,7 +329,7 @@ fn render_prompt(template: &str, constraints: &str, inst: &Instance, verify_cmd:
         .replace("{constraints}", &constraints)
 }
 
-pub async fn run_command(argv: &[String]) -> Result<(), SweError> {
+pub(crate) async fn run_command(argv: &[String]) -> Result<(), SweError> {
     let args = SweArgs::parse(argv)?;
 
     let instances_path = args.root.join("instances.jsonl");

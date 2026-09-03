@@ -59,7 +59,7 @@ pub use commonwealth_tdd::{EditAction, ParsedResponse, TestRunResult};
 /// This filter is therefore load-bearing, not redundant: deleting it
 /// silently changes bench scores. Adopting the fallback deliberately
 /// is filed as `bench-adopt-header-inference-fallback`.
-pub fn parse_response(content: &str) -> Option<ParsedResponse> {
+pub(crate) fn parse_response(content: &str) -> Option<ParsedResponse> {
     let parsed = commonwealth_tdd::shared::parse_response(content)?;
     if parsed.inferred {
         return None;
@@ -75,7 +75,7 @@ use crate::witness::test_result_parser::parse_test_output;
 /// Convert a parsed response into a Primitive and dispatch via the
 /// shared executor. `source_file` is the agent's target file
 /// (e.g. `"evaluator.py"`) — most actions need a path argument.
-pub async fn apply_edit(
+pub(crate) async fn apply_edit(
     ctx: &ExecCtx,
     source_file: &str,
     response: &ParsedResponse,
@@ -163,7 +163,7 @@ pub async fn apply_edit(
 /// Run the bench's verify command in `workdir` with a per-candidate
 /// timeout and return parsed test results. Wraps subprocess
 /// management and exit-code/timeout signal capture.
-pub async fn run_tests(
+pub(crate) async fn run_tests(
     workdir: &Path,
     verify_cmd: &str,
     language: WitnessLanguage,
@@ -233,7 +233,7 @@ fn tail(s: &str, max_bytes: usize) -> String {
 /// POST a chat-completion request body to the provider URL and parse
 /// the response. Returns the raw JSON value on success or an error
 /// string suitable for logging.
-pub async fn post_chat_completion(
+pub(crate) async fn post_chat_completion(
     http: &reqwest::Client,
     provider_url: &str,
     body: &Value,
@@ -264,7 +264,7 @@ pub async fn post_chat_completion(
 /// Build a minimal chat-completion request body. Used by both
 /// search and bare-metal — they layer different message structures
 /// but share the same HTTP envelope.
-pub fn chat_body(
+pub(crate) fn chat_body(
     model: &str,
     messages: Vec<Value>,
     temperature: Option<f32>,

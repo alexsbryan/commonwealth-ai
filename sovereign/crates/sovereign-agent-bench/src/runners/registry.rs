@@ -21,7 +21,7 @@ pub struct AgentRunnerRegistry {
 impl AgentRunnerRegistry {
     /// Empty registry. Useful in tests where only `MockAgentRunner`
     /// should be registered.
-    pub fn empty() -> Self {
+    pub(crate) fn empty() -> Self {
         Self {
             factories: HashMap::new(),
         }
@@ -31,7 +31,7 @@ impl AgentRunnerRegistry {
     /// and the `mock` runner (the latter exists for the test
     /// harness; registering it is cheap and lets `--agent mock` work
     /// from the CLI for smoke probes).
-    pub fn builtin() -> Self {
+    pub(crate) fn builtin() -> Self {
         let mut r = Self::empty();
         r.register("pi", || Arc::new(PiRunner::new()));
         r.register("native", || Arc::new(NativeRunner::new()));
@@ -52,20 +52,20 @@ impl AgentRunnerRegistry {
         r
     }
 
-    pub fn register<F>(&mut self, id: &'static str, factory: F)
+    pub(crate) fn register<F>(&mut self, id: &'static str, factory: F)
     where
         F: Fn() -> Arc<dyn AgentRunner> + Send + Sync + 'static,
     {
         self.factories.insert(id, Box::new(factory));
     }
 
-    pub fn get(&self, id: &str) -> Option<Arc<dyn AgentRunner>> {
+    pub(crate) fn get(&self, id: &str) -> Option<Arc<dyn AgentRunner>> {
         self.factories.get(id).map(|f| f())
     }
 
     /// Sorted list of registered ids. Used by CLI error messages so a
     /// typo at `--agent` produces an actionable list.
-    pub fn agent_ids(&self) -> Vec<&'static str> {
+    pub(crate) fn agent_ids(&self) -> Vec<&'static str> {
         let mut ids: Vec<&'static str> = self.factories.keys().copied().collect();
         ids.sort_unstable();
         ids

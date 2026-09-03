@@ -32,11 +32,11 @@ pub struct SearchRunner {
 }
 
 impl SearchRunner {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::with_provider_url("http://localhost:9741/v1".into())
     }
 
-    pub fn with_provider_url(provider_url: String) -> Self {
+    pub(crate) fn with_provider_url(provider_url: String) -> Self {
         Self {
             backend: Arc::new(ReqwestChatBackend::new(provider_url)),
         }

@@ -11,7 +11,7 @@ use crate::witness::AutoWitnessOutcome;
 /// Where a dimension's score came from.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
-pub enum ScoreSource {
+pub(crate) enum ScoreSource {
     /// Auto-witness only (cargo / go / vitest / pytest pass fraction).
     Auto {
         pass_fraction: f64,
@@ -56,7 +56,7 @@ pub struct DimensionScore {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WitnessSummary {
+pub(crate) struct WitnessSummary {
     pub verify_exit_ok: bool,
     pub passed: u32,
     pub failed: u32,
@@ -65,7 +65,7 @@ pub struct WitnessSummary {
 }
 
 impl WitnessSummary {
-    pub fn from_outcome(o: &AutoWitnessOutcome) -> Self {
+    pub(crate) fn from_outcome(o: &AutoWitnessOutcome) -> Self {
         Self {
             verify_exit_ok: o.verify_exit_ok,
             passed: o.parsed.passed,
@@ -94,7 +94,7 @@ pub struct ProblemScore {
 }
 
 impl ProblemScore {
-    pub fn compute_total(dim_a: u8, dim_b: u8, dim_c: u8) -> u8 {
+    pub(crate) fn compute_total(dim_a: u8, dim_b: u8, dim_c: u8) -> u8 {
         (dim_a + dim_b + dim_c).min(9)
     }
 }
@@ -118,7 +118,7 @@ pub struct ProblemTrialDetail {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TrialEntry {
+pub(crate) struct TrialEntry {
     pub trial: u8,
     pub total: u8,
     pub dim_a: u8,
@@ -133,7 +133,7 @@ impl ProblemTrialDetail {
     /// Build the detail block from the per-trial `ProblemScore`s. The
     /// caller has already collected one `ProblemScore` per trial; this
     /// flattens into the mean/stdev surface plus a typed per-trial vec.
-    pub fn from_trials(problem_id: &str, trials: &[ProblemScore]) -> Self {
+    pub(crate) fn from_trials(problem_id: &str, trials: &[ProblemScore]) -> Self {
         let n = trials.len() as u8;
         let mut per_trial: Vec<TrialEntry> = Vec::with_capacity(trials.len());
         for (i, t) in trials.iter().enumerate() {
@@ -192,7 +192,7 @@ impl ProblemTrialDetail {
     /// for the multi-trial bench report — preserves real per-dim
     /// integer scores, real exit_reason, real tool_calls (vs.
     /// fabricating a synthetic average).
-    pub fn representative_index(&self) -> usize {
+    pub(crate) fn representative_index(&self) -> usize {
         if self.per_trial.is_empty() {
             return 0;
         }
@@ -218,7 +218,7 @@ pub struct RegressionDelta {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProblemDelta {
+pub(crate) struct ProblemDelta {
     pub problem_id: String,
     pub prior_total: u8,
     pub current_total: u8,
@@ -226,7 +226,11 @@ pub struct ProblemDelta {
 }
 
 /// Build a `DimensionScore` for an auto-witness dimension.
-pub fn dim_from_auto(pass_fraction: f64, bucketed: u8, verify_exit_ok: bool) -> DimensionScore {
+pub(crate) fn dim_from_auto(
+    pass_fraction: f64,
+    bucketed: u8,
+    verify_exit_ok: bool,
+) -> DimensionScore {
     DimensionScore {
         raw: bucketed,
         source: ScoreSource::Auto {
@@ -240,7 +244,7 @@ pub fn dim_from_auto(pass_fraction: f64, bucketed: u8, verify_exit_ok: bool) -> 
 }
 
 /// Build a `DimensionScore` for a pure judge dimension.
-pub fn dim_from_judge(judge: &MultiTrialOutcome) -> DimensionScore {
+pub(crate) fn dim_from_judge(judge: &MultiTrialOutcome) -> DimensionScore {
     DimensionScore {
         raw: judge.majority_anchor,
         source: ScoreSource::Judge {
@@ -257,7 +261,7 @@ pub fn dim_from_judge(judge: &MultiTrialOutcome) -> DimensionScore {
 /// auto-witness provides the lower bound; the judge can lift the score
 /// but never lower it (a beautiful incorrect implementation should not
 /// outscore a working one).
-pub fn dim_from_hybrid(auto_score: u8, judge: &MultiTrialOutcome) -> DimensionScore {
+pub(crate) fn dim_from_hybrid(auto_score: u8, judge: &MultiTrialOutcome) -> DimensionScore {
     let combined = judge.majority_anchor.max(auto_score);
     DimensionScore {
         raw: combined,
@@ -279,7 +283,7 @@ pub fn dim_from_hybrid(auto_score: u8, judge: &MultiTrialOutcome) -> DimensionSc
 /// Grand-total regression compare against a prior report. `threshold`
 /// is the minimum negative delta that counts as a regression (default
 /// 1: a single problem dropping a point flags the run).
-pub fn compute_regression(
+pub(crate) fn compute_regression(
     current: &[ProblemScore],
     prior: &[ProblemScore],
     threshold: i32,

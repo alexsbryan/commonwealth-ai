@@ -50,14 +50,14 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub enum Category {
+pub(crate) enum Category {
     Algorithmic,
     SystemDesign,
     CodeTest,
 }
 
 impl Category {
-    pub fn id(&self) -> &'static str {
+    pub(crate) fn id(&self) -> &'static str {
         match self {
             Category::Algorithmic => "Algorithmic",
             Category::SystemDesign => "SystemDesign",
@@ -78,14 +78,14 @@ impl Category {
 /// workdir and the agent has to scaffold the cargo project itself.
 /// This exercises the full tool-call + project-scaffolding surface.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub enum Tier {
+pub(crate) enum Tier {
     Scaffolded,
     #[default]
     FromScratch,
 }
 
 impl Tier {
-    pub fn id(&self) -> &'static str {
+    pub(crate) fn id(&self) -> &'static str {
         match self {
             Tier::Scaffolded => "Scaffolded",
             Tier::FromScratch => "FromScratch",
@@ -94,14 +94,14 @@ impl Tier {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub enum WitnessKind {
+pub(crate) enum WitnessKind {
     AutoTestPass,
     JudgeOnly,
     Hybrid,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub enum WitnessLanguage {
+pub(crate) enum WitnessLanguage {
     Rust,
     Go,
     TypeScript,
@@ -109,7 +109,7 @@ pub enum WitnessLanguage {
 }
 
 impl WitnessLanguage {
-    pub fn id(&self) -> &'static str {
+    pub(crate) fn id(&self) -> &'static str {
         match self {
             WitnessLanguage::Rust => "Rust",
             WitnessLanguage::Go => "Go",
@@ -121,14 +121,14 @@ impl WitnessLanguage {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "mode")]
-pub enum ScoringMode {
+pub(crate) enum ScoringMode {
     AutoTestPassFraction,
     JudgeRubric { rubric_id: String },
     HybridAutoFloor { rubric_id: String },
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct ProblemMeta {
+pub(crate) struct ProblemMeta {
     pub id: String,
     pub title: String,
     pub category: Category,
@@ -143,12 +143,12 @@ pub struct ProblemMeta {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct PromptCfg {
+pub(crate) struct PromptCfg {
     pub file: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct WitnessCfg {
+pub(crate) struct WitnessCfg {
     pub kind: WitnessKind,
     pub language: WitnessLanguage,
     pub fixture_subdir: String,
@@ -176,7 +176,7 @@ impl WitnessCfg {
     /// Resolved build command — falls back to a per-language default
     /// when problem.toml didn't set one explicitly. Python's default
     /// is empty (no-op build).
-    pub fn resolved_build_cmd(&self) -> String {
+    pub(crate) fn resolved_build_cmd(&self) -> String {
         if let Some(cmd) = self.build_cmd.as_deref() {
             return cmd.to_string();
         }
@@ -190,20 +190,20 @@ impl WitnessCfg {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct BudgetCfg {
+pub(crate) struct BudgetCfg {
     pub token_cap: u64,
     pub wall_seconds_cap: u64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct ScoringDimCfg {
+pub(crate) struct ScoringDimCfg {
     pub name: String,
     #[serde(flatten)]
     pub mode: ScoringMode,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct ScoringCfg {
+pub(crate) struct ScoringCfg {
     pub dim_a: ScoringDimCfg,
     pub dim_b: ScoringDimCfg,
     pub dim_c: ScoringDimCfg,
@@ -237,20 +237,20 @@ pub struct Problem {
 }
 
 impl Problem {
-    pub fn fixture_path(&self) -> PathBuf {
+    pub(crate) fn fixture_path(&self) -> PathBuf {
         self.problem_dir.join(&self.witness.fixture_subdir)
     }
 
     /// Absolute path to the scaffold directory, if the problem
     /// declared one. Caller is responsible for handling `None`.
-    pub fn scaffold_path(&self) -> Option<PathBuf> {
+    pub(crate) fn scaffold_path(&self) -> Option<PathBuf> {
         self.witness
             .scaffold_subdir
             .as_ref()
             .map(|s| self.problem_dir.join(s))
     }
 
-    pub fn rubric_for(&self, rubric_id: &str) -> Option<&[String; 4]> {
+    pub(crate) fn rubric_for(&self, rubric_id: &str) -> Option<&[String; 4]> {
         self.rubric_anchors.get(rubric_id)
     }
 }
@@ -354,7 +354,7 @@ pub fn load_problem(problem_dir: &Path) -> Result<Problem, ProblemLoadError> {
 ///
 /// Anchors that aren't found are left as empty strings; the loader's
 /// completeness check above turns missing anchors into a hard error.
-pub fn parse_rubric_markdown(src: &str) -> HashMap<String, [String; 4]> {
+pub(crate) fn parse_rubric_markdown(src: &str) -> HashMap<String, [String; 4]> {
     let mut out: HashMap<String, [String; 4]> = HashMap::new();
     let mut current_dim: Option<String> = None;
     let mut current_anchor: Option<usize> = None;

@@ -62,7 +62,7 @@ use serde::{Deserialize, Serialize};
 /// or success outcome that maps to one and only one rule in the
 /// derivation table above.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub enum FailureClass {
+pub(crate) enum FailureClass {
     Solved,
     Partial,
     Hung,
@@ -96,7 +96,7 @@ pub enum FailureClass {
 }
 
 impl FailureClass {
-    pub fn id(&self) -> &'static str {
+    pub(crate) fn id(&self) -> &'static str {
         match self {
             FailureClass::Solved => "solved",
             FailureClass::Partial => "partial",
@@ -119,7 +119,7 @@ impl FailureClass {
     }
 
     /// One-line description for the histogram printer.
-    pub fn description(&self) -> &'static str {
+    pub(crate) fn description(&self) -> &'static str {
         match self {
             FailureClass::Solved => "tests pass at >85%",
             FailureClass::Partial => "tests pass at 1-85%",
@@ -155,7 +155,7 @@ impl FailureClass {
     /// parser) rather than a *model* capability gap. The histogram
     /// printer surfaces this so the operator can see at a glance how
     /// much of the failure pile is fixable upstream of the model.
-    pub fn is_system_failure(&self) -> bool {
+    pub(crate) fn is_system_failure(&self) -> bool {
         matches!(
             self,
             FailureClass::Hung
@@ -174,7 +174,7 @@ impl FailureClass {
 /// don't depend on the runtime `AgentSummary` struct so the file
 /// schema can evolve without breaking the derivation.
 #[derive(Debug, Clone, Deserialize)]
-pub struct PersistedAgentRun {
+pub(crate) struct PersistedAgentRun {
     pub tokens_input: u64,
     pub tokens_output: u64,
     #[serde(default)]
@@ -188,14 +188,14 @@ pub struct PersistedAgentRun {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct PersistedToolCall {
+pub(crate) struct PersistedToolCall {
     pub tool: String,
     #[serde(default)]
     pub args_preview: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct PersistedWitness {
+pub(crate) struct PersistedWitness {
     pub pass_fraction: f64,
     pub passed: u32,
     pub failed: u32,
@@ -224,7 +224,10 @@ const SOLVED_THRESHOLD: f64 = 0.85;
 
 /// Derive a class from the (agent run, witness) pair. See module-level
 /// docs for the rule table.
-pub fn classify(agent: &PersistedAgentRun, witness: Option<&PersistedWitness>) -> FailureClass {
+pub(crate) fn classify(
+    agent: &PersistedAgentRun,
+    witness: Option<&PersistedWitness>,
+) -> FailureClass {
     // Rule 1, 2: witness-driven (when witness ran). Witness runs even
     // on a crashed agent so these arms fire BEFORE the exit-reason
     // arms — a partial implementation that crashed late still gets
@@ -297,7 +300,7 @@ pub fn classify(agent: &PersistedAgentRun, witness: Option<&PersistedWitness>) -
 /// from a per-problem artifact dir and classify. Returns `None` when
 /// `agent.json` is missing or unparseable — the aggregator skips
 /// such cells rather than poisoning the histogram with a fake class.
-pub fn classify_from_dir(problem_dir: &Path) -> Option<FailureClass> {
+pub(crate) fn classify_from_dir(problem_dir: &Path) -> Option<FailureClass> {
     let agent_path = problem_dir.join("agent.json");
     let agent_bytes = std::fs::read(&agent_path).ok()?;
     let agent: PersistedAgentRun = serde_json::from_slice(&agent_bytes).ok()?;

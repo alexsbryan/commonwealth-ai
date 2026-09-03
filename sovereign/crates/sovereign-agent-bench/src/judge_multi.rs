@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use crate::judge::{JudgeClient, JudgeError, JudgeRequest, JudgeTrialOutcome};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MultiTrialOutcome {
+pub(crate) struct MultiTrialOutcome {
     pub trials: Vec<JudgeTrialOutcome>,
     pub majority_anchor: u8,
     /// `mean(anchor_i / 3.0)` — continuous signal across trials.
@@ -51,7 +51,7 @@ pub async fn run_judge_trials<C: JudgeClient + ?Sized>(
     Ok(aggregate(outcomes, trials))
 }
 
-pub fn aggregate(trials: Vec<JudgeTrialOutcome>, total: u8) -> MultiTrialOutcome {
+pub(crate) fn aggregate(trials: Vec<JudgeTrialOutcome>, total: u8) -> MultiTrialOutcome {
     let mut counts: [u32; 4] = [0; 4];
     let mut sum_f: f64 = 0.0;
     for t in &trials {

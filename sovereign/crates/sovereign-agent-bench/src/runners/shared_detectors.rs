@@ -17,25 +17,25 @@
 /// same path before verifying; thrash trials write 3+. M=3 catches
 /// the canonical incoherent-overlay pattern without false-positive
 /// on iterate-after-read.
-pub const SAME_PATH_WRITE_THRESHOLD: u32 = 3;
+pub(crate) const SAME_PATH_WRITE_THRESHOLD: u32 = 3;
 
 /// Streaming state for the write-thrash detector. The
 /// `observe_*` methods return `ThrashSignal::Kill` when the caller
 /// should terminate the agent run.
 #[derive(Debug, Default, Clone)]
-pub struct ThrashTracker {
+pub(crate) struct ThrashTracker {
     same_path_writes: u32,
     last_write_path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ThrashSignal {
+pub(crate) enum ThrashSignal {
     Continue,
     Kill { same_path_writes: u32 },
 }
 
 impl ThrashTracker {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
@@ -43,7 +43,7 @@ impl ThrashTracker {
     /// failed to surface the path field — treated as a fresh
     /// write). Returns `Kill` when the same-path counter crosses
     /// `SAME_PATH_WRITE_THRESHOLD`.
-    pub fn observe_write(&mut self, path: Option<&str>) -> ThrashSignal {
+    pub(crate) fn observe_write(&mut self, path: Option<&str>) -> ThrashSignal {
         match (&self.last_write_path, path) {
             (Some(prev), Some(curr)) if prev.as_str() == curr => {
                 self.same_path_writes = self.same_path_writes.saturating_add(1);
@@ -64,16 +64,16 @@ impl ThrashTracker {
 
     /// Observe a verification step (`bash`, `cargo_build`,
     /// `cargo_smoke`). Verification happened — slate is clean.
-    pub fn observe_verify(&mut self) {
+    pub(crate) fn observe_verify(&mut self) {
         self.same_path_writes = 0;
         self.last_write_path = None;
     }
 
-    pub fn same_path_writes(&self) -> u32 {
+    pub(crate) fn same_path_writes(&self) -> u32 {
         self.same_path_writes
     }
 
-    pub fn last_write_path(&self) -> Option<&str> {
+    pub(crate) fn last_write_path(&self) -> Option<&str> {
         self.last_write_path.as_deref()
     }
 }
@@ -191,29 +191,29 @@ mod tests {
 /// Tuning: 2 is too aggressive (a model that's making 1-line fixes
 /// to a multi-error file may see the same first error twice while
 /// productively whittling); 4 wastes a cycle. 3 is the sweet spot.
-pub const VERIFY_STUCK_THRESHOLD: u32 = 3;
+pub(crate) const VERIFY_STUCK_THRESHOLD: u32 = 3;
 
 #[derive(Debug, Default, Clone)]
-pub struct VerifyStuckTracker {
+pub(crate) struct VerifyStuckTracker {
     last_failing_hash: Option<u64>,
     consecutive_same: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum VerifySignal {
+pub(crate) enum VerifySignal {
     Continue,
     Kill { hash_repeats: u32 },
 }
 
 impl VerifyStuckTracker {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
     /// Observe one Build or Smoke result. `ok=true` resets the
     /// counter (forward progress). `ok=false` hashes the stdout_tail
     /// and increments / resets the same-hash counter.
-    pub fn observe(&mut self, ok: bool, stdout_tail: &str) -> VerifySignal {
+    pub(crate) fn observe(&mut self, ok: bool, stdout_tail: &str) -> VerifySignal {
         if ok {
             self.last_failing_hash = None;
             self.consecutive_same = 0;
@@ -273,27 +273,27 @@ fn hash_stdout(s: &str) -> u64 {
 /// mid-convergence; ≈ 2× the hardest current problem's bug count,
 /// still well short of the 30+ turn token-burn shape, and the
 /// sticky / verify-stuck detectors guard genuine loops.
-pub const HANDOFF_CYCLE_CAP: u32 = 14;
+pub(crate) const HANDOFF_CYCLE_CAP: u32 = 14;
 
 #[derive(Debug, Default, Clone)]
-pub struct HandoffCycleCounter {
+pub(crate) struct HandoffCycleCounter {
     cycles: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CycleSignal {
+pub(crate) enum CycleSignal {
     Continue,
     Kill { cycles: u32 },
 }
 
 impl HandoffCycleCounter {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
     /// Increment on every `handoff_to_implementer` (Evaluator
     /// concluding "not done yet — Implementer retry").
-    pub fn observe_handoff_to_implementer(&mut self) -> CycleSignal {
+    pub(crate) fn observe_handoff_to_implementer(&mut self) -> CycleSignal {
         self.cycles = self.cycles.saturating_add(1);
         if self.cycles >= HANDOFF_CYCLE_CAP {
             CycleSignal::Kill {
@@ -302,10 +302,6 @@ impl HandoffCycleCounter {
         } else {
             CycleSignal::Continue
         }
-    }
-
-    pub fn cycles(&self) -> u32 {
-        self.cycles
     }
 }
 

@@ -102,7 +102,7 @@ pub async fn run_auto_witness(
 /// `score_buckets` `[low_inclusive, high_exclusive, score]`. When the
 /// buckets list is empty (or no bucket matches), a sensible default
 /// quartile bucketing applies.
-pub fn bucket_pass_fraction(frac: f64, buckets: &[[f64; 3]]) -> u8 {
+pub(crate) fn bucket_pass_fraction(frac: f64, buckets: &[[f64; 3]]) -> u8 {
     if buckets.is_empty() {
         return default_quartile(frac);
     }

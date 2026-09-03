@@ -26,7 +26,7 @@ use tempfile::TempDir;
 /// here) and the fixture-source path (read-only; harness copies from
 /// here only after the agent exits).
 #[derive(Debug)]
-pub struct Sandbox {
+pub(crate) struct Sandbox {
     workdir: TempDir,
     fixture_source: PathBuf,
 }
@@ -37,7 +37,7 @@ impl Sandbox {
     /// It is checked for existence here so an authoring mistake fails
     /// at sandbox construction rather than after the agent has burned
     /// budget.
-    pub fn new(fixture_source: PathBuf) -> std::io::Result<Self> {
+    pub(crate) fn new(fixture_source: PathBuf) -> std::io::Result<Self> {
         if !fixture_source.is_dir() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -63,7 +63,7 @@ impl Sandbox {
     ///
     /// Failure is loud: an authoring mistake (scaffold dir missing
     /// or unreadable) is surfaced before any model time is spent.
-    pub fn install_scaffold(&self, scaffold_source: &Path) -> std::io::Result<()> {
+    pub(crate) fn install_scaffold(&self, scaffold_source: &Path) -> std::io::Result<()> {
         if !scaffold_source.is_dir() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -78,22 +78,15 @@ impl Sandbox {
 
     /// The path the agent will see as its cwd. Public because the
     /// runner needs it; the fixture path is intentionally NOT public.
-    pub fn workdir(&self) -> &Path {
+    pub(crate) fn workdir(&self) -> &Path {
         self.workdir.path()
     }
 
     /// Take ownership of the workdir. Used when assembling the
     /// `AgentRunContext` — the context owns the TempDir, which is
     /// then handed back to the witness via the artifact.
-    pub fn into_workdir(self) -> (TempDir, PathBuf) {
+    pub(crate) fn into_workdir(self) -> (TempDir, PathBuf) {
         (self.workdir, self.fixture_source)
-    }
-
-    /// Recursive copy helper used by `install_scaffold`. Pulled out
-    /// of the impl so it can be exercised in unit tests without
-    /// constructing a full Sandbox.
-    pub fn copy_into(src: &Path, dst: &Path) -> std::io::Result<()> {
-        copy_dir_into(src, dst)
     }
 
     /// Minimal env for a sandboxed subprocess. `PATH` and `HOME` are
@@ -103,7 +96,7 @@ impl Sandbox {
     ///
     /// `extra` carries runner-specific keys (e.g. `PI_PROVIDER_URL`)
     /// that the harness needs to inject explicitly.
-    pub fn scrubbed_env(extra: &[(&str, &str)]) -> HashMap<String, String> {
+    pub(crate) fn scrubbed_env(extra: &[(&str, &str)]) -> HashMap<String, String> {
         let mut out = HashMap::new();
         for key in ["PATH", "HOME"].iter().copied() {
             if let Ok(v) = std::env::var(key) {

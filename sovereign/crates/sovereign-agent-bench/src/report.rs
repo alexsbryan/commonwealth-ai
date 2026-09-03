@@ -35,12 +35,12 @@ fn default_run_trials() -> u8 {
 }
 
 impl BenchReport {
-    pub fn compute_grand_total(problems: &[ProblemScore]) -> u16 {
+    pub(crate) fn compute_grand_total(problems: &[ProblemScore]) -> u16 {
         problems.iter().map(|p| p.total as u16).sum::<u16>().min(72)
     }
 
     /// Text rollup — concise, one line per problem + grand total.
-    pub fn text_rollup(&self) -> String {
+    pub(crate) fn text_rollup(&self) -> String {
         let mut out = String::new();
         out.push_str(&format!(
             "Agent-bench report — agent={} model={} judge={} judge_trials={} run_trials={}\n",

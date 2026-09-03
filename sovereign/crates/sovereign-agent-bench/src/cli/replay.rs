@@ -59,7 +59,7 @@ struct ReplayArgs {
     dump_request: bool,
 }
 
-pub async fn run_command(args: &[String]) -> Result<(), String> {
+pub(crate) async fn run_command(args: &[String]) -> Result<(), String> {
     let parsed = parse_args(args)?;
     let record = load_record(&parsed.artifact_dir, parsed.turn)?;
     let mut body = record.request.clone();

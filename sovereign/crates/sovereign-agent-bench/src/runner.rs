@@ -105,7 +105,7 @@ pub enum ExitReason {
 }
 
 impl ExitReason {
-    pub fn id(&self) -> &'static str {
+    pub(crate) fn id(&self) -> &'static str {
         match self {
             ExitReason::Completed => "completed",
             ExitReason::TokensExceeded { .. } => "tokens_exceeded",
@@ -146,7 +146,7 @@ pub struct TokenCounts {
 /// is much faster — and lets you settle "is it the prompt or the
 /// model?" debates without rerunning the whole bench.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatRequestRecord {
+pub(crate) struct ChatRequestRecord {
     pub turn: u32,
     /// Active role (e.g. "planner", "implementer", "evaluator") for
     /// role-aware runners; `None` for monolithic / pi runs.
@@ -182,7 +182,7 @@ pub struct ToolCallRecord {
 
 /// Read-only context handed to the runner. The runner sees the workdir
 /// path but NOT the fixture path — structural invariant per ARCH §7.2.
-pub struct AgentRunContext {
+pub(crate) struct AgentRunContext {
     pub problem_id: String,
     pub prompt: String,
     /// Owned TempDir; the runner uses `workdir.path()`. Moved to the
@@ -233,19 +233,19 @@ pub struct AgentRunContext {
 
 /// The scaffold anchor budget. Anchors are load-bearing at that scale —
 /// see the failure classes cited in `runners/native.rs`.
-pub const DEFAULT_ANCHOR_BUDGET_LINES: usize = 1200;
+pub(crate) const DEFAULT_ANCHOR_BUDGET_LINES: usize = 1200;
 
 /// The scaffold listing depth.
-pub const DEFAULT_WORKDIR_LISTING_DEPTH: usize = 3;
+pub(crate) const DEFAULT_WORKDIR_LISTING_DEPTH: usize = 3;
 
 impl AgentRunContext {
-    pub fn workdir(&self) -> &Path {
+    pub(crate) fn workdir(&self) -> &Path {
         self.workdir.path()
     }
 
     /// Declare the workdir's scale. Everything preamble-shaped and
     /// every role profile derives from this one answer.
-    pub fn with_workdir_scale(mut self, scale: WorkdirScale) -> Self {
+    pub(crate) fn with_workdir_scale(mut self, scale: WorkdirScale) -> Self {
         self.workdir_scale = scale;
         self
     }
@@ -253,7 +253,7 @@ impl AgentRunContext {
     /// Source-anchor line budget for this scale. A repository renders
     /// no anchors: enumeration by directory sort order is noise, and
     /// the roles hold `inspect_workdir` there instead.
-    pub fn anchor_budget_lines(&self) -> usize {
+    pub(crate) fn anchor_budget_lines(&self) -> usize {
         match self.workdir_scale {
             WorkdirScale::Scaffold => DEFAULT_ANCHOR_BUDGET_LINES,
             WorkdirScale::Repository => 0,
@@ -272,7 +272,7 @@ impl AgentRunContext {
     /// tok, depth 1 581, depth 2 2,266, depth 3 2,384. Against a 128k
     /// window, 2,266 tokens of accurate orientation is not the scarce
     /// resource — a wasted tool call is.
-    pub fn workdir_listing_depth(&self) -> usize {
+    pub(crate) fn workdir_listing_depth(&self) -> usize {
         match self.workdir_scale {
             WorkdirScale::Scaffold => DEFAULT_WORKDIR_LISTING_DEPTH,
             WorkdirScale::Repository => 2,
@@ -283,7 +283,7 @@ impl AgentRunContext {
 /// What the runner produces. `workdir` carries ownership so the
 /// witness pipeline can run real commands against the agent's
 /// on-disk state.
-pub struct AgentRunArtifact {
+pub(crate) struct AgentRunArtifact {
     pub workdir: TempDir,
     pub tokens: TokenCounts,
     pub wall_ms: u64,
@@ -316,13 +316,13 @@ pub struct AgentRunArtifact {
 }
 
 impl AgentRunArtifact {
-    pub fn workdir_path(&self) -> PathBuf {
+    pub(crate) fn workdir_path(&self) -> PathBuf {
         self.workdir.path().to_path_buf()
     }
 }
 
 #[derive(Debug, Error)]
-pub enum AgentRunError {
+pub(crate) enum AgentRunError {
     #[error("agent binary not found on PATH: {0}")]
     BinaryNotFound(String),
     #[error("agent subprocess spawn failed: {0}")]
@@ -355,7 +355,7 @@ pub trait AgentRunner: Send + Sync {
 }
 
 /// Convenience: build a context tied to a problem.
-pub fn context_for(
+pub(crate) fn context_for(
     problem: &Problem,
     workdir: TempDir,
     tool_allowlist: &'static [&'static str],

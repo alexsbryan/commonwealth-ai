@@ -23,17 +23,22 @@ pub enum BaselineError {
     Invalid(String),
 }
 
-pub fn baseline_dir(bench_root: &Path, group: &str) -> PathBuf {
+pub(crate) fn baseline_dir(bench_root: &Path, group: &str) -> PathBuf {
     bench_root.join("baselines").join(group)
 }
 
-pub fn dated_snapshot_path(bench_root: &Path, group: &str, agent: &str, model: &str) -> PathBuf {
+pub(crate) fn dated_snapshot_path(
+    bench_root: &Path,
+    group: &str,
+    agent: &str,
+    model: &str,
+) -> PathBuf {
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
     let model_slug = slug(model);
     baseline_dir(bench_root, group).join(format!("{today}-{agent}-{model_slug}.json"))
 }
 
-pub fn latest_symlink_path(bench_root: &Path, group: &str) -> PathBuf {
+pub(crate) fn latest_symlink_path(bench_root: &Path, group: &str) -> PathBuf {
     baseline_dir(bench_root, group).join(LATEST_SYMLINK)
 }
 

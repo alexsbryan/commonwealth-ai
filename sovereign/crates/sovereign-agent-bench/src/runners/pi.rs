@@ -52,11 +52,11 @@ use crate::sandbox::Sandbox;
 /// `tool_allowlist_matches_canonical_adapter` below so a future PR
 /// that adds a primitive to the canonical layer can't forget to
 /// expose it on the pi runner.
-pub const PI_TOOL_ALLOWLIST: &[&str] = &["read", "write", "bash", "find", "grep", "ls"];
+pub(crate) const PI_TOOL_ALLOWLIST: &[&str] = &["read", "write", "bash", "find", "grep", "ls"];
 
 /// Default daemon endpoint. The setup script writes a matching provider
 /// in `~/.pi/agent/models.json`.
-pub const DEFAULT_PI_PROVIDER_URL: &str = "http://localhost:9741/v1";
+pub(crate) const DEFAULT_PI_PROVIDER_URL: &str = "http://localhost:9741/v1";
 
 /// Stderr tail cap.
 const STDERR_TAIL_CAP_BYTES: usize = 32 * 1024;
@@ -117,19 +117,19 @@ pub struct PiRunner {
 }
 
 impl PiRunner {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             binary: None,
             provider_url: DEFAULT_PI_PROVIDER_URL.to_string(),
         }
     }
 
-    pub fn with_binary(mut self, path: impl Into<String>) -> Self {
+    pub(crate) fn with_binary(mut self, path: impl Into<String>) -> Self {
         self.binary = Some(path.into());
         self
     }
 
-    pub fn with_provider_url(mut self, url: impl Into<String>) -> Self {
+    pub(crate) fn with_provider_url(mut self, url: impl Into<String>) -> Self {
         self.provider_url = url.into();
         self
     }

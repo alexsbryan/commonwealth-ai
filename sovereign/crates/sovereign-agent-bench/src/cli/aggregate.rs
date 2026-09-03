@@ -36,7 +36,7 @@ use thiserror::Error;
 use crate::failure_class::{classify_from_dir, FailureClass};
 
 #[derive(Debug, Error)]
-pub enum AggregateError {
+pub(crate) enum AggregateError {
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
     #[error("json: {0}")]
@@ -54,7 +54,7 @@ pub enum AggregateError {
 /// CLI args for the aggregate subcommand. Tiny enough that we
 /// hand-roll the parser instead of pulling in clap.
 #[derive(Debug, Clone)]
-pub struct AggregateArgs {
+pub(crate) struct AggregateArgs {
     pub roots: Vec<PathBuf>,
     /// Optional path to write the histogram JSON. If `None`, the
     /// printer emits the table to stdout only.
@@ -65,7 +65,7 @@ pub struct AggregateArgs {
 }
 
 impl AggregateArgs {
-    pub fn parse(argv: &[String]) -> Result<Self, AggregateError> {
+    pub(crate) fn parse(argv: &[String]) -> Result<Self, AggregateError> {
         let mut roots: Vec<PathBuf> = Vec::new();
         let mut json_out: Option<PathBuf> = None;
         let mut list_paths = false;
@@ -132,7 +132,7 @@ order is solved > partial > exit_reason-driven > zero-tool-call shapes
 /// One (root, cell, problem) → class observation. The aggregator's
 /// reduce step buckets these by class.
 #[derive(Debug, Clone, Serialize)]
-pub struct CellObservation {
+pub(crate) struct CellObservation {
     pub root: String,
     pub cell: String,
     pub problem: String,
@@ -141,7 +141,7 @@ pub struct CellObservation {
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
-pub struct ClassBucket {
+pub(crate) struct ClassBucket {
     pub class: String,
     pub description: String,
     pub is_system_failure: bool,
@@ -150,7 +150,7 @@ pub struct ClassBucket {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct AggregateReport {
+pub(crate) struct AggregateReport {
     pub roots: Vec<String>,
     pub total_cells: usize,
     pub system_failure_count: usize,
@@ -159,7 +159,7 @@ pub struct AggregateReport {
     pub observations: Vec<CellObservation>,
 }
 
-pub fn run_command(argv: &[String]) -> Result<(), AggregateError> {
+pub(crate) fn run_command(argv: &[String]) -> Result<(), AggregateError> {
     let args = AggregateArgs::parse(argv)?;
     for r in &args.roots {
         if !r.is_dir() {
@@ -193,7 +193,7 @@ pub fn run_command(argv: &[String]) -> Result<(), AggregateError> {
 /// Walk one artifact root looking for `<root>/<cell>/<problem>/agent.json`
 /// or `<root>/<problem>/agent.json` (single-cell shape produced by
 /// `run` without a sweep wrapper).
-pub fn walk_artifact_root(root: &Path) -> Result<Vec<CellObservation>, AggregateError> {
+pub(crate) fn walk_artifact_root(root: &Path) -> Result<Vec<CellObservation>, AggregateError> {
     let root_label = root
         .file_name()
         .and_then(|s| s.to_str())

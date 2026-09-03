@@ -76,7 +76,7 @@ pub trait JudgeClient: Send + Sync {
 }
 
 /// Real HTTP judge — posts to `<base_url>/chat/completions`.
-pub struct HttpJudgeClient {
+pub(crate) struct HttpJudgeClient {
     pub base_url: String,
     pub model: String,
     pub http: reqwest::Client,
@@ -88,7 +88,7 @@ pub struct HttpJudgeClient {
 }
 
 impl HttpJudgeClient {
-    pub fn new(base_url: impl Into<String>, model: impl Into<String>) -> Self {
+    pub(crate) fn new(base_url: impl Into<String>, model: impl Into<String>) -> Self {
         Self {
             base_url: base_url.into(),
             model: model.into(),
@@ -162,7 +162,7 @@ impl JudgeClient for HttpJudgeClient {
 ///   2. Fenced ```json …``` block containing such an object
 ///   3. Any prefix-prose followed by a JSON object as the last
 ///      braced segment
-pub fn parse_judge_response(raw: &str) -> Result<JudgeTrialOutcome, JudgeError> {
+pub(crate) fn parse_judge_response(raw: &str) -> Result<JudgeTrialOutcome, JudgeError> {
     let candidate = extract_json_object(raw).ok_or_else(|| JudgeError::Parse {
         raw: raw.to_string(),
     })?;
@@ -301,7 +301,7 @@ fn strip_code_fence(raw: &str) -> &str {
     raw
 }
 
-pub fn build_judge_prompt(req: &JudgeRequest) -> String {
+pub(crate) fn build_judge_prompt(req: &JudgeRequest) -> String {
     let anchors = req
         .rubric_anchors
         .iter()
@@ -338,7 +338,7 @@ pub fn build_judge_prompt(req: &JudgeRequest) -> String {
 /// Walk the workdir and concatenate every text-looking file into a
 /// markdown block. Per-file caps + a global cap keep the prompt
 /// bounded.
-pub fn assemble_workspace_view(workdir: &std::path::Path) -> String {
+pub(crate) fn assemble_workspace_view(workdir: &std::path::Path) -> String {
     const PER_FILE_CAP: usize = 16 * 1024;
     const GLOBAL_CAP: usize = 128 * 1024;
     let mut sections: BTreeMap<String, String> = BTreeMap::new();
@@ -420,7 +420,7 @@ fn lang_hint_for(path: &str) -> &'static str {
 }
 
 /// Build a judge request from a problem + artifact + dimension id.
-pub fn request_for_dimension(
+pub(crate) fn request_for_dimension(
     problem: &Problem,
     artifact: &AgentRunArtifact,
     dimension_name: &str,
