@@ -375,35 +375,14 @@ fn validate_attr(family: &AttrFamily, value: &serde_json::Value) -> Option<serde
     }
 }
 
-/// Words a model writes into a slot it could not fill. The prompt asks for
-/// the key to be left out; models write the instruction ("omit"), a null word,
-/// or "unknown (not stated in text)" instead, and each of those would land as
-/// a value. Case-insensitive; `unknown…` and `not stated…` match as prefixes
-/// because the model elaborates them.
-pub(super) fn is_absent_marker(s: &str) -> bool {
-    let t = s.trim().to_ascii_lowercase();
-    const EXACT: &[&str] = &[
-        "omit",
-        "omitted",
-        "none",
-        "null",
-        "n/a",
-        "na",
-        "-",
-        "(none)",
-        "unspecified",
-        "not applicable",
-    ];
-    if EXACT.contains(&t.as_str()) {
-        return true;
-    }
-    // A PREFIX needs a word boundary: "unknown" and "unknown (not stated in
-    // text)" are absent values; "unknown-type sceatta series" is a real one.
-    ["unknown", "not stated"].iter().any(|p| {
-        t.strip_prefix(p)
-            .is_some_and(|rest| rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace()))
-    })
-}
+/// Does this attribute value NAME AN ABSENCE rather than carry one?
+///
+/// Re-exported, not re-implemented: `kernel_types::is_absent_marker` is the
+/// one decider, shared with `Reason::is_placeholder`'s vocabulary so a value
+/// this extractor drops cannot be a value some other reader keeps. It carries
+/// the word-boundary rule ("unknown-type sceatta series" is a real value) that
+/// this function was fixed to have on 2026-09-03.
+pub(super) use kernel_types::is_absent_marker;
 
 /// The leading decimal number of a string, ignoring a trailing unit or range
 /// tail. `"1.29 g"` → 1.29; `"c. 720"` → 720.0; `"heavy"` → `None`.

@@ -45,6 +45,11 @@ pub struct ParsedExtract {
     /// apply) from the checkpoint. Mutually exclusive with the
     /// selection flags.
     pub(super) finalize: bool,
+    /// Set by `--dry-run`. Composes each selected chapter's phase-1 prompt
+    /// through the runner's own exemplar selection and seed lookup, prints
+    /// it, and makes no chat call. Pair with `--chapters` for one section;
+    /// refused with `--finalize`, which dispatches nothing anyway.
+    pub(super) dry_run: bool,
 }
 
 pub fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
@@ -55,6 +60,7 @@ pub fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
     let mut terse = false;
     let mut resume = false;
     let mut finalize = false;
+    let mut dry_run = false;
 
     let mut i = 0;
     while i < args.len() {
@@ -88,6 +94,10 @@ pub fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
                 finalize = true;
                 i += 1;
             }
+            "--dry-run" => {
+                dry_run = true;
+                i += 1;
+            }
             other if other.starts_with("--") => {
                 return Err(format!("unknown flag: {other}"));
             }
@@ -108,10 +118,10 @@ pub fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
         return Err("--chapters, --full, and --retry-failed are mutually exclusive".into());
     }
     if finalize {
-        if selection_count > 0 || terse || resume {
+        if selection_count > 0 || terse || resume || dry_run {
             return Err(
                 "--finalize is a read-only checkpoint-to-runfile pass; do not pair with \
-                 --chapters / --full / --retry-failed / --terse / --resume"
+                 --chapters / --full / --retry-failed / --terse / --resume / --dry-run"
                     .into(),
             );
         }
@@ -124,6 +134,7 @@ pub fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
             terse: false,
             resume: false,
             finalize: true,
+            dry_run: false,
         });
     }
     if terse && full {
@@ -158,6 +169,7 @@ pub fn parse_args(args: &[String]) -> Result<ParsedExtract, String> {
         terse,
         resume,
         finalize: false,
+        dry_run,
     })
 }
 

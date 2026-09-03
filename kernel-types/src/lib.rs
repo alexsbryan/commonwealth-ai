@@ -112,5 +112,7 @@ pub use conformance::{
 pub use custody::{join_custody, Custody};
 pub use hash::ContentHash;
 pub use ids::{CorpusId, NodeId};
-pub use judgement::{honesty_footer, render_rows, Freshness, Judgement, Reason, Verdict};
+pub use judgement::{
+    honesty_footer, is_absent_marker, render_rows, Freshness, Judgement, Reason, Verdict,
+};
 pub use origin::{Grain, Locator, Origin, Server, Source};

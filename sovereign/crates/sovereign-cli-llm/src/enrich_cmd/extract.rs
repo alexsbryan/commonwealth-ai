@@ -18,7 +18,7 @@ const HELP: Help = Help {
     summary: "Run phase 1 (per-chapter question extraction) on a subset or the full corpus.",
     sections: &[
         HelpSection::Usage(
-            "svrn enrich extract <corpus-id> [--chapters <id1,id2,...> | --full | --retry-failed] [--terse]",
+            "svrn enrich extract <corpus-id> [--chapters <id1,id2,...> | --full | --retry-failed] [--terse] [--dry-run]",
         ),
         HelpSection::Flags(&[
             ("--chapters <ids>", "Comma-separated chapter ids (e.g. sec_0001,sec_0003). Subset runs do NOT update the cache."),
@@ -54,6 +54,15 @@ const HELP: Help = Help {
                  --resume sequence has covered every chapter — no LLM calls fired by this \
                  mode. Mutually exclusive with --chapters / --full / --retry-failed.",
             ),
+            (
+                "--dry-run",
+                "Compose each selected chapter's Phase 1 prompt — system, user and response \
+                 schema — print it, and call no model. Exemplar selection and the Stage-1a \
+                 seed lookup still run, because both are IN the prompt, so what is printed \
+                 is what the real pass would send. This is the cheap loop for a prompt or \
+                 ontology change: seconds, where a rebuild is minutes. Refused with \
+                 --finalize.",
+            ),
         ]),
         HelpSection::Examples(&[
             (
@@ -71,6 +80,10 @@ const HELP: Help = Help {
             (
                 "svrn enrich extract bk --retry-failed --terse",
                 "Recover chapters whose default pass failed with <think> truncation, using the terse prompt variant.",
+            ),
+            (
+                "svrn enrich extract wessex-hoard --chapters sec_00014 --dry-run",
+                "Print the phase-1 prompt this chapter WOULD be sent — system, user, response schema — and call no model. Seconds, where a rebuild is minutes.",
             ),
         ]),
         HelpSection::Notes(

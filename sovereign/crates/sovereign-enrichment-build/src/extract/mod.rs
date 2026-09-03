@@ -178,7 +178,8 @@ pub async fn run_extract(args: &[String]) -> i32 {
         paths::exemplars_dir(&cfg.corpus_id),
     )
     .with_chat_with_tokens(chat_with_tokens)
-    .with_checkpoint_path(&checkpoint_path);
+    .with_checkpoint_path(&checkpoint_path)
+    .with_dry_run(parsed.dry_run);
 
     // Rebuild corpus state.
     let (inputs, manifest) = match rebuild_corpus_state(&cfg) {
@@ -454,6 +455,23 @@ pub async fn run_extract(args: &[String]) -> i32 {
             reason,
         } => {
             println!("FAILED: {reason}");
+        }
+        Phase1Progress::ChapterPrompt { chapter_id, prompt } => {
+            // The whole prompt, on stdout, as the runner composed it — this
+            // is the payload of `--dry-run` and the reason it exists. JSON
+            // for the schema so a probe can diff it against the daemon's
+            // `inference_client: request body` line without re-deriving it.
+            println!("dry-run");
+            println!("──── {chapter_id} · system ────\n{}", prompt.system);
+            println!("──── {chapter_id} · user ────\n{}", prompt.user);
+            match &prompt.response_schema {
+                Some(schema) => println!(
+                    "──── {chapter_id} · response schema ────\n{}",
+                    serde_json::to_string_pretty(schema)
+                        .unwrap_or_else(|e| format!("<unserialisable: {e}>"))
+                ),
+                None => println!("──── {chapter_id} · response schema ────\n<none>"),
+            }
         }
         Phase1Progress::Done {
             produced,
