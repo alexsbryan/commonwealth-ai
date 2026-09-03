@@ -97,13 +97,15 @@ pub async fn run_trial_observed(
         .or_else(|| source_file.as_deref().map(Language::from_path))
         .unwrap_or(Language::Python);
     // The configured budget is below ONE cold cargo build on a real
-    // workspace (feature-churn alone can pay ~80s), and a timed-out
-    // baseline reads as no tests — the quietest failure this loop has.
-    // Rust gets a floor; the other runners keep the configured budget.
+    // workspace — lib + integration targets of sovereign-core compiled
+    // past 300s on their first touch (watched 2026-09-03, the runner
+    // report named it) — and a timed-out baseline reads as no tests,
+    // the quietest failure this loop has. Rust gets a floor; the other
+    // runners keep the configured budget.
     let trial_timeout = if language == Language::Rust {
         config
             .candidate_test_timeout
-            .max(std::time::Duration::from_secs(300))
+            .max(std::time::Duration::from_secs(900))
     } else {
         config.candidate_test_timeout
     };
