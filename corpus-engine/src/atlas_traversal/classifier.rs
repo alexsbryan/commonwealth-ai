@@ -221,6 +221,22 @@ pub fn classify_query_with(
 }
 
 /// Cues that a question wants a SET rather than one thing.
+///
+/// SUBSTRING CUES, and NOT the §2.4 case for an embedding centroid — that
+/// principle governs classifying open DOMAIN TEXT into an author's
+/// vocabulary, where the set of things to be said is unbounded. These match
+/// English interrogative FORM, which is closed and small: a question opens
+/// with one of a handful of shapes whatever domain it is about, and the
+/// author's own nouns are matched separately, by the type index.
+///
+/// The failing input that would change this answer, named so a later reader
+/// is deciding rather than re-arguing: a question in a language these
+/// openers do not cover, or a domain phrasing that asks for a set without
+/// any of them ("give me the catalogue"). Both are recall misses that a
+/// centroid over question-form exemplars would buy, and both fall through to
+/// the pre-ontology passes rather than answering wrongly — which is why this
+/// is a cost, not a defect. A recall measurement over real author questions
+/// is what would justify the centroid; nobody has one yet.
 const ENUMERATE_CUES: &[&str] = &[
     "which ",
     "what ",

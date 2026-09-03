@@ -209,6 +209,25 @@ pub fn sketch_may_merge_into(
 // ── 3b: resolving a subject within its declared type ─────────
 /// Per-declared-type entity pools for claim-subject resolution, built once per
 /// type on first use so the per-claim cost is a map lookup.
+///
+/// THE INDEXES ARE THE POINT, not the entity slice. A reuse review on
+/// 2026-09-03 proposed replacing this with an `accept: &dyn Fn(&Entity)`
+/// threaded into `resolve_entity_id_with_salience`, on the grounds that the
+/// pool clones the atoms and rebuilds two maps per type. That gives a
+/// DIFFERENT answer, not the same one cheaper.
+///
+/// `build_name_index` maps a folded name to ONE id — later writers overwrite
+/// earlier ones — so a global index asked for "Series Y sceattas" returns
+/// whichever atom happened to win, and a predicate can then only reject it.
+/// It cannot go back and find the `sceatta` of that name, because the global
+/// index no longer holds it. Rebuilding the index over the type's own atoms
+/// is what makes the strict path answer the typed question at all, and that
+/// is the case this whole function exists for: before it, Halstead's "Series
+/// Y sceattas (Wessex Down 1)" resolved to the person Aldfrith and the
+/// tension pass never saw the corpus's central dispute.
+///
+/// The clone is real and bounded: once per declared type per resolve pass,
+/// not per claim. Trading it for a wrong answer is not a saving.
 #[derive(Default)]
 pub struct TypedSubjectPools {
     by_type: HashMap<String, TypedSubjectPool>,

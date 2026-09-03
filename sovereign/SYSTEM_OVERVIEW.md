@@ -5982,8 +5982,15 @@ the five test the module's PRIVATE surface (`render_attributes`,
 `project_claim`, `enumerable_types`), and moving the rest out to shrink a line
 count would be teaching to the test. The real seam, when the phase settles, is
 `atlas_traversal/engine.rs` → the six pre-ontology walks and the two
-declared-type walks as peers; that split is due when P6 stops moving the
-traversal surface.
+declared-type walks as peers.
+
+**That condition is now MET** (2026-09-03). P6 landed and was proven end to
+end on 2026-09-02, and the ontology-v1 cleanup pass has closed; the file is
+1,096 lines, under the 1,200 smell line, so the split is UNBLOCKED and
+UNURGENT — it is waiting on an owner, not on a phase. Stated as met rather
+than left as "when P6 stops moving", because a condition nobody is watching
+for is not a schedule (a review on 2026-09-03 read this line as an unowned
+gate, correctly).
 
 ### 10.1g Size — `resolution.rs` is +217 and P3 could not buy that back (ontology-v1 P3, 2026-09-02; ACCEPTED in §10.1h)
 
@@ -6072,7 +6079,8 @@ cannot leave without taking the loops with it. §10.1g has the table.
 **The splits this schedules**, each as its own order once ontology-v1 stops
 moving these files: `resolution.rs` (the largest and the one §10.1g argues
 for first); `atlas_traversal/engine.rs` — six pre-ontology walks and two
-declared-type walks as peers, due when P6 stops moving the traversal surface;
+declared-type walks as peers, whose condition was met on 2026-09-03 (see
+§10.1f) and which now needs an owner;
 `context.rs`, which splits with the ATLAS_STORAGE_V2 read path rather than
 locally.
 
