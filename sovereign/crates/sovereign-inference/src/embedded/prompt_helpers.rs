@@ -152,6 +152,35 @@ pub(crate) fn arch_ships_mtp_draft_heads(arch: &str) -> bool {
     is_recurrent_arch(arch)
 }
 
+/// Refuse a batch `llama_decode` cannot take, instead of letting it abort the
+/// process.
+///
+/// `llama_decode` opens with `GGML_ASSERT(n_tokens_all <= cparams.n_batch)`
+/// (llama-context.cpp:1713). A failed `GGML_ASSERT` calls `abort()`, so an
+/// over-long batch does not fail the REQUEST — it SIGABRTs the entire daemon,
+/// taking every other in-flight request and the whole slot cache with it.
+/// Observed 2026-07-08 (a 16090-token judge prompt on a padded 16124 context)
+/// and again 2026-09-03 during a bench run on a rented pod, where the daemon
+/// died mid-suite and every lane after it reported "daemon unreachable".
+///
+/// The admission sites are supposed to prevent this by clamping against
+/// `min(n_ctx, n_batch)`, and mostly do. This is the backstop AT THE DECODE
+/// SITE, because that is the only place the invariant is actually true: an
+/// admission check can be forgotten by the next path someone adds (and was —
+/// `generate_stream_sync_with_finish` admitted against `n_ctx` alone while
+/// both its siblings used `min(n_ctx, n_batch)`), whereas every prompt that
+/// reaches ggml goes through a decode. Make it structural, not remembered
+/// (ARCH §7).
+pub(crate) fn ensure_batch_decodable(n_tokens: usize, n_batch: usize, site: &str) -> Result<()> {
+    if n_tokens > n_batch {
+        return Err(Error::Inference(format!(
+            "Prompt too long to decode: {n_tokens} tokens exceeds the decode batch \
+             capacity of {n_batch} ({site}). Shorten the conversation."
+        )));
+    }
+    Ok(())
+}
+
 pub(crate) fn clamp_max_tokens(
     requested: Option<usize>,
     prompt_tokens: usize,

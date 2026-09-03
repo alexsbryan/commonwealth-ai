@@ -59,6 +59,10 @@ BUDGET_SECS=14400         # 4h ceiling
 # capped by this reserve just TIMEOUTs (advisory, non-gating) instead. Covers
 # the ~agent-coding (~15m) + the fast gym gates that trail the synth lanes.
 HARD_RESERVE_SECS="${HARD_RESERVE_SECS:-1800}"
+# How long to wait for a supervised daemon to come back before re-running a
+# lane that found it gone. Sized for a slot reload of a ~30 GB primary, which
+# is what actually has to happen before the retry can succeed.
+DAEMON_RETRY_WAIT_SECS="${DAEMON_RETRY_WAIT_SECS:-120}"
 REPORT_DIR="target/ci-bench"
 UPDATE_BASELINE=""
 # --rebuild: the WEEKLY tier (P0.1). Re-extracts each enrichment corpus's
@@ -263,16 +267,44 @@ run_lane() {
   # output so we can distinguish a real regression from a setup gap.
   run_capped "$lane_cap" "$@" 2>&1 | tee "$out"
   local rc=${PIPESTATUS[0]}
-  local secs=$(( $(date +%s) - t0 ))
   # The four-verdict decision lives in lib/ci-bench-verdict.sh, where a test
   # can reach it. Read that file before changing what any status means.
   local status; status=$(lane_verdict "$rc" "$out")
+  # ONE RETRY WHEN THE DAEMON WAS NOT THERE.
+  #
+  # The daemon can die under a lane without any Rust error path seeing it: a
+  # failed GGML_ASSERT inside llama_decode calls abort(), killing the process.
+  # The pod boot script now supervises and restarts it (scripts/dev-pod.sh),
+  # but a restart costs a model reload, so the lane in flight and possibly the
+  # next one still land on a daemon that is not up yet.
+  #
+  # Re-running the lane IS the probe: it dispatches through the same daemon
+  # resolution the real work uses, so there is no second place that decides
+  # "which daemon" and no chance of the probe and the lane disagreeing
+  # (ARCH §10.6). A bare curl here would have been that second decider.
+  #
+  # Bounded at one retry: two daemon-down verdicts in a row is a dead daemon,
+  # not a restart, and the run should say so rather than sit in a loop.
+  if [[ "$status" == "SKIP(daemon-down)" ]] && (( $(remaining) > DAEMON_RETRY_WAIT_SECS + 120 )); then
+    echo "── RETRY [$kind] $name — daemon was unreachable; waiting ${DAEMON_RETRY_WAIT_SECS}s for a restart"
+    sleep "$DAEMON_RETRY_WAIT_SECS"
+    run_capped "$lane_cap" "$@" 2>&1 | tee "$out"
+    rc=${PIPESTATUS[0]}
+    status=$(lane_verdict "$rc" "$out")
+  fi
+  local secs=$(( $(date +%s) - t0 ))
   echo "── ${status}  [$kind] $name   (${secs}s)"
   LANE_NAMES+=("$name"); LANE_KINDS+=("$kind"); LANE_STATUS+=("$status"); LANE_SECS+=("$secs")
   # PASS and PASS(warn:setup) both clear the gate; everything else fails HARD.
   if [[ "$kind" == "HARD" && "$status" != PASS* ]]; then
     HARD_FAIL=1
-    file_backlog_candidate "$name" "$status" "$secs" "$out"
+    # A daemon that was not there is not a finding about the code. Still red
+    # (nothing was verified), but filing it would manufacture triage for a
+    # regression that never happened — one crash did exactly that on
+    # 2026-09-03, across eight lanes.
+    if [[ "$status" != "SKIP(daemon-down)" ]]; then
+      file_backlog_candidate "$name" "$status" "$secs" "$out"
+    fi
   fi
 }
 

@@ -29,6 +29,20 @@
 #   FAIL(rc)          the lane exited non-zero for a reason that is not N-regressed
 #   TIMEOUT           the lane hit its cap
 #   SKIP(no-data)     COULD-NOT-JUDGE — the lane ran and adjudicated nothing
+#   SKIP(daemon-down) COULD-NOT-JUDGE — the daemon was unreachable, so the
+#                     lane never got to adjudicate anything
+#
+# `SKIP(daemon-down)` separates an INFRASTRUCTURE event from a finding about
+# the code under test. Flown 2026-09-03: a daemon SIGABRTed partway through a
+# suite (a GGML_ASSERT inside llama_decode calls abort(), killing the process,
+# not the request) and every lane after it exited non-zero with "daemon
+# unreachable". Each was stamped FAIL(1)/FAIL(2) — read as eight regressions —
+# and the HARD ones each FILED A BACKLOG ITEM claiming a regression that never
+# happened. One crash manufactured a evening's worth of false triage.
+#
+# It is still NOT a pass: nothing was verified, so a HARD lane goes red on it.
+# What changes is that it does not masquerade as a regression, and the call
+# site does not file work for it.
 #
 # `SKIP(no-data)` is the load-bearing one and it is deliberately NOT a pass:
 # a HARD lane still fails on it, via the `PASS*` test at the call site, because
@@ -40,6 +54,13 @@ lane_verdict() {
 local regressed; regressed=$(grep -oE "[0-9]+ regressed" "$out" 2>/dev/null | grep -oE "^[0-9]+" | tail -1)
 if (( rc == 124 )); then
   status="TIMEOUT"
+elif (( rc != 0 )) && grep -qE "daemon unreachable at|daemon is not responding at" "$out" 2>/dev/null; then
+  # COULD-NOT-JUDGE for an infrastructure reason. Keyed on the daemon's own
+  # reachability strings (the `svrn eval` bootstrap probe and the enrich/
+  # backlog probes both emit one of these), and gated on a non-zero rc so a
+  # lane that merely MENTIONS the phrase in passing output cannot be
+  # downgraded out of a real failure.
+  status="SKIP(daemon-down)"
 elif (( rc == 4 )); then
   # COULD-NOT-JUDGE, not FAILED — the lane ran and had nothing to verify.
   # Exit 4 means exactly this and nothing else in the bench family (both

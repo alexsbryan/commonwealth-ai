@@ -84,4 +84,31 @@ want "a non-zero exit with no tally is a failure carrying its code" \
 want "no tally line is not the same claim as nothing adjudicated" \
      "PASS" "$(verdict no_tally 0 'chaos: 14 scenarios, 0 crashes')"
 
+# ── SKIP(daemon-down): an infrastructure event is not a regression ──────────
+#
+# 2026-09-03: a daemon SIGABRTed mid-suite and the eight lanes after it each
+# posted FAIL(1)/FAIL(2) and filed a backlog item claiming a regression. The
+# code under test never ran.
+want "a lane whose daemon died is could-not-judge, not a regression" \
+     "SKIP(daemon-down)" \
+     "$(verdict daemon_gone 1 'bootstrap failed: Serialization error: daemon unreachable at http://127.0.0.1:9841. Start it with `svrn daemon run`')"
+
+want "the backlog producer's own probe wording is recognised too" \
+     "SKIP(daemon-down)" \
+     "$(verdict daemon_probe 1 'error: the daemon is not responding at http://127.0.0.1:9841, so nothing can score this item.')"
+
+# NEGATIVE CONTROLS for the new arm — it must not swallow real failures.
+want "a zero-exit lane is never downgraded by the phrase appearing in output" \
+     "PASS" \
+     "$(verdict daemon_mentioned 0 'note: daemon unreachable at startup, retried ok
+retrieval   9 green · 0 improved · 0 regressed · 0 new · 0 stale')"
+
+want "a genuine regression is still a regression, daemon or not" \
+     "FAIL(3reg)" \
+     "$(verdict daemon_irrelevant 0 'synth   1 green · 0 improved · 3 regressed · 0 new · 0 stale')"
+
+want "a non-zero exit WITHOUT the daemon marker keeps its own failure code" \
+     "FAIL(2)" \
+     "$(verdict other_failure 2 'bench: corpus index is missing')"
+
 exit "$rc"

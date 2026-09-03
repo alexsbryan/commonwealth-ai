@@ -281,7 +281,38 @@ else
 fi
 
 echo "[dev-pod] launching daemon on 127.0.0.1:9741 — tunnel in to reach it"
-exec sovereign-cli daemon run 2>&1 | tee -a /workspace/daemon.log
+
+# SUPERVISED, NOT EXEC'D. The daemon can die in ways no Rust error path sees:
+# a failed GGML_ASSERT inside llama_decode calls abort(), taking the whole
+# process down rather than the one request. Flown 2026-09-03 — the daemon
+# SIGABRTed partway through a bench suite and every remaining lane reported
+# "daemon unreachable", so a four-hour run on rented hardware produced one
+# real failure and a long cascade of noise. \`exec\` made that terminal:
+# nothing was left to restart it.
+#
+# Restart, and make the restart LOUD. A silent respawn would turn a
+# crash-loop into a run that looks alive and answers nothing, which is the
+# same class of problem one layer up. The counter and the per-start banner
+# go to stdout so \`dev-pod.sh logs\` shows them, and a fast-failing loop
+# backs off instead of spinning the GPU.
+starts=0
+while :; do
+  starts=\$((starts + 1))
+  began=\$(date +%s)
+  echo "[dev-pod] daemon start #\$starts at \$(date -u +%FT%TZ)"
+  sovereign-cli daemon run 2>&1 | tee -a /workspace/daemon.log
+  code=\$?
+  ran=\$(( \$(date +%s) - began ))
+  echo "[dev-pod] DAEMON EXITED — start #\$starts, status \$code, alive \${ran}s"
+  # Under 60s alive means it is not really starting; back off so a broken
+  # loadout does not bill a GPU at full tilt for hours.
+  if [ "\$ran" -lt 60 ]; then
+    echo "[dev-pod] died in under 60s — backing off 60s (crash loop?)"
+    sleep 60
+  else
+    sleep 5
+  fi
+done
 EOS
 }
 

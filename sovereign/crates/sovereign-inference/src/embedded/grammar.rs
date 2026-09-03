@@ -1154,6 +1154,50 @@ mod clamp_tests {
 }
 
 #[cfg(test)]
+mod batch_decodable_tests {
+    use super::super::prompt_helpers::ensure_batch_decodable;
+
+    #[test]
+    fn a_batch_within_capacity_is_allowed() {
+        assert!(ensure_batch_decodable(4096, 4096, "test").is_ok());
+        assert!(ensure_batch_decodable(0, 4096, "test").is_ok());
+    }
+
+    #[test]
+    fn one_token_over_capacity_is_refused_not_aborted() {
+        // THE failing input, named: llama_decode asserts
+        // `n_tokens_all <= cparams.n_batch` and a failed GGML_ASSERT calls
+        // abort(), which kills the daemon rather than the request. One token
+        // over is the boundary that separates "error the caller can see" from
+        // "every other in-flight request dies too".
+        let err = ensure_batch_decodable(4097, 4096, "test").unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("Prompt too long to decode"), "{msg}");
+        assert!(msg.contains("4097"), "{msg}");
+        assert!(msg.contains("4096"), "{msg}");
+    }
+
+    #[test]
+    fn the_site_is_named_so_a_report_says_which_prefill_refused() {
+        // Three prefill paths can hit this; a bug report that cannot say
+        // which one is a bug report that costs a session to reproduce.
+        let msg = format!(
+            "{}",
+            ensure_batch_decodable(9000, 8192, "batched prefill").unwrap_err()
+        );
+        assert!(msg.contains("batched prefill"), "{msg}");
+    }
+
+    #[test]
+    fn the_observed_pod_shape_is_refused() {
+        // 2026-09-03: a 50,804-token judge prompt reached a slot whose decode
+        // batch was far smaller. Whatever admitted it, the decode site now
+        // refuses rather than SIGABRT-ing the daemon mid-bench.
+        assert!(ensure_batch_decodable(50_804, 32_768, "prefix-reuse prefill").is_err());
+    }
+}
+
+#[cfg(test)]
 mod tool_call_parser_tests {
     use super::{parse_tool_calls_from_text, parse_tool_calls_with_errors};
 

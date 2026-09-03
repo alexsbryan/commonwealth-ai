@@ -4405,6 +4405,11 @@ impl ModelSlot {
                 "batched prefill: about to decode with 0 tokens — root-cause for n_tokens == 0 error"
             );
         }
+        // Each request was admitted against its own KV slice (n_ctx_per_seq)
+        // above, but the prefill packs EVERY prompt into ONE batch — nothing
+        // checked the SUM against n_batch, and the sum is what llama_decode
+        // asserts on. Refuse the batch instead of aborting the process.
+        ensure_batch_decodable(batch_n_tokens as usize, n_batch, "batched prefill")?;
         ctx.decode(&mut batch).map_err(|e| {
             Error::Inference(format!(
                 "Batched prefill decode failed: {e} (batch_n_tokens={batch_n_tokens}, n_requests={})",
@@ -4729,6 +4734,10 @@ impl ModelSlot {
             "prefix_cache: prefill scope"
         );
 
+        // The abort backstop. Over-capacity here is `abort()`, not an Err —
+        // it kills the daemon rather than the request (see
+        // `ensure_batch_decodable`).
+        ensure_batch_decodable(batch.n_tokens() as usize, n_batch, "prefix-reuse prefill")?;
         if let Err(e) = ctx.decode(&mut batch) {
             tracing::warn!(
                 error = %e,
@@ -4808,7 +4817,15 @@ impl ModelSlot {
 
         let n_batch = ctx.n_batch() as usize;
         let n_ctx = ctx.n_ctx() as usize;
-        let max_tokens = clamp_max_tokens(request.max_tokens, tokens.len(), n_ctx)?;
+        // Admit against min(n_ctx, n_batch), matching the two sibling sites
+        // (`generate_sync*` and `generate_stream_sync_fim`). This one admitted
+        // against n_ctx ALONE until 2026-09-03, while the prefill below decodes
+        // the whole uncached tail as ONE batch — so a prompt in the
+        // (n_batch, n_ctx] gap was admitted here and then aborted the daemon
+        // inside llama_decode. The streaming path is the one `chat/completions`
+        // takes, i.e. the most-travelled path in the process.
+        let admit_ctx = n_ctx.min(n_batch);
+        let max_tokens = clamp_max_tokens(request.max_tokens, tokens.len(), admit_ctx)?;
         let prompt_tokens = tokens.len();
 
         Self::prefill_reusing_prefix(
