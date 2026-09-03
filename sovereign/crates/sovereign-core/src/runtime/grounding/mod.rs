@@ -5693,7 +5693,7 @@ mod tests {
             "two callers got two semaphores — the nested product would be unbounded again"
         );
         assert_eq!(
-            a.available_permits(),
+            config::claim_search_permits_bound(),
             config::claim_search_concurrency(),
             "the one bound must be sized to the derived concurrency"
         );

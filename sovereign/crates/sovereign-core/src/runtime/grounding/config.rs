@@ -278,9 +278,26 @@ pub(crate) fn concurrency_for_cores(cores: usize) -> usize {
 /// than per-turn because the resource it protects — page cache, file handles,
 /// the box — is global: two concurrent turns must share the bound, not get one
 /// each.
+fn claim_search_permit_cell() -> &'static (tokio::sync::Semaphore, usize) {
+    static SEM: std::sync::OnceLock<(tokio::sync::Semaphore, usize)> = std::sync::OnceLock::new();
+    SEM.get_or_init(|| {
+        let bound = claim_search_concurrency();
+        (tokio::sync::Semaphore::new(bound), bound)
+    })
+}
+
 pub(crate) fn claim_search_permits() -> &'static tokio::sync::Semaphore {
-    static SEM: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::OnceLock::new();
-    SEM.get_or_init(|| tokio::sync::Semaphore::new(claim_search_concurrency()))
+    &claim_search_permit_cell().0
+}
+
+/// The bound the permit semaphore was CREATED with — the structural fact the
+/// guard test asserts. Live `available_permits()` is racy under in-process
+/// parallel test runners (a concurrently-running fan-out test holds permits
+/// from the same process-global); nextest's process-per-test model masked
+/// that, bare `cargo test` exposed it. Recorded at init, never recomputed.
+#[cfg(test)]
+pub(crate) fn claim_search_permits_bound() -> usize {
+    claim_search_permit_cell().1
 }
 
 /// Kill-switch for the gate's per-claim corpus re-search
