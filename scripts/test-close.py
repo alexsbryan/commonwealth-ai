@@ -67,7 +67,10 @@ def test_exists(key):
                 return False
             checked = True
         elif "/" in seg and "." in seg:
-            if not os.path.exists(seg):
+            # A path-shaped key may carry arguments — `scripts/sabotage.py
+            # --self-test` is a legitimate landed value and the registry
+            # already spells one that way. Check the path, ignore the argv.
+            if not os.path.exists(seg.split()[0]):
                 return False
             checked = True
     return checked

@@ -1736,6 +1736,7 @@ observable = """A join producing zero matched rows fails loudly naming the key,
 rather than returning an empty set."""
 mutation = """Return the empty set. The test must redden against a fixture with
 a deliberately mismatched key."""
+landed = "scripts/sabotage.py --self-test (+ scripts/tests/sabotage-self-test.sh)"
 
 [[test]]
 id = "GA-03"

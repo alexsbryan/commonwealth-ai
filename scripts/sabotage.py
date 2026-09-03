@@ -599,6 +599,36 @@ def self_test() -> int:
           ["ck::commonwealth-knowledge::guest_grant::tests::expired_grant_is_not_live"],
           f"stats={st} mustFail={qual[0].get('mustFail')}")
 
+    # LEDGER GA-02 (note 33066b57, 2026-09-01). A JOIN THAT MATCHES NOTHING
+    # MUST FAIL LOUDLY NAMING THE KEY. An empty result set is shaped exactly
+    # like a clean run, and that is what cost 90 minutes of compute for zero
+    # information: 62 candidates ran the full 26-batch loop and every one came
+    # back COULD-NOT-JUDGE because the bank keyed tests one way and the report
+    # keyed them another.
+    #
+    # The guard above it (`ambiguous`) was covered; this one was NOT. Probed
+    # 2026-09-03 by replacing the refusal with `continue` — an empty `mustFail`
+    # and no verdict — and the WHOLE self-test stayed green, 0 failures. The
+    # instrument written to catch silent empties had a silent empty in it.
+    absent = [{"id": "absent", "mustFail": ["no_such_test_anywhere_in_this_workspace"]}]
+    st = resolve_declared(absent, base)
+    check("a declared test absent from the report is refused BY NAME, not emptied",
+          st["absent"] == 1
+          and absent[0].get("verdict") == "COULD-NOT-JUDGE"
+          and "no_such_test_anywhere_in_this_workspace" in absent[0].get("detail", ""),
+          f"stats={st} verdict={absent[0].get('verdict')} detail={absent[0].get('detail')!r}")
+    check("...and its mustFail is never silently emptied into a clean-looking run",
+          absent[0]["mustFail"] == ["no_such_test_anywhere_in_this_workspace"],
+          f"mustFail={absent[0].get('mustFail')}")
+
+    # CONTROL (ARCH §18.4): the check above must not be answering
+    # COULD-NOT-JUDGE to everything. A key that IS in the report resolves.
+    present = [{"id": "present", "mustFail": ["ck::commonwealth-knowledge::other::tests::unrelated"]}]
+    st = resolve_declared(present, base)
+    check("a key present in the report still joins exactly (control)",
+          st["exact"] == 1 and present[0].get("verdict") is None,
+          f"stats={st} verdict={present[0].get('verdict')}")
+
     # 8. THE VERDICT ITSELF (EV-25). Checks 1-7 cover batching, application
     #    and name resolution — everything AROUND the judgment. What decides
     #    whether a mutation counts as proof is `adjudicate`, and nothing
