@@ -250,7 +250,7 @@ async fn run_thread(
     // `turn_register()` recall guard.
     if let Err(e) = session
         .runtime
-        .seed_conversation(&conv_id, unix_seconds() as i64, Some(WITNESS_SKILL))
+        .seed_conversation(&conv_id, unix_seconds() as i64, Some(WITNESS_SKILL), None)
         .await
     {
         let record = error_record(

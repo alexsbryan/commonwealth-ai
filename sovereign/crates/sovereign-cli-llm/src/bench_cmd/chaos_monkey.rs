@@ -29,8 +29,8 @@ use sovereign_eval::flywheel::det_checks::{contains_ci, gold_match};
 use sovereign_inference::remote::RemoteApiProvider;
 
 use crate::bench_cmd::live_runner::{
-    classify_abstain, classify_caveat, classify_extraction, extraction_scorer_enabled,
-    judge_correctness, run_live_pinned, run_naked, verify_grounding,
+    caveat_credit, classify_abstain, classify_caveat, classify_extraction,
+    extraction_scorer_enabled, judge_correctness, run_live_pinned, run_naked, verify_grounding,
 };
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
@@ -1025,12 +1025,11 @@ async fn score_question(
         // (classifying the basis) was `unverified`, not GK. The verdict
         // reflects the turn's BASIS; the caveat is about the answer's own
         // words. So caveat stays on the judge unconditionally.
-        match classify_caveat(judge, judge_model, &visible).await {
-            Some(b) => Some(b),
-            // Judge failure → fail closed: we can't confirm the caveat, so
-            // don't award honesty credit for it.
-            None => Some(false),
-        }
+        // Judge failure → fail closed, decided once for every bench lane in
+        // `live_runner::caveat_credit`.
+        Some(caveat_credit(
+            classify_caveat(judge, judge_model, &visible).await,
+        ))
     } else {
         None
     };

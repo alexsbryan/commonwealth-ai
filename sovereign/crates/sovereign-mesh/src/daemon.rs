@@ -54,6 +54,104 @@ fn internal_bind_addr(
         })
 }
 
+/// What the client API binds to, and what bearer token guards it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ClientBindPosture {
+    /// The interface the client listener binds to.
+    pub bind: String,
+    /// Whether that interface is loopback-only.
+    pub loopback: bool,
+    /// The token to install in `AppState`. `None` on a loopback bind means
+    /// "no auth needed, nothing remote can reach it"; `None` on a
+    /// NON-loopback bind means FAIL CLOSED — the auth layer then refuses
+    /// every remote caller rather than serving unauthenticated.
+    pub token: Option<String>,
+}
+
+/// Is this configured interface loopback?
+fn bind_is_loopback(bind: &str) -> bool {
+    bind == "127.0.0.1" || bind == "::1" || bind.eq_ignore_ascii_case("localhost")
+}
+
+/// The secure-by-default posture for the client API, as one decision.
+///
+/// SECURE BY DEFAULT means two things at once, and they are easy to separate
+/// by accident: the daemon binds loopback unless something explicitly says
+/// otherwise, and a bind that is NOT loopback carries a bearer token or
+/// serves nobody. Both used to live inline in `start_daemon` — a ~4700-line
+/// async fn — with no extracted decision and no test, so the branch that
+/// decides whether an unauthenticated listener goes on the network was
+/// reachable only by starting a daemon.
+///
+/// The precedence, highest first:
+///
+/// 1. **An encrypted mesh forces loopback** (WS-C receiver lockout). Remote
+///    peers reach `/v1` through the key-authenticated iroh acceptor, which
+///    forwards to this loopback listener; plaintext ingress is closed
+///    outright, overriding both the marker and an explicit config bind.
+/// 2. **An explicit non-loopback `client_bind` wins on its own** — the
+///    operator asked for it.
+/// 3. **The `client-exposed` marker promotes a loopback DEFAULT to
+///    `0.0.0.0`** (written by `expose_client_api` on an explicit `mesh
+///    create`/`join`), so a shared mesh stays reachable across restarts while
+///    a silent solo mesh stays loopback.
+///
+/// `resolve_token` is the env → config → generate-and-persist chain, taken as
+/// a closure so this decision needs no data directory: it is called ONLY on a
+/// non-loopback bind, which is itself part of the contract — a loopback
+/// daemon must never mint or persist a credential it has no use for.
+fn resolve_client_bind_posture(
+    configured_bind: &str,
+    client_exposed_marker: bool,
+    require_encryption: bool,
+    resolve_token: impl FnOnce() -> Option<String>,
+) -> ClientBindPosture {
+    let mut bind = configured_bind.to_string();
+    let mut loopback = bind_is_loopback(&bind);
+
+    if loopback && client_exposed_marker {
+        bind = "0.0.0.0".to_string();
+        loopback = false;
+    }
+    if require_encryption && !loopback {
+        info!(
+            "encrypted mesh: forcing client API to loopback-only — remote \
+             access is via the iroh acceptor (key-authenticated)"
+        );
+        bind = "127.0.0.1".to_string();
+        loopback = true;
+    }
+    if loopback {
+        return ClientBindPosture {
+            bind,
+            loopback,
+            token: None,
+        };
+    }
+    // Non-loopback: a token is mandatory. Generating one by default means an
+    // operator cannot expose an unauthenticated surface by flipping the bind
+    // alone — and when even that fails, the absence is REPORTED and the layer
+    // refuses (ARCH §18.3), never defaulted into an open door.
+    let token = resolve_token();
+    match &token {
+        Some(_) => info!(
+            %bind,
+            "client API bound non-loopback — bearer token REQUIRED for remote callers"
+        ),
+        None => warn!(
+            %bind,
+            "client API bound non-loopback but NO token could be resolved/generated — \
+             remote callers will be REFUSED (fail-closed). Fix data-dir perms or set \
+             daemon.client_token."
+        ),
+    }
+    ClientBindPosture {
+        bind,
+        loopback,
+        token,
+    }
+}
+
 /// Effective mDNS-on decision: the `[discovery] mdns` config flag, with
 /// `SOVEREIGN_DISABLE_MDNS` (`=1`/`=true`) as a force-off override for
 /// container/VPC deploys whose network namespace can't bind the multicast
@@ -2641,6 +2739,12 @@ impl EmbeddedDaemon {
                 commonwealth_api::yield_hook::AppStateYieldHook::new(app_state.inner.clone());
             engine.set_yield_hook(hook);
             info!("foreground-yield: hook installed on corpus engine");
+            engine.set_foreground_signal(
+                commonwealth_api::yield_hook::AppStateForegroundSignal::new(
+                    app_state.inner.clone(),
+                ),
+            );
+            info!("foreground-yield: turn lease installed on corpus engine");
         }
 
         // Bound peer-inference admission for headless contributors. The desktop
@@ -2727,76 +2831,31 @@ impl EmbeddedDaemon {
                 c.daemon.internal_bind.clone(),
             )
         };
-        let mut bind_is_loopback = client_bind == "127.0.0.1"
-            || client_bind == "::1"
-            || client_bind.eq_ignore_ascii_case("localhost");
-        // The `client-exposed` marker (written by `expose_client_api`
-        // on an explicit `mesh create`/`join`) bumps a loopback default
-        // to `0.0.0.0`. An explicit non-loopback `client_bind` in config
-        // already wins on its own; this only promotes the default, so
-        // the silent solo-mesh stays loopback (no marker) while a shared
-        // mesh is reachable across restarts (marker persists).
-        if bind_is_loopback && persist::client_exposed(&self.data_dir) {
-            client_bind = "0.0.0.0".to_string();
-            bind_is_loopback = false;
-        }
-        // Receiver-side lockout (WS-C): an ENCRYPTED mesh closes its
-        // plaintext ingress entirely. Force the client bind back to
-        // loopback even if the client-exposed marker or config asked for
-        // `0.0.0.0` — remote peers reach `/v1` over the key-authenticated
-        // iroh acceptor (which forwards to this loopback listener), never
-        // plaintext. Overrides the marker bump above.
-        if require_encryption && !bind_is_loopback {
-            info!(
-                "encrypted mesh: forcing client API to loopback-only — remote \
-                 access is via the iroh acceptor (key-authenticated)"
-            );
-            client_bind = "127.0.0.1".to_string();
-            bind_is_loopback = true;
-        }
-        if bind_is_loopback {
-            app_state.install_client_token(None);
-        } else {
-            // Non-loopback: a token is mandatory. Precedence: env →
-            // config → auto-generate+persist. Generating-by-default
-            // means an operator can't accidentally expose an
-            // unauthenticated surface by flipping the bind alone.
-            let token = std::env::var("SOVEREIGN_CLIENT_TOKEN")
-                .ok()
-                .filter(|s| !s.trim().is_empty())
-                .or(configured_token)
-                .or_else(|| {
-                    commonwealth_transport::identity::load_or_create_client_token(&self.data_dir)
-                        .map_err(|e| warn!("client-token persistence failed: {e}"))
-                        .ok()
-                });
-            match token {
-                Some(tok) => {
-                    info!(
-                        bind = %client_bind,
-                        "client API bound non-loopback — bearer token REQUIRED for \
-                         remote callers (token at {}/client-token; or set \
-                         daemon.client_token / SOVEREIGN_CLIENT_TOKEN)",
-                        self.data_dir.display()
-                    );
-                    app_state.install_client_token(Some(tok.into()));
-                }
-                None => {
-                    // Could not obtain a token at all — fail closed:
-                    // install None so the layer refuses every remote
-                    // caller (loopback still works) rather than serving
-                    // unauthenticated.
-                    warn!(
-                        bind = %client_bind,
-                        "client API bound non-loopback but NO token could be \
-                         resolved/generated — remote callers will be REFUSED \
-                         (fail-closed). Fix data-dir perms or set \
-                         daemon.client_token."
-                    );
-                    app_state.install_client_token(None);
-                }
-            }
-        }
+        // The whole posture — bind + auth — is one decision, resolved in
+        // `resolve_client_bind_posture` so it can be exercised without
+        // starting a daemon. The token chain (env → config →
+        // generate-and-persist) is passed as a closure and is called ONLY on
+        // a non-loopback bind: a loopback daemon must not mint or persist a
+        // credential it has no use for.
+        let data_dir = self.data_dir.clone();
+        let posture = resolve_client_bind_posture(
+            &client_bind,
+            persist::client_exposed(&self.data_dir),
+            require_encryption,
+            move || {
+                std::env::var("SOVEREIGN_CLIENT_TOKEN")
+                    .ok()
+                    .filter(|s| !s.trim().is_empty())
+                    .or(configured_token)
+                    .or_else(|| {
+                        commonwealth_transport::identity::load_or_create_client_token(&data_dir)
+                            .map_err(|e| warn!("client-token persistence failed: {e}"))
+                            .ok()
+                    })
+            },
+        );
+        client_bind = posture.bind;
+        app_state.install_client_token(posture.token.map(Into::into));
         let client_addr: SocketAddr = format!("{client_bind}:{client_port}")
             .parse()
             .unwrap_or_else(|_| {
@@ -4498,6 +4557,91 @@ mod tests {
         // ...but encryption still forces loopback, ignoring the config.
         let pinned_encrypted = internal_bind_addr(true, "10.0.1.4", 9742);
         assert!(pinned_encrypted.ip().is_loopback());
+    }
+
+    /// covers: UI-22
+    ///
+    /// Secure by default, as one decision. Both halves are asserted because
+    /// each is separately capable of shipping an open door: bind loopback
+    /// unless something explicit says otherwise, and a non-loopback bind
+    /// either carries a bearer token or serves nobody.
+    ///
+    /// Until this was extracted the whole posture lived inline in
+    /// `start_daemon` — a ~4700-line async fn — so the only way to reach the
+    /// branch that decides whether an unauthenticated listener goes on the
+    /// network was to start a daemon and try it from another machine.
+    #[test]
+    fn the_client_api_binds_loopback_by_default_and_never_exposes_an_unauthenticated_listener() {
+        let never = || panic!("a loopback daemon must not mint or persist a client token");
+        let token = || Some("tok-abc".to_string());
+        let no_token = || None;
+
+        // 1. THE DEFAULT. No marker, no encryption: loopback, no auth layer,
+        //    and — the part that is easy to lose — no credential minted at
+        //    all. A daemon nothing can reach has no use for one.
+        for bind in ["127.0.0.1", "::1", "localhost", "LOCALHOST"] {
+            let p = resolve_client_bind_posture(bind, false, false, never);
+            assert!(p.loopback, "{bind} is loopback");
+            assert!(p.token.is_none());
+        }
+
+        // 2. THE DANGEROUS CASE. An explicit non-loopback bind where no token
+        //    can be resolved — bad data-dir perms, no config, no env. The
+        //    posture must be token-less, which is what makes `client_auth`
+        //    refuse every remote caller. A posture that shipped `Some(..)` of
+        //    anything here, or that quietly fell back to loopback, would each
+        //    be a different kind of lie about what is listening.
+        let p = resolve_client_bind_posture("0.0.0.0", false, false, no_token);
+        assert_eq!(p.bind, "0.0.0.0");
+        assert!(!p.loopback);
+        assert!(
+            p.token.is_none(),
+            "no resolvable token on a non-loopback bind must install NONE — the auth \
+             layer then refuses every remote caller (fail-closed)"
+        );
+
+        // 3. The same bind WITH a token: exposed, and guarded.
+        let p = resolve_client_bind_posture("0.0.0.0", false, false, token);
+        assert_eq!(p.bind, "0.0.0.0");
+        assert!(!p.loopback);
+        assert_eq!(p.token.as_deref(), Some("tok-abc"));
+
+        // 4. THE OPT-OUT, and its exact scope. The `client-exposed` marker
+        //    promotes a loopback DEFAULT to 0.0.0.0 — and, because that is
+        //    now a non-loopback bind, it goes through the token requirement
+        //    like any other. The marker cannot open an unauthenticated port.
+        let p = resolve_client_bind_posture("127.0.0.1", true, false, token);
+        assert_eq!(p.bind, "0.0.0.0");
+        assert!(!p.loopback);
+        assert_eq!(p.token.as_deref(), Some("tok-abc"));
+
+        let p = resolve_client_bind_posture("127.0.0.1", true, false, no_token);
+        assert!(!p.loopback);
+        assert!(
+            p.token.is_none(),
+            "the marker must not be a route around the token requirement"
+        );
+
+        // 5. An ENCRYPTED mesh overrides everything back to loopback (WS-C
+        //    receiver lockout) — the marker above, and an explicit config
+        //    bind too. Remote peers arrive via the key-authenticated iroh
+        //    acceptor instead, so no plaintext token is minted.
+        let p = resolve_client_bind_posture("127.0.0.1", true, true, never);
+        assert_eq!(p.bind, "127.0.0.1");
+        assert!(p.loopback && p.token.is_none());
+
+        let p = resolve_client_bind_posture("10.0.1.4", false, true, never);
+        assert_eq!(p.bind, "127.0.0.1");
+        assert!(p.loopback && p.token.is_none());
+
+        // 6. And on a PLAINTEXT mesh an explicit routable bind is honoured
+        //    verbatim — the control for [5], so "forced loopback" is known to
+        //    be the encryption doing it rather than the function refusing
+        //    every non-loopback address.
+        let p = resolve_client_bind_posture("10.0.1.4", false, false, token);
+        assert_eq!(p.bind, "10.0.1.4");
+        assert!(!p.loopback);
+        assert_eq!(p.token.as_deref(), Some("tok-abc"));
     }
 
     /// Regression for: after `sovereign setup`, `GET /v1/models`

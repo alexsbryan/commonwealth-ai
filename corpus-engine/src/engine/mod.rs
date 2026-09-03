@@ -9,7 +9,7 @@ mod ingest;
 mod ingest_factories;
 mod ingest_helpers;
 mod ingest_prebuilt;
-mod yield_gate;
+pub(crate) mod yield_gate;
 
 pub mod reindex;
 
@@ -267,6 +267,9 @@ pub struct CorpusEngine {
     /// hot path is one rwlock acquisition per embed-batch start,
     /// which is on the order of seconds — negligible.
     yield_hook: std::sync::RwLock<Option<Arc<dyn crate::YieldHook>>>,
+    /// The write side of the yield contract (`crate::ForegroundSignal`);
+    /// installed by the daemon beside the hook, held by each turn.
+    foreground_signal: std::sync::RwLock<Option<Arc<dyn crate::ForegroundSignal>>>,
     /// Per-partition exclusion locks. Each entry serializes (well —
     /// rejects, see below) concurrent `ingest` / `ingest_with_overrides`
     /// calls that would write into the same `<corpus>-partition-<node>/`
@@ -377,6 +380,7 @@ impl CorpusEngine {
             asset_stores: Arc::new(RwLock::new(HashMap::new())),
             asset_sub_extractors: Arc::new(RwLock::new(None)),
             yield_hook: std::sync::RwLock::new(None),
+            foreground_signal: std::sync::RwLock::new(None),
             partition_locks: Arc::new(std::sync::Mutex::new(HashMap::new())),
         }
     }
@@ -437,6 +441,26 @@ impl CorpusEngine {
             .read()
             .expect("yield_hook RwLock poisoned")
             .clone()
+    }
+
+    /// Install the write side of the yield contract. Same seam as
+    /// [`Self::set_yield_hook`], same installer (the daemon).
+    pub fn set_foreground_signal(&self, signal: Arc<dyn crate::ForegroundSignal>) {
+        let mut guard = self
+            .foreground_signal
+            .write()
+            .expect("foreground_signal RwLock poisoned");
+        *guard = Some(signal);
+    }
+
+    /// A lease that says "a person is waiting" until dropped. `None`
+    /// when no signal is installed (tests, hosts without a daemon).
+    pub fn foreground_lease(&self) -> Option<crate::ForegroundLease> {
+        self.foreground_signal
+            .read()
+            .expect("foreground_signal RwLock poisoned")
+            .clone()
+            .map(crate::ForegroundLease::acquire)
     }
 
     /// Register a custom acquirer keyed by `kind`. Recipes referencing
@@ -1915,21 +1939,38 @@ impl CorpusEngine {
             }
         }
 
-        // Slow path: open, validate the embedding model, then cache.
-        let index = CorpusIndex::open(path).await?;
-        let info = index.info().await?;
+        // Slow path: open, validate the embedding model, then cache. The model
+        // name comes off the handle's meta, NOT `info()`: `info()` also walks
+        // the whole index directory for a byte total, which on a 113 GB
+        // wikipedia index cost seconds on every re-open — and a background
+        // reindexer committing one document every few seconds forced a
+        // re-open on nearly every claim search (measured 2026-09-02, issue #57).
+        let mut index = CorpusIndex::open(path).await?;
+
+        // A re-open of a path we already hold means the on-disk version moved
+        // under us (a committed external write). The search gate that handle
+        // computed — IVF built, FTS built, rows above the flat-scan threshold
+        // — is not what an append changes, so the new handle inherits it and
+        // `GATE_CACHE_TTL` bounds the belief. Without this every such
+        // re-open paid `count_rows` + `list_indices` cold: 4.4-9.7 s on the
+        // 2.0M-row table while the reindexer was writing to it.
+        if let Ok(cache) = self.index_cache.lock() {
+            if let Some((_, prev)) = cache.get(path) {
+                index.share_gate_cache_from(prev);
+            }
+        }
 
         // Warn on mismatch rather than hard-erroring so that indexes written
         // before the model name was recorded correctly (they originally
         // stored a placeholder default) remain searchable after the fix.
         // A true incompatibility (different dimensionality) will surface as a
         // search error anyway; the string check is informational only.
-        if info.embedding_model != self.expected_embedding_model {
+        if index.embedding_model() != self.expected_embedding_model {
             tracing::warn!(
                 "Corpus '{}' was indexed with model '{}' but current engine expects '{}'. \
                  Search results may be degraded if the models differ. Re-install the corpus to fix.",
-                info.corpus_id,
-                info.embedding_model,
+                index.corpus_id(),
+                index.embedding_model(),
                 self.expected_embedding_model,
             );
         }
@@ -3016,6 +3057,102 @@ mod tests {
 
         // Should succeed (warn, not error) when model names differ.
         assert!(engine.open_index(&idx_path).await.is_ok());
+    }
+
+    /// PRE-REGISTERED u1/u2/u3 (issue #57 rec 2, scratchpad
+    /// PREREG_index_reopen_cost.md). A committed EXTERNAL write moves the
+    /// version key, so the engine re-opens — and the new handle must start
+    /// with the previous handle's search gate rather than re-listing the
+    /// indexes cold (u1). That inherited gate is deliberately the OLD one
+    /// (the row count still reads pre-write), which is the bounded staleness
+    /// the TTL exists for: once aged past it, `gate_info` recomputes (u2). A
+    /// write through the engine-held handle itself still clears the shared
+    /// cache at once (u3).
+    /// FAILS IF: the slow path stops sharing the cache, the TTL check is
+    /// dropped, or the write methods stop clearing.
+    #[tokio::test]
+    async fn a_reopen_forced_by_an_external_commit_inherits_the_search_gate() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(&idx_dir).unwrap();
+        let idx_path = idx_dir.join("gate");
+        CorpusIndex::create(&idx_path, "gate", "Gate", "m", 8, true, "MIT")
+            .await
+            .unwrap();
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
+
+        let chunk = |i: usize| {
+            (
+                crate::index::InsertChunk {
+                    content: format!("row {i} with enough words to be a chunk"),
+                    title: None,
+                    url: None,
+                    metadata: None,
+                    content_hash: None,
+                    source_doc_id: Some(format!("doc-{i}")),
+                    source_file: None,
+                    code: crate::index::InsertCodeMeta::default(),
+                    unit_id: None,
+                },
+                vec![0.1_f32; 8],
+            )
+        };
+
+        // Seed one row through an external handle, then let the engine open
+        // and compute its gate.
+        let external = CorpusIndex::open(&idx_path).await.unwrap();
+        external.insert_batch(&[chunk(0)]).await.unwrap();
+        let h1 = engine.open_index(&idx_path).await.unwrap();
+        let (rows1, _, _) = h1.gate_info().await;
+        assert_eq!(rows1, 1);
+        let g1 = h1.gate_cache_snapshot().expect("gate computed and cached");
+
+        // An EXTERNAL commit: a different handle appends. The version key
+        // moves; the engine's next open takes the slow path.
+        // (mtime granularity: make sure the versions dir mtime advances.)
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        external.insert_batch(&[chunk(1)]).await.unwrap();
+        let h2 = engine.open_index(&idx_path).await.unwrap();
+        // u1: warm on arrival, and it is the INHERITED gate — same stamp,
+        // still reporting the pre-write row count, no cold relist.
+        let g2 = h2
+            .gate_cache_snapshot()
+            .expect("re-opened handle inherits the gate");
+        assert_eq!(
+            g2.computed_at, g1.computed_at,
+            "same computation, not a new one"
+        );
+        assert_eq!(
+            g2.row_count, 1,
+            "the inherited gate is the old one — stated staleness"
+        );
+        let (rows2, _, _) = h2.gate_info().await;
+        assert_eq!(
+            rows2, 1,
+            "within the TTL the inherited gate is what search reads"
+        );
+
+        // u2: past the TTL the gate is recomputed and sees both rows.
+        h2.gate_cache_backdate(crate::index::GATE_CACHE_TTL + std::time::Duration::from_secs(1));
+        let (rows3, _, _) = h2.gate_info().await;
+        assert_eq!(rows3, 2, "an aged gate is recomputed");
+        let g3 = h2.gate_cache_snapshot().unwrap();
+        assert!(g3.computed_at > g1.computed_at);
+
+        // u3: a write through the engine-held handle clears the shared cache
+        // immediately — and, because it is shared, the older clone sees the
+        // clear too.
+        h2.insert_batch(&[chunk(2)]).await.unwrap();
+        assert!(
+            h2.gate_cache_snapshot().is_none(),
+            "own write clears the gate"
+        );
+        assert!(
+            h1.gate_cache_snapshot().is_none(),
+            "the cache is one object across handles"
+        );
+        let (rows4, _, _) = h2.gate_info().await;
+        assert_eq!(rows4, 3);
     }
 
     #[tokio::test]

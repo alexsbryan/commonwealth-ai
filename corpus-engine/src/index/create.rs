@@ -271,6 +271,7 @@ impl CorpusIndex {
             table,
             corpus_id: corpus_id.to_string(),
             embedding_dimensions: embedding_dim,
+            embedding_model: embedding_model.to_string(),
             gate_cache: Default::default(),
         })
     }

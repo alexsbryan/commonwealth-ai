@@ -687,7 +687,13 @@ fn directed_pin_tokens(
         .zip(tokens.iter())
         .take_while(|(a, b)| a == b)
         .count();
-    let pin = lcp.saturating_sub(2);
+    // Same margin as the undirected path, from the same constant, so the
+    // two planners cannot drift apart on how much tail a restore needs.
+    // Kept as a plain subtraction rather than `pin_with_tail` on purpose:
+    // this path is measured and working (4,881 tokens restored in 45 ms),
+    // and widening its pin would rotate `directed_key` for every existing
+    // judge family to buy two tokens.
+    let pin = lcp.saturating_sub(super::prefix_state::PIN_TAIL_MARGIN);
     (pin > 0).then_some(pin)
 }
 

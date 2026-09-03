@@ -28,7 +28,7 @@ use sovereign_eval::flywheel::{
 };
 use sovereign_inference::remote::RemoteApiProvider;
 
-use crate::bench_cmd::live_runner::{classify_abstain, classify_caveat, run_live};
+use crate::bench_cmd::live_runner::{caveat_credit, classify_abstain, classify_caveat, run_live};
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
@@ -340,11 +340,9 @@ async fn run_and_verify(
     // Provenance caveat — only for out-of-domain answers (mirrors chaos).
     let caveat_present =
         if probe.qtype == QuestionType::AbsentOutOfDomain && action == AgentAction::Answered {
-            Some(
-                classify_caveat(judge, judge_model, &visible)
-                    .await
-                    .unwrap_or(false),
-            )
+            Some(caveat_credit(
+                classify_caveat(judge, judge_model, &visible).await,
+            ))
         } else {
             None
         };

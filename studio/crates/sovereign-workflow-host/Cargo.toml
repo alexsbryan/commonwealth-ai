@@ -19,6 +19,9 @@ reqwest = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# A fake `/v1` for `daemon_models`' probe tests — the embed resolver's
+# verdict is a real HTTP round-trip, so the test serves one.
+axum = { workspace = true }
 
 [lints]
 workspace = true

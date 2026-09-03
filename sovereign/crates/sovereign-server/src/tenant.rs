@@ -81,10 +81,11 @@ impl TenantRuntime {
         conversation_id: &str,
         created_at: i64,
         skill_id: Option<&str>,
+        enabled_corpora: Option<&[String]>,
     ) -> Result<()> {
         let scoped = self.scoped_id(conversation_id);
         self.runtime
-            .seed_conversation(&scoped, created_at, skill_id)
+            .seed_conversation(&scoped, created_at, skill_id, enabled_corpora)
             .await
     }
 }

@@ -58,21 +58,83 @@ impl Runtime {
     }
 
     /// Seed an empty conversation row with an optional workspace skill
-    /// tag BEFORE the first message — the daemon `/v1/conversations`
-    /// surface's analog of the desktop "new chat" flow
-    /// (`commands/conversation.rs`). Setting `skill_id = "recipe-author"`
-    /// here is what makes [`Self::handle_message_any`] route the
-    /// conversation into the recipe-author agent loop. INSERT-OR-IGNORE:
-    /// a no-op if the row already exists.
+    /// tag and an optional corpus allow-list BEFORE the first message —
+    /// the daemon `/v1/conversations` surface's analog of the desktop
+    /// "new chat" flow (`commands/conversation.rs`). Setting `skill_id =
+    /// "recipe-author"` here is what makes [`Self::handle_message_any`]
+    /// route the conversation into the recipe-author agent loop.
+    /// INSERT-OR-IGNORE on the row; the allow-list, when given, is
+    /// written after it.
+    ///
+    /// `enabled_corpora` is `Conversation::enabled_corpora` — the
+    /// per-conversation retrieval allow-list the desktop sets per chip
+    /// toggle. Until 2026-09-01 it had no wire form, so `svrn chat ask`
+    /// (a surface since TOPOLOGY phase 6 — the turn runs HERE) could not
+    /// scope a turn to one corpus at all. It is VALIDATED against the
+    /// corpora this runtime can actually search, because the retrieval
+    /// filter (`apply_corpus_allow_list`) silently intersects: an id that
+    /// matches nothing produces an empty fan-out and an answer that says
+    /// "the corpus does not cover this", which is the §18.3 substitution
+    /// dressed as a result. An unknown id is refused with the installed
+    /// list; an empty list is refused rather than stored as "search
+    /// nothing".
     pub async fn seed_conversation(
         &self,
         id: &str,
         created_at: i64,
         skill_id: Option<&str>,
+        enabled_corpora: Option<&[String]>,
     ) -> Result<()> {
+        if let Some(allow) = enabled_corpora {
+            let installed = self.allow_list_universe().await;
+            corpus_allow_list_verdict(allow, &installed).map_err(Error::InvalidInput)?;
+        }
         self.store
             .insert_empty_conversation(id, created_at, skill_id)
-            .await
+            .await?;
+        if let Some(allow) = enabled_corpora {
+            self.store
+                .set_conversation_enabled_corpora(id, Some(allow.to_vec()))
+                .await?;
+            tracing::info!(
+                conversation_id = id,
+                enabled_corpora = ?allow,
+                "seed_conversation: corpus allow-list set"
+            );
+        }
+        Ok(())
+    }
+
+    /// Every id an allow-list entry may legitimately name: each installed
+    /// index's `corpus_id`, plus the `parent_corpus_id`s that satellite /
+    /// layer corpora follow (`apply_corpus_allow_list` keeps an index whose
+    /// parent is listed). Read from the SAME engine retrieval fans out over,
+    /// so "installed" here means "would be searched" — not a directory
+    /// listing from some other process. No engine ⇒ nothing is searchable.
+    async fn allow_list_universe(&self) -> Vec<String> {
+        let Some(engine) = self.corpus_engine.as_ref() else {
+            return Vec::new();
+        };
+        let infos = match engine.installed_indexes().await {
+            Ok(infos) => infos,
+            Err(e) => {
+                tracing::warn!(error = %e, "seed_conversation: installed_indexes failed");
+                return Vec::new();
+            }
+        };
+        let mut ids: Vec<String> = Vec::with_capacity(infos.len());
+        for info in infos {
+            if !ids.contains(&info.corpus_id) {
+                ids.push(info.corpus_id);
+            }
+            if let Some(parent) = info.parent_corpus_id {
+                if !ids.contains(&parent) {
+                    ids.push(parent);
+                }
+            }
+        }
+        ids.sort();
+        ids
     }
 
     // `handle_message_any` used to live here. It answered "run a turn, no
@@ -843,5 +905,88 @@ impl Runtime {
             "runtime: turn end"
         );
         result
+    }
+}
+
+/// The ONE decision behind `Runtime::seed_conversation`'s allow-list
+/// check (ARCH §10.6), pure so its failing inputs can be named in a test:
+/// an empty list, and any id absent from `installed`. `Ok(())` means every
+/// entry names a corpus retrieval would search. The message is what the
+/// operator reads on the CLI, so it carries the remedy — the installed ids —
+/// rather than only the complaint.
+pub fn corpus_allow_list_verdict(
+    allow: &[String],
+    installed: &[String],
+) -> std::result::Result<(), String> {
+    if allow.is_empty() {
+        return Err(
+            "enabled_corpora names no corpus — an empty allow-list would search nothing; \
+             omit it to search every installed corpus"
+                .to_string(),
+        );
+    }
+    let unknown: Vec<&str> = allow
+        .iter()
+        .map(String::as_str)
+        .filter(|id| !installed.iter().any(|i| i == id))
+        .collect();
+    if unknown.is_empty() {
+        return Ok(());
+    }
+    let installed_list = if installed.is_empty() {
+        "(none — this daemon has no corpus index installed)".to_string()
+    } else {
+        installed.join(", ")
+    };
+    Err(format!(
+        "unknown corpus id{}: {} — installed: {}",
+        if unknown.len() == 1 { "" } else { "s" },
+        unknown.join(", "),
+        installed_list
+    ))
+}
+
+#[cfg(test)]
+mod corpus_allow_list_tests {
+    use super::corpus_allow_list_verdict;
+
+    fn s(items: &[&str]) -> Vec<String> {
+        items.iter().map(|x| x.to_string()).collect()
+    }
+
+    /// The named failing input: an id retrieval would silently drop.
+    /// The message must carry BOTH the offender and the remedy.
+    #[test]
+    fn an_unknown_corpus_id_is_refused_with_the_installed_list() {
+        let err = corpus_allow_list_verdict(&s(&["sep", "nope"]), &s(&["gutenberg", "sep"]))
+            .expect_err("`nope` is not installed");
+        assert!(err.contains("unknown corpus id: nope"), "{err}");
+        assert!(err.contains("installed: gutenberg, sep"), "{err}");
+        assert!(
+            !err.contains("unknown corpus id: sep"),
+            "the known id must not be reported as unknown: {err}"
+        );
+    }
+
+    #[test]
+    fn every_installed_id_passes() {
+        corpus_allow_list_verdict(&s(&["sep"]), &s(&["gutenberg", "sep"]))
+            .expect("sep is installed");
+    }
+
+    /// An empty list is stored by the desktop as "search nothing"; over the
+    /// wire it is a mistake, not an intent, and is refused (§18.3).
+    #[test]
+    fn an_empty_allow_list_is_refused_not_stored() {
+        let err = corpus_allow_list_verdict(&[], &s(&["sep"])).expect_err("empty");
+        assert!(err.contains("search nothing"), "{err}");
+    }
+
+    /// No engine, or an empty index dir: the message says so instead of
+    /// printing an empty `installed:` that reads like a formatting bug.
+    #[test]
+    fn no_installed_corpora_is_named_as_such() {
+        let err = corpus_allow_list_verdict(&s(&["sep"]), &[]).expect_err("nothing installed");
+        assert!(err.contains("no corpus index installed"), "{err}");
     }
 }

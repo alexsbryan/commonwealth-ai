@@ -396,26 +396,41 @@ async fn resolve_model_ids(v1: &str, globals: &ChatGlobals) -> Result<(String, S
     // crosses.
     let guest = globals.guest_link_active;
 
-    // (b) SetupConfig filename stems. The daemon loads
-    //     `config.models.embed` and advertises it on `/v1/models`
-    //     under its filename stem (e.g. `qwen-embedding-0.6b.gguf`
-    //     → `qwen-embedding-0.6b`). Preferring the stem over
+    // The EMBED id goes through the one decider
+    // (`sovereign_workflow_host::daemon_models`, ARCH §10.6): explicit flag →
+    // configured stem → embedding-like advertised id, then a
+    // `/v1/embeddings` probe so a session never starts on an embed model the
+    // daemon cannot answer with. This file used to hold its own copy of the
+    // ladder (stem first, then an `embedding`/`-embed` substring), and
+    // `recipe_cmd` + `workflow-host` each held a different one — which is how
+    // one daemon could serve `svrn chat` and refuse `svrn corpus ingest`.
+    //
+    // Under a guest link the configured stem is THIS machine's and is
+    // skipped; a grant with no embed model is tolerated with the sentinel
+    // below rather than refused, so the guest branch keeps its own path
+    // through the `/v1/models` loop.
+    let mut embed_found = if guest {
+        globals.embed_model.clone()
+    } else {
+        Some(
+            sovereign_workflow_host::resolve_embed_model(v1, globals.embed_model.as_deref())
+                .await
+                .map_err(Error::Serialization)?
+                .id,
+        )
+    };
+
+    // (b) The CHAT stem from SetupConfig. The daemon loads
+    //     `config.models.primary` and advertises it on `/v1/models`
+    //     under its filename stem. Preferring the stem over
     //     `/v1/models` iteration means we always reach the
     //     *local* slot, never a mesh-peer advertisement, and the
     //     answer is stable across invocations.
-    let from_config = if guest {
-        None
-    } else {
-        chat_and_embed_stems_from_config()
-    };
-    let mut chat_found = globals
-        .chat_model
-        .clone()
-        .or_else(|| from_config.as_ref().and_then(|s| s.chat.clone()));
-    let mut embed_found = globals
-        .embed_model
-        .clone()
-        .or_else(|| from_config.as_ref().and_then(|s| s.embed.clone()));
+    let mut chat_found =
+        globals
+            .chat_model
+            .clone()
+            .or_else(|| if guest { None } else { chat_stem_from_config() });
     if let (Some(c), Some(e)) = (chat_found.as_ref(), embed_found.as_ref()) {
         return Ok((c.clone(), e.clone()));
     }
@@ -454,8 +469,7 @@ async fn resolve_model_ids(v1: &str, globals: &ChatGlobals) -> Result<(String, S
         let Some(id) = m.get("id").and_then(|s| s.as_str()) else {
             continue;
         };
-        let lower = id.to_lowercase();
-        let is_embed = lower.contains("embedding") || lower.contains("-embed");
+        let is_embed = sovereign_workflow_host::looks_like_embed_model(id);
         // Under a guest link the chat model must be one the LENDER
         // advertises. This listing carries local slots, mesh peers AND the
         // lender's granted ids, and taking whichever non-embed id comes
@@ -531,22 +545,14 @@ async fn resolve_model_ids(v1: &str, globals: &ChatGlobals) -> Result<(String, S
 /// like a retrieval miss.
 const NO_EMBED_MODEL_IN_GRANT: &str = "(no-embedding-model-in-this-guest-grant)";
 
-/// Filename-stem extraction for `SetupConfig.models.{primary,embed}`.
-/// The daemon advertises these on `/v1/models` using exactly the
-/// file stem (`qwen-embedding-0.6b.gguf` → `qwen-embedding-0.6b`),
-/// so returning those stems gives us the stable local-model IDs
-/// without any `/v1/models` round-trip.
-struct ConfigModelStems {
-    chat: Option<String>,
-    embed: Option<String>,
-}
-
-fn chat_and_embed_stems_from_config() -> Option<ConfigModelStems> {
-    let cfg = sovereign_core::setup_config::SetupConfig::load().ok()?;
-    Some(ConfigModelStems {
-        chat: cfg.primary_model_stem(),
-        embed: cfg.embed_model_stem(),
-    })
+/// Filename stem of `SetupConfig.models.primary`. The daemon advertises it
+/// on `/v1/models` using exactly the file stem, so this is the stable
+/// local chat id without a `/v1/models` round-trip. (The embed stem's
+/// twin lives in `sovereign_workflow_host::daemon_models`.)
+fn chat_stem_from_config() -> Option<String> {
+    sovereign_core::setup_config::SetupConfig::load()
+        .ok()?
+        .primary_model_stem()
 }
 
 /// Approval channel that silently yes-answers everything. Chat never

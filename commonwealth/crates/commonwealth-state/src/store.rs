@@ -226,6 +226,72 @@ mod tests {
         NodeId::from_u128(n)
     }
 
+    /// covers: FE-119
+    ///
+    /// Neither `gc` nor `gc_app` had any test. Both are silent by
+    /// construction — they return a count nobody checks and delete rows
+    /// nobody reads afterwards — so both failure directions ship quietly:
+    /// a gc that deletes nothing lets a replicated store grow without
+    /// bound, and a `gc_app` that ignores its `app_id` reaches across
+    /// namespaces and takes another app's live state with it.
+    ///
+    /// Timestamps are planted through `merge_entry` rather than `set`,
+    /// because `set` stamps `now_secs()` and a TTL test that has to sleep
+    /// is a test that will be deleted the first time it flakes.
+    #[test]
+    fn gc_is_bounded_by_both_the_cutoff_and_the_namespace() {
+        let store = MeshStore::in_memory().unwrap();
+        let now = now_secs();
+        let plant = |app: &str, key: &str, age: u64| {
+            store
+                .merge_entry(StoreEntry {
+                    app_id: app.to_string(),
+                    key: key.to_string(),
+                    value: Bytes::from("v"),
+                    timestamp: now - age,
+                    origin: node(1),
+                })
+                .unwrap()
+        };
+        const TTL: u64 = 100;
+
+        // Two namespaces. `chat` holds one stale and one live entry;
+        // `presence` holds a stale entry that `gc_app("chat", ..)` must not
+        // touch.
+        plant("chat", "old", 500);
+        plant("chat", "fresh", 5);
+        plant("presence", "old", 500);
+        // Exactly ON the cutoff. `delete_older_than` is `timestamp <
+        // cutoff`, so this entry SURVIVES — the boundary is stated here so
+        // an off-by-one in either direction is a failure rather than a
+        // silent change in how much history a TTL keeps.
+        plant("chat", "at-cutoff", TTL);
+
+        let deleted = store.gc_app("chat", TTL).unwrap();
+        assert_eq!(deleted, 1, "only `chat`'s stale entry is old enough");
+        assert!(store.get("chat", "old").unwrap().is_none());
+        assert!(store.get("chat", "fresh").unwrap().is_some());
+        assert!(
+            store.get("chat", "at-cutoff").unwrap().is_some(),
+            "an entry exactly at the cutoff is not yet older than the TTL"
+        );
+        assert!(
+            store.get("presence", "old").unwrap().is_some(),
+            "gc_app must not reach outside its namespace"
+        );
+
+        // The unscoped sweep spans every app, and reports what it took.
+        let deleted = store.gc(TTL).unwrap();
+        assert_eq!(deleted, 1, "the remaining stale entry, in the other app");
+        assert!(store.get("presence", "old").unwrap().is_none());
+        assert!(store.get("chat", "fresh").unwrap().is_some());
+
+        // A sweep with nothing to take reports zero rather than erroring —
+        // the caller is a periodic task and a spurious Err would be logged
+        // forever.
+        assert_eq!(store.gc(TTL).unwrap(), 0);
+    }
+
     #[test]
     fn set_and_get_roundtrip() {
         let store = MeshStore::in_memory().unwrap();

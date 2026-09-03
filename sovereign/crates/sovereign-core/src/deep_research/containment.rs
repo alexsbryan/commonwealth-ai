@@ -733,6 +733,7 @@ mod tests {
     /// stripped from the claim before tokenizing its figures — the
     /// same strip contract as the evidence side (one strip, both
     /// sides).
+    /// covers: GR-18
     #[test]
     fn claim_citation_spans_do_not_leak_figures() {
         let evidence = vec![

@@ -33,9 +33,22 @@
 //!
 //! # Reading the output
 //!
-//! Newline-delimited command names, first sighting only, flushed as they
-//! happen so a crashed run still reports what it reached. Diff it against the
-//! registry with `scripts/desktop-invoke-coverage.py`.
+//! JSONL, one `{"cmd": "<name>"}` row per command, first sighting only, and
+//! flushed as it happens so a crashed run still reports what it reached.
+//!
+//! THE FORMAT IS NOT ARBITRARY — it is the one every other invoke ledger in
+//! this crate already writes (`tests/e2e/fixtures/test-base.ts` for the
+//! synthetic tier, `SOVEREIGN_COMMAND_BRIDGE_LEDGER` for the real one), so a
+//! file produced here merges into the same reader as those:
+//!
+//! ```text
+//! node tests/e2e/scripts/coverage-report.mjs <this file> ...
+//! ```
+//!
+//! It used to write bare newline-delimited names read by a second tool of its
+//! own, and that tool reported `0/260 reached (0.0%)` when handed a real
+//! ledger — an unparseable input rendered as a zero result rather than as
+//! could-not-parse (ARCH §18.3). One writer format, one reader.
 
 use std::collections::HashSet;
 use std::io::Write;
@@ -82,6 +95,17 @@ fn recorder() -> Option<&'static Recorder> {
         .as_ref()
 }
 
+/// One ledger row for `cmd`, as the shared reader expects it.
+///
+/// Extracted so the FORMAT has a test that does not need the recorder running:
+/// the recorder is behind a process-wide `OnceLock` and an env var, so a test
+/// that enabled it would fight `recording_is_off_without_the_env_var` for the
+/// same lock. serde_json rather than a hand-rolled quote — a command name is
+/// only *usually* a bare identifier, and this row has to parse.
+fn ledger_row(cmd: &str) -> String {
+    serde_json::json!({ "cmd": cmd }).to_string()
+}
+
 /// Note that `cmd` was invoked. First sighting per process is written; repeats
 /// are dropped, so a chatty poll does not swamp the file.
 pub fn record(cmd: &str) {
@@ -97,7 +121,7 @@ pub fn record(cmd: &str) {
     // would otherwise interleave partial lines.
     match std::fs::OpenOptions::new().append(true).open(&rec.path) {
         Ok(mut f) => {
-            let _ = writeln!(f, "{cmd}");
+            let _ = writeln!(f, "{}", ledger_row(cmd));
             let _ = f.flush();
         }
         Err(e) => tracing::warn!(error = %e, cmd, "invoke-coverage: append failed"),
@@ -107,6 +131,29 @@ pub fn record(cmd: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The row must PARSE in the reader every other invoke ledger feeds
+    /// (`tests/e2e/scripts/coverage-report.mjs`), which skips any line that is
+    /// not JSON carrying `cmd`. This file used to write bare names, and the
+    /// tool that read them reported `0/260 reached (0.0%)` against a real
+    /// ledger rather than saying it could not parse.
+    #[test]
+    fn a_ledger_row_is_json_the_shared_reader_can_read() {
+        let row = ledger_row("send_message_stream");
+        let parsed: serde_json::Value =
+            serde_json::from_str(&row).expect("a ledger row must be JSON");
+        assert_eq!(parsed["cmd"], "send_message_stream");
+        assert!(!row.contains('\n'), "one row per line, or appends interleave");
+    }
+
+    /// The reason this uses serde_json and not `format!`.
+    #[test]
+    fn a_command_name_needing_escapes_still_produces_one_parseable_row() {
+        let row = ledger_row(r#"weird"name\with\escapes"#);
+        let parsed: serde_json::Value =
+            serde_json::from_str(&row).expect("escaping must survive the round trip");
+        assert_eq!(parsed["cmd"], r#"weird"name\with\escapes"#);
+    }
 
     /// `record` must be inert when the env var is unset — that is what makes it
     /// safe to leave wired into shipped builds.

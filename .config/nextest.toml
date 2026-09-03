@@ -43,6 +43,34 @@ final-status-level = "slow"
 [profile.ci.junit]
 path = "junit.xml"
 
+# ── Sabotage profile ───────────────────────────────────────────────────────
+# `cargo nextest run --profile sabotage` — the batch mutation adjudicator
+# (scripts/sabotage.py). It exists for ONE reason: to put the junit report in
+# `target/nextest/sabotage/` so a six-hour mutation run and an ordinary
+# `cargo nextest run` cannot destroy each other's evidence.
+#
+# CARGO_TARGET_DIR does NOT do this. Measured 2026-09-01: a run with
+# CARGO_TARGET_DIR=target-sabotage still wrote target/nextest/default/junit.xml
+# and clobbered the shared report — the precise hazard the isolation was added
+# to prevent. The profile directory is the seam that actually works.
+#
+# fail-fast off and no retries: a retry would let a flaky test mask a mutant
+# the suite genuinely failed to catch, which is the one verdict this profile
+# must never get wrong.
+[profile.sabotage]
+fail-fast = false
+slow-timeout = { period = "120s", terminate-after = 3 }
+failure-output = "never"
+success-output = "never"
+status-level = "fail"
+
+[profile.sabotage.junit]
+path = "junit.xml"
+
+[[profile.sabotage.overrides]]
+filter = "binary(evidence_reds) + binary(judgement_reds) + binary(answer_reds)"
+slow-timeout = { period = "300s", terminate-after = 4 }
+
 # ── Quick profile ──────────────────────────────────────────────────────────
 # `cargo nextest run --profile quick` — for tight-loop debugging.
 [profile.quick]

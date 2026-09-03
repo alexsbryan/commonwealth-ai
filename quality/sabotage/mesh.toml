@@ -1,0 +1,35 @@
+# Mesh seam — hand-authored. The 156 tests the feature fix made visible
+# (sabotage.py was building a narrower workspace than the gate) include 263
+# mesh integration tests, in the domain the operator ranked first. These
+# mutants prove EXISTING coverage rather than proposing new tests, which is
+# why they convert at ~100% where the model generator converted at 11%.
+#
+# NOT INCLUDED, and why — each was considered and refused rather than forced:
+#   FE-21 "smoothed estimate" nearly became a spec-gap finding: LatencyMatrix
+#     ::record only overwrites, and LatencyRecord's doc comment CLAIMS an EWMA.
+#     The smoothing is real, one layer up in LatencyProber::update_record. The
+#     gap was in my reading, not the code — checked before claiming (ARCH §11).
+#   Member decay (`gossip_decays_peer_after_local_contact_goes_stale` and its
+#     cry-wolf twin) has NO FE clause. Mapping it to FE-19 would be reaching:
+#     FE-19 is last-writer-wins on timestamp, not decay-on-staleness.
+
+
+[[mutant]]
+id = "mesh-fe20-hosted-corpora-published"
+requirement = "FE-20"
+target = "sovereign/crates/sovereign-mesh/src/gossip.rs"
+find = "    let fresh_caps = build_local_capabilities(\n        app_state.inner.corpus_engine.as_ref(),\n        now,\n        availability,\n        embed_model,\n        Some(app_state),\n    )\n    .await;"
+replace = "    let mut fresh_caps = build_local_capabilities(\n        app_state.inner.corpus_engine.as_ref(),\n        now,\n        availability,\n        embed_model,\n        Some(app_state),\n    )\n    .await;\n    fresh_caps.hosted_corpora.clear();"
+mustFail = ["gossip_round_publishes_live_hosted_corpora"]
+breaks = "Replicated payloads MUST include at minimum member state, inference plans, knowledge plans, ledger entries, and ring configuration."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "mesh-fe21-rtt-ewma-smoothing"
+requirement = "FE-21"
+target = "commonwealth/crates/commonwealth-discovery/src/latency_probe.rs"
+find = "            let smoothed_rtt = alpha * rtt_ms + (1.0 - alpha) * existing.rtt_ms;"
+replace = "            let smoothed_rtt = rtt_ms;"
+mustFail = ["latency_prober_ewma_smoothing"]
+breaks = "Round-trip latency between members MUST be measured periodically and shared, as a smoothed estimate."
+expected = "CAUGHT"

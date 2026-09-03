@@ -35,6 +35,7 @@
 
 pub mod backend;
 pub mod prompts;
+pub mod recur;
 pub mod shared;
 pub mod tasks;
 pub mod trial;

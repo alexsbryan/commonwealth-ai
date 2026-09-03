@@ -41,6 +41,7 @@ mod atlas_builder;
 pub(crate) mod bootstrap;
 pub(crate) mod build;
 mod discovery_policy;
+mod rlimit;
 // `pub(crate)` so `setup_cmd::fim` can reach `restart_daemon` directly.
 // `svrn setup --fim` rewrites the model config and must bounce the
 // daemon itself — telling the operator to go run `svrn daemon restart`
@@ -156,6 +157,8 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
 };
 
 async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
+    #[cfg(unix)]
+    rlimit::raise_open_file_limit();
     // ── Worker-mode branch (ephemeral pod) ────────────────────────
     //
     // `svrn daemon run --worker-mode` runs an ephemeral worker
@@ -1175,9 +1178,18 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         }
     }
 
+    // The log is append-only across restarts by design, so this line is the
+    // KEY every later line in this generation joins against: which binary,
+    // built when, under which run id (sovereign_core::run_identity).
+    let build = sovereign_core::run_identity::build();
     tracing::info!(
         client_port = config.daemon.client_port,
         internal_port = config.daemon.internal_port,
+        run = sovereign_core::run_identity::run_id(),
+        pid = build.pid,
+        exe = %build.exe,
+        exe_mtime = build.exe_mtime.as_deref().unwrap_or("unreadable"),
+        version = env!("CARGO_PKG_VERSION"),
         "svrn daemon is running"
     );
 

@@ -529,31 +529,60 @@ pub fn stub_runtime(
     provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
     store: Option<Arc<dyn sovereign_core::traits::StateStore>>,
 ) -> Arc<sovereign_core::runtime::Runtime> {
+    Arc::new(stub_runtime_parts(provider, store))
+}
+
+/// [`stub_runtime`] with the daemon's corpus engine attached, so
+/// `Runtime::seed_conversation`'s allow-list check and the retrieval fan-out
+/// see the corpora the `ServingCore` holds — as the production recipe wires
+/// them.
+pub fn stub_runtime_with_engine(
+    provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
+    store: Option<Arc<dyn sovereign_core::traits::StateStore>>,
+    engine: Arc<corpus_engine::CorpusEngine>,
+) -> Arc<sovereign_core::runtime::Runtime> {
+    let mut runtime = stub_runtime_parts(provider, store);
+    runtime.corpus_engine = Some(engine);
+    Arc::new(runtime)
+}
+
+fn stub_runtime_parts(
+    provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
+    store: Option<Arc<dyn sovereign_core::traits::StateStore>>,
+) -> sovereign_core::runtime::Runtime {
     let store =
         store.unwrap_or_else(|| Arc::new(sovereign_store::memory::InMemoryStateStore::new()));
-    Arc::new(sovereign_core::runtime::Runtime::new(
-        sovereign_core::RuntimeParts::new(
-            provider,
-            Box::new(sovereign_core::stubs::PassthroughRouter),
-            Box::new(sovereign_core::stubs::NoOpPlanner),
-            Arc::new(sovereign_core::ToolRegistry::new()),
-            store,
-            Arc::new(sovereign_core::SkillRegistry::new()),
-            Arc::new(sovereign_core::executor::AutoApprovalChannel),
-            sovereign_core::types::InferenceConfig::default(),
-            sovereign_core::runtime::lane::LaneSources::none(),
-        ),
+    sovereign_core::runtime::Runtime::new(sovereign_core::RuntimeParts::new(
+        provider,
+        Box::new(sovereign_core::stubs::PassthroughRouter),
+        Box::new(sovereign_core::stubs::NoOpPlanner),
+        Arc::new(sovereign_core::ToolRegistry::new()),
+        store,
+        Arc::new(sovereign_core::SkillRegistry::new()),
+        Arc::new(sovereign_core::executor::AutoApprovalChannel),
+        sovereign_core::types::InferenceConfig::default(),
+        sovereign_core::runtime::lane::LaneSources::none(),
     ))
 }
 
 /// A `Desktop` serving daemon whose `ServingCore` carries the given store and
-/// a `Runtime` built over the SAME store — which is what a turn test needs:
-/// the route reads the store the turn wrote to.
+/// engine and a `Runtime` built over the SAME store and the SAME engine —
+/// which is what a turn test needs: the route reads the store the turn wrote
+/// to, and the corpora the daemon holds are the corpora the runtime's
+/// allow-list check and retrieval fan-out see. (The engine half was missing
+/// until 2026-09-01: the runtime had `corpus_engine: None` while the core
+/// carried one, so a create with `enabled_corpora` was refused as "no corpus
+/// index installed" against a daemon that had two.)
 pub fn desktop_services_with_store(
     engine: Arc<corpus_engine::CorpusEngine>,
     store: Arc<dyn sovereign_core::traits::StateStore>,
     provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
 ) -> sovereign_mesh::DaemonServices {
+    let runtime = stub_runtime_with_engine(
+        Arc::clone(&provider),
+        Some(Arc::clone(&store)),
+        Arc::clone(&engine),
+    );
     sovereign_mesh::assemble(
         &sovereign_contracts::launch::Launch::Desktop,
         sovereign_mesh::LaunchParts::Serving {
@@ -561,9 +590,9 @@ pub fn desktop_services_with_store(
             serving: sovereign_mesh::ServingProfile {
                 core: sovereign_mesh::ServingCore {
                     corpus_engine: engine,
-                    inference_provider: Arc::clone(&provider),
-                    state_store: Arc::clone(&store),
-                    runtime: stub_runtime(provider, Some(store)),
+                    inference_provider: provider,
+                    state_store: store,
+                    runtime,
                 },
                 capability: sovereign_mesh::ServingCapability {
                     mcp: sovereign_mesh::McpSurface::Unavailable {

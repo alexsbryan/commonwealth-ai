@@ -148,6 +148,25 @@ sovereign tools call <id> [--key=value ...]    # invoke, plain-text or --format 
 
 `sovereign tools call symbols --name=ToolRegistry` is exactly equivalent to the MCP `symbols({"name": "ToolRegistry"})` call — same `ToolRegistry::execute()` underneath.
 
+**Ten tools left the MCP surface on 2026-08-31 and are CLI-only now.**
+`lint_status`, `get_lint_output`, `callees`, `arch_report`, `arch_posture`,
+`drift_posture`, `briefing`, `atos_verify`, `resource_may_i`, `facts`. Every
+one was called ZERO times across the 190 sessions on this repo (`arch_posture`
+once), while together costing 2,712 tokens — 27% of the MCP payload —
+in every session's boot floor. `build` was on the list on usage and came off
+it on a coupling: `tools/call` REFUSES an unexposed id, and
+`notes::patterns::ToolPatternMatcher` keys three rules on that literal id, so
+retiring it would have closed a subsystem's wire path as a side effect. They are still registered: `sovereign tools call <id>` reaches all of
+them, which is the portable form anyway. The rationale per tool is in
+`sovereign-tools/src/mcp_surface.rs::MCP_TOOLS_RETIRED`, and the rule it
+records is the one to apply before adding any tool back: **a tool is called
+only when something in a session's flow asks its question** — a hook, a
+protocol step, a skill. `session_state` (482 calls) is used because the split
+protocol demands it; `notes` (101) because a hook injects note titles every
+turn; `work_in_flight` (59) because this file mandates it pre-flight. If you
+cannot name the moment that calls a tool, it is inventory. Re-expose one only
+together with the trigger that reaches it.
+
 ### Precision tools — use these instead of reading files
 
 **DO NOT read an entire file to find a type definition, method signature, or field list.** Call `symbols("TypeName")` first. It returns the exact definition with file path and line number in one round-trip. Only fall back to Read when you need the full surrounding context.
@@ -184,15 +203,17 @@ When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the 
 | "What decisions were made about Y?" | `notes(query: "Y")` |
 | "How many things depend on this?" | `blast("symbol_name")` |
 | "What does the narrative say about THIS symbol/file?" | `drift_findings(query: "name")` |
-| "Is the latest drift report still current?" | `drift_posture()` |
+| "Is the latest drift report still current?" | the boot block already tells you; otherwise `sovereign tools call drift_posture` |
 | "Is anyone else on the mesh touching this?" | `work_in_flight(scope, match_mode)` |
-| "Where is the coupling actually? / which symbols carry it?" | `arch_report(corpus_id, include_git?)` |
-| "Architectural headlines + is the arch report current?" | `arch_posture()` |
+| "Where is the coupling actually? / which symbols carry it?" | `sovereign tools call arch_report --corpus_id=<id>` |
+| "Architectural headlines + is the arch report current?" | `sovereign tools call arch_posture` |
 | "Where did my context/cache budget actually go?" | `sovereign cache-audit` (add `--sort ratio` / `--session <id>`) |
 | "Which crates/files across the workspace do X?" | a read-only search subagent (max 3 concurrent, one message) — `Explore` in Claude Code, `scout` via `pi-subagents` |
 | "Code intel is down and I need a broad sweep" | same — delegate it, and keep the file dumps out of your context |
 | "Am I clean before/after a cleanup session?" | `cd corpus-engine && cargo xtask quality` — the `xtask` alias lives in `corpus-engine/.cargo/config.toml`, so it does NOT resolve from the repo root (arch/docs/boundary/layer/lock/env gates) |
 | "Is any quality subsystem's posture stale?" | `sovereign posture` — one table (drift/arch/capability/contract-nightly/watchers/env-gate/bench), each row names its refresh command |
+| "Does the test my commit body cites actually SEE the change?" | `scripts/evidence-verdict.py <commit>` — runs the cited test at that commit in its own worktree, then again with the source hunks reverted; VALIDATED / UNSUPPORTED / COULD-NOT-JUDGE / NEVER-RAN. Minutes per commit; `--candidates --range A..B` lists what would be judged for free |
+| "What argument produced this fn, and did its evidence hold?" | `scripts/intent.py <symbol> [--note]` — the commits that shaped the symbol, each body's claim / objection / concession (local model, engine named), and the evidence verdict. `--note` stores it tagged with the symbol, and `.claude/hooks/intent-warn.py` shows it before any Edit that touches the fn — you should not need to ask |
 | "Did my change regress retrieval / routing / synthesis / enrichment?" | `./scripts/sovereign-ci-bench.sh --quick` — the ONE comprehensive bench; see `MAIN_SESSION_PROTOCOL.md` §"Measuring quality" |
 | "A bench says regressed — is that real or noise?" | `sovereign/docs/RUNBOOK.md` §6 (noise bands per lane type, baseline-age semantics, the legitimate re-mint path) |
 | "What does bench lane X measure, and how do I run just it?" | `sovereign/bench/README.md`, then `sovereign/bench/<lane>/README.md` |

@@ -256,7 +256,11 @@ mod tests {
     fn descriptor_id_matches_mcp_surface() {
         let tool = ArchPostureTool::with_data_dir(PathBuf::from("/nonexistent")).declared();
         assert_eq!(tool.descriptor().id, "arch_posture");
-        assert!(crate::mcp_surface::MCP_TOOLS_ALWAYS.contains(&tool.descriptor().id.as_str()));
+        // Registry-only since 2026-08-31: retired from the MCP surface on
+        // usage evidence (1 call in 190 sessions), still reachable through
+        // `svrn tools call arch_posture`.
+        assert!(crate::mcp_surface::MCP_TOOLS_RETIRED.contains(&tool.descriptor().id.as_str()));
+        assert!(!crate::mcp_surface::is_mcp_exposed(&tool.descriptor().id));
     }
 
     #[test]

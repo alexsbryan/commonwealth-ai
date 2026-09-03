@@ -116,12 +116,22 @@ fn render_tools_list_emits_canonical_only() {
     let names: Vec<&str> = listed.iter().filter_map(|t| t["name"].as_str()).collect();
 
     // Canonical (renamed) ids appear.
-    for canonical in &["symbols", "callers", "callees", "blast", "note", "notes"] {
+    for canonical in &["symbols", "callers", "blast", "note", "notes"] {
         assert!(
             names.contains(canonical),
             "missing canonical {canonical} in {names:?}"
         );
     }
+
+    // `callees` keeps its canonical descriptor id (asserted above) but left
+    // the MCP surface on 2026-08-31: 0 calls across 190 sessions, against 37
+    // for its sibling `callers`. Registered still, so `svrn tools call
+    // callees` works — this asserts only that it is not ADVERTISED, which is
+    // where the per-session cost was.
+    assert!(
+        !names.contains(&"callees"),
+        "callees is registry-only now, not advertised: {names:?}"
+    );
 
     // No legacy alias is advertised (changed 2026-08-17). The mirrors
     // duplicated the full schema of every renamed tool into every
@@ -138,8 +148,8 @@ fn render_tools_list_emits_canonical_only() {
     // back in under a name this loop does not enumerate.
     assert_eq!(
         listed.len(),
-        6,
-        "expected only the 6 canonical entries, got {names:?}"
+        5,
+        "expected only the 5 canonical entries, got {names:?}"
     );
 
     // Compatibility is preserved on the CALL path, not the list path.

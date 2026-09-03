@@ -115,7 +115,7 @@ test.describe("preparing-state placeholder", () => {
     await expect(page.locator(".typing-indicator")).toHaveCount(0);
   });
 
-  test("placeholder clears on message-complete", async ({
+  test("placeholder clears on message-complete", { tag: ["@GR-43"] }, async ({
     sovereignPage: page,
     chat,
   }) => {

@@ -36,7 +36,8 @@
     "test:ttfi": "playwright test specs/ttfi.spec.ts",
     "report:ttfi": "node tests/e2e/scripts/ttfi-summary.mjs",
     "report:coverage": "node tests/e2e/scripts/coverage-report.mjs",
-    "report:ttfi:save-baseline": "cp tests/e2e/.ttfi-report.json tests/e2e/.ttfi-baseline.json"
+    "report:ttfi:save-baseline": "cp tests/e2e/.ttfi-report.json tests/e2e/.ttfi-baseline.json",
+    "report:coverage:gate": "node tests/e2e/scripts/coverage-report.mjs --min-percent 35"
   },
   "dependencies": {
     "@fontsource-variable/ibm-plex-sans": "^5.2.8",

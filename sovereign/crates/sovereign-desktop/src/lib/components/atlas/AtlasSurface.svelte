@@ -120,13 +120,23 @@
    *  A corpus that DECLARED an ontology wins the atom browser outright —
    *  see the comment in the body. Otherwise:
    *
-   *  Conv corpora (SQLite tiered enrichment) are listed by
-   *  `atlasListConvCorpora`. Collection corpora own no atoms of their
-   *  own — their map lives in `<id>-<slug>` member atlases — and
-   *  `atlasListMembers` returns those; a non-empty result IS the
-   *  signal. Everything else (the common case — folders, documents,
-   *  catalog corpora) routes to the atom browser. Best-effort: any
-   *  failure defaults to "atom". */
+   *  Collection corpora own no atoms of their own — their map lives in
+   *  `<id>-<slug>` member atlases — and `atlasListMembers` returns
+   *  those; a non-empty result IS the signal. Conv corpora (SQLite
+   *  tiered enrichment) are listed by `atlasListConvCorpora`.
+   *  Everything else (the common case — folders, documents, catalog
+   *  corpora) routes to the atom browser. Best-effort: any failure
+   *  defaults to "atom".
+   *
+   *  MEMBERS ARE CHECKED FIRST, and the order is the decision. The two
+   *  signals are not exclusive: a partial tiered-enrichment run over a
+   *  collection leaves `conv_skeletons` rows for the PARENT id, so the
+   *  parent answers yes to both. Sibling member atlases are the more
+   *  specific signal — they only exist because someone extracted atoms
+   *  per entry — whereas a handful of parent-level conv rows can be
+   *  the residue of a run that stopped before it did any LLM work.
+   *  Asking conv first let 14 hollow rows hide SEP's 1,770 member
+   *  atlases behind a "14 conversations" list. */
   async function resolveCorpusKind(corpusId: string): Promise<CorpusKind> {
     // A DECLARED ontology outranks the conv listing. Both can be true of
     // one corpus — a folder of markdown gets conversation skeletons from
@@ -144,15 +154,15 @@
       // Fall through — the conv/collection checks below still apply.
     }
     try {
-      const convs = await atlasListConvCorpora();
-      if (convs.some((c) => c.corpus_id === corpusId)) return "conv";
-    } catch {
-      // Fall through — a conv-listing failure shouldn't hide a
-      // perfectly good atom or collection atlas.
-    }
-    try {
       const members = await atlasListMembers(corpusId);
       if (members.length > 0) return "collection";
+    } catch {
+      // Fall through — a member-listing failure shouldn't hide a
+      // perfectly good conv or atom atlas.
+    }
+    try {
+      const convs = await atlasListConvCorpora();
+      if (convs.some((c) => c.corpus_id === corpusId)) return "conv";
     } catch {
       // Fall through to the atom default.
     }

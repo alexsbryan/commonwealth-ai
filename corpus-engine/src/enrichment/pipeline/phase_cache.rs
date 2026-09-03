@@ -333,6 +333,63 @@ mod tests {
         value: i32,
     }
 
+    /// covers: EN-4
+    ///
+    /// ONE helper builds this identity, so every read and every write carries
+    /// the same notion of "same model" (ARCH §10.6).
+    ///
+    /// The tests around this one all drive the guard through
+    /// `with_model_identity`, so they would stay green against a SECOND
+    /// construction site — say a `PhaseCache::from_manifest` that filled
+    /// `fingerprint` from a different manifest field. The two would agree on
+    /// every case those tests cover and disagree on the one the guard exists
+    /// for: same model name, different weights. That is unreachable
+    /// behaviourally, so it is asserted over the source.
+    ///
+    /// `include_str!` rather than a filesystem read, for the reason
+    /// `call_census`'s funnel guard gives: the compiler resolves it relative
+    /// to THIS file, so it cannot go stale against a moved module or pass
+    /// vacuously from a different working directory.
+    #[test]
+    fn exactly_one_place_constructs_the_cache_model_identity() {
+        let src = include_str!("phase_cache.rs");
+        // Production code is everything above this test module. A test may
+        // legitimately build an identity to assert against.
+        let prod = src.split("\n#[cfg(test)]").next().unwrap_or(src);
+        let sites: Vec<(usize, &str)> = prod
+            .lines()
+            .enumerate()
+            .filter(|(_, line)| {
+                let l = line.trim_start();
+                !l.starts_with("//") && !l.starts_with("///")
+            })
+            // The struct DEFINITION carries the same three tokens. Only a
+            // construction counts.
+            .filter(|(_, line)| {
+                line.contains("CacheModelIdentity {") && !line.contains("struct ")
+            })
+            .map(|(i, line)| (i + 1, line.trim()))
+            .collect();
+        assert_eq!(
+            sites.len(),
+            1,
+            "CacheModelIdentity must be built in exactly one place; found {sites:?}"
+        );
+
+        // And that place is the declared helper — a second site that happened
+        // to replace the first would satisfy the count alone.
+        let helper = prod
+            .find("pub fn with_model_identity")
+            .expect("with_model_identity is the one constructor");
+        let helper_line = prod[..helper].lines().count() + 1;
+        assert!(
+            sites[0].0 > helper_line && sites[0].0 < helper_line + 15,
+            "the one construction site must be inside with_model_identity \
+             (helper at line {helper_line}, site at line {})",
+            sites[0].0
+        );
+    }
+
     #[test]
     fn write_read_roundtrip() {
         let dir = tempdir().unwrap();

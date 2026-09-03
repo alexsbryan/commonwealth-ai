@@ -1016,6 +1016,124 @@ mod tests {
         );
     }
 
+    // ── The two gates are DISJOINT (FE-100) ─────────────────────────
+
+    /// Both layers on one route, stacked the way `client_router_for` stacks
+    /// them (`.layer(admission()).layer(fair_share())` — server.rs:134-135).
+    fn both_gates_router(state: AppState) -> Router {
+        Router::new()
+            .route("/chat", post(|| async { "ok" }))
+            .layer(axum::middleware::from_fn_with_state(
+                state.clone(),
+                peer_admission_layer,
+            ))
+            .layer(axum::middleware::from_fn_with_state(
+                state,
+                client_fairness_layer,
+            ))
+    }
+
+    /// covers: FE-100
+    ///
+    /// One request meets exactly ONE gate. Each layer returns early when the
+    /// other applies — the peer layer on a request with no `X-Node-Id`, the
+    /// client layer on a request that has one — and the two early-returns are
+    /// exact negations of each other. Nothing held them together: they live
+    /// ~90 lines apart and every existing test drives one layer alone, so a
+    /// change to either condition is invisible until traffic is charged twice
+    /// or not at all.
+    ///
+    /// Asserted through the ceilings rather than through counters, because a
+    /// double-gate is only harmful where it costs a slot. Each half sets ONE
+    /// gate's budget to its floor, saturates it with the OTHER kind of
+    /// traffic, and requires the gate's own kind to still get through.
+    #[tokio::test]
+    async fn peer_traffic_and_client_traffic_never_consume_each_others_budget() {
+        // ── Peer traffic must not eat the client fair share ──────────
+        let s = fresh_state();
+        s.set_client_fair_concurrency(1);
+        s.set_client_fairness_enabled(true);
+        s.set_contribution_max_peer_inflight(8);
+        let router = both_gates_router(s.clone());
+
+        // A peer holds a turn open (the response body is alive, so both
+        // gates' guards — if it took one from each — are still held).
+        let mut req = peer_req("/chat");
+        req.headers_mut()
+            .insert("x-node-id", nid(0xBEEF).to_hex().parse().unwrap());
+        let peer_held = router.clone().oneshot(req).await.expect("peer admitted");
+        assert_eq!(peer_held.status(), axum::http::StatusCode::OK);
+
+        // Instrument check (§18.4): the peer gate really did charge for it.
+        assert_eq!(
+            tally_of(&s, nid(0xBEEF)).active,
+            1,
+            "the peer gate must have counted the peer turn"
+        );
+        // And the client scheduler is untouched — nothing is in flight there.
+        assert_eq!(
+            s.lock_client_sched()
+                .active_keys_including(&crate::principal::PrincipalKey::Anonymous),
+            1,
+            "a peer turn must not appear as an active client principal — the only \
+             active key here is the probe key itself"
+        );
+
+        // The client budget is ONE. If the peer turn had also consumed a
+        // client share slot, this would be shed.
+        let client = turn_as(&router, "ailsa").await;
+        assert_eq!(
+            client.status(),
+            axum::http::StatusCode::OK,
+            "a peer turn must not spend the client fair-share budget"
+        );
+        drop(client);
+        drop(peer_held);
+
+        // ── And client traffic must not eat the peer ceiling ─────────
+        //
+        // The peer scheduler slot releases at HEADERS time (only the /status
+        // tally follows the body), so a completed `oneshot` cannot hold the
+        // ceiling. The slot is taken directly instead, which is both
+        // deterministic and closer to the real shape: a peer turn that is
+        // genuinely still decoding.
+        let s = fresh_state();
+        s.set_client_fair_concurrency(16);
+        s.set_client_fairness_enabled(true);
+        s.set_contribution_max_peer_inflight(1);
+        let router = both_gates_router(s.clone());
+        let _peer_slot = s
+            .admit_peer_request(nid(0xCAFE))
+            .expect("the one peer slot");
+
+        // The control: with that slot held, a peer request IS shed. Without
+        // this the assertion below could pass against a ceiling that never
+        // bites.
+        let mut req = peer_req("/chat");
+        req.headers_mut()
+            .insert("x-node-id", nid(0xD00D).to_hex().parse().unwrap());
+        let second_peer = router.clone().oneshot(req).await.expect("gate must respond");
+        assert_eq!(
+            second_peer.status(),
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            "the peer ceiling of 1 must actually refuse a second peer"
+        );
+
+        // And a CLIENT turn, at the same moment, is unaffected — it never
+        // consults the peer ceiling.
+        let client = turn_as(&router, "rhona").await;
+        assert_eq!(
+            client.status(),
+            axum::http::StatusCode::OK,
+            "the peer ceiling must not gate a local caller"
+        );
+        assert!(
+            s.inner.peer_tally_snapshot().is_empty(),
+            "a local client turn must never open a peer tally row"
+        );
+        drop(client);
+    }
+
     // ── Client fair share (order `serve50-identity`) ────────────────
     //
     // These drive the LAYER, not the policy — the policy's own assertions

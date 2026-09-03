@@ -150,6 +150,7 @@ visibility = "public"
 classification = "daemon"
 flags = [
   { name = "--conversation", takes_value = true },
+  { name = "--corpus", takes_value = true },
   { name = "--format", takes_value = true },
   { name = "--show-reasoning" },
 ]
@@ -160,6 +161,7 @@ visibility = "public"
 classification = "daemon"
 flags = [
   { name = "--conversation", takes_value = true },
+  { name = "--corpus", takes_value = true },
   { name = "--show-reasoning" },
 ]
 [[command]]
@@ -326,6 +328,23 @@ classification = "daemon"
 [command.smoke]
 args = ["corpus", "status"]
 expect_exit = 0
+[[command]]
+path = "corpus optimize"
+binary = "llm"
+visibility = "public"
+# `offline`: the refusal path this contract asserts is pure argument parsing —
+# it returns before any index is opened or any daemon is consulted.
+classification = "offline"
+# Both retention flags are declared because both are REFUSAL surfaces, not
+# conveniences: each one is a destructive decision the operator has to state,
+# and the `corpus-prune-refusal` journey asserts what happens when they state
+# nothing.
+flags = [
+  { name = "--all", takes_value = false },
+  { name = "--prune-days", takes_value = true },
+  { name = "--keep-versions", takes_value = true },
+]
+
 [[command]]
 path = "corpus reconstruct-manifest"
 binary = "llm"
@@ -1929,6 +1948,30 @@ exit = 0
 stdout_absent = "{corpus}"
 
 [[journey]]
+id = "corpus-prune-refusal"
+title = "A prune with no retention window is refused, and says why"
+persona = "operator"
+experience = "knowledge-corpora"
+tier = 2
+visibility = "public"
+doc = "sovereign/docs/KNOWLEDGE_BASES.md"
+[[journey.step]]
+run = "corpus optimize {corpus} --prune-days 0"
+requirements = ["ST-15"]
+note = """The one destructive verb in corpus maintenance, refused at its own front door. Compaction only ADDS a dataset version, so storage grows until something prunes; pruning DELETES superseded versions irreversibly, and a retention window shorter than the age of any in-flight reader can break a concurrent query. So the flag has no default and no zero — the operator has to state a window, and `0` states none.
+
+Asserted at the OPERATOR SURFACE rather than only in a unit test because the refusal IS the surface: the exit code is what a script branches on and the stderr is what a person reads. A regression that let `0` through would not fail here as a wrong message — it would reach the index and start deleting."""
+[journey.step.expect]
+exit = 2
+stdout_contains = "--prune-days requires an integer >= 1"
+[[journey.step]]
+run = "corpus optimize {corpus} --prune-days seven"
+note = """The same refusal for an UNPARSED value, which is the shape a typo takes. This is the arm where a `.unwrap_or(0)` would be tempting, and where it would be worst: an unreadable window silently becoming the most destructive one."""
+[journey.step.expect]
+exit = 2
+stdout_contains = "there is no default and no zero"
+
+[[journey]]
 id = "folder-to-corpus"
 title = "Turn a folder of documents into a queryable corpus with a workflow"
 persona = "end-user"
@@ -3221,7 +3264,232 @@ verb = "awareness"
 reason = "12 subcommands behind a cargo feature that is not built by default; an experiment, not a promise"
 disposition = "park"
 
+# ── Arc: the quality surfaces an operator actually reads ─────────────────
+#
+# Written 2026-09-01 clause-first. These are not retrofitted tags over tests
+# that happened to exist: each step was chosen because the requirement names a
+# COMMAND and an OBSERVABLE, and the assertion is the observable. That
+# direction matters — retrofitting requirement tags onto existing tests
+# converted at 2 of 9 here, writing the assertion from the clause at 5 of 5.
+
+[[journey]]
+id = "quality-posture"
+title = "Read the health of the quality subsystems, and the context budget behind them"
+persona = "developer"
+experience = "code-intelligence"
+tier = 3
+visibility = "internal"
+doc = "AGENTS.md#compilation-and-test-feedback--run-the-scripts"
+[[journey.step]]
+run = "posture"
+requirements = ["CI-34"]
+note = """CI-34 asks for ONE table over every quality subsystem where each row \
+names its own refresh command. The assertion is a row's refresh command, not \
+the table header and not the footer summary: a header prints whether or not \
+there are rows behind it, which is the same vacuous shape as asserting \
+non-empty. `drift detect` is the right row to pin — drift is the oldest \
+subsystem here and the least likely to be renamed out from under this."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "refresh: sovereign drift detect"
+
+[[journey.step]]
+run = "tools call work_in_flight --scope= --match_mode=file"
+requirements = ["CI-25"]
+note = """CI-25's substance is TWO GRADES OF SIGNAL — explicit declarations and \
+passive observations — so the assertion names both keys. Asserting only one \
+would pass on a surface that had collapsed them into a single list, which is \
+exactly the shape the requirement forbids. Both keys are present even when \
+each is empty, which is the point: absence is reported, not omitted."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "observations"
+
+[[journey]]
+id = "contract-census"
+title = "Ask the CLI what it promises, and what of that anything actually runs"
+persona = "developer"
+experience = "cli-quality"
+tier = 3
+visibility = "internal"
+doc = "AGENTS.md#definition-of-done--every-feature-push"
+[[journey.step]]
+run = "contract map"
+requirements = ["EV-27"]
+note = """EV-27 wants the use-case contract declared AS DATA — command surface, \
+sequenced journeys, and the promises those journeys make. `map` renders all \
+three, so the assertion pins the join between them: the per-experience roll-up \
+of how many steps assert an answer. A map that had lost the journey layer, or \
+the assertion layer, could not print it."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "steps assert output"
+
+[[journey.step]]
+run = "contract census"
+requirements = ["EV-29"]
+note = """EV-29's whole substance is the SPLIT — steps a lane runs, against \
+steps nothing runs — because a step in a never-run journey is a written \
+intention, not coverage. The assertion is the `nothing runs` half deliberately: \
+that is the row a census under pressure to look good would quietly drop, and \
+its absence is exactly the failure the requirement forbids."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "nothing runs"
+
+[[journey.step]]
+run = "contract census"
+requirements = ["EV-28"]
+note = """EV-28: a step that asserts an exit code asserts nothing, because these \
+tools exit 0 when they find nothing. The census earns this requirement only if \
+it can TELL THE TWO APART, so the assertion is the `exit-code only` column \
+itself. A census that counted every declared step as coverage would have no \
+such column to print."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "exit-code only"
+
+[[journey]]
+id = "code-intel-posture"
+title = "A graph query answers with its own health and with who else is in the file"
+persona = "developer"
+experience = "code-intelligence"
+tier = 3
+visibility = "internal"
+doc = "sovereign/docs/CODE_INTELLIGENCE.md"
+[[journey.step]]
+run = "tools call blast --symbol=verify_answer_against_evidence"
+requirements = ["CI-12"]
+note = """CI-12: index posture must be IN-BAND, so a degraded or aging index \
+cannot masquerade as "no matches". The assertion is the health trailer riding \
+on the query result itself, not a separate posture command — that separation is \
+precisely what the requirement forbids, because an agent that has to ask a \
+second question will not ask it. Scoped honestly to the blast surface: this \
+step proves one query carries the trailer, which is the shape CI-12 names."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "index_health"
+
+[[journey.step]]
+run = "tools call blast --symbol=verify_answer_against_evidence"
+requirements = ["CI-28"]
+note = """CI-28 wants overlapping peer claims INLINE in the blast answer, as a \
+collision warning rather than a footnote an agent has to go looking for. The \
+field is present and empty when no peer holds the symbol, which is the point — \
+absence is reported, not omitted, so an agent can tell "nobody else is here" \
+from "this surface does not track that"."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "concurrent"
+
+[[journey]]
+id = "context-budget"
+title = "Read this operator's own accumulated session history and context spend"
+persona = "developer"
+experience = "cli-quality"
+tier = 3
+visibility = "public"
+needs = ["operator-home"]
+doc = "AGENTS.md#read-budget--three-rules-that-prevent-the-74k-token-slide"
+[[journey.step]]
+run = "cache-audit"
+requirements = ["CI-30"]
+note = """CI-30 wants context spend auditable BY SESSION. `peak_ctx` is the \
+per-session column, so asserting it proves the per-session breakdown rendered \
+rather than a summary line. The dollar and cache-hit columns move every run; \
+the column name does not."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "peak_ctx"
+
+
+[[journey.step]]
+run = "session frames"
+requirements = ["CI-29"]
+note = """CI-29 wants a session-continuity surface that INDEXES frames for \
+selection, not just a single latest-frame file. The assertion is the index \
+header, which only renders when frames have been enumerated and counted; a \
+surface that had degraded to "here is the last frame" would print the \
+predecessor line above it and nothing else, and this step would go red."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "Live session frames"
+
 [[stranded]]
 verb = "deep-research"
 reason = "the demo's path needs a resident draft+embed daemon AND live web (the acquisition leg); no automated lane has either — the sandbox netns has no route out and the nightly lane is read-only — so a manifest journey here would be a written intention. The executed proof is the operator-holdout acceptance run (DEMO_PLAN DEMO-1), recorded in research/deep-research/demo/ (directive 77f21e91)"
 disposition = "promote"
+
+[[journey]]
+id = "degradation-visible"
+title = "A gate that cannot judge says so, and a stale artifact cannot pass for a fresh one"
+persona = "developer"
+experience = "cli-quality"
+tier = 3
+visibility = "internal"
+doc = "AGENTS.md#reading-the-results--three-guards-bare-cargo-does-not-have"
+[[journey.step]]
+run = "doctor"
+requirements = ["CI-33"]
+note = """CI-33: a configured-but-dead watcher must be caught by a PROBE of the \
+same signal, because a configuration-presence check cannot see it. `doctor` \
+carries both kinds and the assertion names the probe one — `watcher_live` sits \
+beside `test_runner`/`lint_runner`, which only read config. Collapse the two \
+and the probe finding disappears, which is the exact regression the \
+requirement forbids. Exit is deliberately NOT asserted: doctor exits non-zero \
+when a finding is red, and the claim here is that the probe EXISTS, not that \
+this machine is healthy."""
+[journey.step.expect]
+stdout_contains = "watcher_live"
+
+[[journey.step]]
+run = "doctor"
+requirements = ["OP-16"]
+note = """OP-16 enumerates a MINIMUM SET a first-stop diagnostic must cover — \
+engine, model, federation, peers, knowledge, disk, stability. One assertion \
+cannot prove a set, so this step pins the engine/model member (`embed_slot` \
+actually round-trips a vector through the slot rather than reading config) and \
+the step below pins the knowledge member. The remaining members render in the \
+same output; they are not separately asserted here, and this note says so \
+rather than letting one string stand in for seven."""
+[journey.step.expect]
+stdout_contains = "embed_slot"
+
+[[journey.step]]
+run = "doctor"
+requirements = ["OP-16"]
+note = """The knowledge member of OP-16's minimum set: whether the corpora this \
+node can actually answer from are readable. Paired with the engine/model step \
+above."""
+[journey.step.expect]
+stdout_contains = "code_indexed"
+
+[[journey.step]]
+run = "tools call blast --symbol=verify_answer_against_evidence"
+requirements = ["X-DG-3"]
+note = """X-DG-3: a stale artifact must not be able to masquerade as a fresh \
+one, so every reported artifact carries a freshness stamp. The assertion is the \
+stamp KEY, not a particular value — `fresh` today, `stale` on a machine that \
+has not rebuilt — because asserting the value would make this step a report on \
+the host rather than on the contract."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "staleness"
+
+[[journey.step]]
+run = "conformance"
+requirements = ["X-DG-2"]
+note = """X-DG-2: results that cannot be attributed to the run that requested \
+them must be reported as unattributable, NOT returned. `target/nextest/` is \
+shared, and `scripts/sabotage.py` leaves a report there whose reds are \
+manufactured by mutation. The reader names it and refuses it rather than \
+adopting the newest file it finds — which it did until 2026-09-01, rendering a \
+mutant's kills as genuine failed requirements.
+
+Exit is NOT asserted, for the same reason as the doctor step above: \
+`conformance` exits 1 whenever any requirement is failing, so pinning exit 0 \
+would make this step a report on how conformant the repo happens to be today \
+rather than on whether the reader refuses an unattributable artifact."""
+[journey.step.expect]
+stdout_contains = "IGNORED, mutation run"
+

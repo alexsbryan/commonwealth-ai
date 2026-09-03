@@ -1928,7 +1928,26 @@ it is an experiment (then it should not be default-on). Resolve it with the
 
 ## GRADUATED — the pipeline completing, for the record
 
-### Claim-search ladder — `SOVEREIGN_GATE_CLAIM_SEARCH_LADDER` → **default ON 2026-08-14**
+### Claim-search ladder — `SOVEREIGN_GATE_CLAIM_SEARCH_LADDER` → **default ON 2026-08-14** → **RETIRED 2026-09-02**
+- **RETIRED 2026-09-02 (issue #57), the knob with it.** The triage was one
+  model call spent to skip deterministic corpus searches. On the reporter's
+  box it measured 185 s against 518 ms of searching; on this host, two
+  successive attempts to PRICE it per turn (a measured bar, then a carried
+  per-search cost) each reproduced the inversion through a new door, because
+  a per-corpus, per-box, per-load quantity was being stored under the
+  identity of the process. The deterministic fix stands instead: the
+  `claims x corpora` fan-out runs concurrently under ONE process-wide permit
+  (`claim_search_permits`, `cores/4` clamped `1..=4`, covering `open_index`
+  as well as the search), which bounds the cost the triage was trying to
+  dodge with no model in the loop and no threshold on a model-produced count.
+  Deleted: `claim_search_ladder_enabled`, two process-global cost stores and
+  their accessors, the 10 s fallback bar, the timeout/abandon path, eight
+  integration tests with real sleeps. The batched pass survives only behind
+  `SOVEREIGN_GATE_BATCH_VERIFY` / `SOVEREIGN_GATE_BATCH_SHADOW`, where it was
+  born. Accepted loss: on wikipedia-scale corpora a working triage saved a
+  few seconds of fan-out per turn on this host; that is now spent, bounded.
+  Guards: `the_claim_search_fanout_overlaps_and_never_exceeds_its_bound`,
+  `the_permit_bounds_open_and_search_across_nested_fanouts`.
 - **Lifespan dark: 2026-08-05 to 2026-08-14** (shipped as an experiment
   with its safety counter pre-built; flipped by operator close decision,
   order `audit-economy` D6).

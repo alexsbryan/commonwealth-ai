@@ -1,0 +1,2208 @@
+# Functional-coverage records drawn from the working notes.
+#
+# READ quality/TEST_LEDGER.md FIRST — it is 190 lines and it carries the rules
+# these records depend on. The three that matter most here:
+#
+#   1. A record is OPEN if and only if its `mutation` still SURVIVES. Coverage
+#      is never stored. Apply the edit, run the suite; nothing red means the
+#      failure is uncovered.
+#   2. `close` must name WHICH test reddened, and it must be the one this
+#      record names. A mutation that reddens something else is
+#      could-not-judge, never covered.
+#   3. Every record traces to a witnessed incident. `note` is an id in
+#      ~/.svrnmesh/notes.db and `found` is the date it happened. A record with
+#      no witnessed failure belongs in quality/conformance-specs.toml, which is
+#      the registry for promises. This one is the registry for damage.
+#
+# `failure`, `observable` and `mutation` are written to be SELF-CONTAINED. An
+# agent picking up a record should never need to open the note — the notes
+# average 2,451 characters and that read will either be paid or skipped, and
+# both are failures.
+#
+# FIELDS
+#   id          family + ordinal. Families are areas, not requirement families.
+#   note        witness in the notes store (8-char prefix, unique)
+#   found       the date the failure was observed, not the date it was written
+#   class       one of the nine in TEST_LEDGER.md §The nine classes
+#   tier        1 = operator's ranking (mesh, inference, setup, desktop,
+#               ingest, enrich, bench, grounding, reasoning); 3 = dev tooling
+#   surface     rust-unit | rust-functional | cli-journey | playwright |
+#               vitest | shell
+#   target      file::symbol. NO line numbers — spans rot, symbols do not.
+#   seam        "needed" when the decision is not reachable without an
+#               extraction first. Costs roughly double. Do not take three in
+#               one order.
+#
+# COUNT: 111 records. None written. Nothing here is claimed as covered.
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# GR — grounding and the answer path
+# ─────────────────────────────────────────────────────────────────────────
+
+[[test]]
+id = "GR-01"
+note = "3035f3a4"
+found = "2026-08-10"
+class = "silent-substitute"
+tier = 1
+surface = "rust-functional"
+target = "sovereign-core/src/runtime/retrieval/mod.rs::prompt_admission"
+failure = """RAPTOR late-inject summaries never reached the production deep
+prompt. They were injected into the retrieval pool after the pipeline had
+already run, so they landed past the point where the prompt is assembled. The
+turn answered normally and nothing anywhere reported that the summaries were
+absent — it was a hypothesis for weeks before a new `prompt_admission`
+retrieval_audit event settled it."""
+observable = """A summary injected after the pipeline completes appears in the
+`prompt_admission` audit event for that turn. Assert on the audit event, not on
+the pool: the pool held them the whole time, which is why this was invisible."""
+mutation = """Drop the late-inject arm from prompt assembly so injected
+summaries are collected but never admitted. The test must redden. If the turn
+still answers and nothing goes red, that is the original defect."""
+
+[[test]]
+id = "GR-02"
+note = "a238f336"
+found = "2026-08-10"
+class = "silent-substitute"
+tier = 1
+surface = "rust-functional"
+target = "sovereign-core/src/runtime/retrieval_pipeline.rs::cap_and_reserve"
+failure = """Anything injected into the retrieval pool AFTER the pipeline must
+carry its own reserve. Late injection lands past `cap_and_reserve` (step 13),
+which is where the pool's reserve passes live, so a late arrival is capped
+without ever being reserved for — it is silently dropped at the cap."""
+observable = """A late-injected passage with its own reserve survives capping;
+one without a reserve is dropped AND the drop is reported, not silent."""
+mutation = """Remove the reserve carried by the late-injection path. The test
+must redden on the survival assertion."""
+
+[[test]]
+id = "GR-03"
+note = "6dc35087"
+found = "2026-08-24"
+class = "silent-substitute"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-core/src/deep_research/synthesize.rs::bounded_evidence"
+failure = """Every prompt-building site must go through `bounded_evidence`, and
+the bound must never drop evidence BY POSITION. This was watched red in the
+field: a bound applied positionally silently truncates the tail of the evidence
+set, and the synthesis that results is well-formed and wrong."""
+observable = """Given more evidence than the bound admits, the retained set is
+chosen by the declared rule and not by input order — shuffling the input does
+not change which items survive."""
+mutation = """Replace the bound with a positional truncation (`take(n)`). The
+shuffle-invariance assertion must redden."""
+
+[[test]]
+id = "GR-04"
+note = "6dc35087"
+found = "2026-08-24"
+class = "shared-state"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-core/src/deep_research/synthesize.rs::bounded_evidence"
+failure = """The same note's other half: prompt-building sites that bypass
+`bounded_evidence` and build their own prompt. One decider, one name (ARCH
+§10.6) — a second bound in a second place is how the first one stops being
+true."""
+observable = """A source-scanning test asserts that every prompt-assembly site
+in `deep_research` reaches `bounded_evidence`, with the count pinned."""
+mutation = """Add a second prompt-building site that assembles evidence
+directly. The census must redden. NOTE the known trap here — note `8c99d74e`:
+a census that scans for a literal at a call site reports the invariant VIOLATED
+rather than itself blind the moment a call site adopts a shared composition.
+Scan for reachability, not for a literal."""
+
+[[test]]
+id = "GR-05"
+note = "74edd5bc"
+found = "2026-08-10"
+class = "silent-substitute"
+tier = 1
+surface = "rust-functional"
+target = "sovereign-inference/src/embedded/model_slot.rs::spawn"
+failure = """A request-carried `assistant_prefix` is invisible on the deep
+streaming path unless the spawn emits it. The inference layer commits the prefix
+BEFORE decode, so the model continues from text the client never sees in the
+stream — the answer reads as if it began mid-sentence, and no error is raised
+anywhere."""
+observable = """A request carrying an `assistant_prefix` produces a stream whose
+first emitted content includes that prefix."""
+mutation = """Stop emitting the prefix at spawn while still committing it to the
+context. The test must redden. This is the exact production shape."""
+
+[[test]]
+id = "GR-06"
+note = "4b4484d1"
+found = "2026-08-14"
+class = "silent-substitute"
+tier = 1
+surface = "rust-functional"
+target = "sovereign-core/src/runtime/retrieval_pipeline.rs::PipelineState::unavailable_corpora"
+failure = """Retrieval's unavailability signal has to REACH the answer. Before
+this landed, a corpus that could not be searched produced an answer built from
+whatever else was available, with no statement that anything was missing — the
+honest 'I could not search X' was structurally unavailable to the synthesiser."""
+observable = """A turn scoped to a corpus that is unavailable produces an answer
+whose text names the unavailability. Assert on the rendered answer, not on the
+`unavailable_corpora` field — the field being populated is what was already
+true when this was broken."""
+mutation = """Stop threading `unavailable_corpora` into the synthesis input. The
+test must redden on the answer text."""
+
+[[test]]
+id = "GR-07"
+note = "95b82f97"
+found = "2026-08-13"
+class = "silent-substitute"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-core/src/runtime/grounding/judge.rs::EvidenceFamily"
+failure = """A CUT CHUNK MANUFACTURES ABSENCES. Establishing specimen watched
+in the field: trimming a chunk removes the sentence that supported a claim, and
+the grounding gate then reports the claim unsupported — a fabricated absence,
+indistinguishable from a genuine one at every downstream surface."""
+observable = """The shared evidence window renders each leaf chunk in FULL, so a
+claim supported only by text past the old 1,500-char cut is still visible to
+the judge. Pinned by `judge::tests::the_gate_shares_one_prefix_family`, whose
+fixture chunk runs 1,800 chars past the cap."""
+mutation = """Re-introduce the per-chunk cap in `EvidenceFamily::new`
+(`prefix.push_str(&chunk.chars().take(1_500).collect::<String>())`).
+`the_gate_shares_one_prefix_family` must redden.
+
+CORRECTED 2026-09-02: this record was written expecting a cut-region
+`could-not-judge` ARM. The shipped remedy is stronger — land B removed the cut,
+so no absence is manufactured to report."""
+
+[[test]]
+id = "GR-08"
+note = "1aeadf1a"
+found = "2026-08-13"
+class = "silent-substitute"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-core/src/runtime/grounding/audit_pass.rs::AuditPass::run"
+failure = """The symmetric hazard to GR-07, priced and seat-ruled: A RESTORED
+CHUNK MANUFACTURES PRESENCES. Restoring a chunk can supply text that supports a
+claim the source never made, and the gate passes it — a fabricated presence,
+which is worse than a fabricated absence because it releases."""
+observable = """A turn whose every extracted claim the calibrated judge SUPPORTED is
+still scanned holistically, and the scan's finding still becomes a failure.
+Pinned by `audit_pass::tests::the_specifics_scan_runs_when_every_claim_cleared`."""
+mutation = """Condition the holistic scan on the per-claim audit having already
+found something: `if specifics_scan_enabled() && !failed.is_empty()`.
+`the_specifics_scan_runs_when_every_claim_cleared` must redden.
+
+CORRECTED 2026-09-02: this record was written expecting restored text to be
+held apart from ordinary evidence. The seat RULED against that (1aeadf1a) —
+land B stands. What holds the line is that the flip needed TWO defects, and the
+second (a composite clearing while carrying an unsupported specific) has an
+independent reader. That independence is the testable property."""
+
+[[test]]
+id = "GR-09"
+note = "531b513c"
+found = "2026-08-10"
+class = "instrument-defect"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-core/src/runtime/streaming.rs + native_grounding/segments.rs"
+failure = """The P1 provenance strip runs over POST-quote-verification text, so
+the two honesty layers agree by construction. Observed live on the desktop:
+`grounded=0` on that path is NOT a segmentation failure and must not be read as
+one. Anyone instrumenting this later will re-derive the wrong conclusion."""
+observable = """The strip is handed the FINAL released string: nothing rebinds
+`full_text` after `segments_for_display` is called, so a segment's
+`text_range` addresses the text the reader actually saw. And a quote the
+guardrail demoted to `[unverified excerpt: …]` segments Unverified, never
+Grounded — so `grounded = 0` on a paraphrasing model is the honest reading,
+not a segmentation failure. Pinned by
+`segments::tests::the_strip_reads_the_released_string` and
+`segments::tests::a_demoted_quote_segments_unverified_and_the_ranges_follow_the_release`."""
+mutation = """Move the segment block back above the post-synthesis quote
+guardrail in `stream_knowledge_query_turn`.
+`the_strip_reads_the_released_string` must redden, naming every rewrite that
+now lands after it.
+
+FIXED 2026-09-02: the invariant was NOT shipped. The block sat above four
+later rebindings of `full_text` — the quote guardrail, the unavailability
+marker, the lesson term-avoid pass and the authority guard — each of which
+changes the string's LENGTH, so every emitted `text_range` addressed a text
+the reader never saw. The block was moved below all four."""
+
+[[test]]
+id = "GR-10"
+note = "cf819c1e"
+found = "2026-08-14"
+class = "inert-guard"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-cli-llm/src/bench_cmd/live_runner.rs::caveat_credit"
+failure = """`classify_caveat` was listed for tombstoning by a latency order.
+It cannot be removed, because it is the instrument that the SAME order's quality
+gate reads. Removing it makes the gate report a number it can no longer compute
+— a green with nothing behind it."""
+observable = """A caveat judge that returned no answer earns NO honesty credit,
+and the collapse happens in exactly one place that every bench lane routes
+through — so `classify_caveat` provably still has a reader and cannot be
+tombstoned out from under the gate. Pinned by
+`live_runner::tests::an_unconfirmed_caveat_never_earns_honesty_credit`."""
+mutation = """`caveat_credit(None)` returns `true` (a missing classification
+defaults to a passing score). The test must redden.
+
+CORRECTED 2026-09-02: this record asked the gate to report COULD-NOT-JUDGE.
+It does not and cannot cheaply — `Observation::caveat_present` is a `bool`,
+so a third value changes the wire type and every artifact reading it, which
+is a scorer change owing ARCH §18.6 discipline. What shipped instead is the
+direction and the arity: fail closed, decided once. Before this, four lanes
+each wrote their own collapse (one `match`, three bare `.unwrap_or(false)`)
+and nothing stopped one drifting to `true`."""
+
+[[test]]
+id = "GR-11"
+note = "df357e58"
+found = "2026-08-14"
+class = "inert-guard"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-core/src/runtime/grounding/mod.rs::answer_declines"
+failure = """The decline-recognition set — `answer_declines`,
+`released_pure_decline`, the refusal-opener list — must not be retired while the
+typed disposition reads `not_computed`. Retiring it leaves the typed field as
+the only decider, and it does not yet decide."""
+observable = """With `native_decision` at the `not_computed` sentinel, a pure
+decline is still reclassified `abstained_decline`, and the decline guard's
+own condition cannot read the typed verdict. Pinned by
+`grounding::tests::a_decline_is_still_recognised_while_the_typed_disposition_is_uncomputed`."""
+mutation = """Route the decline guard through the typed disposition:
+`let reclassify = (action == ACT_RELEASED && !claim_audited && native.is_some())`.
+That test must redden."""
+
+[[test]]
+id = "GR-12"
+note = "4350f44d"
+found = "2026-08-14"
+class = "dark-capability"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-core/src/runtime/grounding/mod.rs"
+failure = """The short-path retry machinery is not tombstonable the way the
+longform ladder is, and the reason is structural rather than a matter of
+appetite. Nothing currently asserts the structural difference, so the next
+tombstone order will propose it again."""
+observable = """The short path has NO `GateReach::Flawed` exit — the longform
+ladder has four — so after a failed verdict the retry's exits are the only
+ones that still hand the reader an answer, and each has exactly one producer
+in production code. Pinned by
+`grounding::tests::the_short_paths_retry_is_the_only_door_from_a_failed_claim_back_to_an_answer`."""
+mutation = """Delete the short-path retry — its exit becomes a refusal
+(`action = ACT_ABSTAINED;` in place of `action = ACT_RETRY_RELEASED;`). The
+test must redden naming the missing state, not merely stop compiling: an
+unused `pub(crate) const` is not an error."""
+
+[[test]]
+id = "GR-13"
+note = "f4972e1b"
+found = "2026-08-26"
+class = "silent-substitute"
+tier = 1
+surface = "rust-functional"
+target = "sovereign-core/src/router_bootstrap.rs"
+failure = """A DEAD EMBED SLOT SILENTLY DISABLES THE ENTIRE ROUTER AND ATLAS
+STACK, AND THE TURN STILL ANSWERS — worse. Root-caused only after a false 'I
+introduced a regression' verdict was nearly shipped: the answer quality drops,
+nothing errors, and the drop is attributed to whatever changed most recently."""
+observable = """With the embed slot unavailable, the turn either refuses or its
+response carries the degradation; it never silently answers as though routing
+and atlas ran."""
+mutation = """Restore the swallow — make router bootstrap fall back to a
+no-router path on embed failure without surfacing it. The test must redden."""
+
+[[test]]
+id = "GR-14"
+note = "b061819c"
+found = "2026-08-27"
+class = "config-lie"
+tier = 1
+surface = "cli-journey"
+target = "sovereign-core/src/deep_research/port.rs"
+failure = """Setting `[models].fast_context_size` breaks EVERY deep-research
+flight, and the error names a token count rather than the config key that caused
+it. The operator sees an arithmetic complaint and has no path back to the
+setting they changed."""
+observable = """With `fast_context_size` set below the flight's requirement, the
+failure message names `[models].fast_context_size`."""
+mutation = """Revert the message to the bare token-count form. The journey step
+asserting the key name must redden."""
+
+[[test]]
+id = "GR-15"
+note = "88338f25"
+found = "2026-08-11"
+class = "ambient-dependence"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-core/src/runtime/grounding/config.rs"
+failure = """Flipping a default-off env flag to default-on requires auditing
+every place that derives 'off' from UNSET. When `SOVEREIGN_NATIVE_GROUNDING`
+went default-on, the flag reader was one site but the derived-off readers were
+not, so parts of the system ran in the old mode against a flag that said
+otherwise."""
+observable = """With the variable unset, every reader agrees on the same
+posture — a test enumerates the readers and asserts one verdict."""
+mutation = """Reintroduce a second reader that treats unset as off. The
+agreement test must redden."""
+
+[[test]]
+id = "GR-16"
+note = "4b3a1d92"
+found = "2026-08-10"
+class = "config-lie"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-core/src/runtime/grounding/native_grounding/admission.rs"
+failure = """`SOVEREIGN_NATIVE_GROUNDING=1` is a DISPLAY flag. H1 admission runs
+as telemetry only — every admission event carries `enforced = false` and it
+decides nothing. A reader who assumes the flag enforces will misattribute every
+quality result taken under it."""
+observable = """H1's typed decision never crosses into the turn and is never a
+branch condition in `handlers/knowledge_query.rs`; the admission event carries
+`enforced = false` as a literal. Pinned by
+`admission::tests::the_admission_verdict_decides_nothing_in_the_turn`."""
+mutation = """Add a branch on the verdict at the `knowledge_query.rs` call site
+(`if native_verdict.as_ref().is_some_and(|v| v.answerability < 0.5) { ... }`).
+`the_admission_verdict_decides_nothing_in_the_turn` must redden."""
+
+[[test]]
+id = "GR-17"
+note = "581b2ffc"
+found = "2026-08-13"
+class = "instrument-defect"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-core/src/runtime/grounding/mod.rs"
+failure = """Forcing surgery on every repairable turn does not move the
+fabrication floor, AND the OFF baseline leaks too — which is why the null must
+be quoted alongside any surgery result. A surgery number reported without its
+null reads as an effect."""
+observable = """BLOCKED 2026-09-02 — the mechanism ships, the INSTRUMENT does
+not. Surgery itself is live and default-ON (`SOVEREIGN_SURGICAL_REWRITE`, one
+production reader at `grounding/config.rs`), and three of the longform ladder's
+four `GateReach::Flawed` exits are its doors. This record is not about the
+rewrite; it is about a lane that reports a surgery DELTA, which must carry the
+paired OFF baseline FROM THE SAME RUN because the OFF arm leaks too.
+
+No such lane exists. `scripts/sovereign-ci-bench.sh` has no surgery lane, and
+its baseline machinery is this-run-vs-committed-past-baseline, a different
+relation. `sovereign/bench/` names surgery only in `CI_GATE_HANDOFF.md` prose
+and inside result artifacts. The only surgery A/B is two DATED one-off
+launchers (`sovereign-desktop/tests/e2e/scripts/launch-surgical-{calibration,
+recalib}.py`) whose arm pairing is incidental to running both in one process.
+
+The one same-run paired-arm lane in the tree, `bench promote` (Lane 7), already
+satisfies the generic discipline STRUCTURALLY: `decide(&baseline_arm,
+&candidate_arm)` takes both and a failed baseline arm returns early, so no path
+emits a candidate delta without its null. Its `--param` surface is `rerank.*`;
+`ScaffoldingParam` has no grounding variant, so surgery cannot ride it."""
+mutation = """Unwatched, and not watchable yet. The named mutation — let the
+lane emit a surgery figure with the baseline absent — has no lane to apply it
+to. At `bench promote`, where a paired lane does exist, the pairing is a TYPE
+SIGNATURE, so the mutation is a compile break: a false red, which this ledger
+names as could-not-judge, never covered.
+
+Unblocks when a surgery arm becomes drivable — a `ScaffoldingParam` grounding
+variant, or a durable lane in `sovereign-ci-bench.sh`. The invariant then
+transfers to whatever reports the delta."""
+
+[[test]]
+id = "GR-18"
+note = "bc2d7a77"
+found = "2026-09-02"
+class = "command-seam"
+tier = 1
+surface = "rust-functional"
+target = "sovereign-core/src/runtime/turn.rs::seed_conversation"
+failure = """`POST /v1/conversations` accepts `enabled_corpora: [ids]` on two
+wire paths (daemon `turn_http` and `sovereign-server`, same form).
+`seed_conversation` validates the list against `installed_indexes()`. Nothing
+asserts the two paths agree, and a divergence means one entry point silently
+accepts a corpus the other rejects."""
+observable = """The same `enabled_corpora` payload posted to both entry points
+produces the same acceptance verdict and the same error text on rejection."""
+mutation = """Drop the validation on one path only. The parity test must
+redden."""
+
+[[test]]
+id = "GR-19"
+note = "d986970b"
+found = "2026-08-31"
+class = "dark-capability"
+tier = 1
+surface = "rust-functional"
+target = "commonwealth-api/src/turn_fidelity.rs::apply_failure_nudge"
+failure = """The three request-side reshape passes are MUTUALLY EXCLUSIVE, and
+one of them is unreachable on the committed corpus — measured while building
+`turn_reshape_fidelity.rs`. An unreachable pass is a pass nobody is testing, and
+its next edit lands with no signal at all."""
+observable = """A test enumerates the three passes, asserts the exclusivity, and
+names which input reaches each — including a constructed input that reaches the
+third."""
+mutation = """Make two passes co-applicable. The exclusivity assertion must
+redden."""
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# ME — mesh, federation, the daemon lifecycle
+# ─────────────────────────────────────────────────────────────────────────
+
+[[test]]
+id = "ME-01"
+note = "07c2e829"
+found = "2026-08-27"
+class = "inert-guard"
+tier = 1
+surface = "rust-functional"
+target = "sovereign-mesh/src/gossip.rs"
+failure = """ROTATING A JOIN KEY USED TO PARTITION THE MESH, AND THREE GREEN
+TESTS COULD NOT SEE IT. A peer filed the symptom as 'rotate-clobber' weeks
+before it was root-caused; the three tests that existed each held one side of
+the rotation and never modelled two nodes crossing it."""
+observable = """Two nodes that rotate a join key at different moments remain in
+one mesh — membership after rotation is the union, asserted from both nodes'
+views, not from the rotating node's alone."""
+mutation = """Restore the pre-fix rotate path. Both nodes' membership
+assertions must redden. A test that only checks the rotator's own view is the
+original defect and does not count as the named test."""
+
+[[test]]
+id = "ME-02"
+note = "219ac444"
+found = "2026-08-27"
+class = "inert-guard"
+tier = 1
+surface = "rust-functional"
+target = "sovereign-mesh/src/daemon.rs"
+failure = """The guard that was supposed to stop rotate from partitioning the
+mesh SHIPPED INERT — the second half of the same bug as ME-01. It was present,
+it was unit-tested, and in the running system it could not fire."""
+observable = """The guard fires: drive the daemon through the rotation that
+would partition, and assert the guard's refusal is observable at the daemon's
+own surface, not merely that the guard function returns false."""
+mutation = """Neuter the guard's trigger condition so it is constructed but
+never consulted. The test must redden. If it stays green, the test is asserting
+on the function rather than on the system, which is the shape that let this
+ship."""
+
+[[test]]
+id = "ME-03"
+note = "4e268c7d"
+found = "2026-08-27"
+class = "silent-substitute"
+tier = 1
+surface = "rust-unit"
+target = "commonwealth-core/src/mesh.rs"
+failure = """Once an upgraded peer withholds its secret ON PURPOSE, a zeroed
+field on the wire stops being evidence of an old build. The code that read it as
+one was written before that was true, so a deliberate withholding was
+indistinguishable from a legacy peer and got legacy handling."""
+observable = """A zeroed field is classified `unknown`, not `legacy` — the two
+are distinct verdicts and the distinction is asserted."""
+mutation = """Collapse `unknown` back into `legacy`. The test must redden."""
+
+[[test]]
+id = "ME-04"
+note = "1567c61a"
+found = "2026-08-27"
+class = "shared-state"
+tier = 1
+surface = "rust-functional"
+target = "sovereign-mesh/src/persist.rs::save"
+failure = """`persist::save` used to DECIDE which mesh is active, which made
+every caller an implicit switcher — and two of those callers fire on a TIMER. A
+background save could silently change the active mesh out from under the
+operator."""
+observable = """A save issued for a non-active mesh leaves the active mesh
+unchanged, asserted after the save by reading the active-mesh decider."""
+mutation = """Let `save` write the active-mesh pointer again. The test must
+redden. Drive it from the timer-backed caller if reachable — that is the path
+that actually bit."""
+
+[[test]]
+id = "ME-05"
+note = "961f12ad"
+found = "2026-08-26"
+class = "dark-capability"
+tier = 1
+surface = "rust-functional"
+target = "sovereign-mesh/src/auto_ingest.rs"
+failure = """PEER-ASSISTED INGEST HANDOFF WAS DARK FOR FIVE WEEKS AND THE
+CONTROL PLANE ABOVE IT KEPT WORKING. Commit `ec7ca66c` ('feat: fim',
+2026-07-21) deleted three lines; the handoff stopped happening and every
+surface that reports on it continued to report success."""
+observable = """A peer-assisted ingest actually hands off — assert the receiving
+peer observes the work, not that the initiating side reports it dispatched."""
+mutation = """Delete the handoff call again. The test must redden. The control
+plane will stay green, which is the point."""
+
+[[test]]
+id = "ME-06"
+note = "74051d09"
+found = "2026-08-31"
+class = "ambient-dependence"
+tier = 1
+surface = "rust-unit"
+target = "commonwealth-knowledge/src/rail/payload.rs"
+failure = """AN OPAQUE SIGNED PAYLOAD MUST BE CANONICAL BY CONSTRUCTION, OR A
+CARGO FEATURE CAN INVALIDATE EVERY SIGNATURE ON THE MESH. A signature covers
+BYTES; `serde_json::Value` has no bytes of its own, and its serialisation
+depends on a feature flag. Two nodes built with different features disagree
+about what was signed."""
+observable = """The same logical payload serialises to identical bytes under
+both feature configurations — asserted against a pinned byte string, not
+against a round-trip."""
+mutation = """Re-derive the signed bytes from a `Value` rather than from the
+canonical form. The pinned-bytes test must redden under one feature set."""
+
+[[test]]
+id = "ME-07"
+note = "3ec305f3"
+found = "2026-08-27"
+class = "config-lie"
+tier = 1
+surface = "cli-journey"
+target = "sovereign-mesh/src/daemon.rs::start_daemon"
+failure = """`[daemon] client_bind` IS NOT WHAT THE DAEMON BOUND. An encrypted
+mesh forces the client listener back to loopback, silently as far as the config
+is concerned. The operator reads their own config and concludes the listener is
+on the network; it is not, or the reverse."""
+observable = """A status surface reports the ACTUAL bound address, and a journey
+step asserts it differs from the configured value when an encrypted mesh
+overrides it."""
+mutation = """Report the configured value instead of the bound one. The journey
+step must redden."""
+
+[[test]]
+id = "ME-08"
+note = "a256476a"
+found = "2026-08-23"
+class = "silent-substitute"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-mesh/src/admin_http.rs::ConfigDiff::diff"
+failure = """DAEMON HOT-RELOAD DROPS EXTRA SLOTS. `ConfigDiff::diff` compares
+primary and fast and does not see `models.extra`, so a reload silently unloads
+extra slots. The note is explicit that the fix is NOT to add `models.extra` to
+the comparison — do not 'fix' it that way."""
+observable = """A hot reload that does not change extra slots leaves them
+resident; a reload that does change them reports the change."""
+mutation = """Restore the two-field comparison. The residency assertion must
+redden."""
+
+[[test]]
+id = "ME-09"
+note = "66123bec"
+found = "2026-08-24"
+class = "shared-state"
+tier = 1
+surface = "rust-functional"
+target = "sovereign-desktop/src-tauri/src/mobile_host_setup.rs"
+failure = """ORPHANED `sovereign-server`, operator-reported as 'keeps
+happening'. Observed with PID 37039 at PPID 1 — a live instance of hazard 10,
+cleanup that never runs. It is the reason `Launch` gained a `Server` variant the
+same day."""
+observable = """Shutting down the owner terminates the server it launched; no
+process survives the owner's exit."""
+mutation = """Drop the `Server` variant's cleanup path. The test must redden by
+observing the surviving child, not by inspecting the enum."""
+
+[[test]]
+id = "ME-10"
+note = "b4b36597"
+found = "2026-08-24"
+class = "resource-ceiling"
+tier = 1
+surface = "rust-functional"
+target = "commonwealth-api/src/admission.rs::shed_response"
+failure = """A daemon returning 503 'host busy, ~30000ms predicted wait' blocked
+a session's own note writes twice. Backpressure on the inference path took down
+an unrelated control-plane write, because both went through the same admission
+gate."""
+observable = """A control-plane write succeeds while the inference path is
+shedding — the two are not gated together."""
+mutation = """Route the control-plane write back through the inference
+admission gate. The test must redden."""
+
+[[test]]
+id = "ME-11"
+note = "015e6fe6"
+found = "2026-08-31"
+class = "resource-ceiling"
+tier = 1
+surface = "rust-functional"
+target = "corpus-engine/src/engine/mod.rs"
+failure = """THE CODE-INTEL ENRICHMENT IS NOT WHAT EXHAUSTS THE DAEMON'S FILE
+DESCRIPTORS — one corpus's resident Lance index is. Measured with the enrichment
+STOPPED: 244 of 256 descriptors held by the daemon alone. The wrong subsystem
+was blamed first, and the enrichment was stopped for nothing."""
+observable = """A resident index's descriptor count is bounded and reported, so
+the holder is identifiable without a `lsof` session."""
+mutation = """Remove the bound. The test must redden on the count, and the
+report must still name which corpus holds them."""
+
+[[test]]
+id = "ME-12"
+note = "3a295d81"
+found = "2026-08-18"
+class = "config-lie"
+tier = 1
+surface = "playwright"
+target = "sovereign-desktop/tests/e2e/real/global-setup.ts::ingestFixtureCorpus"
+failure = """The livelock itself is FIXED and covered — `corpus-engine/src/engine/ingest.rs`
+now calls `yield_gate::defer_to_foreground` with a `DeferralBudget`, and
+`cap_fires_against_a_foreground_that_never_goes_idle` asserts the cap, the
+announcement, a real non-zero `deferred_secs`, the named bound, and that a
+capped exit never claims the foreground went idle. What is NOT covered is the
+harness message that made it cost three runs to diagnose. Global-setup's 180s
+deadline threw "fixture ingest emitted nothing on local-corpus://progress/<job>
+within 180s — bridge listen_any regression or stalled job". The note's own
+verdict: "That message is misleading: the bridge is fine. It is a liveness probe
+starving ingest enrichment forever." The timeout names the wrong subsystem, and
+two independent readers went to the bridge first."""
+observable = """A fixture ingest that times out reports WHY it stalled — it
+distinguishes a bridge that emitted nothing from a job that was deferred, and
+when the deferral cap fired it says so."""
+mutation = """Collapse the two causes back into one message blaming the bridge.
+The test must redden on the message text against a fixture whose ingest is
+deferred rather than dropped."""
+
+[[test]]
+id = "SE-01"
+note = "1a0b8482"
+found = "2026-08-27"
+class = "inert-guard"
+tier = 1
+surface = "rust-functional"
+target = "commonwealth-api/src/client_auth.rs::client_auth_layer"
+failure = """A GUEST GRANT CANNOT BE TESTED OVER LOOPBACK, AND EVERY SUCH TEST
+PASSES FOR THE WRONG REASON. `client_auth_layer` admits every loopback caller
+BEFORE it reads any bearer, so a guest link driven at 127.0.0.1 bypasses the
+grant entirely and receives full access. That is correct behaviour for the
+operator's own box and a silent no-op for anyone verifying the gate. The live
+non-loopback e2e is recorded in the note as OWED, not done."""
+observable = """Under the guest policy (`trust_loopback: false`) a loopback
+caller with no bearer is REFUSED; with an expired grant, refused; with a live
+grant, admitted. Under the operator policy (`trust_loopback: true`) a loopback
+caller with no bearer is admitted."""
+mutation = """Set `trust_loopback: true` in the guest policy. The
+no-bearer-refused case must redden. A test that only exercises the operator
+policy stays green under this mutation and is the original defect."""
+
+[[test]]
+id = "SE-02"
+note = "79c46187"
+found = "2026-08-28"
+class = "config-lie"
+tier = 1
+surface = "rust-functional"
+target = "commonwealth-api/src/client_auth.rs"
+failure = """A GUEST GRANT WAS UNUSABLE ON ANY DAEMON WITH NO CLIENT TOKEN —
+INCLUDING THE DAEMON THAT MINTED IT. Proven on the wire across three probes,
+same tunnel, same ALPN. The mint succeeded and the grant it produced could not
+be redeemed anywhere, so the failure surfaced only at redemption time on a
+different machine."""
+observable = """A grant minted on a daemon with no client token is redeemable on
+that same daemon."""
+mutation = """Reintroduce the client-token requirement on the redemption path.
+The test must redden at redemption, not at mint."""
+
+[[test]]
+id = "SE-03"
+note = "308513da"
+found = "2026-08-28"
+class = "inert-guard"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-mesh/src/iroh_access.rs"
+failure = """HOLDING A NODE'S IROH DIAL STRING IS NOT A CREDENTIAL. The acceptor
+routes on `(ALPN, dialer key)`, never on ALPN alone. An iroh endpoint accepts
+anyone, and the dial string that reaches it is PUBLIC — it rides in every
+invite's `dial=` field and is gossiped. Any check that treats reachability as
+authorisation is open."""
+observable = """A dialer presenting a correct ALPN and an unknown key is
+refused. The refusal is asserted at the acceptor, not at a layer above it."""
+mutation = """Route on ALPN alone. The unknown-key case must redden."""
+
+[[test]]
+id = "SE-04"
+note = "1a0b8482"
+found = "2026-08-27"
+class = "command-seam"
+tier = 1
+surface = "rust-functional"
+target = "commonwealth-api/src/routes_inference.rs::chat_completions"
+failure = """Same note, second break: `chat_completions` must carry the guest
+model refusal, and `list_models` must carry the guest filter. The note records
+both as proven only by in-process falsification — six probes against a script
+kept in a scratchpad that no longer exists. Nothing in the tree holds them."""
+observable = """A guest whose grant does not cover a model receives a refusal
+from `chat_completions`, and that model is absent from `list_models` for the
+same guest."""
+mutation = """Drop the refusal from `chat_completions`. The refusal test must
+redden while the `list_models` test stays green — they are separate records
+because they are separate decisions."""
+
+[[test]]
+id = "SE-05"
+note = "1a0b8482"
+found = "2026-08-27"
+class = "inert-guard"
+tier = 1
+surface = "rust-unit"
+target = "commonwealth-api/src/client_auth.rs"
+failure = """Same note, third break: a Scope must not grant `/internal/*`, and a
+Scope must not name an unmounted route. Both were held by a ratchet proven only
+in a scratchpad script."""
+observable = """A Scope naming `/internal/*` is rejected at construction; a
+Scope naming a route the router does not mount is rejected against the live
+route table."""
+mutation = """Allow `/internal/*` in a Scope. The first assertion must redden.
+Separately, mount-check against a hardcoded list rather than the router — the
+second must redden when a route is renamed."""
+
+[[test]]
+id = "SE-06"
+note = "0fb0f1c8"
+found = "2026-08-30"
+class = "silent-substitute"
+tier = 2
+surface = "rust-unit"
+target = "corpus-engine/src/index/create.rs"
+failure = """`_corpus_meta.json` for commonwealth-ai records NO filter or scope
+keys at all — only `personal_scope`. A consumer reading scope from that file
+gets absence, and absence here reads as 'unscoped' rather than 'unknown'."""
+observable = """A meta file with no scope keys yields `unknown`, and a caller
+that requires a scope refuses rather than defaulting to unscoped."""
+mutation = """Default the missing scope to unscoped. The refusal test must
+redden."""
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# IN — inference, slots, memory, sampling
+# ─────────────────────────────────────────────────────────────────────────
+
+[[test]]
+id = "IN-01"
+note = "0c0b47a8"
+found = "2026-08-26"
+class = "resource-ceiling"
+tier = 1
+surface = "rust-functional"
+target = "sovereign-inference/src/embedded/model_slot.rs"
+failure = """THE DAEMON WAS LOADING EVERY LOCAL MODEL INTO ANONYMOUS MEMORY,
+BECAUSE IT REGISTERS RPC DEVICES. Not a model-specific bug — it applies to every
+local load on any host with mesh or RPC inference wired, which is every host
+that has ever joined a mesh. Anonymous memory is not evictable, so this is the
+mechanism behind several of the OOM records below."""
+observable = """A local load with RPC devices registered maps the weights
+file-backed, asserted from the process's own mapping accounting rather than from
+total RSS."""
+mutation = """Re-register RPC devices ahead of the local load. The mapping
+assertion must redden. RSS alone will not move enough to be a reliable signal —
+assert on the mapping kind."""
+
+[[test]]
+id = "IN-02"
+note = "2c3b74a4"
+found = "2026-08-25"
+class = "inert-guard"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-inference/src/embedded/kv_budget.rs"
+failure = """PER-SLOT KV WINDOWS AND THE GUARD THAT COULD NOT FIRE. The guard
+existed, was tested, and in the configured system its trigger condition was
+unreachable — the budget was computed such that the guard's threshold could
+never be crossed."""
+observable = """The guard fires under a configuration the product actually
+ships, asserted by driving the budget to the threshold through the public
+configuration path."""
+mutation = """Restore the pre-fix budget computation. The firing test must
+redden. A test that calls the guard directly with a synthetic budget stays green
+and does not count."""
+
+[[test]]
+id = "IN-03"
+note = "05cbffed"
+found = "2026-08-25"
+class = "resource-ceiling"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-inference/src/hardware.rs"
+failure = """Host memory ceiling root-caused after SIX OOM kills in 24 hours,
+four of them overnight. The accounting that would have predicted them existed
+nowhere — the daemon sized its loads against a figure that did not include what
+it had already committed."""
+observable = """A load that would exceed the host ceiling is refused before it
+begins, and the refusal names the committed total and the ceiling."""
+mutation = """Size the load against free memory rather than against free minus
+committed. The refusal test must redden."""
+
+[[test]]
+id = "IN-04"
+note = "f2afc2cf"
+found = "2026-08-24"
+class = "resource-ceiling"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-inference/src/hardware.rs"
+failure = """THE DAEMON IS THE DESIGNATED OOM VICTIM ON THIS HOST, root-caused
+from the kernel log. It supersedes a half-explanation that blamed cargo builds.
+The daemon's OOM score makes it the first thing killed under pressure, which
+means every long run is one memory spike away from losing its instrument."""
+observable = """The daemon's OOM adjustment is set deliberately and is
+readable — a test asserts the value the process actually carries, not the value
+the config requests."""
+mutation = """Stop applying the adjustment while leaving the config key. The
+test must redden by reading the live process."""
+
+[[test]]
+id = "IN-05"
+note = "849417cd"
+found = "2026-08-24"
+class = "resource-ceiling"
+tier = 3
+surface = "shell"
+target = "scripts/sovereign-test.sh"
+failure = """Running the cargo gates while a flight is in progress OOM-kills the
+daemon — re-confirmed three times in one evening. The gates and the daemon
+contend for the same memory and neither knows about the other."""
+observable = """The gate refuses to start, with a message naming the in-flight
+run, when a flight is detected."""
+mutation = """Remove the detection. The refusal test must redden — drive it with
+a fake in-flight marker rather than a real flight."""
+
+[[test]]
+id = "IN-06"
+note = "21382c79"
+found = "2026-08-27"
+class = "resource-ceiling"
+tier = 2
+surface = "shell"
+target = "research/deep-research/arms/bed/sweep-compose.sh"
+failure = """The compose sweep OOM-kills the daemon at the wide budgets, and ONE
+crash used to cost FOUR arms — the sweep had no checkpoint, so a crash in arm
+four discarded arms one through three as well."""
+observable = """A crash mid-sweep preserves the arms already completed; a resume
+re-runs only what is missing."""
+mutation = """Remove the per-arm checkpoint write. The resume test must
+redden."""
+
+[[test]]
+id = "IN-07"
+note = "914cf358"
+found = "2026-08-27"
+class = "instrument-defect"
+tier = 2
+surface = "rust-unit"
+target = "sovereign-core/src/deep_research/port.rs"
+failure = """The >4 GiB allocation scales with PROMPT SIZE, not context size —
+a correction the note's own author issued the same day after recommending
+`fast_context_size` as the lever before measuring. Anyone tuning this from the
+first note tunes the wrong knob."""
+observable = """The allocation estimate is a function of prompt size, asserted
+by holding context constant and varying the prompt."""
+mutation = """Make the estimate a function of context size. The
+hold-context-vary-prompt test must redden."""
+
+[[test]]
+id = "IN-08"
+note = "980b5058"
+found = "2026-08-19"
+class = "ambient-dependence"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-core/src/planner.rs"
+failure = """llguidance forces JSON object keys to be emitted in the order it
+ITERATES `properties`, and that order depends on a CARGO FEATURE, not on the
+schema text. So a structured output's key order — which downstream parsers have
+been known to depend on — changes with a build configuration."""
+observable = """The emitted key order is identical under both feature
+configurations, pinned against a literal."""
+mutation = """Build the schema from a map whose iteration order is
+feature-dependent. The pinned-order test must redden under one configuration."""
+
+[[test]]
+id = "IN-09"
+note = "0479b961"
+found = "2026-08-19"
+class = "ambient-dependence"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-inference/src/embedded/sampler.rs"
+failure = """The exact conditions under which a multi-branch `oneOf` compiles
+under llguidance 1.7.6. The note records that the author asserted this WRONG
+TWICE from an incident note before testing it — so the conditions are not
+derivable by reading, and a schema change that violates them fails at sampling
+time rather than at build time."""
+observable = """A multi-branch `oneOf` schema of the shape the product ships
+compiles; one violating the recorded condition is refused at construction with a
+message naming the condition."""
+mutation = """Accept the violating shape at construction. The refusal test must
+redden."""
+
+[[test]]
+id = "IN-10"
+note = "0ea1ae7f"
+found = "2026-08-21"
+class = "shared-state"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-inference/src/embedded/model_slot.rs::StreamSink"
+failure = """Streaming send policy lives in `StreamSink` and nowhere else.
+Before this rung, `model_slot.rs` held THREE implementations of the same policy
+— three deciders for one behaviour, which is how they drift (ARCH §10.6)."""
+observable = """A source-scanning test asserts one implementation, with the
+count pinned. Read GR-04's warning first: scan for reachability, not for a
+literal at a call site."""
+mutation = """Add a second send-policy implementation. The census must redden."""
+
+[[test]]
+id = "IN-11"
+note = "ddeb5f87"
+found = "2026-08-27"
+class = "instrument-defect"
+tier = 2
+surface = "rust-unit"
+target = "sovereign-inference/src/embedded/sampler.rs"
+failure = """TEMPERATURE 0.0 IS NOT DETERMINISM ON THE LOCAL DAEMON, and a small
+agreement sample is not evidence that it is. A comparison bar asked one pair per
+model, agreement looked total, and the conclusion drawn was that the judge was
+deterministic. It was not."""
+observable = """Any lane claiming determinism runs a declared minimum number of
+repeats and reports the observed agreement rate, refusing to assert determinism
+from n=1."""
+mutation = """Let the lane assert determinism from a single pair. The refusal
+test must redden."""
+
+[[test]]
+id = "IN-12"
+note = "db155dad"
+found = "2026-08-27"
+class = "instrument-defect"
+tier = 2
+surface = "rust-unit"
+target = "sovereign-inference/src/embedded/gates.rs"
+failure = """Flash-Next's latency is COLD-START PREFILL, not slow generation —
+republished with three of its own supporting claims corrected. A latency figure
+that does not separate prefill from decode attributes the cost to the wrong
+phase, and the optimisation that follows targets nothing."""
+observable = """A reported latency carries its prefill and decode components
+separately; a report with them merged is refused."""
+mutation = """Merge the two into one figure. The refusal test must redden."""
+
+[[test]]
+id = "IN-13"
+note = "b588ba8b"
+found = "2026-08-27"
+class = "ambient-dependence"
+tier = 2
+surface = "rust-unit"
+target = "sovereign-inference/src/embedded/model_slot.rs"
+failure = """The qwen4exp `ple_hist` divergence fires on EVERY restore and does
+not change the output — measured, after the same author predicted the opposite
+from reading the source. Prefix-state restore is safe in the production-shaped
+configuration, and nothing asserts that, so the next reader re-derives the wrong
+answer from the source too."""
+observable = """A restore in the production-shaped configuration produces output
+identical to a cold run, asserted on the emitted tokens."""
+mutation = """Restore from a session file written under a different
+configuration. The equality assertion must redden."""
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# EN — ingest, corpora, enrichment
+# ─────────────────────────────────────────────────────────────────────────
+
+[[test]]
+id = "EN-01"
+note = "d50b7cf8"
+found = "2026-08-28"
+class = "config-lie"
+tier = 1
+surface = "cli-journey"
+target = "sovereign-cli-llm/src/corpus_cmd/inventory.rs::CorpusReadiness"
+failure = """`CorpusReadiness::label()` carries the comment 'the CLI-contract
+journey asserts on these exact strings, so they are API, not decoration'. NO
+JOURNEY ASSERTS ANY OF THEM. The `corpus status` step in `corpus-lifecycle`
+asserts `stdout_contains = "{corpus}"`, and the corpus id prints in every state,
+so that step passes identically through ready, building and unsearchable. The
+unit tests for the decider are good; the claim about journey coverage is
+false."""
+observable = """The `corpus-lifecycle` status step asserts the literal `ready`.
+A second journey drives a corpus with no vector index and asserts
+`unsearchable`."""
+mutation = """Return `ready` from the `Unsearchable` arm. The second journey
+step must redden. The existing unit tests will also redden — that is fine, but
+`close` must name the journey step."""
+
+[[test]]
+id = "EN-02"
+note = "d50b7cf8"
+found = "2026-08-28"
+class = "silent-substitute"
+tier = 1
+surface = "rust-functional"
+target = "sovereign-core/src/runtime/unavailability.rs"
+failure = """Same note, the consequence that misled a whole investigation: during
+a chaos soak the UX judge twice scored a TRUE system-status message ('the
+knowledge base is still building') as a hallucination, on the strength of
+`corpus status: ready`. The app was telling the truth both times. A judge that
+cannot tell a true unavailability statement from a fabricated one pushes the
+product AWAY from honest reporting when tuned against."""
+observable = """The judge classifies a system-status statement that matches the
+retrieval layer's own unavailability verdict as TRUE, not as fabrication."""
+mutation = """Remove the cross-check against the unavailability verdict. The
+test must redden. This is an ARCH §18.6 change — a judge edit — so it also owes
+a run in the direction it was NOT meant to fix."""
+
+[[test]]
+id = "EN-03"
+note = "d50b7cf8"
+found = "2026-08-28"
+class = "instrument-defect"
+tier = 2
+surface = "shell"
+target = "sovereign/crates/sovereign-desktop/tests/e2e/chaos.mjs"
+failure = """Same note, fourth open item: the chaos harness's `read_get_chunk`
+succeeds on corpora that can never answer, because chunks exist even when no
+vector index does. It happily generates questions from a corpus that will refuse
+every one of them. Passage-fetchable is not retrievable."""
+observable = """The harness verifies retrievability before generating questions
+from a corpus, and skips with a named reason when it cannot retrieve."""
+mutation = """Revert to the chunk-fetch check. The skip test must redden against
+a fixture corpus with no vector index."""
+
+[[test]]
+id = "EN-04"
+note = "89d5f75a"
+found = "2026-08-13"
+class = "command-seam"
+tier = 1
+surface = "cli-journey"
+target = "sovereign-cli-llm/src/corpus_cmd"
+failure = """`svrn corpus ingest` produces corpora that chat retrieval REFUSES
+to search. The shipped `notebook` workflow's `tool:corpus_store` never stamps
+`indexes_built`, so the ingest reports success and the corpus is permanently
+unsearchable. Found by a needle rig, not by any gate — every command in the
+chain worked."""
+observable = """A corpus produced by the shipped notebook workflow is searchable
+from chat — assert a known needle comes back, not that the ingest exited 0."""
+mutation = """Remove the `indexes_built` stamp from the workflow's store step.
+The needle assertion must redden."""
+
+[[test]]
+id = "EN-05"
+note = "5a952f09"
+found = "2026-09-02"
+class = "command-seam"
+tier = 1
+surface = "cli-journey"
+target = "sovereign-cli-llm/src/corpus_cmd/recipe_source.rs"
+failure = """`corpus install my-coins.toml` answered 'No registry entry for
+corpus my-coins.toml'. The shipped template tells an author to run `recipe
+validate <path>` and then `corpus install <path>` on CONSECUTIVE LINES: the
+first takes a path, the second took an id and needed the file already at
+`~/.svrnmesh/recipes/<id>/recipe.toml`. Nothing in the shipped chain put it
+there. The journey that should have caught it installed `{corpus}` right after
+validating `{recipe}` — it composed where the documentation did not."""
+observable = """A journey validates a recipe BY PATH and then installs THAT SAME
+PATH, and the install succeeds and prints where it registered the file."""
+mutation = """Make install reject a path argument. The journey step must redden.
+Verify first whether this fix is present on this host: the note credits commit
+`ce7b9a583`, which does not resolve in this repo."""
+
+[[test]]
+id = "EN-06"
+note = "5a952f09"
+found = "2026-09-02"
+class = "command-seam"
+tier = 1
+surface = "cli-journey"
+target = "sovereign-cli-llm/src/corpus_cmd/recipe_source.rs"
+failure = """Same note, second break: a relative `[acquire] path` was resolved
+against the DAEMON's working directory, not the recipe's. It failed twenty
+seconds later inside the daemon as 'Local source not found', in a log the author
+never sees."""
+observable = """A recipe with a relative acquire path installs successfully from
+any working directory; one whose path resolves to nothing is refused AT
+REGISTRATION, with the message on the author's terminal."""
+mutation = """Resolve the path against the process working directory. The
+install-from-elsewhere test must redden."""
+
+[[test]]
+id = "EN-07"
+note = "5a952f09"
+found = "2026-09-02"
+class = "silent-substitute"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-enrichment-build/src/build/steps.rs"
+failure = """Same note, third break: `enrich build --full` died at step 1 of 9
+with '5 failure(s), none of them retriable'. All five were `Skipped` — phase
+one's own 40-word floor declining short sections. The pipeline treated its OWN
+decision as a fatal build failure. Twenty lines below, the post-retry branch
+faced the identical predicate and CONTINUED: one predicate, two opposite
+verdicts, chosen by whether a retry happened to run."""
+observable = """A build whose only failures are `Skipped` continues. A build
+with nothing extracted at all is fatal — that genuinely fatal case was not
+being tested for before."""
+mutation = """Split the predicate in two again so the pre-retry and post-retry
+branches can disagree. The continue-on-skipped test must redden."""
+
+[[test]]
+id = "EN-08"
+note = "bb4b7be4"
+found = "2026-08-31"
+class = "resource-ceiling"
+tier = 1
+surface = "rust-unit"
+target = "corpus-engine/src/enrichment"
+failure = """AN AGE CANNOT BOUND A STORE WHOSE WRITE RATE OUTRUNS IT, and a
+reclaimer must never share a gate with the producer it cleans up after. Measured
+on wikipedia; both halves were wrong at once and each hid the other."""
+observable = """Under a write rate that outruns the age bound, the store still
+stays bounded — assert the size, not the age. And the reclaimer makes progress
+while the producer is gated."""
+mutation = """Restore the age-only bound. The size assertion must redden under
+the high write rate. Separately, put the reclaimer back behind the producer's
+gate — the progress assertion must redden."""
+
+[[test]]
+id = "EN-09"
+note = "ccd1dffd"
+found = "2026-08-14"
+class = "inert-guard"
+tier = 1
+surface = "rust-unit"
+target = "corpus-engine/src/engine/ingest_helpers.rs::chunk_doc"
+failure = """`recipe test`'s chunk-size gate is STRUCTURALLY RED for any titled
+document whose chunks fill to `max_chars`: `chunk_doc` prepends the title, so
+the emitted chunk exceeds the bound the gate checks. The gate cannot pass for a
+whole legitimate class of input, which means its red carries no information."""
+observable = """A titled document chunked to `max_chars` produces chunks the
+gate accepts — the bound accounts for the prepended title."""
+mutation = """Remove the title allowance from the bound. The test must redden
+for the titled case and stay green for the untitled one."""
+
+[[test]]
+id = "EN-10"
+note = "45b04cf5"
+found = "2026-08-18"
+class = "instrument-defect"
+tier = 1
+surface = "rust-functional"
+target = "sovereign-tools/src/sec_facts.rs"
+failure = """The concept enum closed the in-vocabulary hole and SHARPENED an
+out-of-vocabulary one — a blocker on promoting `sec-filings-company` to
+featured, reproduced rather than inferred. A closed set improves the measured
+case and degrades the unmeasured one, which is the exact shape of tuning to a
+metric."""
+observable = """A bench pair covers both: an in-vocabulary question and an
+out-of-vocabulary one, and the out-of-vocabulary result is reported alongside
+rather than omitted."""
+mutation = """Drop the out-of-vocabulary half of the pair. The lane must refuse
+to report rather than reporting the in-vocabulary figure alone."""
+
+[[test]]
+id = "EN-11"
+note = "357cc769"
+found = "2026-08-18"
+class = "instrument-defect"
+tier = 1
+surface = "rust-functional"
+target = "sovereign-tools/src/sec_facts.rs"
+failure = """Measured regression: the concept enum costs one HONESTY item on the
+frozen nine-item set, 8/9 where the pre-registered bar was zero regressions. The
+bar existed before the run, which is the only reason the regression was
+readable as one."""
+observable = """The lane compares against the pre-registered bar and fails on
+any honesty regression, with the bar named in the output."""
+mutation = """Let the lane read its bar from the current run. The comparison
+test must redden."""
+
+[[test]]
+id = "EN-12"
+note = "7047a03b"
+found = "2026-08-26"
+class = "instrument-defect"
+tier = 1
+surface = "shell"
+target = "scripts/sovereign-ci-bench.sh"
+failure = """The wikipedia retrieval baselines CANNOT ADJUDICATE ANYTHING on
+this host until re-minted — the corpus was re-ingested under them. A baseline
+whose corpus changed underneath is not a baseline, and the lane will keep
+reporting deltas against it."""
+observable = """A lane whose baseline predates its corpus's ingest reports
+`could-not-judge` naming the corpus, not a delta."""
+mutation = """Remove the corpus-age comparison. The could-not-judge test must
+redden."""
+
+[[test]]
+id = "EN-13"
+note = "e5036d81"
+found = "2026-09-02"
+class = "command-seam"
+tier = 2
+surface = "rust-unit"
+target = "corpus-engine/src/enrichment/atlas/writer.rs"
+failure = """A PARALLEL-WORKER MERGE FINDS DEFECTS NEITHER BRANCH CAN SEE, AND
+THE MERGE IS THE ONLY PLACE THEY EXIST. Four phases built concurrently in three
+worktrees off one base; three classes of defect each caught only at the merge,
+where no branch's own gate had ever run."""
+observable = """A test asserts the post-merge invariant that no single branch
+can violate alone — the shape that only breaks when two independently-correct
+changes compose."""
+mutation = """Apply one branch's change without the other's compensating edit.
+The test must redden."""
+
+[[test]]
+id = "EN-14"
+note = "0fb0f1c8"
+found = "2026-08-30"
+class = "silent-substitute"
+tier = 2
+surface = "rust-unit"
+target = "corpus-engine/src/index/create.rs"
+failure = """A corpus meta file that records no filter or scope keys is read as
+carrying an empty scope rather than as carrying none. The distinction decides
+whether a retrieval is scoped or global, and the file cannot tell them apart."""
+observable = """A meta file with the keys absent and one with the keys present
+but empty yield DIFFERENT verdicts."""
+mutation = """Collapse the two. The distinguishing test must redden."""
+
+[[test]]
+id = "EN-15"
+note = "961f12ad"
+found = "2026-08-26"
+class = "dark-capability"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-mesh/src/auto_ingest.rs"
+failure = """The ME-05 handoff was dark for five weeks because three deleted
+lines had no test naming them. The generalisable half: a capability whose only
+construction site is its own test module is not wired, and nothing reports
+that."""
+observable = """A source-scanning test asserts every declared handoff capability
+has a construction site outside its own test module, with the count pinned."""
+mutation = """Delete a production construction site. The census must redden."""
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# UI — the desktop app
+# ─────────────────────────────────────────────────────────────────────────
+
+[[test]]
+id = "UI-01"
+note = "a2ab4a23"
+found = "2026-08-31"
+class = "shared-state"
+tier = 1
+surface = "playwright"
+target = "sovereign-desktop/src/lib/stores/deepResearch.svelte.ts"
+failure = """A LONG-RUNNING JOB MUST NOT LIVE IN THE COMPONENT THAT RENDERS IT.
+`DeepResearchView` was mounted under `{#if view === "deep_research"}`, held the
+entire run in component state, and attached its own listener in `onMount`.
+Navigating away unmounted it, ran `unlisten()`, and dropped round, gaps, budget
+and the question — while the tokio task kept driving the run. The longest-lived
+surface in the app was the one that got destroyed. Found by driving it with
+Playwright; reading the code had not named it."""
+observable = """The note's exact reproduction: start a run, emit round 2, click
+Back to chat, advance the backend to round 3, return. Question, round, gaps and
+budget are all still there and round 3 is showing."""
+mutation = """Move the run state back into component scope. The test must
+redden on the empty composer. `inner-work-draft-persistence.spec.ts` already
+does nav-away-and-back — copy its shape, not its subject."""
+
+[[test]]
+id = "UI-02"
+note = "a2ab4a23"
+found = "2026-08-31"
+class = "silent-substitute"
+tier = 1
+surface = "playwright"
+target = "sovereign-desktop/src-tauri/src/deep_research_commands.rs::dr_list_runs"
+failure = """Same note, the §18.3 half, which the author calls worse than the UX
+gap. `dr_list_runs` did `manifest.map(terminal_state).unwrap_or_else(|| "interrupted")`.
+A live run has no `manifest.json` yet, so the shelf rendered the run that was
+CURRENTLY TURNING as `interrupted`, with a Resume button beside it — and
+`dr_start(resume_run_id)` had no liveness guard, so pressing it would hand
+`prepare_resume` a run directory another task was mid-write on. Absence
+defaulted into a terminal state, and the default was load-bearing on a
+data-corruption path."""
+observable = """A run present in `LIVE_RUNS` with no manifest renders as live
+and offers no resume affordance."""
+mutation = """Restore the `unwrap_or_else(|| "interrupted")`. The test must
+redden on the label and on the resume affordance."""
+
+[[test]]
+id = "UI-03"
+note = "a2ab4a23"
+found = "2026-08-31"
+class = "silent-substitute"
+tier = 1
+surface = "playwright"
+target = "sovereign-desktop/src/lib/stores/deepResearch.svelte.ts"
+failure = """Same note, the part its author flags as most likely to recur
+elsewhere: "NO EVENT" IS NOT A STATE. `emit_if_changed` is deliberately quiet,
+and a deep-research round spends MINUTES inside one model call with nothing on
+disk moving. Silence on that channel is the NORMAL case, so any surface built
+only from change events renders a healthy run and a wedged one as the same
+frozen panel."""
+observable = """A run emitting nothing for longer than the declared quiet window
+still renders as running, distinctly from one whose driver is gone."""
+mutation = """Derive the running state from last-event-time alone. The test must
+redden — the healthy quiet run must stop being distinguishable from the wedged
+one, which is the defect."""
+
+[[test]]
+id = "UI-04"
+note = "8d5cfd1c"
+found = "2026-08-21"
+class = "silent-substitute"
+tier = 1
+surface = "vitest"
+target = "sovereign-desktop/src-tauri/src/watched_folder_commands.rs::lc_watch_register"
+failure = """A Tauri command that RE-TYPES a daemon request type silently
+discards user choices, and the daemon's own `serde(default)`s hide it.
+`lc_watch_register` took a hand-copied five-field `WatchedFolderConfigWire`
+while the real type carried more; the extra fields the user set were dropped at
+the boundary and defaulted on arrival, so the request succeeded and the settings
+did not take."""
+observable = """Every field the user can set in the folder-registration UI
+arrives at the daemon with the value they set — asserted field by field against
+the captured request, not against the command's return."""
+mutation = """Drop one field from the wire type. The per-field assertion must
+redden. A round-trip assertion stays green because the default fills it in,
+which is exactly how this hid."""
+
+[[test]]
+id = "UI-05"
+note = "8d5cfd1c"
+found = "2026-08-21"
+class = "shared-state"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-desktop/src-tauri/src"
+failure = """The generalisable half of UI-04: any Tauri command that declares
+its own copy of a daemon request type is a second decider for that wire form,
+and it will drift. There is no census asserting the desktop uses the daemon's
+types rather than hand-copied ones."""
+observable = """A source-scanning test asserts no Tauri command declares a
+struct that duplicates a daemon request type, with the count pinned."""
+mutation = """Re-introduce a hand-copied wire struct. The census must redden.
+Heed GR-04's warning about literal-scanning censuses."""
+
+[[test]]
+id = "UI-06"
+note = "4c5174d1"
+found = "2026-08-25"
+class = "ambient-dependence"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-inference/src/reranker_standalone.rs"
+failure = """THREE HOST DIVERGENCES closed in one day, found by DIFFING the
+other hosts against `sovereign-runtime-recipe` on the day it landed. The
+divergences were not detectable on any single host — each host was
+self-consistent and wrong relative to the others."""
+observable = """A test asserts the recipe's declared configuration is the one
+the process resolves, so a host whose local state overrides it fails locally
+rather than only in a cross-host diff."""
+mutation = """Let a local override win silently. The test must redden."""
+
+[[test]]
+id = "UI-07"
+note = "e8150212"
+found = "2026-08-11"
+class = "ambient-dependence"
+tier = 1
+surface = "playwright"
+target = "sovereign-desktop/src-tauri/src"
+failure = """WHICH PROCESS READS THE FLAG decides whether a 'flag-on' desktop
+run is real or vacuous. On the desktop path the Runtime is built in the DESKTOP
+process, not the daemon — so setting the flag in the daemon's environment
+produces a run that looks configured and is not. Two witnesses were needed to
+tell a real run from a vacuous one."""
+observable = """The desktop surface reports which process resolved the grounding
+posture and what it resolved to, and a spec asserts it against the value the
+test set."""
+mutation = """Report the daemon's posture instead of the desktop process's. The
+spec must redden."""
+
+[[test]]
+id = "UI-08"
+note = "b2aa9fb8"
+found = "2026-08-24"
+class = "shared-state"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-cli-shared/src/dirs.rs"
+failure = """`~/Library/Application Support/svrnmesh` has ONE live role plus
+residue — settled empirically after an earlier note implied the whole directory
+was dead. Something still reads it, and a cleanup that assumed otherwise would
+take the live role with it."""
+observable = """A test names the one live role and asserts a reader resolves it
+from that directory; the residue paths are asserted as unread."""
+mutation = """Point the live role at the data root instead. The test must
+redden."""
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# CL — the CLI surface, setup, and the operator's own loop
+# ─────────────────────────────────────────────────────────────────────────
+
+[[test]]
+id = "CL-01"
+note = "8e09ef75"
+found = "2026-08-26"
+class = "config-lie"
+tier = 1
+surface = "cli-journey"
+target = "sovereign-cli-llm/src/chat_cmd"
+failure = """'DAEMON UNREACHABLE' DOES NOT MEAN THE DAEMON DIED — AND THE ERROR
+TEXT TELLS YOU TO DO THE WRONG THING. The operator is directed to restart a
+healthy daemon, which on this host means an 18.5 GB model reload, and the actual
+cause goes uninvestigated."""
+observable = """A connect failure against a LIVE daemon produces a message that
+does not advise a restart and does name the distinguishing check."""
+mutation = """Restore the unconditional restart advice. The journey step
+asserting the message must redden while the daemon is up."""
+
+[[test]]
+id = "CL-02"
+note = "32f6b353"
+found = "2026-08-16"
+class = "ambient-dependence"
+tier = 1
+surface = "cli-journey"
+target = "sovereign-cli-llm/src/chat_cmd"
+failure = """THE `chat` ANSWER PATH RUNS IN `sovereign-cli-llm`, NOT THE DAEMON
+— rebuild that sibling or you measure old code and never know. Every behavioural
+measurement of the answer path taken after rebuilding only the daemon measured
+the previous build, silently."""
+observable = """The chat surface reports the build identity of the process that
+actually answered, and a journey step asserts it matches the binary under
+test."""
+mutation = """Report the daemon's build identity. The step must redden when the
+two differ."""
+
+[[test]]
+id = "CL-03"
+note = "e8f91000"
+found = "2026-08-16"
+class = "instrument-defect"
+tier = 3
+surface = "shell"
+target = "scripts/dev-release.sh"
+failure = """'Is the daemon running my code?' must be answered from the
+PROCESS'S INODE, not from the file on disk. `strings` on the path proves nothing
+about the running image, and a big debug binary silently omits many string
+literals anyway — so the usual check returns a confident wrong answer."""
+observable = """The staleness check compares the running process's executable
+inode against the built artifact, and reports stale when they differ."""
+mutation = """Compare mtimes on the path instead. The test must redden against a
+process holding a deleted-and-replaced binary."""
+
+[[test]]
+id = "CL-04"
+note = "5488ff3c"
+found = "2026-09-01"
+class = "silent-substitute"
+tier = 3
+surface = "shell"
+target = "scripts/sovereign-lint.sh"
+failure = """THE 'Raw cargo output' PATH IN A GATE REPORT IS WRONG WHENEVER
+`CARGO_TARGET_DIR` IS REDIRECTED — it points at a stale log, and THE STALE LOG
+READS AS 'NO ERRORS'. A worker sent to triage a failure opens the named file,
+sees nothing wrong, and concludes the failure was transient."""
+observable = """The reported log path is the one this run wrote, asserted under
+a redirected `CARGO_TARGET_DIR`."""
+mutation = """Derive the path from the default target dir. The test must redden
+under redirection."""
+
+[[test]]
+id = "CL-05"
+note = "ce6c45f9"
+found = "2026-09-01"
+class = "instrument-defect"
+tier = 3
+surface = "shell"
+target = "scripts/sovereign-test.sh"
+failure = """A narrow `--filter` or `--package` can produce a BUILD FAILURE that
+looks like the unattributable-results exit 5, and the banner blames the wrong
+thing. The operator re-runs, gets the same wrong diagnosis, and goes looking for
+a concurrent run that does not exist."""
+observable = """A build failure under a narrow filter exits with the build
+failure's own code and a banner naming the build, never exit 5."""
+mutation = """Route the build failure through the unattributable path. The test
+must redden on the exit code AND on the banner text."""
+
+[[test]]
+id = "CL-06"
+note = "58e466e0"
+found = "2026-09-01"
+class = "instrument-defect"
+tier = 3
+surface = "rust-unit"
+target = "sovereign-cli/tests/main/cli_contract_flags.rs"
+failure = """THREE `sovereign-cli` CONTRACT TESTS JUDGE A BINARY THEIR OWN BUILD
+DOES NOT REBUILD, so their verdict depends on target-dir state rather than on
+source. They can pass against a binary from an earlier commit and there is no
+signal that they did."""
+observable = """The contract test asserts the binary it judges was built from
+the current source — a build-identity check that fails when the artifact is
+stale."""
+mutation = """Remove the identity check. The test must redden against a
+deliberately stale artifact."""
+
+[[test]]
+id = "CL-07"
+note = "2fa8bcd5"
+found = "2026-08-20"
+class = "silent-substitute"
+tier = 3
+surface = "shell"
+target = "scripts/sovereign-lint.sh"
+failure = """Disk hit 100% (327 MiB free of 926 GiB) and `cargo build` REPORTED
+EXIT 0 while producing an 864-byte `sovereign-cli`. Exit 0 plus a written file
+is not evidence of a build."""
+observable = """The gate refuses a produced binary below a plausible size and
+names disk exhaustion as the likely cause."""
+mutation = """Remove the size floor. The test must redden against a truncated
+artifact."""
+
+[[test]]
+id = "CL-08"
+note = "fc8b3a44"
+found = "2026-08-29"
+class = "shared-state"
+tier = 2
+surface = "shell"
+target = "scripts/release-cli-local.sh"
+failure = """A HARNESS-REAPED RELEASE LEG LEAVES THE PODMAN CONTAINER RUNNING —
+compile output with no packaging, provenance or upload, from the v0.6.0 release.
+The leg was launched as a tracked background task, the harness reaped the parent,
+and the container kept going with nobody reading it."""
+observable = """Killing the launching process stops the container; a subsequent
+run finds no orphan and says so."""
+mutation = """Remove the container cleanup trap. The test must redden by
+observing the surviving container."""
+
+[[test]]
+id = "CL-09"
+note = "fc8b3a44"
+found = "2026-08-29"
+class = "silent-substitute"
+tier = 2
+surface = "shell"
+target = "scripts/lib/release-host.sh"
+failure = """Same note: the leg produced COMPILE OUTPUT WITH NO PACKAGING,
+PROVENANCE OR UPLOAD, and nothing downstream noticed that a release leg had
+produced artifacts without provenance. A partial release reads as a release."""
+observable = """A leg that produced binaries but no provenance is reported as
+FAILED, not as partially complete."""
+mutation = """Treat missing provenance as a warning. The test must redden."""
+
+[[test]]
+id = "CL-10"
+note = "b4b36597"
+found = "2026-08-24"
+class = "resource-ceiling"
+tier = 1
+surface = "cli-journey"
+target = "sovereign-cli/src/notes_cmd"
+failure = """A session's own note writes failed TWICE against a daemon returning
+503 'host busy, ~30000ms predicted wait'. The write was lost and the session
+carried on — the operator's record of the work is exactly what a busy host
+should not be allowed to drop."""
+observable = """A note write against a shedding daemon either succeeds after
+honouring the retry hint, or fails loudly. It never silently discards."""
+mutation = """Drop the retry-and-report path. The test must redden against a
+daemon fixture that sheds once then admits."""
+
+[[test]]
+id = "CL-11"
+note = "cd93bee9"
+found = "2026-08-31"
+class = "instrument-defect"
+tier = 3
+surface = "rust-unit"
+target = "sovereign/docs/cli-contract.toml"
+failure = """The existing journey manifest reaches 9 of 322 command-settleable
+requirements — and a later adversarial re-adjudication (note `cf566968`) cut
+that to TWO, with 6 of 13 applied claims returning OVERCLAIM. The manifest's
+coverage figure was wrong by more than an order of magnitude in the direction
+that flatters it."""
+observable = """The census refuses to count a journey step as settling a
+requirement unless the step asserts an OUTPUT, not merely an exit code."""
+mutation = """Count exit-only steps. The census figure must move, and the test
+pinning the rule must redden."""
+
+[[test]]
+id = "CL-12"
+note = "e1d3880a"
+found = "2026-08-31"
+class = "instrument-defect"
+tier = 3
+surface = "rust-unit"
+target = "kernel-types/tests/requirements_registry.rs"
+failure = """THE REQUIREMENT DENOMINATOR IS 625 AND IT IS NOT 635, NOT 513, AND
+NOT A RANGE. Three different figures had been in circulation, each used in a
+coverage fraction, before the committed parser settled it. A denominator nobody
+pins produces a percentage nobody can check."""
+observable = """The denominator is asserted against a pinned constant, and any
+consumer rendering a coverage fraction reads it from there."""
+mutation = """Let a consumer compute its own denominator. The one-decider test
+must redden."""
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# GA — the gates and instruments themselves
+#
+# Tier 3 by the operator's ranking, and included deliberately: a broken
+# instrument produces a confident wrong verdict, and the store records more
+# damage from this class than from any other. Every one of these cost real
+# hours or reversed a real conclusion.
+# ─────────────────────────────────────────────────────────────────────────
+
+[[test]]
+id = "GA-01"
+note = "451ec2a8"
+found = "2026-09-01"
+class = "instrument-defect"
+tier = 3
+surface = "shell"
+target = "scripts/conformance-candidates.py"
+failure = """THE GR FAMILY'S 0-CANDIDATE YIELD WAS AN INSTRUMENT DEFECT, NOT
+ABSENT COVERAGE. Same 250 (requirement, test) pairs, generator v1 to v2: one
+candidate became 62, and requirements reached went from 1 to 32 of 50. The v1
+result had been about to be read as 'this family has no coverage' and sent a
+campaign to write tests that already existed."""
+observable = """The generator refuses to report a zero yield without also
+reporting its own reject reasons by bucket — a zero with no reject census is
+could-not-judge, not evidence of absence."""
+mutation = """Suppress the reject census. The refusal test must redden."""
+
+[[test]]
+id = "GA-02"
+note = "33066b57"
+found = "2026-09-01"
+class = "silent-substitute"
+tier = 3
+surface = "shell"
+target = "scripts/sabotage.py"
+failure = """THE JOIN KEY IS THE SILENT FAILURE, AND IT BIT THE RUST SIDE TOO —
+90 MINUTES OF COMPUTE FOR ZERO INFORMATION. A join that matches nothing produces
+an empty result set, and an empty result set is shaped exactly like a clean
+run."""
+observable = """A join producing zero matched rows fails loudly naming the key,
+rather than returning an empty set."""
+mutation = """Return the empty set. The test must redden against a fixture with
+a deliberately mismatched key."""
+
+[[test]]
+id = "GA-03"
+note = "fc1b3443"
+found = "2026-09-01"
+class = "instrument-defect"
+tier = 3
+surface = "shell"
+target = "scripts/mint-claims.py"
+failure = """A CAUGHT VERDICT IS NOT A NEW REQUIREMENT. The adjudicator returned
+7 CAUGHT and it was tempting to read that as seven requirements gained; the real
+movement was 17 to 20, because several CAUGHT verdicts landed on requirements
+already claimed. Counting verdicts instead of requirements inflates the
+number."""
+observable = """The mint counts DISTINCT requirements reached, and a run where
+several verdicts land on one requirement reports the requirement count, not the
+verdict count."""
+mutation = """Count verdicts. The test must redden against a fixture with two
+verdicts on one requirement."""
+
+[[test]]
+id = "GA-04"
+note = "8c99d74e"
+found = "2026-08-26"
+class = "instrument-defect"
+tier = 3
+surface = "rust-unit"
+target = "sovereign-core/tests/turn_tool_census.rs"
+failure = """A SOURCE CENSUS THAT SCANS FOR A LITERAL AT A CALL SITE REPORTS THE
+INVARIANT VIOLATED — NOT ITSELF BLIND — THE MOMENT THAT CALL SITE ADOPTS A
+SHARED COMPOSITION. Hit TWICE in one session on two independent censuses. The
+failure mode is the worst kind: the census goes red, someone 'fixes' compliant
+code to satisfy it, and the shared composition is un-adopted."""
+observable = """A census whose pattern matches nothing anywhere reports
+could-not-judge naming its own blindness, never a violation."""
+mutation = """Change the census pattern to one that cannot match. It must report
+could-not-judge; if it reports a violation, that is the defect."""
+
+[[test]]
+id = "GA-05"
+note = "25a54d70"
+found = "2026-08-26"
+class = "silent-substitute"
+tier = 1
+surface = "shell"
+target = "scripts/sovereign-ci-bench.sh"
+failure = """THE SOFT SYNTH LANE SCORES A QUESTION THAT NEVER RAN AS 0.0 AND
+REPORTS IT AS A REGRESSION — ARCH §18.1's four verdicts collapsed to two, inside
+the instrument. The lane reported FAIL(3reg) with NOT ONE question executed."""
+observable = """A question that never ran is reported as never-ran and excluded
+from the regression count; a lane where nothing executed reports could-not-judge
+rather than a failing score."""
+mutation = """Score a never-ran question as 0.0. The test must redden on both
+the verdict and the regression count."""
+
+[[test]]
+id = "GA-06"
+note = "99d2dc2c"
+found = "2026-08-11"
+class = "silent-substitute"
+tier = 3
+surface = "shell"
+target = "scripts/flip-soak-verify.py"
+failure = """AN INSTRUMENT THAT DIES AT IMPORT REPORTS NO ABSENCE AT ALL — the
+portability variant of the §18.3 trap. A nested same-quoted f-string made the
+script fail at import on one Python version, and the harness recorded the run as
+having found nothing."""
+observable = """A runner distinguishes 'the instrument did not start' from 'the
+instrument found nothing', and reports the first as could-not-judge."""
+mutation = """Collapse the import failure into the empty-result path. The test
+must redden against a deliberately unimportable instrument."""
+
+[[test]]
+id = "GA-07"
+note = "50428602"
+found = "2026-08-11"
+class = "silent-substitute"
+tier = 3
+surface = "vitest"
+target = "sovereign-desktop/tests/e2e/personas.mjs"
+failure = """A PLATFORM-SPECIFIC PROBE INSIDE `try { } catch { return null }` IS
+A SILENT INSTRUMENT OUTAGE, AND IT CAN RUN FOR YEARS UNNOTICED. `daemonRssMb()`
+shelled `pgrep` then read `/proc/<pid>/status`, wrapped in a bare catch
+returning null — on macOS it returned null every time and every consumer read
+that as 'no measurement available' rather than 'this probe cannot work here'."""
+observable = """The probe reports unsupported-on-this-platform distinctly from
+measurement-failed, and a consumer refuses to aggregate over unsupported."""
+mutation = """Restore the bare catch returning null. The test must redden on the
+platform where the probe cannot work."""
+
+[[test]]
+id = "GA-08"
+note = "1040fad0"
+found = "2026-08-23"
+class = "instrument-defect"
+tier = 2
+surface = "shell"
+target = "research/deep-research/arms/lab/score_one.py"
+failure = """THE DRB-I JUDGE WAS NEVER DETERMINISTIC. Every RACE number the
+campaign recorded before that date is ONE DRAW from a temperature-0.7 process,
+not a measurement. The judge's own configuration was never asserted anywhere."""
+observable = """The judge asserts its sampling configuration before scoring and
+refuses to run if it is not the pinned one."""
+mutation = """Remove the assertion. The test must redden against a judge
+configured off-pin."""
+
+[[test]]
+id = "GA-09"
+note = "86ac6f7c"
+found = "2026-08-25"
+class = "instrument-defect"
+tier = 1
+surface = "shell"
+target = "scripts/sovereign-ci-bench.sh"
+failure = """THE PIPELINE'S RUN-TO-RUN SPREAD IS ~7 POINTS AND WE HAVE BEEN
+MEASURING 2-3 POINT EFFECTS WITH n=2. This invalidates the DESIGN of every A/B
+run over two days, not their execution — the numbers were real and could not
+support the conclusions drawn from them."""
+observable = """A lane reporting a delta also reports the measured noise band
+for that lane, and refuses to call a delta inside the band a result."""
+mutation = """Report the delta without the band. The refusal test must redden
+against a sub-band delta."""
+
+[[test]]
+id = "GA-10"
+note = "e2807981"
+found = "2026-08-24"
+class = "instrument-defect"
+tier = 2
+surface = "shell"
+target = "research/deep-research/adversarial/pre-registration.md"
+failure = """n=1 SINGLE-TASK RACE ARMS ARE UNINTERPRETABLE — the pipeline's own
+run-to-run spread is 7.56 points. The arms were executed correctly and the
+comparison they support does not exist."""
+observable = """The harness refuses to emit a comparison from arms below the
+declared minimum n, naming the spread."""
+mutation = """Allow n=1. The refusal test must redden."""
+
+[[test]]
+id = "GA-11"
+note = "e512e1b8"
+found = "2026-08-26"
+class = "ambient-dependence"
+tier = 1
+surface = "shell"
+target = "sovereign/bench/external/aa-omniscience/coverage.py"
+failure = """UNSCOPED RETRIEVAL ON A DEV HOST MEASURES THE DEV HOST, NOT THE
+PRODUCT. It applies to ANY grounded bench: this host carries 42 installed
+indexes and a shipped product carries a handful, so an unscoped run measures a
+corpus set no user has."""
+observable = """A grounded bench declares its corpus scope and refuses to run
+unscoped, naming the installed set it would otherwise have used."""
+mutation = """Allow the unscoped run. The refusal test must redden."""
+
+[[test]]
+id = "GA-12"
+note = "298d2fe6"
+found = "2026-08-26"
+class = "silent-substitute"
+tier = 1
+surface = "shell"
+target = "sovereign/bench/external/aa-omniscience/coverage.py"
+failure = """AN EMPTY RETRIEVED PASSAGE GRADES AS 'NOT COVERED' AND READS AS
+'THE CORPUS DOES NOT HOLD IT' — A FALSE VERDICT THAT PASSED BOTH INSTRUMENT
+CONTROLS. The controls checked that the instrument ran and that it produced
+output; neither could see that the input to grading was empty."""
+observable = """An empty passage grades as could-not-judge, and the run reports
+how many items graded that way."""
+mutation = """Grade the empty passage as not-covered. The test must redden, and
+the could-not-judge count must go to zero — assert both."""
+
+[[test]]
+id = "GA-13"
+note = "b15c59f0"
+found = "2026-08-24"
+class = "instrument-defect"
+tier = 2
+surface = "shell"
+target = "research/deep-research/arms/lab"
+failure = """The lab estate is ANSWER-CONTAMINATED on 6 of 10 subset tasks. Any
+composer score on those tasks is evidence of nothing, and the contamination is
+invisible in the score itself."""
+observable = """A task on the contaminated list cannot be scored — the harness
+refuses and names the task."""
+mutation = """Remove the contamination list check. The refusal test must
+redden."""
+
+[[test]]
+id = "GA-14"
+note = "4dd9c7ab"
+found = "2026-08-20"
+class = "shared-state"
+tier = 3
+surface = "shell"
+target = "scripts/nc-boundary.py"
+failure = """THE GIT INDEX IS SHARED STATE ACROSS SESSIONS, AND `git add <your
+paths>` IS NOT ENOUGH. Three occurrences in one day in one checkout; the third
+revised the rule. A peer session's broad `git add` sweeps your uncommitted work
+into its commit, and the message describes something else entirely (note
+`f5e17a5e`). The invariant fired a FIFTH time on 2026-08-21 by a NEW mechanism
+(notes `7ed1ff4a`, `a75d1314`): a script that WRITES files must take an explicit
+path allowlist and never derive one from `git diff --name-only`, because in a
+shared checkout that list is peer-contaminated."""
+observable = """A writing script refuses to write to a path absent from its
+explicit allowlist, asserted against a working tree carrying a peer's unrelated
+modification."""
+mutation = """Derive the write list from `git diff --name-only`. The test must
+redden — the peer's file must get written."""
+
+[[test]]
+id = "GA-15"
+note = "c5534030"
+found = "2026-08-21"
+class = "instrument-defect"
+tier = 3
+surface = "shell"
+target = "scripts/nc-redundant.py"
+failure = """`nc-redundant` IS NOT REPRODUCIBLE FROM ITS OWN STAMP — four
+consecutive runs at a FIXED `indexed_head` and `indexed_at` produced different
+results. The stamp exists to make a run reproducible and does not."""
+observable = """Two runs at the same stamp produce byte-identical output, or the
+instrument declares itself non-deterministic in its own report."""
+mutation = """Remove the determinism assertion. The test must redden across two
+runs at one stamp."""
+
+[[test]]
+id = "GA-16"
+note = "84d88a98"
+found = "2026-08-20"
+class = "shared-state"
+tier = 3
+surface = "shell"
+target = "scripts/sovereign-test.sh"
+failure = """Background tasks SURVIVE a worker being parked — process-tree
+parentage is NOT evidence they will be killed. A parked worker's background
+cargo run kept holding the file lock, and the next session's gate blocked on a
+lock owned by nothing it could see."""
+observable = """The gate detects a foreign cargo lock holder and names the
+process, rather than blocking silently."""
+mutation = """Remove the lock-holder detection. The test must redden by
+observing the silent block against a held lock."""
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# UI (cont.) — the dark command surface
+#
+# ADMISSIBILITY. Interlock 3 says a record needs a witnessed failure, and an
+# unreached command is not one — it is an absence of evidence. These are
+# admitted under the amendment in TEST_LEDGER.md §Interlock 3: the witness is a
+# dated MEASUREMENT with a named instrument, banked as note 43199a50 on
+# 2026-09-02 (`npm run test:e2e`, 287 specs, 3,314 ledger rows,
+# `npm run report:coverage` -> 94/260). That is an empirical fact about this
+# tree, not a promise copied out of a spec, which is the distinction interlock 3
+# exists to hold.
+#
+# WHAT THE NUMBER IS. The synthetic tier impersonates `__TAURI_INTERNALS__`
+# (tests/e2e/fixtures/tauri-shim.js), so "reached" means the FRONTEND invoked
+# the command and a JS handler answered — the Rust body never runs. 94/260 is
+# the fraction of the surface the UI is observed to ATTEMPT: an upper bound on
+# backend coverage, never a measurement of it.
+#
+# THE SHARED NEGATIVE CONTROL. Every record below carries the same one, and it
+# is not a formality: `__sovereign_test__.setHandler(cmd, fn)` will happily
+# answer a command the app never invokes on the path under test, moving the
+# count without covering anything. So — delete the new spec, re-run
+# `npm run report:coverage`, and the module must fall BACK to its recorded
+# count. If it does not, the spec did not reach what it appeared to.
+# ─────────────────────────────────────────────────────────────────────────
+
+[[test]]
+id = "UI-09"
+note = "43199a50"
+found = "2026-09-02"
+class = "unreached-surface"
+tier = 1
+surface = "playwright"
+target = "sovereign-desktop/src-tauri/src/update_commands.rs"
+failure = """0 of 2 reached. `check_for_update` and `install_update` — the
+SHIPPED UPDATER. No automated path invokes either, so nothing is known about
+the one flow that runs on every user's machine without them asking for it, and
+whose failure mode is a broken install rather than a bad answer. This is the
+highest-stakes zero on the surface."""
+observable = """A spec drives the update check to both verdicts — update
+available and up to date — and drives `install_update` far enough to assert the
+app's response to a refusal, since that is the arm a user cannot retry."""
+mutation = """Delete the spec; `npm run report:coverage` must show
+update_commands fall back to 0/2."""
+
+[[test]]
+id = "UI-10"
+note = "43199a50"
+found = "2026-09-02"
+class = "unreached-surface"
+tier = 1
+surface = "playwright"
+target = "sovereign-desktop/src-tauri/src/crash_report.rs"
+failure = """0 of 4 reached: `list_crash_records`, `read_crash_record`,
+`delete_crash_record`, `export_crash_record`. The surface a user meets ONLY
+after something already went wrong, and it has never been driven. A crash
+reporter that fails is invisible by construction — the run it would have
+reported is the run that crashed."""
+observable = """A spec seeds a crash record, lists it, reads it, exports it and
+deletes it, asserting the record's content survives the round trip rather than
+that the list is non-empty."""
+mutation = """Delete the spec; crash_report must fall back to 0/4."""
+
+[[test]]
+id = "UI-11"
+note = "43199a50"
+found = "2026-09-02"
+class = "unreached-surface"
+tier = 1
+surface = "playwright"
+target = "sovereign-desktop/src-tauri/src/insight_commands.rs"
+failure = """0 of 6 reached: `clip_insight`, `list_insights`, `search_insights`,
+`delete_insight`, `get_sink_status`, `explore_insights`. A whole feature with no
+automated path through any of it — capture, retrieval, search and deletion
+alike."""
+observable = """A spec clips an insight, finds it by search, explores it and
+deletes it, asserting the clipped content comes back — and asserts
+`get_sink_status` reports the sink it actually wrote to."""
+mutation = """Delete the spec; insight_commands must fall back to 0/6."""
+
+[[test]]
+id = "UI-12"
+note = "43199a50"
+found = "2026-09-02"
+class = "unreached-surface"
+tier = 1
+surface = "playwright"
+target = "sovereign-desktop/src-tauri/src/workflow_commands.rs"
+failure = """0 of 3 reached: `workflow_list_runnable`, `workflow_capabilities`,
+`workflow_run`. `workflow_capabilities` is the declaring surface — what the host
+says it can do — and nothing checks that the declaration matches what
+`workflow_run` will actually accept. That divergence is the shape note
+`5a952f09` records at the CLI: every command works, the composition does not."""
+observable = """A spec asserts every capability `workflow_capabilities`
+declares is one `workflow_run` accepts, and that a workflow listed by
+`workflow_list_runnable` actually runs."""
+mutation = """Delete the spec; workflow_commands must fall back to 0/3."""
+
+[[test]]
+id = "UI-13"
+note = "43199a50"
+found = "2026-09-02"
+class = "unreached-surface"
+tier = 1
+surface = "playwright"
+target = "sovereign-desktop/src-tauri/src/mesh_commands.rs"
+failure = """9 of 18 reached, and the nine that are dark are THE ENTIRE
+MEMBERSHIP LIFECYCLE: `mesh_create`, `mesh_join`, `mesh_preview_join_link`,
+`mesh_leave`, `mesh_rotate_invite`, `mesh_switch`, `mesh_forget`,
+`mesh_relay_candidates`, `suggest_node_name`. The read side is covered and every
+mutating verb is not. Rotation and join are exactly where the mesh has been
+broken before — notes `07c2e829` (rotating a join key partitioned the mesh, and
+three green tests could not see it) and `219ac444` (the guard against it shipped
+inert) — and the desktop path to both is undriven."""
+observable = """A spec drives create, preview the join link, join, switch,
+rotate the invite, leave and forget, asserting membership from the surface's own
+view after each step rather than asserting the command returned Ok."""
+mutation = """Delete the spec; mesh_commands must fall back to 9/18. Take this
+one WITH ME-01 and ME-02, which sit on the same lifecycle from the daemon
+side."""
+
+[[test]]
+id = "UI-14"
+note = "43199a50"
+found = "2026-09-02"
+class = "unreached-surface"
+tier = 1
+surface = "playwright"
+target = "sovereign-desktop/src-tauri/src/watched_folder_commands.rs"
+failure = """3 of 17 reached. Dark: register, status, pause, resume,
+confirm_deletion, sync_now, document, add_root, remove_root, enrich_enable,
+enrich_disable, enrich_rebuild, remove, incomplete_jobs. `lc_watch_register` is
+the command note `8d5cfd1c` records as silently discarding user choices through
+a hand-copied wire type that the daemon's own `serde(default)`s then hid — so
+the one command here with a KNOWN defect is also unreached."""
+observable = """A spec registers a watched folder with every field the UI can
+set, asserts each arrives (see UI-04, which is the same defect from the wire
+side), then pauses, resumes, syncs and removes it, asserting status between
+each."""
+mutation = """Delete the spec; watched_folder_commands must fall back to 3/17.
+Take this WITH UI-04 and UI-05 — same file, same defect, one order."""
+
+[[test]]
+id = "UI-15"
+note = "43199a50"
+found = "2026-09-02"
+class = "unreached-surface"
+tier = 1
+surface = "playwright"
+target = "sovereign-desktop/src-tauri/src/local_corpus_commands.rs"
+failure = """4 of 19 reached. Dark: `lc_validate_path`, `lc_ocr_available`,
+`lc_pre_scan`, `lc_ingest`, `lc_reenrich_note`, `lc_remove`, `lc_search`,
+`lc_cluster`, `lc_get_preview`, `lc_check_git`, `lc_write_tags`,
+`lc_list_snapshots`, `lc_rollback`, `lc_clean`, `lc_cancel`. `lc_ingest` is the
+folder-to-corpus path a user takes on first run, and `lc_rollback` is a
+destructive verb with no driven path at all."""
+observable = """A spec validates a path, pre-scans it, ingests it, searches the
+result for a known needle, snapshots, rolls back, and asserts the rollback
+restored the prior state — not that it returned Ok."""
+mutation = """Delete the spec; local_corpus_commands must fall back to 4/19."""
+
+[[test]]
+id = "UI-16"
+note = "43199a50"
+found = "2026-09-02"
+class = "unreached-surface"
+tier = 1
+surface = "playwright"
+target = "sovereign-desktop/src-tauri/src/governance_commands.rs"
+failure = """2 of 9 reached. Dark: `governance_resolve`, `governance_accept`,
+`governance_undo_tension`, `governance_seed`, `governance_post_build_seed`,
+`governance_write_recipe`, `governance_export_write`. The read side is driven
+and every verb that CHANGES governance state — including two that write to disk
+— is not."""
+observable = """A spec resolves a tension, accepts it, then undoes it, asserting
+the governance view returns to its prior state; and asserts
+`governance_export_write` wrote what the view showed."""
+mutation = """Delete the spec; governance_commands must fall back to 2/9."""
+
+[[test]]
+id = "UI-17"
+note = "43199a50"
+found = "2026-09-02"
+class = "instrument-defect"
+tier = 1
+surface = "shell"
+target = "sovereign-desktop/tests/e2e/scripts/coverage-report.mjs"
+failure = """The reported figure is FRONTEND ATTEMPT REACH and reads as command
+coverage. The synthetic tier impersonates `__TAURI_INTERNALS__`, so a reached
+command means the UI called invoke and a JS handler answered; the Rust body
+never runs. `npm run report:coverage` prints `Command coverage — 94/260
+exercised (36%)` with nothing distinguishing that from backend dispatch, and
+QUALITY_SURFACE.md has quoted this class of number as an instrument of app
+correctness since it was introduced."""
+observable = """The report names, per ledger, whether its rows came from the
+shim or from the real command bridge, and refuses to merge the two into one
+percentage without saying so."""
+mutation = """Label a shim ledger as a bridge ledger. The test must redden on
+the report's provenance line."""
+
+[[test]]
+id = "UI-18"
+note = "43199a50"
+found = "2026-09-02"
+class = "instrument-defect"
+tier = 1
+surface = "playwright"
+target = "sovereign-desktop/tests/e2e/real/global-setup.ts"
+failure = """THE REAL-TIER LEDGER HAS NEVER BEEN PRODUCED. `global-setup.ts`
+sets `SOVEREIGN_COMMAND_BRIDGE_LEDGER=test-artifacts/ledger-real.jsonl` and
+`npm run report:coverage:real` exists to merge it, but no such file has been
+generated on this host and no figure for it appears in any doc. Backend
+dispatch reach is UNMEASURED — which is a different verdict from low, and the
+one ARCH §18.1 says must be said out loud."""
+observable = """A real-tier run produces `ledger-real.jsonl` with rows, and
+`report:coverage:real` reports a backend figure distinct from the synthetic
+one."""
+mutation = """Point the bridge ledger env var at a path nothing writes. The run
+must report COULD-NOT-JUDGE for the real column rather than 0%."""
+
+[[test]]
+id = "GR-20"
+note = "dbe415c1"
+found = "2026-09-02"
+class = "unreached-surface"
+tier = 1
+surface = "rust-unit"
+target = "sovereign-core/src/runtime/grounding/surgical.rs::surgical_rewrite"
+failure = """THE SURGICAL FIX PATH COLLAPSED PARAGRAPH BREAKS, on exactly
+the input surgery exists for. `split_sentences` is lossless, so the whitespace
+separating a sentence from its predecessor lives on the FOLLOWING element
+("A.\n\nB." splits to ["A.", "\n", "\nB."]). The fix path overwrote the whole
+element, so every repaired sentence lost its leading break and merged into the
+paragraph above it, and the unconditional trailing space then landed BEFORE the
+next break. The delete path is immune (the standalone "\n" element survives a
+deletion) and every prior fix-path test used a single-paragraph draft, so the
+multi-paragraph surface — the only kind of answer surgery ever runs on — was
+never reached. It degrades an answer's readability without touching a claim, so
+hallucination, grounding and CONFAB all stay flat while the output visibly
+worsens."""
+observable = """A one-sentence repair inside a multi-paragraph draft returns
+the surviving prose byte-identical, paragraph breaks included, with the
+replacement sitting in the paragraph the failed sentence came from. Pinned by
+`surgical::tests::a_repaired_paragraph_keeps_its_break` (two paragraphs, one
+fix) and `surgical::tests::repaired_spans_are_the_new_prose_in_document_order`
+(three paragraphs, two fixes, full output string asserted)."""
+mutation = """Restore the element overwrite:
+`sentences[idx] = format!("{body} ");` in place of the lead/trail
+re-attachment. Both tests must redden.
+
+FOUND AND FIXED 2026-09-02 by the test that reports it — the record is written
+from the failing run, not from a hypothesis."""
+

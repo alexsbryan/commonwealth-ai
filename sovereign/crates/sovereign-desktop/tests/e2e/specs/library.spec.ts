@@ -47,7 +47,7 @@ async function seedNotebooks(page: Page, list: unknown[]): Promise<void> {
 }
 
 test.describe("Library shelf", () => {
-  test("lists notebooks with kind, count, and the explorable badge", async ({
+  test("lists notebooks with kind, count, and the explorable badge", { tag: ["@UI-5"] }, async ({
     sovereignPage: page,
     chat,
   }) => {

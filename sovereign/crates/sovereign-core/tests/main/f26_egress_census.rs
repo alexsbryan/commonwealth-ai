@@ -308,7 +308,6 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-llm/src/workflow_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/solve_cmd.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-llm/src/recipe_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/pipeline_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/mobile_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/mesh_travel.rs", Class::Mesh, 1),
@@ -514,7 +513,15 @@ const REGISTRY: &[(&str, Class, usize)] = &[
 
     // ---- studio/sovereign-workflow-host (LocalDaemon) ----
     ("studio/crates/sovereign-workflow-host/src/installer.rs", Class::LocalDaemon, 2),
-    ("studio/crates/sovereign-workflow-host/src/lib.rs", Class::LocalDaemon, 1),
+    // The embed-model resolution that lived here and in
+    // `sovereign-cli-llm/src/recipe_cmd.rs` (one site each) became ONE
+    // decider in `daemon_models.rs` on 2026-09-01 (issue #57: the listing
+    // check refused a daemon that could embed). Both sites moved with it —
+    // same class, same total, one path instead of two. The second site is
+    // the /v1/embeddings probe that replaced the id-substring test: it
+    // asks the LOCAL daemon to embed a short fixed string, so nothing
+    // leaves the machine and no estate content is in the payload.
+    ("studio/crates/sovereign-workflow-host/src/daemon_models.rs", Class::LocalDaemon, 2),
 
     // ---- studio/sovereign-recipe-author ----
     ("studio/crates/sovereign-recipe-author/src/probe_url.rs", Class::InboundOnly, 1),

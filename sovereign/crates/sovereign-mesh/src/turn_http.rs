@@ -91,12 +91,27 @@ pub struct CreateConversationRequest {
     /// first message rather than after one untagged turn.
     #[serde(default)]
     pub skill_id: Option<String>,
+    /// The per-conversation retrieval allow-list
+    /// (`Conversation::enabled_corpora`), so a surface can scope a turn to
+    /// named corpora the way the desktop's chip strip does. Absent means
+    /// "every installed corpus". Validated by `Runtime::seed_conversation`
+    /// against the corpora this daemon would actually search: an unknown id
+    /// is a 400 naming it and the installed list, never a silent widen.
+    #[serde(default)]
+    pub enabled_corpora: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct CreateConversationResponse {
     pub id: String,
     pub created_at: i64,
+    /// The allow-list that was seeded, echoed back VERBATIM when one was
+    /// sent and omitted otherwise. The echo is what lets a client tell a
+    /// daemon that scoped the conversation from one that predates the field
+    /// and ignored it — serde drops unknown keys, so without this a stale
+    /// daemon would mint an unscoped conversation and say nothing (§18.3).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled_corpora: Option<Vec<String>>,
 }
 
 /// `POST /v1/conversations`
@@ -128,14 +143,27 @@ async fn create_conversation(
         .unwrap_or_default()
         .as_secs() as i64;
     if let Err(e) = runtime
-        .seed_conversation(&id, now, req.skill_id.as_deref())
+        .seed_conversation(
+            &id,
+            now,
+            req.skill_id.as_deref(),
+            req.enabled_corpora.as_deref(),
+        )
         .await
     {
-        return service_unavailable(&format!("seed conversation: {e}"));
+        // A bad allow-list is the CALLER's mistake and carries its own remedy
+        // (the installed ids); a store failure is the daemon's. Different
+        // status codes so a client can tell "fix your flag" from "the daemon
+        // is unwell" without parsing prose.
+        return match e {
+            sovereign_core::error::Error::InvalidInput(msg) => bad_request(&msg),
+            other => service_unavailable(&format!("seed conversation: {other}")),
+        };
     }
     Json(CreateConversationResponse {
         id,
         created_at: now,
+        enabled_corpora: req.enabled_corpora,
     })
     .into_response()
 }
@@ -334,6 +362,14 @@ async fn handle_ws(socket: WebSocket, daemon: Arc<EmbeddedDaemon>, conversation_
         h.abort();
     }
     tx_handle.abort();
+}
+
+fn bad_request(reason: &str) -> Response {
+    (
+        axum::http::StatusCode::BAD_REQUEST,
+        Json(serde_json::json!({ "error": reason })),
+    )
+        .into_response()
 }
 
 fn service_unavailable(reason: &str) -> Response {

@@ -15,16 +15,30 @@
 //! 1.5k-token prefix).
 //!
 //! This module is the bookkeeping half: a small per-slot LRU of
-//! `(prefix-fingerprint → pinned token prefix + state file)` with an
-//! auto-learned pin boundary — the longest common prefix of two
-//! sightings of the same request family. The boundary lands exactly
-//! where requests start to diverge (in practice: the byte-stable
-//! synthesis system core, ~2.5k tokens, ends right where the varying
-//! budget directive splices in — measured 2026-07-12, prefill audit).
-//! No caller cooperation needed: keying is by the first
-//! [`PROBE_TOKENS`] of the tokenized prompt, which separates the
-//! per-handoff prompt families (synthesis / gate / gap-check / router)
-//! without any API change.
+//! `(family key → pinned token prefix + state file)`. Two key
+//! derivations, one per planning path:
+//!
+//!   * **Undirected** ([`PrefixStateCache::plan`]): keyed by the first
+//!     [`PROBE_TOKENS`] of the tokenized prompt, boundary auto-learned as
+//!     the longest common prefix of two sightings. The boundary lands
+//!     exactly where requests start to diverge (in practice: the
+//!     byte-stable synthesis system core, ~2.5k tokens, ends right where
+//!     the varying budget directive splices in — measured 2026-07-12,
+//!     prefill audit). No caller cooperation needed: the probe separates
+//!     the per-handoff prompt families (synthesis / gate / gap-check /
+//!     router) without any API change.
+//!   * **Directed** ([`PrefixStateCache::plan_directed`], the caller
+//!     declared `stable_prefix_len`): keyed by a hash of the declared
+//!     prefix CONTENT, `tokens[..directed_pin]`. Siblings declaring the
+//!     identical window share one entry; a different window — the next
+//!     turn's evidence, a grown audit window — is a different family with
+//!     its own entry, and the byte-budget LRU owns its lifetime. The probe
+//!     cannot key these (2026-09-01): the grounding gate's judges all open
+//!     with the same scaffold plus the head of the first evidence chunk,
+//!     so two TURNS on one corpus collided on one probe key, the pin was
+//!     shortened to the ~500-1300 tokens the turns shared, and every judge
+//!     of every later turn re-prefilled ~12K tokens — 2-3 s judges became
+//!     15-20 s.
 //!
 //! File placement is per-process (`temp_dir/sovereign-prefix-state/
 //! <pid>-<slot>/`) — boot-scoped by design: session files embed model
@@ -103,7 +117,8 @@
 //! Decision logic is pure and unit-tested weight-free below; all file
 //! and context IO stays in `model_slot.rs` where the decode paths live.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::hash_map::DefaultHasher;
+use std::collections::{HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
@@ -120,10 +135,41 @@ const PROBE_TOKENS: usize = 48;
 /// (~2.5k tokens) where the win is seconds per request.
 const DEFAULT_MIN_PIN: usize = 384;
 
+/// Tokens deliberately left OUT of any pin so the restored state has a
+/// non-empty tail to decode. llama state files carry no logits
+/// (`n_outputs=0` on load), so the sampler needs at least one fresh
+/// position after a restore; `PrefixPlan::Restore` enforces the same
+/// thing with its strict-prefix test.
+///
+/// This exists as a shared constant because the two planning paths used
+/// to disagree about it, and the disagreement was a silent
+/// full-prefill: `directed_pin_tokens` has always backed off
+/// (`lcp.saturating_sub(2)`), while the undirected path REFUSED to pin
+/// whenever `lcp == tokens.len()` and fell through to `Pass` — so two
+/// BYTE-IDENTICAL prompts never formed a family, no matter how often
+/// they recurred. Measured live 2026-09-02 on issue #57: the DeepQuery
+/// synthesis call, 9,891 tokens, `lcp=9891 len=9891 min_pin=384`,
+/// re-prefilled in full on every single turn while the gate's judges
+/// beside it restored 4,881 tokens in 45 ms. The old log line called
+/// that "shares too little to pin"; it shared everything.
+pub(crate) const PIN_TAIL_MARGIN: usize = 2;
+
+/// The largest pin that still leaves a decodable tail. `lcp` is what the
+/// two sightings share; the result is what may be pinned.
+fn pin_with_tail(lcp: usize, len: usize) -> usize {
+    lcp.min(len.saturating_sub(PIN_TAIL_MARGIN))
+}
+
 /// Per-slot entry cap. Distinct request families per slot in practice:
 /// synthesis primary/fast variants, gate verifier, gap check, router
-/// coarse, title — six covers the live set with headroom.
+/// coarse, title — six covers the live set with headroom. Directed
+/// windows (one per gate turn) rotate through the same cap; at ~64KB/token
+/// the byte budget below usually retires them first.
 const MAX_ENTRIES: usize = 6;
+
+/// Domain tag hashed ahead of a directed key so a 48-token declaration
+/// can never alias the undirected probe key over the same tokens.
+const DIRECTED_KEY_DOMAIN: &str = "directed-prefix-content";
 
 /// Default per-slot byte budget for state files (MB). State files run
 /// ~64KB/token, so a 10K-token evidence pin is ~650MB — the 2026-07-21
@@ -161,15 +207,9 @@ pub(crate) struct PrefixStateCache {
     entries: HashMap<u64, PinnedPrefix>,
     lru: VecDeque<u64>,
     /// First sighting per family, awaiting a second to learn the
-    /// boundary from. Bounded alongside `entries`.
+    /// boundary from. Bounded alongside `entries`. Undirected families
+    /// only — a directed window learns on first sight.
     last_seen: HashMap<u64, Vec<LlamaToken>>,
-    /// Keys whose pin is a COMPROMISE between two request shapes that
-    /// share a family fingerprint but diverge before either one's
-    /// declared boundary. Such a pin is deliberately shorter than what
-    /// the longer shape declares, and must NOT be upgraded to that
-    /// declaration — doing so orphans the shorter shape, which then
-    /// re-learns the pin back down, forever. See `plan_directed`.
-    shared_pins: HashSet<u64>,
 }
 
 /// Default **ON** since 2026-08-03; opt OUT with
@@ -283,7 +323,6 @@ impl PrefixStateCache {
             entries: HashMap::new(),
             lru: VecDeque::new(),
             last_seen: HashMap::new(),
-            shared_pins: HashSet::new(),
         }
     }
 
@@ -297,13 +336,28 @@ impl PrefixStateCache {
             entries: HashMap::new(),
             lru: VecDeque::new(),
             last_seen: HashMap::new(),
-            shared_pins: HashSet::new(),
         }
     }
 
+    /// Family key for the undirected path: the first [`PROBE_TOKENS`].
     fn key(tokens: &[LlamaToken]) -> u64 {
-        let mut h = std::collections::hash_map::DefaultHasher::new();
+        let mut h = DefaultHasher::new();
         for t in &tokens[..PROBE_TOKENS] {
+            t.0.hash(&mut h);
+        }
+        h.finish()
+    }
+
+    /// Family key for a DIRECTED pin: a hash of the declared prefix
+    /// content, `tokens[..directed_pin]`, domain-separated from [`key`].
+    /// By construction an entry under this key holds exactly these
+    /// tokens, so a hit restores `directed_pin` tokens and a miss learns
+    /// `directed_pin` tokens — there is no third shape.
+    fn directed_key(tokens: &[LlamaToken], directed_pin: usize) -> u64 {
+        let mut h = DefaultHasher::new();
+        DIRECTED_KEY_DOMAIN.hash(&mut h);
+        directed_pin.hash(&mut h);
+        for t in &tokens[..directed_pin] {
             t.0.hash(&mut h);
         }
         h.finish()
@@ -314,6 +368,13 @@ impl PrefixStateCache {
     /// touch); file IO is the caller's.
     pub(crate) fn plan(&mut self, tokens: &[LlamaToken]) -> PrefixPlan {
         if !self.enabled || tokens.len() < self.min_pin.max(PROBE_TOKENS) + 8 {
+            tracing::debug!(
+                target: "prefix_state",
+                enabled = self.enabled,
+                prompt_tokens = tokens.len(),
+                floor = self.min_pin.max(PROBE_TOKENS) + 8,
+                "prefix_state: PASS — not eligible"
+            );
             return PrefixPlan::Pass;
         }
         let key = Self::key(tokens);
@@ -336,9 +397,20 @@ impl PrefixStateCache {
             // The family drifted (e.g. daily anchor rotated, config
             // changed). Re-learn at the surviving common prefix when
             // it's still worth pinning; otherwise drop and start over.
-            if lcp >= self.min_pin && lcp < tokens.len() {
-                return PrefixPlan::Learn { key, pin_len: lcp };
+            let pin = pin_with_tail(lcp, tokens.len());
+            if pin >= self.min_pin {
+                return PrefixPlan::Learn { key, pin_len: pin };
             }
+            tracing::debug!(
+                target: "prefix_state",
+                key = format!("{key:016x}"),
+                prompt_tokens = tokens.len(),
+                entry_tokens = entry_len,
+                lcp,
+                pin,
+                min_pin = self.min_pin,
+                "prefix_state: PASS — family drifted below the pin floor; dropped and re-sighting"
+            );
             self.invalidate(key);
             self.last_seen.insert(key, tokens.to_vec());
             return PrefixPlan::Pass;
@@ -346,17 +418,39 @@ impl PrefixStateCache {
 
         if let Some(prev) = self.last_seen.get(&key) {
             let lcp = lcp_len(prev, tokens);
-            if lcp >= self.min_pin && lcp < tokens.len() {
+            // `pin_with_tail`, not `lcp < tokens.len()`: two identical
+            // sightings share EVERYTHING, which is the strongest possible
+            // evidence for a pin and used to be the one case that refused
+            // one. See `PIN_TAIL_MARGIN`.
+            let pin = pin_with_tail(lcp, tokens.len());
+            if pin >= self.min_pin {
                 self.last_seen.remove(&key);
-                return PrefixPlan::Learn { key, pin_len: lcp };
+                return PrefixPlan::Learn { key, pin_len: pin };
             }
-            // Same family fingerprint but the shared prefix is too
-            // short to pin — keep the newest sighting.
+            // Same family fingerprint, but what they share is below the
+            // floor — keep the newest sighting.
+            tracing::debug!(
+                target: "prefix_state",
+                key = format!("{key:016x}"),
+                prompt_tokens = tokens.len(),
+                prev_tokens = prev.len(),
+                lcp,
+                pin,
+                min_pin = self.min_pin,
+                "prefix_state: PASS — second sighting shares too little to pin"
+            );
             self.last_seen.insert(key, tokens.to_vec());
             return PrefixPlan::Pass;
         }
 
         // First sighting of this family.
+        tracing::debug!(
+            target: "prefix_state",
+            key = format!("{key:016x}"),
+            prompt_tokens = tokens.len(),
+            sightings = self.last_seen.len(),
+            "prefix_state: PASS — first sighting of this family; a second is needed to learn a boundary"
+        );
         if self.last_seen.len() >= MAX_ENTRIES * 2 {
             // Bounded: drop an arbitrary stale sighting.
             if let Some(&stale) = self.last_seen.keys().next() {
@@ -370,15 +464,37 @@ impl PrefixStateCache {
     /// Caller-directed variant of [`plan`]: the request declared its
     /// stable-prefix token boundary (`CompletionRequest.stable_prefix_len`
     /// mapped to tokens by the caller), so no two-sighting learning is
-    /// needed — an unusable/missing entry learns IMMEDIATELY at the
+    /// needed — a window not yet pinned learns IMMEDIATELY at the
     /// directed boundary. This removes the auto-learn path's two costs
     /// for declared families: the extra full prefill of the first
     /// sighting, and relearn churn when the auto boundary lands inside
     /// shared claim-opening text (observed 2026-07-21).
     ///
-    /// A matching entry restores at ITS length even if it differs from
-    /// the directed boundary — restoring more matched tokens is strictly
-    /// better, and a stale-but-strict-prefix entry is still bit-faithful.
+    /// The family key is the declared prefix CONTENT ([`directed_key`]),
+    /// not the 48-token probe, so an entry under the key IS the declared
+    /// window: a hit restores exactly `directed_pin` tokens, a miss learns
+    /// exactly `directed_pin` tokens, and the LRU / byte budget in
+    /// [`commit_sized`] is the only thing that ever removes an entry. Two
+    /// branches used to live between hit and miss; both were symptoms of
+    /// keying a declared window on a probe it shared with other windows:
+    ///
+    ///   * "pin is short of the declared prefix — re-learning"
+    ///     (2026-08-24): a grown audit window shared the probe with its
+    ///     smaller predecessor and kept restoring the small pin (124
+    ///     restores at 1064 tokens, mean 2289 re-prefilled, ~35 min of a
+    ///     39.5-min leg). Under content keys the grown window is its own
+    ///     key and learns its own pin once.
+    ///   * "two shapes share this family — pinning at their common prefix"
+    ///     (2026-08-27): two windows alternating within one flight evicted
+    ///     each other under one probe key (Flash-Next: [3998, 4612, 3998,
+    ///     4612], ~240 s of 566 s cold prefill), so the pin was shortened
+    ///     to what both shared and frozen there. That compromise then bit
+    ///     the grounding gate (2026-09-01): every later TURN on the same
+    ///     corpus shares the probe with the previous one, so the gate
+    ///     pinned the ~500-1300 tokens two turns share and re-prefilled
+    ///     ~12K per judge. Under content keys alternating windows hold two
+    ///     entries and cannot evict each other.
+    ///
     /// Out-of-range/short directives fall back to the sighting-based
     /// [`plan`] so a bad caller can never make behavior worse than
     /// undeclared.
@@ -396,105 +512,37 @@ impl PrefixStateCache {
         {
             return self.plan(tokens);
         }
-        let key = Self::key(tokens);
-        // Read what we need about any existing entry and DROP the borrow, so
-        // the anti-thrash bookkeeping below can mutate `self`.
-        let existing = self.entries.get(&key).map(|entry| {
-            let entry_len = entry.tokens.len();
-            let usable = tokens.len() > entry_len && tokens[..entry_len] == entry.tokens[..];
-            (entry_len, usable, lcp_len(&entry.tokens, tokens))
-        });
-        if let Some((entry_len, usable, lcp)) = existing {
-            if usable {
-                // A matching entry SHORTER than the caller's declaration by
-                // more than a pin's worth is re-learned, not restored.
-                //
-                // Restoring it is bit-faithful but leaves the difference to
-                // be prefilled on EVERY sibling call, forever: the entry is
-                // never replaced while it keeps matching, so a pin learned
-                // once against a small window stays that size no matter how
-                // much the declared prefix grows. Measured on the 2026-08-24
-                // deep-research task-69 flight, where the audit's window grew
-                // with greedy acquisition but the pin did not: 124 restores,
-                // every one `restored_tokens=1064`, mean `suffix_tokens=2289`
-                // re-prefilled — 283,874 tokens, about 35 minutes of a
-                // 39.5-minute leg, spent re-reading evidence that was already
-                // declared stable.
-                //
-                // The existing "restoring more matched tokens is strictly
-                // better" rule still holds and is untouched: it is about an
-                // entry LONGER than the directive. This branch is the
-                // opposite case, which that rule never covered.
-                //
-                // Re-learning costs one full prefill plus one save, once,
-                // and every later sibling restores the whole declared
-                // prefix. The `min_pin` margin keeps a trivial difference
-                // from churning the pin.
-                //
-                // EXCEPT when the pin is a shared compromise (see the branch
-                // below): it is short ON PURPOSE, because a sibling shape
-                // diverges before the declaration. Upgrading it there orphans
-                // that sibling, which re-pins it back down — the thrash this
-                // guard exists to stop.
-                if !self.shared_pins.contains(&key)
-                    && directed_pin > entry_len.saturating_add(self.min_pin)
-                {
-                    tracing::info!(
-                        target: "prefix_state",
-                        key = format_args!("{key:016x}"),
-                        pinned_tokens = entry_len,
-                        directed_tokens = directed_pin,
-                        would_reprefill = tokens.len().saturating_sub(entry_len),
-                        "prefix_state: pin is short of the declared prefix — re-learning"
-                    );
-                    self.last_seen.remove(&key);
-                    return PrefixPlan::Learn {
-                        key,
-                        pin_len: directed_pin,
-                    };
-                }
+        let key = Self::directed_key(tokens, directed_pin);
+        if let Some(entry) = self.entries.get(&key) {
+            // Content-keyed: the entry holds exactly `tokens[..directed_pin]`.
+            // The compare is the one guard against a 64-bit hash collision,
+            // and it is not optional — restoring foreign state would be wrong
+            // output, not a slow path. `directed_pin < tokens.len()` above
+            // guarantees the non-empty tail the sampler's logits come from.
+            if entry.tokens[..] == tokens[..directed_pin] {
+                let prefix_len = entry.tokens.len();
                 self.touch(key);
-                return PrefixPlan::Restore {
-                    key,
-                    prefix_len: entry_len,
-                };
+                return PrefixPlan::Restore { key, prefix_len };
             }
-            // The entry exists but THIS request cannot use it: the two share a
-            // 48-token family fingerprint yet diverge before the entry's end.
-            //
-            // Overwriting it at our own declared boundary — what this fell
-            // through to before 2026-08-27 — makes the two shapes evict each
-            // other forever, and every eviction costs a FULL prefill. Measured
-            // on the Flash-Next synth run (2026-08-26): five of six keys
-            // oscillated between exactly two pin sizes
-            // (e.g. [3998, 4612, 3998, 4612]), 12 of 19 LEARNs were this
-            // thrash, ~240s of that run's 566s of cold prefill.
-            //
-            // Pin at the longest prefix BOTH shapes share instead. It is
-            // shorter than either declaration, so the longer shape re-prefills
-            // its own tail on every call — far cheaper than a re-learn — and
-            // `shared_pins` stops the upgrade rule above from undoing it.
-            // A genuinely drifted family (new evidence) shares almost nothing,
-            // so `lcp` falls under `min_pin` and we take the replace path below.
-            if lcp >= self.min_pin && lcp < tokens.len() {
-                tracing::info!(
-                    target: "prefix_state",
-                    key = format_args!("{key:016x}"),
-                    pinned_tokens = entry_len,
-                    directed_tokens = directed_pin,
-                    shared_prefix = lcp,
-                    "prefix_state: two shapes share this family — pinning at their common prefix"
-                );
-                self.shared_pins.insert(key);
-                self.last_seen.remove(&key);
-                return PrefixPlan::Learn { key, pin_len: lcp };
-            }
+            tracing::warn!(
+                target: "prefix_state",
+                key = format_args!("{key:016x}"),
+                pinned_tokens = entry.tokens.len(),
+                directed_tokens = directed_pin,
+                "prefix_state: directed key collision — entry content differs, replacing"
+            );
         }
-        // No usable entry (first sighting of this evidence, or the
-        // family drifted to new evidence): learn NOW at the directed
-        // boundary. `commit` replaces any stale entry under this key.
-        self.shared_pins.remove(&key);
-        self.last_seen.remove(&key);
+        // First sighting of this window: learn NOW at the directed
+        // boundary. `commit` files it under the content key.
+        tracing::info!(
+            target: "prefix_state",
+            key = format_args!("{key:016x}"),
+            family_key = "hash(tokens[..directed_pin])",
+            directed_tokens = directed_pin,
+            prompt_tokens = tokens.len(),
+            resident_pins = self.entries.len(),
+            "prefix_state: unpinned directed window — learning at the declared prefix"
+        );
         PrefixPlan::Learn {
             key,
             pin_len: directed_pin,
@@ -587,7 +635,6 @@ impl PrefixStateCache {
             let _ = std::fs::remove_file(&e.path);
         }
         self.lru.retain(|k| *k != key);
-        self.shared_pins.remove(&key);
     }
 
     fn touch(&mut self, key: u64) {
@@ -621,90 +668,317 @@ mod tests {
         v
     }
 
-    /// Two shapes sharing a fingerprint must not evict each other forever.
+    /// A sibling call: the identical declared `window`, then a tail only
+    /// this call carries (a different claim under the same evidence).
+    fn sibling(window: &[LlamaToken], tail_seed: i32, tail_len: usize) -> Vec<LlamaToken> {
+        let mut v = window.to_vec();
+        v.extend((0..tail_len as i32).map(|i| LlamaToken(950_000 + tail_seed * 1_000 + i)));
+        v
+    }
+
+    /// Two directed windows that share the 48-token probe but diverge
+    /// inside the declared prefix are two families: each learns its own
+    /// FULL declared prefix, and a sibling of either restores all of it —
+    /// never a common-prefix compromise. This is the 2026-09-01 gate defect
+    /// in miniature: turn N+1's judges open like turn N's (same scaffold,
+    /// same first chunk) and diverge at the second chunk.
     ///
-    /// Before the 2026-08-27 fix `plan_directed` fell through to "learn at MY
-    /// declared boundary" whenever the stored entry was not a strict prefix of
-    /// this request — so shape A overwrote B's pin, B's upgrade rule overwrote
-    /// A's, and each overwrite cost a FULL prefill. Observed on the Flash-Next
-    /// synth run: pin sequences like [3998, 4612, 3998, 4612] on five of six
-    /// keys, 12 of 19 LEARNs, ~240s of 566s of cold prefill.
+    /// Watched red on the probe-keyed code: turn 2 planned
+    /// `Learn { pin_len: 248 }` — the 200-token core it shares with turn 1,
+    /// not its own 300.
+    /// ISSUE #57, found live on 2026-09-02 by instrumenting the undirected
+    /// path's silent `Pass` returns. The DeepQuery synthesis call sends the
+    /// SAME 9,891-token prompt every turn, and the cache refused it a pin
+    /// every turn: the learn guard was `lcp < tokens.len()`, so the one case
+    /// where two sightings share everything fell through to `Pass` and the
+    /// family never formed. The gate's judges, four inches away in the same
+    /// turn, were restoring 4,881 tokens in 45 ms off the directed path,
+    /// which had always backed off by `PIN_TAIL_MARGIN` instead of refusing.
+    ///
+    /// Watched red on the old code: the second sighting returned `Pass`, and
+    /// so did the third, and the tenth.
     #[test]
-    fn two_shapes_sharing_a_family_converge_instead_of_thrashing() {
+    fn two_identical_sightings_learn_a_pin_rather_than_refusing_one() {
         let mut cache = PrefixStateCache::new_for_test(64);
-        let a = shape(200, 1, 0, 40); // declares the shared core only
-        let b = shape(200, 2, 100, 40); // declares 100 tokens further
-        let pin_a = PROBE_TOKENS + 200;
-        let pin_b = PROBE_TOKENS + 200 + 100;
+        let prompt = toks(1, &(0..600).collect::<Vec<i32>>());
+        assert_eq!(
+            lcp_len(&prompt, &prompt),
+            prompt.len(),
+            "fixture: the two sightings are byte-identical"
+        );
 
-        // 1. A learns at its boundary.
-        let PrefixPlan::Learn { key, pin_len } = cache.plan_directed(&a, pin_a) else {
-            panic!("A should learn first")
-        };
-        assert_eq!(pin_len, pin_a);
-        cache.commit(key, a[..pin_len].to_vec(), cache.state_path(key));
+        assert!(
+            matches!(cache.plan(&prompt), PrefixPlan::Pass),
+            "first sighting has nothing to compare against"
+        );
 
-        // 2. B upgrades — legitimate, its declared prefix really is longer.
-        let PrefixPlan::Learn { key, pin_len } = cache.plan_directed(&b, pin_b) else {
-            panic!("B should upgrade")
-        };
-        assert_eq!(pin_len, pin_b);
-        cache.commit(key, b[..pin_len].to_vec(), cache.state_path(key));
-
-        // 3. A cannot use B's pin. It must re-pin at what they SHARE, not at
-        //    its own boundary, and mark the pin shared.
-        let PrefixPlan::Learn { key, pin_len } = cache.plan_directed(&a, pin_a) else {
-            panic!("A should re-pin at the shared prefix")
-        };
-        assert_eq!(pin_len, pin_a, "pins at the common prefix");
-        cache.commit(key, a[..pin_len].to_vec(), cache.state_path(key));
-
-        // 4+. Converged: BOTH restore, forever. No further Learn.
-        for round in 0..4 {
-            assert_eq!(
-                cache.plan_directed(&b, pin_b),
-                PrefixPlan::Restore {
-                    key,
-                    prefix_len: pin_a
-                },
-                "round {round}: B must restore the shared pin, not upgrade it"
-            );
-            assert_eq!(
-                cache.plan_directed(&a, pin_a),
-                PrefixPlan::Restore {
-                    key,
-                    prefix_len: pin_a
-                },
-                "round {round}: A must restore"
-            );
+        let want = prompt.len() - PIN_TAIL_MARGIN;
+        match cache.plan(&prompt) {
+            PrefixPlan::Learn { pin_len, .. } => assert_eq!(
+                pin_len, want,
+                "an identical repeat pins all but the decodable tail"
+            ),
+            other => panic!("identical repeat must learn, got {other:?}"),
         }
     }
 
-    /// The anti-thrash path must not freeze a pin onto stale evidence: a
-    /// family that genuinely drifts shares only the fingerprint, so the
-    /// common prefix falls under `min_pin` and the entry is replaced.
+    /// The pin the case above learns has to be RESTORABLE, or the fix just
+    /// moves the full prefill one turn later. `Restore` needs a strict
+    /// prefix with a non-empty tail, which is what the margin buys.
     #[test]
-    fn a_drifted_family_still_replaces_its_pin() {
+    fn the_pin_learned_from_an_identical_repeat_is_then_restorable() {
         let mut cache = PrefixStateCache::new_for_test(64);
-        let old = shape(200, 1, 0, 40);
-        let pin_old = PROBE_TOKENS + 200;
-        let PrefixPlan::Learn { key, pin_len } = cache.plan_directed(&old, pin_old) else {
+        let prompt = toks(1, &(0..600).collect::<Vec<i32>>());
+        cache.plan(&prompt);
+        let PrefixPlan::Learn { key, pin_len } = cache.plan(&prompt) else {
+            panic!("second sighting must learn");
+        };
+        cache.commit(key, prompt[..pin_len].to_vec(), std::path::PathBuf::from("/tmp/x"));
+
+        match cache.plan(&prompt) {
+            PrefixPlan::Restore { prefix_len, .. } => assert_eq!(
+                prefix_len, pin_len,
+                "the third sighting restores the whole pin"
+            ),
+            other => panic!("expected Restore, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn directed_windows_sharing_the_probe_get_their_own_entries() {
+        let mut cache = PrefixStateCache::new_for_test(64);
+        let turn1 = shape(200, 1, 100, 40);
+        let turn2 = shape(200, 2, 100, 40);
+        let pin = PROBE_TOKENS + 200 + 100;
+        assert_eq!(
+            lcp_len(&turn1, &turn2),
+            PROBE_TOKENS + 200,
+            "fixture: the windows share the probe and diverge inside the declared prefix"
+        );
+
+        let PrefixPlan::Learn { key: key1, pin_len } = cache.plan_directed(&turn1, pin) else {
+            panic!("turn 1 learns on first sight")
+        };
+        assert_eq!(pin_len, pin);
+        cache.commit(key1, turn1[..pin].to_vec(), cache.state_path(key1));
+
+        let plan = cache.plan_directed(&turn2, pin);
+        let PrefixPlan::Learn { key: key2, pin_len } = plan else {
+            panic!("turn 2 must learn its own window, got {plan:?}")
+        };
+        assert_eq!(
+            pin_len, pin,
+            "turn 2 learns its FULL declared prefix, not the prefix it shares with turn 1"
+        );
+        assert_ne!(key2, key1, "a different window is a different family key");
+        cache.commit(key2, turn2[..pin].to_vec(), cache.state_path(key2));
+        assert_eq!(cache.entries.len(), 2, "two windows, two entries");
+
+        // A sibling of EITHER turn restores that turn's whole declared prefix.
+        assert_eq!(
+            cache.plan_directed(&sibling(&turn1[..pin], 1, 55), pin),
+            PrefixPlan::Restore {
+                key: key1,
+                prefix_len: pin
+            }
+        );
+        assert_eq!(
+            cache.plan_directed(&sibling(&turn2[..pin], 2, 55), pin),
+            PrefixPlan::Restore {
+                key: key2,
+                prefix_len: pin
+            }
+        );
+    }
+
+    /// Siblings declaring the identical window share ONE entry — the second
+    /// call restores `prefix_len == directed_pin` — and that entry is not
+    /// shrunk by a nested SHORTER window that shares its probe (the
+    /// 2026-08-24 shape: an audit window that grew between passes, so the
+    /// small window and the grown one are both declared for a while).
+    ///
+    /// Watched red on the probe-keyed code: the nested window came back
+    /// under the long window's key, then replaced its entry with the
+    /// 248-token compromise.
+    #[test]
+    fn directed_siblings_with_one_declared_window_share_one_entry() {
+        let mut cache = PrefixStateCache::new_for_test(64);
+        let long = shape(200, 1, 100, 40);
+        let pin_long = PROBE_TOKENS + 300;
+        let PrefixPlan::Learn { key, .. } = cache.plan_directed(&long, pin_long) else {
             panic!("first sighting learns")
         };
-        cache.commit(key, old[..pin_len].to_vec(), cache.state_path(key));
+        cache.commit(key, long[..pin_long].to_vec(), cache.state_path(key));
 
-        // New evidence: same 48-token opening, different body from token 48 on.
-        let mut fresh = toks(1, &[]);
-        fresh.extend((0..300i32).map(|i| LlamaToken(770_000 + i)));
-        let pin_fresh = PROBE_TOKENS + 200;
+        for seed in 2..5 {
+            assert_eq!(
+                cache.plan_directed(
+                    &sibling(&long[..pin_long], seed, 30 + seed as usize),
+                    pin_long
+                ),
+                PrefixPlan::Restore {
+                    key,
+                    prefix_len: pin_long
+                },
+                "sibling {seed} restores the whole declared window"
+            );
+        }
         assert_eq!(
-            cache.plan_directed(&fresh, pin_fresh),
-            PrefixPlan::Learn {
-                key,
-                pin_len: pin_fresh
-            },
-            "drifted evidence replaces the pin at the declared boundary"
+            cache.entries.len(),
+            1,
+            "identical declared windows share one entry"
         );
+
+        // A nested shorter window: the same bytes up to the shared core,
+        // declared as the whole prefix.
+        let pin_short = PROBE_TOKENS + 200;
+        let short = sibling(&long[..pin_short], 9, 40);
+        let plan = cache.plan_directed(&short, pin_short);
+        let PrefixPlan::Learn {
+            key: key_short,
+            pin_len,
+        } = plan
+        else {
+            panic!("a shorter window is its own family, got {plan:?}")
+        };
+        assert_eq!(pin_len, pin_short);
+        assert_ne!(key_short, key, "a nested window is a different family key");
+        cache.commit(
+            key_short,
+            short[..pin_short].to_vec(),
+            cache.state_path(key_short),
+        );
+
+        assert_eq!(
+            cache.plan_directed(&sibling(&long[..pin_long], 7, 33), pin_long),
+            PrefixPlan::Restore {
+                key,
+                prefix_len: pin_long
+            },
+            "the long window was not shrunk to the nested one"
+        );
+        assert_eq!(cache.entries.len(), 2);
+    }
+
+    /// Two windows sharing the probe must not evict each other, and neither
+    /// may be shortened to what they share.
+    ///
+    /// Rewritten from `two_shapes_sharing_a_family_converge_instead_of_thrashing`
+    /// (2026-08-27). That test asserted the COMPROMISE: once A and B had each
+    /// learned under the one probe key, A re-pinned at their common prefix
+    /// and both shapes restored `pin_a` forever — B paying its own 100-token
+    /// tail on every call. The compromise stopped the eviction thrash it was
+    /// built for (Flash-Next, [3998, 4612, 3998, 4612]) and then broke the
+    /// grounding gate: every later TURN on one corpus shares the probe with
+    /// the previous turn, so the gate pinned the ~500-1300 tokens two turns
+    /// share and re-prefilled ~12K per judge (2026-09-01). Under content keys
+    /// the two windows are two entries. The property that survives is "once
+    /// both are pinned, nothing re-learns"; the one that changed is "each
+    /// restores ITS OWN full declared prefix".
+    ///
+    /// Watched red on the probe-keyed code: round 0, A restored 248 tokens
+    /// (the compromise) instead of its declared 348.
+    #[test]
+    fn alternating_directed_windows_never_relearn_once_both_are_pinned() {
+        let mut cache = PrefixStateCache::new_for_test(64);
+        let a = shape(200, 1, 100, 40);
+        let b = shape(200, 2, 150, 40);
+        let pin_a = PROBE_TOKENS + 200 + 100;
+        let pin_b = PROBE_TOKENS + 200 + 150;
+
+        let PrefixPlan::Learn {
+            key: key_a,
+            pin_len,
+        } = cache.plan_directed(&a, pin_a)
+        else {
+            panic!("A learns first")
+        };
+        cache.commit(key_a, a[..pin_len].to_vec(), cache.state_path(key_a));
+        let PrefixPlan::Learn {
+            key: key_b,
+            pin_len,
+        } = cache.plan_directed(&b, pin_b)
+        else {
+            panic!("B learns its own window")
+        };
+        cache.commit(key_b, b[..pin_len].to_vec(), cache.state_path(key_b));
+
+        for round in 0..4 {
+            let plan_a = cache.plan_directed(&a, pin_a);
+            assert!(
+                !matches!(plan_a, PrefixPlan::Learn { .. }),
+                "round {round}: A re-learned — the eviction thrash is back"
+            );
+            assert_eq!(
+                plan_a,
+                PrefixPlan::Restore {
+                    key: key_a,
+                    prefix_len: pin_a
+                },
+                "round {round}: A must restore its whole declared prefix"
+            );
+            let plan_b = cache.plan_directed(&b, pin_b);
+            assert!(
+                !matches!(plan_b, PrefixPlan::Learn { .. }),
+                "round {round}: B re-learned — the eviction thrash is back"
+            );
+            assert_eq!(
+                plan_b,
+                PrefixPlan::Restore {
+                    key: key_b,
+                    prefix_len: pin_b
+                },
+                "round {round}: B must restore its whole declared prefix"
+            );
+        }
+        assert_eq!(cache.entries.len(), 2, "two windows, two entries, no churn");
+    }
+
+    /// Distinct directed windows accumulate only up to the LRU cap.
+    ///
+    /// Rewritten from `a_drifted_family_still_replaces_its_pin`
+    /// (2026-08-27), which asserted the compromise's escape hatch: evidence
+    /// sharing only the probe (`lcp < min_pin`) learned under the SAME key
+    /// and replaced the entry in place. Under content keys nothing is ever
+    /// replaced in place — each drifted window is its own key — so what has
+    /// to be proven instead is the closure: the entry count is bounded by
+    /// `MAX_ENTRIES` (and the byte budget, `byte_budget_evicts_lru_until_under_cap`)
+    /// and the oldest window is the one retired.
+    ///
+    /// Watched red on the probe-keyed code: all eight windows came back
+    /// under one key.
+    #[test]
+    fn distinct_directed_windows_are_bounded_by_the_lru() {
+        let mut cache = PrefixStateCache::new_for_test(64);
+        let pin = PROBE_TOKENS + 200;
+        let mut keys = Vec::new();
+        for turn in 0..(MAX_ENTRIES as i32 + 2) {
+            // Same 48-token opening, different evidence from token 48 on.
+            let mut w = toks(1, &[]);
+            w.extend((0..300i32).map(|i| LlamaToken(770_000 + turn * 1_000 + i)));
+            let plan = cache.plan_directed(&w, pin);
+            let PrefixPlan::Learn { key, pin_len } = plan else {
+                panic!("turn {turn}: a new window learns immediately, got {plan:?}")
+            };
+            assert_eq!(
+                pin_len, pin,
+                "turn {turn}: learns the whole declared prefix"
+            );
+            cache.commit(key, w[..pin].to_vec(), cache.state_path(key));
+            keys.push(key);
+        }
+        let distinct: std::collections::HashSet<u64> = keys.iter().copied().collect();
+        assert_eq!(
+            distinct.len(),
+            keys.len(),
+            "every drifted window is its own family key"
+        );
+        assert_eq!(cache.entries.len(), MAX_ENTRIES, "bounded by the entry cap");
+        assert!(
+            !cache.entries.contains_key(&keys[0]),
+            "the oldest window was retired"
+        );
+        assert!(cache.entries.contains_key(keys.last().unwrap()));
     }
 
     /// A family: shared stable core of `core_len` tokens, then a
@@ -765,14 +1039,33 @@ mod tests {
 
     #[test]
     fn identical_full_prompts_never_restore_with_empty_tail() {
-        // The tail carries the fresh logits; an exact-match prompt must
-        // not plan a zero-tail restore.
+        // The tail carries the fresh logits, so an exact-match prompt must
+        // never plan a ZERO-TAIL restore. It used to get there by refusing
+        // the pin outright (`lcp < tokens.len()`), which also refused the
+        // ~9.9k-token DeepQuery synthesis prompt on every turn forever
+        // (issue #57). It now pins all but `PIN_TAIL_MARGIN` instead — the
+        // invariant this test is named for, without the full prefill.
         let mut cache = PrefixStateCache::new_for_test(64);
         let a = family_member(200, 1, 40);
         cache.plan(&a);
-        let plan = cache.plan(&a.clone());
-        // Identical twice → lcp == len → not pinnable (lcp < len fails).
-        assert_eq!(plan, PrefixPlan::Pass);
+        let PrefixPlan::Learn { key, pin_len } = cache.plan(&a.clone()) else {
+            panic!("an identical repeat is the strongest evidence for a pin");
+        };
+        assert!(
+            pin_len < a.len(),
+            "the pin must leave a tail: pin_len={pin_len} len={}",
+            a.len()
+        );
+        cache.commit(key, a[..pin_len].to_vec(), cache.state_path(key));
+        // And the restore it enables still leaves that tail to decode.
+        assert_eq!(
+            cache.plan(&a),
+            PrefixPlan::Restore {
+                key,
+                prefix_len: pin_len
+            }
+        );
+        assert!(a.len() > pin_len, "restore keeps a non-empty tail");
     }
 
     #[test]
@@ -917,8 +1210,18 @@ mod tests {
         );
     }
 
+    /// Drifted evidence learns immediately — no invalidate → Pass → Learn
+    /// sighting dance — and under its OWN key.
+    ///
+    /// Until 2026-09-01 this asserted the Learn came back under the same
+    /// key as the stale entry (probe keying: same 48-token opening, one
+    /// family, entry replaced in place). A drifted window is now a different
+    /// family; the stale entry is the LRU's to retire
+    /// (`distinct_directed_windows_are_bounded_by_the_lru`), not this call's.
+    ///
+    /// Watched red on the probe-keyed code: `key_c == key`.
     #[test]
-    fn directed_replaces_drifted_entry_without_sighting_dance() {
+    fn directed_drifted_evidence_learns_immediately_under_its_own_key() {
         let mut cache = PrefixStateCache::new_for_test(64);
         let a = family_member(200, 1, 40);
         let pin_a = PROBE_TOKENS + 180;
@@ -928,39 +1231,47 @@ mod tests {
         cache.commit(key, a[..pin_a].to_vec(), cache.state_path(key));
 
         // Next turn: same family fingerprint, new evidence (core drifts
-        // right after the probe) — directed plan learns at the NEW
-        // boundary immediately instead of invalidate → Pass → Learn.
+        // right after the probe).
         let mut c = toks(1, &(500..700).collect::<Vec<i32>>());
         c.extend([LlamaToken(1), LlamaToken(2), LlamaToken(3)]);
         let pin_c = PROBE_TOKENS + 150;
-        assert_eq!(
-            cache.plan_directed(&c, pin_c),
-            PrefixPlan::Learn {
-                key,
-                pin_len: pin_c
-            }
+        let plan = cache.plan_directed(&c, pin_c);
+        let PrefixPlan::Learn {
+            key: key_c,
+            pin_len,
+        } = plan
+        else {
+            panic!("drifted evidence learns on first sight, got {plan:?}")
+        };
+        assert_eq!(pin_len, pin_c, "at the NEW declared boundary");
+        assert_ne!(key_c, key, "a drifted window is its own family key");
+        assert!(
+            cache.entries.contains_key(&key),
+            "the previous window is not invalidated by a drift"
         );
     }
 
-    /// **A pin far shorter than the declared prefix is RE-LEARNED, not
-    /// restored.**
+    /// **A grown declared window is its own entry, learned at full length.**
     ///
-    /// Restoring it is bit-faithful, so nothing errors — the difference is
-    /// silently prefilled on every sibling call, and because the entry keeps
-    /// matching it is never replaced. A pin learned once against a small
-    /// window therefore stays that size forever while the declared prefix
-    /// grows around it.
+    /// The 2026-08-24 deep-research task-69 flight logged 124 restores,
+    /// every one `restored_tokens=1064` against a declared window that had
+    /// grown past 3,300 — mean `suffix_tokens=2289` re-prefilled, 283,874
+    /// tokens total, roughly 35 minutes of a 39.5-minute audit leg: the
+    /// short pin strict-prefix-matched, so it was restored and the growth
+    /// re-prefilled on every call.
     ///
-    /// That is not hypothetical: the 2026-08-24 deep-research task-69 flight
-    /// logged 124 restores, every one `restored_tokens=1064` against a
-    /// declared window that had grown past 3,300 — mean `suffix_tokens=2289`
-    /// re-prefilled, 283,874 tokens total, roughly 35 minutes of a
-    /// 39.5-minute audit leg.
+    /// Until 2026-09-01 this test (`directed_relearns_a_pin_shorter_than_the_declaration`)
+    /// asserted the cure as a RE-LEARN under the same probe key — the short
+    /// entry replaced by the grown one, with a `min_pin` margin so a small
+    /// growth would not churn. Under content keys there is no margin and no
+    /// replacement: the grown window is a different key, learned once at its
+    /// full length, and the short window's entry stays until the LRU retires
+    /// it. The cost that matters — every sibling of the grown window
+    /// restoring the whole declared prefix — is asserted at the end.
     ///
-    /// Watched red before the branch existed: the assertion below came back
-    /// `Restore { prefix_len: <short entry> }`.
+    /// Watched red on the probe-keyed code: `key_grown == key`.
     #[test]
-    fn directed_relearns_a_pin_shorter_than_the_declaration() {
+    fn a_grown_declared_window_is_its_own_entry_learned_at_full_length() {
         let mut cache = PrefixStateCache::new_for_test(64);
         let short = family_member(200, 1, 40);
         let pin_short = PROBE_TOKENS + 100;
@@ -969,30 +1280,60 @@ mod tests {
         };
         cache.commit(key, short[..pin_short].to_vec(), cache.state_path(key));
 
-        // The same family, now declaring a MUCH longer stable prefix — the
-        // shape of an evidence window that grew between passes. The short
-        // entry still strict-prefix-matches, which is exactly why the old
-        // code restored it and left the rest to re-prefill.
+        // The same opening, now declaring a MUCH longer stable prefix — the
+        // shape of an evidence window that grew between passes.
         let mut grown = short[..pin_short].to_vec();
         grown.extend((0..900i32).map(|i| LlamaToken(700_000 + i)));
         let directed = pin_short + 800;
         assert!(grown.len() > directed);
+        let plan = cache.plan_directed(&grown, directed);
+        let PrefixPlan::Learn {
+            key: key_grown,
+            pin_len,
+        } = plan
+        else {
+            panic!("the grown window learns, got {plan:?}")
+        };
+        assert_eq!(pin_len, directed, "learned at the full declared length");
+        assert_ne!(key_grown, key, "a grown window is a different family key");
+        assert!(
+            cache.entries.contains_key(&key),
+            "the short window's entry is the LRU's to retire, not this call's"
+        );
+        cache.commit(
+            key_grown,
+            grown[..directed].to_vec(),
+            cache.state_path(key_grown),
+        );
+
         assert_eq!(
-            cache.plan_directed(&grown, directed),
-            PrefixPlan::Learn {
-                key,
-                pin_len: directed
+            cache.plan_directed(&sibling(&grown[..directed], 3, 60), directed),
+            PrefixPlan::Restore {
+                key: key_grown,
+                prefix_len: directed
             },
-            "a pin short of the declaration by more than min_pin must re-learn — \
-             restoring it re-prefills the difference on every sibling, forever"
+            "every sibling of the grown window restores the whole declared prefix"
         );
     }
 
-    /// The re-learn branch must NOT churn on a small difference, and must not
-    /// touch the established "an entry LONGER than the directive restores at
-    /// its own length" rule — restoring more matched tokens is still better.
+    /// A declared window that differs from a pinned one by a few tokens is
+    /// its own entry, and never disturbs the pinned one.
+    ///
+    /// Until 2026-09-01 this test (`directed_keeps_restoring_when_the_pin_is_close_or_longer`)
+    /// asserted two riders on probe keying: a declaration 10 tokens longer
+    /// than the pin RESTORED the pin (the re-learn margin, so a trivial
+    /// shortfall would not churn), and a declaration 50 tokens shorter
+    /// restored the pin too ("an entry longer than the directive restores at
+    /// its own length"). Under content keys `pin + 10` and `pin - 50` name
+    /// different windows: each learns once under its own key, and the churn
+    /// the margin guarded against cannot occur because no entry is ever
+    /// replaced by another window. The real consumer never jitters — the gate
+    /// asserts one byte-identical boundary across siblings
+    /// (`the_gate_shares_one_prefix_family`, judge.rs).
+    ///
+    /// Watched red on the probe-keyed code: `pin + 10` planned a Restore.
     #[test]
-    fn directed_keeps_restoring_when_the_pin_is_close_or_longer() {
+    fn a_declared_window_that_differs_by_a_few_tokens_is_its_own_entry() {
         let mut cache = PrefixStateCache::new_for_test(64);
         let base = family_member(200, 1, 40);
         let pin = PROBE_TOKENS + 200;
@@ -1004,23 +1345,23 @@ mod tests {
         let mut longer = base[..pin].to_vec();
         longer.extend((0..600i32).map(|i| LlamaToken(800_000 + i)));
 
-        // Declaration only slightly longer than the pin: restore, do not churn.
+        for declared in [pin + 10, pin - 50] {
+            let plan = cache.plan_directed(&longer, declared);
+            let PrefixPlan::Learn { key: k, pin_len } = plan else {
+                panic!("a declaration of {declared} is its own window, got {plan:?}")
+            };
+            assert_eq!(pin_len, declared, "learned at exactly the declared length");
+            assert_ne!(k, key, "a different window is a different family key");
+            cache.commit(k, longer[..declared].to_vec(), cache.state_path(k));
+        }
+        assert_eq!(cache.entries.len(), 3, "three windows, three entries");
         assert_eq!(
-            cache.plan_directed(&longer, pin + 10),
+            cache.plan_directed(&sibling(&base[..pin], 4, 30), pin),
             PrefixPlan::Restore {
                 key,
                 prefix_len: pin
             },
-            "a trivial shortfall must not re-learn"
-        );
-        // Declaration SHORTER than the pin: the original rule, unchanged.
-        assert_eq!(
-            cache.plan_directed(&longer, pin - 50),
-            PrefixPlan::Restore {
-                key,
-                prefix_len: pin
-            },
-            "an entry longer than the directive still restores at its own length"
+            "the original window's pin was not disturbed"
         );
     }
 
@@ -1029,9 +1370,18 @@ mod tests {
         let mut cache = PrefixStateCache::new_for_test(64);
         let a = family_member(200, 1, 40);
         // Pin below min_pin and pin past the end both degrade to the
-        // sighting-based plan (first sighting → Pass, no learn).
+        // sighting-based plan. Each uses its OWN family, so what is asserted
+        // is the fallback itself — a first sighting Passes — rather than the
+        // undirected path's second-sighting rule, which these two calls used
+        // to exercise by accident (both passed `a`).
+        let b = toks(7, &(0..300).collect::<Vec<i32>>());
+        assert_ne!(
+            PrefixStateCache::key(&a),
+            PrefixStateCache::key(&b),
+            "fixture: the two probes must be different families"
+        );
         assert_eq!(cache.plan_directed(&a, 8), PrefixPlan::Pass);
-        assert_eq!(cache.plan_directed(&a, a.len() + 5), PrefixPlan::Pass);
+        assert_eq!(cache.plan_directed(&b, b.len() + 5), PrefixPlan::Pass);
     }
 
     #[test]

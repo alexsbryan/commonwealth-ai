@@ -3,8 +3,8 @@
 ## The problem
 
 Every measurement this repo makes about its desktop tests describes **reach**:
-how many specs, how many of the 251 Tauri commands got invoked
-(`scripts/desktop-invoke-coverage.py`), whether the fixtures actually ingested
+how many specs, how many of the 260 Tauri commands got invoked
+(`npm run report:coverage`), whether the fixtures actually ingested
 anything (the `FixtureExpectation` gate in `real/global-setup.ts`). Reach is
 worth measuring and none of it answers the question an engineer actually has
 before a release:

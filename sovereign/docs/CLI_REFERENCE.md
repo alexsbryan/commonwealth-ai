@@ -206,6 +206,9 @@ Manage knowledge corpora. See [KNOWLEDGE_BASES.md](KNOWLEDGE_BASES.md) for tier 
 | `remove <id>` | Remove an installed corpus |
 | `status [<id>]` | Show `state` (`ready` / `building` / `absent`) + shard status, for one corpus or all |
 | `reconstruct-manifest <id>` | Rebuild source-file manifest before collaborative ingestion |
+| `optimize <id>` \| `optimize --all` | Lance maintenance: compact fragments and fold unindexed ones into existing indexes. **Non-destructive** — it only adds a dataset version |
+| `optimize <id> --prune-days N` | ALSO delete superseded versions older than N days. **Destructive and irreversible.** No default, and `0` is refused |
+| `optimize <id> --keep-versions N` | ALSO delete superseded versions beyond the newest N, subject to `--prune-days` as a floor it can never undercut |
 
 **`install` is asynchronous, and its exit code says so.** The command POSTs to
 the daemon and returns the moment the request is *accepted*. The ingest then
@@ -227,6 +230,30 @@ svrn corpus status sep        # ready | building | absent
 `status` reports one row per **corpus**, not per directory: an in-flight
 partition appears as its own corpus id in state `building`, never as a
 separate corpus named `<id>-partition-node-…`.
+
+**`optimize` has two halves, and only one of them is safe to run blind.**
+Compaction and index folding are non-destructive: they add a new dataset
+version and leave every earlier one readable. That is what a bare
+`svrn corpus optimize <id>` does, and a corpus fed by a continuous appender
+re-earns it continuously — `wikipedia` had decayed to 2218ms per search
+against a comparable static corpus's 100ms before this existed.
+
+Pruning is the other half. It DELETES superseded versions, irreversibly, and a
+retention window shorter than the age of any in-flight reader can break a
+concurrent query. So there is no default and no zero: `--prune-days` must be an
+integer of at least 1, and anything else — `0`, a negative, a typo — is refused
+with exit 2 before any index is opened.
+
+```bash
+svrn corpus optimize wikipedia                      # safe: compact only
+svrn corpus optimize wikipedia --prune-days 7       # deletes versions older than a week
+svrn corpus optimize wikipedia --keep-versions 500  # bound by count as well as age
+```
+
+An age alone may reclaim nothing. A corpus written to thousands of times a day
+retains only versions newer than any age you could safely pass — measured on
+`wikipedia` 2026-08-31: 5,972 versions, zero older than 7 days, 153.9GB of
+superseded fragments. `--keep-versions` is the bound for that case.
 
 ### `svrn alignment`
 
@@ -544,8 +571,8 @@ Code corpora (`sovereign`, `commonwealth-ai`, `corpus-engine`, …) are filtered
 
 | Subcommand | Description |
 |---|---|
-| `ask "<question>" [--conversation <id>] [--format text\|json] [--show-reasoning]` | One-shot turn. Streams the answer to stdout; writes the provenance footer (searched corpora · latency · intent · backend) and numbered source list to stderr. `--format json` dumps the full message + metadata payload. |
-| `session [--conversation <id>] [--show-reasoning]` | Interactive REPL over a single persistent conversation id. Type `quit` / `exit` / Ctrl-D to end; blank lines are ignored. Follow-up turns inherit the conversation context. |
+| `ask "<question>" [--corpus <id>]... [--conversation <id>] [--format text\|json] [--show-reasoning] [--naked]` | One-shot turn, run ON THE DAEMON. Streams the answer to stdout; writes the provenance footer (searched corpora · latency · intent · backend) and numbered source list to stderr. `--format json` dumps the full message + metadata payload. `--corpus <id>` (repeatable) restricts retrieval to those corpora — the daemon refuses an id it has not installed and lists the ones it has; not combinable with `--conversation`, whose allow-list is already set. Because the turn runs on the daemon, `--data-dir` does not scope it and `SOVEREIGN_GATE_*` knobs are read from the daemon's environment, not this shell — both are reported on stderr when they apply. |
+| `session [--corpus <id>]... [--conversation <id>] [--show-reasoning]` | Interactive REPL over a single persistent conversation id, every turn run on the daemon. `--corpus` as for `ask`. Type `quit` / `exit` / Ctrl-D to end; blank lines are ignored. Follow-up turns inherit the conversation context. |
 | `inspect "<question>" [--limit <N>] [--corpus <id>] [--snippet <N>] [--format text\|json]` | **Diagnostic.** Runs the retrieval stage *without* the LLM. Prints the query embedding dims, every installed corpus with its kind/dims/model, and top-N hits per corpus with scores + snippets. Code corpora are annotated `[omitted from chat by default]` so you can see the potential hit without it polluting actual retrieval. Use when the model is quoting sources that don't match the question. |
 | `list [--limit <N>] [--offset <N>]` | List recent conversations from the state store. |
 | `show <conversation-id> [--show-reasoning]` | Dump a conversation's turns + persisted provenance + retrieved-chunks metadata. |
