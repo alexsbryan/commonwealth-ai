@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # dev-pod.sh — rent a Vast GPU and boot a sovereign daemon carrying the
-# RuggedFox loadout (Qwen3.8-27B primary + Qwen3.5-4B-MTP fast), reachable
+# RuggedFox loadout (Qwen3.6-35B-A3B primary + Qwen3.5-4B-MTP fast), reachable
 # on localhost through an SSH tunnel. Destroy it when the burst is over.
 #
-#   ./dev-pod.sh offers                 # live 48GB-class offers, cheapest first
-#   ./dev-pod.sh up [--mesh] [offer]    # rent + boot (prints the instance id)
+#   ./dev-pod.sh plan [vram-mib]        # what the loadout needs; which card holds it
+#   ./dev-pod.sh offers                 # live eligible offers, cheapest first
+#   ./dev-pod.sh up [--mesh] [--loadout FILE] [offer]
+#                                       # rent + boot (prints the instance id)
 #   ./dev-pod.sh up --dry-run ...       # render + validate the boot script, rent nothing
 #   ./dev-pod.sh logs [instance-id]     # watch the boot (model pull + slot load)
 #   ./dev-pod.sh tunnel [instance-id]   # forward pod :9741 -> local :9841
@@ -46,7 +48,10 @@
 # omit, without which the image could not compile ggml-cuda at all) and
 # openssh-server + aria2 baked into the runtime stage. The daemon logs its
 # SOVEREIGN_GIT_SHA at startup, so check that against the commit you expect
-# before trusting a boot. Whether the 27B LOADS on CUDA is still unproven.
+# before trusting a boot. Whether the 35B-A3B LOADS on CUDA is still unproven
+# — it is an MoE with an MTP head and the image's llama.cpp was only ever
+# flown here with dense models, so treat the first boot as an instrument
+# check (watch `logs` for the slot load) before trusting a long run to it.
 set -euo pipefail
 
 IMAGE="${SOVEREIGN_VAST_IMAGE:-ghcr.io/alexsbryan/sovereign-cuda:latest}"
@@ -77,17 +82,58 @@ HOME_PORT="${HOME_PORT:-9741}"
 # ── model loadout ────────────────────────────────────────────────────────────
 # name | expected bytes | url.  Sizes are the gate: a truncated pull must fail
 # loudly, not boot a daemon on half a GGUF.
-#   27B  : HF's CURRENT revision, 25,299,061,664 — NOT byte-identical to the
-#          local /sovereign/models copy (25,924,152,384, an earlier unsloth
-#          re-quant). Named substitution: fine for dev, NOT for judge parity.
+#   35B  : 30,011,242,784 — byte-exact match for the local
+#          Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf (local name is a rename; the
+#          `out=` field below pulls HF's `-UD-Q6_K` under the LOCAL name so
+#          the daemon registers the SAME model id and a bench run on the pod
+#          stays comparable to baselines minted on the founder).
 #   4B   : 4,261,908,800 — byte-exact match for the local
 #          Qwen3.5-4B-UD-MTP-Q6_K_XL.gguf (local name is a rename).
 #   embed: 639,150,592 — byte-exact match for the local copy.
-read -r -d '' LOADOUT <<'MODELS' || true
-Qwen3.8-27B-UD-Q6_K_XL.gguf 25299061664 https://huggingface.co/unsloth/Qwen3.8-27B-GGUF/resolve/main/Qwen3.8-27B-UD-Q6_K_XL.gguf
-Qwen3.5-4B-UD-Q6_K_XL.gguf 4261908800 https://huggingface.co/unsloth/Qwen3.5-4B-MTP-GGUF/resolve/main/Qwen3.5-4B-UD-Q6_K_XL.gguf
-Qwen3-Embedding-0.6B-Q8_0.gguf 639150592 https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf
+#
+# THE PRIMARY WAS THE 27B UNTIL 2026-09-03 AND THAT WAS NOT THIS HOST'S
+# LOADOUT. RuggedFox's resident `primary` alias is the 35B-A3B (`/v1/models`);
+# the 27B was a near-neighbour whose own comment here conceded it was "fine
+# for dev, NOT for judge parity". A bench run is exactly the judge-parity
+# case: every committed baseline was minted on the 35B, so a pod carrying the
+# 27B reds HARD lanes for the MODEL and reports it as a regression in the
+# change under test (ARCH §18.4 — validate the instrument before the result).
+# All three slots are now byte-exact with the founder.
+read -r -d '' DEFAULT_LOADOUT <<'MODELS' || true
+primary Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf 30011242784 https://huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF/resolve/main/Qwen3.6-35B-A3B-UD-Q6_K.gguf
+fast Qwen3.5-4B-UD-Q6_K_XL.gguf 4261908800 https://huggingface.co/unsloth/Qwen3.5-4B-MTP-GGUF/resolve/main/Qwen3.5-4B-UD-Q6_K_XL.gguf
+embed Qwen3-Embedding-0.6B-Q8_0.gguf 639150592 https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf
 MODELS
+
+# THE LOADOUT IS CONFIGURABLE, and it is ONE declaration.
+#
+#   LOADOUT_FILE=my-loadout.txt ./dev-pod.sh up
+#   ./dev-pod.sh up --loadout my-loadout.txt
+#
+# Four whitespace-separated fields per line: `slot name bytes url`. `slot` is
+# the config.toml key the model lands under (`primary`, `fast`, `embed`), so
+# the daemon config below is GENERATED from these lines rather than repeating
+# the filenames — the two used to be typed separately, which is one loadout
+# declared twice and a rename away from a pod that pulls one model and boots
+# pointing at another (ARCH §10.6).
+#
+# The sizes are the gate and they are not optional: a truncated pull must fail
+# loudly, not boot a daemon on half a GGUF. They are also what the offer
+# search is sized from, so a wrong number here rents the wrong box.
+LOADOUT="${DEFAULT_LOADOUT}"
+load_loadout_file() {
+  [ -r "$1" ] || { echo "[dev-pod] cannot read loadout file: $1" >&2; exit 2; }
+  LOADOUT="$(grep -v '^[[:space:]]*\(#\|$\)' "$1")"
+  [ -n "$LOADOUT" ] || { echo "[dev-pod] loadout file is empty: $1" >&2; exit 2; }
+}
+[ -n "${LOADOUT_FILE:-}" ] && load_loadout_file "$LOADOUT_FILE"
+
+# Every line must carry all four fields, or the awk consumers below silently
+# build a malformed url list / config. Refuse at parse time, on the ground,
+# rather than at boot on a billing GPU.
+printf '%s\n' "$LOADOUT" | awk 'NF != 4 {
+  printf "[dev-pod] loadout line %d has %d fields, expected 4 (slot name bytes url): %s\n", NR, NF, $0 > "/dev/stderr"; bad=1
+} END { exit bad+0 }' || exit 2
 
 # $1 = join link, or "" for a solo island. Rendered BEFORE the instance exists,
 # so nothing in here may depend on the instance id.
@@ -136,21 +182,19 @@ cd /workspace/models
 # read 0 bytes, because they stat the names the config.toml refers to. The
 # gates caught it (that is them working), but it cost a rental.
 cat > /tmp/urls <<'URLS'
-$(printf '%s\n' "$LOADOUT" | awk '{print $3 "\n  out=" $1}')
+$(printf '%s\n' "$LOADOUT" | awk '{print $4 "\n  out=" $2}')
 URLS
-echo "[dev-pod] pulling loadout (~30.2 GB) from HuggingFace"
+echo "[dev-pod] pulling loadout (~${WEIGHTS_GB} GB) from HuggingFace"
 time aria2c -x 8 -s 8 -j 3 --continue=true --auto-file-renaming=false \\
      --summary-interval=15 -i /tmp/urls
 
 fail=0
-$(printf '%s\n' "$LOADOUT" | awk '{printf "have=$(stat -c %%s %s 2>/dev/null || echo 0); [ \"$have\" = \"%s\" ] || { echo \"[dev-pod] FATAL: %s is \$have bytes, expected %s\"; fail=1; }\n", $1, $2, $1, $2}')
+$(printf '%s\n' "$LOADOUT" | awk '{printf "have=$(stat -c %%s %s 2>/dev/null || echo 0); [ \"$have\" = \"%s\" ] || { echo \"[dev-pod] FATAL: %s is \$have bytes, expected %s\"; fail=1; }\n", $2, $3, $2, $3}')
 [ "\$fail" = 0 ] || { echo "[dev-pod] refusing to boot on an incomplete loadout"; exit 1; }
 
 cat > /root/.svrnmesh/config.toml <<'CFG'
 [models]
-primary = "/workspace/models/Qwen3.8-27B-UD-Q6_K_XL.gguf"
-fast    = "/workspace/models/Qwen3.5-4B-UD-Q6_K_XL.gguf"
-embed   = "/workspace/models/Qwen3-Embedding-0.6B-Q8_0.gguf"
+$(printf '%s\n' "$LOADOUT" | awk '{printf "%-7s = \"/workspace/models/%s\"\n", $1, $2}')
 context_size = $CTX
 
 # mDNS is OFF in both modes because a Vast box is a SHARED machine — leaving
@@ -175,7 +219,7 @@ export SOVEREIGN_DISABLE_PEER_INFERENCE=1
 # A background waiter, not an inline step: the daemon is exec'd as this
 # script's last act, so nothing after it would ever run. The waiter polls the
 # daemon's OWN mesh status until the HTTP listener answers (well before the
-# 27B finishes loading — join needs the listener, not the slots), then POSTs
+# 35B finishes loading — join needs the listener, not the slots), then POSTs
 # the invite to \`/v1/mesh/join\`, which is the same call \`svrn mesh join\`
 # makes. Routing through the RUNNING daemon is load-bearing: a join performed
 # in a separate CLI process updates that process's in-memory mesh and not the
@@ -247,10 +291,105 @@ EOS
 # still lists it, marked, so you can name it explicitly if you know better.
 SUPPORTED_GPUS='A100|A6000|A40|A10|RTX 3090|RTX 4090|6000Ada|5880Ada|L40|H100|H200|RTX 5090|RTX PRO 6000'
 
+# ── Sizing: the loadout decides which boxes are even eligible ────────────────
+#
+# The floor used to be a hardcoded `gpu_ram>=46` + `disk_space>=80`. Those two
+# numbers were right for ONE loadout and became silently wrong the moment
+# anybody configured a different model — the search would go on returning
+# 48 GB boxes for a loadout that needs 70, and the mismatch would surface after
+# the pull, the boot and the bill. They are now DERIVED from the loadout by the
+# same estimator the daemon's own boot preflight uses
+# (`sovereign_inference::capacity`, via `svrn daemon vram-plan`), so the box
+# that gets rented tracks whatever models are configured above.
+#
+# There is no fallback number here on purpose. If the estimator cannot be
+# reached the script REFUSES rather than quietly reverting to 46 — a rental
+# sized by a stale constant is exactly the silent substitution ARCH §18.3
+# forbids, and it is one that costs money.
+svrn_bin() {
+  # `svrn` and `sovereign` are the same binary under two names and not every
+  # host has both (AGENTS.md). Take whichever is here.
+  if [ -n "${SOVEREIGN_CLI:-}" ]; then echo "$SOVEREIGN_CLI"; return; fi
+  for c in svrn sovereign; do command -v "$c" >/dev/null && { echo "$c"; return; }; done
+  for c in target/debug/sovereign-cli ./target/debug/sovereign-cli; do
+    [ -x "$c" ] && { echo "$c"; return; }
+  done
+  return 1
+}
+
+# Populates MIN_VRAM_MIB / MIN_VRAM_GB / DISK_GB / REQUIRED_MIB / WEIGHTS_GB
+# from the LOADOUT. Memoised — several verbs want it and it costs a process.
+POD_PLAN_DONE=""
+pod_plan() {
+  [ -n "$POD_PLAN_DONE" ] && return 0
+  local bin slots line
+  bin=$(svrn_bin) || {
+    echo "[dev-pod] cannot find the sovereign CLI, so the loadout cannot be sized." >&2
+    echo "[dev-pod] build it (cargo build -p sovereign-cli-daemon) or set SOVEREIGN_CLI." >&2
+    echo "[dev-pod] refusing to rent against a guessed VRAM floor." >&2
+    return 1
+  }
+  slots=()
+  while read -r slot _name bytes _url; do
+    [ -n "$slot" ] || continue
+    slots+=(--slot "$slot:$bytes:$CTX")
+  done <<< "$LOADOUT"
+
+  line=$("$bin" daemon vram-plan "${slots[@]}" --json 2>/dev/null | tail -1) || true
+  case "$line" in
+    *'"min_total_vram_mb"'*) ;;
+    *) echo "[dev-pod] \`$bin daemon vram-plan\` produced no plan — refusing to size by guess." >&2
+       return 1 ;;
+  esac
+  eval "$(printf '%s' "$line" | python3 -c '
+import sys, json, math
+d = json.load(sys.stdin)
+print("MIN_VRAM_MIB=%d" % d["min_total_vram_mb"])
+print("MIN_VRAM_GB=%d" % d["min_total_vram_gb"])
+print("DISK_GB=%d" % d["disk_gb"])
+print("REQUIRED_MIB=%d" % d["required_mb"])
+print("WEIGHTS_GB=%.1f" % (d["weights_bytes"] / 1e9))
+')"
+  POD_PLAN_DONE=1
+}
+
+# NOTE ON UNITS, because they differ between the two halves of the same API:
+# the SEARCH QUERY takes `gpu_ram` in GB (`gpu_ram>=46`), while the returned
+# ROW carries `gpu_ram` in MiB (49140 for a 48 GB card). Verified 2026-09-03:
+# `gpu_ram>=46000` returns zero rows. The query below is therefore in GB and
+# the exact eligibility test in `offer_eligible` is in MiB.
 offer_rows() {
+  pod_plan || exit 1
   vastai search offers \
-    'gpu_ram>=46 num_gpus=1 rentable=true disk_space>=80 inet_down>=1500 dph<1.30 reliability>0.97' \
+    "gpu_ram>=$MIN_VRAM_GB num_gpus=1 rentable=true disk_space>=$DISK_GB inet_down>=1500 dph<1.30 reliability>0.97" \
     -o dph --raw
+}
+
+# The one eligibility predicate, shared by `offers` and `up`. It used to be
+# spelled twice — the same regex inlined in two Python blocks — so a rule added
+# to one silently did not apply to the other, and `offers` could show a box as
+# fine that auto-pick would refuse (or worse, the reverse).
+#
+# Reads rows on stdin, writes the eligible ones back as JSON, each with an
+# added `_skip` field naming why it was refused (empty when eligible).
+offer_eligible() {
+  pod_plan || exit 1
+  SUPPORTED_GPUS="$SUPPORTED_GPUS" MIN_VRAM_MIB="$MIN_VRAM_MIB" python3 -c "
+import sys, json, os, re
+rows = json.load(sys.stdin)
+gpus = re.compile(os.environ['SUPPORTED_GPUS'])
+need = int(os.environ['MIN_VRAM_MIB'])
+out = []
+for r in rows:
+    why = ''
+    if not gpus.search(r.get('gpu_name') or ''):
+        why = 'arch'
+    elif (r.get('gpu_ram') or 0) < need:
+        why = 'vram'
+    r['_skip'] = why
+    out.append(r)
+json.dump(out, sys.stdout)
+"
 }
 
 # ── Resolving WHICH pod, without making you carry a number ───────────────────
@@ -376,19 +515,35 @@ for m in d.get("members") or []:
 }
 
 case "${1:-}" in
+plan)
+  # What does the configured loadout need, and would a given card hold it?
+  # Read-only and free — the answer that decides which box `up` may rent.
+  pod_plan || exit 1
+  bin=$(svrn_bin) || exit 1
+  slots=()
+  while read -r slot _name bytes _url; do
+    [ -n "$slot" ] || continue
+    slots+=(--slot "$slot:$bytes:$CTX")
+  done <<< "$LOADOUT"
+  printf '%s\n' "$LOADOUT" | awk '{printf "  %-8s %s\n", $1, $2}'
+  echo
+  "$bin" daemon vram-plan "${slots[@]}" ${2:+--vram-mb "$2"}
+  ;;
 offers)
-  offer_rows | SUPPORTED_GPUS="$SUPPORTED_GPUS" python3 -c '
-import sys, json, os, re
+  pod_plan || exit 1
+  echo "[dev-pod] loadout needs ${REQUIRED_MIB} MiB working set -> ${MIN_VRAM_GB} GB card, ${DISK_GB} GB disk" >&2
+  offer_rows | offer_eligible | python3 -c '
+import sys, json
 rows = json.load(sys.stdin)
-print("%10s %-24s %6s %8s %8s %6s  %-3s %s" % ("offer","gpu","vram","$/hr","down","rel","","geo"))
+print("%10s %-24s %6s %8s %8s %6s  %-4s %s" % ("offer","gpu","vram","$/hr","down","rel","","geo"))
 for r in rows[:15]:
-    ok = bool(re.search(os.environ["SUPPORTED_GPUS"], r["gpu_name"]))
-    print("%10s %-24s %5.0fG %8.3f %7.0fM %6.3f  %-3s %s" % (
+    print("%10s %-24s %5.0fG %8.3f %7.0fM %6.3f  %-4s %s" % (
         r["id"], r["gpu_name"][:24], r["gpu_ram"]/1024, r["dph_total"],
         r.get("inet_down") or 0, r.get("reliability2") or 0,
-        "" if ok else "SKIP",
+        r["_skip"].upper(),
         (r.get("geolocation") or "?")[:24]))
-print("\nSKIP = outside the compiled CUDA archs; auto-pick refuses these.", file=sys.stderr)'
+print("\nARCH = outside the compiled CUDA archs. VRAM = too small for this loadout.", file=sys.stderr)
+print("Both are refused by auto-pick.", file=sys.stderr)'
   ;;
 up)
   # An offer id is OPTIONAL and usually the wrong thing to type: offers churn
@@ -401,14 +556,23 @@ up)
   # neither should be a syntax lesson.
   mode=solo; label="$LABEL_SOLO"; join_link=""; dry=""
   offer=""
-  for a in "${@:2}"; do
-    case "$a" in
-      --mesh)    mode=mesh; label="$LABEL_MESH" ;;
-      --dry-run) dry=1 ;;
-      -*)        echo "[dev-pod] unknown flag $a (--mesh, --dry-run)" >&2; exit 2 ;;
-      *)         offer="$a" ;;
+  shift || true
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --mesh)      mode=mesh; label="$LABEL_MESH" ;;
+      --dry-run)   dry=1 ;;
+      --loadout)   [ -n "${2:-}" ] || { echo "[dev-pod] --loadout needs a file" >&2; exit 2; }
+                   load_loadout_file "$2"; shift ;;
+      --loadout=*) load_loadout_file "${1#--loadout=}" ;;
+      -*)          echo "[dev-pod] unknown flag $1 (--mesh, --dry-run, --loadout FILE)" >&2; exit 2 ;;
+      *)           offer="$1" ;;
     esac
+    shift
   done
+  # Size the loadout BEFORE anything is rented, and refuse if it cannot be
+  # sized. Also runs on the explicit-offer path, where the auto-pick search
+  # never happens but the boot script still needs the pull size.
+  pod_plan || exit 1
   # RESOLVE THE INVITE BEFORE SPENDING A CENT. Every way this can fail — no
   # daemon, wrong mesh, still solo, a link with no iroh dial string — is a
   # refusal that happens while nothing is billing. Renting first and
@@ -418,12 +582,15 @@ up)
     echo "[dev-pod] mesh mode: pod will join \"$HOME_MESH\" using the founder's invite" >&2
   fi
   if [ -z "$offer" ]; then
-    offer=$(offer_rows | SUPPORTED_GPUS="$SUPPORTED_GPUS" python3 -c '
-import sys, json, re, os
+    offer=$(offer_rows | offer_eligible | python3 -c '
+import sys, json
 rows = json.load(sys.stdin)
-ok = [r for r in rows if re.search(os.environ["SUPPORTED_GPUS"], r["gpu_name"])]
+ok = [r for r in rows if not r["_skip"]]
 if not ok:
-    print("no eligible offer: nothing matching the compiled CUDA archs is rentable right now", file=sys.stderr)
+    n_arch = sum(1 for r in rows if r["_skip"] == "arch")
+    n_vram = sum(1 for r in rows if r["_skip"] == "vram")
+    print("no eligible offer: %d rentable now, %d refused on CUDA arch, %d too "
+          "small for this loadout" % (len(rows), n_arch, n_vram), file=sys.stderr)
     raise SystemExit(1)
 best = min(ok, key=lambda r: r["dph_total"])
 print("%s %s %.3f %s" % (best["id"], best["gpu_name"].replace(" ","_"), best["dph_total"], best.get("geolocation","?").replace(" ","_")), file=sys.stderr)

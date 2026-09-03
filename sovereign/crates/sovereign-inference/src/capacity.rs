@@ -93,7 +93,30 @@ impl VramEstimate {
 /// context, scaled linearly by actual `n_ctx`. For a 21 GB primary
 /// at 32K, 1 seq that's 2.6 GB — matches observation.
 pub fn estimate_slot_vram(plan: &SlotPlan) -> std::io::Result<VramEstimate> {
-    let weights_mb = std::fs::metadata(&plan.path)?.len() / (1024 * 1024);
+    let weights_bytes = std::fs::metadata(&plan.path)?.len();
+    Ok(estimate_slot_vram_from_bytes(
+        weights_bytes,
+        plan.n_ctx,
+        plan.n_seq_max,
+    ))
+}
+
+/// The estimate for a slot whose weights size is already KNOWN, without
+/// touching the filesystem.
+///
+/// This is where the formula lives; [`estimate_slot_vram`] is a `stat` in
+/// front of it. The split exists so a machine that does not exist yet can be
+/// sized — renting a GPU (`scripts/dev-pod.sh`) has to pick a card BEFORE any
+/// GGUF is on it, and the loadout there declares exact byte counts. Without
+/// this entry point the caller's only option is to re-derive `weights/8`, the
+/// context scale and the scratch tiers in another language, which is two
+/// implementations of one threshold (ARCH §10.6).
+pub fn estimate_slot_vram_from_bytes(
+    weights_bytes: u64,
+    n_ctx: u32,
+    n_seq_max: u32,
+) -> VramEstimate {
+    let weights_mb = weights_bytes / (1024 * 1024);
 
     // KV cache proxy: `weights_mb / 8` at 32K context per sequence.
     // The /8 figure is a back-fit from the L40S measurement —
@@ -109,9 +132,9 @@ pub fn estimate_slot_vram(plan: &SlotPlan) -> std::io::Result<VramEstimate> {
     // binding treats a second init as an error, so an FFI projection here
     // would poison the engine's own startup. A warn-only boot estimate is
     // an acceptable place for a ±5× proxy; a load refusal is not.
-    let ctx_factor = plan.n_ctx as f32 / 32_768.0;
+    let ctx_factor = n_ctx as f32 / 32_768.0;
     let kv_per_seq_mb = ((weights_mb as f32 / 8.0) * ctx_factor).max(64.0) as u64;
-    let kv_cache_mb = kv_per_seq_mb * plan.n_seq_max.max(1) as u64;
+    let kv_cache_mb = kv_per_seq_mb * n_seq_max.max(1) as u64;
 
     // Scratch: compute buffers + grammar mask + activation peak.
     // Scales with model size since intermediate activations are
@@ -128,11 +151,11 @@ pub fn estimate_slot_vram(plan: &SlotPlan) -> std::io::Result<VramEstimate> {
         1_000
     };
 
-    Ok(VramEstimate {
+    VramEstimate {
         weights_mb,
         kv_cache_mb,
         scratch_mb,
-    })
+    }
 }
 
 /// Aggregated capacity report — one row per slot plus a verdict.
@@ -157,6 +180,30 @@ pub struct CapacityReport {
 }
 
 impl CapacityReport {
+    /// The per-slot breakdown, header row included, in MiB.
+    ///
+    /// Every renderer of this report shares it — the daemon's refusal
+    /// message and `svrn daemon vram-plan` alike. It is one table because a
+    /// second copy of the column widths in the CLI drifted from this one the
+    /// moment either was touched.
+    pub fn slot_table(&self) -> String {
+        let mut s = format!(
+            "  {:<22} {:>8} {:>8} {:>8} {:>8}\n",
+            "slot", "weights", "kv", "scratch", "total",
+        );
+        for (role, est) in &self.per_slot {
+            s.push_str(&format!(
+                "  {:<22} {:>8} {:>8} {:>8} {:>8}\n",
+                role,
+                est.weights_mb,
+                est.kv_cache_mb,
+                est.scratch_mb,
+                est.total_mb(),
+            ));
+        }
+        s
+    }
+
     /// Operator-facing message describing why a config was refused,
     /// listing each slot's contribution and suggesting concrete
     /// actions. Empty when the config fits.
@@ -176,20 +223,7 @@ impl CapacityReport {
             self.total_required_mb.saturating_sub(self.available_mb),
         ));
         s.push_str("Per-slot estimates (MiB):\n");
-        s.push_str(&format!(
-            "  {:<22} {:>8} {:>8} {:>8} {:>8}\n",
-            "slot", "weights", "kv", "scratch", "total",
-        ));
-        for (role, est) in &self.per_slot {
-            s.push_str(&format!(
-                "  {:<22} {:>8} {:>8} {:>8} {:>8}\n",
-                role,
-                est.weights_mb,
-                est.kv_cache_mb,
-                est.scratch_mb,
-                est.total_mb(),
-            ));
-        }
+        s.push_str(&self.slot_table());
         s.push_str("\nSuggested actions:\n");
         s.push_str("  - Reduce [models.primary_pool].copies if set\n");
         s.push_str("  - Switch primary to a smaller quant (Q4_K_M < Q4_K_L < Q5_K_M < Q6_K)\n");
@@ -244,16 +278,91 @@ impl CapacityReport {
 /// prints a warning and starts anyway — and only hard-refuses under
 /// `SOVEREIGN_STRICT_VRAM_CHECK=1` (or a genuinely unreadable model
 /// file). See `daemon_cmd::build::preflight::check_vram`.
+/// The safety reservation subtracted from a card's raw VRAM before any
+/// fit verdict. Covers CUDA context (~300-500 MB), cuBLAS workspace
+/// (~200 MB), GGML scratch we can't size from the outside, plus estimator
+/// error. 8% of VRAM, floored at 768 MB so an 8 GB card still reserves
+/// enough — a 1 GB floor would leave the friend's RTX 3060 at 7 GB
+/// available, barely fitting a 5 GB fast slot + embed.
+///
+/// ONE decider: `check_fit`, `check_fit_sized` and `min_total_vram_mb` all
+/// route through this rather than each spelling `/12` and `768` again.
+pub fn safety_reserved_mb(available_total_mb: u64) -> u64 {
+    (available_total_mb / 12).max(768)
+}
+
+/// The smallest card, in MiB of raw VRAM, on which `total_required_mb`
+/// still fits once [`safety_reserved_mb`] is held back — the INVERSE of the
+/// fit verdict.
+///
+/// This is the question a rental asks: not "does it fit on the card I have"
+/// but "which card do I need". `scripts/dev-pod.sh` turns the answer into
+/// the `gpu_ram>=` floor of its offer search, so the box that gets rented is
+/// derived from the loadout instead of a hardcoded 46 GB that silently stops
+/// being true the moment someone configures a different model.
+pub fn min_total_vram_mb(total_required_mb: u64) -> u64 {
+    // Two branches, because the reserve is a max() of a proportional term
+    // and a floor. Try the floor branch first; if the resulting card is big
+    // enough that 1/12 of it exceeds the floor, solve the proportional one
+    // instead. The loop is a handful of iterations of integer correction,
+    // not a search — it exists so this can never disagree with
+    // `safety_reserved_mb`, whatever that rule becomes later.
+    let with_floor = total_required_mb.saturating_add(768);
+    if safety_reserved_mb(with_floor) == 768 {
+        return with_floor;
+    }
+    let mut total = total_required_mb.saturating_mul(12) / 11;
+    while total.saturating_sub(safety_reserved_mb(total)) < total_required_mb {
+        total += 1;
+    }
+    total
+}
+
+/// A slot whose weights size is already KNOWN — the planning counterpart of
+/// [`SlotPlan`], for sizing hardware that does not exist yet.
+#[derive(Debug, Clone)]
+pub struct SizedSlot {
+    pub role: String,
+    pub weights_bytes: u64,
+    pub n_seq_max: u32,
+    pub n_ctx: u32,
+}
+
+/// [`check_fit`] against a HYPOTHETICAL card of `available_total_mb` raw
+/// VRAM, for slots whose sizes are declared rather than on this disk.
+pub fn check_fit_sized(slots: &[SizedSlot], available_total_mb: u64) -> CapacityReport {
+    let per_slot: Vec<(String, VramEstimate)> = slots
+        .iter()
+        .map(|s| {
+            (
+                s.role.clone(),
+                estimate_slot_vram_from_bytes(s.weights_bytes, s.n_ctx, s.n_seq_max),
+            )
+        })
+        .collect();
+    let total_required_mb = per_slot.iter().map(|(_, e)| e.total_mb()).sum();
+    finish_report(per_slot, total_required_mb, available_total_mb)
+}
+
+/// Apply the margin and the verdict. The one place either is decided.
+fn finish_report(
+    per_slot: Vec<(String, VramEstimate)>,
+    total_required_mb: u64,
+    available_total_mb: u64,
+) -> CapacityReport {
+    let safety_reserved_mb = safety_reserved_mb(available_total_mb);
+    let available_mb = available_total_mb.saturating_sub(safety_reserved_mb);
+    CapacityReport {
+        per_slot,
+        total_required_mb,
+        available_mb,
+        safety_reserved_mb,
+        fits: total_required_mb <= available_mb,
+    }
+}
+
 pub fn check_fit(slots: &[SlotPlan], hw: &HardwareProfile) -> CapacityReport {
     let available_total_mb = (hw.effective_vram_gb() as u64) * 1024;
-    // Safety reserve covers CUDA context (~300-500 MB), cuBLAS
-    // workspace (~200 MB), GGML scratch we can't size from the
-    // outside, plus estimator error. 8% of detected VRAM, floored
-    // at 768 MB so an 8 GB card still reserves enough — a 1 GB
-    // floor would leave the friend's RTX 3060 at 7 GB available,
-    // barely fitting a 5 GB fast slot + embed.
-    let safety_reserved_mb = (available_total_mb / 12).max(768);
-    let available_mb = available_total_mb.saturating_sub(safety_reserved_mb);
 
     let mut per_slot = Vec::with_capacity(slots.len());
     let mut total_required_mb: u64 = 0;
@@ -280,14 +389,7 @@ pub fn check_fit(slots: &[SlotPlan], hw: &HardwareProfile) -> CapacityReport {
         per_slot.push((plan.role.clone(), est));
     }
 
-    let fits = total_required_mb <= available_mb;
-    CapacityReport {
-        per_slot,
-        total_required_mb,
-        available_mb,
-        safety_reserved_mb,
-        fits,
-    }
+    finish_report(per_slot, total_required_mb, available_total_mb)
 }
 
 /// Build the `Vec<SlotPlan>` the daemon would actually load from a
@@ -555,5 +657,91 @@ mod tests {
         assert!(!check_skipped_by_env());
 
         std::env::remove_var("SOVEREIGN_SKIP_VRAM_CHECK");
+    }
+
+    #[test]
+    fn min_total_vram_is_the_exact_inverse_of_the_fit_verdict() {
+        // The property that makes `min_total_vram_mb` safe to spend money on:
+        // the card it names FITS, and one MiB less does NOT. Checked across
+        // both branches of the reserve rule (the 768 MB floor for small
+        // loadouts, the 1/12 proportional term for large ones) — a rounding
+        // error in the branch selection would rent a box that OOMs on first
+        // request, which is the 2026-05-11 thrash incident with a bill.
+        for required_mb in [500u64, 1_000, 5_000, 8_448, 8_449, 20_000, 35_000, 70_000] {
+            let need = min_total_vram_mb(required_mb);
+            // Drive the verdict arithmetic directly rather than through the
+            // estimator, so this tests the inverse and not the KV proxy.
+            let at = finish_report(vec![], required_mb, need);
+            let below = finish_report(vec![], required_mb, need - 1);
+            assert!(at.fits, "{required_mb} MiB should fit a {need} MiB card");
+            assert!(
+                !below.fits,
+                "{required_mb} MiB must NOT fit {} MiB — {need} is not minimal",
+                need - 1
+            );
+        }
+    }
+
+    #[test]
+    fn the_sized_path_and_the_file_path_agree() {
+        // `estimate_slot_vram_from_bytes` is the formula and
+        // `estimate_slot_vram` is a stat in front of it. If these ever
+        // diverge, the pod is sized by one rule and the daemon boots under
+        // another — the two-implementations smell this split was made to
+        // avoid (ARCH §10.6).
+        let f = fake_gguf(21_000);
+        let via_file = estimate_slot_vram(&SlotPlan {
+            role: "primary".into(),
+            path: f.path().into(),
+            n_seq_max: 1,
+            n_ctx: 32_768,
+        })
+        .unwrap();
+        let via_bytes = estimate_slot_vram_from_bytes(21_000 * 1024 * 1024, 32_768, 1);
+        assert_eq!(via_file.weights_mb, via_bytes.weights_mb);
+        assert_eq!(via_file.kv_cache_mb, via_bytes.kv_cache_mb);
+        assert_eq!(via_file.scratch_mb, via_bytes.scratch_mb);
+    }
+
+    #[test]
+    fn the_founder_loadout_needs_a_48g_card_and_not_a_24g_one() {
+        // The loadout `scripts/dev-pod.sh` rents for: the 35B-A3B primary,
+        // the 4B fast slot and the 0.6B embed, all byte-exact with RuggedFox.
+        // Named here because the pod's offer floor is derived from exactly
+        // this sum — if the estimate ever drifts under a 24 GB card the
+        // script would start renting boxes that cannot hold the bench.
+        let slots = vec![
+            SizedSlot {
+                role: "primary".into(),
+                weights_bytes: 30_011_242_784,
+                n_seq_max: 1,
+                n_ctx: 32_768,
+            },
+            SizedSlot {
+                role: "fast".into(),
+                weights_bytes: 4_261_908_800,
+                n_seq_max: 1,
+                n_ctx: 32_768,
+            },
+            SizedSlot {
+                role: "embed".into(),
+                weights_bytes: 639_150_592,
+                n_seq_max: 1,
+                n_ctx: 32_768,
+            },
+        ];
+        let need_mb = check_fit_sized(&slots, 0).total_required_mb;
+        let min_mb = min_total_vram_mb(need_mb);
+        assert!(
+            min_mb > 24 * 1024,
+            "loadout claimed to fit a 24 GB card ({min_mb} MiB) — estimate drifted"
+        );
+        assert!(
+            min_mb <= 48 * 1024,
+            "loadout no longer fits the 48 GB class ({min_mb} MiB) — dev-pod's \
+             offer search would find nothing"
+        );
+        assert!(check_fit_sized(&slots, 48 * 1024).fits);
+        assert!(!check_fit_sized(&slots, 24 * 1024).fits);
     }
 }

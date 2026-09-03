@@ -25,7 +25,8 @@ This one runs a whole *daemon* and federates *retrieval*.
 No instance id anywhere: every verb resolves the one pod by its Vast label. Add
 `&& ./scripts/dev-pod.sh check` after the tunnel if you want the gate to say so
 rather than trusting it. First boot is ~5–6 minutes, nearly all of it pulling
-the CUDA image and 30.2 GB of models.
+the CUDA image and ~35 GB of models. `./scripts/dev-pod.sh plan` prints the
+sizing first, costs nothing, and rents nothing.
 
 **Billing stops on `down` and on nothing else.** `./scripts/dev-pod.sh status`
 answers "is anything costing me money right now, and how much so far".
@@ -49,7 +50,57 @@ for CUDA archs 80;86;89;90 (`sovereign/container/Containerfile.cuda`). Auto-pick
 takes the cheapest offer that passes it and **refuses an unrecognised GPU**
 rather than assuming it works — a Turing card is often the cheapest offer that
 fits the loadout, and you would pay for a could-not-judge. `offers` still lists
-them, marked `SKIP`, so you can name one explicitly if you know better.
+every row, marked `ARCH` (wrong CUDA arch) or `VRAM` (too small for the
+configured loadout), so you can name one explicitly if you know better.
+
+## The loadout, and the box it picks
+
+The three slots are declared once, at the top of `scripts/dev-pod.sh`, as
+`slot name bytes url`. The daemon's `config.toml` is GENERATED from those
+lines, so a model cannot be pulled under one name and booted under another.
+
+Point it at different models without editing the script:
+
+```bash
+./scripts/dev-pod.sh up --loadout my-loadout.txt     # or LOADOUT_FILE=...
+```
+
+**The VRAM and disk floors of the offer search are derived from whatever
+loadout is in force**, by the same estimator the daemon runs at its own boot
+(`sovereign_inference::capacity`, reachable as `svrn daemon vram-plan`). So a
+bigger primary searches for a bigger card on its own:
+
+```
+$ ./scripts/dev-pod.sh plan
+  primary  Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf
+  fast     Qwen3.5-4B-UD-Q6_K_XL.gguf
+  embed    Qwen3-Embedding-0.6B-Q8_0.gguf
+
+  slot                    weights       kv  scratch    total
+  primary                   28620     3577     1000    33197
+  fast                       4064      508      500     5072
+  embed                       609       76      200      885
+  required                  39154
+  smallest card             42713 MiB (42 GB card)
+  disk for the pull            55 GB
+```
+
+Those floors were hardcoded (`gpu_ram>=46`, `disk_space>=80`) until
+2026-09-03. Two things were wrong with that. A larger loadout kept searching
+for 48 GB boxes it could not fit, and the mismatch only surfaced after the
+pull, the boot and the bill; and 46 was over-tight for the loadout it was
+written for, hiding cheaper 45 GB cards that fit fine. If the estimator cannot
+be reached the script REFUSES rather than falling back to a constant — a
+rental sized by a stale number is the silent substitution ARCH §18.3 forbids,
+and this one costs money.
+
+**The default loadout is byte-exact with RuggedFox on all three slots**, which
+is what makes a bench run on a pod comparable to baselines minted on the
+founder. It carried the 27B as primary until 2026-09-03, which was NOT this
+host's primary (the 35B-A3B is) — the script's own comment conceded that was
+"fine for dev, NOT for judge parity". Substituting a near-neighbour model reds
+HARD bench lanes for the model and reports it as a regression in whatever
+change is under test.
 
 ## The two modes
 

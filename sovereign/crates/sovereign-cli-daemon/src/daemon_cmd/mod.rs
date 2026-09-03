@@ -37,6 +37,7 @@ use sovereign_inference::embedded::EmbeddedLlamaCpp;
 // the separable lifecycle / workspace / provider / worker / tool-registry
 // concerns moved to submodules. `home_dir_buf` + `warn_orphaned_indexes`
 // stay here (the former is shared with submodules as an ancestor-private).
+mod vram_plan;
 mod atlas_builder;
 pub(crate) mod bootstrap;
 pub(crate) mod build;
@@ -97,6 +98,11 @@ pub async fn run(launch: &Launch, args: &[String]) -> i32 {
         Some("restart") => restart_daemon(&args[1..]).await,
         Some("reload") => reload_daemon().await,
         Some("status") => status_daemon().await,
+        // Sizing, not lifecycle: what VRAM would a loadout need, and which
+        // card holds it. Lives under `daemon` because it answers the same
+        // question the daemon's own boot preflight asks (`build/preflight`),
+        // just ahead of the hardware existing.
+        Some("vram-plan") => vram_plan::run(&args[1..]),
         Some(flag) if flag.starts_with("--") => {
             // Bare flags like `svrn daemon --setup-only` route
             // straight to run_daemon — the user means "start the
