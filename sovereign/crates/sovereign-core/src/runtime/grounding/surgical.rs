@@ -1082,66 +1082,76 @@ mod tests {
         );
     }
 
-    /// **The wrong-span hazard: a recurring subject must not pull an edit onto
-    /// the wrong sentence.**
+    /// **The wrong-span hazard: when content overlap TIES, the distinctive
+    /// token has to break it.**
     ///
-    /// This is the module's worst failure, and it is silent in both directions
-    /// at once — surgery deletes or rewrites a sentence that VERIFIED, and
-    /// leaves the fabrication standing. The re-audit does not save it: the
-    /// incremental pass judges the repaired spans, and the span it is handed
-    /// is a correction of prose that was never in doubt.
+    /// Editing the wrong sentence is this module's worst failure and it is
+    /// silent in both directions at once — surgery rewrites prose that
+    /// VERIFIED and leaves the fabrication standing. The re-audit cannot see
+    /// it either: the incremental pass judges the repaired span it was handed,
+    /// which is a correction of something nobody doubted.
     ///
-    /// `best_match` guards it with a content-word floor plus a distinctive-token
-    /// (proper-noun / number) bonus, and the bonus exists precisely for this
-    /// input: a longform answer names one subject in several sentences, so
-    /// content-word overlap alone ties, and the tie has to break on the
-    /// specifics — the year, the figure, the second name — that identify WHICH
-    /// sentence made the claim.
+    /// `best_match` ranks on content-word coverage plus a distinctive-token
+    /// (proper-noun / number) bonus. The bonus only ever does work on a TIE —
+    /// `distinctive` is a subset of `content_words` (both need 4+ alphanumeric
+    /// chars), so any token that moves the bonus has already moved coverage.
     ///
-    /// Both directions are asserted: picking the right sentence when a
-    /// distinctive token names it, and refusing outright when nothing clears
-    /// the content floor — a claim it cannot place must abandon surgery, never
-    /// settle for the least-bad sentence.
+    /// The first version of this test learned that the hard way: it used three
+    /// sentences whose subjects differed by ordinary content words, so coverage
+    /// alone picked the right one and `let score = cover;` left it GREEN. This
+    /// fixture is built so both candidates cover exactly the same share of the
+    /// claim, and the tie is asserted rather than assumed — a later edit that
+    /// un-ties it turns this back into a test that passes for the wrong reason.
     #[test]
-    fn a_recurring_subject_does_not_pull_the_edit_onto_the_wrong_sentence() {
-        // Three sentences about ONE person: content words overlap heavily and
-        // only the specifics tell them apart.
-        let sentences = split_sentences(
-            "Smerdyakov served the Karamazov household as its cook for many years. \
-             Smerdyakov suffered from epilepsy and fell ill on the night of the murder. \
-             Smerdyakov inherited three thousand roubles and hid them beneath the floor.",
+    fn a_tie_on_content_overlap_is_broken_by_the_distinctive_token() {
+        // Both sentences cover three of the claim's five content words. Only
+        // the second shares its proper noun; the first offers a DIFFERENT one,
+        // so the bonus has something to be wrong about.
+        const CLAIM: &str = "Grushenka received the letter from Smerdyakov.";
+        const WRONG: &str = "Rakitin received the letter from the porter.";
+        const RIGHT: &str = "Smerdyakov received the letter and said nothing.";
+
+        // The precondition that makes this test mean anything.
+        let cw = content_words(CLAIM);
+        let cover = |s: &str| cw.intersection(&content_words(s)).count() as f64 / cw.len() as f64;
+        assert_eq!(
+            cover(WRONG),
+            cover(RIGHT),
+            "the fixture must TIE on content-word coverage ({} vs {}), or \
+             `cover` alone decides and the distinctive-token bonus is never \
+             exercised — which is exactly how the first version of this test \
+             sat green through `let score = cover;`",
+            cover(WRONG),
+            cover(RIGHT)
         );
-        assert_eq!(sentences.len(), 3, "fixture must split into three");
+        // And the tie has to be breakable: the claim's distinctive tokens must
+        // reach one candidate and not the other.
+        let dc = distinctive(CLAIM);
+        assert!(
+            distinctive(RIGHT).intersection(&dc).count() > 0
+                && distinctive(WRONG).intersection(&dc).count() == 0,
+            "only the right sentence may share a distinctive token with the claim"
+        );
 
-        for (claim, must_contain) in [
-            (
-                "Smerdyakov inherited three thousand roubles from the household",
-                "roubles",
-            ),
-            (
-                "Smerdyakov suffered from epilepsy on the night of the murder",
-                "epilepsy",
-            ),
-            ("Smerdyakov served the household as its cook", "cook"),
-        ] {
-            let (idx, _score) = best_match(claim, &sentences).unwrap_or_else(|| {
-                panic!("{claim:?} shares plenty of content words — it must map")
-            });
-            assert!(
-                sentences[idx].contains(must_contain),
-                "{claim:?} landed on {:?}. Every sentence names the same subject, \
-                 so content overlap alone ties; the distinctive-token bonus is \
-                 what has to break it. Editing the wrong span deletes prose that \
-                 VERIFIED and leaves the fabrication standing, and the \
-                 incremental re-audit cannot notice — it judges the repair it \
-                 was handed",
-                sentences[idx]
-            );
-        }
+        // WRONG is listed FIRST on purpose: `best_match` keeps the incumbent on
+        // an exact tie (`score > b`), so without the bonus the wrong sentence
+        // wins by arrival order alone.
+        let sentences = split_sentences(&format!("{WRONG} {RIGHT}"));
+        assert_eq!(sentences.len(), 2, "fixture must split into two sentences");
+        let (idx, _score) = best_match(CLAIM, &sentences).expect("the claim maps");
+        assert!(
+            sentences[idx].contains("Smerdyakov"),
+            "the edit landed on {:?}. Coverage ties here, so the proper noun is \
+             the only thing that says WHICH sentence made the claim. Editing the \
+             wrong span rewrites prose that verified and leaves the fabrication \
+             standing, and the incremental re-audit cannot notice — it judges the \
+             repair it was handed",
+            sentences[idx]
+        );
 
-        // The other direction: below the content floor, refuse. A claim placed
-        // by elimination is a wrong edit waiting for its turn, so the honest
-        // answer is the full rewrite.
+        // The other direction: below the content floor, refuse outright. A
+        // claim placed by elimination is a wrong edit waiting for its turn, so
+        // the honest answer is the full rewrite.
         assert!(
             best_match(
                 "quantum chromodynamics governs the confinement of gluons",
