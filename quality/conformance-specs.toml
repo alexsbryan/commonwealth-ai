@@ -840,18 +840,20 @@ existing = '''sovereign/crates/sovereign-desktop/src-tauri/src/health.rs:598::a_
 [[spec]]
 id = "UI-31"
 family = "UI"
-status = "exists-untagged"
+status = "landed"
 clause = '''Each report MUST carry a short speakable **reference code** derived from the message identity by a **pinned** function — a wire format, not an implementation detail (X-CO-2).'''
 target = '''sovereign/crates/sovereign-desktop/src-tauri/src/turn_report.rs:153::reference_code'''
 existing = '''sovereign/crates/sovereign-desktop/src-tauri/src/turn_report.rs:400::reference_code_is_stable_and_speakable'''
+landed = '''sovereign-desktop::bin/sovereign-desktop::turn_report::tests::reference_code_is_stable_and_speakable (+ ::reference_code_is_deterministic_and_distinguishes_turns + ::a_thin_snapshot_still_renders_without_guessing)'''
 
 [[spec]]
 id = "UI-32"
 family = "UI"
-status = "exists-untagged"
+status = "landed"
 clause = '''Source text in a report MUST be opt-in per report, defaulted off, with the gate enforced by the renderer rather than trusted to the caller.'''
 target = '''sovereign/crates/sovereign-desktop/src-tauri/src/turn_report.rs:191::render_turn_section'''
 existing = '''sovereign/crates/sovereign-desktop/src-tauri/src/turn_report.rs:423::source_text_is_withheld_unless_the_reporter_opted_in'''
+landed = '''sovereign-desktop::bin/sovereign-desktop::turn_report::tests::source_text_is_withheld_unless_the_reporter_opted_in (+ ::source_text_appears_when_the_reporter_opted_in + ::snapshot_deserializes_from_a_minimal_frontend_payload)'''
 
 [[spec]]
 id = "UI-33"

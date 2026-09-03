@@ -16,3 +16,45 @@ test = "sovereign-desktop::crash_report::tests::a_shared_crash_report_carries_th
 file = "sovereign/crates/sovereign-desktop/src-tauri/src/crash_report.rs"
 line = 323
 asserts = 9
+
+[[claim]]
+requirement = "UI-31"
+test = "sovereign-desktop::turn_report::tests::a_thin_snapshot_still_renders_without_guessing"
+file = "sovereign/crates/sovereign-desktop/src-tauri/src/turn_report.rs"
+line = 477
+asserts = 4
+
+[[claim]]
+requirement = "UI-31"
+test = "sovereign-desktop::turn_report::tests::reference_code_is_deterministic_and_distinguishes_turns"
+file = "sovereign/crates/sovereign-desktop/src-tauri/src/turn_report.rs"
+line = 427
+asserts = 2
+
+[[claim]]
+requirement = "UI-31"
+test = "sovereign-desktop::turn_report::tests::reference_code_is_stable_and_speakable"
+file = "sovereign/crates/sovereign-desktop/src-tauri/src/turn_report.rs"
+line = 406
+asserts = 4
+
+[[claim]]
+requirement = "UI-32"
+test = "sovereign-desktop::turn_report::tests::snapshot_deserializes_from_a_minimal_frontend_payload"
+file = "sovereign/crates/sovereign-desktop/src-tauri/src/turn_report.rs"
+line = 548
+asserts = 3
+
+[[claim]]
+requirement = "UI-32"
+test = "sovereign-desktop::turn_report::tests::source_text_appears_when_the_reporter_opted_in"
+file = "sovereign/crates/sovereign-desktop/src-tauri/src/turn_report.rs"
+line = 463
+asserts = 2
+
+[[claim]]
+requirement = "UI-32"
+test = "sovereign-desktop::turn_report::tests::source_text_is_withheld_unless_the_reporter_opted_in"
+file = "sovereign/crates/sovereign-desktop/src-tauri/src/turn_report.rs"
+line = 439
+asserts = 4

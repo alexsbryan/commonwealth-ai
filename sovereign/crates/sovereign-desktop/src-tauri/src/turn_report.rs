@@ -396,6 +396,12 @@ mod tests {
         }
     }
 
+    /// covers: UI-31
+    ///
+    /// Two halves of the clause at once: SPEAKABLE (the alphabet excludes the
+    /// glyphs that can be misheard) and PINNED (the value itself is asserted, so
+    /// a change to the derivation breaks the build rather than the user's
+    /// screenshot).
     #[test]
     fn reference_code_is_stable_and_speakable() {
         let a = reference_code("3f7c1e2a-0000-4000-8000-000000000001");
@@ -412,6 +418,11 @@ mod tests {
         }
     }
 
+    /// covers: UI-31
+    ///
+    /// "Derived from the message identity": the same id gives the same code, and
+    /// two ids do not collide. A code that does not distinguish turns is not a
+    /// reference to anything.
     #[test]
     fn reference_code_is_deterministic_and_distinguishes_turns() {
         let a = reference_code("message-a");
@@ -419,6 +430,11 @@ mod tests {
         assert_ne!(a, reference_code("message-b"));
     }
 
+    /// covers: UI-32
+    ///
+    /// The clause's load-bearing half, and the reason it says RENDERER rather than
+    /// caller: the fixture carries a snippet AND withholds consent — the exact
+    /// shape a frontend bug produces — and the text must still not appear.
     #[test]
     fn source_text_is_withheld_unless_the_reporter_opted_in() {
         // The snapshot carries a snippet AND withholds consent — the
@@ -438,6 +454,11 @@ mod tests {
         assert!(out.contains("did not include the text"));
     }
 
+    /// covers: UI-32
+    ///
+    /// The other side of the gate. Without this, withholding everything
+    /// unconditionally would satisfy the test above, and the opt-in would be a
+    /// switch wired to nothing.
     #[test]
     fn source_text_appears_when_the_reporter_opted_in() {
         let mut s = snap();
@@ -447,6 +468,11 @@ mod tests {
         assert!(!out.contains("did not include the text"));
     }
 
+    /// covers: UI-31
+    ///
+    /// "EACH report MUST carry" it. Until this tag the render was never asserted
+    /// to print the code at all — `reference_code` was tested as a function and
+    /// the wire format stopped at its return value.
     #[test]
     fn a_thin_snapshot_still_renders_without_guessing() {
         // Everything a legacy or errored turn cannot supply. The report
@@ -475,6 +501,13 @@ mod tests {
         assert!(out.contains("_not recorded_") || out.contains("_(not recorded)_"));
         assert!(out.contains("no knowledge base contributed"));
         assert!(out.contains("nothing was retrieved"));
+        // EVERY report carries the code — including this one, where nothing
+        // else could be recorded. A user with a broken turn is the one most
+        // likely to be reading a code out loud to somebody.
+        assert!(
+            out.contains(&format!("Reference: **{}**", reference_code("m"))),
+            "the report must carry the reference code:\n{out}"
+        );
     }
 
     #[test]
@@ -507,6 +540,10 @@ mod tests {
         assert!(out.contains("searched on peer `mac-peer`"));
     }
 
+    /// covers: UI-32
+    ///
+    /// "Defaulted off." A payload that never mentions consent deserializes to
+    /// withheld, so an older frontend cannot opt the user in by omission.
     #[test]
     fn snapshot_deserializes_from_a_minimal_frontend_payload() {
         // The frontend sends what it has. A turn whose metadata predates
