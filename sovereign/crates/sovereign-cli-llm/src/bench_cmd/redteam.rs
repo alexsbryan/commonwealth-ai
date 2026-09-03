@@ -87,7 +87,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut captures_dir = PathBuf::from("target/flywheel/redteam");
     let mut replay = false;
     let mut judge_model = "fast".to_string();
-    let mut base_url = "http://localhost:9741".to_string();
+    let mut base_url = sovereign_core::setup_config::client_daemon_base();
 
     let mut i = 0;
     macro_rules! val {

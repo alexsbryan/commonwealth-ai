@@ -92,7 +92,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut n = 12usize;
     let mut seed = 0u64;
     let mut judge_model = "fast".to_string();
-    let mut base_url = "http://localhost:9741".to_string();
+    let mut base_url = sovereign_core::setup_config::client_daemon_base();
     let mut out = PathBuf::from("target/flywheel/results.jsonl");
     let mut regressions: Option<PathBuf> = None;
     let mut capture = true;

@@ -151,7 +151,7 @@ async fn run(rest: &[String]) -> i32 {
     let mut sample: usize = 25;
     let mut seed: u64 = 17;
     let mut model = "primary".to_string();
-    let mut base_url = "http://localhost:9741".to_string();
+    let mut base_url = sovereign_core::setup_config::client_daemon_base();
     let mut output: Option<PathBuf> = None;
 
     let mut i = 0;

@@ -96,7 +96,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
     let mut bench_root = PathBuf::from("sovereign/bench");
     let mut candidate_config = None;
     let mut judge_model = "fast".to_string();
-    let mut base_url = "http://localhost:9741".to_string();
+    let mut base_url = sovereign_core::setup_config::client_daemon_base();
     let mut apply = false;
     let mut unseal_test = false;
     let mut reason = None;

@@ -180,7 +180,7 @@ fn parse_args(rest: &[String]) -> Result<Args, String> {
             .preferred_tier
             .model_stem()
             .to_string();
-    let mut base_url = "http://localhost:9741".to_string();
+    let mut base_url = sovereign_core::setup_config::client_daemon_base();
     let mut manifest = None;
     let mut out = PathBuf::from("target/chaos-monkey/results.jsonl");
     let mut transcripts: Option<PathBuf> = None;
@@ -1122,7 +1122,7 @@ async fn rescore(rest: &[String]) -> i32 {
             .preferred_tier
             .model_stem()
             .to_string();
-    let mut base_url = "http://localhost:9741".to_string();
+    let mut base_url = sovereign_core::setup_config::client_daemon_base();
     let mut manifest: Option<PathBuf> = None;
     let mut out = PathBuf::from("target/chaos-monkey/rescored.jsonl");
     let mut grounding_verify = false;
@@ -1366,7 +1366,7 @@ async fn score_answer(rest: &[String]) -> i32 {
             .preferred_tier
             .model_stem()
             .to_string();
-    let mut base_url = "http://localhost:9741".to_string();
+    let mut base_url = sovereign_core::setup_config::client_daemon_base();
 
     let mut i = 0;
     macro_rules! val {

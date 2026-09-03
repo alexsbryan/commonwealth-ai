@@ -78,7 +78,7 @@ async fn extract_claims(rest: &[String]) -> i32 {
         .preferred_tier
         .model_stem()
         .to_string();
-    let mut base_url = "http://localhost:9741".to_string();
+    let mut base_url = sovereign_core::setup_config::client_daemon_base();
     let mut max_claims: usize = 10;
 
     let mut i = 0;
@@ -194,7 +194,7 @@ async fn harvest(rest: &[String]) -> i32 {
         .preferred_tier
         .model_stem()
         .to_string();
-    let mut base_url = "http://localhost:9741".to_string();
+    let mut base_url = sovereign_core::setup_config::client_daemon_base();
     let mut max_claims: usize = 8;
     let mut window: usize = 2;
     let mut limit: usize = 0;

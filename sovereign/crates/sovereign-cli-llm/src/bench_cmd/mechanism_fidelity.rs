@@ -134,7 +134,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
     let mut n_cases: usize = 200;
     let mut seed: u64 = 0;
     let mut concurrency: usize = 8;
-    let mut base_url = "http://localhost:9741".to_string();
+    let mut base_url = sovereign_core::setup_config::client_daemon_base();
     let mut api_key_env: Option<String> = None;
     let mut manifest = PathBuf::from("sovereign/bench/mechanism_fidelity/manifest.toml");
     let mut out: Option<PathBuf> = None;

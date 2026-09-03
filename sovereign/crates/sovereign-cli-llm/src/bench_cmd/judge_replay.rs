@@ -106,7 +106,7 @@ pub async fn cmd_judge_replay(rest: &[String]) -> i32 {
     }
     let mut cases_path: Option<PathBuf> = None;
     let mut out: Option<PathBuf> = None;
-    let mut base_url = "http://localhost:9741".to_string();
+    let mut base_url = sovereign_core::setup_config::client_daemon_base();
     let mut model = "primary".to_string();
     let mut register_filter: Option<String> = None;
     let mut case_filter: Option<String> = None;
