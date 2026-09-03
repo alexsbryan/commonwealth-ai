@@ -2521,7 +2521,8 @@ retrieval-injection orchestration — which grounding/boost/expansion steps run,
 in what order, under which `SOVEREIGN_*` gates — is **data**: a
 `RetrievalPipeline` is an ordered list of named `RetrievalStep`s run by one
 tracing runner (one `tracing::info!(target: "retrieval.pipeline")` line per
-step with `chunks_before/after/delta`). The governing principle: **the
+step with `chunks_before/after/delta`, plus the step's declared `kind` and its
+accounting — see below). The governing principle: **the
 intent decides HOW to answer (model tier, expansion, synthesis shape) — never
 WHERE knowledge lives.** Both pipelines are composed as **the SHARED 3-step
 evidence-gathering head (local corpora ∥ mesh fan-out → personal-scope filter
@@ -2549,6 +2550,32 @@ the same `decide_expansion_strategy` the KQ planner uses, the personal-scope
 filter is one shared whole-pool step, and the store-search leg reuses the
 pipeline's query embedding. `retrieval_pipeline_flags()` is the SSOT
 registry of every retrieval env knob (name + default + purpose).
+
+**Every step accounts for what it did to the pool (since 2026-09-03).** A
+`delta` of 0 used to mean two different things — "nothing was relevant" and
+"every candidate failed to resolve" — and the pipeline could not tell them
+apart. That ambiguity is why atlas grounding contributed literally zero chunks
+to every SEP answer for months behind an ordinary-looking trace line (fixed in
+`3ab1fecbc`; see `corpus-engine/src/enrichment/atlas/evidence_site.rs`). Two
+mechanisms close it, both structural rather than remembered (ARCH §7):
+`StepKind` is **declared** on all 27 steps (`Injector` / `Filter(DropReason)` /
+`Reorder` / `Inert`) and checked by the runner against the delta it already
+measures, so an injector that removes or a sort that changes membership is a
+reported violation; and because `Filter` carries the reason it removes for, the
+runner derives removal COUNTS itself — eight filters are fully accounted with
+no per-step code. Injectors report `considered` plus drops by `DropReason` (18
+variants, collapsed from the 49 distinct guards across the steps) and the runner
+enforces `added + dropped == considered`. `DropReason::is_resolution_failure`
+splits decisions (scope, threshold, budget, duplicate) from failures
+(`corpus_not_searchable`, `evidence_unresolvable`, `title_mismatch`): a step
+whose every candidate dies for a *failure* reason is not filtering, it is
+broken, and that is now something code can say. The audit is a pure
+`ledger_violations()` with tests driving each arm to failure (ARCH §18.1), and
+`svrn eval run --prod-pipeline` exits non-zero on any violation, so the report
+has teeth rather than scrolling past. **Still open:** 10 of the 11 injectors do
+not yet report `considered` — they log `injector has no ledger yet` at debug and
+the runner declines to cry wolf; the kind-vs-delta invariant already covers all
+27.
 
 **An answer over missing knowledge says so — and CODE guarantees it, not the
 model (`runtime/unavailability.rs`, since 2026-08-14).** Retrieval can lose a
