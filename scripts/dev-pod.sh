@@ -55,7 +55,15 @@
 set -euo pipefail
 
 IMAGE="${SOVEREIGN_VAST_IMAGE:-ghcr.io/alexsbryan/sovereign-cuda:latest}"
-DISK="${DISK:-80}"
+# The instance disk. Left EMPTY here on purpose: `pod_plan` fills it from the
+# loadout (weights + headroom for the image and the daemon's data dir) so the
+# volume tracks the models. An explicit DISK= still wins.
+#
+# It must be the SAME number the offer search filters on, or the search can
+# return a box with less free space than `create` then asks for.
+DISK="${DISK:-}"
+# Headroom over the model weights for the container image and the data dir.
+POD_DISK_HEADROOM_GB="${POD_DISK_HEADROOM_GB:-35}"
 LOCAL_PORT="${LOCAL_PORT:-9841}"
 CTX="${CTX:-32768}"
 # The label is BOTH the handle every verb resolves by AND the record of which
@@ -346,10 +354,15 @@ import sys, json, math
 d = json.load(sys.stdin)
 print("MIN_VRAM_MIB=%d" % d["min_total_vram_mb"])
 print("MIN_VRAM_GB=%d" % d["min_total_vram_gb"])
-print("DISK_GB=%d" % d["disk_gb"])
+print("WEIGHTS_GB_INT=%d" % d["weights_gb"])
 print("REQUIRED_MIB=%d" % d["required_mb"])
 print("WEIGHTS_GB=%.1f" % (d["weights_bytes"] / 1e9))
 ')"
+  # One number for both the search floor and the volume actually requested.
+  # The estimator reports the WEIGHTS; the headroom on top is this script's
+  # own domain — the CUDA image (~12 GB), the daemon's data dir, and room for
+  # a partial re-pull on a resume.
+  DISK="${DISK:-$(( WEIGHTS_GB_INT + POD_DISK_HEADROOM_GB ))}"
   POD_PLAN_DONE=1
 }
 
@@ -361,7 +374,7 @@ print("WEIGHTS_GB=%.1f" % (d["weights_bytes"] / 1e9))
 offer_rows() {
   pod_plan || exit 1
   vastai search offers \
-    "gpu_ram>=$MIN_VRAM_GB num_gpus=1 rentable=true disk_space>=$DISK_GB inet_down>=1500 dph<1.30 reliability>0.97" \
+    "gpu_ram>=$MIN_VRAM_GB num_gpus=1 rentable=true disk_space>=$DISK inet_down>=1500 dph<1.30 reliability>0.97" \
     -o dph --raw
 }
 
@@ -531,7 +544,7 @@ plan)
   ;;
 offers)
   pod_plan || exit 1
-  echo "[dev-pod] loadout needs ${REQUIRED_MIB} MiB working set -> ${MIN_VRAM_GB} GB card, ${DISK_GB} GB disk" >&2
+  echo "[dev-pod] loadout needs ${REQUIRED_MIB} MiB working set -> ${MIN_VRAM_GB} GB card, ${DISK} GB disk" >&2
   offer_rows | offer_eligible | python3 -c '
 import sys, json
 rows = json.load(sys.stdin)

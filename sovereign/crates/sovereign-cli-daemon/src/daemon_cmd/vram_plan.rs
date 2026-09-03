@@ -196,10 +196,11 @@ pub fn run(args: &[String]) -> i32 {
     let required_mb = check_fit_sized(&slots, 0).total_required_mb;
     let min_mb = min_total_vram_mb(required_mb);
     // Disk needs the raw bytes, not the working set: the pull is what fills
-    // the volume. Rounded UP to a GB and given the same headroom the image
-    // and the daemon's own data dir want.
+    // the volume. Reported as the weights alone — how much headroom a caller
+    // needs on top is the CALLER's domain (a container image, a data dir),
+    // not something a VRAM estimator should be guessing at.
     let weights_bytes: u64 = slots.iter().map(|s| s.weights_bytes).sum();
-    let disk_gb = weights_bytes.div_ceil(1_000_000_000) + 20;
+    let weights_gb = weights_bytes.div_ceil(1_000_000_000);
 
     let report = vram_mb.map(|mb| check_fit_sized(&slots, mb));
 
@@ -219,12 +220,12 @@ pub fn run(args: &[String]) -> i32 {
             })
             .collect();
         print!(
-            r#"{{"required_mb":{},"min_total_vram_mb":{},"min_total_vram_gb":{},"weights_bytes":{},"disk_gb":{},"slots":[{}]"#,
+            r#"{{"required_mb":{},"min_total_vram_mb":{},"min_total_vram_gb":{},"weights_bytes":{},"weights_gb":{},"slots":[{}]"#,
             required_mb,
             min_mb,
             min_mb.div_ceil(1024),
             weights_bytes,
-            disk_gb,
+            weights_gb,
             per_slot.join(",")
         );
         if let Some(r) = &report {
@@ -246,7 +247,7 @@ pub fn run(args: &[String]) -> i32 {
             min_mb,
             min_mb.div_ceil(1024)
         );
-        println!("  {:<22} {:>8} GB", "disk for the pull", disk_gb);
+        println!("  {:<22} {:>8} GB", "weights on disk", weights_gb);
         if let Some(r) = &report {
             println!(
                 "  {:<22} {:>8} MiB available after {} reserved",
