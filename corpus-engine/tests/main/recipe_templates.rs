@@ -31,7 +31,12 @@ fn template_dirs() -> Vec<String> {
         .unwrap_or_else(|e| panic!("read_dir {}: {e}", root.display()))
         .map(|e| e.expect("dir entry").path())
         .filter(|p| p.join("recipe.toml").is_file())
-        .map(|p| p.file_name().expect("named dir").to_string_lossy().into_owned())
+        .map(|p| {
+            p.file_name()
+                .expect("named dir")
+                .to_string_lossy()
+                .into_owned()
+        })
         .collect();
     names.sort();
     names
