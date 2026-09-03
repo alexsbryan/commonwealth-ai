@@ -35,6 +35,12 @@ LIB="$ROOT/scripts/lib/release-host.sh"
 DRIVER="$ROOT/scripts/release-cli-local.sh"
 for f in "$LIB" "$DRIVER"; do [[ -f "$f" ]] || { echo "cannot find $f"; exit 2; }; done
 
+# The GENUINE host, captured before the `uname` stub below goes on PATH. The
+# three BSD/GNU shims are the one thing in this suite that must NOT be driven
+# by the stub: they are branch-per-platform wrappers, and the point of checking
+# them is that they answer on the machine actually running the suite.
+REAL_UNAME_SM="$(uname -sm)"
+
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/root/scripts/lib" "$T/root/dist" "$T/bin"
@@ -107,9 +113,23 @@ expect "an explicit override beats both defaults" \
 # The BSD/GNU shims must return a NUMBER on the host actually running this —
 # `df -g`, `du -sg` and `stat -f %m` each fail differently on Linux, and two
 # of the three fail by producing something that explodes inside (( … )).
-for probe_fn in "release_free_gb ." "release_dir_gb ." "release_file_mtime Cargo.toml"; do
+#
+# TWO THINGS THIS GOT WRONG UNTIL 2026-09-03, and both made it a check that
+# only ever ran on Linux:
+#
+#   1. It inherited the `uname` stub, whose default is `Linux x86_64`. So on a
+#      Mac these ran the GNU branch — `df -BG`, `du -sBG`, `stat -c %Y` — which
+#      BSD rejects, yielding '', '' and 0. The check asserted "the host
+#      actually running this" while being told the host was something else. On
+#      Linux it passed only because the stub's default happened to match.
+#      REAL_UNAME_SM pins it to the truth.
+#   2. It probed `.`, which is the mktemp `$T/root` — a handful of small files,
+#      so `release_dir_gb` correctly answers 0 and then fails a `> 0` bar. The
+#      probes now point at the real repo, where every one of them has a
+#      meaningful positive answer.
+for probe_fn in "release_free_gb $ROOT" "release_dir_gb $ROOT" "release_file_mtime $ROOT/Cargo.toml"; do
     # shellcheck disable=SC2086
-    v="$(bash -c ". scripts/lib/release-host.sh; $probe_fn" 2>&1)"
+    v="$(UNAME_SM="$REAL_UNAME_SM" bash -c ". scripts/lib/release-host.sh; $probe_fn" 2>&1)"
     if [[ "$v" =~ ^[0-9]+$ ]] && (( v > 0 )); then
         pass "${probe_fn%% *} answers a number on the real host ($v)"
     else

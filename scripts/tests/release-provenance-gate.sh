@@ -27,6 +27,9 @@ ROOT="$(git rev-parse --show-toplevel)"
 REAL_SCRIPT="$ROOT/scripts/release-cli-local.sh"
 [[ -f "$REAL_SCRIPT" ]] || { echo "cannot find $REAL_SCRIPT"; exit 2; }
 
+# shellcheck source=../lib/run-capped.sh
+source "$ROOT/scripts/lib/run-capped.sh"
+
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/root/scripts/lib" "$T/root/dist" "$T/bin"
@@ -147,7 +150,10 @@ run_case "one fresh + one stale refuses the WHOLE upload" expect-die "STALE arti
 # So the assertion is a refusal, and `timeout` distinguishes the first mode
 # from a slow pass: rc=124 is a hang, and a hang is a failure.
 mk_tarball aarch64-apple-darwin 0.5.0 "$HEAD_SHA"
-out="$(GH_STUB_NO_ASSETS=1 timeout 20 bash scripts/release-cli-local.sh --upload-only </dev/null 2>&1)"
+# `run_capped`, not bare `timeout`: macOS ships neither `timeout` nor
+# `gtimeout`, so this line exited 127 and the check never ran on a Mac — the
+# one host where the original hang was found. See scripts/lib/run-capped.sh.
+out="$(GH_STUB_NO_ASSETS=1 run_capped 20 bash scripts/release-cli-local.sh --upload-only </dev/null 2>&1)"
 code=$?
 if (( code == 124 )); then
     echo "  FAIL  an empty sidecar listing must fail, not hang — timed out after 20s"

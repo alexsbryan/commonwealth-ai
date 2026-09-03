@@ -85,6 +85,29 @@ dist/
 # release binary ever grows enough to matter, the context budget check names it.
 !target/release/sovereign-cli
 
+# Build OUTPUTS and host-only trees that were being tar-streamed into every
+# container build. Found 2026-09-03, the first time
+# scripts/tests/release-build-context.sh could complete its walk on a Mac:
+# effective context 4903 MB against a 2048 MB budget. None is a COPY source in
+# any Containerfile.
+#
+# `target-xwin` is the Windows cross-compile output and matched NEITHER
+# `target/` nor `target-container-*/` — 2042 MB, the single largest offender.
+sovereign/crates/sovereign-desktop/target-xwin/
+# Test output, at the root and under the desktop crate: 497 + 882 MB.
+test-artifacts/
+**/test-artifacts/
+# npm deps are installed INSIDE the container by both build entrypoints
+# (`npm ci --no-audit --no-fund`), and the windows entrypoint keeps
+# node_modules container-private on purpose so npm ci cannot stomp the host's
+# darwin natives. Streaming the host copy is waste and would be wrong.
+**/node_modules/
+# Run logs and a second agent harness; neither is copied by anything.
+runs/
+.opencode/
+# The mobile tree is not a COPY source for the CLI or desktop images.
+sovereign-mobile/
+
 # sovereign-recipes/ is INCLUDED wholesale (≈1.4 MB): corpus-engine's
 # build.rs vendors the whole tree into OUT_DIR, and sovereign-contracts
 # include_str!s registry.toml + schema/. The tree used to be excluded

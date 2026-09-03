@@ -116,6 +116,17 @@ release_dir_gb() {  # release_dir_gb <dir> → whole GB used, or 0
     fi
 }
 
+# `stat` arguments that print a file's APPARENT SIZE in bytes — what gets
+# tar-streamed, not on-disk blocks. Used with `find -exec … {} +` so one stat
+# covers a batch. The fourth BSD/GNU wrapper, and it exists because GNU
+# `find -printf '%s\n'` has no BSD equivalent at all: on a Mac that spelling
+# does not degrade, it errors, and the caller sees an empty walk.
+if [[ "$RELEASE_HOST_KIND" == mac-arm64 ]]; then
+    RELEASE_STAT_SIZE=(-f %z)
+else
+    RELEASE_STAT_SIZE=(-c %s)
+fi
+
 release_file_mtime() {  # release_file_mtime <file> → mtime epoch, or 0
     local f="$1"
     [[ -f "$f" ]] || { echo 0; return; }

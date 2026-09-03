@@ -187,41 +187,8 @@ ROUTING_FILTER="routing"
 # gates, agent-coding-gate — into SKIP(budget) → HARD_FAIL. That is precisely
 # the failure `HARD_RESERVE_SECS` is documented to prevent, by a guard that
 # was computed and then discarded.
-TIMEOUT_BIN="$(command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null || true)"
-
-# Run "$@" with a hard wall-clock cap in seconds ($1). Returns 124 on timeout,
-# matching `timeout(1)`, which is what the lane-status switch already reads.
-run_capped() {
-  local cap="$1"; shift
-  if [[ -n "$TIMEOUT_BIN" ]]; then
-    "$TIMEOUT_BIN" "${cap}s" "$@"
-    return $?
-  fi
-  # Shell watchdog. Kills the lane AND its descendants — a bench lane spawns
-  # `eval run` children, and TERMing only the parent leaves the model call
-  # holding the daemon slot the next lane needs.
-  "$@" &
-  local pid=$!
-  local waited=0
-  while kill -0 "$pid" 2>/dev/null; do
-    if (( waited >= cap )); then
-      pkill -TERM -P "$pid" 2>/dev/null
-      kill -TERM "$pid" 2>/dev/null
-      local grace=0
-      while kill -0 "$pid" 2>/dev/null && (( grace < 10 )); do
-        sleep 1; grace=$(( grace + 1 ))
-      done
-      pkill -KILL -P "$pid" 2>/dev/null
-      kill -KILL "$pid" 2>/dev/null
-      wait "$pid" 2>/dev/null
-      return 124
-    fi
-    sleep 1
-    waited=$(( waited + 1 ))
-  done
-  wait "$pid"
-  return $?
-}
+# shellcheck source=lib/run-capped.sh
+source "${SCRIPT_DIR}/lib/run-capped.sh"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

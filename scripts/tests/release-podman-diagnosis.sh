@@ -40,13 +40,29 @@ git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
 
 rc=0
 
-mk_podman() {  # mk_podman <info-succeeds 0|1> <image-exists-succeeds 0|1>
+# mk_podman <info-succeeds 0|1> <image-exists-succeeds 0|1> [machine-mem-MiB]
+#
+# `machine` MUST answer `inspect --format '{{.Resources.Memory}}'` with a
+# number. On mac-arm64 that is the FIRST thing `release_container_ready`
+# asks, and a bare `exit 0` with no output made `mem` empty -> 0 -> "no podman
+# machine" — so both cases below reported unreachable and the image-absent case
+# could never be reached. On Linux the whole VM branch is skipped, which is why
+# this only ever passed there (fixed 2026-09-03).
+#
+# Default 24576 MiB clears the lib's ~16GiB shader-compile floor; pass a
+# smaller value to drive the resize refusal.
+mk_podman() {
+    local mem="${3:-24576}"
     cat > "$T/bin/podman" <<EOF
 #!/usr/bin/env bash
 case "\$1" in
   info)    exit $(( $1 ? 0 : 1 )) ;;
   image)   exit $(( $2 ? 0 : 1 )) ;;
-  machine) exit 0 ;;
+  machine)
+      # \`machine inspect --format …\` is the memory probe; anything else
+      # (start, list) just succeeds.
+      [[ "\${2:-}" == inspect ]] && { echo $mem; exit 0; }
+      exit 0 ;;
   run)     echo "!!! CONTAINER RAN"; exit 0 ;;
   *)       exit 0 ;;
 esac

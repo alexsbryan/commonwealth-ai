@@ -31,6 +31,16 @@ set -uo pipefail
 ROOT="$(git rev-parse --show-toplevel)" || exit 2
 cd "$ROOT" || exit 2
 
+# Both libs: `run_capped` because macOS has no `timeout`, and release-host.sh
+# for RELEASE_STAT_SIZE because BSD `find` has no `-printf`. Until 2026-09-03
+# this suite used both GNU spellings, so on a Mac the walk produced nothing and
+# the size budget was reported COULD-NOT-JUDGE on every run — honestly, which
+# is why it was the only one of the six that did not read as a pass.
+# shellcheck source=../lib/run-capped.sh
+source "$ROOT/scripts/lib/run-capped.sh"
+# shellcheck source=../lib/release-host.sh
+source "$ROOT/scripts/lib/release-host.sh"
+
 IGNORE_FILE=".containerignore"
 [[ -f "$IGNORE_FILE" ]] || { echo "release-build-context: no $IGNORE_FILE at repo root"; exit 2; }
 
@@ -234,11 +244,11 @@ done < "$IGNORE_FILE"
 # Sum the sizes of every file that survives pruning. Sizes are apparent bytes
 # (%s), which is what gets tar-streamed — not on-disk blocks.
 total_mb=""
-if walk_out=$(timeout "$WALK_TIMEOUT" find . "${prune[@]}" -type f -printf '%s\n' 2>/dev/null); then
+if walk_out=$(run_capped "$WALK_TIMEOUT" find . "${prune[@]}" -type f -exec stat "${RELEASE_STAT_SIZE[@]}" {} + 2>/dev/null); then
     # Add back anything a `!` pattern re-included from inside a pruned tree.
     for n in "${negated[@]:-}"; do
         [[ -z "$n" || ! -e "$n" ]] && continue
-        walk_out+=$'\n'"$(find "$n" -type f -printf '%s\n' 2>/dev/null)"
+        walk_out+=$'\n'"$(find "$n" -type f -exec stat "${RELEASE_STAT_SIZE[@]}" {} + 2>/dev/null)"
     done
     total_mb=$(awk '{s+=$1} END {printf "%d", s/1048576}' <<<"$walk_out")
 else
@@ -252,10 +262,10 @@ if [[ -n "$total_mb" ]]; then
         # the total above.
         while IFS= read -r entry; do
             path_is_ignored "$entry" && continue
-            sz=$(timeout "$WALK_TIMEOUT" find "./$entry" "${prune[@]}" -type f -printf '%s\n' 2>/dev/null \
+            sz=$(run_capped "$WALK_TIMEOUT" find "./$entry" "${prune[@]}" -type f -exec stat "${RELEASE_STAT_SIZE[@]}" {} + 2>/dev/null \
                  | awk '{s+=$1} END {printf "%d", s/1048576}')
             [[ -n "$sz" ]] && printf '%8s MB  %s\n' "$sz" "$entry"
-        done < <(find . -mindepth 1 -maxdepth 1 -printf '%P\n' 2>/dev/null) \
+        done < <(ls -A 2>/dev/null) \
             | sort -rn | head -6 | sed 's/^/          /'
     else
         ok "effective context is ${total_mb} MB (budget ${BUDGET_MB} MB)"
