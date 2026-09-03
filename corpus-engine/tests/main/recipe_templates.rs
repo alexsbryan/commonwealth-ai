@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The ten ontology-v1 templates (`ONTOLOGY_PRIMITIVES.md` §1) are real
+//! Every ontology-v1 template (`ONTOLOGY_PRIMITIVES.md` §1) is a real
 //! recipes: each parses, is an active version-1 ontology, validates
 //! error-free with every reference resolved, instantiates, and derives the
 //! facets pinned under `tests/fixtures/recipe_templates/<name>.facets.txt`.
@@ -14,20 +14,28 @@ use std::path::PathBuf;
 use corpus_engine::testing::validate_recipe_offline;
 use corpus_engine::{recipe_templates, Recipe};
 
-/// One template per PRIMITIVES §1 user, in §1 order — the catalog order
-/// `list_builtin_names` must return.
-const TEN: [&str; 10] = [
-    "numismatics",
-    "governance",
-    "patient-community",
-    "contracts",
-    "engineering-org",
-    "due-diligence",
-    "literary",
-    "research-notebook",
-    "materials-lab",
-    "product-support",
-];
+/// The template directories ON DISK, alphabetically — the same discovery
+/// `build.rs` does, redone here at test time.
+///
+/// NOT a list of names. The catalog used to be written down three times (a
+/// `BUILTINS` array, a `TEN: [&str; 10]` here, a README tree), so a template
+/// dropped from one of them was silent. Re-deriving it means this test cannot
+/// agree with a build that missed a directory: the two readings are
+/// independent, and a template added since the last build fails here.
+fn template_dirs() -> Vec<String> {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("corpus-engine has a parent")
+        .join("sovereign-recipes/_templates/ontology-v1");
+    let mut names: Vec<String> = std::fs::read_dir(&root)
+        .unwrap_or_else(|e| panic!("read_dir {}: {e}", root.display()))
+        .map(|e| e.expect("dir entry").path())
+        .filter(|p| p.join("recipe.toml").is_file())
+        .map(|p| p.file_name().expect("named dir").to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
 
 fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/recipe_templates")
@@ -35,8 +43,13 @@ fn fixtures_dir() -> PathBuf {
 
 #[test]
 fn recipe_templates_all_ten_parse() {
-    assert_eq!(recipe_templates::list_builtin_names(), TEN.to_vec());
-    for name in TEN {
+    let names = template_dirs();
+    assert!(
+        names.len() >= 10,
+        "PRIMITIVES §1 names ten users and each is a shipped template; found {names:?}"
+    );
+    assert_eq!(recipe_templates::list_builtin_names(), names);
+    for name in &names {
         let toml = recipe_templates::load_builtin(name).unwrap();
         let recipe = Recipe::from_toml(toml).unwrap_or_else(|e| panic!("{name}: {e}"));
         assert_eq!(recipe.ontology_block().unwrap().version, 1, "{name}");
@@ -67,7 +80,7 @@ fn recipe_templates_all_ten_parse() {
         .err()
         .unwrap()
         .to_string();
-    for name in TEN {
+    for name in &names {
         assert!(e.contains(name), "{e}");
     }
 }
@@ -78,8 +91,8 @@ fn recipe_templates_all_ten_parse() {
 /// author.
 #[test]
 fn recipe_templates_derived_facets_match_goldens() {
-    for name in TEN {
-        let recipe = Recipe::from_toml(recipe_templates::load_builtin(name).unwrap()).unwrap();
+    for name in template_dirs() {
+        let recipe = Recipe::from_toml(recipe_templates::load_builtin(&name).unwrap()).unwrap();
         let mut rendered = validate_recipe_offline(&recipe).notes.join("\n");
         rendered.push('\n');
         crate::ontology_prompt_snapshots::assert_golden(
