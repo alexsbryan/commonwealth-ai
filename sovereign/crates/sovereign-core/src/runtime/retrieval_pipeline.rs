@@ -940,6 +940,7 @@ impl RetrievalPipeline {
             );
         }
         for why in ledger_violations(s.kind, delta, led) {
+            LEDGER_VIOLATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             tracing::error!(
                 target: "retrieval.pipeline",
                 pipeline = self.name,
@@ -952,6 +953,19 @@ impl RetrievalPipeline {
             );
         }
     }
+}
+
+/// Ledger violations this process has observed, ever.
+///
+/// A logged error is not a gate: nothing fails, and on a bench run the line
+/// scrolls past among thousands. This counter is what `svrn eval run
+/// --prod-pipeline` reads to turn a violation into a non-zero exit — the
+/// difference between an instrument and a ratchet (ARCH §18.1).
+static LEDGER_VIOLATIONS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Total ledger violations observed since process start.
+pub fn ledger_violation_count() -> usize {
+    LEDGER_VIOLATIONS.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// The pure decision behind [`RetrievalPipeline::audit_step`]: given what a

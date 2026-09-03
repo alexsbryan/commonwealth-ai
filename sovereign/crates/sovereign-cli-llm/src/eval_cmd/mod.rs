@@ -863,6 +863,35 @@ async fn cmd_run(args: &[String]) -> i32 {
         eprintln!("wrote run JSON to {}", path.display());
     }
 
+    // The gate that would have caught the SEP atlas defect on the day it
+    // landed, with no bank score involved.
+    //
+    // Only `--prod-pipeline` drives the real retrieval pipeline, so it is the
+    // only mode whose ledger means anything. A violation is a step lying about
+    // what it did to the pool — candidates vanishing unexplained, an injector
+    // whose every candidate died at resolution, a filter that added. None of
+    // those can be traded off against a score, so this is a HARD failure
+    // rather than an advisory: the run's numbers are not trustworthy when the
+    // pipeline that produced them is not accounting.
+    //
+    // A logged error alone was never going to be enough — on a 21-question
+    // bank it scrolls past among thousands of lines. A check with no failing
+    // exit is not a check (ARCH §18.1).
+    if a.prod_pipeline {
+        let violations = sovereign_core::runtime::retrieval_pipeline::ledger_violation_count();
+        if violations > 0 {
+            eprintln!(
+                "\nFAIL: {violations} retrieval-pipeline LEDGER VIOLATION(s) during this run.\n\
+                 A step did something its declared StepKind forbids, or could not account for \n\
+                 its candidates. Re-run with RUST_LOG=retrieval.pipeline=error to see which \n\
+                 step and why. The bank numbers above are NOT trustworthy: the pipeline that \n\
+                 produced them is not accounting for its own pool."
+            );
+            return 1;
+        }
+        eprintln!("retrieval-pipeline ledger: clean (0 violations)");
+    }
+
     0
 }
 
