@@ -1131,9 +1131,23 @@ quote's offset inside its own chunk (kept at 273; demoted at 792 and 1708).
 The chunks are passed IN ADDITION to `doc_context`, never instead of it, so the
 source set is a strict superset and the change can only remove demotions. The
 composite-quote catch the guard exists for is untouched: a spliced quote is
-non-contiguous in any chunk under any normalisation. Do NOT "fix" this class by
-raising `MAX_CHUNK_CHARS` — that constant is a prompt-budget decision about how
-much of each chunk the synthesis model reads, and re-costs every turn.
+non-contiguous in any chunk under any normalisation.
+
+The prohibition that stood here — *do NOT "fix" this class by raising
+`MAX_CHUNK_CHARS`* — was correct on 2026-08-05 and is no longer the rule. The
+constant WAS raised, 600 -> 2000, deliberately and on bank evidence (its doc
+comment at `text_utils.rs` carries the three misses whose gold sat beyond the
+old cut). A session obeying this paragraph after that commit would have been
+undoing a measurement, and the docs-gate could not catch it: that gate checks
+whether cited paths and symbols exist, never whether the claim about them still
+holds. **The rule now lives in
+`text_utils::prompt_budget_constants::the_prompt_budget_triple_moves_together_or_not_at_all`,
+where it fails loudly** — the real constraint was never "don't raise it" but
+"the per-chunk seat and the two knowledge budgets are one decision under a
+fixed total, so raising one alone silently trades breadth for depth." Note also
+that three distinct constants are named `MAX_CHUNK_CHARS` (`text_utils` 2000,
+`threaded_turns` 1500, `rag/chunk` 700), so the bare name in prose does not
+identify one — an ARCH §10.6 collision, unresolved.
 
 `EvidenceContext::chunk_locators` is built inside `gate_evidence_with_sources`
 so it passes through the same summary filter and Leaf-first reordering as

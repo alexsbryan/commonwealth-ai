@@ -417,7 +417,9 @@ else:
             # and prints the same facts.
             lines = [f"### Live session frames ({prov['frame_candidates']}) — "
                      f"read one in full: `sovereign session frames <id>`\n"]
-            for c in cands:
+            # A picker, not a payload: three is enough to choose from,
+            # and `sovereign session frames` lists the rest on demand.
+            for c in cands[:3]:
                 sig = c.get("signals") or {}
                 marks = []
                 if sig.get("branch_match"):
@@ -482,11 +484,12 @@ if not os.environ.get("SOVEREIGN_NO_ORDERS"):
                             (_ti.group(1).strip() if _ti else "")[:80]))
         if _orders:
             _lines = [f"### Open work orders ({len(_orders)})\n"]
-            for _oid, _title in _orders[:8]:
+            for _oid, _title in _orders[:3]:
                 _lines.append(f"- `{_oid}` — {_title}  "
                               f"(`.sovereign/features/{_oid}/order.md`)")
-            if len(_orders) > 8:
-                _lines.append(f"- …and {len(_orders) - 8} more")
+            if len(_orders) > 3:
+                _lines.append(
+                    f"- …and {len(_orders) - 3} more in `.sovereign/features/`")
             _lines.append("\n_If this session is picking one up, Read it "
                           "whole first — it carries objective, scope to "
                           "claim, lane, budget, seams. If not, ignore this "
@@ -494,6 +497,24 @@ if not os.environ.get("SOVEREIGN_NO_ORDERS"):
             emit("\n".join(_lines))
     except Exception as e:
         emit(f"_order index unavailable ({type(e).__name__})_\n")
+
+def drop_sections(md, titles):
+    """Strip `## <title>` blocks from the brief.
+
+    The criterion: an agent can retrieve any fact it knows to ask for, but not
+    one whose existence it does not suspect. So the boot payload carries the
+    triggers for suspicion — a peer editing this file, a stale index — and not
+    the facts that are merely true. Dropped here rather than in `sovereign code
+    brief` because other harnesses consume that command's full output.
+    """
+    out_lines, skipping = [], False
+    for line in md.splitlines():
+        if line.startswith("## "):
+            skipping = any(line[3:].strip().startswith(t) for t in titles)
+        if not skipping:
+            out_lines.append(line)
+    return "\n".join(out_lines).strip()
+
 
 # ── Tier 1: working-set brief ───────────────────────────────────────────
 spent = sum(nbytes(p) + 1 for p in out)
@@ -505,8 +526,11 @@ try:
         capture_output=True, text=True, timeout=15,
     )
     if proc.returncode == 0 and proc.stdout.strip():
+        raw_brief = drop_sections(
+            proc.stdout.strip(), ("Working set", "Stated about this area")
+        )
         brief, prov["brief_truncated"] = fit_bytes(
-            proc.stdout.strip(), brief_budget,
+            raw_brief, brief_budget,
             "\n\n_[brief truncated to stay under the hook payload budget — "
             "full: `sovereign code brief --hours 48`]_")
         prov["brief_bytes"] = nbytes(brief)

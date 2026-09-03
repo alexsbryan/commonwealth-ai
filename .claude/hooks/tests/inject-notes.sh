@@ -45,7 +45,15 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 NOTES_FILE = os.environ["STUB_NOTES"]
 class H(BaseHTTPRequestHandler):
     def do_POST(self):
-        self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        # Record the ARGUMENTS the hook asked for. Every check that predates
+        # this one asserts what came back; these assert what was requested,
+        # which is the half the selection defect lived in.
+        try:
+            with open(os.environ["STUB_ARGS"], "w") as fh:
+                json.dump(json.loads(raw)["params"]["arguments"], fh)
+        except Exception:
+            pass
         with open(NOTES_FILE) as fh:
             notes = json.load(fh)
         inner = json.dumps({"notes": notes, "total": len(notes)})
@@ -70,6 +78,7 @@ json.dump([
 PYEOF
 
 PORT=$(python3 -c "import socket;s=socket.socket();s.bind(('127.0.0.1',0));print(s.getsockname()[1]);s.close()")
+export STUB_ARGS="$ROOT/last-args.json"
 STUB_NOTES="$ROOT/notes.json" python3 "$ROOT/stub.py" "$PORT" &
 STUB_PID=$!
 export SOVEREIGN_PORT="$PORT"
@@ -167,6 +176,74 @@ check "seat via the Skill tool publishes its role sidecar"  "seat"   "$(role_of 
 check "seat via /comaintainer publishes it too"             "seat"   "$(role_of seat-slash-01)"
 check "a worker session publishes nothing"                  "absent" "$(present worker-01)"
 check "the skill LISTING alone is not a seat"               "absent" "$(present listing-01)"
+
+# ── 3c. SELECTION — what the injector ASKS FOR, not just what it carries ────
+# Every check above this line is TRANSPORT: does the pipe carry bytes, dedupe,
+# log, fail safe. None asserts that the RIGHT note was chosen — which is the
+# smell ARCH §18.1 names, a check with no failing input you can name. These are
+# that failing input.
+#
+# The expensive failure here is an agent re-proposing an approach already
+# measured and rejected (quality/DELETION.md §6 is a page of them). The store
+# has a kind for exactly that — `attempt` — and settings.json's own
+# systemPrompt tells sessions to WRITE them. The injector's `kinds` list
+# excluded it, so none could ever be read back: a creation loop with no
+# closure. And `read_notes` ranks by `query`, which the hook never sent, so
+# selection was newest-first over a pool that is 57% harvested commit subjects.
+SELSID="test-session-select"
+mkdir -p "$SOVEREIGN_SESSIONS_DIR/$SELSID"
+ATTEMPT_ID="dddddddd-3333-4444-5555-666666666666"
+python3 - "$ROOT" "$ATTEMPT_ID" <<'PYEOF'
+import json, sys
+root, attempt_id = sys.argv[1:3]
+p = f"{root}/notes.json"
+notes = json.load(open(p))
+notes.insert(0, {"id": attempt_id, "kind": "attempt", "scope": "global",
+                 "content": "KILLED: the SCIP reachability closure — trap #2, cascades from trait impls"})
+json.dump(notes, open(p, "w"))
+PYEOF
+
+SEL_PROMPT="identify code only used circularly, aggressive deadcode removal"
+sel_hook() { printf '{"session_id":"%s","prompt":"%s"}' "$1" "$2" | $HOOK_CMD; }
+SELOUT="$(sel_hook "$SELSID" "$SEL_PROMPT")"
+ARGS="$(cat "$ROOT/last-args.json" 2>/dev/null)"
+
+case "$ARGS" in *'"attempt"'*) got=yes;; *) got=no;; esac
+check "asks for kind=attempt (the rejected-approach ledger)" "yes" "$got"
+
+case "$ARGS" in *"deadcode"*) got=yes;; *) got=no;; esac
+check "passes the PROMPT as the retrieval query" "yes" "$got"
+
+case "$ARGS" in *'"invariant"'*) got=yes;; *) got=no;; esac
+check "still asks for invariants (no regression)" "yes" "$got"
+
+case "$SELOUT" in *"[attempt]"*) got=yes;; *) got=no;; esac
+check "an attempt note renders with its kind visible" "yes" "$got"
+
+# A HARNESS turn is not a decision moment. The hook also fires on task
+# notifications and system reminders; sending their boilerplate as the key
+# spends a note's one-and-only surfacing (see the dedupe above) on XML. Caught
+# live on 2026-09-03, the first turn after the query change shipped.
+HSID="test-session-harness"
+mkdir -p "$SOVEREIGN_SESSIONS_DIR/$HSID"
+sel_hook "$HSID" "<task-notification> <task-id>b8j0glrqt</task-id> </task-notification>" >/dev/null 2>&1
+HARGS="$(cat "$ROOT/last-args.json" 2>/dev/null)"
+case "$HARGS" in *'"query"'*) got=yes;; *) got=no;; esac
+check "a harness-only turn sends NO query (falls back to newest)" "no" "$got"
+
+MSID="test-session-mixed"
+mkdir -p "$SOVEREIGN_SESSIONS_DIR/$MSID"
+sel_hook "$MSID" "refactor the grounding gate <system-reminder>ignore me</system-reminder>" >/dev/null 2>&1
+MARGS="$(cat "$ROOT/last-args.json" 2>/dev/null)"
+case "$MARGS" in *"grounding gate"*) got=yes;; *) got=no;; esac
+check "a mixed turn keeps the human half" "yes" "$got"
+case "$MARGS" in *"ignore me"*) got=yes;; *) got=no;; esac
+check "...and drops the harness half" "no" "$got"
+
+# The audit row must name the real query, or retrieval-audit scores a fiction.
+SELLOG="$SVRNMESH_RETRIEVAL_LOG_DIR/$SELSID.jsonl"
+case "$(tail -1 "$SELLOG" 2>/dev/null)" in *"deadcode"*) got=yes;; *) got=no;; esac
+check "the E2 row records the query actually sent" "yes" "$got"
 
 # ── 4. the hook must never block a prompt ────────────────────────────────────
 kill "$STUB_PID" 2>/dev/null; wait "$STUB_PID" 2>/dev/null

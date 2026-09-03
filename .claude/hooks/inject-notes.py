@@ -16,6 +16,7 @@
 # and a hook must never block a prompt.
 import json
 import os
+import re
 import sys
 import time
 import urllib.request
@@ -30,6 +31,8 @@ LOG_DIR = os.environ.get(
 FIRST_PROMPT_BUDGET = int(os.environ.get("SOVEREIGN_FIRST_PROMPT_NOTES_BUDGET", "3200"))
 NOTES_BUDGET = int(os.environ.get("SOVEREIGN_NOTES_BUDGET_CHARS", "6000"))
 NOTE_LIMIT = int(os.environ.get("SOVEREIGN_INJECT_NOTE_LIMIT", "20"))
+# The ranker wants terms, not an essay; a long paste should not become the key.
+QUERY_CAP = int(os.environ.get("SOVEREIGN_INJECT_QUERY_CAP", "500"))
 
 
 def first_line(content, cap=110):
@@ -45,11 +48,49 @@ try:
 except Exception:
     envelope = {}
 session_id = (envelope.get("session_id") or "").strip()
+# The prompt is the RETRIEVAL KEY, and it is the only artifact that exists at
+# the moment the expensive decision is made. Approach-level mistakes — "I'll
+# build a reachability closure" — happen before any file is touched, so a
+# path-anchored trigger structurally cannot catch them; the prompt can.
+# Harness-generated turns are NOT decision moments. Claude Code runs this hook
+# on task notifications and system reminders too, and their boilerplate makes a
+# meaningless retrieval key — measured live on 2026-09-03, a notification turn
+# queried `<task-notification> <task-id>b8j0…`. That matters because the
+# per-session dedupe below spends each note's ONE surfacing: a note burned
+# against harness XML never reaches the prompt that needed it. Strip the
+# wrappers; if nothing human is left, send no query and fall back to newest.
+HARNESS_TAGS = ("task-notification", "system-reminder", "local-command-stdout",
+                "command-message", "command-name", "command-args")
+
+
+def human_part(text):
+    for tag in HARNESS_TAGS:
+        text = re.sub(rf"<{tag}>.*?</{tag}>", " ", text, flags=re.S)
+        text = re.sub(rf"</?{tag}[^>]*>", " ", text)
+    return " ".join(text.split())
+
+
+prompt = human_part(envelope.get("prompt") or "")[:QUERY_CAP]
 
 # ATOS scope-aware payload: globals plus the active feature's notes when
 # $SOVEREIGN_FEATURE_ID is set (svrn atos start-milestone); globals only
 # otherwise, so in-flight feature chatter does not leak into other sessions.
-args = {"kinds": ["invariant", "decision"], "scope": ["global"], "limit": NOTE_LIMIT}
+#
+# `attempt` is here because the costliest failure in this repo is re-proposing
+# something already measured and rejected, and settings.json's own systemPrompt
+# instructs every session to WRITE those notes. Reading them back closes a loop
+# that was open: the kind existed, the writers existed, the reader excluded it.
+args = {
+    "kinds": ["invariant", "decision", "attempt"],
+    "scope": ["global"],
+    "limit": NOTE_LIMIT,
+}
+# Without a query `read_notes` returns NEWEST-first, and the pool is majority
+# harvested commit subjects — so recency structurally evicts the durable notes
+# this hook exists to carry. Keying on the prompt is what makes the 20 slots
+# situational instead of chronological.
+if prompt:
+    args["query"] = prompt
 fid = os.environ.get("SOVEREIGN_FEATURE_ID", "").strip()
 if fid:
     args["scope"] = ["global", "feature"]
@@ -144,7 +185,11 @@ if out:
             record = {
                 "ts": int(time.time()),
                 "session_id": session_id,
-                "query": "injected: newest {limit} decisions+invariants".format(limit=NOTE_LIMIT),
+                "query": prompt
+                if prompt
+                else "injected: newest {limit} (no prompt in envelope)".format(
+                    limit=NOTE_LIMIT
+                ),
                 "label": "first-prompt notes" if first_prompt else "notes",
                 "count": len(fresh),
                 "delivered_count": sum(1 for _, d in delivered if d),

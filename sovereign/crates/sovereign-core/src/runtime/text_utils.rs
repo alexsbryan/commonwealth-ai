@@ -32,6 +32,48 @@ use crate::types::{Message, Role};
 /// together.
 pub(crate) const MAX_CHUNK_CHARS: usize = 2000;
 
+#[cfg(test)]
+mod prompt_budget_constants {
+    //! The per-chunk seat and the two knowledge budgets are ONE decision, and
+    //! this test is where that decision is enforced.
+    //!
+    //! It exists because the paragraph that used to carry the rule went stale
+    //! in the worst available way. `SYSTEM_OVERVIEW.md` still says
+    //! `text_utils::MAX_CHUNK_CHARS = 600` and still says *"Do NOT fix this
+    //! class by raising MAX_CHUNK_CHARS"* — months after the constant was
+    //! deliberately raised to 2000 on bench evidence (see its doc comment).
+    //! A session that obeyed the doc would have been undoing a measurement,
+    //! and the docs-gate could not see it: that gate checks whether cited
+    //! paths and symbols EXIST, never whether the claim about them still
+    //! holds. Prose cannot fail loudly. This can.
+    //!
+    //! Three constants, three modules, one budget. Under a fixed total,
+    //! raising the per-chunk seat alone evicts tail chunks instead of showing
+    //! more of each — which is why they are asserted as a triple rather than
+    //! one at a time.
+    use super::MAX_CHUNK_CHARS;
+    use crate::runtime::formatters::MAX_KNOWLEDGE_CHARS;
+    use crate::runtime::prompts::EXPANDED_KNOWLEDGE_CHARS;
+
+    #[test]
+    fn the_prompt_budget_triple_moves_together_or_not_at_all() {
+        assert_eq!(
+            (
+                MAX_CHUNK_CHARS,
+                MAX_KNOWLEDGE_CHARS,
+                EXPANDED_KNOWLEDGE_CHARS
+            ),
+            (2000, 24000, 56000),
+            "prompt-budget constants changed. They are a measured triple, not \
+             three preferences: the per-chunk seat decides how much of each \
+             admitted chunk the synthesis model reads, and the two knowledge \
+             budgets decide how many chunks fit. Raising one alone trades \
+             breadth for depth silently. Change them together, with a bench \
+             run behind it, and update this tuple in the same commit."
+        );
+    }
+}
+
 pub(crate) use crate::time::unix_now as now;
 
 /// UTF-8-safe truncate by character count. Used by the atlas-navigate

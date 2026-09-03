@@ -498,6 +498,24 @@ size_gate() {
 warn_gate "size ratchet (code lines per crate)" size_gate
 warn_gate "deletion manifest ratchet" python3 "${REPO_ROOT}/scripts/deletion-manifest.py" --verify
 
+# The awareness layer had no gate at all, which is why its own suite rotted:
+# `scripts/tests/run-all.sh` is gated below, `.claude/hooks/tests/run-all.sh`
+# was gated by nothing, and it sits at 16 failures at HEAD (inject-boot-block
+# 11, inject-budget 3, inject-notes 2 — seat-sidecar cases whose subject was
+# removed from the hook while its tests stayed). Nothing surfaced that, so
+# nothing surfaced the injector defects underneath it either: there was no
+# green to break.
+#
+# DIFF-SCOPED because the suite is ~50s and this file holds a one-minute
+# budget — free on the pushes that do not touch a hook, present on the ones
+# that do. warn_gate for the reason above it: a 16-failure wall at the push is
+# how a gate teaches people to reach for --no-verify.
+# Promote to run_gate the day the backlog reaches zero.
+if match '^\.claude/hooks/'; then
+    warn_gate "hook suites (.claude/hooks/tests — 16 known failures)" \
+        bash "${REPO_ROOT}/.claude/hooks/tests/run-all.sh"
+fi
+
 # ── Gate 3: NOT HERE. The workspace test suite runs in CI, not at the push. ─
 #
 # Removed 2026-08-30 on operator direction, and the reasoning is the header's:
