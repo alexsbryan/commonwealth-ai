@@ -628,6 +628,14 @@ mod process_status_tests {
         assert_eq!(json["inbound_ingest"]["stale"], false);
     }
 
+    /// covers: FE-99
+    ///
+    /// The clause's last half: the status surface names the rejected raw value,
+    /// WHEN it was last seen, and the EXPECTED form. Note the scope — this
+    /// builds the row itself, so it pins the serialized shape and the text of
+    /// `RejectedNodeIdHeader::expected_wire_form`, not the handler's wiring of
+    /// it at routes_status.rs:174. That wiring has no witness; see the commit
+    /// that added this tag.
     #[test]
     fn zero_bucket_row_names_rejected_header_and_expected_form() {
         // Fix 7: the malformed-header bucket (node id 0) names the rejected

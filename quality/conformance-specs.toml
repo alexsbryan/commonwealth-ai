@@ -659,10 +659,11 @@ landed = '''sovereign-core::mesh_measurements::tests::no_co_residents_is_reporte
 [[spec]]
 id = "FE-99"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''There MUST be exactly one canonical wire form for an origin identifier, and exactly one parser. A display form MUST never be accepted as a wire form. A present-but-malformed value MUST still be gated and tallied, and the status surface MUST name the rejected raw value, when it was last seen, and the expected form.'''
 target = '''commonwealth/crates/commonwealth-api/src/admission.rs:551::peer_admission_layer'''
 existing = '''commonwealth/crates/commonwealth-api/src/admission.rs:1289::middleware_malformed_header_buckets_zero_and_is_named'''
+landed = '''commonwealth-api::admission::tests::middleware_malformed_header_buckets_zero_and_is_named (+ ::headers::tests::wrong_length_returns_none + ::headers::tests::non_hex_returns_none + ::routes_status::process_status_tests::zero_bucket_row_names_rejected_header_and_expected_form)'''
 
 [[spec]]
 id = "IN-17"

@@ -651,6 +651,7 @@ observable = """A control-plane write succeeds while the inference path is
 shedding — the two are not gated together."""
 mutation = """Route the control-plane write back through the inference
 admission gate. The test must redden."""
+landed = "commonwealth-api::main::control_plane_not_shed::a_control_plane_write_survives_inference_backpressure"
 
 [[test]]
 id = "ME-11"

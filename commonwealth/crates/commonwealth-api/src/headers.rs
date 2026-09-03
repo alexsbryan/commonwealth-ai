@@ -76,13 +76,40 @@ mod tests {
         assert_eq!(parse_x_node_id(&HeaderMap::new()), None);
     }
 
+    /// covers: FE-99
+    ///
+    /// "Exactly one canonical wire form", and the half that had no witness:
+    /// a value LONGER than the wire form must be refused, not truncated to it.
+    /// The short case below is caught by the slice bound rather than by the
+    /// length check, so deleting `if s.len() != 32` left this file green —
+    /// a 34-hex-char value parsed its first 32 chars and silently became a
+    /// valid node id. That is a display form accepted as a wire form, which is
+    /// the exact thing the clause forbids.
     #[test]
     fn wrong_length_returns_none() {
         let mut h = HeaderMap::new();
         h.insert("x-node-id", "abcd".parse().unwrap());
-        assert_eq!(parse_x_node_id(&h), None);
+        assert_eq!(parse_x_node_id(&h), None, "too short");
+
+        // 34 hex chars: every byte pair parses, so only the length check can
+        // refuse this one.
+        h.insert(
+            "x-node-id",
+            "0000000000000000000000000000002aff".parse().unwrap(),
+        );
+        assert_eq!(
+            parse_x_node_id(&h),
+            None,
+            "a longer-than-canonical value must be REFUSED, never truncated \
+             into a valid id"
+        );
     }
 
+    /// covers: FE-99
+    ///
+    /// The other half of "never accepted as a wire form": right length, wrong
+    /// alphabet. Together with the length case this is the whole parser
+    /// contract, and there is exactly one parser to hold it.
     #[test]
     fn non_hex_returns_none() {
         let mut h = HeaderMap::new();

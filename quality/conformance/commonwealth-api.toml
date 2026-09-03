@@ -18,6 +18,34 @@ line = 1051
 asserts = 7
 
 [[claim]]
+requirement = "FE-99"
+test = "commonwealth-api::admission::tests::middleware_malformed_header_buckets_zero_and_is_named"
+file = "commonwealth/crates/commonwealth-api/src/admission.rs"
+line = 1415
+asserts = 4
+
+[[claim]]
+requirement = "FE-99"
+test = "commonwealth-api::headers::tests::non_hex_returns_none"
+file = "commonwealth/crates/commonwealth-api/src/headers.rs"
+line = 114
+asserts = 1
+
+[[claim]]
+requirement = "FE-99"
+test = "commonwealth-api::headers::tests::wrong_length_returns_none"
+file = "commonwealth/crates/commonwealth-api/src/headers.rs"
+line = 89
+asserts = 2
+
+[[claim]]
+requirement = "FE-99"
+test = "commonwealth-api::routes_status::process_status_tests::zero_bucket_row_names_rejected_header_and_expected_form"
+file = "commonwealth/crates/commonwealth-api/src/routes_status.rs"
+line = 640
+asserts = 4
+
+[[claim]]
 requirement = "IN-27"
 test = "commonwealth-api::next_edit_journal::tests::the_outcome_route_answers_204_or_400_and_never_5xx"
 file = "commonwealth/crates/commonwealth-api/src/next_edit_journal.rs"

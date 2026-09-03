@@ -22,6 +22,8 @@
 mod app_state_privacy;
 #[path = "main/client_auth.rs"]
 mod client_auth;
+#[path = "main/control_plane_not_shed.rs"]
+mod control_plane_not_shed;
 #[path = "main/corpus_lifecycle.rs"]
 mod corpus_lifecycle;
 #[path = "main/gossip_route.rs"]

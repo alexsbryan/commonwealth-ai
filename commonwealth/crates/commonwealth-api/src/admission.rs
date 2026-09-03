@@ -1403,6 +1403,14 @@ mod tests {
         }
     }
 
+    /// covers: FE-99
+    ///
+    /// "A present-but-malformed value MUST still be gated and tallied, and the
+    /// status surface MUST name the rejected raw value." Both halves: the
+    /// request buckets under the ZERO node rather than bypassing the ceiling,
+    /// and the raw value is recorded with its timestamp so /status can name it
+    /// instead of showing an opaque `node-0000000000000000` row (ARCH §18.3 —
+    /// absence is reported, never defaulted).
     #[tokio::test]
     async fn middleware_malformed_header_buckets_zero_and_is_named() {
         // Fix 7: a present-but-malformed X-Node-Id must (a) still be gated
