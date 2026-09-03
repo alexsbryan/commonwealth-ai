@@ -148,6 +148,20 @@ fn custom_ontology_spec(
         .custom_atlas_spec()
 }
 
+/// One line saying which ontology `init` chose and how big it is, so the
+/// choice is visible at the moment it is made rather than discovered in
+/// `config.json` (§18.3: name what you chose).
+fn describe_custom_ontology(spec: &corpus_engine::enrichment::pipeline::CustomAtlasSpec) -> String {
+    let policies = spec.policies();
+    format!(
+        "custom ontology: {} (version {}, {} types, {} claim types)",
+        spec.name,
+        spec.ontology_version,
+        policies.shape.types.len(),
+        policies.claim_types().count()
+    )
+}
+
 pub async fn cmd_init(args: &[String]) -> i32 {
     if help::wants_help(args) {
         help::print(&HELP);
@@ -199,8 +213,9 @@ pub async fn cmd_init(args: &[String]) -> i32 {
             // here so the failure is legible at init, not deep in the build.
             if custom_ontology_spec(&parsed.corpus_id).is_none() {
                 eprintln!(
-                    "error: --pipeline custom_atlas needs a recipe with a non-empty \
-                     [enrichment.ontology].guidance for corpus `{}` \
+                    "error: --pipeline custom_atlas needs a recipe whose \
+                     [enrichment.ontology] is active — non-empty `guidance` or at \
+                     least one declared type — for corpus `{}` \
                      (looked in <data_dir>/recipes/{}/recipe.toml)",
                     parsed.corpus_id, parsed.corpus_id
                 );
@@ -435,6 +450,9 @@ pub async fn cmd_init(args: &[String]) -> i32 {
     }
     println!("  ✓ wrote {}", cfg.path().display());
     println!("  ✓ pipeline      = {}", parsed.pipeline_id);
+    if let Some(spec) = cfg.ontology.as_ref() {
+        println!("  ✓ {}", describe_custom_ontology(spec));
+    }
     println!("  ✓ chat_model    = {chat}");
     println!("  ✓ embed_model   = {embed}");
     println!();
@@ -617,6 +635,9 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
     }
     println!("  ✓ wrote {}", cfg.path().display());
     println!("  ✓ pipeline      = {}", parsed.pipeline_id);
+    if let Some(spec) = cfg.ontology.as_ref() {
+        println!("  ✓ {}", describe_custom_ontology(spec));
+    }
     println!("  ✓ chat_model    = {chat}");
     println!("  ✓ embed_model   = {embed}");
     println!("  ✓ from_corpus   = {source_corpus}");

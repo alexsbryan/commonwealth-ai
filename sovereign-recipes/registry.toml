@@ -438,6 +438,15 @@ catalog_status = "preview"
 # themselves there. This entry is what makes `svrn corpus install
 # brothers-karamazov-book-1` work on a clean checkout with no setup step.
 #
+# Since 2026-09-02 there is a third way, and it is why `wessex-hoard` (the
+# ontology-v1 probe) is not registered here: `svrn corpus install <path>`
+# does the mirroring itself — it reads the `[corpus] id`, copies the file to
+# ~/.svrnmesh/recipes/<id>/, resolves a relative `[acquire] path` against the
+# recipe's own directory, and prints all of it. A probe corpus committed in
+# this tree no longer needs either a registry entry or a mirroring step in
+# its setup script; `scripts/setup-numismatics-corpus.sh` is the worked
+# example, and it has no `sed` where setup-governance-corpus.sh has one.
+#
 # `sha256 = ""` is deliberate: choose_recipe_source() then prefers the BUNDLED
 # recipe (vendored from sovereign-recipes/ by corpus-engine's build.rs) over the
 # unverified GitHub mirror, so the reviewed in-repo recipe wins.

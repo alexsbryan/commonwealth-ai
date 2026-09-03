@@ -1,0 +1,85 @@
+# Literary scholarship — an ontology-v1 recipe template.
+#
+# A novel, its drafts, the critical literature. The questions it is built to
+# answer: how a character's inner life changes across the book; which scenes
+# show a group of characters as a configuration; what critics disagree about
+# in a chapter. The declaration is ONTOLOGY_PRIMITIVES.md §1.7 verbatim.
+#
+# Scaffold:  svrn recipe new --ontology literary --id my-novel --out my-novel.toml
+# Then fill the REPLACE_ME fields, and:
+#   svrn recipe validate my-novel.toml       # prints what the ontology derives
+#   svrn corpus install my-novel.toml
+#   svrn enrich init my-novel --from-corpus my-novel
+#   svrn enrich build my-novel --full
+
+[corpus]
+# REQUIRED: a stable, repo-scoped id.
+id = "REPLACE_ME"
+# REQUIRED: human-readable name.
+name = "REPLACE_ME"
+description = "A work, its drafts and its criticism, extracted as characters, their inner states in narrative order, and the readings critics offer."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# One markdown file: each chapter and each critical essay as a `## ` section,
+# chapters in reading order (the clock is narrative, not the calendar).
+[acquire]
+type = "local_file"
+# REQUIRED: the source file — an absolute path, or one relative to this recipe.
+path = "REPLACE_ME"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "literary-scholarship"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is a work of fiction together with its drafts and the criticism written
+about it. Characters are the things; an inner state is a condition a character is in
+— faith, doubt, shame — and it changes in the order of the book, not the calendar.
+A reading is what a critic says about the work, from outside it; readings disagree,
+and the disagreement is the point. The narrator speaks but is not a character to
+extract.
+"""
+
+[[enrichment.ontology.types]]
+name = "character"
+kind = "entity"
+
+[[enrichment.ontology.types]]
+name = "inner_state"
+kind = "state"
+of = "character"
+
+[[enrichment.ontology.types]]
+name = "reading"
+kind = "claim"
+force = "assertive"
+scope = "about_work"
+
+[enrichment.ontology.change]
+clock = "narrative"
+
+[enrichment.ontology.voices]
+not_entities = ["the narrator"]
+
+[enrichment.ontology.derive]
+configurations = true
+
+[enrichment.ontology.tension]
+between = ["reading"]

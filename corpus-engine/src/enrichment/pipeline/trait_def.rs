@@ -445,6 +445,20 @@ pub trait Pipeline: Send + Sync + 'static {
         crate::enrichment::atlas::analysis::TensionStrategy::Graph
     }
 
+    /// The same question, asked of a corpus whose shape has been measured
+    /// (`CorpusShape::of` over the claim pool the selector will see, after
+    /// `tension.between`). The default ignores the shape and answers
+    /// [`tension_strategy`](Self::tension_strategy), so a pipeline that
+    /// does not opt in behaves exactly as it did; a recipe-ontology
+    /// pipeline derives instead. Callers must go through THIS method — it
+    /// is the one decider, and `tension_strategy` is its floor.
+    fn derive_tension_strategy(
+        &self,
+        _shape: &crate::enrichment::atlas::analysis::CorpusShape,
+    ) -> crate::enrichment::atlas::analysis::TensionStrategy {
+        self.tension_strategy()
+    }
+
     // ── Selection tuning ──────────────────────────────────────
 
     /// How many exemplars to inject per call. Default 5 across all

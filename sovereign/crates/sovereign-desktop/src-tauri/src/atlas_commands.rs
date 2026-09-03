@@ -17,7 +17,7 @@
 use std::sync::Arc;
 
 use sovereign_tools::atlas_view::{
-    AtlasCorpusSummary, AtlasMemberSummary, AtomDetail, AtomFilter, AtomListPage,
+    AtlasBuildReport, AtlasCorpusSummary, AtlasMemberSummary, AtomDetail, AtomFilter, AtomListPage,
     ConvCorpusSummary, ConvDetailView, ConvEntityChip, ConvListPage, ConvRaptorNodeView,
     ConvSummary, FileAtlasReader, PageCursor, SummaryCorrectionView,
 };
@@ -61,6 +61,29 @@ pub async fn atlas_list_corpora(
         .list_corpora()
         .await
         .map_err(|e| format!("atlas_list_corpora: {e}"))
+}
+
+/// What the last build found about one corpus — the desktop's build report
+/// card (ontology-v1 P6.4).
+///
+/// Reads the artefacts a build already wrote; it does not re-derive anything,
+/// so the card shows a VERDICT with an age rather than a live measurement.
+/// A corpus whose report step has not run comes back `reported: false` — a
+/// successful answer the card renders as "not built yet", never an error.
+#[tauri::command]
+pub async fn atlas_build_report(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<AtlasBuildReport, String> {
+    let engine = match state.corpus_engine.read().await.as_ref() {
+        Some(e) => Arc::clone(e),
+        None => return Err("Corpus engine not initialized".into()),
+    };
+    let reader = FileAtlasReader::new(engine.index_dir().to_path_buf());
+    reader
+        .build_report(&corpus_id)
+        .await
+        .map_err(|e| format!("atlas_build_report: {e}"))
 }
 
 /// List the **member atlases** of a collection corpus — the sibling
@@ -709,5 +732,165 @@ mod tests {
         assert_eq!(arr[0]["total_atoms"], 1);
         assert_eq!(arr[1]["corpus_id"], "wikipedia");
         assert_eq!(arr[1]["total_atoms"], 2);
+    }
+
+    /// The numismatics real-mode fixture, validated through the SAME reader
+    /// the Tauri commands use.
+    ///
+    /// `numismatics.real.spec.ts` asserts a pill row, a filtered list and an
+    /// atom inspector over a checked-in atlas that global-setup overlays onto
+    /// a real ingested corpus. Every number in that spec comes from these
+    /// three files, so if the fixture drifts — a serde field renamed, a
+    /// hand-edited atom that no longer deserialises, `ontology.json` dropped
+    /// from the overlay list — the browser spec fails minutes into a real-mode
+    /// run with a UI-shaped error a long way from the cause. This fails in
+    /// milliseconds and says which file.
+    ///
+    /// Modelled on `governance_real_fixture_is_valid_or_regenerated`
+    /// (`governance_commands.rs`), including the "absent → skip" arm: the
+    /// fixture is committed, so absence means a partial checkout, not a
+    /// regression.
+    #[tokio::test]
+    async fn numismatics_real_fixture_carries_the_census_its_spec_asserts() {
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../tests/e2e/real/fixtures/numismatics-atlas");
+        if !fixture.join("ontology.json").exists() {
+            eprintln!(
+                "[skip] numismatics real-mode fixture absent at {}",
+                fixture.display()
+            );
+            return;
+        }
+
+        // Lay it out exactly as `plantNumismaticsCorpus` does: one index dir
+        // with an `atlas/` holding the three overlay files.
+        let tmp = tempfile::tempdir().unwrap();
+        let atlas_dir = tmp.path().join("numismatics-e2e").join("atlas");
+        std::fs::create_dir_all(&atlas_dir).unwrap();
+        for f in ["atoms.json", "edges.json", "ontology.json"] {
+            std::fs::copy(fixture.join(f), atlas_dir.join(f))
+                .unwrap_or_else(|e| panic!("copying {f}: {e}"));
+        }
+
+        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        let rows = reader.list_corpora().await.expect("list_corpora succeeds");
+        let row = rows
+            .iter()
+            .find(|r| r.corpus_id == "numismatics-e2e")
+            .expect("the fixture corpus is listed — if not, atoms.json failed to parse");
+
+        assert_eq!(row.total_atoms, 12);
+
+        // The declaration reached the summary. WITHOUT `ontology.json` in the
+        // overlay this vector is empty and the desktop falls back to the
+        // generic atom kinds — the spec would then assert nothing about
+        // ontology while still passing on the kind pills.
+        let declared: Vec<&str> = row.declared_types.iter().map(|t| t.name.as_str()).collect();
+        // ALPHABETICAL, not declaration order. The recipe declares coin,
+        // sceatta, ruler, mint, attribution; `_summary.json` v4 carries the
+        // declaration as a `BTreeMap<String, String>`, so the order is lost
+        // before `AtlasCorpusSummary` ever sees it — and the desktop's pill
+        // row therefore separates `sceatta` from the `coin` it specializes.
+        // Pinned as it IS rather than as the P6 design assumed, so a later
+        // order-preserving change is a deliberate edit here and not a
+        // surprise (§18.3).
+        assert_eq!(
+            declared,
+            vec!["attribution", "coin", "mint", "ruler", "sceatta"],
+            "the summary's declaration map is a BTreeMap — this is pill order",
+        );
+        let sceatta = row
+            .declared_types
+            .iter()
+            .find(|t| t.name == "sceatta")
+            .expect("sceatta is declared");
+        assert_eq!(
+            sceatta.specializes.as_deref(),
+            Some("coin"),
+            "the roll-up the `coin` pill's badge depends on",
+        );
+
+        // OWN counts. The spec's `coin` badge is 5 — 3 + the 2 sceattas —
+        // and nothing here carries that total.
+        assert_eq!(row.subtype_counts.get("coin"), Some(&3));
+        assert_eq!(row.subtype_counts.get("sceatta"), Some(&2));
+        assert_eq!(row.subtype_counts.get("mint"), Some(&2));
+        assert_eq!(row.subtype_counts.get("attribution"), Some(&2));
+        assert_eq!(
+            row.subtype_counts.get("ruler"),
+            Some(&1),
+            "a `role_of` type is counted across kinds, not inside Entity",
+        );
+        assert_eq!(row.atom_counts.values().sum::<u64>(), 12);
+
+        // Clicking the `coin` pill: exact match, no roll-up.
+        let page = reader
+            .list_atoms(
+                "numismatics-e2e",
+                AtomFilter {
+                    subtypes: vec!["coin".into()],
+                    ..Default::default()
+                },
+                PageCursor::default(),
+            )
+            .await
+            .unwrap();
+        let names: Vec<&str> = page.items.iter().map(|a| a.display_name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["Marlow Field 1", "Marlow Field 2", "Marlow Field 3"],
+            "the three coins, NOT the two sceattas the badge counts",
+        );
+
+        // Clicking `ruler`: a State atom on the person, found without the
+        // caller naming a kind.
+        let page = reader
+            .list_atoms(
+                "numismatics-e2e",
+                AtomFilter {
+                    subtypes: vec!["ruler".into()],
+                    ..Default::default()
+                },
+                PageCursor::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(page.items.len(), 1);
+        assert_eq!(page.items[0].display_name, "King of Mercia");
+        assert_eq!(
+            page.items[0].atom_type,
+            corpus_engine::enrichment::atlas::atoms::AtomType::State,
+        );
+
+        // The attribution claim's "About" link, and the `ref` attribute that
+        // resolves beside one that is only what the source said.
+        let detail = reader
+            .get_atom_detail("numismatics-e2e", "claim-0001")
+            .await
+            .unwrap()
+            .expect("the attribution claim is in the fixture");
+        assert_eq!(
+            detail.referenced_atoms["entity-0008"].display_name, "Marlow Field 4",
+            "the claim's subject resolves",
+        );
+        let sceatta = reader
+            .get_atom_detail("numismatics-e2e", "entity-0008")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            sceatta.referenced_atoms["entity-0003"].display_name, "Canterbury",
+            "the `mint` ref attribute resolves",
+        );
+        let unresolved = reader
+            .get_atom_detail("numismatics-e2e", "entity-0009")
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            unresolved.referenced_atoms.is_empty(),
+            "\"an unidentified continental mint\" is the source's words, not a link: {:?}",
+            unresolved.referenced_atoms,
+        );
     }
 }

@@ -650,6 +650,10 @@ mod tests {
 
     fn claim(content: &str, attributed_to: Option<&str>) -> ClaimSketch {
         ClaimSketch {
+            attributes: Default::default(),
+            claim_kind: None,
+            subject: None,
+            scope: None,
             content: content.into(),
             discourse_act: DiscourseAct::Enact,
             epistemic_status: EpistemicStatus::Confident,
@@ -930,6 +934,8 @@ mod tests {
         // `unclustered` list carries the ref with facet=Event.
         fn ev(desc: &str) -> EventSketch {
             EventSketch {
+                attributes: Default::default(),
+                event_type: None,
                 description: desc.into(),
                 participants: vec!["Alyosha".into()],
                 anchor: String::new(),

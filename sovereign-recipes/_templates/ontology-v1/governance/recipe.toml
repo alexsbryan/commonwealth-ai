@@ -1,0 +1,93 @@
+# Governance — an ontology-v1 recipe template.
+#
+# A charter plus dated decisions that amend it: a co-housing steward, a club,
+# a small company's policies. The questions it is built to answer: what is the
+# rule today; which articles have been amended and by which decision; which
+# rules contradict each other. The declaration is ONTOLOGY_PRIMITIVES.md §1.2
+# verbatim; the guidance is the maple-house probe's, which this template
+# generalizes.
+#
+# Scaffold:  svrn recipe new --ontology governance --id my-house --out my-house.toml
+# Then fill the REPLACE_ME fields, and:
+#   svrn recipe validate my-house.toml      # prints what the ontology derives
+#   svrn corpus install my-house.toml
+#   svrn enrich init my-house --from-corpus my-house
+#   svrn enrich build my-house --full
+
+[corpus]
+# REQUIRED: a stable, repo-scoped id.
+id = "REPLACE_ME"
+# REQUIRED: human-readable name.
+name = "REPLACE_ME"
+description = "A founding charter plus dated decisions that amend it, extracted as rules with their topics, conditions and validity."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# One markdown file: the charter's articles and each dated decision as a
+# `## ` section (dates in the headings let supersession order them).
+[acquire]
+type = "local_file"
+# REQUIRED: the source file — an absolute path, or one relative to this recipe.
+path = "REPLACE_ME"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "governance"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is the governing rules of a community: founding documents (a charter of
+numbered articles) plus dated decisions that amend, extend, or override them over time.
+Treat it as living common law — a later decision can change an earlier rule.
+
+Extract, as rules, every NORMATIVE STATEMENT — each thing that is required, forbidden,
+or permitted — attributed to the single topic it governs (guests, quiet hours, kitchen,
+parking, dues), with any conditions it carries and the period it is valid for.
+Identify the governed topics themselves as entities.
+
+A conflict is a genuine contradiction in what is required, forbidden, or permitted for
+the same topic and situation — never two rules that merely share a word.
+"""
+
+[[enrichment.ontology.types]]
+name = "topic"
+kind = "entity"
+description = "A governed matter: guests, quiet hours, kitchen, common spaces, parking, chores."
+
+[[enrichment.ontology.types]]
+name = "rule"
+kind = "claim"
+label = "rule"
+force = "directive"
+deontic = ["require", "forbid", "permit"]
+subject = "topic"
+attributes = [{ name = "conditions", type = "text" }, { name = "valid", type = "time", range = true }]
+
+[enrichment.ontology.change]
+supersedes = { rule = "valid" }
+
+[enrichment.ontology.tension]
+label = "conflict"
+between = ["rule"]
+same = ["subject", "valid"]
+not_conflicts = [
+  "two separate exemptions to the same rule",
+  "a rule for visitors versus a rule for members",
+  "rules governing different places or resources",
+  "an additive rule layered on another",
+]

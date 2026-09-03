@@ -142,6 +142,8 @@ pub fn parse_phase1_narrative(response: &str) -> Result<NarrativeExtension> {
                         .unwrap_or("")
                         .to_string();
                     Some(EventSketch {
+                        attributes: Default::default(),
+                        event_type: None,
                         description,
                         participants,
                         anchor,
@@ -223,6 +225,8 @@ pub fn parse_phase1_narrative(response: &str) -> Result<NarrativeExtension> {
         .unwrap_or_default()
         .into_iter()
         .map(|(participants, label, anchor)| RelationSketch {
+            attributes: Default::default(),
+            relation_type: None,
             participants,
             label,
             anchor,

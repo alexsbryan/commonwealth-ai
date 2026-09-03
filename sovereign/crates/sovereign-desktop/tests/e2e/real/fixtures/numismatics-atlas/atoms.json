@@ -1,0 +1,231 @@
+{
+  "schema_version": "2.4",
+  "atoms": [
+    {
+      "atom_type": "Entity",
+      "data": {
+        "id": "entity-0001",
+        "canonical_name": "Offa",
+        "entity_type": "person",
+        "first_appearance": {
+          "chunk_id": "sec_hoard_i"
+        },
+        "description": "Offa, from the Marlow Field hoard report.",
+        "salience": 0.9,
+        "enrichment_depth": "extracted"
+      }
+    },
+    {
+      "atom_type": "Entity",
+      "data": {
+        "id": "entity-0002",
+        "canonical_name": "Michael Metcalf",
+        "entity_type": "person",
+        "first_appearance": {
+          "chunk_id": "sec_catalogue_i"
+        },
+        "description": "Michael Metcalf, from the Marlow Field hoard report.",
+        "salience": 0.5,
+        "enrichment_depth": "extracted"
+      }
+    },
+    {
+      "atom_type": "Entity",
+      "data": {
+        "id": "entity-0003",
+        "canonical_name": "Canterbury",
+        "entity_type": "mint",
+        "first_appearance": {
+          "chunk_id": "sec_hoard_i"
+        },
+        "description": "Canterbury, from the Marlow Field hoard report.",
+        "salience": 0.8,
+        "enrichment_depth": "extracted"
+      }
+    },
+    {
+      "atom_type": "Entity",
+      "data": {
+        "id": "entity-0004",
+        "canonical_name": "London",
+        "entity_type": "mint",
+        "first_appearance": {
+          "chunk_id": "sec_hoard_i"
+        },
+        "description": "London, from the Marlow Field hoard report.",
+        "salience": 0.6,
+        "enrichment_depth": "extracted"
+      }
+    },
+    {
+      "atom_type": "Entity",
+      "data": {
+        "id": "entity-0005",
+        "canonical_name": "Marlow Field 1",
+        "entity_type": "coin",
+        "first_appearance": {
+          "chunk_id": "sec_hoard_i"
+        },
+        "description": "Marlow Field 1, from the Marlow Field hoard report.",
+        "salience": 0.9,
+        "enrichment_depth": "extracted",
+        "attributes": {
+          "ruler": "entity-0001",
+          "mint": "entity-0004",
+          "denomination": "penny",
+          "metal": "silver",
+          "weight": 1.21,
+          "struck": "757-796",
+          "catalogue_ref": "Marlow Field 1"
+        }
+      }
+    },
+    {
+      "atom_type": "Entity",
+      "data": {
+        "id": "entity-0006",
+        "canonical_name": "Marlow Field 2",
+        "entity_type": "coin",
+        "first_appearance": {
+          "chunk_id": "sec_hoard_i"
+        },
+        "description": "Marlow Field 2, from the Marlow Field hoard report.",
+        "salience": 0.8,
+        "enrichment_depth": "extracted",
+        "attributes": {
+          "ruler": "entity-0001",
+          "mint": "entity-0003",
+          "denomination": "penny",
+          "metal": "silver",
+          "weight": 1.32,
+          "catalogue_ref": "Marlow Field 2"
+        }
+      }
+    },
+    {
+      "atom_type": "Entity",
+      "data": {
+        "id": "entity-0007",
+        "canonical_name": "Marlow Field 3",
+        "entity_type": "coin",
+        "first_appearance": {
+          "chunk_id": "sec_hoard_i"
+        },
+        "description": "Marlow Field 3, from the Marlow Field hoard report.",
+        "salience": 0.7,
+        "enrichment_depth": "extracted",
+        "attributes": {
+          "denomination": "mancus",
+          "metal": "gold",
+          "weight": 4.28,
+          "catalogue_ref": "Marlow Field 3"
+        }
+      }
+    },
+    {
+      "atom_type": "Entity",
+      "data": {
+        "id": "entity-0008",
+        "canonical_name": "Marlow Field 4",
+        "entity_type": "sceatta",
+        "first_appearance": {
+          "chunk_id": "sec_hoard_i"
+        },
+        "description": "Marlow Field 4, from the Marlow Field hoard report.",
+        "salience": 0.85,
+        "enrichment_depth": "extracted",
+        "attributes": {
+          "mint": "entity-0003",
+          "metal": "silver",
+          "weight": 0.95,
+          "struck": "between 710 and 725",
+          "catalogue_ref": "Marlow Field 4"
+        }
+      }
+    },
+    {
+      "atom_type": "Entity",
+      "data": {
+        "id": "entity-0009",
+        "canonical_name": "Marlow Field 5",
+        "entity_type": "sceatta",
+        "first_appearance": {
+          "chunk_id": "sec_hoard_i"
+        },
+        "description": "Marlow Field 5, from the Marlow Field hoard report.",
+        "salience": 0.6,
+        "enrichment_depth": "extracted",
+        "attributes": {
+          "mint": "an unidentified continental mint",
+          "metal": "billon",
+          "weight": 0.88,
+          "catalogue_ref": "Marlow Field 5"
+        }
+      }
+    },
+    {
+      "atom_type": "State",
+      "data": {
+        "id": "state-0001",
+        "entity_id": "entity-0001",
+        "label": "King of Mercia",
+        "state_type": "ruler",
+        "evidence": [
+          {
+            "chunk_id": "sec_hoard_i"
+          }
+        ],
+        "section_range": {
+          "start": "sec_hoard_i",
+          "end": "sec_hoard_i"
+        },
+        "enrichment_depth": "extracted"
+      }
+    },
+    {
+      "atom_type": "Claim",
+      "data": {
+        "id": "claim-0001",
+        "content": "Marlow Field 4 was struck at Canterbury between 710 and 725.",
+        "discourse_act": "assert",
+        "epistemic_status": "confident",
+        "scope": "particular",
+        "evidence": [
+          {
+            "chunk_id": "sec_catalogue_i"
+          }
+        ],
+        "attributed_to": "entity-0002",
+        "subject": "entity-0008",
+        "claim_kind": "attribution",
+        "enrichment_depth": "extracted",
+        "attributes": {
+          "proposed_date": "710-725",
+          "grade": "die-linked"
+        }
+      }
+    },
+    {
+      "atom_type": "Claim",
+      "data": {
+        "id": "claim-0002",
+        "content": "Marlow Field 1 was struck for Offa at London.",
+        "discourse_act": "assert",
+        "epistemic_status": "confident",
+        "scope": "particular",
+        "evidence": [
+          {
+            "chunk_id": "sec_catalogue_i"
+          }
+        ],
+        "attributed_to": "entity-0002",
+        "subject": "entity-0005",
+        "claim_kind": "attribution",
+        "enrichment_depth": "extracted",
+        "attributes": {
+          "proposed_date": "757-796"
+        }
+      }
+    }
+  ]
+}

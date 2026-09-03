@@ -196,6 +196,7 @@ mod tests {
 
     fn event_citing(refs: Vec<ChunkRef>) -> AtomEnvelope {
         AtomEnvelope::Event(Event {
+            attributes: Default::default(),
             id: AtomId::event(1),
             description: "d".into(),
             event_type: EventType::Decision,

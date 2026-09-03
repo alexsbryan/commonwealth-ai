@@ -1,0 +1,103 @@
+# Contracts practice — an ontology-v1 recipe template.
+#
+# Executed agreements and the case law they rely on. The questions it is
+# built to answer: which agreements carry a change-of-control clause; what a
+# defined term means in this agreement; when an obligation expires; which
+# authority has been distinguished since. The declaration is
+# ONTOLOGY_PRIMITIVES.md §1.4 verbatim, plus the `organization`, `agreement`
+# and `case` types its facets point at.
+#
+# Scaffold:  svrn recipe new --ontology contracts --id my-deals --out my-deals.toml
+# Then fill the REPLACE_ME fields, and:
+#   svrn recipe validate my-deals.toml       # prints what the ontology derives
+#   svrn corpus install my-deals.toml
+#   svrn enrich init my-deals --from-corpus my-deals
+#   svrn enrich build my-deals --full
+
+[corpus]
+# REQUIRED: a stable, repo-scoped id.
+id = "REPLACE_ME"
+# REQUIRED: human-readable name.
+name = "REPLACE_ME"
+description = "Executed agreements and the authorities they rely on, extracted as parties, defined terms, dated obligations and citations."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# One markdown file: each agreement and each opinion as a `## ` section
+# (effective dates in the headings let supersession order the obligations).
+[acquire]
+type = "local_file"
+# REQUIRED: the source file — an absolute path, or one relative to this recipe.
+path = "REPLACE_ME"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "contracts"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is a contracts practice: executed agreements and the case law they rely
+on. Parties are organizations acting under an agreement. A defined term means what
+its agreement says it means, nothing more. An obligation requires, forbids or permits
+something of a party for a period, with a deadline where one is set; a later amendment
+supersedes an earlier obligation on the same matter. Authorities cite one another, and
+a later court may follow, distinguish or overrule an earlier one.
+"""
+
+[[enrichment.ontology.types]]
+name = "organization"
+kind = "entity"
+description = "A company, fund, agency or other legal person."
+
+[[enrichment.ontology.types]]
+name = "party"
+kind = "entity"
+role_of = "organization"
+
+[[enrichment.ontology.types]]
+name = "agreement"
+kind = "entity"
+description = "An executed agreement: title, parties, effective date."
+
+[[enrichment.ontology.types]]
+name = "defined_term"
+kind = "entity"
+attributes = [{ name = "definition", type = "text" }, { name = "agreement", type = "ref", of = "agreement" }]
+
+[[enrichment.ontology.types]]
+name = "case"
+kind = "entity"
+description = "A reported decision the agreements rely on."
+
+[[enrichment.ontology.types]]
+name = "obligation"
+kind = "claim"
+force = "directive"
+deontic = ["require", "forbid", "permit"]
+subject = "party"
+attributes = [{ name = "valid", type = "time", range = true }, { name = "deadline", type = "time" }]
+
+[[enrichment.ontology.types]]
+name = "cites"
+kind = "relation"
+from = "case"
+to = "case"
+source = { file = "courtlistener_citations.csv", from = "citing_id", to = "cited_id", attributes = { treatment = "treatment" } }
+
+[enrichment.ontology.change]
+supersedes = { obligation = "valid" }

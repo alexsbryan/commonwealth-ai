@@ -302,6 +302,8 @@ mod tests {
 
     fn claim(act: DiscourseAct) -> AtomEnvelope {
         AtomEnvelope::Claim(Claim {
+            attributes: Default::default(),
+            subject: None,
             id: AtomId::claim(1),
             content: "some claim".into(),
             discourse_act: act,

@@ -1,0 +1,92 @@
+# Materials lab — an ontology-v1 recipe template.
+#
+# Two hundred papers and the group's own reports. The questions it is built
+# to answer: what yields have been reported for a catalyst at a temperature;
+# which papers contradict each other on a property; which methods measured
+# it. The declaration is ONTOLOGY_PRIMITIVES.md §1.9 verbatim, plus the
+# `method` type a measurement's `method` points at.
+#
+# Scaffold:  svrn recipe new --ontology materials-lab --id my-lab --out my-lab.toml
+# Then fill the REPLACE_ME fields, and:
+#   svrn recipe validate my-lab.toml         # prints what the ontology derives
+#   svrn corpus install my-lab.toml
+#   svrn enrich init my-lab --from-corpus my-lab
+#   svrn enrich build my-lab --full
+
+[corpus]
+# REQUIRED: a stable, repo-scoped id.
+id = "REPLACE_ME"
+# REQUIRED: human-readable name.
+name = "REPLACE_ME"
+description = "Papers and lab reports, extracted as materials, catalysts and measurements — property, value, temperature, method — anchored to their tables."
+license = "private"
+mesh_sharing = false
+schema_version = 1
+
+# One markdown file: each paper or report as a `## ` section, results tables
+# kept as markdown tables (measurements anchor to them).
+[acquire]
+type = "local_file"
+# REQUIRED: the source file — an absolute path, or one relative to this recipe.
+path = "REPLACE_ME"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "paragraph"
+max_chars = 2000
+overlap_chars = 200
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "materials-lab"
+
+[enrichment.ontology]
+version = 1
+guidance = """
+This corpus is a materials laboratory's literature: published papers and the group's
+own reports. Materials are identified by CAS number where one is given; catalysts are
+materials in a catalytic role. A measurement is a reported value of a property of a
+material — yield, conductivity, band gap — at a temperature, by a method, most often
+read from a results table or a figure. Two measurements of the same property of the
+same material at the same temperature that disagree are the contradiction to find.
+"""
+
+[[enrichment.ontology.types]]
+name = "material"
+kind = "entity"
+identity = ["cas_number"]
+attributes = [{ name = "cas_number", type = "text" }]
+
+[[enrichment.ontology.types]]
+name = "catalyst"
+kind = "entity"
+specializes = "material"
+
+[[enrichment.ontology.types]]
+name = "method"
+kind = "entity"
+description = "A measurement method: XRD, GC-MS, a four-point probe."
+
+[[enrichment.ontology.types]]
+name = "measurement"
+kind = "claim"
+force = "assertive"
+subject = "material"
+attributes = [
+  { name = "property",    type = "text",     values = ["yield", "conductivity", "band_gap"] },
+  { name = "value",       type = "quantity" },
+  { name = "temperature", type = "quantity", unit = "K" },
+  { name = "method",      type = "ref",      of = "method" },
+]
+anchors = ["table", "figure", "text"]
+
+[enrichment.ontology.tension]
+between = ["measurement"]
+same = ["subject", "property", "temperature"]

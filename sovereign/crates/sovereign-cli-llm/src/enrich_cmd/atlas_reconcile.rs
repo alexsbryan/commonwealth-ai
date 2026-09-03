@@ -21,9 +21,12 @@
 //! bench's B³/precision numbers ARE this artifact's numbers.
 
 use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, Entity};
-use corpus_engine::enrichment::atlas::{read_atlas_atoms, ATLAS_DIRNAME};
+use corpus_engine::enrichment::atlas::{
+    append_atoms_and_edges, read_atlas_atoms, read_atlas_edges, read_atlas_ontology, ATLAS_DIRNAME,
+};
+use corpus_engine::enrichment::ontology::TypeIndex;
 use corpus_engine::enrichment::reconciliation::{
-    reconcile, ReconciledEntity, ReconciliationAct, ReconciliationPolicy,
+    reconcile, reify_merges, ReconciledEntity, ReconciliationAct, ReconciliationPolicy,
 };
 use serde::Serialize;
 
@@ -115,12 +118,34 @@ pub async fn cmd_atlas_reconcile(args: &[String]) -> i32 {
         return 2;
     }
 
-    // Default policy — identical to the bench's `--policy tuned` baseline
-    // (cross_origin_required_signals = 2). Deterministic; no judge LLM is
-    // invoked because `reconcile` carries no InferenceFn.
-    let policy = ReconciliationPolicy::default();
+    // The identity criteria this atlas was built under, read from the atlas
+    // itself (`atlas/ontology.json`) — the reconciler runs over atoms, not
+    // over a recipe, and the atlas is what records the policies that produced
+    // it. An atlas that declares nothing yields an empty map, so the policy is
+    // byte-for-byte the bench's `--policy tuned` baseline
+    // (cross_origin_required_signals = 2) and every Enron run is unaffected.
+    let ontology = read_atlas_ontology(&atlas_dir);
+    let declared = ontology
+        .as_ref()
+        .is_some_and(|o| o.policies.has_declarations());
+    let policy = ReconciliationPolicy {
+        identity: ontology
+            .as_ref()
+            .map(|o| TypeIndex::from_policies(&o.policies).effective_identity_policy())
+            .unwrap_or_default(),
+        ..Default::default()
+    };
     println!("─── reconcile: {corpus_id} ───");
     println!("  input entity atoms : {input_atom_count}");
+    if declared {
+        println!(
+            "  identity criteria  : {} external, {} descriptive",
+            policy.identity.identity.len(),
+            policy.identity.identity_fallback.len()
+        );
+    }
+    // Deterministic; no judge LLM is invoked because `reconcile` carries no
+    // InferenceFn.
     let outcome = reconcile(entities, &policy);
     let canonical_entity_count = outcome.entities.len();
     let merged: Vec<&ReconciledEntity> = outcome
@@ -165,11 +190,74 @@ pub async fn cmd_atlas_reconcile(args: &[String]) -> i32 {
         }
     }
 
+    // A declared corpus asked for its identity criteria to be part of the
+    // knowledge, so each merge also lands as a `same_as` Claim a reader can
+    // find from either side. An undeclared corpus keeps today's silent merge
+    // — making reification always-on is a DEFAULTS_LEDGER decision with the
+    // Enron B³ lane as its gate, not this command's call.
+    let mut same_as_claims = 0usize;
+    if declared && !outcome.reified.is_empty() {
+        match append_reified_merges(&atlas_dir, &outcome.reified) {
+            Ok(n) => same_as_claims = n,
+            Err(e) => {
+                eprintln!("error: writing same_as claims: {e}");
+                return 1;
+            }
+        }
+    }
+
     println!("  canonical entities : {canonical_entity_count}  ({collapsed} atoms collapsed into {merged_entity_count} multi-source clusters)");
     println!("  oplog merges       : {}", outcome.oplog_entries.len());
+    if declared {
+        println!("  same_as claims     : {same_as_claims}");
+    }
     if oplog_errs > 0 {
         eprintln!("  warn: {oplog_errs} oplog entries failed to append");
     }
     println!("  → {}", recon_path.display());
     0
+}
+
+/// Append one `same_as` Claim per merge to the atlas, continuing its id
+/// sequences. Returns how many claims were written.
+///
+/// Ids continue from what is already on disk rather than restarting at 1:
+/// this command runs AFTER `atlas-resolve` wrote the atlas, so a fresh
+/// sequence would collide with the claims already there.
+fn append_reified_merges(
+    atlas_dir: &std::path::Path,
+    reified: &[corpus_engine::enrichment::reconciliation::ReifiedMerge],
+) -> Result<usize, String> {
+    let atoms = read_atlas_atoms(atlas_dir).map_err(|e| format!("read atoms.json: {e}"))?;
+    let edges = read_atlas_edges(atlas_dir).map_err(|e| format!("read edges.json: {e}"))?;
+    let next_claim = 1 + atoms
+        .atoms
+        .iter()
+        .filter_map(|a| match a {
+            AtomEnvelope::Claim(c) => index_suffix(c.id.as_str()),
+            _ => None,
+        })
+        .max()
+        .unwrap_or(0);
+    let next_edge = 1 + edges
+        .edges
+        .iter()
+        .filter_map(|e| index_suffix(e.id.as_str()))
+        .max()
+        .unwrap_or(0);
+
+    let (claims, new_edges) = reify_merges(reified, next_claim, next_edge);
+    let count = claims.len();
+    let envelopes: Vec<AtomEnvelope> = claims.into_iter().map(AtomEnvelope::Claim).collect();
+    append_atoms_and_edges(atlas_dir, &envelopes, &new_edges)
+        .map_err(|e| format!("append to atlas: {e}"))?;
+    Ok(count)
+}
+
+/// The numeric tail of a `<kind>-<index>` id. `None` for a content-hash id
+/// (the v2 constructors) — those carry no sequence, so they contribute
+/// nothing to "what is the next free index", which is the right answer
+/// rather than a guess.
+fn index_suffix(id: &str) -> Option<usize> {
+    id.rsplit_once('-')?.1.parse().ok()
 }

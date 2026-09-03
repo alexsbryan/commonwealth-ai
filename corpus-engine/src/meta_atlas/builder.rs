@@ -21,7 +21,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::atlas_canonical::lookup_key;
 use crate::enrichment::atlas::{
-    atoms_content_hash, read_atlas_atoms, AtomEnvelope, AtomId, ChunkRef, ATLAS_DIRNAME,
+    atoms_content_hash, read_atlas_atoms, read_atlas_ontology, AtomEnvelope, AtomId, ChunkRef,
+    ATLAS_DIRNAME,
 };
 use crate::enrichment::pipeline::atlas::EntityType;
 use crate::stream_axes::{ArticulationVector, Stability, StreamAxes};
@@ -146,6 +147,9 @@ pub fn build_meta_atlas(indexes_dir: &Path) -> std::io::Result<MetaAtlasFile> {
                 tracing::warn!(corpus = %corpus_id, error = %e, "meta_atlas: atoms_content_hash failed");
                 String::new()
             });
+        // Read once per corpus, not per atom. `None` for every corpus that
+        // declares nothing, which is every prebuilt genre.
+        let vocab = declared_vocabulary(&atlas_dir);
 
         // Per-corpus stream block (stability) lives in
         // `_corpus_meta.json`. Missing → None (atlas-sibling case).
@@ -197,7 +201,11 @@ pub fn build_meta_atlas(indexes_dir: &Path) -> std::io::Result<MetaAtlasFile> {
             // lead-sentence shape often enough that the
             // chunk-preview classifier picks up the right markers;
             // see Stage 5 calibration histogram.
-            let articulation = super::classifier::classify_articulation(env, &entity.description);
+            let articulation = super::classifier::classify_articulation_with(
+                env,
+                &entity.description,
+                vocab.as_ref(),
+            );
 
             let anchor = Anchor {
                 corpus_id: corpus_id.clone(),
@@ -344,6 +352,7 @@ pub fn rebuild_for_corpus(
             }
         };
         let content_hash = atoms_content_hash(&atlas_dir).unwrap_or_default();
+        let vocab = declared_vocabulary(&atlas_dir);
         let stability = read_corpus_stability(&corpus_path);
 
         if stability != Some(crate::stream_axes::Stability::Rolling) {
@@ -366,8 +375,11 @@ pub fn rebuild_for_corpus(
                 if key.is_empty() {
                     continue;
                 }
-                let articulation =
-                    super::classifier::classify_articulation(env, &entity.description);
+                let articulation = super::classifier::classify_articulation_with(
+                    env,
+                    &entity.description,
+                    vocab.as_ref(),
+                );
                 let anchor = Anchor {
                     corpus_id: target_corpus_id.to_string(),
                     atom_id: entity.id.clone(),
@@ -450,6 +462,16 @@ pub fn rebuild_for_corpus(
 /// Atomically write a `MetaAtlasFile` to `out_path`. Creates parent
 /// dirs as needed. Writes to `<out_path>.tmp` then renames so a
 /// process kill mid-write doesn't leave a partial file in place.
+/// The declared ontology under `atlas_dir`, or `None` when the corpus
+/// declared nothing. The `has_declarations()` filter is the I5 gate: a
+/// prose-only or absent ontology reads as no vocabulary, so the classifier
+/// takes the pre-ontology path.
+fn declared_vocabulary(atlas_dir: &Path) -> Option<crate::enrichment::ontology::OntologyPolicies> {
+    read_atlas_ontology(atlas_dir)
+        .map(|f| f.policies)
+        .filter(|p| p.has_declarations())
+}
+
 pub fn write_meta_atlas(file: &MetaAtlasFile, out_path: &Path) -> std::io::Result<()> {
     if let Some(parent) = out_path.parent() {
         std::fs::create_dir_all(parent)?;

@@ -31,6 +31,7 @@ use crate::enrichment::atlas::ann_store::AnnSeedTable;
 use crate::enrichment::atlas::projection::AtomRecord;
 use crate::enrichment::atlas::store::LancePreload;
 use crate::enrichment::atlas::{AtomEnvelope, AtomType, ChunkRef, EdgeProvenance, EdgeType};
+use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
 use crate::enrichment::pipeline::atlas::EpistemicStatus;
 use crate::ScoredChunk;
 
@@ -97,6 +98,19 @@ pub struct AtlasGraph {
     /// (`AtlasContextManager` / eval runner) via
     /// [`AtlasGraph::with_ann_seed_table`], never the sync open bridge.
     ann: Option<Arc<AnnSeedTable>>,
+    /// The ontology this atlas was extracted under, read from
+    /// `atlas/ontology.json` by [`Self::load_lance_from_disk`]. This is the
+    /// vocabulary carrier for ontology-v1 P5: every reader that needs to know
+    /// "what did the author declare" asks the graph it is already holding,
+    /// rather than re-opening the atlas dir or growing a second projection
+    /// beside `_summary.json`'s [`super::summary::OntologySummary`].
+    ///
+    /// **`None` is load-bearing.** [`Self::with_ontology`] drops a policy set
+    /// with no declared types, so `Some` means *this corpus declared types* —
+    /// the single structural gate (I5) that keeps SEP, Wikipedia and Enron off
+    /// every declared-type code path. A caller never re-checks
+    /// `has_declarations()`; the `Option` already answered.
+    ontology: Option<Arc<OntologyPolicies>>,
 }
 
 impl std::fmt::Debug for AtlasGraph {
@@ -155,6 +169,7 @@ impl AtlasGraph {
             article_slug,
             preload: Arc::new(preload),
             ann: None,
+            ontology: None,
         }
     }
 
@@ -165,7 +180,44 @@ impl AtlasGraph {
     pub fn load_lance_from_disk(atlas_corpus_id: &str, atlas_dir: &Path) -> Result<Self, String> {
         let preload = LancePreload::open_blocking(atlas_dir)
             .map_err(|e| format!("open v2 store for {atlas_corpus_id}: {e}"))?;
-        Ok(Self::from_lance_preload(atlas_corpus_id, preload))
+        let ontology = super::writer::read_atlas_ontology(atlas_dir).map(|f| f.policies);
+        Ok(Self::from_lance_preload(atlas_corpus_id, preload).with_ontology(ontology))
+    }
+
+    /// Attach the declared ontology read from `atlas/ontology.json`. Policies
+    /// that declare no types are dropped to `None` HERE, once, so no consumer
+    /// has to remember the `has_declarations()` check — see the field doc.
+    pub fn with_ontology(mut self, policies: Option<OntologyPolicies>) -> Self {
+        let declared = policies.filter(|p| p.has_declarations());
+        tracing::debug!(
+            corpus = %self.atlas_corpus_id,
+            declared_types = declared.as_ref().map(|p| p.shape.types.len()).unwrap_or(0),
+            "atlas graph: declared vocabulary attached"
+        );
+        self.ontology = declared.map(Arc::new);
+        self
+    }
+
+    /// The declared ontology, or `None` for a corpus that declared nothing.
+    pub fn ontology(&self) -> Option<&OntologyPolicies> {
+        self.ontology.as_deref()
+    }
+
+    /// Is `subtype` the declared type `target`, or a `specializes` descendant
+    /// of it? `sceatta specializes coin`, so `is_subtype_of("sceatta", "coin")`
+    /// is true and an enumeration of `coin` includes the sceattas.
+    ///
+    /// Always `false` for a corpus that declared nothing, which is what makes
+    /// an undeclared corpus's equality compare byte-identical: callers write
+    /// `a == b || graph.is_subtype_of(a, b)` and the second term is inert.
+    /// The `specializes` walk itself is [`TypeIndex::is_a`] — the ONE place the
+    /// chain is walked (§10.6); this is the graph-side accessor for it, not a
+    /// second implementation.
+    pub fn is_subtype_of(&self, subtype: &str, target: &str) -> bool {
+        match self.ontology() {
+            Some(p) => TypeIndex::from_policies(p).is_a(subtype, target),
+            None => false,
+        }
     }
 
     /// Attach a persistent ANN seed table (`atlas/atoms_ann.lance`) — the
@@ -1239,6 +1291,81 @@ pub async fn atlas_navigate_ann(
     requests
 }
 
+/// DARK (ontology-v1 P5, default **OFF**) — `SOVEREIGN_ATLAS_EMBED_ATTRIBUTES`.
+///
+/// When on, a declared atom's `attributes` are appended to its embed text, so
+/// "which coins are silver" has something to match on: today the metal lives
+/// in a JSON map the embedder never sees. Read once (the renderer runs per
+/// atom over million-atom atlases).
+///
+/// Off by default because it changes what every atom embeds to, and the cache
+/// signature does not key on it — see the `DEFAULTS_LEDGER.md` row for the
+/// flip conditions.
+static EMBED_ATTRIBUTES: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+    let on = std::env::var("SOVEREIGN_ATLAS_EMBED_ATTRIBUTES")
+        .ok()
+        .map(|v| {
+            let v = v.trim().to_string();
+            v == "1" || v.eq_ignore_ascii_case("true")
+        })
+        .unwrap_or(false);
+    tracing::debug!(
+        enabled = on,
+        "atlas render: SOVEREIGN_ATLAS_EMBED_ATTRIBUTES"
+    );
+    on
+});
+
+/// The `\nattr: k=v; k2=v2` suffix an atom's declared attributes contribute to
+/// its embed text, or `""`.
+///
+/// Empty when the knob is off AND when the atom has no attributes — which is
+/// every atom of every undeclared corpus, so SEP / Wikipedia / Enron render
+/// identically whichever way the knob is set. Keys are already sorted
+/// (`serde_json::Map` is a BTreeMap under the default feature), so the suffix
+/// is deterministic.
+///
+/// ONE decider: both the ANN-backfill renderer ([`render_atom_entry`]) and the
+/// daemon's bag loader call this, so an entry's `embed_text` stays stable
+/// across the build and read paths — the invariant [`ATLAS_ENTRY_CHAR_LIMIT`]
+/// documents.
+pub fn atom_attributes_suffix(attrs: &serde_json::Map<String, serde_json::Value>) -> String {
+    if !*EMBED_ATTRIBUTES {
+        return String::new();
+    }
+    render_attributes(attrs)
+}
+
+/// The rendering itself, independent of the knob — the half a unit test can
+/// exercise (a `LazyLock` env read is decided once per process, so the gate
+/// above is proven by its default, not by flipping it mid-run).
+fn render_attributes(attrs: &serde_json::Map<String, serde_json::Value>) -> String {
+    if attrs.is_empty() {
+        return String::new();
+    }
+    // Sorted HERE, not inherited from the map. `serde_json::Map` is a
+    // `BTreeMap` or an insertion-ordered `IndexMap` depending on whether
+    // anything in the build enables `serde_json/preserve_order` — and
+    // something in this workspace does, so cargo's feature unification
+    // decides the order for every crate at once. This string is EMBEDDED
+    // (`SOVEREIGN_ATLAS_EMBED_ATTRIBUTES`), so inheriting that order would
+    // make an atom's vector depend on the order the extractor happened to
+    // emit its keys, and on which crates were in the build. Caught 2026-09-02
+    // by `attribute_suffix_is_dark_and_key_sorted` failing in the full
+    // workspace and passing under `-p corpus-engine`.
+    let mut pairs: Vec<(&String, &serde_json::Value)> = attrs.iter().collect();
+    pairs.sort_by(|(a, _), (b, _)| a.cmp(b));
+    let rendered = pairs
+        .into_iter()
+        .map(|(k, v)| match v {
+            serde_json::Value::String(s) => format!("{k}={s}"),
+            other => format!("{k}={other}"),
+        })
+        .collect::<Vec<_>>()
+        .join("; ");
+    format!("\nattr: {rendered}")
+}
+
 /// Max chars of rendered atom text fed to the embedder — the cap
 /// [`render_atom_entry`] truncates to. The loaders share the renderer, so an
 /// entry's `embed_text` is stable across the build (embed) and read (bag) paths.
@@ -1248,7 +1375,7 @@ const ATLAS_ENTRY_CHAR_LIMIT: usize = 3000;
 /// glassbox number the 3b go/no-go watches: `resolved` of `total` bag entries
 /// became ANN rows (the rest had no embedding or didn't resolve to an atom-id,
 /// which the v1 cosine path also drops, so the seedable set matches).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AnnBuildStats {
     pub resolved: usize,
     pub total: usize,
@@ -1354,6 +1481,7 @@ pub fn render_atom_entry(atom: &AtomEnvelope, article_slug: &str) -> Option<(Str
                 text.push('\n');
             }
             text.push_str(&e.description);
+            text.push_str(&atom_attributes_suffix(&e.attributes));
             if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
                 text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
             }
@@ -1369,6 +1497,7 @@ pub fn render_atom_entry(atom: &AtomEnvelope, article_slug: &str) -> Option<(Str
                 .trim_matches('"')
                 .to_string();
             let mut text = format!("[Claim: {act}, {status}] {content}", content = c.content);
+            text.push_str(&atom_attributes_suffix(&c.attributes));
             if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
                 text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
             }
@@ -1830,6 +1959,99 @@ mod store_io_tests {
         }
 
         assert!(graph.atom("no-such-id").is_none());
+    }
+
+    /// The DARK attribute suffix (`SOVEREIGN_ATLAS_EMBED_ATTRIBUTES`).
+    ///
+    /// Two facts, separately checked: the rendering is deterministic and
+    /// key-sorted, and the knob is OFF by default so nothing renders today.
+    #[test]
+    fn attribute_suffix_is_dark_and_key_sorted() {
+        let mut attrs = serde_json::Map::new();
+        attrs.insert("metal".into(), serde_json::Value::String("silver".into()));
+        attrs.insert("weight".into(), serde_json::json!(1.21));
+        attrs.insert("mint".into(), serde_json::Value::String("Eoforwic".into()));
+
+        // Inserted metal, weight, mint — deliberately NOT alphabetical, so
+        // this asserts the renderer sorts rather than that the map happens
+        // to. It does not: something in this workspace enables
+        // `serde_json/preserve_order`, so `Map` is insertion-ordered here and
+        // this same assertion passed under `-p corpus-engine` while failing
+        // in the full build until `render_attributes` sorted for itself.
+        assert_eq!(
+            super::render_attributes(&attrs),
+            "\nattr: metal=silver; mint=Eoforwic; weight=1.21"
+        );
+        assert_eq!(super::render_attributes(&serde_json::Map::new()), "");
+
+        // Default OFF. An explicit override in the environment makes this
+        // assertion measure the override rather than the default, so say so.
+        assert!(
+            std::env::var("SOVEREIGN_ATLAS_EMBED_ATTRIBUTES").is_err(),
+            "this test asserts the DEFAULT; unset SOVEREIGN_ATLAS_EMBED_ATTRIBUTES to run it"
+        );
+        assert_eq!(atom_attributes_suffix(&attrs), "");
+
+        // And an atom with no attributes renders identically either way —
+        // which is every atom of every undeclared corpus (I5).
+        assert_eq!(atom_attributes_suffix(&serde_json::Map::new()), "");
+    }
+
+    /// The vocabulary carrier (ontology-v1 P5). A graph loaded from an atlas
+    /// dir with an `ontology.json` carries the declared policies; one without
+    /// carries `None`, and `is_subtype_of` is inert there — that inertness is
+    /// what makes every `a == b || graph.is_subtype_of(a, b)` compare
+    /// byte-identical for SEP / Wikipedia / Enron (I5).
+    #[test]
+    fn graph_carries_the_declared_ontology_and_walks_specializes() {
+        use crate::enrichment::atlas::ATLAS_DIRNAME;
+        use crate::enrichment::ontology::{OntologyTypeDecl, TypeKind};
+
+        fn decl(name: &str, specializes: Option<&str>) -> OntologyTypeDecl {
+            OntologyTypeDecl {
+                name: name.to_string(),
+                kind: TypeKind::Entity,
+                specializes: specializes.map(str::to_string),
+                ..Default::default()
+            }
+        }
+
+        let tmp = tempfile::tempdir().unwrap();
+        let atlas_dir = tmp.path().join("wessex-hoard").join(ATLAS_DIRNAME);
+        std::fs::create_dir_all(&atlas_dir).unwrap();
+        let atoms = vec![AtomEnvelope::Entity(sample_entity(
+            1,
+            "Aldfrith penny",
+            0.9,
+        ))];
+        store::write_store_blocking(&atlas_dir, "wessex-hoard", &atoms, &[]).unwrap();
+
+        // No ontology.json → declared nothing, and the subtype walk is inert.
+        let undeclared = AtlasGraph::load_from_disk("wessex-hoard", &atlas_dir).unwrap();
+        assert!(undeclared.ontology().is_none());
+        assert!(!undeclared.is_subtype_of("sceatta", "coin"));
+        assert!(!undeclared.is_subtype_of("coin", "coin"));
+
+        // A policy set that declares NO types still reads as undeclared — the
+        // filter lives in `with_ontology`, so no consumer re-checks it.
+        let empty = crate::enrichment::ontology::OntologyPolicies::from_prose(
+            "some prose guidance",
+            Default::default(),
+        );
+        super::super::writer::write_atlas_ontology(&atlas_dir, 1, &empty).unwrap();
+        let prose_only = AtlasGraph::load_from_disk("wessex-hoard", &atlas_dir).unwrap();
+        assert!(prose_only.ontology().is_none());
+
+        // Declared types → the walk answers.
+        let mut declared = crate::enrichment::ontology::OntologyPolicies::default();
+        declared.shape.types = vec![decl("coin", None), decl("sceatta", Some("coin"))];
+        super::super::writer::write_atlas_ontology(&atlas_dir, 1, &declared).unwrap();
+        let g = AtlasGraph::load_from_disk("wessex-hoard", &atlas_dir).unwrap();
+        assert_eq!(g.ontology().unwrap().shape.types.len(), 2);
+        assert!(g.is_subtype_of("sceatta", "coin"));
+        assert!(g.is_subtype_of("coin", "coin"));
+        assert!(!g.is_subtype_of("coin", "sceatta"));
+        assert!(!g.is_subtype_of("ruler", "coin"));
     }
 
     /// `load_from_disk` loads the v2 store when present and errors (no

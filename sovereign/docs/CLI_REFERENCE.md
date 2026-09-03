@@ -425,6 +425,8 @@ Run and curate corpus ingestion recipes.
 | `test <path>` | Run the full test harness against a recipe file. Flags: `--sample-size N`, `--output <path>`, `--params k=v[,...]`, `--params-file <json>` |
 | `validate <path>` | Validate recipe fields without downloading data. `--offline` skips registry fetch |
 | `publish <path>` | Add a recipe to `~/.svrnmesh/recipes/registry.toml`. `--submit-pr` also drafts a community-registry PR via `gh` |
+| `new --ontology <name> [--id <corpus-id>] [--out <path>]` | Scaffold a complete recipe from a built-in ontology-v1 template; `--ontology list` prints the names (they come from the engine's template registry, `corpus-engine/src/recipe_templates.rs`, not from this page). Stdout unless `--out`; never overwrites |
+| `migrate <path> --ontology-version N [--dry-run]` | Add or raise the `version = N` line under `[enrichment.ontology]` and change nothing else; `--dry-run` prints the diff instead of writing |
 
 ### `svrn pipeline`
 
@@ -655,7 +657,7 @@ For debugging, partial re-runs, and iterating on a single prompt. `build` orches
 | Subcommand | Description |
 |---|---|
 | `seed <corpus-id>` | Stage 1a: extract the canonical seed entity list from the first section. Writes `cache/seed.json`. Threaded into every subsequent Phase 1 prompt to prevent entity-name drift across sections. |
-| `extract <corpus-id> [--chapters <ids> \| --full] [--terse]` | Phase 1: per-section atlas extraction (six facets — entities, entity-states, relations, relation-states, events, claims, questions). Subset runs write to `runs/` only; `--full` updates `cache/questions.json`. `--terse` uses the schema-only retry variant for chapters whose default pass hit a think-truncation. |
+| `extract <corpus-id> [--chapters <ids> \| --full] [--terse] [--dry-run]` | Phase 1: per-section atlas extraction (six facets — entities, entity-states, relations, relation-states, events, claims, questions). Subset runs write to `runs/` only; `--full` updates `cache/questions.json`. `--terse` uses the schema-only retry variant for chapters whose default pass hit a think-truncation. `--dry-run` composes each selected chapter's prompt through the runner's own exemplar selection and seed lookup, prints system + user + response schema, and calls no model — the seconds-long loop for a prompt or ontology change. |
 | `cluster <corpus-id>` | Phase 2: facet-typed clustering over the Phase 1 sketches (question / claim / entity-state / relation-state / event). Writes `cache/atlas-clusters.json`. |
 | `name <corpus-id>` | Phase 3: one LLM call per cluster to name it with facet-specific vocabulary (thematic inquiry / position / conceptual arc / dialectical dynamic / argumentative thread). Writes `cache/atlas-named-clusters.json`. |
 | `resolve <corpus-id> --phase <3a\|3b\|all>` | Phase 3a/3b: resolve atoms + edges + trajectories from the Phase 1 sketches. `--phase all` runs entity/event resolution (3a) + state/relation/claim/question resolution (3b) in one pass. Writes `atlas/atoms.json`, `atlas/edges.json`, `atlas/trajectories.json`. |
@@ -667,6 +669,8 @@ For debugging, partial re-runs, and iterating on a single prompt. `build` orches
 
 | Subcommand | Description |
 |---|---|
+| `atlas-query <corpus-id> "<question>" [--depth N] [--callers] [--json]` | Classify and traverse a question against a resolved atlas. Over a corpus with a declared `[enrichment.ontology]` this is where the author's own nouns come back: the answer to "which coins are in this catalogue" is an enumeration of the declared type, and `--json` emits the `TraversalResult` with each atom's `entity_type`. Over a code atlas it walks the scip call chain (`--depth`, `--callers`). |
+| `schema-report <corpus-id> [--json]` | The §12 validation table for one corpus: coverage per declared type, depth, confidence, orphans, gaps. Needs a resolved atlas; also writes `atlas/schema_validation.json`. |
 | `status <corpus-id>` | Per-phase cache-freshness table (fresh / stale / never-run). |
 | `show <corpus-id> <target> [--chapter <id>] [--concern <id>]` | Formatted view of any cached phase output. |
 | `exemplars <corpus-id>` | Report per-phase exemplar-bank counts + lint findings. |

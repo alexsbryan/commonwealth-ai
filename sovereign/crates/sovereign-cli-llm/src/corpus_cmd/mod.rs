@@ -16,13 +16,16 @@ mod ingest;
 mod inventory;
 mod optimize;
 mod partitions;
+mod recipe_source;
 mod search;
+mod status;
 
 use diagnostics::{
     cmd_corpus_dedupe, cmd_corpus_diag, cmd_corpus_export_parcels, cmd_corpus_repair,
     cmd_corpus_stream_axes,
 };
-use inventory::{cmd_corpus_install, cmd_corpus_list, cmd_corpus_remove, cmd_corpus_status};
+use inventory::{cmd_corpus_install, cmd_corpus_list, cmd_corpus_remove};
+use status::cmd_corpus_status;
 // Shared with `workflow run <recipe-id>`: one install client + one `--param`
 // value convention across the `corpus` and `workflow` surfaces (Inc3 surface
 // unification — two backends, one surface).

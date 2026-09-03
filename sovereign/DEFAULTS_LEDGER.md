@@ -30,6 +30,31 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### Reified merges — ON for a DECLARED corpus, OFF everywhere else (2026-09-02)
+
+**What ships.** `svrn enrich reconcile` writes one `same_as` Claim per merge
+(plus `Involves` / `Grounds` edges) when — and only when — the atlas's
+`ontology.json` declares types. An undeclared corpus keeps today's silent
+merge: `atoms.json` is unchanged and only the oplog records what collapsed.
+
+**Why not always-on.** Enron is the reconciler's only measured corpus and it
+declares nothing. Reifying its merges would add a Claim atom per cluster to
+`atoms.json`, which the B³ lane does not read — but the atlas it reads would no
+longer be the one the baseline was minted on, and "probably fine" is not a
+measurement (§18.5). **The condition that flips it:** two `bench enron` runs on
+the always-on build with B³ unmoved. That bench is also what P3 pre-registered
+as its own leak detector, so the run is already on the board.
+
+**One thing this row is NOT.** The grade on a reified merge is `external` or
+`signal_gated` — never "judged". `ONTOLOGY_PRIMITIVES.md` calls the non-strict
+path judged, and `ReconciliationPolicy.judge_when_uncertain` defaults to `true`,
+but `enrich reconcile` installs no judge (`reconcile` takes no `InferenceFn`),
+so what actually decides a non-strict merge today is the signal-count gate. The
+word is not a default that can be flipped; it is a capability that does not
+exist yet, and grading a merge by a judge that never ran would be the
+well-formed false result §18.3 forbids. When a judge lands it produces a THIRD
+grade, and this paragraph is what says so.
+
 ### `[node] entry` — keyed on an ADDRESS, not a node id — **CLOSED 2026-08-31**
 
 **Repaid.** A terminal now binds its entry node by mesh identity
@@ -686,6 +711,65 @@ _Historical record below — the reasoning while this row was `preview`._
   after-arm vs 688f8eba.
 - **Review-by:** 2026-08-28. If the order closes without the flip,
   this row moves to Rejected with the curve that said no.
+
+### Declared attributes in the embed text — `SOVEREIGN_ATLAS_EMBED_ATTRIBUTES` (default **OFF**)
+- **Shipped dark:** 2026-09-02, order `ontology-v1-p5` item 5. A declared
+  atom's `attributes` map is appended to its embed text as
+  `\nattr: metal=silver; mint=Eoforwic; weight=1.21`, in
+  `atom_attributes_suffix` (`corpus-engine/src/enrichment/atlas/context.rs`),
+  called from both renderers — `render_atom_entry` (the ANN backfill) and the
+  daemon bag loader (`atlas_context_loader.rs`), which forks the same
+  rendering. One decider, so the two paths cannot drift.
+- **Why it might matter:** the wessex-hoard probe asks "which coins are in
+  this catalogue, and what metal is each". The metal is on the atom, in a JSON
+  map the embedder never sees, so cosine has no handle on it. This is the
+  cheapest way to give it one.
+- **Evidence so far, cited:** NONE. Nothing has been measured. The
+  implementation is verified only by unit test
+  (`attribute_suffix_is_dark_and_key_sorted`, context.rs): the rendering is
+  deterministic and key-sorted, and the default renders nothing. The row exists
+  because the code shipped, not because a number said to ship it.
+- **Structurally inert where it must be:** an atom with an empty `attributes`
+  map renders byte-identically whichever way the knob is set. Every atom of
+  SEP, Wikipedia and Enron has an empty map (attributes are an ontology-v1
+  declared-type field), so those corpora are unaffected even if an operator
+  turns it on.
+- **Flip condition (falsifiable), pre-registered:** (1) numismatics
+  attribute questions score ≥1 hit with it on that they miss with it off;
+  AND (2) the `--quick` sep + wikipedia HARD lanes are unchanged across TWO
+  runs, not one (§18.5). Either half failing keeps it off.
+- **Known cost if flipped:** the cache signature does NOT key on this knob, so
+  flipping it makes every existing embedding cache stale WITHOUT invalidating
+  it. Whoever flips it must force a re-embed, or fold the knob into
+  `AtlasContextFilter::signature()` first. Recorded here because it is the
+  trap, not a detail.
+- **Review-by:** 2026-10-01. If nothing has measured it by then, this row
+  moves to Rejected and the code comes out.
+
+### Declared claim types in the atlas bag — `SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS` (default **OFF**)
+- **Shipped dark:** 2026-09-02, order `ontology-v1-p5` item 5. New
+  `AtlasContextFilter.include_declared_claim_types`
+  (`sovereign-tools/src/atlas_context_manager.rs`), read from the env in
+  `default()` and baked into `signature()`. `load_atlas_context` admits a Claim
+  atom when its `claim_kind` names one of the corpus's declared claim types.
+- **Why it might matter:** on a declared corpus the claim is where the
+  substance is — "Halstead dates C1 to 685/690 on a die-link" is an
+  `attribution` Claim, and the entity bag cannot carry it. The existing
+  `SOVEREIGN_ATLAS_INCLUDE_CLAIMS` is the corpus-wide switch and multiplies the
+  embed count on wiki/SEP-scale atlases; this one admits only the author's own
+  declared types.
+- **Evidence so far, cited:** NONE. Verified by unit test only
+  (`declared_claim_types_are_dark_and_keyed_into_the_signature`,
+  atlas_context_manager.rs): default off, and the signature changes when it
+  flips so a bag built without declared claims is not served after the flip.
+- **Structurally inert where it must be:** the admission guard reads the
+  corpus's declared claim types from `atlas/ontology.json`, filtered on
+  `has_declarations()`. That list is empty for every undeclared corpus, so the
+  guard admits nothing new there however the knob is set.
+- **Flip condition (falsifiable), pre-registered:** (1) the governance-qa gate
+  holds; AND (2) the wessex-hoard "who disputes the 780s dating" question hits
+  with it on and misses with it off. Both, or it stays off.
+- **Review-by:** 2026-10-01. Same terms as the row above.
 
 ### TOMBSTONE 1/2 — the longform REWRITE pass — `SOVEREIGN_GATE_LONGFORM_REPAIR` (default **OFF**)
 - **Shipped tombstoned:** 2026-08-14, order `gate-tombstone-ladder`

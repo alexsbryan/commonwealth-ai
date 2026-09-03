@@ -1,0 +1,7 @@
+clock: document_date — supersession folds on document dates (the default; set `change.clock = "narrative"` for order within a work)
+tension selector: embedding top-k (k = 10, floor = 0.5) over attribution — cross-document declared corpora select the embedding net; the classifier judges each pair
+identity: coin → canonical name (default; declare `identity = [...]` for an external key)
+identity: sceatta → canonical name (default; declare `identity = [...]` for an external key)
+identity: ruler → canonical name (default; declare `identity = [...]` for an external key)
+identity: mint → canonical name (default; declare `identity = [...]` for an external key)
+question shapes: enumerate [coin, sceatta, ruler, mint]; relations [(none)]; events [(none)]; aggregate [(none — a claim type with a `ref` attribute can be counted by it)]

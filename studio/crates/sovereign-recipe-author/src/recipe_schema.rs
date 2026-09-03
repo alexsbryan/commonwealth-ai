@@ -51,6 +51,18 @@ static DESCRIPTOR: LazyLock<Value> = LazyLock::new(|| {
         .expect("checked-in recipe_schema_descriptor.json must parse")
 });
 
+/// One list under `descriptor.ontology` — field names of a version-1 struct
+/// (`type`, `attribute`, `voices`, …) or the wire values of a closed enum
+/// (`kind`, `force`, `deontic`, `clock`, `claim_scope`). Generated from the
+/// ontology AST by the same corpus-engine test that emits the rest of the
+/// descriptor, so the grammar below cannot drift behind the real types.
+fn desc_ontology(key: &str) -> Vec<Value> {
+    DESCRIPTOR["ontology"][key]
+        .as_array()
+        .unwrap_or_else(|| panic!("descriptor.ontology.{key} must be an array"))
+        .clone()
+}
+
 /// `[{key, required}]` for a tagged enum (acquire / extract).
 fn desc_variants(section: &str) -> Vec<(String, Vec<String>)> {
     DESCRIPTOR[section]
@@ -410,28 +422,135 @@ fn enrichment_schema() -> Value {
     })
 }
 
-/// Custom atlas ontology (`[enrichment.ontology]`). `guidance` is the
-/// load-bearing field — prose, in the domain's own language, naming what
-/// entities / relations / claims / events the extractor should lift. Optional
-/// `vocabulary` renames the CLI/label terms per domain.
+/// Custom atlas ontology (`[enrichment.ontology]`), versioned. `version`
+/// (absent = 0) selects the declaration language: version 0 is `guidance`
+/// prose plus optional `vocabulary`; version 1 adds declared `types` with
+/// typed attributes and the `voices` / `change` / `tension` / `derive`
+/// blocks. Nothing is required — a types-only block is a valid recipe, so
+/// `guidance` is no longer `required` here (it hard-blocked declared types).
+/// Every property list and enum is gated to the recipe AST through the
+/// descriptor (`tool_schema_matches_recipe_ast`).
 fn ontology_schema() -> Value {
     json!({
         "type": "object",
-        "required": ["guidance"],
         "additionalProperties": true,
         "properties": {
+            "version": { "type": "integer", "enum": desc_ontology("versions") },
             "guidance": { "type": "string" },
-            "vocabulary": {
+            "vocabulary": vocabulary_schema(),
+            "must_not": { "type": "array", "items": { "type": "string" } },
+            "types": { "type": "array", "items": ontology_type_schema() },
+            "voices": {
                 "type": "object",
                 "additionalProperties": true,
                 "properties": {
-                    "concern_term":  { "type": "string" },
-                    "position_term": { "type": "string" },
-                    "tension_term":  { "type": "string" },
-                    "absence_term":  { "type": "string" },
-                    "evidence_term": { "type": "string" }
+                    "not_entities":  { "type": "array", "items": { "type": "string" } },
+                    "self":          { "type": "string" },
+                    "attributed_to": { "type": "array", "items": { "type": "string" } }
                 }
-            }
+            },
+            "change": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "clock":      { "enum": desc_ontology("clock") },
+                    "supersedes": { "type": "object", "additionalProperties": { "type": "string" } }
+                }
+            },
+            "tension": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "label":         { "type": "string" },
+                    "between":       { "type": "array", "items": { "type": "string" } },
+                    "same":          { "type": "array", "items": { "type": "string" } },
+                    "not_conflicts": { "type": "array", "items": { "type": "string" } }
+                }
+            },
+            "derive": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "configurations": { "type": "boolean" },
+                    "arguments":      { "type": "boolean" }
+                }
+            },
+            "patterns": { "type": "array", "items": pattern_schema() }
+        }
+    })
+}
+
+fn vocabulary_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+            "concern_term":  { "type": "string" },
+            "position_term": { "type": "string" },
+            "tension_term":  { "type": "string" },
+            "absence_term":  { "type": "string" },
+            "evidence_term": { "type": "string" }
+        }
+    })
+}
+
+/// One `[[enrichment.ontology.types]]` entry. `name` and `kind` are required;
+/// the rest are per-kind facets (see the descriptor's `type` field list).
+fn ontology_type_schema() -> Value {
+    let str_array = json!({ "type": "array", "items": { "type": "string" } });
+    json!({
+        "type": "object",
+        "required": ["name", "kind"],
+        "additionalProperties": true,
+        "properties": {
+            "name":              { "type": "string" },
+            "kind":              { "enum": desc_ontology("kind") },
+            "description":       { "type": "string" },
+            "attributes":        { "type": "array", "items": ontology_attr_schema() },
+            "specializes":       { "type": "string" },
+            "role_of":           { "type": "string" },
+            "from":              { "type": "string" },
+            "to":                { "type": "string" },
+            "participants":      { "type": "object", "additionalProperties": { "type": "string" } },
+            "of":                { "type": "string" },
+            "source": {
+                "type": "object",
+                "required": ["file"],
+                "additionalProperties": true,
+                "properties": {
+                    "file":       { "type": "string" },
+                    "from":       { "type": "string" },
+                    "to":         { "type": "string" },
+                    "attributes": { "type": "object", "additionalProperties": { "type": "string" } }
+                }
+            },
+            "label":             { "type": "string" },
+            "identity":          str_array.clone(),
+            "identity_fallback": str_array.clone(),
+            "force":             { "enum": desc_ontology("force") },
+            "deontic":           { "type": "array", "items": { "enum": desc_ontology("deontic") } },
+            "subject":           { "type": "string" },
+            "grades":            str_array.clone(),
+            "anchors":           str_array,
+            "scope":             { "enum": desc_ontology("claim_scope") }
+        }
+    })
+}
+
+/// One typed attribute: `name` + `type` (the family) + that family's keys.
+fn ontology_attr_schema() -> Value {
+    json!({
+        "type": "object",
+        "required": ["name", "type"],
+        "additionalProperties": true,
+        "properties": {
+            "name":        { "type": "string" },
+            "type":        { "enum": desc_ontology("attribute_family") },
+            "description": { "type": "string" },
+            "values":      { "type": "array", "items": { "type": "string" } },
+            "unit":        { "type": "string" },
+            "range":       { "type": "boolean" },
+            "of":          { "type": "string" }
         }
     })
 }
@@ -582,6 +701,132 @@ mod tests {
             !required.contains(&"base_url"),
             "base_url is defaulted, must not be required"
         );
+    }
+
+    /// Property names of a JSON-schema object node, sorted.
+    fn props(node: &Value) -> Vec<String> {
+        let mut v: Vec<String> = node["properties"]
+            .as_object()
+            .unwrap_or_else(|| panic!("node has no properties: {node}"))
+            .keys()
+            .cloned()
+            .collect();
+        v.sort();
+        v
+    }
+
+    /// The descriptor list `ontology.<key>` as sorted strings.
+    fn desc_strings(key: &str) -> Vec<String> {
+        let mut v: Vec<String> = desc_ontology(key)
+            .iter()
+            .map(|x| x.as_str().expect("string").to_string())
+            .collect();
+        v.sort();
+        v
+    }
+
+    /// The ontology grammar is a hand copy of the recipe AST, gated here in
+    /// BOTH directions through the descriptor corpus-engine generates from
+    /// that AST: every field the AST has, the tool offers (an agent can emit
+    /// it); every field the tool offers, the AST has (nothing phantom). A
+    /// June note records the grammar silently blocking `ontology` when it
+    /// lagged; this is what makes that impossible to repeat.
+    #[test]
+    fn tool_schema_matches_recipe_ast() {
+        let tool = ontology_schema();
+
+        // Block-level keys: `version` plus every version-1 key.
+        let mut ast_block = desc_strings("block");
+        ast_block.extend(desc_strings("v1"));
+        ast_block.sort();
+        assert_eq!(props(&tool), ast_block, "[enrichment.ontology] keys");
+
+        // Nested version-1 structs.
+        for (prop, key) in [
+            ("vocabulary", "vocabulary"),
+            ("voices", "voices"),
+            ("change", "change"),
+            ("tension", "tension"),
+            ("derive", "derive"),
+        ] {
+            assert_eq!(
+                props(&tool["properties"][prop]),
+                desc_strings(key),
+                "[enrichment.ontology.{prop}] keys"
+            );
+        }
+
+        // Type declarations and their nested `source`.
+        let type_node = &tool["properties"]["types"]["items"];
+        assert_eq!(props(type_node), desc_strings("type"), "[[types]] keys");
+        assert_eq!(
+            props(&type_node["properties"]["source"]),
+            desc_strings("source"),
+            "types.source keys"
+        );
+
+        // Attributes: the shared fields plus every family's own keys plus `type`.
+        let mut ast_attr = desc_strings("attribute");
+        ast_attr.push("type".to_string());
+        for fam in desc_ontology("attribute_families") {
+            for f in fam["fields"].as_array().expect("fields") {
+                ast_attr.push(f.as_str().expect("string").to_string());
+            }
+        }
+        ast_attr.sort();
+        ast_attr.dedup();
+        assert_eq!(
+            props(&type_node["properties"]["attributes"]["items"]),
+            ast_attr,
+            "attribute keys"
+        );
+
+        // Closed enums are read straight from the descriptor.
+        let enum_of = |node: &Value| -> Vec<String> {
+            let mut v: Vec<String> = node["enum"]
+                .as_array()
+                .expect("enum")
+                .iter()
+                .map(|x| x.as_str().expect("string").to_string())
+                .collect();
+            v.sort();
+            v
+        };
+        assert_eq!(
+            enum_of(&type_node["properties"]["kind"]),
+            desc_strings("kind")
+        );
+        assert_eq!(
+            enum_of(&type_node["properties"]["force"]),
+            desc_strings("force")
+        );
+        assert_eq!(
+            enum_of(&type_node["properties"]["deontic"]["items"]),
+            desc_strings("deontic")
+        );
+        assert_eq!(
+            enum_of(&type_node["properties"]["scope"]),
+            desc_strings("claim_scope")
+        );
+        assert_eq!(
+            enum_of(&tool["properties"]["change"]["properties"]["clock"]),
+            desc_strings("clock")
+        );
+        assert_eq!(
+            enum_of(&type_node["properties"]["attributes"]["items"]["properties"]["type"]),
+            desc_strings("attribute_family")
+        );
+
+        // The grammar block no longer hard-requires prose (a types-only block
+        // is a valid recipe), and the version enum is the registry's.
+        assert!(
+            tool.get("required").is_none(),
+            "ontology must not require `guidance`"
+        );
+        let versions = tool["properties"]["version"]["enum"]
+            .as_array()
+            .expect("versions");
+        assert!(versions.iter().any(|v| v == 1), "version 1 must be offered");
     }
 
     #[test]

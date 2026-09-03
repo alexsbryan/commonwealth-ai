@@ -45,6 +45,10 @@ pub enum BuildStep {
     Gaps,
     Configure,
     Report,
+    /// Embed the resolved atoms into the persistent ANN seed table
+    /// (`atlas/atoms_ann.lance`) so the corpus grounds without an operator
+    /// command. Last: it reads the atlas every other step wrote.
+    Backfill,
 }
 
 impl BuildStep {
@@ -59,6 +63,7 @@ impl BuildStep {
             Self::Gaps => "gaps",
             Self::Configure => "configure",
             Self::Report => "report",
+            Self::Backfill => "backfill",
         }
     }
 
@@ -74,6 +79,7 @@ impl BuildStep {
             Self::Gaps => "Detect structural gaps (Phase 7)",
             Self::Configure => "Identify interpretive configurations (Phase 8)",
             Self::Report => "§12 schema validation",
+            Self::Backfill => "Embed atoms into the ANN seed table (grounding)",
         }
     }
 
@@ -94,6 +100,7 @@ impl BuildStep {
             Self::Gaps => Some(PipelinePhase::Gaps),
             Self::Configure => None,
             Self::Report => None,
+            Self::Backfill => None,
         }
     }
 }
@@ -117,10 +124,14 @@ impl BuildStep {
 /// the wire was designed and simply never used. This is it, in one place, so
 /// the writer and the reader cannot drift (ARCH §10.6).
 ///
-/// It does NOT close §9.3, which is that `enrich build` should be a CALL and
-/// not a subprocess at all. That needs the 14-module, ~9,100-line orchestrator
-/// subtree to move below `sovereign-tools`. What it closes is the reparsing
-/// hazard, which was the part with no gate in front of it.
+/// §9.3 itself — `enrich build` as a CALL, not a subprocess — is closed for
+/// the daemon since ontology-v1 P0.4, without moving the 14-module orchestrator
+/// subtree below `sovereign-tools`: the tools crate declares
+/// `local_corpus::watched::enrich::AtlasBuildRunner`, the daemon (which links
+/// `sovereign-cli-llm` as a library) implements it, and `enrich_now` on an
+/// `[enrichment] type = "atlas"` recipe runs the build in-process. This wire
+/// remains the contract for the subprocess path, which dev boxes without the
+/// builder installed still take.
 pub mod wire {
     use super::EnrichProgress;
 
@@ -322,6 +333,9 @@ impl EnrichProgress {
             super::types::PhaseFailureKind::UnresolvedClaimAttribution => {
                 "unresolved_claim_attribution"
             }
+            super::types::PhaseFailureKind::EndpointTypeMismatch => "endpoint_type_mismatch",
+            super::types::PhaseFailureKind::UnresolvedClaimSubject => "unresolved_claim_subject",
+            super::types::PhaseFailureKind::UnresolvedAttributeRef => "unresolved_attribute_ref",
             super::types::PhaseFailureKind::NoClusterableItems => "no_clusterable_items",
             super::types::PhaseFailureKind::ClusterNamingFailed => "cluster_naming_failed",
             super::types::PhaseFailureKind::Other => "other",
@@ -381,6 +395,7 @@ mod tests {
             BuildStep::Gaps,
             BuildStep::Configure,
             BuildStep::Report,
+            BuildStep::Backfill,
         ]
         .iter()
         .map(|s| s.id())

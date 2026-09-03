@@ -185,6 +185,43 @@ const PLACEHOLDERS: &[&str] = &[
     "unspecified",
 ];
 
+/// Spellings that name an absence in an EXTRACTED FIELD but are not
+/// placeholder *reasons* — a model asked for a coin's mint may answer
+/// "omitted" or "not applicable", and neither is a reason anyone wrote.
+const FIELD_ABSENCES: &[&str] = &["omit", "omitted", "(none)", "not applicable"];
+
+/// Prefixes that name an absence when they stand as a whole word.
+///
+/// THE WORD BOUNDARY IS THE POINT. `"unknown"` and `"unknown (not stated in
+/// text)"` are absent values; `"unknown-type sceatta series"` is a real one,
+/// and a bare `starts_with` swallowed it. That defect shipped twice — the
+/// numismatics extractor lost real values to it, and the test that was meant
+/// to defend the case carried an escape that made it pass for free (ARCH
+/// §18.1, 2026-09-03).
+const ABSENCE_PREFIXES: &[&str] = &["unknown", "not stated"];
+
+/// Does this text NAME AN ABSENCE rather than carry a value?
+///
+/// THE one decider for that question. It was three: `Reason::is_placeholder`
+/// here, `parse_policy::is_absent_marker` in corpus-engine (ten exact
+/// spellings plus a prefix rule), and an inline chain in sovereign-core's
+/// `value_presence.rs` (a bare `starts_with`, still). Three vocabularies
+/// meant a value dropped by the extractor could survive the judge and vice
+/// versa, with nothing pinning them together.
+///
+/// Trimmed and lowercased before matching. A prefix must end at a word
+/// boundary — see [`ABSENCE_PREFIXES`].
+pub fn is_absent_marker(text: &str) -> bool {
+    let t = text.trim().to_ascii_lowercase();
+    if PLACEHOLDERS.contains(&t.as_str()) || FIELD_ABSENCES.contains(&t.as_str()) {
+        return true;
+    }
+    ABSENCE_PREFIXES.iter().any(|p| {
+        t.strip_prefix(p)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace()))
+    })
+}
+
 impl Reason {
     /// Build a reason from runtime-derived text. `None` when the text is
     /// empty, whitespace, or one of the placeholder spellings.
@@ -211,6 +248,13 @@ impl Reason {
     }
 
     /// Is `text` one of the spellings that carry no information?
+    ///
+    /// EXACT match only, and deliberately so — a reason is prose, and prose
+    /// beginning "unknown cause of the flap" is informative. The other
+    /// question, "does this text NAME an absence rather than carry a value",
+    /// is [`is_absent_marker`]: it shares this vocabulary and adds a
+    /// prefix rule, because an extracted FIELD reading "unknown (not stated
+    /// in text)" is absent while a reason reading the same is not.
     pub fn is_placeholder(text: &str) -> bool {
         let t = text.trim().to_ascii_lowercase();
         PLACEHOLDERS.contains(&t.as_str())
@@ -536,6 +580,43 @@ pub fn honesty_footer(rows: &[Judgement]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+
+    /// The two questions this module answers about empty-looking text, and
+    /// the case that separates them. A reason reading "unknown cause of the
+    /// flap" is informative prose; a coin's `mint` field reading "unknown
+    /// (not stated in text)" is an absence. Only the second reading carries
+    /// the prefix rule.
+    #[test]
+    fn an_absence_marker_is_not_the_same_question_as_a_placeholder_reason() {
+        for absent in [
+            "unknown",
+            "Unknown (not stated in text)",
+            "not stated",
+            "omitted",
+            "not applicable",
+            "(none)",
+            "n/a",
+            "  TBD ",
+        ] {
+            assert!(is_absent_marker(absent), "{absent}");
+        }
+        // The word boundary. Both are real values, and a bare `starts_with`
+        // swallowed them.
+        for real in [
+            "unknown-type sceatta series",
+            "not stated-in-catalogue variant",
+            "Wessex Down 1",
+            "c. 720",
+        ] {
+            assert!(!is_absent_marker(real), "{real}");
+        }
+        // A reason is prose: the prefix rule must NOT reach it.
+        assert!(!Reason::is_placeholder("unknown cause of the flap"));
+        assert!(Reason::is_placeholder("unknown"));
+        // …and the field-only spellings are not placeholder reasons either.
+        assert!(!Reason::is_placeholder("not applicable"));
+        assert!(is_absent_marker("not applicable"));
+    }
     use super::*;
 
     fn r(s: &'static str) -> Reason {

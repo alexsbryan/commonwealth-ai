@@ -539,7 +539,7 @@ fn person_seeds_subsume_surnames_and_drop_noise() {
         row("FTC", "Organization", 0.9, 33),  // wrong label
         row("Weak Name", "Person", 0.3, 34),  // below score floor
     ];
-    let seeds = super::build_person_seed_entities(&rows);
+    let seeds = super::harvest::build_person_seed_entities(&rows);
     let names: Vec<&str> = seeds.iter().map(|e| e.canonical_name.as_str()).collect();
     assert!(names.contains(&"Elinor Ostrom"), "names = {names:?}");
     assert!(names.contains(&"Garrett Hardin"));
@@ -565,7 +565,7 @@ fn figure_sentences_pick_digit_bearing_text_and_respect_caps() {
                 Margins reached 58% in the most recent quarter. \
                 A third figure: 12,000 units shipped in 2019. \
                 Yet another numeric line: 7 of 9 axes regressed.";
-    let got = super::figure_sentences_from(text, 3);
+    let got = super::harvest::figure_sentences_from(text, 3);
     assert_eq!(got.len(), 3, "per-call cap must hold: {got:?}");
     assert!(got[0].contains("$224.8 million"));
     assert!(got[1].contains("58%"));
@@ -573,6 +573,6 @@ fn figure_sentences_pick_digit_bearing_text_and_respect_caps() {
     assert!(got.iter().all(|s| s.chars().any(|c| c.is_ascii_digit())));
 
     // Sub-20-char and digit-free inputs yield nothing.
-    assert!(super::figure_sentences_from("No digits here at all, ever.", 5).is_empty());
-    assert!(super::figure_sentences_from("a 1.", 5).is_empty());
+    assert!(super::harvest::figure_sentences_from("No digits here at all, ever.", 5).is_empty());
+    assert!(super::harvest::figure_sentences_from("a 1.", 5).is_empty());
 }

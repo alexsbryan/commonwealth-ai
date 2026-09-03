@@ -12131,6 +12131,7 @@ dependencies = [
  "sovereign-compute",
  "sovereign-contracts",
  "sovereign-core",
+ "sovereign-enrichment-build",
  "sovereign-gliner",
  "sovereign-inference",
  "sovereign-mesh",
@@ -12231,6 +12232,7 @@ dependencies = [
  "sovereign-cli-shared",
  "sovereign-contracts",
  "sovereign-core",
+ "sovereign-enrichment-build",
  "sovereign-enrichment-catalog",
  "sovereign-eval",
  "sovereign-gliner",
@@ -12415,6 +12417,28 @@ dependencies = [
  "uuid",
  "walkdir",
  "zip 8.6.0",
+]
+
+[[package]]
+name = "sovereign-enrichment-build"
+version = "0.6.0"
+dependencies = [
+ "chrono",
+ "corpus-engine",
+ "oicp-client",
+ "oicp-types",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sovereign-contracts",
+ "sovereign-core",
+ "sovereign-enrichment-catalog",
+ "sovereign-inference",
+ "sovereign-tools",
+ "tempfile",
+ "tokio",
+ "toml 0.8.2",
+ "tracing",
 ]
 
 [[package]]

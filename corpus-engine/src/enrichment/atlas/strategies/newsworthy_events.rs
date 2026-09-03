@@ -155,6 +155,7 @@ pub fn extract_atoms_for_portal_chunks(
         // participants populated in pass 3 once placeholder atom_ids
         // exist. Stash an empty Vec for now and emit the Event atom.
         let event = Event {
+            attributes: Default::default(),
             id: event_id.clone(),
             description: description.to_string(),
             event_type: event_type.clone(),

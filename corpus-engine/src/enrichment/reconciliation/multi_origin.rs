@@ -14,11 +14,13 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use super::identity_signals::{identity_blocking_key, signals_for_policy};
 use super::oplog::ReconciliationAct;
 use super::signals::{
-    collect_emails, default_signals, fold_name, strip_org_suffixes, MergeSignal, MergeSignalCheck,
+    collect_emails, fold_name, strip_org_suffixes, MergeSignal, MergeSignalCheck,
 };
-use crate::enrichment::atlas::atoms::{AtomId, Entity, Provenance};
+use crate::enrichment::atlas::atoms::{AtomId, ChunkRef, Entity, Provenance};
+use crate::enrichment::ontology::IdentityPolicy;
 use crate::enrichment::pipeline::atlas::EntityType;
 use crate::oplog::Op;
 
@@ -54,6 +56,17 @@ pub struct ReconciliationPolicy {
     /// `trials` parameter.
     #[serde(default = "default_judge_trials")]
     pub judge_trials: u8,
+    /// Per-declared-type identity keys (ontology v1), already resolved through
+    /// `specializes` by `TypeIndex::effective_identity_policy`.
+    ///
+    /// Empty by default and empty for every corpus that declares no ontology,
+    /// which is what makes this addition invisible to Enron: with no keys the
+    /// signal stack is [`super::signals::default_signals`] term for term, the
+    /// blocking keys are the same four, and the strict gate below can never
+    /// fire. It is serialized into `reconciliation.json` so the criterion a
+    /// merge ran under is on disk beside the merge.
+    #[serde(default)]
+    pub identity: IdentityPolicy,
 }
 
 impl Default for ReconciliationPolicy {
@@ -63,6 +76,7 @@ impl Default for ReconciliationPolicy {
             cross_origin_required_signals: default_cross_origin_required_signals(),
             judge_when_uncertain: default_true(),
             judge_trials: default_judge_trials(),
+            identity: IdentityPolicy::default(),
         }
     }
 }
@@ -97,6 +111,44 @@ pub struct ReconciledEntity {
     pub source_atom_ids: Vec<AtomId>,
 }
 
+/// One merge, in the shape the atlas can hold it.
+///
+/// The oplog already records every merge, but an oplog is an operator
+/// artefact: nothing that answers a question reads it. A corpus that DECLARED
+/// its identity criteria asked for the merge to be part of the knowledge, so
+/// each one is also reified as a `same_as` Claim ([`reify_merges`]) — visible
+/// in the inspector, reachable from either side, and carrying the criterion it
+/// ran under.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReifiedMerge {
+    /// The atoms that collapsed, in the order the cluster held them.
+    pub inputs: Vec<AtomId>,
+    /// The canonical atom they collapsed into. Always one of `inputs`.
+    pub output: AtomId,
+    /// The signals that fired somewhere in the cluster.
+    pub signals: Vec<MergeSignal>,
+    /// First appearances of the merged atoms — the passages a reader would
+    /// go to in order to check the merge.
+    pub evidence: Vec<ChunkRef>,
+    /// [`Self::EXTERNAL`] or [`Self::SIGNAL_GATED`].
+    pub grade: String,
+}
+
+impl ReifiedMerge {
+    /// A declared external identifier agreed. Strict: the criterion IS the
+    /// identity, so one signal decides it.
+    pub const EXTERNAL: &'static str = "external";
+    /// Everything else — the merge cleared the signal-count gate.
+    ///
+    /// The primitives note calls this path "judged". It is not, yet: no judge
+    /// is wired into `svrn enrich reconcile` (`judge_when_uncertain` describes
+    /// a hook the CLI does not install), and grading a merge "judged" when
+    /// nothing judged it would be exactly the well-formed false claim §18.3
+    /// forbids. When the judge lands, the grade it produces is a third value,
+    /// not a re-reading of this one.
+    pub const SIGNAL_GATED: &'static str = "signal_gated";
+}
+
 /// Outcome bundle the runner consumes.
 #[derive(Debug, Clone, Default)]
 pub struct ReconciliationOutcome {
@@ -106,6 +158,11 @@ pub struct ReconciliationOutcome {
     /// `<corpus_index>/atlas/reconciliation_oplog.jsonl` so the
     /// audit trail survives the process exiting.
     pub oplog_entries: Vec<Op<ReconciliationAct>>,
+    /// One [`ReifiedMerge`] per merge, for a caller that wants the merges as
+    /// atoms. Populated on every run — it is the CALLER that decides whether
+    /// to write them, and only `enrich reconcile` on a declared corpus does
+    /// (`bench enron` reads `entities` and nothing else, so B³ is untouched).
+    pub reified: Vec<ReifiedMerge>,
 }
 
 /// Run the merger over `entities` with `policy`. The signal stack is
@@ -114,7 +171,7 @@ pub struct ReconciliationOutcome {
 /// reconciler — a -> b -> c chain collapses into a single canonical
 /// id even if a and c have no direct pairwise signal.
 pub fn reconcile(entities: Vec<Entity>, policy: &ReconciliationPolicy) -> ReconciliationOutcome {
-    let signals = default_signals();
+    let signals = signals_for_policy(&policy.identity);
     reconcile_with_signals(entities, policy, &signals)
 }
 
@@ -144,7 +201,7 @@ pub fn reconcile_with_signals(
     // cross-origin gate below still decides each candidate; blocking
     // only skips pairs that provably cannot fire. Pairs are sorted, so
     // iteration order (and thus the oplog) matches the naive scan.
-    for (i, j) in candidate_pairs(&entities) {
+    for (i, j) in candidate_pairs(&entities, &policy.identity) {
         let mut fired: Vec<MergeSignal> = Vec::new();
         for signal in signals {
             if signal.check(&entities[i], &entities[j]) {
@@ -155,7 +212,15 @@ pub fn reconcile_with_signals(
             continue;
         }
         let cross_origin = entities[i].provenance.signal_kind != entities[j].provenance.signal_kind;
-        let needed = if cross_origin {
+        // A declared external identifier is a criterion of identity, not
+        // evidence toward one: when it agrees, the pair IS one thing and a
+        // second signal would add nothing. Every other signal — including the
+        // descriptive-key fallback, which the recipe declares precisely
+        // because it is NOT an identifier — goes through the count gate.
+        let strict = fired.contains(&MergeSignal::ExternalId);
+        let needed = if strict {
+            1
+        } else if cross_origin {
             policy.cross_origin_required_signals as usize
         } else {
             1
@@ -175,6 +240,7 @@ pub fn reconcile_with_signals(
             left = %entities[i].canonical_name,
             right = %entities[j].canonical_name,
             cross_origin,
+            strict,
             signals = ?fired.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
             "reconciliation: merging candidate pair"
         );
@@ -190,6 +256,7 @@ pub fn reconcile_with_signals(
 
     let mut out_entities = Vec::with_capacity(clusters.len());
     let mut oplog_entries = Vec::new();
+    let mut reified: Vec<ReifiedMerge> = Vec::new();
 
     for (root, members) in clusters {
         let canonical_idx = pick_canonical(&entities, &members);
@@ -222,6 +289,20 @@ pub fn reconcile_with_signals(
         }
 
         if members.len() > 1 {
+            reified.push(ReifiedMerge {
+                inputs: source_atom_ids.clone(),
+                output: canonical_id.clone(),
+                signals: signals_fired.clone(),
+                evidence: members
+                    .iter()
+                    .map(|&m| entities[m].first_appearance.clone())
+                    .collect(),
+                grade: if signals_fired.contains(&MergeSignal::ExternalId) {
+                    ReifiedMerge::EXTERNAL.to_string()
+                } else {
+                    ReifiedMerge::SIGNAL_GATED.to_string()
+                },
+            });
             oplog_entries.push(Op::merge(
                 source_atom_ids.clone(),
                 canonical_id.clone(),
@@ -247,9 +328,14 @@ pub fn reconcile_with_signals(
     }
 
     out_entities.sort_by(|a, b| a.canonical_name.cmp(&b.canonical_name));
+    // Cluster iteration is over a HashMap, so pin an order the way the entity
+    // list is pinned — a reified merge becomes an atom with an id, and an id
+    // that moves between runs is not an id (§7.5).
+    reified.sort_by(|a, b| a.output.as_str().cmp(b.output.as_str()));
     ReconciliationOutcome {
         entities: out_entities,
         oplog_entries,
+        reified,
     }
 }
 
@@ -330,12 +416,29 @@ fn surname_keys(folded: &str) -> Vec<String> {
 ///   (email-restricted) `NameSimilarity` alias overlap
 /// - `o:<aff>|<role>`      — `OrgRole` (both non-empty)
 ///
+/// - `x:<type>|<values>` / `d:<type>|<values>` — the declared identity and
+///   identity-fallback signals (ontology v1). Present only when the policy
+///   carries keys, so an undeclared corpus buckets on exactly the four keys it
+///   always did. This one is NOT an optimisation: a declared identifier can
+///   match across atoms that share no name token, so without it the blocking
+///   would hide the pair from the signal that was written to find it.
+///
 /// The returned vector is sorted so iteration order — and the resulting
 /// oplog — is deterministic and matches the old ascending i<j scan.
-fn candidate_pairs(entities: &[Entity]) -> Vec<(usize, usize)> {
+fn candidate_pairs(entities: &[Entity], identity: &IdentityPolicy) -> Vec<(usize, usize)> {
     use std::collections::{HashMap, HashSet};
     let mut buckets: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, e) in entities.iter().enumerate() {
+        for (prefix, map) in [
+            ("x", &identity.identity),
+            ("d", &identity.identity_fallback),
+        ] {
+            if let Some(keys) = map.get(e.entity_type.as_str_repr()) {
+                if let Some(key) = identity_blocking_key(prefix, e, keys) {
+                    buckets.entry(key).or_default().push(i);
+                }
+            }
+        }
         let fc = fold_name(&e.canonical_name);
         if !fc.is_empty() {
             buckets.entry(format!("c:{fc}")).or_default().push(i);
@@ -406,8 +509,9 @@ fn pick_canonical(entities: &[Entity], members: &[usize]) -> usize {
 
 #[cfg(test)]
 mod tests {
+    use super::super::signals::default_signals;
     use super::*;
-    use crate::enrichment::atlas::atoms::{ChunkRef, SignalKind};
+    use crate::enrichment::atlas::atoms::SignalKind;
     use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
 
     fn ent(name: &str, id: &str, sk: SignalKind, doc: &str) -> Entity {
@@ -457,6 +561,72 @@ mod tests {
         assert_eq!(lay.canonical_name, "Kenneth L. Lay");
         // Oplog has one merge entry.
         assert_eq!(outcome.oplog_entries.len(), 1);
+    }
+
+    /// A declared external key merges two mentions that share NO name token.
+    ///
+    /// This is what `identity = ["catalogue_ref"]` is for and the thing the
+    /// four name/email/org signals structurally cannot do: "Coenwulf mancus"
+    /// in the catalogue and "the gold mancus of Coenwulf" in a later article
+    /// fold to different names, and only the shared reference says they are
+    /// one coin. It merges across origins on the key alone, where
+    /// `cross_origin_signal_gate_blocks_weak_merge` above shows a name match
+    /// is not enough.
+    ///
+    /// Falsifier: give the two atoms different `catalogue_ref` values, or drop
+    /// `coin` from the policy's `identity` map, and the outcome is two
+    /// entities.
+    #[test]
+    fn a_declared_external_key_merges_two_mentions_with_no_shared_name() {
+        let coin = |name: &str, id: &str, sk: SignalKind, doc: &str, cat: &str| {
+            let mut e = ent(name, id, sk, doc);
+            e.entity_type = EntityType::Other("coin".into());
+            e.attributes
+                .insert("catalogue_ref".into(), serde_json::json!(cat));
+            e
+        };
+        let mut policy = ReconciliationPolicy::default();
+        policy
+            .identity
+            .identity
+            .insert("coin".to_string(), vec!["catalogue_ref".to_string()]);
+
+        let same_key = vec![
+            coin(
+                "Coenwulf mancus",
+                "entity-001",
+                SignalKind::LlmBatch,
+                "sec-005",
+                "Wessex Down 5",
+            ),
+            coin(
+                "the gold mancus of Coenwulf",
+                "entity-002",
+                SignalKind::ColumnHeader,
+                "sec-019",
+                "Wessex Down 5",
+            ),
+        ];
+        let outcome = reconcile(same_key.clone(), &policy);
+        assert_eq!(
+            outcome.entities.len(),
+            1,
+            "one shared catalogue reference is one coin"
+        );
+        assert_eq!(outcome.entities[0].surface_forms.len(), 2);
+        assert_eq!(outcome.oplog_entries.len(), 1);
+
+        // Same two atoms, different references — the key is what merged them,
+        // not their type or their co-occurrence.
+        let mut different_key = same_key;
+        different_key[1]
+            .attributes
+            .insert("catalogue_ref".into(), serde_json::json!("Wessex Down 6"));
+        assert_eq!(
+            reconcile(different_key, &policy).entities.len(),
+            2,
+            "two references are two coins"
+        );
     }
 
     #[test]
@@ -532,7 +702,9 @@ mod tests {
         entities.push(b);
 
         let cands: std::collections::HashSet<(usize, usize)> =
-            candidate_pairs(&entities).into_iter().collect();
+            candidate_pairs(&entities, &IdentityPolicy::default())
+                .into_iter()
+                .collect();
         let n = entities.len();
         let mut fired_any = false;
         for i in 0..n {
