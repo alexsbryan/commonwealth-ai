@@ -37,6 +37,7 @@ You are a Senior Architect. You look to apply SOLID principles and best practice
 
 **This section exists because the compass kept getting lost.** Sessions boot holding a task frame — ranked next-actions, working set, drift posture — and no architecture, then make design calls with nothing to navigate by. The two architecture docs are 299KB together (~74k tokens); injecting them every session is not affordable and would not help anyway. What follows is the distillation: **the eleven you hold**, the four commitments they descend from (`sovereign/ARCH_PRINCIPLES.md §0`), the seventeen smells that mean *stop*, and the index of which door to open. Hold the eleven actively. Open the numbered section when one of them is at stake.
 
+<!-- portable:start the eleven + the smell table -->
 ### The eleven — hold these; everything else is lookup
 
 `ARCH_PRINCIPLES.md`'s own distillation, and the only part of it you are expected to carry without opening the file. A violation of one of these should stop you mid-keystroke. Each names the section carrying its evidence.
@@ -78,6 +79,7 @@ One through four are this workspace's declared ethos. **Five through eight were 
 | A key derived from a row count, sequence number, or network address | §7.5 |
 | New capability added without citing the existing surface that was checked | §19 |
 
+<!-- portable:end -->
 ### Which door to open
 
 `ARCH_PRINCIPLES.md` is 19 numbered sections. **Read the section, not the file** — each is ~200-600 tokens and a targeted read is always affordable. Never recall a principle from memory when you're about to act on it; §11.1 is the principle that says so.
@@ -167,6 +169,7 @@ turn; `work_in_flight` (59) because this file mandates it pre-flight. If you
 cannot name the moment that calls a tool, it is inventory. Re-expose one only
 together with the trigger that reaches it.
 
+<!-- portable:start precision tools + read budget -->
 ### Precision tools — use these instead of reading files
 
 **DO NOT read an entire file to find a type definition, method signature, or field list.** Call `symbols("TypeName")` first. It returns the exact definition with file path and line number in one round-trip. Only fall back to Read when you need the full surrounding context.
@@ -189,6 +192,7 @@ When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the 
 
 **Batch independent tool calls into one message.** Every extra serial request re-bills the entire cached context. Measured fleet-wide (2026-07-23): about 1 in 7 small serial calls needed nothing from the call before it — different files Read back-to-back, unrelated greps, separate `symbols` lookups. If the next call's inputs don't depend on the previous call's output, send both calls in the same message.
 
+<!-- portable:end -->
 ### When to use which tool
 
 | Situation | Tool |
@@ -254,6 +258,7 @@ If the result has live `claims` or `active`-grade `observations`: STOP and tell 
 
 If you forget, the TTL drops it. But explicit release is the courtesy.
 
+<!-- portable:start mandatory pre-flight checks -->
 ### Mandatory pre-flight checks
 
 These are hard to undo when skipped. Do not proceed without them.
@@ -263,9 +268,10 @@ These are hard to undo when skipped. Do not proceed without them.
 - **Before any non-trivial change to an existing function:** `blast("function_name", max_depth: 2)`. Know the transitive impact before touching it. The `concurrent` field in the response lists peer claims on this symbol from the work atlas — treat a non-empty `concurrent` as a collision warning, not an FYI.
 - **Before renaming a public symbol or HTTP route:** `drift_findings(query: "old_name", kind: "any")`. If any normative claim references it, the rename must update the narrative atomically. Skip this and the next drift run will surface an "anchor not in atlas" finding pointing at the rename.
 - **Before using a type from another crate:** `symbols("TypeName")` to confirm it exists and check its fields.
-- **Before minting a NEW type, trait, or enum:** `sovereign code converge noun <Name>` (~8s, read-only). It answers "does this concept already exist, and which crate owns it" across all three workspaces — the question local context cannot answer and the reason `deep_research/icd.rs` privately re-derived five register nouns that already had homes. A name already defined elsewhere is a convergence decision, not a free choice: reuse the owner's type, or rename yours apart and say which. `cargo xtask concept-gate` is the backstop, and it only sees your type after the next index.
+- **Before minting a NEW type, trait, or enum:** `sovereign code converge noun <Name>` (~8s, read-only). It answers "does this concept already exist, and which crate owns it" across the whole workspace — the question local context cannot answer, and the one that stops a module privately re-deriving nouns that already have homes. A name already defined elsewhere is a convergence decision, not a free choice: reuse the owner's type, or rename yours apart and say which. The concept ratchet is the backstop, and it only sees your type after the next index.
 - **Before non-trivial edits to a hot file:** `work_in_flight(scope="<path>", match_mode="file")` to catch peer agents and humans editing the same file. Active-grade observations within the last 5 minutes mean someone is right there — coordinate, don't race. Skip this only when the change is local, mechanical, and unlikely to merge-conflict (typo, comment, isolated module).
 
+<!-- portable:end -->
 ### Compilation and test feedback — run the scripts
 
 **The watchers are OFF here, deliberately, and that is fine.** `.sovereign/sovereign.toml` declares `[watchers] enabled = false` (disabled 2026-05-31: the parallel cargo fan OOM'd the daemon under a resident big model). So `lint_status`/`test_status` have nothing to report, `doctor` reports the opt-out as **Passed**, and none of this needs investigating. Do not open a session by diagnosing the watcher, and do not restore the runner config unless you actually intend to run watchers.
@@ -356,6 +362,7 @@ Gate on the **exit code**, not on the summary line you read. Both cover every me
 
 **If you touched the CLI surface, add one more step: `sovereign contract census`.** A green workspace test run says the verbs still compile and dispatch; it says nothing about whether the use case is *proven*. The census answers that in one line — how many declared steps a lane actually runs, and how many of those check the output rather than the exit code. Three of its gates are hard zeros in the normal test run (`live_steps_all_assert_something`, `live_read_steps_assert_output`, `every_live_journey_asserts_output_somewhere`), so a new step with no `expect` block turns the suite red rather than shipping a tick nobody earned. If you added a command, `svrn contract map` is where you check that some journey drives it. Behavioural proof is the nightly lane (`svrn contract nightly` shows its last verdict and age).
 
+<!-- portable:start ship code not prose + commit attribution -->
 ## Ship code, not prose
 
 Operator direction 2026-08-14. **~98% of what a session produces is code, with
@@ -393,6 +400,7 @@ Operator direction 2026-08-12. Three forms, all of them out, going forward only 
 
 `scripts/strip-coauthors.sh` rewrites history and is the *other* decision — it force-pushes and breaks every peer clone on the mesh. It is not part of this convention. Do not run it without explicit operator direction.
 
+<!-- portable:end -->
 ## Moved protocol — read at the trigger
 
 The sections below moved whole to `.claude/docs/MAIN_SESSION_PROTOCOL.md`
@@ -447,6 +455,7 @@ commonwealth-ai/
 ** commonwealth ≠ sovereign**. They are peer projects, not parent/child. The Commonwealth mesh daemon serves a local API that sovereign uses for inference routing.
 
 
+<!-- portable:start working style: prose, commits -->
 ## Working style
 
 How the maintainer expects agents to work here. Norms, not code rules —
@@ -466,6 +475,7 @@ across several machines; these keep them consistent.)
   time. Commit to the CURRENT branch; branching is their call too and
   they will say so (2026-08-28, replacing a "branch first if on `main`"
   rule that had the same problem the commit rule did).
+<!-- portable:end -->
 - **Debug builds for dev, not release** — the rule and its exceptions are
   under "Code Intelligence" above. Behavioural work including CI benches
   runs from `target/debug/<sibling>`; the llama.cpp kernels are native C++
@@ -482,6 +492,7 @@ across several machines; these keep them consistent.)
   debug binary (it silently misses many `&str`s). The chat pipeline logs to
   the desktop app log (`test-artifacts/repro-defects-app.log`), not
   `daemon.err`.
+<!-- portable:start working style: observability, quality, fluent CLI -->
 - **Observability before hypothesis.** When a deployed-path behavior is
   wrong and one signal can't explain it, make the real decision *visible*
   first (tracing at a captured target + `RUST_LOG`, or a trace file) and
@@ -499,4 +510,5 @@ across several machines; these keep them consistent.)
   fix the bug, don't wrap ceremony around it.
 - **No trailing `/schedule` offers.** Don't close turns proposing to
   schedule background follow-ups; the maintainer reads it as pestering.
+<!-- portable:end -->
   An ordinary "next step?" for the task at hand is fine.
