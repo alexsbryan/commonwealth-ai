@@ -25,7 +25,8 @@ pub use catalog::GoalCatalog;
 pub use driver::{Driver, DriverConfig, DriverError, MemoEntry, StackState};
 pub use evaluator::{EvalError, EvalRequest, EvalResponse, Evaluator, ScriptedEvaluator};
 pub use frame::{
-    fold, Continuation, Env, Event, GoalId, GoalPath, ReturnValue, Slot, StackFrame, StackItem,
+    fold, Continuation, Decider, Env, Event, GoalId, GoalPath, ReturnValue, Slot, StackFrame,
+    StackItem,
 };
 pub use model::{AskRecord, ModelConfig, ModelEvaluator};
 

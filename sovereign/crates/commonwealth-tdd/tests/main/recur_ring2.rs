@@ -126,9 +126,15 @@ async fn one_run(fidelity: bool) -> RunReport {
     );
     let mut mc = ModelConfig::local(model());
     mc.fidelity_probe = fidelity;
-    let ev = ModelEvaluator::new(mc, catalog);
+    // The cost counterfactual: RECUR_PIN=0 sends the same bytes with no
+    // `stable_prefix_len`, so the instruction is re-prefilled every ask
+    // instead of restored. Same prompts, same moves — only the engine's
+    // work differs, which is the claim under test.
+    mc.pin = !matches!(std::env::var("RECUR_PIN").as_deref(), Ok("0") | Ok("false"));
+    let ev = ModelEvaluator::new(mc);
     let mut cfg = DriverConfig::pytest(tmp.path().join("scratch"));
     cfg.instruction = RECUR_MODEL_INSTRUCTION;
+    cfg.catalog = catalog;
     let t0 = Instant::now();
     let mut d = Driver::start(&wd, g("tests"), cfg, ev).unwrap();
     let root = d.run().await.unwrap();

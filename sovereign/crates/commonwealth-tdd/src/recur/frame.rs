@@ -177,6 +177,16 @@ pub fn fold(verdicts: impl IntoIterator<Item = Verdict>) -> Verdict {
         .unwrap_or(Verdict::NeverRan)
 }
 
+/// Who chose a move. A split the DRIVER made from the oracle's own failure
+/// count is a different fact from one the model asked for, and a log that
+/// cannot tell them apart cannot answer "did the model decompose?".
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Decider {
+    Driver,
+    Model,
+}
+
 /// The glassbox log: every decision the driver takes is one event (ARCH §9).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
@@ -205,6 +215,7 @@ pub enum Event {
     Split {
         from: GoalPath,
         children: Vec<GoalId>,
+        by: Decider,
     },
     MemoHit {
         path: GoalPath,

@@ -18,9 +18,11 @@
 //! returns that verdict rather than asking the evaluator again. That is
 //! the bar ("the trap is caught in the Combine frame, and only there").
 
+use super::catalog::GoalCatalog;
 use super::evaluator::{EvalError, EvalRequest, EvalResponse, Evaluator};
 use super::frame::{
-    fold, Continuation, Env, Event, GoalId, GoalPath, ReturnValue, Slot, StackFrame, StackItem,
+    fold, Continuation, Decider, Env, Event, GoalId, GoalPath, ReturnValue, Slot, StackFrame,
+    StackItem,
 };
 use super::git;
 use super::RECUR_INSTRUCTION;
@@ -48,6 +50,20 @@ pub struct DriverConfig {
     pub test_timeout: Duration,
     /// Holds `stack.json` and the forked worktrees. Outside the repo.
     pub scratch: PathBuf,
+    /// The goal tree. The driver owns it: it decides what a frame may name
+    /// and, with `auto_split`, when a frame decomposes.
+    pub catalog: GoalCatalog,
+    /// Split a fresh goal whose oracle reports more than one failure and
+    /// which has two or more parts, WITHOUT asking the evaluator.
+    ///
+    /// Measured 2026-09-03: the model does not decompose. Given three asks
+    /// it edits at the root; given one it still edits. But the oracle has
+    /// just run and already knows how many parts failed, so "is this
+    /// decomposable" is a question code can answer and (ARCH §7.6) must not
+    /// be asked of a model. Only on FIRST entry to a goal — a frame
+    /// resuming after `Verify` has already had its chance, and re-splitting
+    /// there is how a split/merge/still-red loop would start.
+    pub auto_split: bool,
     /// Checked BEFORE an edit is written. A model's edit body can run on
     /// past the file (measured, ring 3: one reply carried the frame
     /// scaffolding into `calc/cyc_a.py`), and a grammar terminator does not
@@ -67,6 +83,8 @@ impl std::fmt::Debug for DriverConfig {
             .field("max_steps", &self.max_steps)
             .field("test_timeout", &self.test_timeout)
             .field("scratch", &self.scratch)
+            .field("catalog_goals", &self.catalog.goals().len())
+            .field("auto_split", &self.auto_split)
             .field(
                 "syntax_validator",
                 &self.syntax_validator.as_ref().map(|v| v.language_id()),
@@ -91,6 +109,8 @@ impl DriverConfig {
             max_steps: 200,
             test_timeout: Duration::from_secs(60),
             scratch,
+            catalog: GoalCatalog::default(),
+            auto_split: true,
             syntax_validator: Some(std::sync::Arc::new(PythonSyntaxValidator::new())),
         }
     }
@@ -366,6 +386,22 @@ impl<E: Evaluator> Driver<E> {
                 return Ok(Outcome::Value(ReturnValue { goal, ..m.value }));
             }
         }
+        let nameable: Vec<GoalId> = self
+            .cfg
+            .catalog
+            .goals()
+            .iter()
+            .filter(|g| !path.contains(g))
+            .cloned()
+            .collect();
+        let parts: Vec<GoalId> = self
+            .cfg
+            .catalog
+            .parts_of(&goal)
+            .into_iter()
+            .filter(|g| !path.contains(g))
+            .collect();
+        let mut auto_split_left = self.cfg.auto_split && fresh && parts.len() >= 2;
         let mut refused: Option<GoalId> = None;
         let mut rejected: Option<String> = None;
         let mut asks = 0u32;
@@ -403,12 +439,23 @@ impl<E: Evaluator> Driver<E> {
                 });
                 return Ok(Outcome::Value(v));
             }
+            // The oracle just ran. More than one failure under a goal with
+            // parts is decomposable BY CONSTRUCTION — no judgement, so no
+            // ask is spent on it.
+            if auto_split_left && run.parsed.failed > 1 {
+                auto_split_left = false;
+                return self
+                    .split_into(path, env, before, parts.clone(), Decider::Driver)
+                    .await;
+            }
             asks_left -= 1;
             asks += 1;
             let req = EvalRequest {
                 instruction: self.cfg.instruction,
                 path: path.clone(),
                 on_stack: path.goals().to_vec(),
+                goals: nameable.clone(),
+                parts: parts.clone(),
                 observation: run.tail.clone(),
                 refused: refused.take(),
                 rejected: rejected.take(),
@@ -460,39 +507,9 @@ impl<E: Evaluator> Driver<E> {
                     std::fs::write(target, content)?;
                 }
                 EvalResponse::Split { children } => {
-                    git::commit_all(&env.worktree, &format!("recur: split {goal}"))?;
-                    let base = git::head(&env.worktree)?;
-                    let mut slots = Vec::with_capacity(children.len());
-                    for c in &children {
-                        let cp = path.child(c.clone());
-                        let branch = format!("recur/{}", cp.short_slug());
-                        let wt = self.cfg.scratch.join("wt").join(cp.short_slug());
-                        git::add_worktree(&env.worktree, &wt, &branch, &base)?;
-                        slots.push(Slot {
-                            goal: c.clone(),
-                            env: Env {
-                                worktree: wt,
-                                branch,
-                            },
-                            value: None,
-                        });
-                    }
-                    self.event(Event::Split {
-                        from: path.clone(),
-                        children: children.clone(),
-                    });
-                    let first = slots[0].clone();
-                    self.state.stack.push(StackItem::Frame(StackFrame {
-                        path: path.clone(),
-                        env,
-                        before,
-                        k: Continuation::Combine { slots, next: 1 },
-                    }));
-                    self.state.stack.push(StackItem::Goal {
-                        path: path.child(first.goal),
-                        env: first.env,
-                    });
-                    return Ok(Outcome::Suspended);
+                    return self
+                        .split_into(path, env, before, children, Decider::Model)
+                        .await;
                 }
                 EvalResponse::GiveUp { reason } => {
                     let v = terminal(verdict, format!("gave up ({}): {reason}", verdict.as_str()));
@@ -507,6 +524,53 @@ impl<E: Evaluator> Driver<E> {
                 }
             }
         }
+    }
+
+    /// Fork one worktree per child, push the `Combine` frame and the first
+    /// child. One implementation for both deciders (ARCH §10.6).
+    async fn split_into(
+        &mut self,
+        path: GoalPath,
+        env: Env,
+        before: String,
+        children: Vec<GoalId>,
+        by: Decider,
+    ) -> Result<Outcome, DriverError> {
+        let goal = path.leaf().clone();
+        git::commit_all(&env.worktree, &format!("recur: split {goal}"))?;
+        let base = git::head(&env.worktree)?;
+        let mut slots = Vec::with_capacity(children.len());
+        for c in &children {
+            let cp = path.child(c.clone());
+            let branch = format!("recur/{}", cp.short_slug());
+            let wt = self.cfg.scratch.join("wt").join(cp.short_slug());
+            git::add_worktree(&env.worktree, &wt, &branch, &base)?;
+            slots.push(Slot {
+                goal: c.clone(),
+                env: Env {
+                    worktree: wt,
+                    branch,
+                },
+                value: None,
+            });
+        }
+        self.event(Event::Split {
+            from: path.clone(),
+            children,
+            by,
+        });
+        let first = slots[0].clone();
+        self.state.stack.push(StackItem::Frame(StackFrame {
+            path: path.clone(),
+            env,
+            before,
+            k: Continuation::Combine { slots, next: 1 },
+        }));
+        self.state.stack.push(StackItem::Goal {
+            path: path.child(first.goal),
+            env: first.env,
+        });
+        Ok(Outcome::Suspended)
     }
 
     /// Deliver a value to the frame beneath it, and keep delivering while

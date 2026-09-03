@@ -18,7 +18,6 @@
 //! context), then Restore path (state file + suffix). Same bytes both times;
 //! the outputs must agree token-for-token.
 
-use super::catalog::GoalCatalog;
 use super::evaluator::{EvalError, EvalRequest, EvalResponse, Evaluator};
 use super::frame::GoalId;
 use crate::shared::Language;
@@ -89,7 +88,6 @@ pub struct AskRecord {
 pub struct ModelEvaluator {
     cfg: ModelConfig,
     client: reqwest::Client,
-    catalog: GoalCatalog,
     asks: Mutex<Vec<AskRecord>>,
     frame_ids: AtomicU64,
 }
@@ -140,11 +138,10 @@ struct Usage {
 }
 
 impl ModelEvaluator {
-    pub fn new(cfg: ModelConfig, catalog: GoalCatalog) -> Self {
+    pub fn new(cfg: ModelConfig) -> Self {
         Self {
             cfg,
             client: reqwest::Client::new(),
-            catalog,
             asks: Mutex::new(Vec::new()),
             frame_ids: AtomicU64::new(0),
         }
@@ -518,22 +515,13 @@ impl ModelEvaluator {
 #[async_trait]
 impl Evaluator for ModelEvaluator {
     async fn evaluate(&self, req: &EvalRequest) -> Result<EvalResponse, EvalError> {
-        let goals: Vec<GoalId> = self
-            .catalog
-            .goals()
-            .iter()
-            .filter(|g| !req.on_stack.contains(g))
-            .cloned()
-            .collect();
+        // The driver decided what this frame may name; rendering it is all
+        // that is left here.
+        let goals = req.goals.clone();
         let files = self.allowed_files(&req.worktree);
         let tracked = self.tracked(&req.worktree);
         let sources = self.sources_for(req, &tracked);
-        let parts: Vec<GoalId> = self
-            .catalog
-            .parts_of(req.goal())
-            .into_iter()
-            .filter(|c| !req.on_stack.contains(c))
-            .collect();
+        let parts = req.parts.clone();
         let grammar = Self::grammar(&goals, &parts, &files);
         let frame_id = self
             .cfg

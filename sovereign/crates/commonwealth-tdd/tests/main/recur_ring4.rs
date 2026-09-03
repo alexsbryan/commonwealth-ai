@@ -269,9 +269,10 @@ async fn ring4_model_arm_decomposes_and_reaches_the_combine() {
             language: Language::Rust,
             ..ModelConfig::local(model())
         };
-        let ev = ModelEvaluator::new(mc, rust_catalog());
+        let ev = ModelEvaluator::new(mc);
         let mut cfg = cfg(tmp.path().join("scratch"));
         cfg.instruction = RECUR_MODEL_INSTRUCTION_RUST;
+        cfg.catalog = rust_catalog();
         let mut d = Driver::start(&wd, g(ROOT), cfg, ev).unwrap();
         let root = d.run().await.unwrap();
         let st = d.state().clone();
@@ -354,9 +355,10 @@ async fn ring4_model_arm_under_a_one_ask_budget() {
             language: Language::Rust,
             ..ModelConfig::local(model())
         };
-        let ev = ModelEvaluator::new(mc, rust_catalog());
+        let ev = ModelEvaluator::new(mc);
         let mut cfg = cfg(tmp.path().join("scratch"));
         cfg.instruction = RECUR_MODEL_INSTRUCTION_RUST;
+        cfg.catalog = rust_catalog();
         cfg.asks_per_frame = 1;
         let mut d = Driver::start(&wd, g(ROOT), cfg, ev).unwrap();
         let root = d.run().await.unwrap();

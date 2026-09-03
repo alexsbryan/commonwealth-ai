@@ -9,8 +9,8 @@
 //! the evaluator remembers the sequence.
 
 use commonwealth_tdd::recur::{
-    driver::delivered_to, Driver, DriverConfig, EvalRequest, EvalResponse, Event,
-    ScriptedEvaluator, StackState,
+    driver::delivered_to, Decider, Driver, DriverConfig, EvalRequest, EvalResponse, Event,
+    GoalCatalog, GoalId, GoalPath, ScriptedEvaluator, StackState,
 };
 use kernel_types::Verdict;
 use std::path::PathBuf;
@@ -393,4 +393,72 @@ async fn ring0_an_unparseable_edit_is_rejected_before_it_is_written() {
     // The run-on body never reached the file.
     let on_disk = std::fs::read_to_string(repo.join("calc/h.py")).unwrap();
     assert_eq!(on_disk, good, "the rejected body was written anyway");
+}
+
+/// The driver decomposes on its own, and that is what reaches the trap.
+///
+/// The model does not split (measured, ring 4): it edits at the root, and
+/// `Combine` is never entered. But the oracle has just run and already knows
+/// that more than one part failed, so decomposability is a question code can
+/// answer. Here the evaluator is scripted to NEVER split — every move it
+/// makes is an edit — and the tree recursion happens anyway, all the way to
+/// the merge that catches what neither branch could see.
+#[tokio::test]
+async fn ring0_the_driver_splits_a_multi_failure_goal_without_being_asked() {
+    if !pytest_available() {
+        eprintln!("python3 -m pytest unavailable — SKIPPED, this run verified nothing");
+        return;
+    }
+    let tmp = tempfile::tempdir().unwrap();
+    let repo = tmp.path().join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    let wd = fixture(&repo, false);
+    let top = g("tests/test_top.py");
+    let mut cfg = cfg(tmp.path().join("scratch"));
+    cfg.catalog = GoalCatalog::from_tree(
+        [
+            "tests/test_top.py::test_f",
+            "tests/test_top.py::test_g",
+            "tests/test_top.py::test_k",
+        ]
+        .map(|c| (GoalId::new(c), top.clone()))
+        .to_vec(),
+    );
+    // An evaluator that CANNOT split: the goal the driver decomposes is the
+    // one move this script refuses to make. Without that the assertion would
+    // pass on a split the script itself would have asked for.
+    let never_splits = ScriptedEvaluator::new(|req: &EvalRequest| match script(req) {
+        EvalResponse::Split { .. } => EvalResponse::GiveUp {
+            reason: "this evaluator never splits".into(),
+        },
+        other => other,
+    });
+    let mut d = Driver::start(&wd, top.clone(), cfg, never_splits).unwrap();
+    let root = d.run().await.unwrap();
+    let st = d.state().clone();
+    let dump = serde_json::to_string_pretty(&st.events).unwrap();
+
+    // Nobody asked for the split.
+    let splits: Vec<&Event> = st
+        .events
+        .iter()
+        .filter(|e| matches!(e, Event::Split { .. }))
+        .collect();
+    assert_eq!(splits.len(), 1, "{dump}");
+    let Event::Split { by, children, .. } = splits[0] else {
+        unreachable!()
+    };
+    assert_eq!(*by, Decider::Driver, "{dump}");
+    assert_eq!(children.len(), 3, "{dump}");
+
+    // Every branch green on its own; the merge is where it breaks.
+    let slots = delivered_to(&st, &GoalPath::root(top));
+    assert_eq!(slots.len(), 3, "{dump}");
+    assert!(slots.iter().all(|v| v.verdict == Verdict::Passed), "{dump}");
+    assert_eq!(root.verdict, Verdict::Failed, "{dump}");
+    assert!(
+        root.reason.starts_with("passed in every branch"),
+        "{}",
+        root.reason
+    );
 }

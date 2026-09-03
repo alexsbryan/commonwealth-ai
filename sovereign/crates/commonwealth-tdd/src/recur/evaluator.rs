@@ -22,6 +22,14 @@ pub struct EvalRequest {
     /// The goals on the path. In ring 2 the grammar excludes these from
     /// `push`; in ring 0 the driver refuses them and says so via `refused`.
     pub on_stack: Vec<GoalId>,
+    /// Every goal this frame may `push`: the catalog minus the stack. The
+    /// DRIVER computes it, because the driver owns the goal tree — an
+    /// evaluator that derived its own copy would be a second decider for
+    /// the same question (ARCH §10.6).
+    pub goals: Vec<GoalId>,
+    /// The goals this frame may `split` into: this goal's own parts, minus
+    /// the stack. Empty means the split arm is not offered.
+    pub parts: Vec<GoalId>,
     /// The last ~1.5KB of the failing oracle run.
     pub observation: String,
     /// A push the driver refused since the last ask, if any.
