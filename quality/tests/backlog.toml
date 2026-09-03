@@ -14,6 +14,15 @@
 #      no witnessed failure belongs in quality/conformance-specs.toml, which is
 #      the registry for promises. This one is the registry for damage.
 #
+# CLOSING A RECORD. Apply the `mutation`, watch the suite, and name the test
+# that went red in a `landed` field on the record — `<junit classname>::<test
+# path>`, the same spelling `quality/conformance-specs.toml` uses. That field
+# is the ONLY thing `scripts/test-queue.py` reads to drop a record from the
+# queue, and it is admissible only for a mutation actually WATCHED red: a
+# `landed` written from reading the tree is the opinion-versus-mutation trap
+# TEST_LEDGER.md §Closure names, wearing the burndown's own clothes. The test
+# it names must be the test the record names (interlock 5).
+#
 # `failure`, `observable` and `mutation` are written to be SELF-CONTAINED. An
 # agent picking up a record should never need to open the note — the notes
 # average 2,451 characters and that read will either be paid or skipped, and
@@ -503,7 +512,6 @@ found = "2026-08-27"
 class = "silent-substitute"
 tier = 1
 surface = "rust-unit"
-target = "commonwealth-core/src/mesh.rs"
 failure = """Once an upgraded peer withholds its secret ON PURPOSE, a zeroed
 field on the wire stops being evidence of an old build. The code that read it as
 one was written before that was true, so a deliberate withholding was
@@ -511,6 +519,8 @@ indistinguishable from a legacy peer and got legacy handling."""
 observable = """A zeroed field is classified `unknown`, not `legacy` — the two
 are distinct verdicts and the distinction is asserted."""
 mutation = """Collapse `unknown` back into `legacy`. The test must redden."""
+target = "commonwealth-core/src/mesh/mod.rs"
+landed = "commonwealth-core::mesh::tests::gossip_auth::a_zeroed_secret_is_not_a_verdict_the_authorization_arm_is"
 
 [[test]]
 id = "ME-04"

@@ -5,6 +5,9 @@ quality/TEST_LEDGER.md is the model. This joins its two sources into one
 ordered queue and prints it:
 
   quality/tests/backlog.toml       102 notes-derived records   kind=write
+                                     (a record carrying `landed` is excluded:
+                                      its mutation was watched red on the test
+                                      that field names — see the file header)
   quality/conformance-specs.toml    75 exists-untagged clauses kind=tag
                                      4 landed-but-unclaimable  kind=blocked
                                      1 spec/code conflict      kind=decide
@@ -55,6 +58,8 @@ def same(a, b):
 def load():
     items = []
     for r in tomllib.load(open(ROOT / "quality/tests/backlog.toml", "rb"))["test"]:
+        if r.get("landed"):
+            continue                        # mutation watched red: not queue work
         items.append(dict(id=r["id"], kind="write", tier=r["tier"], path=norm(r["target"]),
                           why=one_line(r["failure"].split(". ")[0]), witness="note " + r["note"]))
     d = tomllib.load(open(ROOT / "quality/conformance-specs.toml", "rb"))

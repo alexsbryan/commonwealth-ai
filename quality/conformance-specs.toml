@@ -393,10 +393,11 @@ existing = '''sovereign/crates/sovereign-mesh/src/yield_backoff.rs:194::backoff_
 [[spec]]
 id = "FE-11"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''A ring MUST carry **two separate credentials**: one that authorises ongoing participation and never rotates, and one that admits new joiners and rotates freely.'''
-target = '''commonwealth/crates/commonwealth-core/src/mesh.rs:673::rotate_invite_key'''
-existing = '''commonwealth/crates/commonwealth-core/src/mesh.rs:1920::rotating_the_invite_never_touches_the_mesh_secret'''
+target = '''commonwealth/crates/commonwealth-core/src/mesh/mod.rs:673::rotate_invite_key'''
+existing = '''commonwealth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs:565::rotating_the_invite_never_touches_the_mesh_secret'''
+landed = '''commonwealth-core::mesh::tests::gossip_auth::rotating_the_invite_never_touches_the_mesh_secret'''
 
 [[spec]]
 id = "FE-110"
@@ -409,10 +410,11 @@ existing = '''commonwealth/crates/commonwealth-core/src/contributions.rs:420::pu
 [[spec]]
 id = "FE-13"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''The participation credential SHOULD NOT ride the wire between upgraded peers. A round SHOULD carry a keyed proof bound to the **sender** and to a short time window, so a captured proof is neither transferable nor durable.'''
-target = '''commonwealth/crates/commonwealth-core/src/mesh.rs:550::mesh_proof'''
-existing = '''commonwealth/crates/commonwealth-core/src/mesh.rs:1619::a_proof_cannot_be_replayed_by_a_different_peer'''
+target = '''commonwealth/crates/commonwealth-core/src/mesh/mod.rs:550::mesh_proof'''
+existing = '''commonwealth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs:165::a_proof_cannot_be_replayed_by_a_different_peer'''
+landed = '''commonwealth-core::mesh::tests::gossip_auth::a_proof_cannot_be_replayed_by_a_different_peer'''
 
 [[spec]]
 id = "FE-133"
@@ -449,10 +451,11 @@ existing = '''sovereign/crates/sovereign-mesh/tests/main/rotate_pre_split_guard.
 [[spec]]
 id = "FE-16"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''**The confirmation is local observation, never a peer's claim.** An upgraded peer deliberately withholds the credential, so a zeroed field stopped being evidence of an old build; reading it as one made two upgraded nodes report each other as legacy and block rotation on both sides.'''
-target = '''commonwealth/crates/commonwealth-core/src/mesh.rs:611::gossip_authorized_with'''
-existing = '''commonwealth/crates/commonwealth-core/src/mesh.rs:1713::a_peer_that_proves_possession_is_never_reported_pre_split'''
+target = '''commonwealth/crates/commonwealth-core/src/mesh/mod.rs:611::gossip_authorized_with'''
+existing = '''commonwealth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs:261::a_peer_that_proves_possession_is_never_reported_pre_split'''
+landed = '''commonwealth-core::mesh::tests::gossip_auth::a_peer_that_proves_possession_is_never_reported_pre_split'''
 
 [[spec]]
 id = "FE-17"
@@ -481,18 +484,20 @@ existing = '''commonwealth/crates/commonwealth-discovery/src/latency_probe.rs:25
 [[spec]]
 id = "FE-23"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''Reachability information a peer publishes MUST be **signed per-node with a monotonic version**, so an attacker past the admission gate cannot force a peer unreachable or downgrade its transport.'''
-target = '''commonwealth/crates/commonwealth-core/src/mesh.rs:731::reconcile_dial_info'''
-existing = '''commonwealth/crates/commonwealth-core/src/mesh.rs:1014::dial_info_strip_attack_is_rejected_and_pinned'''
+target = '''commonwealth/crates/commonwealth-core/src/mesh/mod.rs:731::reconcile_dial_info'''
+existing = '''commonwealth/crates/commonwealth-core/src/mesh/tests.rs:239::dial_info_strip_attack_is_rejected_and_pinned'''
+landed = '''commonwealth-core::mesh::tests::dial_info_strip_attack_is_rejected_and_pinned'''
 
 [[spec]]
 id = "FE-24"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''Policy that must only ever tighten (such as an encryption requirement) MUST merge **stricter-wins**, not last-writer-wins.'''
-target = '''commonwealth/crates/commonwealth-core/src/mesh.rs:382::merge_from_authenticated'''
-existing = '''commonwealth/crates/commonwealth-core/src/mesh.rs:1163::encryption_policy_never_downgrades'''
+target = '''commonwealth/crates/commonwealth-core/src/mesh/mod.rs:382::merge_from_authenticated'''
+existing = '''commonwealth/crates/commonwealth-core/src/mesh/tests.rs:389::encryption_policy_never_downgrades'''
+landed = '''commonwealth-core::mesh::tests::encryption_policy_never_downgrades'''
 
 [[spec]]
 id = "FE-25"
@@ -553,10 +558,11 @@ existing = '''commonwealth/crates/commonwealth-transport/src/identity.rs:344::jo
 [[spec]]
 id = "FE-6"
 family = "FE"
-status = "exists-untagged"
+status = "landed"
 clause = '''Identity keys MUST be protected by an anti-downgrade rule: a relayed record without the key MUST NOT strip a known one.'''
-target = '''commonwealth/crates/commonwealth-core/src/mesh.rs:448::merge_one_member'''
-existing = '''commonwealth/crates/commonwealth-core/src/mesh.rs:1328::merge_preserves_pubkey_when_old_peer_relays_record_without_it'''
+target = '''commonwealth/crates/commonwealth-core/src/mesh/mod.rs:448::merge_one_member'''
+existing = '''commonwealth/crates/commonwealth-core/src/mesh/tests.rs:555::merge_preserves_pubkey_when_old_peer_relays_record_without_it'''
+landed = '''commonwealth-core::mesh::tests::merge_preserves_pubkey_when_old_peer_relays_record_without_it'''
 
 [[spec]]
 id = "FE-7"

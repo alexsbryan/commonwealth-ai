@@ -1,0 +1,53 @@
+# Conformance tags in `commonwealth-core` — GENERATED. DO NOT EDIT BY HAND.
+#
+#   UPDATE_CONFORMANCE_TAGS=1 cargo test -p kernel-types --test conformance_tags
+#
+# Each claim maps a requirement id from research/clean-room/REQUIREMENTS.md
+# to the test that proves it. `test` is `<junit classname>::<junit name>`, so
+# `svrn conformance` can join a claim to a real per-test verdict without
+# guessing.
+#
+# `asserts` counts falsifiable exits in the test body. It is never zero: a
+# covers: tag over a body that cannot fail is refused by the generator.
+
+[[claim]]
+requirement = "FE-11"
+test = "commonwealth-core::mesh::tests::gossip_auth::rotating_the_invite_never_touches_the_mesh_secret"
+file = "commonwealth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs"
+line = 565
+asserts = 3
+
+[[claim]]
+requirement = "FE-13"
+test = "commonwealth-core::mesh::tests::gossip_auth::a_proof_cannot_be_replayed_by_a_different_peer"
+file = "commonwealth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs"
+line = 165
+asserts = 2
+
+[[claim]]
+requirement = "FE-16"
+test = "commonwealth-core::mesh::tests::gossip_auth::a_peer_that_proves_possession_is_never_reported_pre_split"
+file = "commonwealth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs"
+line = 261
+asserts = 2
+
+[[claim]]
+requirement = "FE-23"
+test = "commonwealth-core::mesh::tests::dial_info_strip_attack_is_rejected_and_pinned"
+file = "commonwealth/crates/commonwealth-core/src/mesh/tests.rs"
+line = 239
+asserts = 4
+
+[[claim]]
+requirement = "FE-24"
+test = "commonwealth-core::mesh::tests::encryption_policy_never_downgrades"
+file = "commonwealth/crates/commonwealth-core/src/mesh/tests.rs"
+line = 389
+asserts = 1
+
+[[claim]]
+requirement = "FE-6"
+test = "commonwealth-core::mesh::tests::merge_preserves_pubkey_when_old_peer_relays_record_without_it"
+file = "commonwealth/crates/commonwealth-core/src/mesh/tests.rs"
+line = 555
+asserts = 3
