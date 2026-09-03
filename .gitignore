@@ -215,3 +215,6 @@ research/deep-research/demo/p5/runs-t1c/
 
 # machine-state observation heartbeat (daemon rewrites observed_at; tracked copy only causes merge noise)
 .sovereign/project.toml
+
+
+*.private.md
