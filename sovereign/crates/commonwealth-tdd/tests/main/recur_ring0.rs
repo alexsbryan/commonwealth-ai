@@ -9,139 +9,13 @@
 //! the evaluator remembers the sequence.
 
 use commonwealth_tdd::recur::{
-    driver::delivered_to, Driver, DriverConfig, EvalRequest, EvalResponse, Event, GoalId, GoalPath,
+    driver::delivered_to, Driver, DriverConfig, EvalRequest, EvalResponse, Event,
     ScriptedEvaluator, StackState,
 };
-use commonwealth_tdd::Workdir;
 use kernel_types::Verdict;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::PathBuf;
 
-// ── fixture ──────────────────────────────────────────────────────────────
-
-fn pytest_available() -> bool {
-    Command::new("python3")
-        .args(["-m", "pytest", "--version"])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
-}
-
-fn sh(dir: &Path, args: &[&str]) {
-    let out = Command::new(args[0])
-        .args(&args[1..])
-        .current_dir(dir)
-        .output()
-        .expect("spawn");
-    assert!(
-        out.status.success(),
-        "{:?}: {}",
-        args,
-        String::from_utf8_lossy(&out.stderr)
-    );
-}
-
-/// chain.py with the given bugs still planted. `c{i}` raises before it can
-/// reach `c{i+1}`, so each bug masks the next: fixing c1 exposes c2.
-fn chain_src(bugs: &[u8]) -> String {
-    let mut s = String::new();
-    for i in (1..=4).rev() {
-        let raise = if bugs.contains(&i) {
-            format!("    raise ValueError(\"c{i} bug\")\n")
-        } else {
-            String::new()
-        };
-        let body = if i == 4 {
-            "    return x * 4\n".to_string()
-        } else {
-            format!("    return c{}(x) + {i}\n", i + 1)
-        };
-        s.push_str(&format!("def c{i}(x):\n{raise}{body}\n"));
-    }
-    s
-}
-
-fn write(root: &Path, rel: &str, content: &str) {
-    let p = root.join(rel);
-    std::fs::create_dir_all(p.parent().unwrap()).unwrap();
-    std::fs::write(p, content).unwrap();
-}
-
-/// The fixture. Root goal `tests` is red for five independent reasons.
-fn fixture(root: &Path) -> Workdir {
-    sh(root, &["git", "init", "-q", "--initial-branch=main"]);
-    sh(root, &["git", "config", "user.email", "recur@test"]);
-    sh(root, &["git", "config", "user.name", "recur"]);
-    write(root, ".gitignore", "__pycache__/\n.pytest_cache/\n");
-    write(root, "conftest.py", "");
-    write(root, "calc/__init__.py", "");
-    write(root, "calc/chain.py", &chain_src(&[1, 2, 3, 4]));
-    write(root, "calc/h.py", "def base(a, b):\n    return a - b\n");
-    write(
-        root,
-        "calc/f.py",
-        "from .h import base\n\ndef f(x):\n    return base(x, 1) * 2\n",
-    );
-    write(
-        root,
-        "calc/g.py",
-        "from .h import base\n\ndef g(x):\n    return base(x, 2) * 2\n",
-    );
-    write(
-        root,
-        "calc/k.py",
-        "from .h import base\n\ndef k(x):\n    return base(x, 2) - 1\n",
-    );
-    write(
-        root,
-        "calc/cyc_a.py",
-        "def a(x):\n    from .cyc_b import b\n    return b(x) + 1\n",
-    );
-    write(
-        root,
-        "calc/cyc_b.py",
-        "def b(x):\n    from .cyc_a import a\n    return a(x) - 1\n",
-    );
-    write(
-        root,
-        "calc/net.py",
-        "import os\nREMOTE = os.environ[\"CALC_REMOTE_RECUR_FIXTURE\"]\n",
-    );
-    write(
-        root,
-        "tests/test_chain.py",
-        "from calc.chain import c1, c2, c3, c4\n\ndef test_c1(): assert c1(1) == 10\ndef test_c2(): assert c2(1) == 9\ndef test_c3(): assert c3(1) == 7\ndef test_c4(): assert c4(1) == 4\n",
-    );
-    write(
-        root,
-        "tests/test_top.py",
-        "from calc.f import f\nfrom calc.g import g\nfrom calc.k import k\n\ndef test_f(): assert f(1) == 4\ndef test_g(): assert g(1) == 6\ndef test_k(): assert k(1) == 2\n",
-    );
-    write(
-        root,
-        "tests/test_h.py",
-        "from calc.h import base\n\ndef test_base(): assert base(1, 1) == 2\n",
-    );
-    write(
-        root,
-        "tests/test_cycle.py",
-        "from calc.cyc_a import a\nfrom calc.cyc_b import b\n\ndef test_cyc_a(): assert a(1) == 2\ndef test_cyc_b(): assert b(1) == 0\n",
-    );
-    write(
-        root,
-        "tests/test_net.py",
-        "from calc.net import REMOTE\n\ndef test_net(): assert REMOTE\n",
-    );
-    sh(root, &["git", "add", "-A"]);
-    sh(root, &["git", "commit", "-q", "-m", "fixture"]);
-    Workdir::check_safe(root.to_path_buf(), false).unwrap()
-}
-
-fn g(s: &str) -> GoalId {
-    GoalId::new(s)
-}
+use crate::recur_fixture::{count, fixture, g, pytest_available, root_path, strip_paths};
 
 // ── the scripted evaluator: a pure function of (request, worktree) ───────
 
@@ -257,14 +131,6 @@ fn evaluated(state: &StackState, goal: &str) -> Vec<(usize, Verdict)> {
         .collect()
 }
 
-fn count<F: Fn(&Event) -> bool>(state: &StackState, f: F) -> usize {
-    state.events.iter().filter(|e| f(e)).count()
-}
-
-fn root_path() -> GoalPath {
-    GoalPath::root(g("tests"))
-}
-
 // ── bars ─────────────────────────────────────────────────────────────────
 
 /// Occurs · memo · combine (the trap) · flat frame — one full run.
@@ -277,7 +143,7 @@ async fn ring0_full_run_meets_the_structural_bars() {
     let tmp = tempfile::tempdir().unwrap();
     let repo = tmp.path().join("repo");
     std::fs::create_dir_all(&repo).unwrap();
-    let wd = fixture(&repo);
+    let wd = fixture(&repo, false);
     let mut d = Driver::start(
         &wd,
         g("tests"),
@@ -401,7 +267,7 @@ async fn ring0_could_not_judge_propagates_to_the_root() {
     let tmp = tempfile::tempdir().unwrap();
     let repo = tmp.path().join("repo");
     std::fs::create_dir_all(&repo).unwrap();
-    let wd = fixture(&repo);
+    let wd = fixture(&repo, false);
     let ev = ScriptedEvaluator::new(|req: &EvalRequest| {
         if req.goal().0 == "tests" {
             EvalResponse::Split {
@@ -435,7 +301,7 @@ async fn ring0_resumes_from_the_stack_file_and_two_runs_agree() {
         let tmp = tempfile::tempdir().unwrap();
         let repo = tmp.path().join("repo");
         std::fs::create_dir_all(&repo).unwrap();
-        let wd = fixture(&repo);
+        let wd = fixture(&repo, false);
         let mut d = Driver::start(
             &wd,
             g("tests"),
@@ -450,7 +316,7 @@ async fn ring0_resumes_from_the_stack_file_and_two_runs_agree() {
         let tmp = tempfile::tempdir().unwrap();
         let repo = tmp.path().join("repo");
         std::fs::create_dir_all(&repo).unwrap();
-        let wd = fixture(&repo);
+        let wd = fixture(&repo, false);
         let c = cfg(tmp.path().join("scratch"));
         let mut d = Driver::start(&wd, g("tests"), c.clone(), evaluator()).unwrap();
         let early = d.run_steps(4).await.unwrap();
@@ -470,14 +336,4 @@ async fn ring0_resumes_from_the_stack_file_and_two_runs_agree() {
     let (b, eb) = run_killed.await;
     assert_eq!(a, b);
     assert_eq!(ea, eb);
-}
-
-/// Event log with the tempdir-specific worktree paths and tree hashes
-/// removed, so two fixtures compare equal.
-fn strip_paths(state: &StackState) -> String {
-    let s = serde_json::to_string_pretty(&state.events).unwrap();
-    s.lines()
-        .filter(|l| !l.contains("\"worktree\"") && !l.contains("\"key\""))
-        .collect::<Vec<_>>()
-        .join("\n")
 }

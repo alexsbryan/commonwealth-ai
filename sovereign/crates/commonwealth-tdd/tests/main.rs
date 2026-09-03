@@ -20,8 +20,12 @@
 
 #[path = "main/bdd_integration.rs"]
 mod bdd_integration;
+#[path = "main/recur_fixture.rs"]
+mod recur_fixture;
 #[path = "main/recur_ring0.rs"]
 mod recur_ring0;
+#[path = "main/recur_ring2.rs"]
+mod recur_ring2;
 #[path = "main/tasks_integration.rs"]
 mod tasks_integration;
 #[path = "main/trial_integration.rs"]

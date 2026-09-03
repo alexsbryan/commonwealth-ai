@@ -18,14 +18,21 @@ pub mod driver;
 pub mod evaluator;
 pub mod frame;
 pub mod git;
+pub mod model;
 
 pub use driver::{Driver, DriverConfig, DriverError, MemoEntry, StackState};
 pub use evaluator::{EvalError, EvalRequest, EvalResponse, Evaluator, ScriptedEvaluator};
 pub use frame::{
     fold, Continuation, Env, Event, GoalId, GoalPath, ReturnValue, Slot, StackFrame, StackItem,
 };
+pub use model::{AskRecord, ModelConfig, ModelEvaluator};
 
 /// The depth-agnostic instruction. Byte-identical at every depth by
 /// construction, so in ring 2 it is exactly one pinned-prefix family.
 /// Asset, not literal (ARCH §6.2).
 pub const RECUR_INSTRUCTION: &str = include_str!("../../assets/recur_instruction.md");
+
+/// Ring 2's instruction for a local model: the four moves with their exact
+/// wire form, how to read an observation, and worked examples. ~617 tokens
+/// on the 4B tokenizer, above the pinned-prefix cache's 384-token minimum.
+pub const RECUR_MODEL_INSTRUCTION: &str = include_str!("../../assets/recur_model_instruction.md");

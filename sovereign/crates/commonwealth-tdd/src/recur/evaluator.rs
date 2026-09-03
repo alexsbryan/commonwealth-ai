@@ -8,7 +8,7 @@
 //! the same trait, with `on_stack` becoming the grammar's exclusion list and
 //! the instruction becoming the pinned prefix.
 
-use super::frame::{GoalId, GoalPath};
+use super::frame::{GoalId, GoalPath, ReturnValue};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -26,6 +26,9 @@ pub struct EvalRequest {
     pub observation: String,
     /// A push the driver refused since the last ask, if any.
     pub refused: Option<GoalId>,
+    /// The value the last pushed sub-goal returned, when this frame is
+    /// resuming after one. A failed push is information, not a verdict.
+    pub sub_result: Option<ReturnValue>,
     pub asks_left: u32,
     pub worktree: PathBuf,
 }
@@ -44,13 +47,26 @@ impl EvalRequest {
             .as_ref()
             .map(|g| format!("\nrefused: {g} (already on the stack)"))
             .unwrap_or_default();
+        let sub = self
+            .sub_result
+            .as_ref()
+            .map(|v| {
+                format!(
+                    "\nsub_result: {} {} ({})",
+                    v.goal,
+                    v.verdict.as_str(),
+                    v.reason
+                )
+            })
+            .unwrap_or_default();
         format!(
-            "{}\n\n## Frame\ngoal: {}\non_stack: {}\nasks_left: {}{}\n\n## Observation\n{}\n",
+            "{}\n\n## Frame\ngoal: {}\non_stack: {}\nasks_left: {}{}{}\n\n## Observation\n{}\n",
             self.instruction,
             self.goal(),
             on_stack.join(", "),
             self.asks_left,
             refused,
+            sub,
             self.observation
         )
     }

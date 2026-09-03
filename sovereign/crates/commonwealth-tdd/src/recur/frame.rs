@@ -81,6 +81,21 @@ impl GoalPath {
     }
 }
 
+impl GoalPath {
+    /// A bounded, deterministic name for branches and worktrees: a 64-bit
+    /// FNV-1a of the full slug plus the leaf's slug, capped. The full slug
+    /// grows with depth and a deep push chain overran the filename limit.
+    pub fn short_slug(&self) -> String {
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        for b in self.slug().bytes() {
+            h ^= u64::from(b);
+            h = h.wrapping_mul(0x0100_0000_01b3);
+        }
+        let leaf: String = self.leaf().slug().chars().take(40).collect();
+        format!("{h:016x}-{leaf}")
+    }
+}
+
 impl std::fmt::Display for GoalPath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let parts: Vec<&str> = self.0.iter().map(|g| g.0.as_str()).collect();

@@ -34,6 +34,9 @@ use std::time::Duration;
 
 #[derive(Clone, Debug)]
 pub struct DriverConfig {
+    /// The depth-agnostic instruction handed to every frame. Byte-identical
+    /// at every depth by construction; ring 2 pins it as one prefix family.
+    pub instruction: &'static str,
     /// `{goal}` is replaced by the goal id.
     pub test_command: String,
     pub language: Language,
@@ -49,10 +52,14 @@ pub struct DriverConfig {
 impl DriverConfig {
     pub fn pytest(scratch: PathBuf) -> Self {
         Self {
+            instruction: RECUR_INSTRUCTION,
             // No bytecode, no cache dir: the memo key is a tree hash and a merge
             // is a tree merge, so nothing the oracle writes may land in either.
+            // Continue past collection errors: a directory goal's observation
+            // must show every failure, not only the file that cannot import
+            // (the model gave up at the root otherwise — ring 2).
             test_command:
-                "PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider {goal}".into(),
+                "PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider --continue-on-collection-errors {goal}".into(),
             language: Language::Python,
             asks_per_frame: 3,
             max_steps: 200,
@@ -215,7 +222,7 @@ impl<E: Evaluator> Driver<E> {
                         })
                     } else {
                         let before = git::tree_hash(&env.worktree)?;
-                        self.evaluate(path, env, before, self.cfg.asks_per_frame, true)
+                        self.evaluate(path, env, before, self.cfg.asks_per_frame, true, None)
                             .await?
                     };
                     if let Outcome::Value(v) = outcome {
@@ -296,6 +303,7 @@ impl<E: Evaluator> Driver<E> {
         before: String,
         mut asks_left: u32,
         fresh: bool,
+        mut sub_result: Option<ReturnValue>,
     ) -> Result<Outcome, DriverError> {
         let goal = path.leaf().clone();
         let key = Self::memo_key(&goal, &before);
@@ -348,11 +356,12 @@ impl<E: Evaluator> Driver<E> {
             asks_left -= 1;
             asks += 1;
             let req = EvalRequest {
-                instruction: RECUR_INSTRUCTION,
+                instruction: self.cfg.instruction,
                 path: path.clone(),
                 on_stack: path.goals().to_vec(),
                 observation: run.tail.clone(),
                 refused: refused.take(),
+                sub_result: sub_result.take(),
                 asks_left,
                 worktree: env.worktree.clone(),
             };
@@ -396,8 +405,8 @@ impl<E: Evaluator> Driver<E> {
                     let mut slots = Vec::with_capacity(children.len());
                     for c in &children {
                         let cp = path.child(c.clone());
-                        let branch = format!("recur/{}", cp.slug());
-                        let wt = self.cfg.scratch.join("wt").join(cp.slug());
+                        let branch = format!("recur/{}", cp.short_slug());
+                        let wt = self.cfg.scratch.join("wt").join(cp.short_slug());
                         git::add_worktree(&env.worktree, &wt, &branch, &base)?;
                         slots.push(Slot {
                             goal: c.clone(),
@@ -460,29 +469,13 @@ impl<E: Evaluator> Driver<E> {
                     });
                     match f.k.clone() {
                         Continuation::Verify { asks_left } => {
-                            if v.verdict != Verdict::Passed {
-                                let out = ReturnValue {
-                                    goal: f.goal().clone(),
-                                    verdict: v.verdict,
-                                    reason: format!(
-                                        "sub-goal {} {}: {}",
-                                        v.goal,
-                                        v.verdict.as_str(),
-                                        v.reason
-                                    ),
-                                };
-                                self.memoize(f.goal(), &f.env, &f.before, &out)?;
-                                self.event(Event::Evaluated {
-                                    path: f.path.clone(),
-                                    verdict: out.verdict,
-                                    asks: 0,
-                                    reason: out.reason.clone(),
-                                });
-                                v = out;
-                                continue;
-                            }
+                            // Resume this frame's own evaluation whatever the
+                            // sub-goal returned: the oracle re-runs the goal,
+                            // and a failed push is information for the next
+                            // ask, not this frame's verdict. Out of asks, the
+                            // frame returns what its last oracle run showed.
                             match self
-                                .evaluate(f.path, f.env, f.before, asks_left, false)
+                                .evaluate(f.path, f.env, f.before, asks_left, false, Some(v))
                                 .await?
                             {
                                 Outcome::Value(v2) => {
