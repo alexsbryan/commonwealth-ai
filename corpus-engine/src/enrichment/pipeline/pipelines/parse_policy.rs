@@ -499,8 +499,8 @@ pub(super) fn validated_choice(
 
 #[cfg(test)]
 mod tests {
-    use crate::recipe_templates::numismatics_policies as numismatics;
     use super::*;
+    use crate::recipe_templates::numismatics_policies as numismatics;
 
     #[test]
     fn default_policy_declares_nothing() {

@@ -36,10 +36,7 @@ fn numismatics_policies() -> OntologyPolicies {
 /// 2026-09-03 the seven catalogue rows were re-typed here, so an edit to the
 /// manifest the eval bank and the chain proof both read left this test
 /// asserting the old hoard.
-const TRUTH_JSON: &str = include_str!(concat!(
-    env!("OUT_DIR"),
-    "/recipes/wessex-hoard/truth.json"
-));
+const TRUTH_JSON: &str = include_str!(concat!(env!("OUT_DIR"), "/recipes/wessex-hoard/truth.json"));
 
 /// One catalogue coin, typed under the author's noun.
 fn coin(idx: usize, name: &str, subtype: &str, metal: &str, salience: f32) -> Entity {
@@ -68,8 +65,7 @@ fn coin(idx: usize, name: &str, subtype: &str, metal: &str, salience: f32) -> En
 /// in file order. Salience descends so the walk's sort is deterministic; it is
 /// not a truth field.
 fn wessex_hoard() -> Vec<Entity> {
-    let truth: serde_json::Value =
-        serde_json::from_str(TRUTH_JSON).expect("truth.json parses");
+    let truth: serde_json::Value = serde_json::from_str(TRUTH_JSON).expect("truth.json parses");
     let coins = truth["entities"]["coin"]
         .as_array()
         .expect("truth.json declares entities.coin");
@@ -80,7 +76,9 @@ fn wessex_hoard() -> Vec<Entity> {
             coin(
                 i + 1,
                 c["name"].as_str().expect("every truth coin has a name"),
-                c["subtype"].as_str().expect("every truth coin has a subtype"),
+                c["subtype"]
+                    .as_str()
+                    .expect("every truth coin has a subtype"),
                 c["metal"].as_str().expect("every truth coin has a metal"),
                 0.90 - 0.10 * i as f32,
             )
@@ -91,8 +89,7 @@ fn wessex_hoard() -> Vec<Entity> {
 /// `truth.json`'s `enumeration_probe`: the question the chain must answer, and
 /// how many coins the answer must carry.
 fn enumeration_probe() -> (String, usize) {
-    let truth: serde_json::Value =
-        serde_json::from_str(TRUTH_JSON).expect("truth.json parses");
+    let truth: serde_json::Value = serde_json::from_str(TRUTH_JSON).expect("truth.json parses");
     let probe = &truth["enumeration_probe"];
     (
         probe["question"]

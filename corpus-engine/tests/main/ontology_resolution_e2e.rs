@@ -21,9 +21,7 @@ use corpus_engine::enrichment::atlas::{
     resolve_entities_and_events, resolve_entities_and_events_with, resolve_step_3b,
     resolve_step_3b_with, ResolutionOutput, ResolutionPolicy, Step3bOutput,
 };
-use corpus_engine::enrichment::ontology::{
-    OntologyPolicies, OntologyTypeDecl, TypeKind,
-};
+use corpus_engine::enrichment::ontology::{OntologyPolicies, OntologyTypeDecl, TypeKind};
 use corpus_engine::enrichment::pipeline::atlas::{
     ClaimSketch, DiscourseAct, EnrichmentDepth, EntitySketch, EntityType, EpistemicStatus,
     EventSketch, RelationSketch, SectionExtraction,

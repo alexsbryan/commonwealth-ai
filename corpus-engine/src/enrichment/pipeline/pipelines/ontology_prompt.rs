@@ -402,10 +402,10 @@ fn render_attr(a: &AttrDecl) -> String {
 mod tests {
     use super::*;
 
-    use crate::recipe_templates::numismatics_policies as numismatics;
     use super::super::ontology_schema::{
         phase1_schema_for, report_added_prompt_size, MAX_ADDED_PROMPT_CHARS,
     };
+    use crate::recipe_templates::numismatics_policies as numismatics;
 
     // ── Phase 6 extras ───────────────────────────────────────
 
