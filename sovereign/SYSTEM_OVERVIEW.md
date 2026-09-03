@@ -6151,6 +6151,42 @@ band refuses an 800-1,200 residual). The three new crossings are new to the
 BASELINE, not to the repository, and each is one owner's call to make when
 they next open it.
 
+### 10.1j Concept ratchet RE-PINNED on main — 2026-09-03 (+2, and the gate cannot say which two)
+
+`concept-gate` reports **35 duplicated names against a baseline of 33**. The
+baseline is a bare COUNT, pinned at `27c0fe031` (Noun convergence, #47), and
+`quality/baselines/concepts.txt` holds the single line `33`. That is the
+finding as much as the number is: **the gate can tell you a noun crossed and
+cannot tell you which**, because it stores no name list to diff against. Every
+merge since #47 has been able to move it silently, and this is the first run
+on a current index since.
+
+Not this merge's rise. The commits on this branch add no types — a `cargo fmt`
+pass, three regenerated baselines, two docs. The rise arrived with
+`origin/main`'s own content, already public.
+
+**What was established, and what was not.** The four nouns
+`commonwealth-api/src/state.rs` copies field-for-field from
+`oicp-types/src/slot.rs` (`SlotPlacement`, `WorkerPlacement`, `ResidentSlot`,
+`ComputeChildStatus`) are NOT the crossers: `slot.rs` was added in #47 itself,
+so the baseline already counted them. The two that did cross were not
+isolated, and saying so is cheaper than a guess.
+
+**A live convergence the ratchet is right about, with its blocker named.**
+Those four copies carry a stale reason — the comment says commonwealth-api
+"cannot depend on sovereign-contracts", which is true and no longer relevant:
+the owner is `oicp-types`, and `commonwealth-api/Cargo.toml:63` already
+depends on it (layer-0 contract; `ARCH_LAYERS.toml` permits the edge). What
+blocks the `pub use` is not the layer map but SERDE: `state.rs` marks
+`placement`, `port` and `last_exit` `skip_serializing_if = "Option::is_none"`
+while `oicp-types` marks them `#[serde(default)]`, so folding the copies would
+turn omitted fields into explicit `null`s on `/status`. That is a wire change
+to a public endpoint and belongs to whoever owns it, not to a gate-greening
+pass. Recorded here so the next reader starts from the blocker rather than
+rediscovering the copies.
+
+Re-pinned to 35. `--tighten` first, as always; it had nothing to bank.
+
 ### 10.2 cmnwlth deferrals
 
 | Item | Location | Why deferred |
