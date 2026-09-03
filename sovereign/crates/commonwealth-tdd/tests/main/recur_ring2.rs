@@ -14,7 +14,7 @@
 
 use crate::recur_fixture::{fixture, g, pytest_available, root_path, strip_paths};
 use commonwealth_tdd::recur::{
-    driver::delivered_to, AskRecord, Driver, DriverConfig, ModelConfig, ModelEvaluator,
+    driver::delivered_to, AskRecord, Driver, DriverConfig, Event, ModelConfig, ModelEvaluator,
     RECUR_MODEL_INSTRUCTION,
 };
 use commonwealth_tdd::tasks::make_passing::{make_failing_tests_pass, MakePassingArgs};
@@ -25,6 +25,16 @@ use std::time::{Duration, Instant};
 
 fn model() -> String {
     std::env::var("RECUR_MODEL").unwrap_or_else(|_| "Qwopus3.5-4B-v3-MTP-Q8_0".into())
+}
+
+/// Ring 2 runs with `# BUG:` hints; ring 3 is the same harness with
+/// `RECUR_HINTS=0`. The delta between the two is the model's contribution,
+/// isolated — every other input is identical.
+fn hints() -> bool {
+    !matches!(
+        std::env::var("RECUR_HINTS").as_deref(),
+        Ok("0") | Ok("false")
+    )
 }
 
 fn runs() -> usize {
@@ -89,6 +99,7 @@ fn log_len() -> u64 {
 
 struct RunReport {
     root: String,
+    rejected: usize,
     slots: Vec<String>,
     events: String,
     asks: Vec<AskRecord>,
@@ -99,7 +110,7 @@ async fn one_run(fidelity: bool) -> RunReport {
     let tmp = tempfile::tempdir().unwrap();
     let repo = tmp.path().join("repo");
     std::fs::create_dir_all(&repo).unwrap();
-    let wd = fixture(&repo, true);
+    let wd = fixture(&repo, hints());
     let catalog = ModelEvaluator::catalog_from_pytest(&repo).unwrap();
     assert!(
         catalog.iter().any(|c| c.0 == "tests/test_h.py::test_base"),
@@ -118,8 +129,15 @@ async fn one_run(fidelity: bool) -> RunReport {
         .iter()
         .map(|v| format!("{}={} ({})", v.goal, v.verdict.as_str(), v.reason))
         .collect();
+    let rejected = d
+        .state()
+        .events
+        .iter()
+        .filter(|e| matches!(e, Event::Rejected { .. }))
+        .count();
     RunReport {
         root: format!("{} ({})", root.verdict.as_str(), root.reason),
+        rejected,
         slots,
         events: strip_paths(d.state()),
         asks: d.evaluator().asks(),
@@ -132,8 +150,9 @@ fn cost_line(r: &RunReport) -> String {
     let c: u32 = r.asks.iter().map(|a| a.completion_tokens).sum();
     let m: u128 = r.asks.iter().map(|a| a.wall_ms).sum();
     format!(
-        "asks={} prompt_tokens={p} completion_tokens={c} model_ms={m} run_wall_s={:.1}",
+        "asks={} rejected_edits={} prompt_tokens={p} completion_tokens={c} model_ms={m} run_wall_s={:.1}",
         r.asks.len(),
+        r.rejected,
         r.wall.as_secs_f64()
     )
 }
@@ -144,6 +163,11 @@ fn cost_line(r: &RunReport) -> String {
 async fn ring2_model_run_meets_the_inference_bars() {
     assert!(pytest_available(), "python3 -m pytest unavailable");
     let n = runs();
+    eprintln!(
+        "ring {}: hints={} runs={n}",
+        if hints() { 2 } else { 3 },
+        hints()
+    );
     let log_from = log_len();
     let mut reports = Vec::new();
     for i in 0..n {
@@ -222,7 +246,7 @@ async fn ring2_model_run_meets_the_inference_bars() {
 async fn ring2_restore_fidelity_is_exact() {
     assert!(pytest_available(), "python3 -m pytest unavailable");
     let r = one_run(true).await;
-    eprintln!("root {}", r.root);
+    eprintln!("hints={} root {}", hints(), r.root);
     eprintln!("{}", cost_line(&r));
     let checked: Vec<&AskRecord> = r.asks.iter().filter(|a| a.fidelity.is_some()).collect();
     let mismatched: Vec<&AskRecord> = checked
@@ -251,7 +275,7 @@ async fn ring2_flat_control_arm() {
     let tmp = tempfile::tempdir().unwrap();
     let repo = tmp.path().join("repo");
     std::fs::create_dir_all(&repo).unwrap();
-    let wd = fixture(&repo, true);
+    let wd = fixture(&repo, hints());
     let base = std::env::var("RECUR_DAEMON").unwrap_or_else(|_| "http://localhost:9741".into());
     let trial = make_failing_tests_pass(MakePassingArgs {
         workdir: wd,

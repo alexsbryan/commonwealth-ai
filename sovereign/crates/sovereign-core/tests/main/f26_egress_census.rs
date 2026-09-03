@@ -449,6 +449,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
 
     // ---- commonwealth-tdd (LocalDaemon — TDD loop against the daemon) ----
     ("sovereign/crates/commonwealth-tdd/src/backend.rs", Class::LocalDaemon, 2),
+    ("sovereign/crates/commonwealth-tdd/src/recur/model.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-compute ----
     // client: loopback back to the host daemon; supervisor: heartbeat

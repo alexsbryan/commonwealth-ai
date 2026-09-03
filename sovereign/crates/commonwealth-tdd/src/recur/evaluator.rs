@@ -26,6 +26,11 @@ pub struct EvalRequest {
     pub observation: String,
     /// A push the driver refused since the last ask, if any.
     pub refused: Option<GoalId>,
+    /// An edit the validator refused since the last ask: the file was NOT
+    /// written, and this is what was wrong with it. Absence is reported,
+    /// never defaulted (ARCH §18.3) — the model must see why its edit did
+    /// not land, or it repeats it.
+    pub rejected: Option<String>,
     /// The value the last pushed sub-goal returned, when this frame is
     /// resuming after one. A failed push is information, not a verdict.
     pub sub_result: Option<ReturnValue>,
@@ -47,6 +52,11 @@ impl EvalRequest {
             .as_ref()
             .map(|g| format!("\nrefused: {g} (already on the stack)"))
             .unwrap_or_default();
+        let rejected = self
+            .rejected
+            .as_ref()
+            .map(|e| format!("\nrejected: {e}"))
+            .unwrap_or_default();
         let sub = self
             .sub_result
             .as_ref()
@@ -60,12 +70,13 @@ impl EvalRequest {
             })
             .unwrap_or_default();
         format!(
-            "{}\n\n## Frame\ngoal: {}\non_stack: {}\nasks_left: {}{}{}\n\n## Observation\n{}\n",
+            "{}\n\n## Frame\ngoal: {}\non_stack: {}\nasks_left: {}{}{}{}\n\n## Observation\n{}\n",
             self.instruction,
             self.goal(),
             on_stack.join(", "),
             self.asks_left,
             refused,
+            rejected,
             sub,
             self.observation
         )

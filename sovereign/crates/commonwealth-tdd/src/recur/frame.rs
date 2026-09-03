@@ -196,6 +196,12 @@ pub enum Event {
         from: GoalPath,
         goal: GoalId,
     },
+    /// An edit the validator refused, so nothing was written.
+    Rejected {
+        from: GoalPath,
+        file: String,
+        errors: String,
+    },
     Split {
         from: GoalPath,
         children: Vec<GoalId>,

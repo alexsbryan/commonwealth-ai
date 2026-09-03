@@ -339,6 +339,11 @@ impl ModelEvaluator {
                 v.reason
             ));
         }
+        if let Some(e) = &req.rejected {
+            p.push_str(&format!(
+                "rejected: your last edit was NOT written, it does not parse:\n{e}\n"
+            ));
+        }
         if let Some(r) = &req.refused {
             p.push_str(&format!(
                 "refused: {r} (already on the stack; do not push it again)\n"

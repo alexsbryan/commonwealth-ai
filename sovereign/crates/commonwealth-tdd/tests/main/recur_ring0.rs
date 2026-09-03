@@ -337,3 +337,60 @@ async fn ring0_resumes_from_the_stack_file_and_two_runs_agree() {
     assert_eq!(a, b);
     assert_eq!(ea, eb);
 }
+
+/// The write boundary: an edit that does not parse is NOT written, and the
+/// frame's next ask carries the reason. Ring 3 produced exactly this reply —
+/// a body that ran on into the frame scaffolding — and without the check it
+/// landed in the file and cost two more asks.
+#[tokio::test]
+async fn ring0_an_unparseable_edit_is_rejected_before_it_is_written() {
+    if !pytest_available() {
+        eprintln!("python3 -m pytest unavailable — SKIPPED, this run verified nothing");
+        return;
+    }
+    let tmp = tempfile::tempdir().unwrap();
+    let repo = tmp.path().join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    let wd = fixture(&repo, false);
+    let good = "def base(a, b):\n    return a + b\n";
+    let runon = format!("{good}\n## FRAME\ngoal: tests/test_h.py::test_base\nasks_left: 1\n");
+    let ev = ScriptedEvaluator::new(move |req: &EvalRequest| {
+        // Second ask only once the driver has told us why the first failed.
+        let content = if req.rejected.is_some() {
+            good
+        } else {
+            runon.as_str()
+        };
+        EvalResponse::Edit {
+            path: "calc/h.py".into(),
+            content: content.to_string(),
+        }
+    });
+    let mut d = Driver::start(
+        &wd,
+        g("tests/test_h.py::test_base"),
+        cfg(tmp.path().join("scratch")),
+        ev,
+    )
+    .unwrap();
+    let root = d.run().await.unwrap();
+    let st = d.state().clone();
+    let dump = serde_json::to_string_pretty(&st.events).unwrap();
+
+    assert_eq!(root.verdict, Verdict::Passed, "{dump}");
+    // Exactly one rejection, naming the file and a parse error.
+    let rejections: Vec<&Event> = st
+        .events
+        .iter()
+        .filter(|e| matches!(e, Event::Rejected { .. }))
+        .collect();
+    assert_eq!(rejections.len(), 1, "{dump}");
+    let Event::Rejected { file, errors, .. } = rejections[0] else {
+        unreachable!()
+    };
+    assert_eq!(file, "calc/h.py");
+    assert!(errors.contains("calc/h.py:"), "{errors}");
+    // The run-on body never reached the file.
+    let on_disk = std::fs::read_to_string(repo.join("calc/h.py")).unwrap();
+    assert_eq!(on_disk, good, "the rejected body was written anyway");
+}

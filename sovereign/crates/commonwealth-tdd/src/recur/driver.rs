@@ -26,13 +26,14 @@ use super::git;
 use super::RECUR_INSTRUCTION;
 use crate::shared::{run_tests, Language, TestRunResult};
 use crate::workdir::Workdir;
+use commonwealth_agent_tools::syntax::{DynSyntaxValidator, PythonSyntaxValidator};
 use kernel_types::Verdict;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct DriverConfig {
     /// The depth-agnostic instruction handed to every frame. Byte-identical
     /// at every depth by construction; ring 2 pins it as one prefix family.
@@ -47,6 +48,31 @@ pub struct DriverConfig {
     pub test_timeout: Duration,
     /// Holds `stack.json` and the forked worktrees. Outside the repo.
     pub scratch: PathBuf,
+    /// Checked BEFORE an edit is written. A model's edit body can run on
+    /// past the file (measured, ring 3: one reply carried the frame
+    /// scaffolding into `calc/cyc_a.py`), and a grammar terminator does not
+    /// prevent it — llguidance stops constraining once the start rule is
+    /// satisfied, so the model emits the marker and keeps going. The write
+    /// boundary is where the check belongs. Reuses the trial loop's seam
+    /// (`Trial::syntax_validator`) rather than minting a second one.
+    pub syntax_validator: Option<DynSyntaxValidator>,
+}
+
+impl std::fmt::Debug for DriverConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DriverConfig")
+            .field("test_command", &self.test_command)
+            .field("language", &self.language)
+            .field("asks_per_frame", &self.asks_per_frame)
+            .field("max_steps", &self.max_steps)
+            .field("test_timeout", &self.test_timeout)
+            .field("scratch", &self.scratch)
+            .field(
+                "syntax_validator",
+                &self.syntax_validator.as_ref().map(|v| v.language_id()),
+            )
+            .finish()
+    }
 }
 
 impl DriverConfig {
@@ -65,6 +91,7 @@ impl DriverConfig {
             max_steps: 200,
             test_timeout: Duration::from_secs(60),
             scratch,
+            syntax_validator: Some(std::sync::Arc::new(PythonSyntaxValidator::new())),
         }
     }
 }
@@ -241,6 +268,28 @@ impl<E: Evaluator> Driver<E> {
         Ok(self.state.result.clone())
     }
 
+    /// `Some(errors)` when the configured validator refuses this content,
+    /// so the file is not written. `None` means write it — including when
+    /// no validator handles the extension, which is reported as "no
+    /// validator", never as "valid".
+    fn reject_edit(&self, file: &str, content: &str) -> Option<String> {
+        let v = self.cfg.syntax_validator.as_ref()?;
+        if !v.language_extensions().iter().any(|e| file.ends_with(e)) {
+            return None;
+        }
+        let errors = v.check_file(std::path::Path::new(file), content);
+        if errors.is_empty() {
+            return None;
+        }
+        Some(
+            errors
+                .iter()
+                .map(|e| format!("{}:{}:{}: {}", file, e.line, e.col, e.message))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+    }
+
     fn command_for(&self, goal: &GoalId) -> String {
         self.cfg.test_command.replace("{goal}", &goal.0)
     }
@@ -318,6 +367,7 @@ impl<E: Evaluator> Driver<E> {
             }
         }
         let mut refused: Option<GoalId> = None;
+        let mut rejected: Option<String> = None;
         let mut asks = 0u32;
         loop {
             let run = self.oracle(&goal, &env).await;
@@ -361,6 +411,7 @@ impl<E: Evaluator> Driver<E> {
                 on_stack: path.goals().to_vec(),
                 observation: run.tail.clone(),
                 refused: refused.take(),
+                rejected: rejected.take(),
                 sub_result: sub_result.take(),
                 asks_left,
                 worktree: env.worktree.clone(),
@@ -394,6 +445,15 @@ impl<E: Evaluator> Driver<E> {
                     content,
                 } => {
                     let target = env.worktree.join(&file);
+                    if let Some(errors) = self.reject_edit(&file, &content) {
+                        self.event(Event::Rejected {
+                            from: path.clone(),
+                            file: file.clone(),
+                            errors: errors.clone(),
+                        });
+                        rejected = Some(errors);
+                        continue;
+                    }
                     if let Some(p) = target.parent() {
                         std::fs::create_dir_all(p)?;
                     }
