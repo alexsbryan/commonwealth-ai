@@ -2078,6 +2078,21 @@ keyed:** `svrn daemon is running` carries `run`, `pid`, `exe`, `exe_mtime` and
 `version` (`sovereign_core::run_identity`), and the gate's `claim_search_fanout`
 event and `audit` forensics record carry the same `run`, because `daemon.err`
 is append-only across restarts and a line without that key is not attributable.
+**mod.rs left the oversized list** (2026-09-02, ARCH §3.1 split, three commits).
+The 6,042-line file now reads as a ~1,160-line façade: module declarations plus
+`pub`/`pub(crate)` re-exports that hold every historical `grounding::X` path
+stable, so handlers, collaboration, `audit_pass` and the moved tests compile
+unchanged. The concerns live beside it: `gate.rs` (ladder entry, verdict
+projection, decision journaling, the short-path specifics guard),
+`inner.rs` (`gate_answer_inner`), `longform.rs` (`gate_longform`),
+`repair.rs` (`FailedClaim` + the corrective/rewrite/verification notes),
+`replay.rs` (the offline extraction harness) and `tests.rs` (the 2,246-line
+test module, whose `use super::*` resolves to the same grounding module it
+resolved to inline). Two source-text guards in `tests.rs` re-pointed from
+`include_str!("mod.rs")` to the module family — their subject was the gate's
+production surface, not one file. Remaining grounding tail, sequenced in
+§10 of this file: `judge.rs` (3,007), `citation.rs` (1,694),
+`citation_attribution.rs` (1,403).
 **The long-form repair ladder is TOMBSTONED as of 2026-08-14** (Phase 4 of
 `NATIVE_GROUNDING_ECONOMY.md`, order `gate-tombstone-ladder`). On the default
 configuration a long-form draft whose audit found failures is **released with
