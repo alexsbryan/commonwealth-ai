@@ -117,6 +117,15 @@ impl ChatBackend for ReqwestChatBackend {
         // (I-arm 5.1 r4: six candidates AND their continuation calls
         // all died err:backend in one round — a wedged moment, not
         // six independent failures). A failed retry still errors.
+        //
+        // 503 + retry_after is a DIFFERENT refusal and needs its own
+        // handling (watched live 2026-09-03, the judge.rs split: the
+        // slot's predicted-wait shed rejected candidates 2..6 of every
+        // round with `local_queue_full — ~30000 ms predicted wait`,
+        // because each 4k-token candidate generation queues the slot
+        // past the shed threshold for the ones behind it). The daemon
+        // names its backoff; a local candidate has nothing else to do
+        // with that time — honor it, up to three waits.
         let send_once = || async {
             self.http
                 .post(&url)
@@ -125,14 +134,41 @@ impl ChatBackend for ReqwestChatBackend {
                 .await
                 .map_err(|e| BackendError::Transport(e.to_string()))
         };
-        let resp = match send_once().await {
-            Ok(r) => r,
-            Err(first) => {
-                tracing::debug!(error = %first, "backend transport error — one retry in 3s");
-                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-                send_once().await?
+        let mut resp = {
+            let first = send_once().await;
+            match first {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::debug!(error = %e, "backend transport error — one retry in 3s");
+                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                    send_once().await?
+                }
             }
         };
+        let mut shed_retries = 0u32;
+        loop {
+            let status = resp.status();
+            if status != reqwest::StatusCode::SERVICE_UNAVAILABLE || shed_retries >= 3 {
+                break;
+            }
+            let head = resp.text().await.unwrap_or_default();
+            let wait = serde_json::from_str::<serde_json::Value>(&head)
+                .ok()
+                .and_then(|v| {
+                    v.pointer("/retry_after_secs")
+                        .and_then(|x| x.as_u64())
+                })
+                .unwrap_or(30)
+                .clamp(1, 60);
+            tracing::info!(wait_secs = wait, attempt = shed_retries + 1,
+                "backend shed by the slot queue (503 local_queue_full) — backing off");
+            tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+            shed_retries += 1;
+            match send_once().await {
+                Ok(r) => resp = r,
+                Err(e) => return Err(BackendError::Transport(e.to_string())),
+            }
+        }
         let status = resp.status();
         let text = resp
             .text()
