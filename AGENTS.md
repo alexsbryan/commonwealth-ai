@@ -310,10 +310,11 @@ Both exit non-zero on failure and both write a raw cargo log for triage, so a fa
 feature that has not passed it is not done.** Install it once
 (`scripts/install-git-hooks.sh` → `core.hooksPath=.githooks`). Held to a
 ONE-MINUTE budget (~22s warm), it scopes to the diff and runs rustfmt, the
-workspace compile, the eight xtask ratchets
+workspace compile, the eight blocking xtask ratchets
 (docs/arch/boundary/layer/lock/layout/env/concept) and the desktop node gates
-concurrently. The ratchets are the half no test run speaks to; each failure
-names its own fix command. Two rules:
+concurrently, then two ADVISORY size ratchets that report and let the push
+through. The ratchets are the half no test run speaks to; each failure names
+its own fix command. Two rules:
 
 - **A ratchet failure is not fixed by `--update-baseline` on your working
   tree** — that absorbs your own growth along with everything else. Re-pin at
@@ -321,6 +322,26 @@ names its own fix command. Two rules:
   already public is separated from what this push adds, and ledger the
   acceptance in `SYSTEM_OVERVIEW.md §10` (§10.1c/§10.1d are worked examples).
 - **`--tighten` is always safe** — it banks a real cut and never raises.
+
+**The two advisory ones are the size term, and they are new.** Every gate
+above them answers "is this correct?", and correctness is monotone: no
+amount of added code can make a passing test fail. So "done" has never
+carried a size term, and the workspace runs about +622k / -179k over 90 days
+(`quality/DELETION.md`) — 29 lines deleted per 100 added.
+
+- `cargo xtask size-gate` — code lines per crate, comments and blanks
+  excluded, `<crate>::tests` counted apart with its own ceiling. Raise ONE
+  crate with `size-gate --accept <crate>` and say in the commit what the
+  lines bought; `--update-baseline` on a working tree is the absorb-everyone
+  trap above, and `--root <path>` is there so the re-pin recipe works.
+- `scripts/deletion-manifest.py --verify` — the deletion campaign's own
+  ratchet, which was written but never wired to anything and had lost about
+  155k lines to two growing lanes before this.
+
+Both are `warn_gate` deliberately: a gate in arrears, or one whose
+false-positive rate nobody has measured, is how people learn to reach for
+`--no-verify`. Promote each on its own evidence — size-gate after a week of
+pushes with no false positive, deletion the day no lane grows.
 
 Then **both of these must exit 0**, in the `sovereign-vulkan` toolbox (drop the prefix if the boot hook says you are already inside it):
 

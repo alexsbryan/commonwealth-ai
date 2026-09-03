@@ -32,6 +32,7 @@ mod lint_gate;
 mod lock_gate;
 mod manifests;
 mod quality_cmd;
+mod size_gate;
 mod target_arch;
 
 fn main() {
@@ -51,6 +52,7 @@ fn main() {
         "layout-gate" => layout_gate::run(&args[1..]),
         "lint-gate" => lint_gate::run(&args[1..]),
         "lock-gate" => lock_gate::run(&args[1..]),
+        "size-gate" => size_gate::run(&args[1..]),
         "target-arch" => target_arch::run(&args[1..]),
         "help" | "--help" | "-h" => {
             print_usage();
@@ -100,6 +102,9 @@ fn print_usage() {
     );
     eprintln!(
         "  lint-gate --from <clippy.json> [--update-baseline|--tighten]  Per-crate/lint warning-count ratchet"
+    );
+    eprintln!(
+        "  size-gate [--update-baseline|--tighten|--accept <crate>|--root <path>]  Code lines per crate may only shrink; comments/blanks excluded, tests counted apart"
     );
     eprintln!(
         "  api-gate [--update-baseline]   Diff hub-crate public APIs vs committed snapshots (pinned nightly)"

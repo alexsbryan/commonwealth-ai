@@ -473,6 +473,31 @@ xtask_gates() {
 
 run_gate "xtask gates (docs/arch/boundary/layer/lock/layout/env/concept)" xtask_gates
 
+# ── The size term. ADVISORY on purpose, for now. ──────────────────────────
+#
+# Every gate above answers "is this correct?", and correctness is monotone:
+# no amount of added code can make a passing test fail. So "done" has never
+# had a size term, and the workspace runs about +622k / -179k over 90 days
+# (quality/DELETION.md) — 29 lines deleted per 100 added. These two print the
+# missing number at every push.
+#
+# They are warn_gate, not run_gate, and the reason is this file's own rule:
+# a gate in arrears, or one whose false-positive rate nobody has measured
+# yet, is how people learn to reach for --no-verify. size-gate's arrears are
+# zero today but it has never run across a real week of pushes; the deletion
+# ratchet is genuinely in arrears (two lanes grew since the freeze). Promote
+# each to run_gate on its own evidence:
+#   size-gate      — after a week of pushes with no false positive.
+#   deletion       — the day `--verify` reports no lane growing.
+# Raising ONE crate's ceiling is `xtask size-gate --accept <crate>`; never
+# --update-baseline on a working tree, which absorbs everyone else's growth.
+size_gate() {
+    (( XTASK_BUILT )) || return 0
+    "$XTASK_BIN" size-gate
+}
+warn_gate "size ratchet (code lines per crate)" size_gate
+warn_gate "deletion manifest ratchet" python3 "${REPO_ROOT}/scripts/deletion-manifest.py" --verify
+
 # ── Gate 3: NOT HERE. The workspace test suite runs in CI, not at the push. ─
 #
 # Removed 2026-08-30 on operator direction, and the reasoning is the header's:
