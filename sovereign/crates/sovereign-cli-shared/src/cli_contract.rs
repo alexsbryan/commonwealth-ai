@@ -1285,6 +1285,11 @@ disposition = "demote"
         assert!(c.journeys[0].needs.is_empty());
     }
 
+    /// covers: EV-28
+    ///
+    /// The clause's whole shape: an exit-code-only READ proves nothing (every
+    /// code-intel tool here exits 0 on a name that does not exist), while a
+    /// MUTATION earns its proof from a LATER step that asserts output.
     #[test]
     fn a_read_proves_itself_inline_and_a_mutation_is_proven_downstream() {
         // The fixture is [corpus list (no expect), corpus install (mutates,
@@ -1318,6 +1323,11 @@ disposition = "demote"
         assert!(j.exercises("chat inspect"), "proven inline");
     }
 
+    /// covers: EV-28
+    ///
+    /// The boundary of that downstream credit. "Proven by a later step" means
+    /// STRICTLY later — a journey ending on a mutation has nobody left to prove
+    /// it, and `mesh leave` is the real instance.
     #[test]
     fn a_trailing_mutation_with_nothing_after_it_is_unproven() {
         // The downstream credit is strictly LATER steps. A journey that ends

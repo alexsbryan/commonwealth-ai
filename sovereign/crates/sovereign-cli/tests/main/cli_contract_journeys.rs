@@ -729,6 +729,10 @@ fn served_journeys_are_documented_outside_the_monoliths() {
 //     its journey must prove the effect downstream, which is
 //     `every_live_journey_asserts_output_somewhere` plus the capability rule.
 
+/// covers: EV-30
+///
+/// Hard zero 1 of the three the clause requires: every live step asserts
+/// something.
 #[test]
 fn live_steps_all_assert_something() {
     // HARD ZERO, deliberately not a cap. A step some lane executes and nobody
@@ -755,6 +759,10 @@ fn live_steps_all_assert_something() {
     );
 }
 
+/// covers: EV-30
+///
+/// Hard zero 2: every live READ step asserts OUTPUT. This is the one that stops
+/// the axis being satisfied by `exit = 0` everywhere.
 #[test]
 fn live_read_steps_assert_output() {
     // The second layer, and the one that stops this whole axis from being
@@ -792,6 +800,10 @@ fn live_read_steps_assert_output() {
     );
 }
 
+/// covers: EV-30
+///
+/// Hard zero 3: every live journey asserts output SOMEWHERE — the collection
+/// point for the mutation exemption in hard zero 2.
 #[test]
 fn every_live_journey_asserts_output_somewhere() {
     // The static twin of the runner's ⊘ UNPROVEN verdict, and the check that
@@ -830,6 +842,10 @@ fn every_live_journey_asserts_output_somewhere() {
 /// a doc comment with a TOML syntax.
 const MAX_NEVER_RUN_STEPS: usize = 62;
 
+/// covers: EV-30
+///
+/// The clause's second sentence: never-run debt MUST be capped and shrink-only.
+/// The cap is a constant that only ever goes down.
 #[test]
 fn steps_no_lane_runs_do_not_grow() {
     let c = contract();

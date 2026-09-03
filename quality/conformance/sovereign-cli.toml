@@ -1,0 +1,39 @@
+# Conformance tags in `sovereign-cli` — GENERATED. DO NOT EDIT BY HAND.
+#
+#   UPDATE_CONFORMANCE_TAGS=1 cargo test -p kernel-types --test conformance_tags
+#
+# Each claim maps a requirement id from research/clean-room/REQUIREMENTS.md
+# to the test that proves it. `test` is `<junit classname>::<junit name>`, so
+# `svrn conformance` can join a claim to a real per-test verdict without
+# guessing.
+#
+# `asserts` counts falsifiable exits in the test body. It is never zero: a
+# covers: tag over a body that cannot fail is refused by the generator.
+
+[[claim]]
+requirement = "EV-30"
+test = "sovereign-cli::main::cli_contract_journeys::every_live_journey_asserts_output_somewhere"
+file = "sovereign/crates/sovereign-cli/tests/main/cli_contract_journeys.rs"
+line = 808
+asserts = 1
+
+[[claim]]
+requirement = "EV-30"
+test = "sovereign-cli::main::cli_contract_journeys::live_read_steps_assert_output"
+file = "sovereign/crates/sovereign-cli/tests/main/cli_contract_journeys.rs"
+line = 767
+asserts = 1
+
+[[claim]]
+requirement = "EV-30"
+test = "sovereign-cli::main::cli_contract_journeys::live_steps_all_assert_something"
+file = "sovereign/crates/sovereign-cli/tests/main/cli_contract_journeys.rs"
+line = 737
+asserts = 1
+
+[[claim]]
+requirement = "EV-30"
+test = "sovereign-cli::main::cli_contract_journeys::steps_no_lane_runs_do_not_grow"
+file = "sovereign/crates/sovereign-cli/tests/main/cli_contract_journeys.rs"
+line = 850
+asserts = 1

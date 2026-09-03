@@ -1,0 +1,25 @@
+# Conformance tags in `sovereign-cli-shared` — GENERATED. DO NOT EDIT BY HAND.
+#
+#   UPDATE_CONFORMANCE_TAGS=1 cargo test -p kernel-types --test conformance_tags
+#
+# Each claim maps a requirement id from research/clean-room/REQUIREMENTS.md
+# to the test that proves it. `test` is `<junit classname>::<junit name>`, so
+# `svrn conformance` can join a claim to a real per-test verdict without
+# guessing.
+#
+# `asserts` counts falsifiable exits in the test body. It is never zero: a
+# covers: tag over a body that cannot fail is refused by the generator.
+
+[[claim]]
+requirement = "EV-28"
+test = "sovereign-cli-shared::cli_contract::tests::a_read_proves_itself_inline_and_a_mutation_is_proven_downstream"
+file = "sovereign/crates/sovereign-cli-shared/src/cli_contract.rs"
+line = 1294
+asserts = 5
+
+[[claim]]
+requirement = "EV-28"
+test = "sovereign-cli-shared::cli_contract::tests::a_trailing_mutation_with_nothing_after_it_is_unproven"
+file = "sovereign/crates/sovereign-cli-shared/src/cli_contract.rs"
+line = 1332
+asserts = 1

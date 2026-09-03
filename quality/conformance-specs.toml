@@ -921,18 +921,20 @@ existing = '''corpus-engine/tests/evidence_reds.rs:41::evidence_has_exactly_one_
 [[spec]]
 id = "EV-28"
 family = "EV"
-status = "exists-untagged"
+status = "landed"
 clause = '''**A step that asserts an exit code asserts nothing**, because tools of this kind exit successfully when they find nothing. Every step a lane runs MUST assert **output** — read inline, or proven by a later step.'''
 target = '''sovereign/crates/sovereign-cli-shared/src/cli_contract.rs:288::Journey::exercises'''
 existing = '''sovereign/crates/sovereign-cli-shared/src/cli_contract.rs:1289::a_read_proves_itself_inline_and_a_mutation_is_proven_downstream'''
+landed = '''sovereign-cli-shared::cli_contract::tests::a_read_proves_itself_inline_and_a_mutation_is_proven_downstream (+ ::a_trailing_mutation_with_nothing_after_it_is_unproven)'''
 
 [[spec]]
 id = "EV-30"
 family = "EV"
-status = "exists-untagged"
+status = "landed"
 clause = '''At least three gates MUST be **hard zeros**: every live step asserts something; every live read step asserts output; every live journey asserts output somewhere. Never-run debt MUST be capped and shrink-only.'''
 target = '''sovereign/crates/sovereign-cli-shared/src/cli_contract.rs:952::assertion_census'''
 existing = '''sovereign/crates/sovereign-cli/tests/main/cli_contract_journeys.rs:733::live_steps_all_assert_something'''
+landed = '''sovereign-cli::main::cli_contract_journeys::live_steps_all_assert_something (+ ::live_read_steps_assert_output + ::every_live_journey_asserts_output_somewhere + ::steps_no_lane_runs_do_not_grow)'''
 
 [[spec]]
 id = "EV-4"
