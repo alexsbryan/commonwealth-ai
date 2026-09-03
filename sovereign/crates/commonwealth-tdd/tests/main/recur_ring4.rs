@@ -18,6 +18,9 @@ use crate::recur_fixture::{count, g, root_path, sh};
 use commonwealth_tdd::recur::{
     driver::delivered_to, Driver, DriverConfig, EvalRequest, EvalResponse, Event, ScriptedEvaluator,
 };
+use commonwealth_tdd::recur::{
+    GoalCatalog, ModelConfig, ModelEvaluator, RECUR_MODEL_INSTRUCTION_RUST,
+};
 use commonwealth_tdd::{Language, Workdir};
 use kernel_types::Verdict;
 use std::path::{Path, PathBuf};
@@ -218,4 +221,178 @@ async fn ring4_a_clean_merge_of_two_green_branches_does_not_compile() {
 fn root_path_for(goal: &str) -> commonwealth_tdd::recur::GoalPath {
     let _ = root_path();
     commonwealth_tdd::recur::GoalPath::root(g(goal))
+}
+
+// ── the model arm ────────────────────────────────────────────────────────
+
+/// The goal tree, stated outright. Nothing about "--tests" and "--test
+/// behaviour area_works" lets a relation be INFERRED from the strings, which
+/// is exactly why the catalog is data now.
+fn rust_catalog() -> GoalCatalog {
+    GoalCatalog::from_tree([(g(AREA), g(ROOT)), (g(TEXT), g(ROOT))])
+}
+
+fn model() -> String {
+    std::env::var("RECUR_MODEL").unwrap_or_else(|_| "Qwopus3.5-4B-v3-MTP-Q8_0".into())
+}
+
+/// Ring 4 with the local model in the evaluator seat, on a subject whose
+/// goal ids are cargo arguments.
+///
+/// What is BARRED here is the mechanism: the catalog yields parts for the
+/// root, the grammar therefore carries a `split` arm naming them, every
+/// reply parses, and the runs are identical. What is REPORTED, never
+/// demanded, is whether the model chooses to decompose. Asserting a split
+/// would be asserting a model behaviour the harness has no right to
+/// require — and the first run showed why: given three asks and one small
+/// file, the model fixed both failures at the root and the oracle went
+/// green. That is the better engineering choice, and it means `Combine` is
+/// exercised by the scripted test, not this one.
+#[tokio::test]
+#[ignore = "needs the daemon and a resident model; spawns cargo"]
+async fn ring4_model_arm_decomposes_and_reaches_the_combine() {
+    if !cargo_available() {
+        eprintln!("cargo unavailable — SKIPPED, this run verified nothing");
+        return;
+    }
+    let runs: usize = std::env::var("RECUR_RUNS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(3);
+    let mut logs = Vec::new();
+    for i in 0..runs {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = tmp.path().join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        let wd = rust_fixture(&repo);
+        let mc = ModelConfig {
+            language: Language::Rust,
+            ..ModelConfig::local(model())
+        };
+        let ev = ModelEvaluator::new(mc, rust_catalog());
+        let mut cfg = cfg(tmp.path().join("scratch"));
+        cfg.instruction = RECUR_MODEL_INSTRUCTION_RUST;
+        let mut d = Driver::start(&wd, g(ROOT), cfg, ev).unwrap();
+        let root = d.run().await.unwrap();
+        let st = d.state().clone();
+        let splits = count(&st, |e| matches!(e, Event::Split { .. }));
+        let merges = count(&st, |e| matches!(e, Event::Merged { .. }));
+        let asks = d.evaluator().asks();
+        eprintln!(
+            "run {i}: root {} ({}) — splits={splits} merges={merges} asks={} unparsed={}",
+            root.verdict.as_str(),
+            root.reason,
+            asks.len(),
+            asks.iter().filter(|a| !a.parsed).count()
+        );
+        for a in &asks {
+            eprintln!(
+                "    d{} {:>6}ms {}",
+                a.depth,
+                a.wall_ms,
+                a.reply.lines().next().unwrap_or("")
+            );
+        }
+        // BAR grammar: the closed set holds for a subject whose goal ids are
+        // cargo arguments.
+        assert!(
+            asks.iter().all(|a| a.parsed),
+            "unparseable reply: {asks:#?}"
+        );
+        logs.push((splits, merges, crate::recur_fixture::strip_paths(&st)));
+    }
+    // BAR determinism, as every other ring.
+    for (i, l) in logs.iter().enumerate().skip(1) {
+        assert_eq!(logs[0].2, l.2, "run {i} diverged from run 0");
+    }
+    // BAR mechanism: the split arm is genuinely on offer for this subject.
+    // This is the thing that was broken — parts inferred from pytest syntax
+    // came back empty for cargo goals and the arm was silently dropped.
+    let cat = rust_catalog();
+    let parts = cat.parts_of(&g(ROOT));
+    assert_eq!(parts.len(), 2, "the catalog must name the root's parts");
+    let grammar = ModelEvaluator::grammar(cat.goals(), &parts, &["src/big.rs".into()]);
+    assert!(grammar.contains("split: "), "{grammar}");
+    assert!(grammar.contains(AREA), "{grammar}");
+    assert!(grammar.contains(TEXT), "{grammar}");
+
+    // REPORTED, not barred.
+    let (splits, merges, _) = &logs[0];
+    eprintln!("decomposed: splits={splits} merges={merges} over {runs} identical runs");
+    assert_eq!(
+        (*splits > 0),
+        (*merges > 0),
+        "a split without a merge, or a merge without a split, is a driver bug"
+    );
+}
+
+/// The same subject under a ONE-ASK budget per frame. One whole-file edit
+/// cannot fix two independent failures, so a frame that wants to get green
+/// has to decompose — and the budget is not a trick, it is the recursion's
+/// reduction step, the thing that has to shrink for the process to
+/// terminate. This is where a model-driven `Combine` becomes reachable, and
+/// where the planted collision can actually bite a model rather than a
+/// script. Reported, not barred, except for parse and determinism.
+#[tokio::test]
+#[ignore = "needs the daemon and a resident model; spawns cargo"]
+async fn ring4_model_arm_under_a_one_ask_budget() {
+    if !cargo_available() {
+        eprintln!("cargo unavailable — SKIPPED, this run verified nothing");
+        return;
+    }
+    let runs: usize = std::env::var("RECUR_RUNS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(3);
+    let mut logs = Vec::new();
+    for i in 0..runs {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = tmp.path().join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        let wd = rust_fixture(&repo);
+        let mc = ModelConfig {
+            language: Language::Rust,
+            ..ModelConfig::local(model())
+        };
+        let ev = ModelEvaluator::new(mc, rust_catalog());
+        let mut cfg = cfg(tmp.path().join("scratch"));
+        cfg.instruction = RECUR_MODEL_INSTRUCTION_RUST;
+        cfg.asks_per_frame = 1;
+        let mut d = Driver::start(&wd, g(ROOT), cfg, ev).unwrap();
+        let root = d.run().await.unwrap();
+        let st = d.state().clone();
+        let splits = count(&st, |e| matches!(e, Event::Split { .. }));
+        let merges = count(&st, |e| matches!(e, Event::Merged { .. }));
+        let asks = d.evaluator().asks();
+        eprintln!(
+            "run {i}: root {} ({}) — splits={splits} merges={merges} asks={}",
+            root.verdict.as_str(),
+            root.reason,
+            asks.len()
+        );
+        for a in &asks {
+            eprintln!(
+                "    d{} {:>6}ms {}",
+                a.depth,
+                a.wall_ms,
+                a.reply.lines().next().unwrap_or("")
+            );
+        }
+        for e in &st.events {
+            if let Event::Merged {
+                verdict, reason, ..
+            } = e
+            {
+                eprintln!("    MERGED {} — {reason}", verdict.as_str());
+            }
+        }
+        assert!(
+            asks.iter().all(|a| a.parsed),
+            "unparseable reply: {asks:#?}"
+        );
+        logs.push(crate::recur_fixture::strip_paths(&st));
+    }
+    for (i, l) in logs.iter().enumerate().skip(1) {
+        assert_eq!(logs[0], *l, "run {i} diverged from run 0");
+    }
 }

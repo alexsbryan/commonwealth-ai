@@ -18,11 +18,12 @@
 //! context), then Restore path (state file + suffix). Same bytes both times;
 //! the outputs must agree token-for-token.
 
+use super::catalog::GoalCatalog;
 use super::evaluator::{EvalError, EvalRequest, EvalResponse, Evaluator};
 use super::frame::GoalId;
+use crate::shared::Language;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
 use std::path::Path;
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -41,6 +42,10 @@ pub struct ModelConfig {
     pub fidelity_probe: bool,
     /// Bytes of source shown under SOURCE, total.
     pub source_budget: usize,
+    /// Which files are editable and how their imports read. The driver
+    /// already carries this for the oracle; the evaluator needs it for the
+    /// same reason and must not disagree with it.
+    pub language: Language,
     /// Prefilled at the generation position — the continue register. For
     /// this family it closes the think block the chat template opens
     /// unconditionally (`prompt_helpers.rs` ~L308); without it the grammar
@@ -60,6 +65,7 @@ impl ModelConfig {
             pin: true,
             fidelity_probe: false,
             source_budget: 6 * 1024,
+            language: Language::Python,
             assistant_prefix: Some("</think>\n\n".into()),
         }
     }
@@ -83,7 +89,7 @@ pub struct AskRecord {
 pub struct ModelEvaluator {
     cfg: ModelConfig,
     client: reqwest::Client,
-    catalog: Vec<GoalId>,
+    catalog: GoalCatalog,
     asks: Mutex<Vec<AskRecord>>,
     frame_ids: AtomicU64,
 }
@@ -134,7 +140,7 @@ struct Usage {
 }
 
 impl ModelEvaluator {
-    pub fn new(cfg: ModelConfig, catalog: Vec<GoalId>) -> Self {
+    pub fn new(cfg: ModelConfig, catalog: GoalCatalog) -> Self {
         Self {
             cfg,
             client: reqwest::Client::new(),
@@ -148,47 +154,44 @@ impl ModelEvaluator {
         self.asks.lock().unwrap_or_else(|p| p.into_inner()).clone()
     }
 
-    /// Every pytest node id plus each test file, from `--collect-only`. The
-    /// closed set `push`/`split` draw from.
-    pub fn catalog_from_pytest(workdir: &Path) -> std::io::Result<Vec<GoalId>> {
-        let out = Command::new("python3")
-            .args([
-                "-m",
-                "pytest",
-                "--collect-only",
-                "-q",
-                "-p",
-                "no:cacheprovider",
-            ])
-            .env("PYTHONDONTWRITEBYTECODE", "1")
-            .current_dir(workdir)
-            .output()?;
-        let text = String::from_utf8_lossy(&out.stdout);
-        let mut set = BTreeSet::new();
-        for line in text.lines() {
-            let line = line.trim();
-            if let Some((file, _)) = line.split_once("::") {
-                set.insert(file.to_string());
-                set.insert(line.to_string());
-            }
-        }
-        Ok(set.into_iter().map(GoalId::new).collect())
+    /// Tracked source files of this language that are not tests: the
+    /// oracle is never editable.
+    fn allowed_files(&self, worktree: &Path) -> Vec<String> {
+        self.tracked(worktree)
+            .into_iter()
+            .filter(|l| !Self::is_test_path(l))
+            .collect()
     }
 
-    /// Tracked `.py` files that are not tests: the oracle is never editable.
-    fn allowed_files(worktree: &Path) -> Vec<String> {
+    /// Every tracked file of this language, tests included — the frame must
+    /// show the assertion even where it may not edit it.
+    fn tracked(&self, worktree: &Path) -> Vec<String> {
+        let glob = format!("*{}", self.ext());
         let out = Command::new("git")
             .arg("-C")
             .arg(worktree)
-            .args(["ls-files", "--", "*.py"])
+            .args(["ls-files", "--", &glob])
             .output();
         let Ok(out) = out else { return Vec::new() };
         String::from_utf8_lossy(&out.stdout)
             .lines()
             .map(str::trim)
-            .filter(|l| !l.is_empty() && !l.starts_with("tests/") && !l.ends_with("conftest.py"))
+            .filter(|l| !l.is_empty())
             .map(String::from)
             .collect()
+    }
+
+    fn is_test_path(path: &str) -> bool {
+        path.starts_with("tests/") || path.ends_with("conftest.py") || path.contains("/tests/")
+    }
+
+    fn ext(&self) -> &'static str {
+        match self.cfg.language {
+            Language::Python => ".py",
+            Language::Rust => ".rs",
+            Language::Go => ".go",
+            Language::TypeScript => ".ts",
+        }
     }
 
     /// Which sources the frame shows: the goal's own test file, every
@@ -219,7 +222,7 @@ impl ModelEvaluator {
             let Ok(src) = std::fs::read_to_string(req.worktree.join(&path)) else {
                 continue;
             };
-            for m in Self::imports(&src, &path) {
+            for m in self.imports(&src, &path) {
                 push(&m, &mut order);
             }
             if used + src.len() > self.cfg.source_budget {
@@ -231,9 +234,19 @@ impl ModelEvaluator {
         out
     }
 
+    /// What `src` pulls in, as repo-relative paths. Language-shaped,
+    /// because an import is. Over-collects on purpose: a path that does not
+    /// exist in the tracked set is dropped by the caller.
+    fn imports(&self, src: &str, from_path: &str) -> Vec<String> {
+        match self.cfg.language {
+            Language::Rust => Self::rust_imports(src, from_path),
+            _ => Self::python_imports(src, from_path),
+        }
+    }
+
     /// `from calc.g import g` → `calc/g.py`; `from .h import base` inside
     /// `calc/f.py` → `calc/h.py`; `import calc.g` → `calc/g.py`.
-    fn imports(src: &str, from_path: &str) -> Vec<String> {
+    fn python_imports(src: &str, from_path: &str) -> Vec<String> {
         let dir = from_path.rsplit_once('/').map(|(d, _)| d).unwrap_or("");
         let mut out = Vec::new();
         for line in src.lines() {
@@ -252,6 +265,36 @@ impl ModelEvaluator {
                 format!("{}.py", module.replace('.', "/"))
             };
             out.push(path);
+        }
+        out
+    }
+
+    /// `mod big;` in `src/lib.rs` → `src/big.rs` (and `src/big/mod.rs`);
+    /// `use bigmod::big;` / `use crate::big::rect_area;` → `src/big.rs`.
+    fn rust_imports(src: &str, from_path: &str) -> Vec<String> {
+        let dir = from_path.rsplit_once('/').map(|(d, _)| d).unwrap_or("src");
+        let mut out = Vec::new();
+        for line in src.lines() {
+            let line = line.trim().trim_start_matches("pub ").trim();
+            if let Some(rest) = line.strip_prefix("mod ") {
+                let name = rest.trim_end_matches(';').trim();
+                if !name.is_empty() && !name.contains('{') {
+                    out.push(format!("{dir}/{name}.rs"));
+                    out.push(format!("{dir}/{name}/mod.rs"));
+                }
+            } else if let Some(rest) = line.strip_prefix("use ") {
+                let path = rest.trim_end_matches(';');
+                // Second segment past the crate root is the module file.
+                let mut segs = path.split("::").map(str::trim);
+                let head = segs.next().unwrap_or("");
+                if let Some(name) = segs.next() {
+                    let name = name.trim_end_matches('{').trim();
+                    if !name.is_empty() && head != "std" && head != "core" {
+                        out.push(format!("src/{name}.rs"));
+                        out.push(format!("src/{name}/mod.rs"));
+                    }
+                }
+            }
         }
         out
     }
@@ -297,14 +340,6 @@ impl ModelEvaluator {
         }
         rules.push_str("give_up: \"give_up \" /[^\\n]{1,200}/\n");
         format!("start: {}\n{}", arms.join(" | "), rules)
-    }
-
-    /// `child` is a part of `goal`: a node id of a test file, or anything
-    /// under a directory.
-    pub fn is_part_of(goal: &GoalId, child: &GoalId) -> bool {
-        child != goal
-            && (child.0.starts_with(&format!("{}::", goal.0))
-                || (!goal.0.contains("::") && child.0.starts_with(&format!("{}/", goal.0))))
     }
 
     /// The prompt, and the byte length of its pinned prefix as the daemon's
@@ -485,34 +520,19 @@ impl Evaluator for ModelEvaluator {
     async fn evaluate(&self, req: &EvalRequest) -> Result<EvalResponse, EvalError> {
         let goals: Vec<GoalId> = self
             .catalog
+            .goals()
             .iter()
             .filter(|g| !req.on_stack.contains(g))
             .cloned()
             .collect();
-        let files = Self::allowed_files(&req.worktree);
-        let tracked = {
-            let mut all = files.clone();
-            let out = Command::new("git")
-                .arg("-C")
-                .arg(&req.worktree)
-                .args(["ls-files", "--", "*.py"])
-                .output();
-            if let Ok(out) = out {
-                all.extend(
-                    String::from_utf8_lossy(&out.stdout)
-                        .lines()
-                        .map(|l| l.trim().to_string()),
-                );
-            }
-            all.sort();
-            all.dedup();
-            all
-        };
+        let files = self.allowed_files(&req.worktree);
+        let tracked = self.tracked(&req.worktree);
         let sources = self.sources_for(req, &tracked);
-        let parts: Vec<GoalId> = goals
-            .iter()
-            .filter(|c| Self::is_part_of(req.goal(), c))
-            .cloned()
+        let parts: Vec<GoalId> = self
+            .catalog
+            .parts_of(req.goal())
+            .into_iter()
+            .filter(|c| !req.on_stack.contains(c))
             .collect();
         let grammar = Self::grammar(&goals, &parts, &files);
         let frame_id = self
@@ -599,29 +619,30 @@ mod tests {
         assert!(!one.contains("split"), "{one}");
         let none = ModelEvaluator::grammar(&[], &[], &[]);
         assert!(none.starts_with("start: give_up\n"), "{none}");
-        let file = GoalId::new("tests/a.py");
-        let dir = GoalId::new("tests");
-        assert!(ModelEvaluator::is_part_of(&file, &t));
-        assert!(ModelEvaluator::is_part_of(&dir, &file));
-        assert!(ModelEvaluator::is_part_of(&dir, &t));
-        assert!(!ModelEvaluator::is_part_of(&t, &u));
-        assert!(!ModelEvaluator::is_part_of(
-            &file,
-            &GoalId::new("tests/ab.py::t")
-        ));
     }
 
     #[test]
-    fn imports_resolve_relative_and_package_forms() {
+    fn python_imports_resolve_relative_and_package_forms() {
         let src = "from calc.g import g\nimport calc.h\nfrom .k import k\n";
         assert_eq!(
-            ModelEvaluator::imports(src, "calc/f.py"),
+            ModelEvaluator::python_imports(src, "calc/f.py"),
             vec!["calc/g.py", "calc/h.py", "calc/k.py"]
         );
         assert_eq!(
-            ModelEvaluator::imports("from .h import base\n", "calc/f.py"),
+            ModelEvaluator::python_imports("from .h import base\n", "calc/f.py"),
             vec!["calc/h.py"]
         );
+    }
+
+    #[test]
+    fn rust_imports_resolve_mod_and_use_items() {
+        let got = ModelEvaluator::rust_imports("pub mod big;\n", "src/lib.rs");
+        assert!(got.contains(&"src/big.rs".to_string()), "{got:?}");
+        let got = ModelEvaluator::rust_imports("use bigmod::big;\n", "tests/behaviour.rs");
+        assert!(got.contains(&"src/big.rs".to_string()), "{got:?}");
+        // std is not a file in this repo, and a brace group is not a module.
+        let got = ModelEvaluator::rust_imports("use std::path::Path;\nmod {}\n", "src/lib.rs");
+        assert!(got.is_empty(), "{got:?}");
     }
 
     #[test]

@@ -14,12 +14,14 @@
 //!
 //! Order: `.sovereign/features/rec-1-explicit-stack/order.md` (the bars).
 
+pub mod catalog;
 pub mod driver;
 pub mod evaluator;
 pub mod frame;
 pub mod git;
 pub mod model;
 
+pub use catalog::GoalCatalog;
 pub use driver::{Driver, DriverConfig, DriverError, MemoEntry, StackState};
 pub use evaluator::{EvalError, EvalRequest, EvalResponse, Evaluator, ScriptedEvaluator};
 pub use frame::{
@@ -36,3 +38,11 @@ pub const RECUR_INSTRUCTION: &str = include_str!("../../assets/recur_instruction
 /// wire form, how to read an observation, and worked examples. ~617 tokens
 /// on the 4B tokenizer, above the pinned-prefix cache's 384-token minimum.
 pub const RECUR_MODEL_INSTRUCTION: &str = include_str!("../../assets/recur_model_instruction.md");
+
+/// The same instruction for a Rust subject. Two assets rather than one
+/// neutral asset with generic examples: the examples are what a small model
+/// actually copies, and rings 2-3 are committed measurements whose numbers
+/// only reproduce against the exact bytes they were measured with. The cost
+/// is one extra pinned family, which the byte-budget LRU already owns.
+pub const RECUR_MODEL_INSTRUCTION_RUST: &str =
+    include_str!("../../assets/recur_model_instruction_rust.md");

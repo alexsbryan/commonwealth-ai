@@ -14,8 +14,8 @@
 
 use crate::recur_fixture::{fixture, g, pytest_available, root_path, strip_paths};
 use commonwealth_tdd::recur::{
-    driver::delivered_to, AskRecord, Driver, DriverConfig, Event, ModelConfig, ModelEvaluator,
-    RECUR_MODEL_INSTRUCTION,
+    driver::delivered_to, AskRecord, Driver, DriverConfig, Event, GoalCatalog, ModelConfig,
+    ModelEvaluator, RECUR_MODEL_INSTRUCTION,
 };
 use commonwealth_tdd::tasks::make_passing::{make_failing_tests_pass, MakePassingArgs};
 use commonwealth_tdd::{run_trial, ReqwestChatBackend, TrialConfig};
@@ -111,9 +111,17 @@ async fn one_run(fidelity: bool) -> RunReport {
     let repo = tmp.path().join("repo");
     std::fs::create_dir_all(&repo).unwrap();
     let wd = fixture(&repo, hints());
-    let catalog = ModelEvaluator::catalog_from_pytest(&repo).unwrap();
+    // The goal tree, from pytest's own collection, rooted at the directory
+    // the run starts from. A node's parent is its file; a file's parent is
+    // the root — which is what `split` may decompose into.
+    let catalog = GoalCatalog::from_pytest(&repo)
+        .unwrap()
+        .under_root(g("tests"));
     assert!(
-        catalog.iter().any(|c| c.0 == "tests/test_h.py::test_base"),
+        catalog
+            .goals()
+            .iter()
+            .any(|c| c.0 == "tests/test_h.py::test_base"),
         "{catalog:?}"
     );
     let mut mc = ModelConfig::local(model());
