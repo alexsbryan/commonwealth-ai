@@ -1076,6 +1076,8 @@ mod tests {
         );
     }
 
+    /// covers: FE-8
+    ///
     /// The same separation from the other side: a plain `save` still writes the
     /// mesh's own file, in the mesh's own directory, whichever mesh is active.
     /// That is what removes the crash window — the pointer no longer has to

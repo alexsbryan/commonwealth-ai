@@ -1899,6 +1899,7 @@ mod tests {
         assert_eq!(info.chunk_count, 8);
     }
 
+    /// covers: ST-9
     #[tokio::test]
     async fn merge_shards_rejects_two_distinct_non_empty_embedding_models() {
         // The wildcard relaxation only applies to empty strings —

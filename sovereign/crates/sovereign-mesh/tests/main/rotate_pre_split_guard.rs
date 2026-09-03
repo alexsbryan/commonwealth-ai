@@ -75,6 +75,8 @@ async fn daemon_with_online_peer(
     (daemon, peer_id, tmp)
 }
 
+/// covers: FE-17
+///
 /// The headline case. A peer we have never confirmed post-split is online, so
 /// rotating would partition it. Refuse, and NAME it — an operator cannot act
 /// on "some peer".
@@ -106,6 +108,8 @@ async fn rotate_refuses_while_an_unconfirmed_peer_is_online() {
     }
 }
 
+/// covers: FE-15
+///
 /// The wording defect this split exists to fix, stated as an assertion: the two
 /// populations get different prose, because they need different actions.
 #[tokio::test]

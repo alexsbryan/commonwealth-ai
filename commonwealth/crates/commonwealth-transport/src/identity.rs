@@ -263,6 +263,7 @@ mod tests {
         SigningKey::from_bytes(&[7u8; 32])
     }
 
+    /// covers: FE-3
     #[test]
     fn load_or_generate_round_trips() {
         let dir = tempfile::tempdir().unwrap();
@@ -340,6 +341,7 @@ mod tests {
         ));
     }
 
+    /// covers: FE-5
     #[test]
     fn join_proof_binds_node_id_and_name() {
         let key = test_key();

@@ -1626,6 +1626,7 @@ mod tests {
         );
     }
 
+    /// covers: FE-70
     #[test]
     fn weighted_contiguous_and_gapless_on_heterogeneous_vram() {
         // Contiguity is load-bearing (hops stay D-1; override_patterns/tensor_device
@@ -1723,6 +1724,7 @@ mod tests {
         );
     }
 
+    /// covers: FE-76
     #[test]
     fn an_unread_tensor_table_is_never_a_pass() {
         // This is the whole reason `shard_fits` returns Option. Judging against
@@ -1732,8 +1734,29 @@ mod tests {
         assert!(!mass.is_known());
         let plan = plan_shards(4, &[1.0, 1.0]);
         assert_eq!(shard_fits(&plan, &[GIB, GIB], &mass, 1.2, None), None);
+
+        // The shape the guard is ACTUALLY for, and the one the empty mass
+        // above does not exercise: a table that was read and came back all
+        // zeros. `block_bytes` then has the right LENGTH, so the per-block
+        // lookup inside `shard_fits` succeeds and nothing else refuses —
+        // every device would clear on `need = 0`, which is the "clean bill of
+        // health from a failed header read" this returns `None` to prevent.
+        // Deleting the `is_known` guard leaves the empty-table case above
+        // refusing anyway (the block lookup runs off the end), so without
+        // this arm the test passes for a reason that is not the guard.
+        let zeroed = ModelMass {
+            block_bytes: vec![0; 4],
+            ..ModelMass::default()
+        };
+        assert!(!zeroed.is_known(), "a read-but-zero table is not knowledge");
+        assert_eq!(
+            shard_fits(&plan, &[GIB, GIB], &zeroed, 1.2, None),
+            None,
+            "zeros are not a fit — cannot-judge must stay distinct from pass"
+        );
     }
 
+    /// covers: FE-75
     #[test]
     fn shard_fits_reports_every_device_not_just_the_failures() {
         // A Result-shaped decider would force `mesh plan` to keep its own
@@ -1761,6 +1784,7 @@ mod tests {
         assert!(fits[1].fits(), "one overflow must not condemn the others");
     }
 
+    /// covers: FE-74
     #[test]
     fn pooled_memory_can_pass_where_a_device_fails() {
         // The exact hole the per-device gate closes: 12 GiB pooled against a

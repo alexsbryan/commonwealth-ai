@@ -729,6 +729,7 @@ mod tests {
         }
     }
 
+    /// covers: FE-135
     #[test]
     fn anchor_profile_is_stricter_than_default() {
         let a = EligibilityConfig::anchor();
@@ -742,6 +743,7 @@ mod tests {
         assert_eq!(a.max_cooldown, d.max_cooldown);
     }
 
+    /// covers: FE-133
     #[test]
     fn stable_worker_eligible_after_settle() {
         let e = WorkerEligibility::new(cfg());

@@ -82,6 +82,8 @@ async fn add_peer(daemon: &EmbeddedDaemon, name: &str) {
     );
 }
 
+/// covers: FE-7
+///
 /// The headline: a solo mesh is PARKED, not destroyed. Fails against
 /// auto-leave, which cleared `mesh.json` and rolled back into a brand-new solo
 /// mesh carrying a different id.

@@ -831,6 +831,7 @@ mod tests {
 
     // ── Equal-share cap (order serve50-identity) ────────────────────
 
+    /// covers: FE-102
     #[test]
     fn fair_share_cap_is_uncapped_for_a_lone_principal() {
         // The single-principal no-regression arm, as an assertion rather

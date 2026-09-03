@@ -170,6 +170,8 @@ async fn switch_and_forget_resolve_a_mesh_the_same_way() {
     assert_eq!(daemon.known_meshes().len(), 1);
 }
 
+/// covers: FE-10
+///
 /// Leaving deleted the mesh's `mesh.json` and left `active` still naming it.
 /// Boot looked healthy — `load` returns `None`, `resume_active` returns false —
 /// while `forget` refused that mesh forever, because forget refuses the ACTIVE

@@ -190,6 +190,7 @@ mod tests {
         assert_eq!(b.secs_remaining("mac"), None);
     }
 
+    /// covers: FE-106
     #[test]
     fn backoff_is_capped_however_long_the_peer_asks() {
         let b = YieldBackoff::new();

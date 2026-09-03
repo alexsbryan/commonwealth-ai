@@ -1148,6 +1148,8 @@ mod tests {
         assert!(rows[0].from_canonical);
     }
 
+    /// covers: ST-7
+    ///
     /// The labels are asserted on by `sovereign/docs/cli-contract.toml`
     /// (journey `enrich-atlas`), so they are API. Renaming one silently
     /// turns that journey's barrier back into a vacuous check.
@@ -1159,6 +1161,8 @@ mod tests {
         assert_eq!(CorpusReadiness::Absent.label(), "absent");
     }
 
+    /// covers: ST-6
+    ///
     /// The 2026-08-28 failing input, recorded from disk rather than imagined:
     /// `wikipedia-newsworthy` had `ingestion_in_progress: false` beside
     /// `indexes_built: false` — 26 data fragments, no vector index — and this

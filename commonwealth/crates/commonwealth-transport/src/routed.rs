@@ -241,6 +241,7 @@ mod tests {
         assert_eq!(labels(out), vec!["ip:a"]);
     }
 
+    /// covers: FE-25
     #[tokio::test]
     async fn routed_class_lists_primary_then_default_fallback() {
         let iroh = Mock::new("iroh", &["iroh:x"]);
@@ -279,6 +280,7 @@ mod tests {
         assert_eq!(labels(g), vec!["iroh:x"]);
     }
 
+    /// covers: FE-26
     #[tokio::test]
     async fn required_class_with_no_iroh_path_returns_empty_not_plaintext() {
         // THE KEYSTONE: peer has no iroh path (iroh primary yields
@@ -326,6 +328,7 @@ mod tests {
         );
     }
 
+    /// covers: FE-27
     #[tokio::test]
     async fn note_success_routes_to_the_transport_that_produced_the_endpoint() {
         let iroh = Mock::new("iroh", &["iroh:x"]);

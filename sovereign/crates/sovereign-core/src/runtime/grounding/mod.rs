@@ -5973,6 +5973,7 @@ mod tests {
         }
     }
 
+    /// covers: GR-2
     #[test]
     fn rewrite_note_includes_corrective_passages() {
         let note = rewrite_system_note(&[fc(

@@ -2286,6 +2286,7 @@ mod tests {
         )
     }
 
+    /// covers: FE-90
     #[test]
     fn a_witness_accounts_for_the_digest_it_was_built_from() {
         assert!(witness().explains(&witnessed_key().placement_digest));
@@ -2943,6 +2944,8 @@ mod tests {
         assert_eq!(back.conditions, r.conditions);
     }
 
+    /// covers: FE-92
+    ///
     /// An empty slot list is a FINDING — "nothing else was resident" — not
     /// missing information. A reader who cannot tell those apart cannot use the
     /// field to compare two runs, which is its only purpose.

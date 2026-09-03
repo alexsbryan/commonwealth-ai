@@ -3388,6 +3388,8 @@ mod tests {
         assert!(engine.corpora_with_colliding_indexes().is_empty());
     }
 
+    /// covers: ST-5
+    ///
     /// Pins the dedup invariant: when two physical indexes advertise
     /// the same corpus_id, `installed_indexes` returns exactly one
     /// entry per corpus_id, and the kept entry is the one whose

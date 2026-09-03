@@ -299,6 +299,8 @@ mod tests {
         }
     }
 
+    /// covers: GR-36
+    ///
     /// The order forbids rendering "5% coverage". Held structurally: the
     /// card carries neither a ratio nor the two tag counts one needs, so
     /// a renderer cannot compute one from what it is given.
@@ -368,6 +370,8 @@ mod tests {
         }
     }
 
+    /// covers: GR-35
+    ///
     /// The honesty bar that ties the card to the tool: every period the
     /// card advertises must actually resolve through `lookup`. A card
     /// that promises what the tool refuses is the fabrication this
