@@ -178,8 +178,8 @@ cargo run -p xtask -- quality        # every structural gate, one summary table
 ```
 
 `cargo xtask quality` bundles arch-gate (file-size ratchet), docs-gate (every
-path the narrative docs cite must resolve), boundary-gate (the studio package
-stays liftable), layer-gate (dependency direction per `quality/ARCH_LAYERS.toml`
+path the narrative docs cite must resolve), boundary-gate (every package declared in
+`quality/ARCH_LAYERS.toml` — studio, code-intel — stays liftable), layer-gate (dependency direction per `quality/ARCH_LAYERS.toml`
 plus god-crate fan-in caps), lock-gate (no new duplicate crate versions),
 env-gate (every env read declared in `quality/env-flags.toml`), and concept-gate
 (one noun, one owner — no NEW name defined as a type in two crates).

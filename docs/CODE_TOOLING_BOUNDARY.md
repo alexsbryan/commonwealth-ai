@@ -107,8 +107,9 @@ a dependency on the runtime hub — see §6.
    and the monolith injects an impl at the call site (§6).
 2. **The shared leaves keep the budget in the table above.** Widening a leaf
    widens both packages' contract surface at once, so the gate pins them by
-   hand. This is the same `allowed_leaf_deps` table `studio/` uses; do not fork
-   it.
+   hand. This is the same leaf table `studio/` uses — one global
+   `[[package_leaf]]` set in `quality/ARCH_LAYERS.toml`, not a per-package one;
+   do not fork it.
 3. **No `build.rs` in any package crate, and no `include_str!` /
    `include_bytes!` that escapes the crate root.** A build script or an escaping
    embed is a source-tree reach-in no boundary survives. The package's one baked
@@ -390,7 +391,7 @@ that failing list *is* the work queue — the same way `studio/`'s did.
 
 | Phase | Work | Shape |
 |---|---|---|
-| 0 | Generalise `boundary_gate.rs` from one `PACKAGE_SET` to N named packages; register this package's set with an empty allowlist | ~50 LOC in `corpus-engine/xtask/src/boundary_gate.rs` |
+| 0 | ~~Generalise `boundary_gate.rs` from one `PACKAGE_SET` to N named packages; register this package's set with an empty allowlist~~ **DONE 2026-09-03.** The package set moved to `[[package]]` blocks in `quality/ARCH_LAYERS.toml` (schema v3) behind the shared `arch-layers` parser, and this package is registered with the FIVE crates that already exist (`corpus-engine-{yield,scip,notes,watchers,archaeology}`). It is GREEN on those five — the ~22k lines already carved out cannot silently re-acquire an edge while the remaining 29k moves. Grandfathering arrives with the crates that need it: an `[[exception]]` carrying `package = "code-intel"`, stale-entry detection included | landed |
 | 1 | Repoint 128 imports `sovereign_core::{error,types,traits}` → `sovereign_contracts::` | Mechanical; no behaviour change; drops the runtime-hub edge entirely |
 | 2 | Move `facts.rs` + `facts_check.rs` + `facts_store.rs` (1,710 LOC) into `code-facts`; resolve `crate::{error,types}` against contracts | Straight move; carries the `lang_packs` grammar table |
 | 3 | Define `SymbolIndex` + `CorpusHost` (§6.1); write the package's default SQLite flat-cosine `SymbolIndex`; implement both over `corpus-engine` in-tree so the daemon keeps one index | The only real design work in the plan |
@@ -409,10 +410,16 @@ removes a false dependency on the largest hub crate in the workspace.
 It names the offending edge (`crate → dep`) or file. Either the dependency
 doesn't belong in the package — move the code that needs it monolith-side and
 inject through a seam (a trait in `sovereign-contracts`, or a `CorpusLocator`
-impl) — or, if a leaf genuinely must grow, widen `allowed_leaf_deps` in
-`corpus-engine/xtask/src/boundary_gate.rs` deliberately, with the table in §2
-updated to match. Widening a leaf widens `studio/` too; check that document
-before you do.
+impl) — or, if a leaf genuinely must grow, widen its `[[package_leaf]]` budget
+in `quality/ARCH_LAYERS.toml` deliberately, with the table in §2 updated to
+match. Widening a leaf widens `studio/` too; check that document before you do.
+
+A third option exists once a package is declared but not yet clean, and it is
+the one that makes declaring early cheap: grandfather the edge with an
+`[[exception]]` carrying `package = "code-intel"` and a reason. New edges fail
+from day one, the grandfathered ones are a counted ledger, and an entry that
+stops matching any edge fails the gate until it is deleted — the same
+burn-down discipline the layer exceptions run on.
 
 ---
 

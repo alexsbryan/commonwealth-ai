@@ -85,10 +85,10 @@ pub struct KnowledgeResult {
     /// absence.
     ///
     /// Deliberately a `String` and not `kernel_types::Custody`. `oicp-types`
-    /// is pinned to ZERO internal dependencies (`boundary_gate::
-    /// allowed_leaf_deps`) so the protocol crate stays liftable by a third
-    /// party; the wire spelling is the contract and `Custody::parse_wire` is
-    /// its one parser.
+    /// is pinned to ZERO internal dependencies (the `[[package_leaf]]` budget
+    /// in `quality/ARCH_LAYERS.toml`) so the protocol crate stays liftable by
+    /// a third party; the wire spelling is the contract and
+    /// `Custody::parse_wire` is its one parser.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custody: Option<String>,
     /// `leaf` | `summary` — whether the serving index vouched for this as

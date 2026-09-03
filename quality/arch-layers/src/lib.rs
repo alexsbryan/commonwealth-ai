@@ -12,14 +12,31 @@
 //! depend on them. See [`LayerMap::backstage`] for the rule and the one thing
 //! it cannot enforce.
 //!
-//! Two consumers, one parser:
+//! `[[package]]` names an EXTRACTABLE package — a crate set that must stay
+//! liftable out of the monorepo against nothing but the `[[package_leaf]]`
+//! set. Layers govern direction for the whole workspace; a package pins an
+//! exact allowlist for a named subset, which is a different question: an edge
+//! can point DOWN the stack (layer-legal) and still leave the package's
+//! closure. See [`evaluate_packages`].
+//!
+//! Three consumers, one parser:
 //! - `xtask layer-gate` feeds Cargo-DECLARED dependency edges (deterministic,
 //!   runs in CI without a daemon).
+//! - `xtask boundary-gate` feeds the same edges to [`evaluate_packages`], and
+//!   adds the two filesystem rules a manifest cannot express (no `build.rs`,
+//!   no crate-escaping `include_str!`).
 //! - the code-intel `arch_report` feeds SCIP-OBSERVED symbol-reference edges
 //!   (catches coupling that re-exports hide from Cargo).
 //!
-//! Both call [`evaluate`]; the meaning of the policy file lives here and only
-//! here.
+//! They call [`evaluate`] and [`evaluate_packages`]; the meaning of the
+//! policy file lives here and only here.
+
+mod packages;
+mod violations;
+pub use packages::{
+    evaluate_packages, missing_package_crates, Package, PackageLeaf, SHARED_LEAVES_SCOPE,
+};
+pub use violations::Violation;
 
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
@@ -32,7 +49,13 @@ use std::collections::{BTreeMap, BTreeSet};
 /// key, and report a clean bill of health on a map whose central rule it never
 /// evaluated. Refusing the map is the only honest answer (ARCH §18.3 — absence
 /// is reported, never defaulted).
-pub const MAX_SCHEMA_VERSION: u32 = 2;
+///
+/// v3 added `[[package]]` / `[[package_leaf]]`, moving the package boundary
+/// out of `boundary_gate.rs`'s Rust consts and into the policy file beside the
+/// layer map. Same argument for the bump, one rung sharper: an old build meets
+/// a v3 map, ignores every package, and prints the same "boundary-gate: clean"
+/// it prints when the packages are genuinely clean.
+pub const MAX_SCHEMA_VERSION: u32 = 3;
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -46,6 +69,15 @@ pub struct LayerMap {
     pub forbids: Vec<Forbid>,
     #[serde(default, rename = "exception")]
     pub exceptions: Vec<Exception>,
+    /// The extractable packages. Each is a hand-curated closure that must
+    /// stay liftable against `package_leaves` alone — see [`Package`].
+    #[serde(default, rename = "package")]
+    pub packages: Vec<Package>,
+    /// The shared contract leaves every package may reach. GLOBAL, not
+    /// per-package: widening one widens every package's contract surface at
+    /// once, which is why the list is short and each entry is pinned by hand.
+    #[serde(default, rename = "package_leaf")]
+    pub package_leaves: Vec<PackageLeaf>,
     /// The quality controls — eval, benches, judges, gates, harnesses. Crate
     /// name patterns (`*` allowed), declared ONCE here and nowhere else.
     ///
@@ -103,6 +135,16 @@ pub struct Exception {
     pub reason: String,
     #[serde(default)]
     pub tracking: Option<String>,
+    /// Scopes this entry to a PACKAGE boundary instead of the layer map.
+    /// `Some("code-intel")` grandfathers an edge out of that package's
+    /// closure; `Some("shared-leaves")` grandfathers one out of a leaf's
+    /// budget; `None` is a layer/forbid exception as before.
+    ///
+    /// This is what lets a package be declared while it is still dirty: the
+    /// first run's failure list becomes entries here, new edges fail from day
+    /// one, and the count only goes down.
+    #[serde(default)]
+    pub package: Option<String>,
 }
 
 // ── Input edges ───────────────────────────────────────────────────────────────
@@ -134,99 +176,6 @@ pub struct DepEdge {
     /// `false`: an observed reference is by definition in some build, and
     /// claiming otherwise would be a guess.
     pub optional: bool,
-}
-
-// ── Output ────────────────────────────────────────────────────────────────────
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum Violation {
-    /// A workspace member no layer pattern matches. The map must be total.
-    UnassignedCrate { name: String },
-    /// A member matched by more than one layer — the map is ambiguous.
-    AmbiguousCrate { name: String, layers: Vec<String> },
-    /// A dependency pointing at a HIGHER layer.
-    UpwardEdge {
-        from: String,
-        from_layer: String,
-        to: String,
-        to_layer: String,
-        kind: DepKind,
-    },
-    /// A dependency matching a `[[forbid]]` rule.
-    ForbiddenEdge {
-        from: String,
-        to: String,
-        reason: String,
-    },
-    /// An `[[exception]]` no live edge needed — delete it, it's already won.
-    StaleException { from: String, to: String },
-    /// A product crate depending on a back-of-house crate in its default
-    /// build. The one-way rule runs the other way: back-of-house observes the
-    /// product, never the reverse.
-    BackstageEdge {
-        from: String,
-        to: String,
-        kind: DepKind,
-    },
-}
-
-impl Violation {
-    pub fn describe(&self) -> String {
-        match self {
-            Violation::UnassignedCrate { name } => format!(
-                "crate `{name}` is not assigned to any layer — add it to a \
-                 [[layer]] in quality/ARCH_LAYERS.toml (the map must cover \
-                 every workspace member)"
-            ),
-            Violation::AmbiguousCrate { name, layers } => format!(
-                "crate `{name}` matches more than one layer ({}) — tighten \
-                 the patterns in quality/ARCH_LAYERS.toml",
-                layers.join(", ")
-            ),
-            Violation::UpwardEdge {
-                from,
-                from_layer,
-                to,
-                to_layer,
-                kind,
-            } => format!(
-                "{from} ({from_layer}) → {to} ({to_layer}): {} dependency \
-                 points UP the layer stack — invert it, or grandfather it \
-                 with a [[exception]] entry (with a reason) in \
-                 quality/ARCH_LAYERS.toml",
-                match kind {
-                    DepKind::Normal => "a normal",
-                    DepKind::Build => "a build",
-                    DepKind::Dev => "a dev",
-                }
-            ),
-            Violation::ForbiddenEdge { from, to, reason } => format!(
-                "{from} → {to}: forbidden by a [[forbid]] rule ({reason}) — \
-                 remove the edge or grandfather it with a [[exception]] entry"
-            ),
-            Violation::StaleException { from, to } => format!(
-                "[[exception]] {from} → {to} no longer matches any edge — \
-                 the violation is fixed; delete the entry from \
-                 quality/ARCH_LAYERS.toml"
-            ),
-            Violation::BackstageEdge { from, to, kind } => format!(
-                "{from} → {to}: {} dependency on a `backstage` crate that the \
-                 DEFAULT build carries — the quality controls observe the \
-                 product, never the reverse (a bench you cannot ship without \
-                 is not a bench). Fix it by making the dep `optional = true` \
-                 and leaving it out of `default`, so the shipped artifact \
-                 builds without its own instrument. NOTE: this gate's unit is \
-                 the CRATE — it cannot see which module names the type, and \
-                 Cargo still links `{to}` into the product binary wherever an \
-                 [[exception]] tolerates the edge.",
-                match kind {
-                    DepKind::Normal => "a normal",
-                    DepKind::Build => "a build",
-                    DepKind::Dev => "a dev",
-                }
-            ),
-        }
-    }
 }
 
 // ── Parsing ───────────────────────────────────────────────────────────────────
@@ -268,6 +217,8 @@ pub fn parse(toml_text: &str) -> Result<LayerMap, String> {
                 .to_string(),
         );
     }
+    packages::validate(&map)?;
+
     Ok(map)
 }
 

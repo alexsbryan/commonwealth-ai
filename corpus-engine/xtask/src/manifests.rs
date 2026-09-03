@@ -332,96 +332,9 @@ fn header_dep_context(header: &str) -> Option<(DepKind, Option<String>)> {
     None
 }
 
-// ── boundary-gate's parsers (predate the layer-gate; kept as-is) ─────────────
-
-/// Parse root `Cargo.toml`'s `[workspace.dependencies]` for `name = { path = … }`
-/// entries — the authoritative list of internal (in-repo) crates → their dirs.
-pub fn workspace_internal_crates(root: &Path) -> HashMap<String, String> {
-    std::fs::read_to_string(root.join("Cargo.toml"))
-        .map(|m| parse_workspace_internal_crates(&m))
-        .unwrap_or_default()
-}
-
-pub fn parse_workspace_internal_crates(manifest: &str) -> HashMap<String, String> {
-    let mut out = HashMap::new();
-    let mut in_section = false;
-    for line in manifest.lines() {
-        let t = line.trim();
-        if t.starts_with('[') {
-            in_section = t == "[workspace.dependencies]";
-            continue;
-        }
-        if !in_section || t.is_empty() || t.starts_with('#') {
-            continue;
-        }
-        let Some((name, rest)) = t.split_once('=') else {
-            continue;
-        };
-        if let Some(pidx) = rest.find("path") {
-            let after = &rest[pidx..];
-            if let Some(q1) = after.find('"') {
-                let after = &after[q1 + 1..];
-                if let Some(q2) = after.find('"') {
-                    out.insert(name.trim().to_string(), after[..q2].to_string());
-                }
-            }
-        }
-    }
-    out
-}
-
-/// The internal (in-repo) crate names a crate depends on, across every
-/// `…dependencies` table (normal / dev / build / target-specific). Dev and build
-/// deps count: a crate a third party lifts carries its tests and build scripts.
-pub fn cargo_internal_deps(
-    cargo_toml: &Path,
-    internal: &HashMap<String, String>,
-) -> BTreeSet<String> {
-    std::fs::read_to_string(cargo_toml)
-        .map(|t| parse_cargo_internal_deps(&t, internal))
-        .unwrap_or_default()
-}
-
-pub fn parse_cargo_internal_deps(
-    text: &str,
-    internal: &HashMap<String, String>,
-) -> BTreeSet<String> {
-    deps_with_kinds(text)
-        .into_iter()
-        .map(|(name, _)| name)
-        .filter(|name| internal.contains_key(name))
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn parses_workspace_internal_crates() {
-        let manifest = "\
-[workspace]\n\
-members = [\"a\"]\n\
-[workspace.dependencies]\n\
-oicp-types = { path = \"oicp-types\" }\n\
-sovereign-contracts = { path = \"sovereign/crates/sovereign-contracts\" }\n\
-# external — no path, must be skipped\n\
-serde = { version = \"1\", features = [\"derive\"] }\n\
-[workspace.lints.clippy]\n\
-too_many_arguments = \"allow\"\n";
-        let map = parse_workspace_internal_crates(manifest);
-        assert_eq!(
-            map.get("oicp-types").map(String::as_str),
-            Some("oicp-types")
-        );
-        assert_eq!(
-            map.get("sovereign-contracts").map(String::as_str),
-            Some("sovereign/crates/sovereign-contracts")
-        );
-        // The external dep and the lint key are not internal crates.
-        assert!(!map.contains_key("serde"));
-        assert!(!map.contains_key("too_many_arguments"));
-    }
 
     #[test]
     fn package_name_comes_from_package_section_only() {
@@ -487,35 +400,6 @@ version = \"0.3\"\n";
         let odd = "[dependencies.my-dependencies]\nversion = \"1\"\n";
         let deps = deps_with_kinds(odd);
         assert_eq!(deps, vec![("my-dependencies".into(), DepKind::Normal)]);
-    }
-
-    #[test]
-    fn extracts_internal_deps_across_sections() {
-        let internal: HashMap<String, String> = [
-            ("sovereign-contracts", "x"),
-            ("sovereign-core", "y"),
-            ("oicp-types", "z"),
-        ]
-        .iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
-        .collect();
-
-        let cargo = "\
-[package]\n\
-name = \"sovereign-tools-base\"\n\
-[dependencies]\n\
-sovereign-contracts = { workspace = true }\n\
-serde = { workspace = true }\n\
-[build-dependencies]\n\
-sovereign-core = { workspace = true }\n\
-[dev-dependencies]\n\
-tempfile = { workspace = true }\n";
-        let deps = parse_cargo_internal_deps(cargo, &internal);
-        // Only the in-repo crates are picked up (serde/tempfile are external).
-        assert!(deps.contains("sovereign-contracts"));
-        assert!(deps.contains("sovereign-core"));
-        assert!(!deps.contains("serde"));
-        assert!(!deps.contains("tempfile"));
     }
 
     // ── "does the product ship without it?", read off the manifest ────────

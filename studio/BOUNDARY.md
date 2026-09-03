@@ -62,5 +62,13 @@ carries its tests and its build scripts, so those must respect the same budget.
 It names the offending edge (`crate → dep`) or file. Either the dependency
 doesn't belong in the package — move the code that needs it monolith-side and
 inject through a seam (a trait in `sovereign-contracts`, or the runner's
-`extra_tools`) — or, if a leaf genuinely must grow, widen `allowed_leaf_deps` in
-`corpus-engine/xtask/src/main.rs` deliberately, with this table updated to match.
+`extra_tools`) — or, if a leaf genuinely must grow, widen its `[[package_leaf]]`
+budget in `quality/ARCH_LAYERS.toml` deliberately, with this table updated to
+match.
+
+Both tables above are DECLARED in `quality/ARCH_LAYERS.toml` (schema v3,
+2026-09-03) rather than in the gate's Rust. They moved there when the gate
+learned about N packages instead of just this one: it is policy, and it now
+shares the parser (`quality/arch-layers`) with layer-gate and `arch_report` so
+the three cannot drift on what a boundary means. The tables here are the prose
+copy — the TOML is the source.

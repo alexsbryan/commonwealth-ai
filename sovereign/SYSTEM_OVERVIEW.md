@@ -259,7 +259,13 @@ by any third party certifying their own implementation.
 
 The liftable authoring package (`studio/crates/`) — buildable against
 only the OICP contract crates, enforced by the xtask `boundary-gate`
-(contract: `studio/BOUNDARY.md`).
+(contract: `studio/BOUNDARY.md`). It is one of N packages the gate
+governs since 2026-09-03: the crate sets and the shared-leaf budgets
+are declared as `[[package]]` / `[[package_leaf]]` blocks in
+`quality/ARCH_LAYERS.toml` (schema v3), beside the layer map and behind
+the same parser, so layer-gate, boundary-gate and `arch_report` cannot
+drift on what a boundary means. `code-intel` is the second
+(`docs/CODE_TOOLING_BOUNDARY.md`).
 
 ```
 crates/
