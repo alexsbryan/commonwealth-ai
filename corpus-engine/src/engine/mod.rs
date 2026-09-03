@@ -1659,32 +1659,7 @@ impl CorpusEngine {
     pub async fn usable_indexes(&self) -> Result<Vec<IndexInfo>> {
         let all = self.installed_indexes().await?;
         let total = all.len();
-        // BOTH flags, because they are two different failures and only one of
-        // them was checked here until 2026-09-03.
-        //
-        // `validate_corpus_readiness` — the boot warning whose doc says it
-        // "mirrors the runtime eligibility filter" — refuses on `indexes_built`
-        // AND `vector_index_built`. This filter checked only the first, so the
-        // two were not mirrors, and a corpus with `indexes_built: true` beside
-        // `vector_index_built: false` was admitted here and then LOST at query
-        // time as `NoVectorIndex`.
-        //
-        // What that cost: `wikipedia-simple` on this host is a 12K stub from a
-        // failed May ingest (`committed_iter_pos: 0`, a chunks.lance holding
-        // only _transactions/_versions) carrying exactly that flag pair. It
-        // entered scope on every wikipedia query, retrieval dropped it, and the
-        // bench's honest "refusing to score a partial pool" then zeroed the
-        // whole `retrieval-prod:wikipedia` lane — reported as SKIP(no-data),
-        // which reads like a setup gap rather than "the production pipeline
-        // returns nothing for wikipedia". Measured: with the stub removed the
-        // same lane goes 2 green / 3 improved / 0 regressed.
-        //
-        // One question, one decider (ARCH §10.6): "can I search it" is asked
-        // here, and it must mean the same thing it means at boot.
-        let usable: Vec<IndexInfo> = all
-            .into_iter()
-            .filter(|i| i.indexes_built && i.vector_index_built)
-            .collect();
+        let usable: Vec<IndexInfo> = all.into_iter().filter(|i| i.indexes_built).collect();
         if usable.len() != total {
             // Absence is reported, never defaulted (ARCH §18.3). A caller that
             // silently searched fewer corpora than it listed is the bug this
@@ -1694,8 +1669,7 @@ impl CorpusEngine {
                 listed = total,
                 usable = usable.len(),
                 dropped = total - usable.len(),
-                "corpora listed as installed but not searchable \
-                 (indexes_built=false or vector_index_built=false)"
+                "corpora listed as installed but not searchable (indexes_built=false)"
             );
         }
         Ok(usable)
