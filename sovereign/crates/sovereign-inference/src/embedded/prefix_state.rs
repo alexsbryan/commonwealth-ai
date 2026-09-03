@@ -733,7 +733,11 @@ mod tests {
         let PrefixPlan::Learn { key, pin_len } = cache.plan(&prompt) else {
             panic!("second sighting must learn");
         };
-        cache.commit(key, prompt[..pin_len].to_vec(), std::path::PathBuf::from("/tmp/x"));
+        cache.commit(
+            key,
+            prompt[..pin_len].to_vec(),
+            std::path::PathBuf::from("/tmp/x"),
+        );
 
         match cache.plan(&prompt) {
             PrefixPlan::Restore { prefix_len, .. } => assert_eq!(

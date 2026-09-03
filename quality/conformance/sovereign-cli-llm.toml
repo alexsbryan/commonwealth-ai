@@ -35,12 +35,12 @@ asserts = 3
 requirement = "ST-15"
 test = "sovereign-cli-llm::corpus_cmd::optimize::tests::a_prune_with_no_real_retention_window_is_refused_before_any_index_is_opened"
 file = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/optimize.rs"
-line = 366
+line = 367
 asserts = 3
 
 [[claim]]
 requirement = "ST-15"
 test = "sovereign-cli-llm::corpus_cmd::optimize::tests::a_stated_retention_window_is_accepted_and_carried_through_verbatim"
 file = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/optimize.rs"
-line = 411
+line = 412
 asserts = 8

@@ -498,8 +498,7 @@ impl Orchestrator {
             // a stuck process — silently dropping the Result was
             // hiding genuine "process refused to stop" cases from
             // logs.
-            if let Err(e) = self.depart_gracefully(my_node_id, DEFAULT_COUNTDOWN).await
-            {
+            if let Err(e) = self.depart_gracefully(my_node_id, DEFAULT_COUNTDOWN).await {
                 warn!(
                     error = %e,
                     "orchestrator: graceful departure returned error during standby transition"

@@ -593,7 +593,10 @@ async fn a_departing_orchestrator_announces_rebalances_and_drains_before_it_stop
         },
         HealthCheckConfig::default(),
     );
-    assert!(!orch.is_departing(), "a fresh orchestrator is not departing");
+    assert!(
+        !orch.is_departing(),
+        "a fresh orchestrator is not departing"
+    );
 
     // A 50ms countdown so the drain window is real but the test is not slow.
     // The states are unaffected by its length — that is the point of taking
@@ -707,7 +710,10 @@ async fn a_node_that_has_announced_its_departure_refuses_new_shard_plans() {
         .announce_departure(node_id, Duration::from_millis(20))
         .is_err());
 
-    let rest = orch.complete_departure().await.expect("departure completes");
+    let rest = orch
+        .complete_departure()
+        .await
+        .expect("departure completes");
     assert_eq!(
         rest,
         vec![

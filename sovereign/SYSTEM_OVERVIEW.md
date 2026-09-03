@@ -6085,6 +6085,72 @@ declared-type walks as peers, whose condition was met on 2026-09-03 (see
 locally.
 
 
+### 10.1i Size RE-PINNED on main — 2026-09-03 (the baseline was measured on a branch, not on the tree)
+
+**This is not the ontology wave's bill.** `cargo xtask quality` on `main`
+after merging `origin/main` reported arch-gate FAILING with seventeen
+findings, and the first question was whose growth it is. It is nobody's on
+this branch: `prefix_state.rs`, `conformance_cmd.rs`,
+`commonwealth-test-harness/tests/integration.rs`, `sovereign/crates/sovereign-mesh/src/daemon.rs` and
+`commonwealth/crates/commonwealth-api/src/admission.rs` are byte-identical at `abbd08b6f` (a
+pre-#59 `main` commit), at `851bf1784` (#59, the ontology squash) and at this
+merge. The baseline was already stale at `abbd08b6f` — it carried
+`admission.rs 1317` against a 1,435-line file and `daemon.rs 4758` against a
+4,902-line one — so **`main` has been red on arch-gate since "code quality
+spikes" and "tons of latent work"**, which grew fourteen files and AGENTS.md
+without re-pinning. #59 did not cause it and did not see it: its baseline was
+computed on the ontology-v1 tree, which did not contain those commits.
+
+Re-pinned here rather than deferred again, because a ratchet that has been
+failing across several merges is not ratcheting anything — the next author to
+run it cannot tell their own growth from the standing debt, which is the
+failure mode §10 exists to prevent.
+
+**Paid before asking.** `arch-gate --tighten` first: two real cuts banked
+(`grounding/mod.rs` 6,071 → 6,041, `bench_cmd/chaos_monkey.rs` 2,160 →
+2,159). Tracked oversized files 175 → 173 entries.
+
+| File | Baseline | Now | Δ |
+|------|----------|-----|---|
+| `commonwealth-api/src/admission.rs` | 1,317 | 1,439 | +122 |
+| `corpus-engine/src/engine/mod.rs` | 3,879 | 4,016 | +137 |
+| `corpus-engine/src/enrichment/atlas/resolution.rs` | 5,390 | 5,473 | +83 |
+| `corpus-engine/src/enrichment/atlas/strategies/code_walk.rs` | 1,907 | 2,129 | +222 |
+| `corpus-engine/src/index/mod.rs` | 2,318 | 2,377 | +59 |
+| `corpus-engine/src/update/newsworthy_watcher.rs` | 1,837 | 1,898 | +61 |
+| `sovereign-core/src/runtime/epistemic.rs` | 1,242 | 1,396 | +154 |
+| `sovereign-core/src/runtime/retrieval_pipeline.rs` | 2,921 | 3,076 | +155 |
+| `sovereign-core/tests/main/core_tests.rs` | 2,434 | 2,522 | +88 |
+| `sovereign-inference/src/embedded/rpc_distribution.rs` | 3,388 | 3,511 | +123 |
+| `sovereign-mesh/src/daemon.rs` | 4,758 | 4,902 | +144 |
+
+Newly tracked (over 1,200 and absent from the baseline, all three already
+over before #59): `commonwealth-test-harness/tests/integration.rs` 1,298 ·
+`sovereign-cli/src/conformance_cmd.rs` 1,210 ·
+`sovereign-inference/src/embedded/prefix_state.rs` 1,400.
+
+Approach band: **files 162 → 165 (+3), lines 157,600 → 160,800 (+3,200)**.
+Instruction surface: **AGENTS.md 42,890 → 45,111 bytes (+2,221)**, grown by
+`code quality spikes` (+1,475) and `tons of latent work` (+746). That one is
+the row to watch — every session and every spawned worker re-reads this file,
+so it is the only entry here whose cost is paid per session rather than per
+reader. It is re-pinned, not forgiven; §1's "distill and point" is the repair
+and it needs the operator, because the compass's content is theirs.
+
+**What this merge itself contributed: fourteen lines.** `cargo fmt --all`
+over eleven files the tree had left unformatted since `main` grew them added
++4 to `prefix_state.rs`, +6 to `integration.rs`, +4 to `admission.rs`, and
+reformatted `rpc_distribution.rs` — the gate's own rustfmt requirement, and
+the reason four of the numbers above are four to six lines higher than the
+same file on `origin/main`.
+
+**No splits are scheduled by this row.** Fourteen of the seventeen are files
+that were already over 1,200 and grew; the disposition §10.1h states for that
+shape holds unchanged (a split cannot be taken in steps while the approach
+band refuses an 800-1,200 residual). The three new crossings are new to the
+BASELINE, not to the repository, and each is one owner's call to make when
+they next open it.
+
 ### 10.2 cmnwlth deferrals
 
 | Item | Location | Why deferred |

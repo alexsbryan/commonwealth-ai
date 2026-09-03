@@ -192,7 +192,10 @@ async fn the_injected_entity_extractor_is_called_once_per_conversation_with_its_
         "each call carries that conversation's own chunks"
     );
     assert_eq!(calls[1].1, "conv-b");
-    assert_eq!(calls[1].2, vec!["Separate thread about the pier".to_string()]);
+    assert_eq!(
+        calls[1].2,
+        vec!["Separate thread about the pier".to_string()]
+    );
 
     // And the heavy provider still ran for both — the NER pass is an addition
     // to the dispatch, not a replacement for it.

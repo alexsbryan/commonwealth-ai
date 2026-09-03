@@ -1112,7 +1112,11 @@ mod tests {
         let mut req = peer_req("/chat");
         req.headers_mut()
             .insert("x-node-id", nid(0xD00D).to_hex().parse().unwrap());
-        let second_peer = router.clone().oneshot(req).await.expect("gate must respond");
+        let second_peer = router
+            .clone()
+            .oneshot(req)
+            .await
+            .expect("gate must respond");
         assert_eq!(
             second_peer.status(),
             axum::http::StatusCode::SERVICE_UNAVAILABLE,
