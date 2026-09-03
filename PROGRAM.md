@@ -180,6 +180,60 @@ required, nullable — filled 30 of 30 by stamping Beonna's reign dates as
 it was rejected. The control's 32 grades were never checked for truth; the bar
 was set against an unverified number.
 
+## The three seams the fill rate exposed — 2026-09-03
+
+The required bag put true values in the atoms. Reading the result showed the
+pipeline then mangling them, in three places that had nothing to do with the
+schema or the prompt.
+
+**A claim subject resolved without regard to type.** `attribution` declares
+`subject = "coin"`, but the subject went through the same name-salience lookup
+as `attributed_to`, over every entity — so Halstead's "Series Y sceattas
+(Wessex Down 1)" resolved to *Aldfrith the king*, whose name it carries.
+`resolution_identity::declared_subject_type` now keeps the general hit only
+when it IS the declared type, else resolves the name again among that type's
+atoms alone (10 such retries on the rebuild).
+
+**Merges ignored the author's identity key.** One `coin` atom had absorbed
+Series R, the Eoforwic mint and "Series Y sceattas of Aldfrith" as aliases and
+ended up carrying a catalogue reference belonging to a different coin.
+`merge_permitted` adds three vetoes: a declared type never folds across types
+(compared on RIGID types — a `ruler` is a role its `person` atom plays, §7.5),
+two mentions carrying different values of a declared identity key are two
+things, and a type identified by an external key does not merge on fuzzy name
+shape alone unless a key agrees. Plurals are one name, so the singular mention
+still folds in.
+
+| after the veto | |
+|---|---|
+| catalogue coins, distinct references | 7 of 7 (`Wessex Down 1`–`7`) |
+| coin atoms carrying another coin's reference | 0 (was 1) |
+| merges refused, each traced with its reason | 30 |
+
+**The client dropped a request the daemon asked it to retry.** A 503
+`local_queue_full` carries `retry_after_secs`; `wire.rs` mapped every
+non-success status to an error, and Phase 6 lost 5 of 65 candidates to it on
+two consecutive runs. A bounded retry on that one code — three waits of the
+daemon's own estimate — brings chat failures to **0 of 104**, and the pass now
+finds the Series R dating dispute (Vasquez 710-725 against Ferreira's hoard
+context) that the lost candidates had hidden.
+
+Two placeholder leaks went with them. `attributed_to` arrived as the literal
+string `"omit"` on 22 of 40 claims, because the neutral prompt said
+`attributed_to: omit` and the model wrote the word; the prompt now says to
+leave the key out, and `is_absent_marker` refuses the word and its cousins in
+both the attribution and the Time/Ref attribute paths — **0 such failures**,
+down from 25. A `proposed_date` of `"unknown"` is likewise dropped: only a
+missing key is visibly missing (§18.3), the same rule that already refused a
+zero-gram coin.
+
+**Not fixed, and not to be chased with a prompt.** The catalogue section
+states "Catalogue reference Wessex Down 1" and the extraction omits
+`catalogue_ref` anyway, 3 of 3 probes. Putting the identity key FIRST in the
+attribute bag — the fix the property-order finding suggests — changed nothing,
+3 of 3. That hypothesis is falsified; the remaining gap is elicitation, and the
+next lever is a narrower pass, not a fifth prompt variant.
+
 ## What running the chain found — four breaks, none visible to 11,657 tests
 
 Unit tests test commands; every command worked. All four sat in the seams between
@@ -216,22 +270,20 @@ Ahead: `--quick` bench once, at the very end · `bench enron` B³ for P3
 - P4's tension axes now have their input: `subject` reaches 36 of 37 claims and
   Phase 6 finds 2 tensions from 34 candidates (was 1 from 155). Whether `between`
   ENFORCES rather than reports is still P4's own question.
-- Claim attributes: `grade` 18, `proposed_date` 19 of 51, `subject` 49/51 after the
-  required bag + subject-first order. Below the pre-registered bar; the probes say
-  the remainder is claims that carry no date, not omission. Tension verdict for
-  this build: could-not-judge on the designed dispute. Halstead's `685-690` and
-  Ferreira's `695-704` claims both carry subject + grade + date, but their subjects
-  resolved to two coin atoms ("Series Y sceatta" vs "Series Y sceattas (Wessex
-  Down 1)"), and Phase 6 only pairs same-subject claims — the identity seam, not
-  the schema. Two passes also lost 5 of 65 candidates each to daemon 503
-  `local_queue_full` (30 s predicted wait) that the client does not retry.
-- `attributed_to` arrives as the literal string `"omit"` on 22 of 40 claims — the
-  neutral prompt (`phase1_system.md:92,106`) says "omit" and the model writes it.
-  The parser maps it to no attribution, so nothing false lands, but real scholar
-  attributions may be lost with it.
+- Claim attributes stay below the pre-registered bar (`grade` 14, `proposed_date`
+  11 of 49 on the seam-fixed rebuild). The probes say the remainder is claims that
+  propose no date; the fills that exist are true to the text.
+- `claims_missing_subject` is 9 of 49 — HIGHER than the 2 the mis-typed resolver
+  reported, and that is the point: a subject that is not of the declared type is
+  now an honest absence rather than a link to the wrong atom.
+- The Aldfrith dispute (Halstead 685-690 against Ferreira 695-704) still does not
+  pair. On this extraction Phase 1 did not give Halstead's claim a subject at all,
+  so it is upstream of the seams now fixed. The Series R dispute DOES pair.
 - Coin `weight` is invented under the full-key worked example: 0.32 / 0.72 g for a
   coin whose section states no weight, in every probe variant. The parser catches a
   zero, not a plausible number. Order item 5 (trim the example to fidelity) is open.
+- `catalogue_ref` is omitted by the extractor on the catalogue sections that state
+  it (3 of 3 probes), and identity-first bag order does not change that (3 of 3).
 - Four files accepted over their size baseline at the wave merge — `SYSTEM_OVERVIEW`
   §10.1h names them and schedules the splits.
 - `bench enron` B³ has never been run for P3, before or after.

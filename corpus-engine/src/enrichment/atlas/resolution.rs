@@ -42,6 +42,9 @@ use crate::types::EmbedFn;
 
 use super::atoms::{AtomId, ChunkRef, Entity, Event, SectionPosition};
 use super::edges::{Edge, EdgeId, EdgeProvenance, EdgeType};
+use super::resolution_identity::{
+    accepts_subject, declared_subject_type, merge_permitted, MergeEvidence,
+};
 use super::resolution_ontology::{
     check_event_participants, check_relation_endpoints, emit_role_states, rigid_entity_type,
     snap_ref_attributes, ResolutionPolicy,
@@ -167,8 +170,11 @@ pub async fn resolve_entities_and_events_with(
     // atoms). Runs after synthesis so synthesized atoms also benefit
     // from the merge if a typo variant of the same name landed in
     // entities_introduced earlier.
-    let typo_merges =
-        dedup_typo_fragmented_entities(&mut entity_result.entities, &mut entity_result.name_index);
+    let typo_merges = dedup_typo_fragmented_entities(
+        &mut entity_result.entities,
+        &mut entity_result.name_index,
+        policy,
+    );
     if !typo_merges.is_empty() {
         info!(
             merged = typo_merges.len(),
@@ -372,6 +378,7 @@ const TYPO_DEDUP_PREFIX_MATCH: usize = 4;
 fn dedup_typo_fragmented_entities(
     entities: &mut Vec<Entity>,
     name_index: &mut HashMap<String, AtomId>,
+    policy: &ResolutionPolicy<'_>,
 ) -> Vec<(String, String)> {
     let mut merges: Vec<(String, String)> = Vec::new();
 
@@ -380,6 +387,24 @@ fn dedup_typo_fragmented_entities(
         'pair_search: for i in 0..entities.len() {
             for j in (i + 1)..entities.len() {
                 if !typo_dedup_match(&entities[i], &entities[j]) {
+                    continue;
+                }
+                // "Series Y sceattas" and "Series R sceatta" are one edit
+                // apart and two coins; the declared identity key says so.
+                if let Err(reason) = merge_permitted(
+                    policy,
+                    MergeEvidence::Fuzzy,
+                    entities[i].entity_type.as_str_repr(),
+                    &entities[i].canonical_name,
+                    &entities[i].attributes,
+                    entities[j].entity_type.as_str_repr(),
+                    &entities[j].canonical_name,
+                    &entities[j].attributes,
+                ) {
+                    debug!(
+                        %reason,
+                        "atlas/resolution 3a: typo dedup refused by the declared ontology"
+                    );
                     continue;
                 }
                 chosen = Some(pick_typo_dedup_survivor(&entities[i], &entities[j], i, j));
@@ -615,7 +640,33 @@ async fn resolve_entities(
                 (embed_fn)(&sketch.description).await?
             };
 
-            match find_merge_target(
+            // The declared ontology's veto on every proposed merge target —
+            // a declared type never folds across types, and two mentions
+            // carrying different declared identity keys stay two things.
+            // Inert for an undeclared corpus (`merge_permitted` is `Ok`).
+            let permit = |idx: usize, evidence: MergeEvidence| {
+                let existing = &entities[idx];
+                match merge_permitted(
+                    policy,
+                    evidence,
+                    sketch.entity_type.as_str_repr(),
+                    &sketch.canonical_name,
+                    &sketch.attributes,
+                    existing.entity_type.as_str_repr(),
+                    &existing.canonical_name,
+                    &existing.attributes,
+                ) {
+                    Ok(()) => true,
+                    Err(reason) => {
+                        debug!(
+                            %reason,
+                            "atlas/resolution 3a: merge refused by the declared ontology"
+                        );
+                        false
+                    }
+                }
+            };
+            let target = find_merge_target(
                 sketch,
                 &entities,
                 &descriptions,
@@ -623,7 +674,9 @@ async fn resolve_entities(
                 &name_index,
                 &candidate_emb,
                 section_ordinal,
-            ) {
+                &permit,
+            );
+            match target {
                 Some(existing_idx) => {
                     merge_into_existing(
                         &mut entities[existing_idx],
@@ -741,17 +794,31 @@ fn find_merge_target(
     name_index: &HashMap<String, AtomId>,
     candidate_emb: &[f32],
     current_section_ordinal: usize,
+    permit: &dyn Fn(usize, MergeEvidence) -> bool,
 ) -> Option<usize> {
     let folded_name = fold(&sketch.canonical_name);
 
     // Rule 1: alias match via the name index — cheap and strongest
     // signal. Works across any section distance.
-    if let Some(id) = name_index.get(&folded_name) {
-        return entities.iter().position(|e| e.id == *id);
+    // Every rule below proposes a target; `permit` — the declared ontology's
+    // veto (`merge_permitted`) — has the last word, and a refused proposal
+    // falls through to the next rule rather than ending the search.
+    if let Some(idx) = name_index
+        .get(&folded_name)
+        .and_then(|id| entities.iter().position(|e| e.id == *id))
+    {
+        if permit(idx, MergeEvidence::Exact) {
+            return Some(idx);
+        }
     }
     for alias in &sketch.aliases {
-        if let Some(id) = name_index.get(&fold(alias)) {
-            return entities.iter().position(|e| e.id == *id);
+        if let Some(idx) = name_index
+            .get(&fold(alias))
+            .and_then(|id| entities.iter().position(|e| e.id == *id))
+        {
+            if permit(idx, MergeEvidence::Exact) {
+                return Some(idx);
+            }
         }
     }
 
@@ -764,7 +831,9 @@ fn find_merge_target(
     // signal — rule 1 is the only other unbounded rule, and an
     // alias-less follow-up sketch deserves the same courtesy.
     if let Some(idx) = find_substring_match(&folded_name, entities) {
-        return Some(idx);
+        if permit(idx, MergeEvidence::Exact) {
+            return Some(idx);
+        }
     }
 
     // Rules 2 and 3 require scanning; bound the scan to a 5-section
@@ -791,14 +860,18 @@ fn find_merge_target(
             && shared_token_overlap(&sketch.canonical_name, &existing.canonical_name)
                 >= ENTITY_MERGE_MIN_SHARED_TOKENS
         {
-            return Some(idx);
+            if permit(idx, MergeEvidence::Fuzzy) {
+                return Some(idx);
+            }
         }
         for alias in &existing.aliases {
             if first_token_matches(&sketch.canonical_name, alias)
                 && shared_token_overlap(&sketch.canonical_name, alias)
                     >= ENTITY_MERGE_MIN_SHARED_TOKENS
             {
-                return Some(idx);
+                if permit(idx, MergeEvidence::Fuzzy) {
+                    return Some(idx);
+                }
             }
         }
 
@@ -815,7 +888,9 @@ fn find_merge_target(
         {
             let cosine = cosine_similarity(candidate_emb, &descriptions[idx]);
             if cosine >= ENTITY_MERGE_COSINE {
-                return Some(idx);
+                if permit(idx, MergeEvidence::Fuzzy) {
+                    return Some(idx);
+                }
             }
         }
 
@@ -850,10 +925,14 @@ fn find_merge_target(
             if has_both_embeddings {
                 let cosine = cosine_similarity(candidate_emb, &descriptions[idx]);
                 if cosine >= ENTITY_MERGE_SINGLE_TOKEN_COSINE {
-                    return Some(idx);
+                    if permit(idx, MergeEvidence::Fuzzy) {
+                        return Some(idx);
+                    }
                 }
             } else if one_side_empty {
-                return Some(idx);
+                if permit(idx, MergeEvidence::Fuzzy) {
+                    return Some(idx);
+                }
             }
             // Both-sides empty: no semantic signal, no merge.
         }
@@ -1211,6 +1290,7 @@ pub fn resolve_step_3b_with(
     // show an operator how much evidence the deterministic resolver
     // lost on this corpus, grouped by kind.
     let mut failures: Vec<PhaseFailure> = Vec::new();
+    let mut typed_pools = TypedSubjectPools::default();
 
     // 1. Entity states (one State per EntityStateSketch)
     let mut states: Vec<super::atoms::State> = Vec::new();
@@ -1549,19 +1629,40 @@ pub fn resolve_step_3b_with(
             // `subject` is the referent, `attributed_to` the voice — two
             // different questions, resolved the same way, because "which atom
             // does this name mean" has one answer in this file (§10.6).
+            // A declared claim kind says what it is ABOUT (`subject = "coin"`
+            // on `attribution`), so its subject resolves among atoms of that
+            // type: "Series Y sceattas of Aldfrith" is a coin, not the king
+            // whose name it carries.
+            let declared_subject = declared_subject_type(policy, sketch.claim_kind.as_deref());
             let subject = sketch.subject.as_ref().and_then(|name| {
-                let resolved =
-                    resolve_entity_id_with_salience(name, entities, &name_index, &token_index);
+                let resolved = resolve_claim_subject(
+                    name,
+                    declared_subject,
+                    policy,
+                    entities,
+                    &name_index,
+                    &token_index,
+                    &mut typed_pools,
+                );
                 if resolved.is_none() {
                     failures.push(PhaseFailure {
                         phase: PipelinePhase::Questions,
                         subject: format!("sketch:claim:{}#{}", section.section_id, sketch_index),
                         kind: PhaseFailureKind::UnresolvedClaimSubject,
-                        reason: format!(
-                            "claim subject `{}` did not resolve (claim content: `{}`)",
-                            name,
-                            sketch.content.trim()
-                        ),
+                        reason: match declared_subject {
+                            Some(t) => format!(
+                                "claim subject `{}` did not resolve to a `{t}` — `{}` \
+                                 declares subject = `{t}` (claim content: `{}`)",
+                                name,
+                                sketch.claim_kind.as_deref().unwrap_or("?"),
+                                sketch.content.trim()
+                            ),
+                            None => format!(
+                                "claim subject `{}` did not resolve (claim content: `{}`)",
+                                name,
+                                sketch.content.trim()
+                            ),
+                        },
                         raw_response_head: None,
                     });
                 }
@@ -1950,6 +2051,88 @@ const SALIENCE_DOMINANCE_FACTOR: f32 = 2.0;
 /// opt-in for Phase 3b attribution/relation resolution, where
 /// coverage of cross-section connections matters more than a
 /// single wrong snap.
+/// Per-declared-type entity pools for claim-subject resolution, built once per
+/// type on first use so the per-claim cost is a map lookup.
+#[derive(Default)]
+struct TypedSubjectPools {
+    by_type: HashMap<String, TypedSubjectPool>,
+}
+
+struct TypedSubjectPool {
+    entities: Vec<super::atoms::Entity>,
+    name_index: HashMap<String, super::atoms::AtomId>,
+    token_index: HashMap<String, Vec<super::atoms::AtomId>>,
+}
+
+impl TypedSubjectPools {
+    fn pool_for(
+        &mut self,
+        declared: &str,
+        policy: &ResolutionPolicy<'_>,
+        entities: &[super::atoms::Entity],
+    ) -> &TypedSubjectPool {
+        self.by_type.entry(declared.to_string()).or_insert_with(|| {
+            let pool: Vec<super::atoms::Entity> = entities
+                .iter()
+                .filter(|e| accepts_subject(policy, declared, e))
+                .cloned()
+                .collect();
+            let name_index = build_name_index(&pool);
+            let token_index = build_token_index(&pool);
+            TypedSubjectPool {
+                entities: pool,
+                name_index,
+                token_index,
+            }
+        })
+    }
+}
+
+/// Resolve a claim's `subject`. Undeclared kinds take the general path. A kind
+/// declaring `subject = T` accepts a general hit only when it IS a `T` (or a
+/// specialisation); otherwise the name is resolved again among the `T` atoms
+/// alone. Measured before this existed: Halstead's "Series Y sceattas (Wessex
+/// Down 1)" resolved to the person Aldfrith on token salience, and the
+/// tension pass — which pairs claims by subject — never saw the dispute the
+/// corpus was written around.
+fn resolve_claim_subject(
+    name: &str,
+    declared: Option<&str>,
+    policy: &ResolutionPolicy<'_>,
+    entities: &[super::atoms::Entity],
+    name_index: &HashMap<String, super::atoms::AtomId>,
+    token_index: &HashMap<String, Vec<super::atoms::AtomId>>,
+    pools: &mut TypedSubjectPools,
+) -> Option<super::atoms::AtomId> {
+    let general = resolve_entity_id_with_salience(name, entities, name_index, token_index);
+    let Some(declared) = declared else {
+        return general;
+    };
+    if let Some(id) = &general {
+        let fits = entities
+            .iter()
+            .find(|e| &e.id == id)
+            .is_some_and(|e| accepts_subject(policy, declared, e));
+        if fits {
+            return general;
+        }
+        debug!(
+            subject = name,
+            declared,
+            resolved = ?id,
+            "atlas/resolution 3b: claim subject resolved outside its declared type; \
+             retrying among that type's atoms"
+        );
+    }
+    let pool = pools.pool_for(declared, policy, entities);
+    let typed =
+        resolve_entity_id_with_salience(name, &pool.entities, &pool.name_index, &pool.token_index);
+    if let Some(id) = &typed {
+        debug!(subject = name, declared, resolved = ?id, "atlas/resolution 3b: claim subject resolved within its declared type");
+    }
+    typed
+}
+
 pub(super) fn resolve_entity_id_with_salience(
     name: &str,
     entities: &[super::atoms::Entity],

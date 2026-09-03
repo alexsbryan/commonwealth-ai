@@ -217,22 +217,48 @@ impl DaemonInferenceClient {
         if let Some(secret) = provider.auth_secret.as_deref() {
             request_builder = request_builder.bearer_auth(secret);
         }
-        let result = request_builder.send().await;
-        let outcome = match result {
-            Ok(resp) => {
-                let status = resp.status();
-                let text_res = resp.text().await;
-                match text_res {
-                    Ok(text) if !status.is_success() => Err(Error::Serialization(format!(
-                        "daemon chat error {status}: {text}"
-                    ))),
-                    Ok(text) => Ok(text),
-                    Err(e) => Err(Error::Serialization(format!(
-                        "chat response read error: {e}"
-                    ))),
+        // A 503 `local_queue_full` is the daemon saying "not now, ask again
+        // in N seconds" — it names the wait. Treating it as a failure threw
+        // away 5 of 65 tension candidates twice on one build (2026-09-02).
+        // Bounded, and every retry is traced.
+        let mut queue_full_retries: u32 = 0;
+        let outcome = loop {
+            let attempt = request_builder
+                .try_clone()
+                .expect("a JSON-bodied request is cloneable");
+            match attempt.send().await {
+                Ok(resp) => {
+                    let status = resp.status();
+                    match resp.text().await {
+                        Ok(text) if !status.is_success() => {
+                            if let Some(wait) = queue_full_retry_after(status.as_u16(), &text) {
+                                if queue_full_retries < QUEUE_FULL_RETRIES {
+                                    queue_full_retries += 1;
+                                    tracing::warn!(
+                                        phase = %phase_label,
+                                        model = %model_label,
+                                        retry = queue_full_retries,
+                                        wait_secs = wait.as_secs(),
+                                        "inference_client: daemon queue full; retrying after the wait it asked for"
+                                    );
+                                    tokio::time::sleep(wait).await;
+                                    continue;
+                                }
+                            }
+                            break Err(Error::Serialization(format!(
+                                "daemon chat error {status}: {text}"
+                            )));
+                        }
+                        Ok(text) => break Ok(text),
+                        Err(e) => {
+                            break Err(Error::Serialization(format!(
+                                "chat response read error: {e}"
+                            )))
+                        }
+                    }
                 }
+                Err(e) => break Err(Error::from(e)),
             }
-            Err(e) => Err(Error::from(e)),
         };
 
         heartbeat.abort();
@@ -594,5 +620,73 @@ impl DaemonInferenceClient {
             "inference_client: Anthropic /v1/messages ok"
         );
         Ok(extracted)
+    }
+}
+
+/// How many times a request is re-sent after the daemon answers 503
+/// `local_queue_full`. Three waits of the daemon's own estimate (≤60 s each)
+/// spans a slow slot handover; past that the queue is not draining.
+const QUEUE_FULL_RETRIES: u32 = 3;
+/// Cap on one wait, whatever the daemon estimates.
+const QUEUE_FULL_MAX_WAIT_SECS: u64 = 60;
+
+/// The wait a daemon 503 asks for, or `None` when the response is anything
+/// else. The body carries `"reason": "local_queue_full"` (or the same code
+/// under `error.code`) and `retry_after_secs`; a queue-full without a number
+/// waits the daemon's documented default of 30 s. Only a 503 qualifies — a
+/// 4xx or 500 is not a queue.
+pub(crate) fn queue_full_retry_after(status: u16, body: &str) -> Option<Duration> {
+    if status != 503 {
+        return None;
+    }
+    let v: serde_json::Value = serde_json::from_str(body).ok()?;
+    let code = v["reason"]
+        .as_str()
+        .or_else(|| v["error"]["code"].as_str())?;
+    if code != "local_queue_full" {
+        return None;
+    }
+    let secs = v["retry_after_secs"].as_u64().unwrap_or(30);
+    Some(Duration::from_secs(secs.clamp(1, QUEUE_FULL_MAX_WAIT_SECS)))
+}
+
+#[cfg(test)]
+mod queue_full_tests {
+    use super::queue_full_retry_after;
+
+    const BODY: &str = r#"{"error":{"message":"host busy: ~30000 ms predicted wait at queue position 2","type":"server_error","code":"local_queue_full"},"reason":"local_queue_full","retry_after_secs":30}"#;
+
+    #[test]
+    fn a_queue_full_503_names_its_wait() {
+        assert_eq!(
+            queue_full_retry_after(503, BODY).map(|d| d.as_secs()),
+            Some(30)
+        );
+    }
+
+    #[test]
+    fn the_wait_is_clamped_and_defaulted() {
+        let long = BODY.replace("\"retry_after_secs\":30", "\"retry_after_secs\":600");
+        assert_eq!(
+            queue_full_retry_after(503, &long).map(|d| d.as_secs()),
+            Some(60)
+        );
+        let none = BODY.replace(",\"retry_after_secs\":30", "");
+        assert_eq!(
+            queue_full_retry_after(503, &none).map(|d| d.as_secs()),
+            Some(30)
+        );
+    }
+
+    /// Falsifier: a 500 with the same body, or a 503 for another reason,
+    /// must NOT be retried — that is how a real failure would hide.
+    #[test]
+    fn only_a_queue_full_503_is_retried() {
+        assert_eq!(queue_full_retry_after(500, BODY), None);
+        assert_eq!(
+            queue_full_retry_after(503, r#"{"reason":"model_not_loaded"}"#),
+            None
+        );
+        assert_eq!(queue_full_retry_after(503, "Service Unavailable"), None);
     }
 }

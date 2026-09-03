@@ -365,6 +365,56 @@ mod tests {
         assert_eq!(c.attributes["grade"].as_str(), Some("die-link"));
     }
 
+    /// The prompt says to leave `attributed_to` out; the model writes the
+    /// word. Falsifier: remove the marker filter in `sketch_parse` and
+    /// "omit" becomes a scholar the resolver then fails to find (22 of 40
+    /// claims on one build).
+    #[test]
+    fn the_word_omit_is_not_an_attribution() {
+        let e = parse(
+            r#"{
+              "section_id": "s",
+              "claims": [
+                {"content": "A.", "discourse_act": "assert", "attributed_to": "omit", "anchor": "a"},
+                {"content": "B.", "discourse_act": "assert", "attributed_to": "Halstead", "anchor": "b"}
+              ],
+              "questions_raised": [{"content": "q"}]
+            }"#,
+            &policy(),
+        );
+        assert_eq!(e.claims.len(), 2);
+        assert_eq!(e.claims[0].attributed_to, None);
+        assert_eq!(e.claims[1].attributed_to.as_deref(), Some("Halstead"));
+    }
+
+    /// A date slot holding "unknown" reads downstream as a date. Falsifier:
+    /// drop `is_absent_marker` from the Time branch and the placeholder
+    /// lands beside real dates in the fill-rate report.
+    #[test]
+    fn a_placeholder_date_is_an_absent_date() {
+        let e = parse(
+            r#"{
+              "section_id": "s",
+              "claims": [{
+                "content": "Series X is undated.",
+                "discourse_act": "assert",
+                "claim_kind": "attribution",
+                "anchor": "undated",
+                "attributes": {"proposed_date": "unknown", "grade": "stylistic"}
+              }],
+              "questions_raised": [{"content": "q"}]
+            }"#,
+            &policy(),
+        );
+        let c = &e.claims[0];
+        assert!(
+            !c.attributes.contains_key("proposed_date"),
+            "{:?}",
+            c.attributes
+        );
+        assert_eq!(c.attributes["grade"].as_str(), Some("stylistic"));
+    }
+
     #[test]
     fn drops_a_grade_the_claim_type_does_not_declare() {
         let e = parse(

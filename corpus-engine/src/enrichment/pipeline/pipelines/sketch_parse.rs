@@ -527,6 +527,19 @@ impl RawClaimSketch {
             .and_then(phase3_metadata_value_to_string)
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
+            // The prompt says to leave `attributed_to` out for a text-level
+            // claim; models write the word instead. "omit" is not a scholar.
+            // 22 of 40 claims on one build (2026-09-02) carried the literal.
+            .filter(|s| {
+                let absent = super::parse_policy::is_absent_marker(s);
+                if absent {
+                    debug!(
+                        claim = %content, attributed_to = %s,
+                        "ontology parse: clearing attribution — a placeholder, not a name"
+                    );
+                }
+                !absent
+            })
             // A voice is a speaker role, not an entity; there is no atom to
             // attribute to. The claim survives, the attribution does not.
             .filter(|s| {

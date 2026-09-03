@@ -1318,8 +1318,15 @@ means one thing.
   `Transition`s); a declared relation's `from`/`to` and a declared event's
   `participants` are type-checked against the atoms they resolved to, with a
   mismatch dropped and recorded as `PhaseFailureKind::EndpointTypeMismatch`;
-  a claim's `subject` resolves the way `attributed_to` always has
-  (`UnresolvedClaimSubject`) and gets its own `Involves` edge; and declared
+  a claim's `subject` resolves among atoms of the kind's declared `subject`
+  type — the general salience hit is kept only if it IS that type, else the
+  name is resolved again within the type's atoms (`resolution_identity::
+  declared_subject_type`, `UnresolvedClaimSubject` names the declared type);
+  every entity merge the name rules propose passes `merge_permitted`
+  (`atlas/resolution_identity.rs`): a declared type never folds across
+  types, two mentions carrying different declared identity keys are two
+  things, and a type identified by an external key merges on fuzzy name
+  shape only when a key agrees (`MergeEvidence`); and declared
   `ref` attributes snap to atom ids, an unresolvable one keeping the name
   plus an `UnresolvedAttributeRef` record. `resolve_step_3b` /
   `resolve_entities_and_events` stay as shims over the `_with` forms, so

@@ -97,7 +97,7 @@ impl<'a> ResolutionPolicy<'a> {
     /// Is `atom_type` acceptable where `declared` was required? True on an
     /// exact match and on any `specializes` descendant, after the role→rigid
     /// normalisation above.
-    fn accepts(&self, declared: &str, atom_type: &str) -> bool {
+    pub(super) fn accepts(&self, declared: &str, atom_type: &str) -> bool {
         let expected = self.expected_at_position(declared);
         atom_type == expected || self.index.is_a(atom_type, expected)
     }

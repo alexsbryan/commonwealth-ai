@@ -41,6 +41,7 @@ pub mod ontology_coverage;
 pub mod projection;
 pub mod registry;
 pub mod resolution;
+pub mod resolution_identity;
 pub mod resolution_ontology;
 pub mod schema_validation;
 pub mod section_cache;

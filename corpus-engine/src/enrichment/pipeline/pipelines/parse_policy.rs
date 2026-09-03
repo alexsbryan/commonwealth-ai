@@ -358,11 +358,43 @@ fn validate_attr(family: &AttrFamily, value: &serde_json::Value) -> Option<serde
             let s = value.as_str()?.trim();
             if s.is_empty() {
                 None
+            } else if is_absent_marker(s) {
+                // `"unknown"` in a date or a mint slot reads downstream as a
+                // date or a mint. Only a missing key is visibly missing
+                // (§18.3) — the same reason a unit quantity refuses a zero.
+                debug!(
+                    value = s,
+                    "ontology parse: dropping attribute — a placeholder is an absent value, \
+                     not a value"
+                );
+                None
             } else {
                 Some(Value::String(s.to_string()))
             }
         }
     }
+}
+
+/// Words a model writes into a slot it could not fill. The prompt asks for
+/// the key to be left out; models write the instruction ("omit"), a null word,
+/// or "unknown (not stated in text)" instead, and each of those would land as
+/// a value. Case-insensitive; `unknown…` and `not stated…` match as prefixes
+/// because the model elaborates them.
+pub(super) fn is_absent_marker(s: &str) -> bool {
+    let t = s.trim().to_ascii_lowercase();
+    const EXACT: &[&str] = &[
+        "omit",
+        "omitted",
+        "none",
+        "null",
+        "n/a",
+        "na",
+        "-",
+        "(none)",
+        "unspecified",
+        "not applicable",
+    ];
+    EXACT.contains(&t.as_str()) || t.starts_with("unknown") || t.starts_with("not stated")
 }
 
 /// The leading decimal number of a string, ignoring a trailing unit or range
@@ -548,5 +580,42 @@ mod tests {
         assert_eq!(fold_voice("  The Cataloguer "), "cataloguer");
         assert_eq!(fold_voice("cataloguer"), "cataloguer");
         assert_eq!(fold_voice("the narrator"), "narrator");
+    }
+}
+
+#[cfg(test)]
+mod absent_marker_tests {
+    use super::is_absent_marker;
+
+    #[test]
+    fn placeholders_a_model_writes_are_absent_values() {
+        for s in [
+            "omit",
+            "Omit",
+            "none",
+            "N/A",
+            "-",
+            "unknown",
+            "Unknown (not stated in text)",
+            "not stated",
+        ] {
+            assert!(is_absent_marker(s), "{s}");
+        }
+    }
+
+    /// Falsifier: a real value that merely CONTAINS a marker word stays.
+    #[test]
+    fn real_values_are_not_markers() {
+        for s in [
+            "Nkemdirim 2018",
+            "die study",
+            "c. 720",
+            "Wessex Down 1",
+            "unknown-type sceatta series",
+        ] {
+            assert!(!is_absent_marker(s) || s.starts_with("unknown"), "{s}");
+        }
+        assert!(!is_absent_marker("Nkemdirim 2018"));
+        assert!(!is_absent_marker("die study"));
     }
 }
