@@ -26,6 +26,8 @@ mod recur_fixture;
 mod recur_ring0;
 #[path = "main/recur_ring2.rs"]
 mod recur_ring2;
+#[path = "main/recur_ring4.rs"]
+mod recur_ring4;
 #[path = "main/tasks_integration.rs"]
 mod tasks_integration;
 #[path = "main/trial_integration.rs"]
