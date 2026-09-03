@@ -13,7 +13,6 @@
 2746	commonwealth/crates/commonwealth-api/src/routes_responses.rs
 1253	commonwealth/crates/commonwealth-api/src/server.rs
 2622	commonwealth/crates/commonwealth-api/src/state.rs
-1946	commonwealth/crates/commonwealth-core/src/mesh.rs
 1475	commonwealth/crates/commonwealth-transport/src/iroh.rs
 1484	corpus-engine-atos/src/features.rs
 7794	corpus-engine-notes/src/notes.rs
@@ -64,7 +63,7 @@
 1682	sovereign/crates/sovereign-cli-dev/src/refactor_cmd/detector.rs
 1691	sovereign/crates/sovereign-cli-llm/src/bench_cmd/all.rs
 2543	sovereign/crates/sovereign-cli-llm/src/bench_cmd/book_report.rs
-2160	sovereign/crates/sovereign-cli-llm/src/bench_cmd/chaos_monkey.rs
+2159	sovereign/crates/sovereign-cli-llm/src/bench_cmd/chaos_monkey.rs
 1350	sovereign/crates/sovereign-cli-llm/src/bench_cmd/mechanism_fidelity.rs
 1908	sovereign/crates/sovereign-cli-llm/src/bench_cmd/vault_report.rs
 1338	sovereign/crates/sovereign-cli-llm/src/corpus_snapshot_cmd.rs
@@ -119,7 +118,6 @@
 1694	sovereign/crates/sovereign-core/src/runtime/grounding/citation.rs
 1403	sovereign/crates/sovereign-core/src/runtime/grounding/citation_attribution.rs
 3007	sovereign/crates/sovereign-core/src/runtime/grounding/judge.rs
-6071	sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs
 1432	sovereign/crates/sovereign-core/src/runtime/handlers/attached_doc.rs
 2115	sovereign/crates/sovereign-core/src/runtime/handlers/knowledge_query.rs
 1605	sovereign/crates/sovereign-core/src/runtime/retrieval/atom_enum.rs

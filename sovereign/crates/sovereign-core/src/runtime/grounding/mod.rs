@@ -103,6 +103,8 @@ pub(crate) use pipeline::StreamingVerifier;
 mod gate;
 mod inner;
 mod longform;
+mod repair;
+mod replay;
 // The orchestrator trio keep their historical `grounding::` paths: handlers,
 // collaboration, and the moved tests all reach them through this façade.
 pub(crate) use gate::{gate_answer, gate_answer_with_progress};
@@ -111,6 +113,19 @@ pub(crate) use gate::{
 };
 pub(crate) use inner::gate_answer_inner;
 pub(crate) use longform::gate_longform;
+// Repair text and the replay harness keep their `grounding::` paths via
+// these re-exports; `FailedClaim` and the note builders are consumed by
+// the gate modules through `super::*`.
+pub use replay::{
+    claim_chunk_support, extract_claim_list, replay_claim_violation_joint,
+    replay_claims_support_batched, replay_judge_system_turn, replay_render_batched_claims_prompt,
+    replay_render_claim_prompt, replay_scan_unsupported_specifics,
+};
+pub use repair::LONGFORM_REWRITE_PREFIX;
+pub(crate) use repair::{
+    append_note, grounded_abstention, retry_system_note, rewrite_system_note, strip_gk_caveat,
+    verification_note, FailedClaim,
+};
 // `ClaimSearcher` is constructed via `Runtime::claim_searcher`; the
 // type re-exports are for call sites that name them.
 #[allow(unused_imports)]
@@ -146,131 +161,6 @@ use judge::unwrap_unverified_excerpts;
 /// assert more.
 const CITATION_QUOTE_DISPLAY_CHARS: usize = 900;
 
-/// The gate's claim-extraction primitive, exported for callers OUTSIDE the
-/// gate (`svrn bench verifier extract-claims`, the Stream B corruption
-/// harness). Delegates to the same `judge::extract_claim_list` the longform
-/// gate runs, so offline-extracted claims are in the exact register the
-/// verifier sees at runtime — re-implementing the prompt in a script is the
-/// drift this seam exists to prevent (VERIFIER_V0.md §3 Stream B).
-pub async fn extract_claim_list(
-    inference: &Arc<dyn InferenceProvider>,
-    question: &str,
-    answer: &str,
-    max_claims: usize,
-    posture: crate::oicp::ShardingPrivacy,
-) -> Option<Vec<String>> {
-    judge::extract_claim_list(inference, question, answer, max_claims, posture).await
-}
-
-/// The gate's per-chunk support primitive, exported for the same reason as
-/// [`extract_claim_list`]: the bench faithfulness lane (T1 P0.3) judges
-/// RAPTOR-summary claims against member-chunk texts, and it must do so in
-/// the exact register the runtime gate uses — passage cap, prompt, and
-/// forced-choice normalization included — or lane rates stop predicting
-/// gate behavior. Returns support in [0,1]; `None` = judge failure.
-pub async fn claim_chunk_support(
-    inference: &Arc<dyn InferenceProvider>,
-    passage: &str,
-    claim: &str,
-    posture: crate::oicp::ShardingPrivacy,
-) -> Option<f64> {
-    judge::claim_chunk_support(inference, passage, claim, posture).await
-}
-
-/// The gate's JOINT per-claim register, exported for the judge-replay
-/// harness (`svrn bench judge-replay`) — the third seam in the
-/// [`extract_claim_list`] / [`claim_chunk_support`] family, for the same
-/// reason: an offline verdict transfers to the production gate only if it was
-/// produced by the EXACT production register (family renderer, system turn,
-/// forced-choice normalization). `replay_` prefix because `judge::
-/// claim_violation_joint` is already imported unqualified in this module;
-/// this is pure delegation, not a second implementation (ARCH §10.6).
-///
-/// `chunks` is shared window + appended claim-conditioned passages, in that
-/// order; `n_stable` is the shared-window length — exactly the
-/// (`judged`, `n_shared`) pair the longform loop passes at its own call site.
-pub async fn replay_claim_violation_joint(
-    inference: &Arc<dyn InferenceProvider>,
-    claim: &str,
-    chunks: &[String],
-    n_stable: usize,
-    posture: crate::oicp::ShardingPrivacy,
-) -> Option<f64> {
-    claim_violation_joint(inference, claim, chunks, chunks.len(), n_stable, posture).await
-}
-
-/// The joint register's PROMPT, without the model call — the replay
-/// harness's bit-stability surface: two builds whose rendered bytes differ
-/// are different judge configurations whatever their diff says. Delegates to
-/// the one renderer ([`judge::EvidenceFamily`]).
-pub fn replay_render_claim_prompt(
-    shared: &[String],
-    appended: &[String],
-    claim: &str,
-) -> (String, Option<usize>) {
-    judge::replay_render_claim_prompt(shared, appended, claim)
-}
-
-/// The BATCHED support register, exported for the judge-replay harness
-/// (order `audit-economy` D1: the batched text-A/B verdict is recalibrated
-/// offline against the calibrated per-claim register before
-/// `SOVEREIGN_GATE_BATCH_VERIFY` can flip). Pure delegation; `shared` is the
-/// full shared window (the batched pre-pass judges the family window only —
-/// exactly what `gate_longform` passes at its own call site). Returns one
-/// entry per claim; `None` = no clean aligned verdict for that row.
-pub async fn replay_claims_support_batched(
-    inference: &Arc<dyn InferenceProvider>,
-    claims: &[String],
-    shared: &[String],
-    posture: crate::oicp::ShardingPrivacy,
-) -> Vec<Option<bool>> {
-    judge::claims_support_batched(inference, claims, shared, shared.len(), posture).await
-}
-
-/// The batched register's PROMPT, without the model call — the replay
-/// harness's bit-stability surface for the batched shape. Delegates to the
-/// one renderer ([`judge::EvidenceFamily`]).
-pub fn replay_render_batched_claims_prompt(
-    shared: &[String],
-    claims: &[String],
-) -> (String, Option<usize>) {
-    judge::replay_render_batched_claims_prompt(shared, claims)
-}
-
-/// The system turn every forced-choice judge call carries, behind an
-/// accessor so the replay harness fingerprints WHATEVER constant this build
-/// compiled in — the constant's *name* is exactly what judge-register lands
-/// change (land C renames `CHUNK_JUDGE_SYSTEM` to `GATE_EVIDENCE_SYSTEM`),
-/// and a harness naming one of them would silently stop compiling against
-/// the other side of the very comparison it exists to make.
-pub fn replay_judge_system_turn() -> &'static str {
-    CHUNK_JUDGE_SYSTEM
-}
-
-/// The holistic specifics scan, exported for the judge-replay harness.
-/// `evidence_chunks` is what the production call site passes: the leaf
-/// window followed by the summary chunks (`gate_longform`'s
-/// `scan_evidence`). Pure delegation; see [`replay_claim_violation_joint`].
-pub async fn replay_scan_unsupported_specifics(
-    inference: &Arc<dyn InferenceProvider>,
-    question: &str,
-    answer: &str,
-    leaf_chunks: &[String],
-    summary_chunks: &[String],
-    max_items: usize,
-    posture: crate::oicp::ShardingPrivacy,
-) -> Option<Vec<String>> {
-    scan_unsupported_specifics(
-        inference,
-        question,
-        answer,
-        leaf_chunks,
-        summary_chunks,
-        max_items,
-        posture,
-    )
-    .await
-}
 
 /// WHAT one released answer is verified against — the sealed evidence
 /// universe for one turn. Owned values throughout (the gate runs in
@@ -654,100 +544,6 @@ pub(crate) fn gate_evidence_source_labels(chunks: &[corpus_engine::ScoredChunk])
         }
     }
     out
-}
-
-/// One audit-failed claim plus the claim-conditioned passages its
-/// targeted search returned — the rewrite's correction material.
-struct FailedClaim {
-    claim: String,
-    evidence: Vec<String>,
-}
-
-/// The grounded abstention released when both drafts fail the gate.
-///
-/// Deliberately does NOT restate the rejected claim's value. The old wording
-/// ("The draft answer asserted that Heat's first name is Vernon …") re-uttered
-/// the fabrication even while disclaiming it: a strict judge reads the named
-/// value as an answer (measured — the primary judge scored these as "answered",
-/// so the gate's abstentions didn't count), and a skimming user sees the
-/// fabricated specific anyway. The failed claim is preserved in the gate's
-/// glassbox `meta` / trace, not in the user-facing text — observability without
-/// leakage.
-///
-/// Wording is a SELF-SCOPED epistemic hedge ("I couldn't confirm …"), NOT a
-/// universal claim about the sources ("none of them cover it"). Measured
-/// 2026-07-08 (8h chaos run, class-A "evidence-denial"): the gate's short
-/// citation path abstains far more often than the evidence warrants (single-digit
-/// answers filtered, verbatim quote-match misses), so the abstention frequently
-/// fires when the answer IS in the passages. A universal negative is then a FALSE
-/// statement about the sources — the trust rubric scores it as confabulation, and
-/// it reads to the user as the app denying its own evidence. An assistant-scoped
-/// "I couldn't verify this against them" is honest in BOTH the true-miss and the
-/// mis-abstain case (it claims only the assistant's confidence, never the
-/// sources' content), and the calibrated judge's decline-shape override already
-/// treats it as an honest limitation rather than a fabrication.
-pub(crate) fn grounded_abstention(_claim: &str, chunks_checked: usize) -> String {
-    format!(
-        "I couldn't confirm an answer to this against the {chunks_checked} passages \
-         your sources turned up — so rather than guess at something I can't verify \
-         from them, I'd flag that instead. If you think it's there, try rephrasing \
-         with the specific names or terms involved and I'll take another look."
-    )
-}
-
-/// Remove a leading general-knowledge caveat ("Not in your sources — from
-/// general knowledge: …") so the gate verifies the asserted CLAIM, not the
-/// hedge. Applied ONLY on entity-anchored questions: there a GK caveat can never
-/// legitimately answer an in-world question, so the value after it must be
-/// grounded or dropped. For genuinely out-of-domain questions (not
-/// entity-anchored) the caveat IS the honest move and is left intact — this is
-/// why the strip is gated on `entity_anchored`, not applied unconditionally.
-fn strip_gk_caveat(text: &str) -> String {
-    if let Some(rest) = text.strip_prefix(crate::runtime::prompts::GK_CAVEAT_PREFIX) {
-        return rest.trim_start().to_string();
-    }
-    // Robustness: the marker may not sit at the very start.
-    let low = text.to_lowercase();
-    if let Some(p) = low.find("from general knowledge:") {
-        if let Some(after) = text[p..].split_once(':').map(|x| x.1) {
-            return after.trim().to_string();
-        }
-    }
-    text.to_string()
-}
-
-/// System-message suffix for the single gated retry. Quotes the failed
-/// claim back — the second draft knows exactly which assertion failed
-/// verification and must either ground it or drop it.
-pub(crate) fn retry_system_note(claim: &str, corrective: &[String]) -> String {
-    const RETRY_EVIDENCE_PER_CLAIM: usize = 2;
-    const RETRY_EVIDENCE_CHARS: usize = 700;
-    let mut note = format!(
-        "\n\nGROUNDING CHECK FAILED on your previous draft. It asserted: \"{claim}\" — \
-         no retrieved passage supports that assertion."
-    );
-    if corrective.is_empty() {
-        note.push_str(
-            " Write a new answer using ONLY what the passages state. If the passages \
-             do not contain the asked-for fact, say plainly that the sources do not \
-             state it. Do not repeat the unsupported assertion.",
-        );
-    } else {
-        // Parity with the long-form rewrite (measured v13c–v15): a
-        // retry told only WHICH assertion failed, with no passages
-        // stating the truth, can only delete and disclaim.
-        note.push_str("\n  What the sources actually say on this point:");
-        for p in corrective.iter().take(RETRY_EVIDENCE_PER_CLAIM) {
-            let trimmed: String = p.chars().take(RETRY_EVIDENCE_CHARS).collect();
-            note.push_str(&format!("\n  | {}", trimmed.replace('\n', "\n  | ")));
-        }
-        note.push_str(
-            "\nWrite a new answer using ONLY what the passages state — if the \
-             passages above contain the asked-for fact, state it (with citations); \
-             do not repeat the unsupported assertion.",
-        );
-    }
-    note
 }
 
 /// Final outcome of a full gate ladder over one draft answer.
@@ -1157,134 +953,6 @@ fn release_unjudged(
 /// substitution is visible in the source, never silent (ARCH §18.3).
 fn reason_or(why: String, fallback: &'static str) -> kernel_types::Reason {
     kernel_types::Reason::new(why).unwrap_or_else(|| kernel_types::Reason::literal(fallback))
-}
-
-/// Decode-committed opening for the long-form rewrite. Instruction-only
-/// shape rules measured non-compliant (v14: the rewrite still led with
-/// "I do not have access to passages detailing…" despite an explicit
-/// "do not open with what the passages lack" rule — same ~60%
-/// instruction-wall as the GK caveat). Committing the opening forces
-/// the rewrite to continue into the supported account; the abstain
-/// read of a disclaimer-led head disappears structurally. Like
-/// GK_CAVEAT_PREFIX, assistant_prefix is decode-commit only — the
-/// caller must prepend it to the returned text.
-/// User-facing wording (grace audit 2026-07-11): the previous prefix
-/// ("From the retrieved sources, here is what can be established:")
-/// injected auditor-speak as the OPENING of every rewritten answer — a
-/// structural jargon hit on the grace gate's `clean` component. The
-/// prefix's decode-commit job (force continuation into the supported
-/// account) needs no machinery reference.
-pub const LONGFORM_REWRITE_PREFIX: &str = "Here's what I can say with confidence:\n\n";
-
-/// Rewrite-request system note: every failed claim, each with the
-/// passages its targeted corpus search returned (when any). The
-/// correction material is the point — v13c/v14/v14b measured that a
-/// rewrite told only WHICH assertions failed, with no passages
-/// stating the truth, can only delete and disclaim.
-fn rewrite_system_note(failed: &[FailedClaim]) -> String {
-    const REWRITE_EVIDENCE_PER_CLAIM: usize = 2;
-    const REWRITE_EVIDENCE_CHARS: usize = 700;
-    let list = failed
-        .iter()
-        .map(|f| {
-            let mut entry = format!("- \"{}\"", f.claim);
-            if f.evidence.is_empty() {
-                entry.push_str(
-                    "\n  (no corpus passage states this — remove it, or say the \
-                     sources do not establish it)",
-                );
-            } else {
-                entry.push_str("\n  What the sources actually say on this point:");
-                for p in f.evidence.iter().take(REWRITE_EVIDENCE_PER_CLAIM) {
-                    let trimmed: String = p.chars().take(REWRITE_EVIDENCE_CHARS).collect();
-                    entry.push_str(&format!("\n  | {}", trimmed.replace('\n', "\n  | ")));
-                }
-            }
-            entry
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    format!(
-        "\n\nGROUNDING AUDIT FAILED on your previous draft. These assertions did not \
-         verify against the sources:\n{list}\n\
-         Rewrite the answer: keep everything the sources support. For each failed \
-         assertion that has corrective passages above, REPLACE it with what those \
-         passages actually state, citing them — do not merely delete it. Never add \
-         a NEW statement about what the sources say, cite, name, or omit unless a \
-         passage above shows it. Structure \
-         the rewrite as an ANSWER, not a disclaimer: open directly with the \
-         supported account, organized to address the question. Do not open with \
-         what the sources lack, and do not enumerate the removed assertions in the \
-         body. If material gaps remain, note them briefly in a single short \
-         paragraph at the end."
-    )
-}
-
-/// The user-visible verification note. Items are answer spans / short claims
-/// (`normalize_scan_item` reduces scan output toward answer wording); render
-/// each one deduped and length-capped, in plain language — judge vocabulary
-/// must never reach the user (observed 2026-07-01: raw scan chatter footnoted
-/// a released answer with "… is a fabricated specific").
-///
-/// Items are deliberately UNQUOTED: the post-synthesis quote guardrail
-/// (`quote_verification::verify_answer_against_turn_evidence`, streaming.rs) treats
-/// any curly-quoted span as a quotation claim and demotes what it can't
-/// verbatim-confirm — a quoted note item (a paraphrased claim, by nature not
-/// verbatim) was rewritten to "[unverified excerpt: …]", turning the app's own
-/// footer into a self-contradiction (probed 2026-07-01: the note trace showed
-/// clean items; the released text showed them wrapped).
-/// EXPERIMENT (`SOVEREIGN_NOTE_AS_METADATA=1`): keep the verification note
-/// OUT of the answer text — the failed claims already ride
-/// `GateOutcome.meta.failed_claims` → `metadata.grounding_gate`, and the
-/// desktop renders them as a collapsible disclosure instead. Persona-QA
-/// receipts (2026-07-11): the appended note owns the answer's final words
-/// ("— The evidence states…", "[unverified excerpt:…]"), which zeroes the
-/// grace gate's `agency`/`clean` components and buries the model's own
-/// closing line — the honest audit trail read as auditor-speak in user
-/// space. Default OFF: non-desktop surfaces (API/CLI) keep the in-text
-/// note so a known-failed claim is never silently released without its
-/// caveat (the never-silent invariant).
-fn append_note(text: String, note: &str) -> String {
-    let as_metadata = std::env::var("SOVEREIGN_NOTE_AS_METADATA")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
-    if as_metadata {
-        text
-    } else {
-        format!("{text}{note}")
-    }
-}
-
-fn verification_note(failed_claims: &[String]) -> String {
-    const NOTE_ITEM_CHARS: usize = 160;
-    let mut seen = std::collections::HashSet::new();
-    let items: Vec<String> = failed_claims
-        .iter()
-        .map(|c| {
-            let c = unwrap_unverified_excerpts(c);
-            let c = c.trim().trim_matches(['"', '“', '”']).trim();
-            let mut item: String = c.chars().take(NOTE_ITEM_CHARS).collect();
-            if c.chars().count() > NOTE_ITEM_CHARS {
-                item.push('…');
-            }
-            item
-        })
-        .filter(|c| !c.is_empty() && seen.insert(c.to_lowercase()))
-        .map(|c| format!("- {c}"))
-        .collect();
-    tracing::info!(
-        target: "grounding_gate",
-        n_claims = failed_claims.len(),
-        n_items = items.len(),
-        first_claim_head = %failed_claims.first().map(|c| c.chars().take(80).collect::<String>()).unwrap_or_default(),
-        first_item_head = %items.first().map(|c| c.chars().take(80).collect::<String>()).unwrap_or_default(),
-        "verification note rendered"
-    );
-    format!(
-        "\n\n---\n*Verification note: these statements could not be confirmed \
-         against your sources — treat them as unverified:*\n{}",
-        items.join("\n")
-    )
 }
 
 /// Cross-passage support check for ONE long-form claim: the top
