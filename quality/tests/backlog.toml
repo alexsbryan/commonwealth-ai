@@ -132,7 +132,7 @@ found = "2026-08-10"
 class = "silent-substitute"
 tier = 1
 surface = "rust-functional"
-target = "sovereign-inference/src/embedded/model_slot.rs::spawn"
+target = "sovereign-core/src/runtime/streaming.rs::spawn"
 failure = """A request-carried `assistant_prefix` is invisible on the deep
 streaming path unless the spawn emits it. The inference layer commits the prefix
 BEFORE decode, so the model continues from text the client never sees in the
@@ -832,6 +832,7 @@ total RSS."""
 mutation = """Re-register RPC devices ahead of the local load. The mapping
 assertion must redden. RSS alone will not move enough to be a reliable signal —
 assert on the mapping kind."""
+blocked = "needs real GGUF weights plus a registered RPC device to observe mapping kind; no model fixture on any host that runs the gate (cf. device_memory_probe.rs, #[ignore]d for the same reason)"
 
 [[test]]
 id = "IN-02"
@@ -987,6 +988,7 @@ observable = """A source-scanning test asserts one implementation, with the
 count pinned. Read GR-04's warning first: scan for reachability, not for a
 literal at a call site."""
 mutation = """Add a second send-policy implementation. The census must redden."""
+landed = "sovereign-inference::main::stream_send_policy_census::exactly_one_function_constructs_a_stream_token_for_delivery (+ ::only_the_sink_puts_frames_on_the_client_channel)"
 
 [[test]]
 id = "IN-11"
@@ -1044,6 +1046,7 @@ configuration. The equality assertion must redden."""
 # ─────────────────────────────────────────────────────────────────────────
 # EN — ingest, corpora, enrichment
 # ─────────────────────────────────────────────────────────────────────────
+blocked = "needs a real model, a session file written under a second configuration, and token-level output equality; same missing weights fixture as IN-01"
 
 [[test]]
 id = "EN-01"

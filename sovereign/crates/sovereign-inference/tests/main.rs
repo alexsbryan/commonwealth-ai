@@ -30,3 +30,5 @@ mod llguidance_parity;
 mod mtp_prefill_logits_spike;
 #[path = "main/state_cartridge_spike.rs"]
 mod state_cartridge_spike;
+#[path = "main/stream_send_policy_census.rs"]
+mod stream_send_policy_census;

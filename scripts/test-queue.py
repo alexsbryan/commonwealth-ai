@@ -68,7 +68,8 @@ def load():
     for r in tomllib.load(open(ROOT / "quality/tests/backlog.toml", "rb"))["test"]:
         if r.get("landed"):
             continue                        # mutation watched red: not queue work
-        items.append(dict(id=r["id"], kind="write", tier=r["tier"], path=norm(r["target"]),
+        items.append(dict(id=r["id"], kind="blocked" if r.get("blocked") else "write",
+                          tier=r["tier"], path=norm(r["target"]),
                           why=one_line(r["failure"].split(". ")[0]), witness="note " + r["note"],
                           raw=r))
     d = tomllib.load(open(ROOT / "quality/conformance-specs.toml", "rb"))
@@ -132,6 +133,9 @@ def order(path, items):
     for i in sorted(items, key=lambda x: (x["kind"] != "tag", x["id"])):
         r = i["raw"]
         print(f"\n── {i['id']}   {i['kind']}   {i['witness']}")
+        if i["kind"] == "blocked" and r.get("blocked"):
+            wrap("blocked", r["blocked"])
+            continue
         if i["kind"] == "write":
             wrap("class", f"{r.get('class')}   surface {r.get('surface')}   found {r.get('found')}")
             wrap("target", r.get("target"))
@@ -172,7 +176,8 @@ def main():
     if a.next:
         avoid = [x.strip() for x in a.avoid.split(",") if x.strip()]
         live = [(p, its) for p, its in ranked
-                if not any(x in (p or "") for x in avoid)]
+                if not any(x in (p or "") for x in avoid)
+                and any(i["kind"] in ("write", "tag") for i in its)]
         if not live:
             print("QUEUE EMPTY — nothing left that is not avoided.")
             return
