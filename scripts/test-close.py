@@ -102,8 +102,24 @@ def close_backlog(rid, test):
     blk = t[start:end]
     if "\nlanded = " in blk:
         sys.exit(f"{rid}: already landed")
-    open(BACKLOG, "w").write(t[:start] + blk.rstrip("\n") + f'\nlanded = "{test}"\n\n' + t[end:])
+    open(BACKLOG, "w").write(
+        t[:start] + blk.rstrip("\n") + f"\nlanded = {toml_basic(test)}\n\n" + t[end:])
     return True
+
+
+def toml_basic(s):
+    """A TOML basic string, escaped.
+
+    Learned the hard way: a `blocked` reason quoting a design doc contains
+    double quotes, and writing it raw produced a backlog.toml that tomllib
+    could not parse — which took the whole burndown VIEW down with it, not just
+    the one record. The single write path escapes; nothing downstream should
+    have to.
+    """
+    out = s.replace("\\", "\\\\").replace('"', '\\"')
+    for raw, esc in (("\n", "\\n"), ("\r", "\\r"), ("\t", "\\t")):
+        out = out.replace(raw, esc)
+    return '"' + out + '"'
 
 
 def block_backlog(rid, reason):
@@ -122,7 +138,8 @@ def block_backlog(rid, reason):
         sys.exit(f"{rid}: already blocked")
     if "\nlanded = " in blk:
         sys.exit(f"{rid}: already landed — closed records are not blocked")
-    open(BACKLOG, "w").write(t[:start] + blk.rstrip("\n") + f'\nblocked = "{reason}"\n\n' + t[end:])
+    open(BACKLOG, "w").write(
+        t[:start] + blk.rstrip("\n") + f"\nblocked = {toml_basic(reason)}\n\n" + t[end:])
     print(f"blocked {rid}: {reason}")
 
 

@@ -669,6 +669,7 @@ observable = """A resident index's descriptor count is bounded and reported, so
 the holder is identifiable without a `lsof` session."""
 mutation = """Remove the bound. The test must redden on the count, and the
 report must still name which corpus holds them."""
+blocked = "the record prescribes a mechanism that was considered and DROPPED, and the fix that actually landed is already covered. Neither half of the observable exists. (1) No bound: open_index_inner has no eviction by design; research/scale-analysis/MESH_SCALE_100_USERS_1000_CORPORA.md R4 reads \"Index-handle LRU: do not — the hourly sweep is a textbook LRU-flushing scan that would evict the hot set hourly\", and line 346 lists it under \"Dropped: index-handle LRU (counterproductive under the sweep)\". The mutation \"remove the bound\" has nothing to remove. (2) No holder report: index_cache_len() returns a COUNT, and nothing names which corpora hold resident handles. The descriptor exhaustion this record witnesses was fixed instead by open_index_transient (suppress the sweep insert, keep cache hits), and THAT fix has coverage in corpus-engine/tests/main/index_cache_residency.rs — five tests including the source census no_walker_in_this_crate_opens_a_corpus_through_the_caching_wrapper. Reopen only if the operator wants the holder report; the bound is a settled no."
 
 [[test]]
 id = "ME-12"
