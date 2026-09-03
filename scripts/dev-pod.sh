@@ -786,9 +786,32 @@ tunnel)
   url=$(vastai ssh-url "$id")                         # ssh://root@host:port
   hostport="${url#ssh://root@}"
   echo "[dev-pod] http://127.0.0.1:$LOCAL_PORT  ->  pod 127.0.0.1:9741   (ctrl-c to drop)"
-  exec ssh -N -o StrictHostKeyChecking=accept-new \
-       -L "$LOCAL_PORT:127.0.0.1:9741" \
-       -p "${hostport##*:}" "root@${hostport%%:*}"
+  # KEEPALIVES + RECONNECT. A bare `ssh -N` holds a TCP session open across a
+  # WAN for as long as the run lasts, and a multi-hour bench is long enough
+  # for it to go away: a NAT idle-timeout or a dropped route leaves the ssh
+  # PROCESS alive with forwarding dead, so the port answers connection-refused
+  # while `pgrep ssh` says everything is fine. Flown 2026-09-03 — the tunnel
+  # process was still listed while every lane reported "daemon unreachable",
+  # which sent the diagnosis down the wrong path for a while.
+  #
+  # ServerAliveInterval makes ssh notice a dead peer instead of hanging on it,
+  # and the loop reconnects rather than ending the run. ExitOnForwardFailure
+  # means a tunnel that cannot bind FAILS instead of sitting there forwarding
+  # nothing (§18.3 — absence is reported, never defaulted).
+  #
+  # `exec` is gone on purpose: the point is to outlive one connection.
+  attempt=0
+  while :; do
+    attempt=$((attempt + 1))
+    [ "$attempt" -gt 1 ] && echo "[dev-pod] tunnel reconnect #$attempt at $(date -u +%FT%TZ)"
+    ssh -N -o StrictHostKeyChecking=accept-new \
+        -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
+        -o ExitOnForwardFailure=yes -o ConnectTimeout=15 \
+        -L "$LOCAL_PORT:127.0.0.1:9741" \
+        -p "${hostport##*:}" "root@${hostport%%:*}"
+    echo "[dev-pod] tunnel dropped (status $?) — retrying in 5s; ctrl-c to stop"
+    sleep 5
+  done
   ;;
 down)
   # -y IS LOAD-BEARING. Without it vastai prompts "Are you sure? [y/N]" and,
