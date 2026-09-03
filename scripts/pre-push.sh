@@ -209,7 +209,11 @@ match '(^sovereign/docs/cli-contract\.toml$|^sovereign/scripts/cli-journey-.*\.s
 # The Containerfiles are the single decider of which paths the build genuinely
 # needs, so a new COPY is the one change that can turn a lean context into a
 # broken build.
-match '(^scripts/release-.*\.sh$|^scripts/tests/|^scripts/lib/release-host\.sh$|^scripts/build-desktop-.*\.sh$|^\.containerignore$|/containerfiles/)' && RELEASE=1
+# `scripts/tests/` also holds the CI-bench lane-verdict suite, so the two files
+# it guards are named here too. Without them, editing the verdict logic would
+# not run the only gate on it — which is the "opt-in guard decays into
+# decoration" failure that `scripts/tests/run-all.sh`'s own header warns about.
+match '(^scripts/release-.*\.sh$|^scripts/tests/|^scripts/lib/release-host\.sh$|^scripts/lib/ci-bench-verdict\.sh$|^scripts/sovereign-ci-bench\.sh$|^scripts/build-desktop-.*\.sh$|^\.containerignore$|/containerfiles/)' && RELEASE=1
 
 FAILED=()        # gates that ran and said no — these block
 UNVERIFIED=()    # gates that could not run here — these warn

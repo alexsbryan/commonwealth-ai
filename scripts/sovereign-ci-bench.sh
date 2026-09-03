@@ -44,6 +44,8 @@ set -uo pipefail
 
 # ── Config ──────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/ci-bench-verdict.sh
+source "${SCRIPT_DIR}/lib/ci-bench-verdict.sh"
 BIN="${SOVEREIGN_CLI:-target/debug/sovereign-cli-llm}"
 # Total wall-clock ceiling. Sized for a local slow-slot model: the SOFT synth
 # lanes drive full DeepQuery syntheses (~150-210s/question on the 35B-A3B), so
@@ -295,83 +297,9 @@ run_lane() {
   run_capped "$lane_cap" "$@" 2>&1 | tee "$out"
   local rc=${PIPESTATUS[0]}
   local secs=$(( $(date +%s) - t0 ))
-  local status
-  # bench-all lanes print "N regressed" — gate on THAT, not the raw exit code:
-  # `bench all` also exits 1 on first-run (no baseline) and stale (corpus not
-  # installed), which are setup gaps, NOT regressions, and must not break CI.
-  local regressed; regressed=$(grep -oE "[0-9]+ regressed" "$out" 2>/dev/null | grep -oE "^[0-9]+" | tail -1)
-  if (( rc == 124 )); then
-    status="TIMEOUT"
-  elif (( rc == 4 )); then
-    # COULD-NOT-JUDGE, not FAILED — the lane ran and had nothing to verify.
-    # Exit 4 means exactly this and nothing else in the bench family (both
-    # sites are bench_cmd/faithfulness.rs: "no RAPTOR nodes" and "zero claims
-    # judged — nothing verified is not a pass"). Distinguishing it matters
-    # now that the faithfulness lane discovers every enriched corpus: a corpus
-    # whose nodes are all sentinel-filtered would otherwise post a red FAIL(4)
-    # every run and train everyone to ignore the lane.
-    #
-    # A HARD lane still fails on it, via the PASS* test below — for a gated
-    # corpus, "suddenly nothing to judge" is a regression signal, not a pass.
-    status="SKIP(no-data)"
-  elif [[ -n "$regressed" ]]; then
-    if (( regressed == 0 )); then
-      # "0 regressed" is NOT the same claim as "nothing regressed". A lane that
-      # adjudicated NOTHING also prints zero, and until 2026-08-26 that was
-      # stamped PASS. Two real lanes did it in one run (Flash-Next bench,
-      # research/engram/bench-flashnext.log):
-      #   synth:wikipedia   0 green · 0 improved · 0 regressed · … · 5 stale
-      #                     with "0 regressed (unmeasured — every question errored)"
-      #   enrichment:...    same all-zero tally, corpus not installed locally
-      # Both posted PASS(warn:setup) — a green built on five errored questions
-      # and an absent corpus. The BINARY is right (bench_cmd/all.rs:1153 prints
-      # the "unmeasured" parenthetical, and `an_all_errored_run_is_unmeasured_
-      # not_regressed` tests it); only this parser was wrong, because
-      # `grep -oE "[0-9]+ regressed"` cannot tell 0-of-0 from 0-of-30.
-      #
-      # So: prove the lane adjudicated something before calling it a pass.
-      # green/improved/regressed are the three outcomes that mean a real
-      # baseline comparison happened; first-run/no-baseline/stale all mean
-      # "could not compare" and must not, alone, carry a PASS. Verified against
-      # this run's seven tallies — the five genuine passes each have
-      # green+improved ≥ 3, both false passes have all three at zero.
-      local tally adjudicated n_green n_improved n_regressed
-      tally=$(grep -oE "[0-9]+ green · [0-9]+ improved · [0-9]+ regressed" "$out" 2>/dev/null | tail -1)
-      if [[ -n "$tally" ]]; then
-        # Parse by LABEL, not by column. The separator is " · " and awk splits
-        # the middle dot into its own field, so $1/$3/$5 read "3 + · + improved"
-        # — an arithmetic error that would have made every lane could-not-judge
-        # and failed every HARD gate. Keyed on the word, column drift is moot.
-        n_green=$(grep -oE "[0-9]+ green" <<<"$tally" | grep -oE "^[0-9]+")
-        n_improved=$(grep -oE "[0-9]+ improved" <<<"$tally" | grep -oE "^[0-9]+")
-        n_regressed=$(grep -oE "[0-9]+ regressed" <<<"$tally" | grep -oE "^[0-9]+")
-        adjudicated=$(( ${n_green:-0} + ${n_improved:-0} + ${n_regressed:-0} ))
-      else
-        # No tally line at all (lane types that don't print one) — fall back to
-        # the explicit all-errored marker rather than inventing a verdict.
-        adjudicated=1
-      fi
-      if grep -qF "unmeasured — every question errored" "$out" 2>/dev/null; then
-        adjudicated=0
-      fi
-      if (( adjudicated == 0 )); then
-        # Same verdict, same name as the rc==4 arm above: could-not-judge.
-        # One concept, one status string — and a HARD lane still fails on it
-        # via the PASS* test below, which is the point.
-        status="SKIP(no-data)"
-      elif grep -qE "[1-9][0-9]* (stale|first-run)" "$out" 2>/dev/null; then
-        status="PASS(warn:setup)"  # 0 regressed, but a bench was stale/first-run
-      else
-        status="PASS"
-      fi
-    else
-      status="FAIL(${regressed}reg)"
-    fi
-  elif (( rc == 0 )); then
-    status="PASS"
-  else
-    status="FAIL($rc)"
-  fi
+  # The four-verdict decision lives in lib/ci-bench-verdict.sh, where a test
+  # can reach it. Read that file before changing what any status means.
+  local status; status=$(lane_verdict "$rc" "$out")
   echo "── ${status}  [$kind] $name   (${secs}s)"
   LANE_NAMES+=("$name"); LANE_KINDS+=("$kind"); LANE_STATUS+=("$status"); LANE_SECS+=("$secs")
   # PASS and PASS(warn:setup) both clear the gate; everything else fails HARD.

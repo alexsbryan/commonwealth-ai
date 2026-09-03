@@ -1271,6 +1271,7 @@ observable = """A lane whose baseline predates its corpus's ingest reports
 `could-not-judge` naming the corpus, not a delta."""
 mutation = """Remove the corpus-age comparison. The could-not-judge test must
 redden."""
+blocked = "the mechanism does not exist. baselines::baseline_age compares the baseline capture date to NOW, and its own doc says staleness is operator information, never a gate verdict — renderers warn, exit codes do not change. Nothing anywhere compares a baseline capture time against its corpus ingest time, so the mutation (remove the corpus-age comparison) has nothing to remove. This is a feature to build, not coverage to add."
 
 [[test]]
 id = "EN-13"
@@ -1787,6 +1788,7 @@ from the regression count; a lane where nothing executed reports could-not-judge
 rather than a failing score."""
 mutation = """Score a never-ran question as 0.0. The test must redden on both
 the verdict and the regression count."""
+landed = "sovereign-cli-llm::bench_cmd::all::tests::an_all_errored_run_is_unmeasured_not_regressed (+ scripts/tests/ci-bench-lane-verdict.sh)"
 
 [[test]]
 id = "GA-06"
@@ -1855,6 +1857,7 @@ observable = """A lane reporting a delta also reports the measured noise band
 for that lane, and refuses to call a delta inside the band a result."""
 mutation = """Report the delta without the band. The refusal test must redden
 against a sub-band delta."""
+blocked = "half exists, half does not. Per-lane declared `tolerance` in bench_cmd/lane_baseline.rs already refuses a sub-band delta (one_item_flip_within_tolerance_is_noise). But that is a DECLARED tolerance, not the MEASURED run-to-run band this record is about; the measured bands live as prose in sovereign/docs/RUNBOOK.md section 6, and neither render.rs nor all.rs reports a band alongside a delta. The mutation (report the delta without the band) has no band to remove."
 
 [[test]]
 id = "GA-10"
