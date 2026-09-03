@@ -763,10 +763,11 @@ existing = '''corpus-engine/src/enrichment/pipeline/section_join.rs:434::an_ambi
 [[spec]]
 id = "ST-25"
 family = "ST"
-status = "exists-untagged"
+status = "landed"
 clause = '''Join status MUST be three-valued: **no structure declared**, **structure declared but join missing**, **join present**. Conflating the first two is what allows this to rot invisibly — no caller can distinguish a broken corpus from a flat one.'''
 target = '''corpus-engine/src/enrichment/governance_view.rs:293::chunk_to_section_map_status'''
 existing = '''corpus-engine/src/enrichment/governance_view.rs:1198'''
+landed = '''corpus-engine::enrichment::governance_view::tests::sections_with_no_chunk_ids_are_a_missing_join_and_say_so (+ ::an_absent_manifest_is_no_structure_not_a_missing_join + ::an_empty_chapter_list_is_no_structure_not_a_fault + ::a_populated_join_is_present_and_silent)'''
 
 [[spec]]
 id = "ST-27"
@@ -871,10 +872,11 @@ existing = '''corpus-engine/src/enrichment/reconciliation/signals.rs:505::name_s
 [[spec]]
 id = "EN-19"
 family = "EN"
-status = "exists-untagged"
+status = "landed"
 clause = '''Adjudications MUST survive a rebuild that renumbers graph identifiers. They MUST therefore record their endpoint *rule pair*, not only an edge identifier, and MUST resolve **mootness** — a conflict whose rule has been superseded is not open. Only a genuinely dangling decision (whose rule text was edited away) MUST surface as an issue.'''
 target = '''corpus-engine/src/enrichment/governance_view.rs:411::tension_disposition'''
 existing = '''corpus-engine/src/enrichment/governance_view.rs:949::tension_with_superseded_endpoint_is_moot_not_open'''
+landed = '''corpus-engine::enrichment::governance_view::tests::tension_with_superseded_endpoint_is_moot_not_open (+ ::pair_matched_disposition_survives_rebuild_edge_ids + ::vanished_pair_is_not_an_issue_but_missing_endpoint_atom_is)'''
 
 [[spec]]
 id = "EN-3"

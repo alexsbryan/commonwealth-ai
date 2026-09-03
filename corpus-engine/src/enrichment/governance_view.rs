@@ -907,6 +907,10 @@ mod tests {
         assert!(view.issues.is_empty());
     }
 
+    /// covers: EN-19
+    ///
+    /// The clause's first half: an adjudication recorded on the endpoint RULE PAIR
+    /// survives a rebuild that re-mints every edge id.
     #[test]
     fn pair_matched_disposition_survives_rebuild_edge_ids() {
         // Week 1: accept the conflict between rules 1 and 2, adjudicating
@@ -945,6 +949,10 @@ mod tests {
         );
     }
 
+    /// covers: EN-19
+    ///
+    /// The clause's mootness half: a conflict whose rule has been superseded is
+    /// not open.
     #[test]
     fn tension_with_superseded_endpoint_is_moot_not_open() {
         // Rule 1 was superseded by rule 2. A tension the detector surfaces
@@ -976,6 +984,11 @@ mod tests {
         }
     }
 
+    /// covers: EN-19
+    ///
+    /// The clause's last half: ONLY a genuinely dangling decision — one whose rule
+    /// text was edited away — surfaces as an issue. A pair awaiting re-detection
+    /// is weekly variance.
     #[test]
     fn vanished_pair_is_not_an_issue_but_missing_endpoint_atom_is() {
         // (a) A pair decision whose edge the detector simply didn't
@@ -1173,6 +1186,9 @@ mod tests {
     /// corpus has no sections, vs an empty map because its join was never
     /// written. Conflating these is what hid a broken join across 1779 of
     /// 1788 corpora.
+    /// covers: ST-25
+    ///
+    /// Value 1 of the trichotomy: no structure declared.
     #[test]
     fn an_absent_manifest_is_no_structure_not_a_missing_join() {
         let dir = tempfile::tempdir().unwrap();
@@ -1185,6 +1201,10 @@ mod tests {
         );
     }
 
+    /// covers: ST-25
+    ///
+    /// Value 2: structure declared but join missing. Conflating this with value 1
+    /// is what lets a broken corpus read as a flat one.
     #[test]
     fn sections_with_no_chunk_ids_are_a_missing_join_and_say_so() {
         let dir = tempfile::tempdir().unwrap();
@@ -1207,6 +1227,9 @@ mod tests {
         );
     }
 
+    /// covers: ST-25
+    ///
+    /// Value 3: join present.
     #[test]
     fn a_populated_join_is_present_and_silent() {
         let dir = tempfile::tempdir().unwrap();
@@ -1227,6 +1250,10 @@ mod tests {
     }
 
     /// A manifest declaring zero sections has nothing that COULD be joined.
+    /// covers: ST-25
+    ///
+    /// Value 1 again, by the other door — an empty chapter list rather than an
+    /// absent manifest. Both must land on `NoSectionStructure`.
     #[test]
     fn an_empty_chapter_list_is_no_structure_not_a_fault() {
         let dir = tempfile::tempdir().unwrap();

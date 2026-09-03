@@ -25,6 +25,27 @@ line = 357
 asserts = 4
 
 [[claim]]
+requirement = "EN-19"
+test = "corpus-engine::enrichment::governance_view::tests::pair_matched_disposition_survives_rebuild_edge_ids"
+file = "corpus-engine/src/enrichment/governance_view.rs"
+line = 915
+asserts = 4
+
+[[claim]]
+requirement = "EN-19"
+test = "corpus-engine::enrichment::governance_view::tests::tension_with_superseded_endpoint_is_moot_not_open"
+file = "corpus-engine/src/enrichment/governance_view.rs"
+line = 957
+asserts = 3
+
+[[claim]]
+requirement = "EN-19"
+test = "corpus-engine::enrichment::governance_view::tests::vanished_pair_is_not_an_issue_but_missing_endpoint_atom_is"
+file = "corpus-engine/src/enrichment/governance_view.rs"
+line = 993
+asserts = 2
+
+[[claim]]
 requirement = "EN-4"
 test = "corpus-engine::enrichment::pipeline::phase_cache::tests::exactly_one_place_constructs_the_cache_model_identity"
 file = "corpus-engine/src/enrichment/pipeline/phase_cache.rs"
@@ -65,6 +86,34 @@ test = "corpus-engine::enrichment::atlas::analysis::sec_facts::coverage::tests::
 file = "corpus-engine/src/enrichment/atlas/analysis/sec_facts/coverage.rs"
 line = 308
 asserts = 5
+
+[[claim]]
+requirement = "ST-25"
+test = "corpus-engine::enrichment::governance_view::tests::a_populated_join_is_present_and_silent"
+file = "corpus-engine/src/enrichment/governance_view.rs"
+line = 1234
+asserts = 4
+
+[[claim]]
+requirement = "ST-25"
+test = "corpus-engine::enrichment::governance_view::tests::an_absent_manifest_is_no_structure_not_a_missing_join"
+file = "corpus-engine/src/enrichment/governance_view.rs"
+line = 1193
+asserts = 3
+
+[[claim]]
+requirement = "ST-25"
+test = "corpus-engine::enrichment::governance_view::tests::an_empty_chapter_list_is_no_structure_not_a_fault"
+file = "corpus-engine/src/enrichment/governance_view.rs"
+line = 1258
+asserts = 1
+
+[[claim]]
+requirement = "ST-25"
+test = "corpus-engine::enrichment::governance_view::tests::sections_with_no_chunk_ids_are_a_missing_join_and_say_so"
+file = "corpus-engine/src/enrichment/governance_view.rs"
+line = 1209
+asserts = 4
 
 [[claim]]
 requirement = "ST-41"
