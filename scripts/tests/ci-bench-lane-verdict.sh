@@ -111,4 +111,25 @@ want "a non-zero exit WITHOUT the daemon marker keeps its own failure code" \
      "FAIL(2)" \
      "$(verdict other_failure 2 'bench: corpus index is missing')"
 
+# ── the second-order cascade: a gate with no artifact to score ──────────────
+#
+# 2026-09-03: one crash produced five extra red HARD lanes. Each gate failed
+# with "No such file or directory" because its producer had gone daemon-down
+# and written nothing — no daemon wording of its own, so it read as FAIL(2).
+verdict3() { local f="$T/$1.out"; printf '%s\n' "$3" > "$f"; lane_verdict "$2" "$f" "$4"; }
+
+want "a gate whose artifact is missing AFTER a daemon-down lane is could-not-judge" \
+     "SKIP(daemon-down)" \
+     "$(verdict3 gate_missing 2 'error: read /x/ci-bench/threads.json: No such file or directory (os error 2)' 1)"
+
+# NEGATIVE CONTROL: on a HEALTHY run the same output is a real failure. Without
+# this, the arm would excuse every missing artifact for the rest of time.
+want "a missing artifact on a healthy run still fails on its own merit" \
+     "FAIL(2)" \
+     "$(verdict3 gate_missing_healthy 2 'error: read /x/ci-bench/threads.json: No such file or directory (os error 2)' 0)"
+
+want "a daemon-down run does not excuse an unrelated non-zero exit" \
+     "FAIL(3)" \
+     "$(verdict3 unrelated 3 'bench: the golden file failed to parse' 1)"
+
 exit "$rc"

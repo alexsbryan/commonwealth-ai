@@ -49,11 +49,24 @@
 # for a gated corpus "suddenly nothing to judge" is a regression signal.
 
 lane_verdict() {
-  local rc="$1" out="$2"
+  local rc="$1" out="$2" daemon_was_down="${3:-0}"
   local status
 local regressed; regressed=$(grep -oE "[0-9]+ regressed" "$out" 2>/dev/null | grep -oE "^[0-9]+" | tail -1)
 if (( rc == 124 )); then
   status="TIMEOUT"
+elif (( rc != 0 )) && [[ "$daemon_was_down" == "1" ]] \
+     && grep -qE "No such file or directory|no such file" "$out" 2>/dev/null; then
+  # SECOND-ORDER CASCADE. The TRACKED/SOFT lanes produce an artifact and their
+  # paired HARD gate re-scores it. When the producer went SKIP(daemon-down) it
+  # wrote nothing, so the gate fails with "read <report>.json: No such file or
+  # directory" — which carries no daemon wording of its own and was therefore
+  # stamped FAIL(2). On 2026-09-03 that turned ONE crash into five more red
+  # HARD lanes (chaos-gate, governance-gate, governance-qa-gate,
+  # mechanism-gate, multiturn-gate), none of which had adjudicated anything.
+  #
+  # Gated on the run having actually seen a daemon-down lane, so a genuinely
+  # missing artifact on a healthy run still fails on its own merit.
+  status="SKIP(daemon-down)"
 elif (( rc != 0 )) && grep -qE "daemon unreachable at|daemon is not responding at" "$out" 2>/dev/null; then
   # COULD-NOT-JUDGE for an infrastructure reason. Keyed on the daemon's own
   # reachability strings (the `svrn eval` bootstrap probe and the enrich/

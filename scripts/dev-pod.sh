@@ -54,6 +54,9 @@
 # check (watch `logs` for the slot load) before trusting a long run to it.
 set -euo pipefail
 
+# Where this script lives, so the onstart render can read its siblings
+# (pod-supervise.sh). Resolved before any cd.
+SCRIPT_DIR_LOCAL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IMAGE="${SOVEREIGN_VAST_IMAGE:-ghcr.io/alexsbryan/sovereign-cuda:latest}"
 # The instance disk. Left EMPTY here on purpose: `pod_plan` fills it from the
 # loadout (weights + headroom for the image and the daemon's data dir) so the
@@ -282,37 +285,26 @@ fi
 
 echo "[dev-pod] launching daemon on 127.0.0.1:9741 — tunnel in to reach it"
 
-# SUPERVISED, NOT EXEC'D. The daemon can die in ways no Rust error path sees:
-# a failed GGML_ASSERT inside llama_decode calls abort(), taking the whole
-# process down rather than the one request. Flown 2026-09-03 — the daemon
-# SIGABRTed partway through a bench suite and every remaining lane reported
-# "daemon unreachable", so a four-hour run on rented hardware produced one
-# real failure and a long cascade of noise. \`exec\` made that terminal:
-# nothing was left to restart it.
+# SUPERVISED, NOT EXEC'D — and the supervisor is a REAL FILE with a REAL TEST
+# (scripts/pod-supervise.sh, scripts/tests/pod-supervise.sh), shipped here
+# base64'd so nothing in it has to survive this heredoc's expansion.
 #
-# Restart, and make the restart LOUD. A silent respawn would turn a
-# crash-loop into a run that looks alive and answers nothing, which is the
-# same class of problem one layer up. The counter and the per-start banner
-# go to stdout so \`dev-pod.sh logs\` shows them, and a fast-failing loop
-# backs off instead of spinning the GPU.
-starts=0
-while :; do
-  starts=\$((starts + 1))
-  began=\$(date +%s)
-  echo "[dev-pod] daemon start #\$starts at \$(date -u +%FT%TZ)"
-  sovereign-cli daemon run 2>&1 | tee -a /workspace/daemon.log
-  code=\$?
-  ran=\$(( \$(date +%s) - began ))
-  echo "[dev-pod] DAEMON EXITED — start #\$starts, status \$code, alive \${ran}s"
-  # Under 60s alive means it is not really starting; back off so a broken
-  # loadout does not bill a GPU at full tilt for hours.
-  if [ "\$ran" -lt 60 ]; then
-    echo "[dev-pod] died in under 60s — backing off 60s (crash loop?)"
-    sleep 60
-  else
-    sleep 5
-  fi
-done
+# Using exec was terminal: a failed GGML_ASSERT in llama_decode calls abort(),
+# so one over-long prompt killed the daemon and a four-hour bench reported
+# "daemon unreachable" from that point on.
+#
+# The first fix was an inline while-loop piping the daemon into tee, and it
+# WEDGED: bash waits for every member of a pipeline, tee only sees EOF when
+# the last writer closes, and the daemon's surviving children hold that pipe.
+# (No backticks in this comment on purpose — see the warning above: this is an
+#  UNQUOTED heredoc, so a backticked phrase in a COMMENT is executed at render
+#  time. Writing that exact loop in backticks here ran it locally, forever.)
+# Flown 2026-09-03 on pod 49783403 — supervisor alive, no daemon, no restart.
+# That is exactly why the loop is no longer inline: a heredoc cannot be tested,
+# and this bug only appears when the supervised process leaves a child behind.
+echo '$(base64 -w0 < "$SCRIPT_DIR_LOCAL/pod-supervise.sh")' | base64 -d > /workspace/pod-supervise.sh
+chmod +x /workspace/pod-supervise.sh
+exec /workspace/pod-supervise.sh /workspace/daemon.log sovereign-cli daemon run
 EOS
 }
 

@@ -60,9 +60,16 @@ BUDGET_SECS=14400         # 4h ceiling
 # the ~agent-coding (~15m) + the fast gym gates that trail the synth lanes.
 HARD_RESERVE_SECS="${HARD_RESERVE_SECS:-1800}"
 # How long to wait for a supervised daemon to come back before re-running a
-# lane that found it gone. Sized for a slot reload of a ~30 GB primary, which
-# is what actually has to happen before the retry can succeed.
-DAEMON_RETRY_WAIT_SECS="${DAEMON_RETRY_WAIT_SECS:-120}"
+# lane that found it gone. It has to cover the supervisor's own backoff PLUS a
+# cold reload of a ~30 GB primary from page cache.
+#
+# 120s was the first guess and it was MEASURED TOO SHORT: on the 2026-09-03
+# run every retry still found the daemon gone, so five lanes (both synth
+# lanes, chaos-monkey, governance-qa, multiturn) went SKIP(daemon-down) that a
+# longer wait would have recovered. The daemon was back by the time
+# search-gym ran. A retry that always fires too early is a retry that only
+# costs time.
+DAEMON_RETRY_WAIT_SECS="${DAEMON_RETRY_WAIT_SECS:-300}"
 REPORT_DIR="target/ci-bench"
 UPDATE_BASELINE=""
 # --rebuild: the WEEKLY tier (P0.1). Re-extracts each enrichment corpus's
@@ -235,6 +242,10 @@ START_TS=$(date +%s)
 # ── Lane bookkeeping ────────────────────────────────────────────────────────
 declare -a LANE_NAMES LANE_KINDS LANE_STATUS LANE_SECS
 HARD_FAIL=0
+# Set once any lane reports the daemon gone. Read by `lane_verdict` so a gate
+# that fails ONLY because its producer wrote no artifact is could-not-judge
+# rather than a sixth red HARD lane.
+DAEMON_WAS_DOWN=0
 
 elapsed() { echo $(( $(date +%s) - START_TS )); }
 remaining() { echo $(( BUDGET_SECS - $(elapsed) )); }
@@ -269,7 +280,7 @@ run_lane() {
   local rc=${PIPESTATUS[0]}
   # The four-verdict decision lives in lib/ci-bench-verdict.sh, where a test
   # can reach it. Read that file before changing what any status means.
-  local status; status=$(lane_verdict "$rc" "$out")
+  local status; status=$(lane_verdict "$rc" "$out" "$DAEMON_WAS_DOWN")
   # ONE RETRY WHEN THE DAEMON WAS NOT THERE.
   #
   # The daemon can die under a lane without any Rust error path seeing it: a
@@ -290,8 +301,9 @@ run_lane() {
     sleep "$DAEMON_RETRY_WAIT_SECS"
     run_capped "$lane_cap" "$@" 2>&1 | tee "$out"
     rc=${PIPESTATUS[0]}
-    status=$(lane_verdict "$rc" "$out")
+    status=$(lane_verdict "$rc" "$out" "$DAEMON_WAS_DOWN")
   fi
+  [[ "$status" == "SKIP(daemon-down)" ]] && DAEMON_WAS_DOWN=1
   local secs=$(( $(date +%s) - t0 ))
   echo "── ${status}  [$kind] $name   (${secs}s)"
   LANE_NAMES+=("$name"); LANE_KINDS+=("$kind"); LANE_STATUS+=("$status"); LANE_SECS+=("$secs")
