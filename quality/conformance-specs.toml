@@ -937,18 +937,20 @@ existing = '''sovereign/crates/sovereign-cli/tests/main/cli_contract_journeys.rs
 [[spec]]
 id = "EV-4"
 family = "EV"
-status = "exists-untagged"
+status = "landed"
 clause = '''Gate logic MUST be one shared metric/direction/tolerance primitive across all lanes (X-SD-1). A first run MUST pass.'''
 target = '''sovereign/crates/sovereign-cli-llm/src/bench_cmd/lane_baseline.rs:304::diff'''
 existing = '''sovereign/crates/sovereign-cli-llm/src/bench_cmd/lane_baseline.rs:497::first_run_when_no_baseline'''
+landed = '''sovereign-cli-llm::bench_cmd::lane_baseline::tests::first_run_when_no_baseline (+ ::one_item_flip_within_tolerance_is_noise + ::lower_is_better_rise_regresses + ::near_zero_drift_either_sign_regresses + ::same_model_compares_normally_and_honours_tolerance)'''
 
 [[spec]]
 id = "EV-7"
 family = "EV"
-status = "exists-untagged"
+status = "landed"
 clause = '''Baselines MUST record the **concrete artefact** that produced them — resolving any alias to the specific model — and MUST stamp that identity into every transcript row. An alias is worthless the moment it is re-pointed.'''
 target = '''sovereign/crates/sovereign-cli-llm/src/bench_cmd/lane_baseline.rs:170::LaneBaseline::attribute'''
 existing = '''sovereign/crates/sovereign-cli-llm/src/bench_cmd/lane_baseline.rs:668::attribute_refuses_alias_and_accepts_concrete_stem'''
+landed = '''sovereign-cli-llm::bench_cmd::lane_baseline::tests::attribute_refuses_alias_and_accepts_concrete_stem (+ ::is_alias_marker_matches_canonical_slots + ::unattributed_baseline_is_flagged_but_still_compares)'''
 
 [[spec]]
 id = "GR-2"

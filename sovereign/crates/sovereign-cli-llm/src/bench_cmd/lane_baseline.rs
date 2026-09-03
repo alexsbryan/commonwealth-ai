@@ -493,6 +493,11 @@ mod tests {
         assert!(b.artifact_mtime.is_none());
     }
 
+    /// covers: EV-4
+    ///
+    /// The clause's second sentence, verbatim: a first run MUST pass. With no
+    /// baseline there is nothing to compare against, and a gate that reds on its
+    /// own first run can never be adopted.
     #[test]
     fn first_run_when_no_baseline() {
         let d = diff(None, &base());
@@ -519,6 +524,10 @@ mod tests {
         assert_eq!(d.n_regressed(), 1);
     }
 
+    /// covers: EV-4
+    ///
+    /// The TOLERANCE term of the shared primitive: movement inside the band is
+    /// weather, not a result.
     #[test]
     fn one_item_flip_within_tolerance_is_noise() {
         // honesty 0.36 → 0.27 (one of 11 items flips ≈0.09 < tol 0.10): ok.
@@ -534,6 +543,11 @@ mod tests {
         );
     }
 
+    /// covers: EV-4
+    ///
+    /// The DIRECTION term: the same primitive serves a lane whose metric improves
+    /// downward, and both signs are read through it rather than through a raw
+    /// delta.
     #[test]
     fn lower_is_better_rise_regresses() {
         let cur = LaneBaseline::new("chaos", "now").with(
@@ -555,6 +569,10 @@ mod tests {
         assert_eq!(d.improvements().count(), 1);
     }
 
+    /// covers: EV-4
+    ///
+    /// The direction term's third case: drift away from zero in EITHER sign is the
+    /// regression, which no signed comparison can express.
     #[test]
     fn near_zero_drift_either_sign_regresses() {
         let prev = LaneBaseline::new("mech", "old")
@@ -614,6 +632,11 @@ mod tests {
     /// the declared tolerance is noise, not a regression. (0.6875 → 0.59375 is
     /// Δ 0.094 against tol 0.15 — the lane never called this a regression;
     /// only the cross-model diff made it look like one.)
+    /// covers: EV-4
+    ///
+    /// A second tolerance witness, and the one that names the band in its own
+    /// assertion: 0.094 inside 0.15 is not a result. Earned by the same
+    /// band-collapse mutation.
     #[test]
     fn same_model_compares_normally_and_honours_tolerance() {
         let prev = on_model("2026-07-16", "Qwen3.6-35B-A3B-UD-MTP-IQ4_NL", 0.6875);
@@ -628,6 +651,11 @@ mod tests {
     /// A legacy alias capture (`model: "primary"`) leaves the baseline
     /// unattributed. We cannot prove the diff wrong — so it still runs — but
     /// it is flagged rather than presented as a clean comparison.
+    /// covers: EV-7
+    ///
+    /// The consequence half: a legacy alias capture leaves the baseline
+    /// unattributed, and the diff is FLAGGED rather than presented as a clean
+    /// comparison. Earned by the mutation that lets `attribute` swallow an alias.
     #[test]
     fn unattributed_baseline_is_flagged_but_still_compares() {
         let mut prev = LaneBaseline::new("chaos-monkey", "2026-07-16");
@@ -666,6 +694,16 @@ mod tests {
         assert!(d.missing.contains(&"honesty".to_string()));
     }
 
+    /// covers: EV-7
+    ///
+    /// The clause's first half: an alias is refused and only a concrete artefact is
+    /// recorded. An alias is worthless the moment it is re-pointed — a baseline
+    /// attributed to `primary` says nothing once the slot moves.
+    ///
+    /// The clause's OTHER half — stamping that identity into every transcript row
+    /// — is not proven here and is not proven by anything this file can see:
+    /// `attribute` READS the stem off the rows. See the commit that added this
+    /// tag.
     #[test]
     fn attribute_refuses_alias_and_accepts_concrete_stem() {
         // The alias placeholder must never become an attribution.
@@ -689,6 +727,10 @@ mod tests {
         assert_eq!(a.quant.as_deref(), Some("Q4_K_M"));
     }
 
+    /// covers: EV-7
+    ///
+    /// The alias set itself. `attribute`'s refusal is only as good as the list of
+    /// things it recognises as an alias, so the list is pinned separately.
     #[test]
     fn is_alias_marker_matches_canonical_slots() {
         for a in ["primary", "fast", "embed", "code", "commonwealth/primary"] {

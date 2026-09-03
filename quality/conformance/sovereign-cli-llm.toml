@@ -32,6 +32,62 @@ line = 636
 asserts = 3
 
 [[claim]]
+requirement = "EV-4"
+test = "sovereign-cli-llm::bench_cmd::lane_baseline::tests::first_run_when_no_baseline"
+file = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/lane_baseline.rs"
+line = 502
+asserts = 2
+
+[[claim]]
+requirement = "EV-4"
+test = "sovereign-cli-llm::bench_cmd::lane_baseline::tests::lower_is_better_rise_regresses"
+file = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/lane_baseline.rs"
+line = 552
+asserts = 3
+
+[[claim]]
+requirement = "EV-4"
+test = "sovereign-cli-llm::bench_cmd::lane_baseline::tests::near_zero_drift_either_sign_regresses"
+file = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/lane_baseline.rs"
+line = 577
+asserts = 3
+
+[[claim]]
+requirement = "EV-4"
+test = "sovereign-cli-llm::bench_cmd::lane_baseline::tests::one_item_flip_within_tolerance_is_noise"
+file = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/lane_baseline.rs"
+line = 532
+asserts = 1
+
+[[claim]]
+requirement = "EV-4"
+test = "sovereign-cli-llm::bench_cmd::lane_baseline::tests::same_model_compares_normally_and_honours_tolerance"
+file = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/lane_baseline.rs"
+line = 641
+asserts = 4
+
+[[claim]]
+requirement = "EV-7"
+test = "sovereign-cli-llm::bench_cmd::lane_baseline::tests::attribute_refuses_alias_and_accepts_concrete_stem"
+file = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/lane_baseline.rs"
+line = 708
+asserts = 6
+
+[[claim]]
+requirement = "EV-7"
+test = "sovereign-cli-llm::bench_cmd::lane_baseline::tests::is_alias_marker_matches_canonical_slots"
+file = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/lane_baseline.rs"
+line = 735
+asserts = 2
+
+[[claim]]
+requirement = "EV-7"
+test = "sovereign-cli-llm::bench_cmd::lane_baseline::tests::unattributed_baseline_is_flagged_but_still_compares"
+file = "sovereign/crates/sovereign-cli-llm/src/bench_cmd/lane_baseline.rs"
+line = 660
+asserts = 3
+
+[[claim]]
 requirement = "ST-15"
 test = "sovereign-cli-llm::corpus_cmd::optimize::tests::a_prune_with_no_real_retention_window_is_refused_before_any_index_is_opened"
 file = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/optimize.rs"
