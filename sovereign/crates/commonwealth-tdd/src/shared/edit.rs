@@ -264,14 +264,60 @@ fn parse_action_json(content: &str) -> Option<EditAction> {
         if let Ok(v) = serde_json::from_str::<EditAction>(&c[1]) {
             return Some(v);
         }
+        if let Some(v) = coerce_action_json(&c[1]) {
+            return Some(v);
+        }
     }
     let inline = Regex::new(r#"(\{[^{}]*?"action"\s*:\s*"[^"]+?"[^{}]*?\})"#).unwrap();
     if let Some(c) = inline.captures(content) {
         if let Ok(v) = serde_json::from_str::<EditAction>(&c[1]) {
             return Some(v);
         }
+        if let Some(v) = coerce_action_json(&c[1]) {
+            return Some(v);
+        }
     }
     None
+}
+
+/// One bounded normalization for action headers whose SHAPE the model
+/// improvised: decision fields wrapped under `params`/`arguments` and
+/// spelled longer (`source_file`, `start_line`, `destination`…). Watched
+/// live 2026-09-03: the primary emitted `{"action":"move_lines",
+/// "params":{"source_file":…,"start_line":…}}` for a flat-schema action;
+/// the strict parse failed and the candidate died as parse-failed
+/// despite a CORRECT decision. Field aliases are explicit — this is a
+/// key-spelling fix, not a schema-widening; unknown keys still reject.
+fn coerce_action_json(raw: &str) -> Option<EditAction> {
+    let mut v: serde_json::Value = serde_json::from_str(raw).ok()?;
+    {
+        let obj = v.as_object_mut()?;
+        let wrapper = ["params", "arguments", "args"]
+            .iter()
+            .find_map(|k| obj.remove(*k));
+        if let Some(inner) = wrapper.and_then(|x| x.as_object().cloned()) {
+            for (k, val) in inner {
+                obj.entry(k).or_insert(val);
+            }
+        }
+        let renames: &[(&str, &str)] = &[
+            ("source_file", "src"),
+            ("file", "src"),
+            ("start_line", "start"),
+            ("line_start", "start"),
+            ("end_line", "end"),
+            ("line_end", "end"),
+            ("destination", "dest"),
+            ("dest_file", "dest"),
+            ("target", "dest"),
+        ];
+        for (from, to) in renames {
+            if let Some(val) = obj.remove(*from) {
+                obj.entry((*to).to_string()).or_insert(val);
+            }
+        }
+    }
+    serde_json::from_value(v).ok()
 }
 
 fn parse_source_block(content: &str) -> Option<String> {
@@ -497,5 +543,34 @@ mod plan_only_eos_tests {
     fn short_or_empty_responses_do_not_trigger() {
         assert!(!has_dangling_action(""));
         assert!(!has_dangling_action("OK."));
+    }
+}
+
+#[cfg(test)]
+mod coerce_tests {
+    use super::*;
+
+    /// The watched live shape: nested params + long key spellings must
+    /// parse to the same typed decision the flat form produces.
+    #[test]
+    fn a_nested_params_action_coerces_to_the_flat_schema() {
+        let raw = r#"{"action": "move_lines", "params": {"source_file": "src/judge.rs", "start_line": 1846, "end_line": 3010, "destination": "src/judge/tests.rs"}}"#;
+        let p = parse_response(&format!("```json\n{raw}\n```")).expect("coerces");
+        match p.action {
+            EditAction::MoveLines { src, start, end, dest } => {
+                assert_eq!(src.as_deref(), Some("src/judge.rs"));
+                assert_eq!((start, end), (1846, 3010));
+                assert_eq!(dest, "src/judge/tests.rs");
+            }
+            other => panic!("wrong action: {other:?}"),
+        }
+    }
+
+    /// The coercion is a key fix, not a schema widening: a header that
+    /// names no known action still fails.
+    #[test]
+    fn an_unknown_action_still_rejects() {
+        let raw = r#"{"action": "teleport", "params": {"start": 1}}"#;
+        assert!(parse_response(&format!("```json\n{raw}\n```")).is_none());
     }
 }
