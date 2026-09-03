@@ -168,3 +168,111 @@ async fn runner_survives_steps_that_shrink_the_pool() {
     // Products written by earlier steps persist across the drop.
     assert_eq!(state.entities.len(), 2);
 }
+
+/// The violation counter is PROCESS-GLOBAL, so the two ledger tests below
+/// must not run concurrently: the lying one deliberately increments it and the
+/// honest one asserts it did not move. Nextest runs tests in parallel within a
+/// binary, so without this lock the honest test reads the liar's increment and
+/// fails for a reason that has nothing to do with the runner. Found by the
+/// test itself on its first run.
+/// `unwrap_or_else(|e| e.into_inner())` on the lock below is a NAMED
+/// substitution (ARCH §18.3), not a swallowed error: this mutex guards no
+/// data, only ordering, so a poisoned lock carries no corrupt state to
+/// protect against. Recovering keeps a panicking test's own failure visible
+/// instead of cascading a PoisonError into the sibling and hiding it.
+static LEDGER_COUNTER: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Every pipeline this file runs must leave the ledger clean.
+///
+/// Cheap insurance with a wide blast radius: any future mechanics test that
+/// builds a pipeline gets the accounting invariant for free, because the
+/// counter is process-global and this asserts on the whole test binary's
+/// total. A step that lies about its `StepKind` — the exact mutation used to
+/// prove the eval gate fires — turns this red in milliseconds rather than
+/// needing a bench run against a live daemon.
+///
+/// Not a substitute for the eval gate: that one watches the REAL pipeline
+/// against REAL corpora. This one watches the runner.
+#[tokio::test]
+async fn the_runner_reports_no_ledger_violations_for_honest_steps() {
+    use sovereign_core::runtime::retrieval_pipeline::ledger_violation_count;
+
+    let _serial = LEDGER_COUNTER.lock().unwrap_or_else(|e| e.into_inner());
+    let before = ledger_violation_count();
+
+    let h = TestHarness::new();
+    let context = test_context();
+    let intent = Intent::DeepQuery;
+    let mut state = PipelineState::new(
+        "test question",
+        &context,
+        &intent,
+        None,
+        Vec::new(),
+        "DeepQuery",
+        "DeepQuery".to_string(),
+        sovereign_core::runtime::Lane::none(),
+    );
+    let pipeline = RetrievalPipeline {
+        name: "ledger_honesty",
+        steps: vec![
+            step("push_a", StepKind::Injector, None, step_push_a),
+            step(
+                "drop_all",
+                StepKind::Filter(
+                    sovereign_core::runtime::retrieval_pipeline::DropReason::NotSelectedByObjective,
+                ),
+                None,
+                step_drop_all,
+            ),
+        ],
+    };
+    pipeline.run(&h.runtime, &mut state).await;
+
+    assert_eq!(
+        ledger_violation_count(),
+        before,
+        "honest steps must produce no ledger violations; the runner flagged \
+         {} — run with RUST_LOG=retrieval.pipeline=error to see which",
+        ledger_violation_count() - before
+    );
+}
+
+/// The negative control for the test above: a step that LIES about its kind
+/// must be caught. Without this, `the_runner_reports_no_ledger_violations`
+/// could pass because the check is broken rather than because the steps are
+/// honest (ARCH §18.1 — a gate nobody has watched fail is not a gate).
+#[tokio::test]
+async fn a_step_that_lies_about_its_kind_is_caught() {
+    use sovereign_core::runtime::retrieval_pipeline::ledger_violation_count;
+
+    let _serial = LEDGER_COUNTER.lock().unwrap_or_else(|e| e.into_inner());
+    let before = ledger_violation_count();
+
+    let h = TestHarness::new();
+    let context = test_context();
+    let intent = Intent::DeepQuery;
+    let mut state = PipelineState::new(
+        "test question",
+        &context,
+        &intent,
+        None,
+        Vec::new(),
+        "DeepQuery",
+        "DeepQuery".to_string(),
+        sovereign_core::runtime::Lane::none(),
+    );
+    // `step_push_a` demonstrably ADDS a chunk. Declaring it Inert is a lie of
+    // exactly the shape that let atlas grounding claim it had done its job.
+    let pipeline = RetrievalPipeline {
+        name: "ledger_lie",
+        steps: vec![step("push_a", StepKind::Inert, None, step_push_a)],
+    };
+    pipeline.run(&h.runtime, &mut state).await;
+
+    assert!(
+        ledger_violation_count() > before,
+        "a step declared Inert that added a chunk MUST be reported; the \
+         violation counter did not move, so the invariant is not wired"
+    );
+}

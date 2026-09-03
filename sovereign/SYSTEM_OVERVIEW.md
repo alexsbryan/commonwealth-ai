@@ -5495,13 +5495,27 @@ The system's configuration and mutable state live on four roots. The rule that
 holds them together (center-of-mass program, 2026-07-30): **path derivations
 come from the SSOT accessors** — `sovereign_contracts::rebrand`
 (`svrnmesh_root` / `data_dir` / `projects_json` / `work_atlas_toml` /
-`drift_dir` / `state_db_path` / `mesh_data_dir`) or their
+`drift_dir` / `state_db_path` / `mesh_data_dir` / `sessions_root`) or their
 `sovereign_cli_shared::dirs` wrappers — enforced by a `clippy.toml`
 `disallowed-methods` ban on hand-rolled `dirs::home_dir` joins. **Env-var
 overrides are declared** in `quality/env-flags.toml` (enforced by `cargo run
 -p xtask -- env-gate`; human view generated at `docs/ENV_FLAGS.md`), and ~25
 of them shadow `SetupConfig` fields — declared debt via the registry's
 `shadows` key, unification deferred to `quality/CLEANUP.md`.
+
+`rebrand::sessions_root` (added 2026-09-03) is the newest of these and the one
+with a structural reason to exist rather than a stylistic one: the session-frame
+WRITER (`sovereign-tools::code::session_state`) and the boot-time READER
+(`sovereign-cli::session_cmd`) are in crates that deliberately cannot see each
+other — `sovereign-cli` does not depend on `sovereign-tools`, the same
+constraint that put the shared frame combinators in `sovereign-contracts`. While
+each hand-rolled the `SESSIONS_DIR` override they drifted twice: until
+2026-07-29 the writer ignored the override outright (a sandboxed run wrote six
+junk frames into the live store), and after that fix they still disagreed when
+`SVRNMESH_SESSIONS_DIR` was set but blank — writer fell back to the live store,
+reader honoured `SOVEREIGN_SESSIONS_DIR`. Neither crate could host a test
+comparing the two. The precedence is now pinned once, in
+`rebrand::tests::sessions_root_precedence_is_one_decider`.
 
 **Committed contracts (versioned, reviewed):**
 
@@ -5829,6 +5843,7 @@ now) and the row is dropped — or trimmed to the still-open residual.
 |------|----------|--------------|
 | `project_cmd.rs` split — **DONE 2026-07-13** | `sovereign-cli-dev/src/project_cmd/` (dispatcher `mod.rs` 645 lines, was 7,102) | Split into a directory module — `audit/`, `serve.rs`, `refresh.rs`, `charter_amend.rs`, `registry_watch.rs`, `hooks.rs`, `phase.rs`, `design_plan.rs` — every file under the ARCH §3.1 1,200-line ceiling. `mod.rs` keeps `run_project` dispatch + the shared daemon/git/date plumbing; each command family is one findable file. (`sovereign-cli-dev` remains feature-gated out of the public build behind `--features dev-tools` — the rationale the `atos_cmd/run.rs` row still references.) **`init/` and `scaffold.rs` left this tree 2026-08-07** for `sovereign-cli/src/project_init/`; `registry_watch.rs`'s four verbs were mirrored into `sovereign-cli/src/project_registry.rs` on 2026-08-06, and **`registry_watch.rs` itself was DELETED 2026-08-21 (nc-27)** — the mirror made the cli-dev copies unreachable (`project_registry::try_run` is consulted first and never returns `None` for those verbs), so the file was a dead fork; its one live function, `daemon_get`, moved into `mod.rs` beside `daemon_post`. |
 | `model_slot.rs` residual (was the `embedded.rs` split) | `sovereign-inference/src/embedded/model_slot.rs` (~5,860 lines) | The residual of the `embedded.rs` decomposition ([HISTORY](./HISTORY.md#embeddedrs--embedded-pr5b--2026-06-10)): the slot state machine + decode loops + MTP — one tight, unsafe-heavy (44 blocks) FFI concern whose remaining seam is an alternate inference backend at the `InferenceProvider` boundary, not a file split. That seam is now cut: `engine_factory` selects the engine from `[engine] kind`, so this file is llama's implementation rather than the system's only one. |
+| `retrieval_pipeline.rs` residual — **baseline raised 3,076 → 3,201, 2026-09-03** | `sovereign-core/src/runtime/retrieval_pipeline.rs` (3,201 lines) | The step ledger (`cba4d6e5d`) added 631 lines to an already-oversized file. **512 of them left again** in the same push: the whole accounting concern — `StepKind`, `DropReason`, `StepLedger`, `StepOutcome`, `ledger_violations`, `audit_step` and the violation counter — is now `runtime/retrieval_ledger.rs` (344 lines), and its 12 tests are `tests/main/retrieval_ledger.rs`. That split is real rather than cosmetic: the ledger depends on none of the pipeline's internals (every function in it is pure apart from one counter), which is why it could move whole and why `retrieval_pipeline` only re-exports it. The **+125 that remains is irreducible**: a `StepKind` argument threaded through 26 `step(...)` declarations, the runner's synthesise-then-audit block, and the re-export. That is the pipeline's own share of the accounting and it cannot live anywhere else. Accepted by editing the ONE line in `quality/baselines/oversized.txt` rather than `arch-gate --update-baseline`, which would also have absorbed the `commonwealth-tdd` approach-band growth from four unrelated local commits — the trap `AGENTS.md` names. Next seam if it grows again: the 27 `step_*` bodies are the bulk and split along head / core / per-intent-tail. |
 | `streaming.rs` refusal-retry duplication | `sovereign-core/src/runtime/streaming.rs` (~2,900 lines) | The 2026-06-10 runtime.rs decomposition moved the streaming dispatch here intact. Its KQ and Deep/Simple synthesis loops carry two NEAR-duplicate refusal-retry state machines that genuinely differ (error-frame + finish-reason handling) — unifying them is a measured behavior change, not a move. Same deferral class for the streaming-vs-non-streaming setup duplication (turn.rs). |
 | `state.rs` decomposition (desktop) | `sovereign-desktop/src-tauri/src/state.rs` (~1,730 lines, was 2,347) | Contiguous phases are extracted ([HISTORY](./HISTORY.md#staters-desktop--extraction-of-the-contiguous-phases-2026-06-09)). The `tools` registry stays inline *by necessity, not omission*: it is **interleaved** across the whole bootstrap (tools registered before AND after `corpus_engine`), so it cannot be a pure-relocation builder without reordering a GGUF-gated startup path. The `EmbeddedDaemon` wiring no longer is: daemon-convergence Phase 2 (2026-08-24) replaced the four `mesh.set_*` sites with ONE commissioning site just before `try_resume`, and the daemon's services arrive as a single `sovereign_mesh::DaemonServices::Desktop` value assembled from what bootstrap already built. Keep `AppState` fields flat (~295 call sites borrow `state.<field>`). |
 | `DesktopError` burn-down (desktop) | `sovereign-desktop/src-tauri/src/error.rs` + `src/lib/errors.ts` | The structured error + frontend mirror + zero-per-caller-edit migration enabler are in place ([HISTORY](./HISTORY.md#desktoperror--first-pr--the-burn-down-enabler-2026-06-09)). **Remaining (incremental, ~140 command modules):** flip each handler's `-> Result<_, String>` → `DesktopError` (the `?`-sites auto-convert via `From<String>`; explicit `return Err` / tail `map_err` take `.into()` or a semantic `DesktopError::upstream`/`invalid_request`) + repoint its api.ts wrapper at `invokeChecked`. `AppState::store()` landed 2026-08-24 with daemon-convergence Phase 0 (see the `Runtime` surface row below); `corpus_engine()` and the `require_runtime!` retirement still wait on the first chat-path module that needs them (deferred — chat is the live, higher-traffic path). |

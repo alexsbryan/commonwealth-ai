@@ -66,6 +66,8 @@ mod locator_axis_live;
 mod memory_compaction_smoke;
 #[path = "main/oneshot_rag.rs"]
 mod oneshot_rag;
+#[path = "main/retrieval_ledger.rs"]
+mod retrieval_ledger;
 #[path = "main/retrieval_pipeline_doc.rs"]
 mod retrieval_pipeline_doc;
 #[path = "main/retrieval_pipeline_mechanics.rs"]

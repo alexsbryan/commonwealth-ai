@@ -76,8 +76,8 @@ impl Runtime {
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
         lane: &crate::runtime::Lane,
-    ) -> crate::runtime::retrieval_pipeline::StepLedger {
-        use crate::runtime::retrieval_pipeline::{DropReason, StepLedger};
+    ) -> crate::runtime::retrieval_ledger::StepLedger {
+        use crate::runtime::retrieval_ledger::{DropReason, StepLedger};
         if !atlas_grounding_enabled() {
             return StepLedger::injected(0).drop(DropReason::FeatureDisabled, 0);
         }

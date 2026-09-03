@@ -91,13 +91,24 @@ fn render() -> String {
 }
 
 fn render_pipeline(p: &RetrievalPipeline, title: &str) -> String {
-    let mut s = format!("### {title}\n\n| # | step | gate flag |\n|---|---|---|\n");
+    // `kind` is pinned here as well as the order, so RECLASSIFYING a step is
+    // as reviewed an act as reordering one. The runner checks every step
+    // against its declared kind at runtime; this makes changing the
+    // declaration itself fail a millisecond-scale unit test rather than
+    // waiting for a bench run to notice.
+    let mut s = format!("### {title}\n\n| # | step | kind | gate flag |\n|---|---|---|---|\n");
     for (i, step) in p.steps.iter().enumerate() {
         let flag = step
             .flag
             .map(|f| format!("`{}`", f.name))
             .unwrap_or_else(|| "—".to_string());
-        s.push_str(&format!("| {} | `{}` | {} |\n", i + 1, step.name, flag));
+        s.push_str(&format!(
+            "| {} | `{}` | `{:?}` | {} |\n",
+            i + 1,
+            step.name,
+            step.kind,
+            flag
+        ));
     }
     s.push('\n');
     s

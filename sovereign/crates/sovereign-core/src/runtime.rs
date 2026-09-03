@@ -248,6 +248,11 @@ mod prompt_budget;
 mod question_analysis;
 mod retrieval;
 mod retrieval_helpers;
+/// The pipeline's accounting — what a step may do to the pool, what it says
+/// it did, and the invariants between. Public for the same reason
+/// `retrieval_pipeline` is: the integration tests drive it directly.
+#[doc(hidden)]
+pub mod retrieval_ledger;
 /// Public (doc-hidden) so the integration-test harness can drive the
 /// runner with mocked steps against a real `Runtime` — the in-crate
 /// unit-test route is blocked by the sovereign-store circular dev-dep

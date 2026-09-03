@@ -22,6 +22,8 @@
 mod architecture_over_enron_e2e;
 #[path = "main/atlas_code_structure.rs"]
 mod atlas_code_structure;
+#[path = "main/atlas_evidence_site_wiring.rs"]
+mod atlas_evidence_site_wiring;
 #[path = "main/atlas_narrative_markdown.rs"]
 mod atlas_narrative_markdown;
 #[path = "main/atoms_schema_back_compat.rs"]

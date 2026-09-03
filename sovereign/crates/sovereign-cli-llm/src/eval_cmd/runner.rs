@@ -1189,7 +1189,9 @@ async fn run_question(
     let mut article_excerpts: std::collections::HashMap<String, Vec<String>> =
         std::collections::HashMap::new();
     for req in &atlas_chunk_requests {
-        let s = article_score.entry(req.article_slug().to_string()).or_insert(0.0);
+        let s = article_score
+            .entry(req.article_slug().to_string())
+            .or_insert(0.0);
         if req.score > *s {
             *s = req.score;
         }
