@@ -700,7 +700,14 @@
         // state that went missing — rather than the build going quiet because
         // an unused `const` is not an error.
         const SRC: &str = include_str!("mod.rs");
-        let prod = SRC.split("\n#[cfg(test)]").next().unwrap_or(SRC);
+        // (2026-09-02 split) the producers live across the gate module
+        // family now; the guard's subject is the FAMILY, not one file.
+        const INNER_SRC: &str = include_str!("inner.rs");
+        const GATE_SRC: &str = include_str!("gate.rs");
+        let prod: String = SRC.split("\n#[cfg(test)]").next().unwrap_or(SRC)
+            .to_string()
+            + INNER_SRC
+            + GATE_SRC;
         for state in ["ACT_RETRY_RELEASED", "ACT_RETRY_RELEASED_SPECIFICS"] {
             // Every mention outside the constant's own declaration and outside
             // comments. Counted this way rather than by matching one assignment
@@ -794,8 +801,8 @@
         // the call site (`&& native.is_some()`) that no pure-function test can
         // see, so the condition is read here directly. `include_str!` resolves
         // relative to THIS file (ARCH §7 — structural, not remembered).
-        const SRC: &str = include_str!("mod.rs");
-        let prod = SRC.split("\n#[cfg(test)]").next().unwrap_or(SRC);
+        const SRC: &str = include_str!("inner.rs");
+        let prod = SRC;
         let i = prod
             .find("let reclassify = ")
             .expect("the decline guard is gone — re-point this guard");
