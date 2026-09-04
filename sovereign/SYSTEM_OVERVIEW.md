@@ -6715,6 +6715,35 @@ band refuses an 800-1,200 residual). The three new crossings are new to the
 BASELINE, not to the repository, and each is one owner's call to make when
 they next open it.
 
+### 10.1k Size RE-PINNED at `origin/main` — 2026-09-04 (epistemic-index landings, seat)
+
+The arch-gate blocked every pre-push on the epistemic-index branches with
+"approach band GREW 170 → 176 files / 165,823 → 171,747 lines". The ei-4
+worker attributed it segment by segment (its instrument reproduced the
+gate's own two numbers before being trusted): +1 file / +1,225 lines was a
+baseline that had been regenerated against a tree other than the commit it
+names; +4 files / +3,132 lines arrived with the `origin/main` merge
+(a1b0465df — peers' work, already public); +1 file / +1,350 lines is this
+campaign's own `corpus-engine/src/enrichment/atlas/ground.rs` (1,165, the
+one walk); +217 lines inside the band is ei-3c's loader change. The four
+segments sum to the gate's +5,924 exactly.
+
+Re-pinned by the seat ONCE, at `origin/main` (1bcd7b168) in a worktree —
+never on a working tree — so what is public is separated from what the
+campaign adds: `approach_band.txt` **170 / 165,823 → 175 / 170,180**;
+`oversized.txt` re-frozen at 167 entries (a re-sort plus files that shrank
+under the ceiling or grew on `origin/main`, none of them these branches').
+
+**What the campaign still owes after this row, by owner:** `ground.rs`
+(+1 file into the band) is ei-4's and is cleared at its landing by a
+mechanical `mod tests` carve or a row here. ei-7c's carve of
+`wikipedia_columnar.rs` (1,293 → 931) and `wiki_store.rs` (1,378 → 687)
+takes two files OFF the over-ceiling set and drops one into the band — the
+§10.1j shape, where the queue metric counts the ordered remedy as growth;
+accepted at ei-7c's merge with the numbers in that commit. Until those land,
+main's arch-gate names exactly one file and one owner, which is what a
+ratchet is for.
+
 ### 10.1j Concept ratchet RE-PINNED on main — 2026-09-03 (+2, and the gate cannot say which two)
 
 `concept-gate` reports **35 duplicated names against a baseline of 33**. The
