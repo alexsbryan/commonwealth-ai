@@ -498,8 +498,10 @@ pub struct EnrichmentConfig {
     pub enabled: bool,
 
     // ── New field model fields ──────────────────────────────
-    /// Enrichment type: "field_model" (default), "atlas",
-    /// "investigation".
+    /// Enrichment type — the id of a registered `EnrichmentPass`
+    /// (`corpus_engine::enrichment::pass`): `field_model` (default),
+    /// `tiered`, `atlas`, `investigation`. Anything else is refused at load
+    /// with the valid set listed.
     #[serde(default = "default_enrichment_type", rename = "type")]
     pub enrichment_type: String,
 
@@ -597,23 +599,6 @@ pub struct EnrichmentConfig {
     /// [`crate::enrichment::investigation::normalize::Normalizer`].
     #[serde(default)]
     pub normalization: Option<NormalizationConfig>,
-}
-
-impl EnrichmentConfig {
-    /// The on-disk artifact (relative to the corpus index dir) that a BUILT
-    /// enrichment of this declared `type` writes — the file whose ABSENCE means
-    /// the declared enrichment was never built/pulled on this machine (drift).
-    ///
-    /// Conservative by design: `None` for any type with no single verifiable
-    /// artifact (e.g. `investigation`) so callers don't assert drift they can't
-    /// check. Drives [`crate::engine`]'s `enrichment_drift` freshness probe.
-    pub fn declared_artifact_rel_path(&self) -> Option<&'static str> {
-        match self.enrichment_type.as_str() {
-            "field_model" => Some("field_skeleton.json"),
-            "atlas" => Some("atlas/atoms.json"),
-            _ => None,
-        }
-    }
 }
 
 /// The `[enrichment.ontology]` block, its version-0 prose body, and that
@@ -2074,6 +2059,11 @@ impl Recipe {
     ///    line, structural errors inside the block), so a declared ontology
     ///    that would not extract as written fails at load.
     ///    See [`check_ontology_block`](crate::recipe_parsing::check_ontology_block).
+    /// 5. Enrichment-type gate — a `type` naming no registered
+    ///    [`EnrichmentPass`](crate::enrichment::pass::EnrichmentPass) is
+    ///    refused with the valid set listed, instead of being run as
+    ///    `field_model` by one site and `tiered` by another.
+    ///    See [`check_enrichment_type`](crate::recipe_parsing::check_enrichment_type).
     ///
     /// This is the ONE recipe load boundary: [`Self::from_file`],
     /// `recipe_builtin`, and the desktop recipe author's validate
@@ -2084,6 +2074,7 @@ impl Recipe {
             Ok(recipe) => {
                 check_schema_version(recipe.corpus.schema_version)?;
                 crate::recipe_parsing::check_ontology_block(&recipe)?;
+                crate::recipe_parsing::check_enrichment_type(&recipe)?;
                 crate::recipe_parsing::check_enrichment_domain(&recipe)?;
                 Ok(recipe)
             }
@@ -2106,7 +2097,10 @@ impl Recipe {
     /// flagged before the (expensive) build, rather than discovered after.
     pub fn produces_enriched_atoms(&self) -> bool {
         self.enrichment.as_ref().is_some_and(|e| {
-            e.enabled && matches!(e.enrichment_type.as_str(), "atlas" | "investigation")
+            e.enabled
+                && crate::enrichment::pass::EnrichmentPassRegistry::builtin()
+                    .get(&e.enrichment_type)
+                    .is_some_and(|p| p.produces_atoms())
         })
     }
 
@@ -2807,25 +2801,6 @@ type = "paragraph"
             }
             other => panic!("SEP must use Parquet extractor, got {other:?}"),
         }
-    }
-
-    #[test]
-    fn declared_artifact_rel_path_maps_known_types() {
-        // Minimal TOML — every other EnrichmentConfig field is serde-default.
-        let atlas: EnrichmentConfig = toml::from_str("enabled = true\ntype = \"atlas\"").unwrap();
-        assert_eq!(atlas.declared_artifact_rel_path(), Some("atlas/atoms.json"));
-
-        let field: EnrichmentConfig =
-            toml::from_str("enabled = true\ntype = \"field_model\"").unwrap();
-        assert_eq!(
-            field.declared_artifact_rel_path(),
-            Some("field_skeleton.json")
-        );
-
-        // Artifact-less / unrecognised types assert no drift (conservative).
-        let investigation: EnrichmentConfig =
-            toml::from_str("enabled = true\ntype = \"investigation\"").unwrap();
-        assert_eq!(investigation.declared_artifact_rel_path(), None);
     }
 
     #[test]

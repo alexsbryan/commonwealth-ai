@@ -88,6 +88,13 @@ pub enum Error {
     #[error("Unknown enrichment domain: {0}")]
     UnknownEnrichmentDomain(String),
 
+    /// A recipe's `[enrichment] type` names no registered pass. Refused at
+    /// recipe load by `recipe_parsing::check_enrichment_type`; the valid set
+    /// comes from `EnrichmentPassRegistry::builtin` so the message never
+    /// goes stale against the registry (§10.6, §18.3).
+    #[error("Unknown enrichment type \"{got}\" — valid [enrichment] type values are: {valid}")]
+    UnknownEnrichmentType { got: String, valid: String },
+
     #[error("Shard mismatch: {0}")]
     ShardMismatch(String),
 

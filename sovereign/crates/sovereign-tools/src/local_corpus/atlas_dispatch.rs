@@ -2,9 +2,11 @@
 //! Atlas-vs-tiered enrichment dispatch for a local corpus.
 //!
 //! `enrich_now` is the one-shot "enrich this corpus" entry point; which BUILD
-//! that means is decided by the corpus recipe's `[enrichment] type` through
-//! [`enrich_route`] — a pure decider, so the dispatch is testable without a
-//! daemon (ARCH §10.6). `atlas` runs the atlas orchestrator in-process (a
+//! that means is decided by the corpus recipe's `[enrichment] type`, resolved
+//! through `corpus_engine::enrichment::pass::EnrichmentPassRegistry` — the
+//! one decider every other site uses (ARCH §10.6; this module carried its own
+//! `enrich_route` copy until 2026-09-03, and it disagreed with ingest about
+//! unknown types). The `atlas` pass runs the atlas orchestrator in-process (a
 //! shipped desktop carries no CLI to shell out to); everything else, and every
 //! recipe-less folder corpus, keeps the tiered RAPTOR + entity build.
 //!
@@ -22,6 +24,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use corpus_engine::enrichment::pass::{self, EnrichmentPassRegistry};
 use corpus_engine::enrichment::pipeline::EnrichProgress;
 use corpus_engine::enrichment::state::{EnrichmentPhase, EnrichmentStateFile};
 use sovereign_core::error::{Error, Result};
@@ -52,16 +55,21 @@ impl LocalCorpusManager {
                 None
             }
         };
-        let route = enrich_route(recipe_type.as_deref());
+        let pass = recipe_type
+            .as_deref()
+            .and_then(|t| EnrichmentPassRegistry::builtin().get(t));
+        let is_atlas = pass.as_ref().is_some_and(|p| p.id() == pass::ATLAS);
         tracing::info!(
             corpus_id = %corpus_id,
             recipe_type = recipe_type.as_deref().unwrap_or("<none>"),
-            route = ?route,
+            pass = pass.as_ref().map(|p| p.id()).unwrap_or("<none>"),
+            route = if is_atlas { "atlas" } else { "tiered" },
             "enrich_now: route decided"
         );
-        match route {
-            EnrichRoute::Atlas => self.start_atlas_build(corpus_id).await,
-            EnrichRoute::Tiered => self.enable_enrichment(corpus_id, "referential_atlas").await,
+        if is_atlas {
+            self.start_atlas_build(corpus_id).await
+        } else {
+            self.enable_enrichment(corpus_id, "referential_atlas").await
         }
     }
 
@@ -91,25 +99,6 @@ impl LocalCorpusManager {
         self.enrichment_driver
             .start_atlas_build(corpus_id, sink)
             .await
-    }
-}
-
-/// Which build `enrich_now` runs for a corpus, from its recipe's
-/// `[enrichment] type`. One decider, pure, so the dispatch is testable
-/// without a daemon (ARCH §10.6).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EnrichRoute {
-    /// The RAPTOR + entity tiered build (`start_tiered_build`) — every
-    /// folder corpus, and any recipe that does not say `atlas`.
-    Tiered,
-    /// The CLI's `enrich build` orchestrator, in-process.
-    Atlas,
-}
-
-pub fn enrich_route(recipe_enrichment_type: Option<&str>) -> EnrichRoute {
-    match recipe_enrichment_type {
-        Some(t) if t.eq_ignore_ascii_case("atlas") => EnrichRoute::Atlas,
-        _ => EnrichRoute::Tiered,
     }
 }
 
@@ -206,18 +195,9 @@ fn atlas_progress_to_state(
 }
 
 #[cfg(test)]
-mod enrich_route_tests {
+mod atlas_dispatch_tests {
     use super::*;
     use corpus_engine::enrichment::pipeline::BuildStep;
-
-    #[test]
-    fn only_an_atlas_recipe_takes_the_in_process_atlas_route() {
-        assert_eq!(enrich_route(Some("atlas")), EnrichRoute::Atlas);
-        assert_eq!(enrich_route(Some("Atlas")), EnrichRoute::Atlas);
-        assert_eq!(enrich_route(Some("tiered")), EnrichRoute::Tiered);
-        assert_eq!(enrich_route(Some("investigation")), EnrichRoute::Tiered);
-        assert_eq!(enrich_route(None), EnrichRoute::Tiered);
-    }
 
     /// The progress → state mapping the UI reads: a step in flight shows
     /// `<ordinal>/<total>` under a non-terminal phase, `Complete` closes the

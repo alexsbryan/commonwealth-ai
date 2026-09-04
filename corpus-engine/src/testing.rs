@@ -1045,7 +1045,8 @@ pub fn validate_recipe_offline(recipe: &Recipe) -> ValidationResult {
         // the silent failure mode of a `[[enrichments.patterns]]` typo (note
         // the plural) — an unknown top-level key is dropped by the parser, so
         // the threshold vanishes and validation otherwise passes. Surface it.
-        if enr.enrichment_type == "investigation" && enr.patterns.is_empty() {
+        if enr.enrichment_type == crate::enrichment::pass::INVESTIGATION && enr.patterns.is_empty()
+        {
             warnings.push(
                 "investigation enrichment declares no [[enrichment.patterns]] — \
                  entities + relationships are still extracted, but NO pattern \

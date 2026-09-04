@@ -1068,7 +1068,7 @@ impl CorpusIndex {
     /// `_corpus_meta.json` (mirrors `set_dedup_by_source`).
     ///
     /// Called from two places in `engine/ingest.rs`, both gated on the same
-    /// decider (`install_time_enrichment_expected`): the ENTRY of the
+    /// decider (the resolved `EnrichmentPass::runs_at_install()`): the ENTRY of the
     /// `'enrichment:` block, and the `None` arm taken when the engine has no
     /// `InferenceFn` at all — the silent skip. Entry, not exit, is the whole
     /// design: the flag has to mean "was supposed to be enriched" so that

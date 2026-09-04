@@ -23,6 +23,7 @@ pub mod governance_view;
 pub mod investigation;
 pub mod ontology;
 pub mod open_questions;
+pub mod pass;
 pub mod pipeline;
 pub mod reconciliation;
 pub mod sep;

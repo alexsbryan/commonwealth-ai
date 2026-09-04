@@ -177,7 +177,7 @@ async fn cmd_build(args: &[String]) -> i32 {
         );
         return 1;
     };
-    if enrichment.enrichment_type != "investigation" {
+    if enrichment.enrichment_type != corpus_engine::enrichment::pass::INVESTIGATION {
         eprintln!(
             "error: recipe `{corpus_id}` has enrichment.type = \"{}\". Investigation \
              pipeline expects \"investigation\".",

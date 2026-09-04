@@ -1,0 +1,51 @@
+# refactor anchor baseline
+# repo    /home/alexbryan/dev/commonwealth-ai
+# head    b3a7eba4a
+# written 2026-09-04T00:15:33Z
+#
+# The DEFAULT block below is what every behaviour-preserving refactor
+# step must reproduce byte-for-byte. The CONTROL block is the same
+# capture with --limit 5: it exists so the next reader can see that
+# this anchor has been watched to move (ARCH §18.1). An anchor that
+# has only ever been green proves nothing.
+
+=== DEFAULT (limit 10) ===
+atoms  sep-incompatibilism-arguments  5170fc36933c17b7a9b84b52a8ba6e16f0e7e2eaa79343cd75a3d70f34dcf437
+atoms  sep-compatibilism  a401aa98aa7622daabad78d27e76d8d049dce055970f86f96b9596858dff4779
+atoms  sep-freewill  d6cb030717c786537c863f45eb0fe74d2ee488b1a66ffd0b69cc286a8e52e84c
+bank   sep-refactor-anchor-v1  corpus=sep  limit=10
+result argument_consequence_against_compatibilism  vector_eligible=True  corpora_hit=['sep']
+  src    matched=['compatibilism', 'incompatibilism-arguments']
+  src    missing=['freewill']
+  src    unscorable=[]  total_expected=3
+  fct    matched=['Frankfurt', 'alternative possibilities', 'compatibilism', 'consequence argument', 'no choice about', 'rule beta', 'van Inwagen']
+  fct    missing=[]
+  fct    unscorable=[]  total_expected=7
+  chunk 000  sep  https://plato.stanford.edu/entries/incompatibilism-arguments/  incompatibilism-arguments  -  0.031592  088ab48620a0
+  chunk 001  sep  https://plato.stanford.edu/entries/compatibilism/  compatibilism  -  0.030331  e2f27295f1cb
+  chunk 002  sep  https://plato.stanford.edu/entries/abilities/  abilities  -  0.030214  3e3ced467125
+  chunk 003  sep  https://plato.stanford.edu/entries/incompatibilism-arguments/  incompatibilism-arguments  -  0.029572  232faa3a24df
+  chunk 004  sep  https://plato.stanford.edu/entries/compatibilism/  compatibilism  -  0.028790  9cf1221ee06a
+  chunk 005  sep  https://plato.stanford.edu/entries/incompatibilism-arguments/  incompatibilism-arguments  -  0.027083  4b6e721e193d
+  chunk 006  sep  https://plato.stanford.edu/entries/incompatibilism-arguments/  incompatibilism-arguments  -  0.025000  4bf3654585ff
+  chunk 007  sep  https://plato.stanford.edu/entries/alternative-possibilities/  alternative-possibilities  -  0.024725  4791770f524a
+  chunk 008  sep  https://plato.stanford.edu/entries/incompatibilism-arguments/  incompatibilism-arguments  -  0.024451  59d2a16e887b
+  chunk 009  sep  https://plato.stanford.edu/entries/incompatibilism-arguments/  incompatibilism-arguments  -  0.016393  b09a4f1a1614
+
+=== CONTROL (limit 5) — MUST differ from DEFAULT ===
+atoms  sep-incompatibilism-arguments  5170fc36933c17b7a9b84b52a8ba6e16f0e7e2eaa79343cd75a3d70f34dcf437
+atoms  sep-compatibilism  a401aa98aa7622daabad78d27e76d8d049dce055970f86f96b9596858dff4779
+atoms  sep-freewill  d6cb030717c786537c863f45eb0fe74d2ee488b1a66ffd0b69cc286a8e52e84c
+bank   sep-refactor-anchor-v1  corpus=sep  limit=5
+result argument_consequence_against_compatibilism  vector_eligible=True  corpora_hit=['sep']
+  src    matched=['compatibilism', 'incompatibilism-arguments']
+  src    missing=['freewill']
+  src    unscorable=[]  total_expected=3
+  fct    matched=['Frankfurt', 'alternative possibilities', 'compatibilism', 'consequence argument', 'no choice about', 'van Inwagen']
+  fct    missing=['rule beta']
+  fct    unscorable=[]  total_expected=7
+  chunk 000  sep  https://plato.stanford.edu/entries/incompatibilism-arguments/  incompatibilism-arguments  -  0.031592  088ab48620a0
+  chunk 001  sep  https://plato.stanford.edu/entries/compatibilism/  compatibilism  -  0.030331  e2f27295f1cb
+  chunk 002  sep  https://plato.stanford.edu/entries/abilities/  abilities  -  0.030214  3e3ced467125
+  chunk 003  sep  https://plato.stanford.edu/entries/incompatibilism-arguments/  incompatibilism-arguments  -  0.029572  232faa3a24df
+  chunk 004  sep  https://plato.stanford.edu/entries/compatibilism/  compatibilism  -  0.028790  9cf1221ee06a

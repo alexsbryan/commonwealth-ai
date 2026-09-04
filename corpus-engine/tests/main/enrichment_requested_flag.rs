@@ -22,8 +22,9 @@
 //! other direction: those recipes are deliberately not field-model-enriched
 //! at install time, so they must never carry the stamp — otherwise every such
 //! corpus draws a standing "unfinished enrichment" complaint forever. Which
-//! types those are is one decider, `install_time_enrichment_expected` in
-//! `engine/ingest.rs`, consulted by both stamp sites.
+//! types those are is one decider, the resolved pass's
+//! `EnrichmentPass::runs_at_install()` (`enrichment/pass.rs`), consulted by
+//! both stamp sites in `engine/ingest.rs`.
 //!
 //! There are TWO stamp sites, because there are two ways a recipe's ask goes
 //! unanswered:
@@ -266,7 +267,7 @@ async fn a_recipe_without_enrichment_never_claims_it_was_requested() {
 /// permanent "unfinished enrichment" against every investigation corpus,
 /// which is a false positive, not a finding.
 ///
-/// This holds through `install_time_enrichment_expected` at the entry stamp,
+/// This holds through `EnrichmentPass::runs_at_install()` at the entry stamp,
 /// so there is no window in which a landed `true` has to be taken back by a
 /// second write that could itself fail.
 #[tokio::test]
@@ -390,7 +391,7 @@ domain = "philosophy"
 /// inference-present path: install-time enrichment was never intended, so a
 /// standing "unfinished enrichment" complaint against it is a false positive.
 ///
-/// Replace the `install_time_enrichment_expected(...)` gate in the `None` arm
+/// Replace the `pass.runs_at_install()` gate in the `None` arm
 /// of `engine/ingest.rs` with an unconditional `true` and this test fails.
 #[tokio::test]
 async fn an_investigation_recipe_with_no_inference_fn_stays_unstamped() {

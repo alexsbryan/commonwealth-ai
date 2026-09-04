@@ -36,6 +36,8 @@ mod custom_ontology_pipeline_e2e;
 mod described_asset_e2e;
 #[path = "main/enrichment_requested_flag.rs"]
 mod enrichment_requested_flag;
+#[path = "main/enrichment_type_deciders_census.rs"]
+mod enrichment_type_deciders_census;
 #[path = "main/filter_pipeline.rs"]
 mod filter_pipeline;
 #[path = "main/http_api_pagination_e2e.rs"]

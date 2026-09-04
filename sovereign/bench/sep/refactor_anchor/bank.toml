@@ -1,0 +1,55 @@
+# Refactor anchor — a ONE-question bank whose only job is to detect
+# behaviour change across the enrichment-as-plugin refactor.
+#
+# This is NOT a quality bank. Its scores are not a target and moving them
+# up is not a goal; the only thing that matters is that the fingerprint
+# `capture.sh` derives from a run is IDENTICAL before and after a refactor
+# step that is supposed to be behaviour-preserving.
+#
+# Why one question rather than `--only <id>` against the 21-question bank:
+# `svrn eval run` has no per-question filter flag, and adding one is more
+# surface than the anchor is worth. The question is lifted verbatim from
+# `../questions.toml` (id `argument_consequence_against_compatibilism`) so
+# the anchor and the real bank measure the same retrieval.
+#
+# Why THIS question: its three expected_sources —
+# sep-{incompatibilism-arguments,compatibilism,freewill} — all have
+# `atlas/atoms.json` sidecars installed locally, so the atoms-hash half of
+# the fingerprint has something to hash. The searchable corpus is the
+# single bare `sep` index (the 1,770 `sep-*` directories are atlas-only;
+# `ls ~/.svrnmesh/indexes/sep-*/chunks.lance` returns zero), which is why
+# `corpus` below is `sep` and not a slug.
+
+[bank]
+name = "sep-refactor-anchor-v1"
+corpus = "sep"
+description = """
+One question, retrieval-only, no model in the scoring loop. Used as the
+correctness spine for the enrichment-as-plugin refactor: every step that
+claims to be behaviour-preserving must leave `capture.sh`'s fingerprint
+byte-identical.
+"""
+
+[[questions]]
+id = "argument_consequence_against_compatibilism"
+category = "argument_reconstruction"
+subject = "metaphysics"
+question = """
+Reconstruct van Inwagen's consequence argument and explain the strongest
+compatibilist response to it.
+"""
+expected_facts = [
+    "consequence argument",
+    "van Inwagen",
+    "no choice about",
+    "rule beta",
+    "compatibilism",
+    "Frankfurt",
+    "alternative possibilities",
+]
+expected_sources = [
+    "incompatibilism-arguments",
+    "compatibilism",
+    "freewill",
+]
+notes = "Verbatim copy of the same id in ../questions.toml. Do not edit independently."

@@ -1174,8 +1174,22 @@ control arm.
 
 ### Enrichment
 
-**Three coexisting systems**, selected per-corpus by `[enrichment] type`
-(the labeled `'enrichment:` dispatch block in `engine/ingest.rs`). See
+**Three coexisting systems**, selected per-corpus by `[enrichment] type`.
+Since 2026-09-03 that string resolves through ONE table —
+`enrichment/pass.rs::EnrichmentPassRegistry` (`field_model`, `tiered`,
+`atlas`, `investigation`; shape copied from `DomainRegistry`) — and every
+question the pipeline asks about a type is a method on the resolved
+`EnrichmentPass`: `runs_at_install()` (the `'enrichment:` block in
+`engine/ingest.rs` and its no-`InferenceFn` arm), `declared_artifact()`
+(`CorpusEngine::enrichment_drift`), `resumable_at_boot()`
+(`conversation_enrichment_is_resumable`), `produces_atoms()`
+(`Recipe::produces_enriched_atoms`), and `run()` for the install-time passes.
+An unregistered type is refused at recipe load by
+`recipe_parsing::check_enrichment_type` with the valid set listed; before
+that gate, five sites in three crates switched on the string and `type =
+"foo"` ran `field_model` at ingest, `tiered` from the desktop's "enrich now",
+and was invisible to drift. `tests/main/enrichment_type_deciders_census.rs`
+pins the literal-switch count at zero. See
 [`corpus-engine/ENRICHMENT.md`](../corpus-engine/ENRICHMENT.md) — the
 canonical umbrella that reconciles all three — before assuming "enrichment"
 means one thing.
@@ -5471,7 +5485,7 @@ Default ports:
 | Understand index storage on disk                 | `corpus-engine/src/index/mod.rs`                                    |
 | Understand the v2 atlas pipeline                 | [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md) + `corpus-engine/src/enrichment/pipeline/mod.rs` |
 | Drive v2 enrichment from the CLI                 | `sovereign-cli-llm/src/enrich_cmd/`                                 |
-| Run an atlas build INSIDE the daemon (a shipped desktop has no CLI on PATH) | `enrich_now` (`sovereign-tools/src/local_corpus/manager.rs`) routes `[enrichment] type = "atlas"` recipes to `EnrichmentDriver::start_atlas_build` → the host-installed `watched::enrich::AtlasBuildRunner` (`sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs::in_process_atlas_builder`, which links `sovereign-cli-llm` as a library); progress lands in `_enrichment_state.json`. `tiered` and recipe-less folders keep `start_tiered_build`. The subprocess runner (`sovereign-tools/src/enrich.rs`) is the fallback where no builder is installed. (ontology-v1 P0.4) |
+| Run an atlas build INSIDE the daemon (a shipped desktop has no CLI on PATH) | `enrich_now` (`sovereign-tools/src/local_corpus/atlas_dispatch.rs`) resolves the recipe's `[enrichment] type` through `EnrichmentPassRegistry` and routes the `atlas` pass to `EnrichmentDriver::start_atlas_build` → the host-installed `watched::enrich::AtlasBuildRunner` (`sovereign-cli-daemon/src/daemon_cmd/bootstrap.rs::in_process_atlas_builder`, which links `sovereign-cli-llm` as a library); progress lands in `_enrichment_state.json`. `tiered` and recipe-less folders keep `start_tiered_build`. The subprocess runner (`sovereign-tools/src/enrich.rs`) is the fallback where no builder is installed. (ontology-v1 P0.4) |
 | Understand the recipe registry                   | `corpus-engine/src/registry.rs` (+ `recipe.rs::bundled_recipe_toml`) |
 | Understand delta updates                         | `corpus-engine/src/update/delta.rs`                                 |
 | Understand scope expansion (filter delta)        | `corpus-engine/src/engine/expand.rs`                                |

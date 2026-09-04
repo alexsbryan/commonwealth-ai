@@ -93,7 +93,7 @@ pub async fn run_investigation<'a>(
     let enrichment = recipe.enrichment.as_ref().ok_or_else(|| {
         Error::Recipe("investigation pipeline requires an [enrichment] block".into())
     })?;
-    if enrichment.enrichment_type != "investigation" {
+    if enrichment.enrichment_type != super::pass::INVESTIGATION {
         return Err(Error::Recipe(format!(
             "investigation pipeline expected `enrichment.type = \"investigation\"`, got \"{}\"",
             enrichment.enrichment_type

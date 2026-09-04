@@ -245,11 +245,42 @@ pub(crate) fn migrate_ontology_version(toml_str: &str, target: u32) -> Result<Op
 /// widens this gate in the same commit, with no second edit.
 ///
 /// [`DomainRegistry::builtin`]: crate::enrichment::domain_registry::DomainRegistry::builtin
+/// Refuse a recipe whose `[enrichment] type` names no registered pass —
+/// at load, with the valid set listed (ARCH §4.3).
+///
+/// Before this gate an unknown type was five different things at once:
+/// `engine/ingest.rs` ran `field_model` for it, the `enrichment_requested`
+/// stamp said "expected", `enrichment_drift` said "unverifiable", the
+/// desktop's "enrich now" ran `tiered`, and boot-resume said "not
+/// resumable". `type = "foo"` therefore installed a field model and was
+/// structurally invisible to every health check. Now it does not load.
+///
+/// Checked whether or not `enabled` is set: a typo in a disabled block is
+/// still a typo, and the author flipping `enabled = true` later should not
+/// be the first time they hear about it. The valid set is read from
+/// [`EnrichmentPassRegistry::builtin`], never re-listed here (§10.6).
+///
+/// [`EnrichmentPassRegistry::builtin`]: crate::enrichment::pass::EnrichmentPassRegistry::builtin
+pub(crate) fn check_enrichment_type(recipe: &Recipe) -> Result<()> {
+    let Some(enrichment) = recipe.enrichment.as_ref() else {
+        return Ok(());
+    };
+    crate::enrichment::pass::EnrichmentPassRegistry::builtin()
+        .resolve(&enrichment.enrichment_type)
+        .map(|_| ())
+        .map_err(|e| {
+            Error::Recipe(format!(
+                "recipe `{corpus_id}` declares [enrichment] {e}",
+                corpus_id = recipe.corpus.id,
+            ))
+        })
+}
+
 pub(crate) fn check_enrichment_domain(recipe: &Recipe) -> Result<()> {
     let Some(enrichment) = recipe.enrichment.as_ref() else {
         return Ok(());
     };
-    if !enrichment.enabled || enrichment.enrichment_type != "field_model" {
+    if !enrichment.enabled || enrichment.enrichment_type != crate::enrichment::pass::FIELD_MODEL {
         return Ok(());
     }
     let Some(domain) = enrichment.domain.as_deref() else {

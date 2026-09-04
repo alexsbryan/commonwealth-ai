@@ -279,3 +279,54 @@ fn every_bundled_recipe_loads_except_the_ones_we_name() {
         );
     }
 }
+
+/// The enrichment-TYPE gate, beside the domain gate: a `type` naming no
+/// registered `EnrichmentPass` is refused at load, with the valid set listed.
+///
+/// Before 2026-09-03 this recipe loaded, and then five sites disagreed about
+/// what it meant — ingest ran `field_model` for it, the desktop's "enrich now"
+/// ran `tiered`, and `enrichment_drift` could never check it. The fixture is
+/// the known-good atlas recipe with only its `type` line changed, so the only
+/// thing that can reject it is this gate.
+#[test]
+fn an_unregistered_enrichment_type_is_refused_at_load_naming_the_valid_set() {
+    let good = fixture("fixed_atlas_literary.toml");
+    assert!(
+        good.contains("type = \"atlas\""),
+        "fixture drifted; the test rewrites that line"
+    );
+    let bad = good.replace("type = \"atlas\"", "type = \"foo\"");
+
+    let err = match Recipe::from_toml(&bad) {
+        Ok(r) => panic!(
+            "corpus `{}` with `[enrichment] type = \"foo\"` was ACCEPTED — the \
+             enrichment-type gate did not fire",
+            r.corpus.id
+        ),
+        Err(e) => e.to_string(),
+    };
+    assert!(
+        err.contains("\"foo\""),
+        "error must name the value it refused: {err}"
+    );
+    for id in ["atlas", "field_model", "investigation", "tiered"] {
+        assert!(err.contains(id), "error must list `{id}` as valid: {err}");
+    }
+
+    // Exact ids only — the old desktop route folded case, ingest did not.
+    let cased = good.replace("type = \"atlas\"", "type = \"Atlas\"");
+    assert!(Recipe::from_toml(&cased).is_err(), "`Atlas` must not load");
+
+    // And every registered id still loads through the same fixture.
+    for id in ["field_model", "tiered", "atlas", "investigation"] {
+        let ok = good.replace("type = \"atlas\"", &format!("type = \"{id}\""));
+        // `field_model` + `domain = "literary"` is the DOMAIN gate's case, not
+        // this one — strip the domain line so only the type is under test.
+        let ok = ok
+            .lines()
+            .filter(|l| !l.starts_with("domain = "))
+            .collect::<Vec<_>>()
+            .join("\n");
+        Recipe::from_toml(&ok).unwrap_or_else(|e| panic!("`{id}` must load: {e}"));
+    }
+}

@@ -3,7 +3,6 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -23,31 +22,6 @@ use super::ingest_helpers::{
 use super::yield_gate;
 use super::{blake3_hex, CorpusEngine, EMBED_BATCH_SIZE, INDEX_FLUSH_SIZE};
 use corpus_engine_yield::DeferralBudget;
-
-/// Would install-time enrichment have been ATTEMPTED for a recipe declaring
-/// this `[enrichment] type`?
-///
-/// The single decider (§10.6) behind every `enrichment_requested` stamp in
-/// this file — the entry stamp inside the `'enrichment:` block and the
-/// no-`InferenceFn` arm that never enters it. Both ask the same question and
-/// must answer it the same way, or the enrichment health check goes blind on
-/// one path and cries wolf on the other.
-///
-/// `investigation` and `atlas` recipes are enriched by a separate explicit
-/// command (`sovereign enrich investigation build <id>`, `sovereign enrich
-/// init … && enrich build <id>`), never at install. Stamping them would make
-/// `EnrichmentChecker` report a standing, permanent "unfinished enrichment"
-/// against every such corpus — a false positive, not a finding. Everything
-/// else (`field_model`, `tiered`, and any future type) is attempted at
-/// install, so the request is real and must be recorded even when the attempt
-/// produces nothing.
-///
-/// Open set on purpose: the two named types are the exceptions, and an
-/// unrecognised type is treated as "attempted" so a new enrichment type is
-/// visible to the health check by default rather than silently exempt.
-fn install_time_enrichment_expected(enrichment_type: &str) -> bool {
-    !matches!(enrichment_type, "investigation" | "atlas")
-}
 
 impl CorpusEngine {
     /// Ingest a corpus from source. Downloads, parses, chunks,
@@ -1767,362 +1741,74 @@ impl CorpusEngine {
                             }
                         }
 
-                        // Tiered enrichment path (spec
-                        // `sovereign/docs/specs/CONV_TIERED_PORT.md`).
-                        // Replaces the legacy field-model atlas
-                        // pipeline for conversation corpora. The two
-                        // paths are mutually exclusive; tiered skips
-                        // the FieldModelEngine block via labeled
-                        // break and falls through to the same
-                        // IngestResult shape via the post-block
-                        // `index.info()` summary.
-                        'enrichment: {
-                            // Record the REQUEST, at the entry, before any
-                            // enricher is constructed. This is deliberately
-                            // not a success stamp: if the block below dies
-                            // (`UnknownEnrichmentDomain`, an inference
-                            // outage, a kill mid-phase) the flag stays
-                            // `true`, and `EnrichmentChecker` can then say
-                            // "this corpus was supposed to be enriched and
-                            // isn't". Stamping on exit instead is the exact
-                            // shape that left the check dead —
-                            // `docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §4-§5.
-                            //
-                            // Non-fatal on failure: a meta write that cannot
-                            // land must not abort an otherwise-good ingest,
-                            // but it is WARN-loud because the standing health
-                            // surface goes blind for this corpus without it.
-                            //
-                            // The value is not a literal `true`: two recipe
-                            // types (`investigation`, `atlas`) are enriched by
-                            // a separate explicit command and never at install,
-                            // so a standing "unfinished enrichment" complaint
-                            // against them is a false positive, not a finding.
-                            // `install_time_enrichment_expected` is the single
-                            // decider for that (§10.6) and is also what the
-                            // no-InferenceFn arm below consults.
-                            if let Err(e) =
-                                index.set_enrichment_requested(install_time_enrichment_expected(
-                                    &enrichment_config.enrichment_type,
-                                ))
-                            {
-                                tracing::warn!(
-                                    corpus = %recipe.corpus.id,
-                                    error = %e,
-                                    "enrichment: failed to stamp enrichment_requested — \
-                                     the enrichment health check will not see this corpus"
-                                );
-                            }
+                        // One decider for what `[enrichment] type` means
+                        // (§10.6): the pass registry. The recipe loader has
+                        // already refused an unregistered type by name, so
+                        // `resolve` failing here means a programmatically
+                        // built recipe — still an error, never a default
+                        // pass (§18.3).
+                        let pass = crate::enrichment::pass::EnrichmentPassRegistry::builtin()
+                            .resolve(&enrichment_config.enrichment_type)?;
 
-                            if enrichment_config.enrichment_type == "tiered" {
-                                // Two tiered variants: the conv-grouping
-                                // one (`run_tiered_enrichment`) buckets
-                                // chunks by `conv_uuid` (per the conv
-                                // corpora schema), and the folder-grouping
-                                // one (`run_folder_tiered_enrichment`)
-                                // buckets by `source_doc_id` (one bag per
-                                // file, what watched-folder and vault
-                                // corpora produce). Pick by recipe's
-                                // display.category — vault + watched
-                                // folders take the folder variant.
-                                let display_category = recipe
-                                    .display
-                                    .as_ref()
-                                    .and_then(|d| d.category.as_deref())
-                                    .unwrap_or("");
-                                let is_folder_shape =
-                                    matches!(display_category, "vault" | "watched_folder");
-                                if is_folder_shape {
-                                    crate::enrichment::tiered::run_folder_tiered_enrichment(
-                                        &recipe.corpus.id,
-                                        index_path,
-                                        self.tiered_provider(),
-                                        self.chunk_entity_extractor(),
-                                    )
-                                    .await?;
-                                } else {
-                                    crate::enrichment::tiered::run_tiered_enrichment(
-                                        recipe,
-                                        index_path,
-                                        self.tiered_provider(),
-                                        self.chunk_entity_extractor(),
-                                    )
-                                    .await?;
-                                }
-                                break 'enrichment;
-                            }
-
-                            // Investigation enrichment is an explicit, opt-in
-                            // step (`sovereign enrich investigation build
-                            // <id>`) that runs the typed entity/relationship
-                            // pipeline — NOT the field-model domain registry
-                            // below. Skip it here so an investigation-type
-                            // recipe installs + finalizes cleanly instead of
-                            // tripping `UnknownEnrichmentDomain` when the
-                            // recipe's `enrichment.domain` isn't a registered
-                            // field-model domain.
-                            if enrichment_config.enrichment_type == "investigation" {
-                                tracing::info!(
-                                    corpus = %recipe.corpus.id,
-                                    "install: skipping auto-enrichment for investigation recipe — \
-                                     run `sovereign enrich investigation build <id>` to enrich"
-                                );
-                                // No un-stamp needed: the entry stamp above
-                                // already wrote `false` for this type, via
-                                // `install_time_enrichment_expected`. Taking
-                                // the request back here as a second write was
-                                // the previous shape; it left a window where
-                                // the entry write landed and the un-stamp
-                                // failed, stranding a permanent false positive.
-                                break 'enrichment;
-                            }
-
-                            // Atlas enrichment is a separate, explicit build
-                            // (`sovereign enrich init <id> --from-corpus <id>
-                            // --pipeline <…_atlas>` then `enrich build <id>`),
-                            // run from the registry of `*_atlas` pipelines — NOT
-                            // the field-model domain registry below. Skip it on
-                            // install for the same reasons as `investigation`:
-                            //   1. running the field-model enricher here would
-                            //      DUPLICATE the work the atlas build redoes, and
-                            //   2. an atlas recipe's `enrichment.domain` selects
-                            //      the atlas pipeline (literary/philosophy), which
-                            //      is NOT a registered field-model domain, so
-                            //      `from_recipe` would trip `UnknownEnrichmentDomain`.
-                            // The desktop "Build & enrich" flow bridges install →
-                            // atlas via `recipe_enrich_init_from_corpus`.
-                            if enrichment_config.enrichment_type == "atlas" {
-                                tracing::info!(
-                                    corpus = %recipe.corpus.id,
-                                    "install: skipping auto-enrichment for atlas recipe — \
-                                     run `sovereign enrich init <id> --from-corpus <id> \
-                                     --pipeline <…_atlas>` then `enrich build <id>` to enrich"
-                                );
-                                // Same as `investigation` above: the entry
-                                // stamp already wrote `false` for this type.
-                                break 'enrichment;
-                            }
-
-                            // Count the enrichment pipeline's inference calls
-                            // and how many of them failed.
-                            //
-                            // The pipeline absorbs per-call errors by design —
-                            // a few unparseable cluster labels should not kill
-                            // an ingest. The failure mode that creates is a
-                            // TOTAL outage: every call errors, `enrich`
-                            // returns `Ok` with zero field-model tables, and
-                            // the ingest reports "Ingestion complete". That is
-                            // success-shaped for something nobody asked for
-                            // (§18.3).
-                            //
-                            // It does NOT become an `Err`: the chunks are real
-                            // and the ingest genuinely succeeded — saying
-                            // otherwise would be its own lie, and would throw
-                            // away work the user can use. What it must not do
-                            // is stay SILENT. These two counters are the
-                            // evidence the completion WARN below is built
-                            // from; the wrapper is local to this call site, so
-                            // no enrichment signature changes.
-                            let inference_calls = Arc::new(AtomicU64::new(0));
-                            let inference_failures = Arc::new(AtomicU64::new(0));
-                            let counted_inference: crate::types::InferenceFn = {
-                                let inner = inference.clone();
-                                let calls = inference_calls.clone();
-                                let failures = inference_failures.clone();
-                                Arc::new(move |prompt: &str, schema: Option<&serde_json::Value>| {
-                                    calls.fetch_add(1, Ordering::Relaxed);
-                                    let failures = failures.clone();
-                                    let call = inner(prompt, schema);
-                                    Box::pin(async move {
-                                        let outcome = call.await;
-                                        if outcome.is_err() {
-                                            failures.fetch_add(1, Ordering::Relaxed);
-                                        }
-                                        outcome
-                                    })
-                                })
-                            };
-                            let field_engine =
-                                crate::enrichment::field_engine::FieldModelEngine::from_recipe(
-                                    recipe,
-                                    self.embed.clone(),
-                                    counted_inference,
-                                )?;
-                            let id = recipe.corpus.id.clone();
-                            // Bridge enrichment-phase events to the outer
-                            // `IngestProgress` channel so HTTP consumers
-                            // (desktop UI, CLI poll) see real-time phase
-                            // transitions during Phase 1 / 1b / 2 /
-                            // clustering / 3 instead of staring at the
-                            // last `Embedding` event. Without this bridge,
-                            // a long enrichment phase looked like a hang
-                            // (observed 2026-05-20: conversations-anthropic
-                            // ingest stuck at "Embedding chunks…" while
-                            // HDBSCAN clustered 16326×1024 silently).
-                            let outer_progress = progress.as_ref();
-                            let progress_fn =
-                                move |p: crate::enrichment::clustering::EnrichmentProgress| {
-                                    use crate::enrichment::clustering::EnrichmentProgress as EP;
-                                    // Existing stderr-render path — unchanged so
-                                    // log consumers see the same lines.
-                                    match &p {
-                                EP::Phase { phase, name, note } => {
-                                    if note.is_empty() {
-                                        eprintln!("[{id}] Phase {phase}: {name}");
-                                    } else {
-                                        eprintln!("[{id}] Phase {phase}: {name} ({note})");
-                                    }
-                                }
-                                EP::PhaseSkipped { phase, name } =>
-                                    eprintln!("[{id}] Phase {phase}: {name} — skipped (checkpoint)"),
-                                EP::Resuming { from_phase } =>
-                                    eprintln!("[{id}] Resuming enrichment from {from_phase}"),
-                                EP::ClusteringStarted { total_chunks } =>
-                                    eprintln!("[{id}] Clustering {total_chunks} chunks..."),
-                                EP::ClusteringStep { step, detail } =>
-                                    eprintln!("[{id}] ↳ {step}: {detail}"),
-                                EP::ClusteringComplete { cluster_count, noise_chunks } =>
-                                    eprintln!("[{id}] Clustering complete: {cluster_count} clusters, {noise_chunks} noise"),
-                                EP::Phase1Progress { batches_done, batches_total } =>
-                                    eprintln!("[{id}] Skeleton extraction: {batches_done}/{batches_total} batches"),
-                                EP::Phase2bProgress { clusters_done, clusters_total, clusters_failed, consecutive_failures, last_error } => {
-                                    if *consecutive_failures >= 4 {
-                                        eprintln!(
-                                            "[{id}] Cluster labeling: {clusters_done}/{clusters_total} — {consecutive_failures} consecutive failures (last: {})",
-                                            last_error.as_deref().unwrap_or("?"),
-                                        );
-                                    } else if *clusters_done == *clusters_total
-                                        || clusters_done % 16 == 0
-                                    {
-                                        eprintln!(
-                                            "[{id}] Cluster labeling: {clusters_done}/{clusters_total} ({clusters_failed} failed)"
-                                        );
-                                    }
-                                }
-                                EP::Phase2bComplete { labeled_count } =>
-                                    eprintln!("[{id}] Cluster labeling complete: {labeled_count} clusters labeled"),
-                            }
-
-                                    // New: forward to the IngestProgress channel.
-                                    // Mapping rules:
-                                    //   - Phase variants emit `Enriching` with a
-                                    //     stable machine-token phase name. The
-                                    //     desktop UI maps these to display labels.
-                                    //   - Numeric progress (Phase1Progress,
-                                    //     ClusteringComplete) sets `fraction` so
-                                    //     progress bars can move.
-                                    if let Some(cb) = outer_progress {
-                                        let evt = match &p {
-                                    EP::Phase { phase, name, note } => {
-                                        let detail = if note.is_empty() {
-                                            format!("Phase {phase}: {name}")
-                                        } else {
-                                            format!("Phase {phase}: {name} ({note})")
-                                        };
-                                        Some(IngestProgress::Enriching {
-                                            phase: format!("phase-{phase}"),
-                                            detail,
-                                            fraction: None,
-                                        })
-                                    }
-                                    EP::PhaseSkipped { phase, name } => Some(IngestProgress::Enriching {
-                                        phase: format!("phase-{phase}-skipped"),
-                                        detail: format!("Phase {phase}: {name} — skipped (checkpoint)"),
-                                        fraction: None,
-                                    }),
-                                    EP::Resuming { from_phase } => Some(IngestProgress::Enriching {
-                                        phase: "resuming".into(),
-                                        detail: format!("Resuming enrichment from {from_phase}"),
-                                        fraction: None,
-                                    }),
-                                    EP::ClusteringStarted { total_chunks } => Some(IngestProgress::Enriching {
-                                        phase: "clustering".into(),
-                                        detail: format!("Clustering {total_chunks} chunks…"),
-                                        fraction: None,
-                                    }),
-                                    EP::ClusteringStep { step, detail } => Some(IngestProgress::Enriching {
-                                        phase: "clustering".into(),
-                                        detail: format!("{step}: {detail}"),
-                                        fraction: None,
-                                    }),
-                                    EP::ClusteringComplete { cluster_count, noise_chunks } => Some(IngestProgress::Enriching {
-                                        phase: "clustering-complete".into(),
-                                        detail: format!("Clustering complete: {cluster_count} clusters, {noise_chunks} noise"),
-                                        fraction: Some(1.0),
-                                    }),
-                                    EP::Phase1Progress { batches_done, batches_total } => {
-                                        let frac = if *batches_total > 0 {
-                                            Some(*batches_done as f32 / *batches_total as f32)
-                                        } else {
-                                            None
-                                        };
-                                        Some(IngestProgress::Enriching {
-                                            phase: "skeleton-extraction".into(),
-                                            detail: format!("Skeleton extraction: {batches_done}/{batches_total} batches"),
-                                            fraction: frac,
-                                        })
-                                    }
-                                    EP::Phase2bProgress { clusters_done, clusters_total, clusters_failed, consecutive_failures, last_error } => {
-                                        let frac = if *clusters_total > 0 {
-                                            Some(*clusters_done as f32 / *clusters_total as f32)
-                                        } else {
-                                            None
-                                        };
-                                        let detail = if *consecutive_failures >= 4 {
-                                            format!(
-                                                "Cluster labeling: {clusters_done}/{clusters_total} ({clusters_failed} failed, {consecutive_failures} consecutive — last: {})",
-                                                last_error.as_deref().unwrap_or("?"),
-                                            )
-                                        } else {
-                                            format!("Cluster labeling: {clusters_done}/{clusters_total} ({clusters_failed} failed)")
-                                        };
-                                        Some(IngestProgress::Enriching {
-                                            phase: "cluster-labeling".into(),
-                                            detail,
-                                            fraction: frac,
-                                        })
-                                    }
-                                    EP::Phase2bComplete { labeled_count } => Some(IngestProgress::Enriching {
-                                        phase: "cluster-labeling-complete".into(),
-                                        detail: format!("Cluster labeling complete: {labeled_count} clusters labeled"),
-                                        fraction: Some(1.0),
-                                    }),
-                                };
-                                        if let Some(evt) = evt {
-                                            cb(evt);
-                                        }
-                                    }
-                                };
-                            let enrich_outcome = field_engine.enrich(&index, &progress_fn).await;
-
-                            // Report at completion, on both the Ok and Err
-                            // paths, before the outcome propagates.
-                            let calls = inference_calls.load(Ordering::Relaxed);
-                            let failed = inference_failures.load(Ordering::Relaxed);
-                            tracing::debug!(
+                        // Record the REQUEST, at the entry, before any
+                        // enricher is constructed. This is deliberately
+                        // not a success stamp: if the pass below dies
+                        // (`UnknownEnrichmentDomain`, an inference
+                        // outage, a kill mid-phase) the flag stays
+                        // `true`, and `EnrichmentChecker` can then say
+                        // "this corpus was supposed to be enriched and
+                        // isn't". Stamping on exit instead is the exact
+                        // shape that left the check dead —
+                        // `docs/TRACE_ENRICHMENT_ENABLED_FLAG.md` §4-§5.
+                        //
+                        // Non-fatal on failure: a meta write that cannot
+                        // land must not abort an otherwise-good ingest,
+                        // but it is WARN-loud because the standing health
+                        // surface goes blind for this corpus without it.
+                        //
+                        // The value is `runs_at_install()`, not a literal
+                        // `true`: a deferred pass (`atlas`, `investigation`)
+                        // is enriched by a separate explicit command and
+                        // never at install, so a standing "unfinished
+                        // enrichment" complaint against it is a false
+                        // positive, not a finding. The no-InferenceFn arm
+                        // below consults the same pass.
+                        if let Err(e) = index.set_enrichment_requested(pass.runs_at_install()) {
+                            tracing::warn!(
                                 corpus = %recipe.corpus.id,
-                                inference_calls = calls,
-                                inference_failures = failed,
-                                "enrichment: inference tally"
+                                error = %e,
+                                "enrichment: failed to stamp enrichment_requested — \
+                                 the enrichment health check will not see this corpus"
                             );
-                            if calls > 0 && failed == calls {
-                                // Name the substitution out loud (§18.3). The
-                                // corpus is installed and searchable; what it
-                                // is NOT is enriched, and every other line
-                                // this ingest emits says "complete".
-                                // `EnrichmentChecker` is the standing surface
-                                // for the same fact — this WARN is what puts
-                                // it in the log at the moment it happens.
-                                tracing::warn!(
-                                    corpus = %recipe.corpus.id,
-                                    inference_calls = calls,
-                                    inference_failures = failed,
-                                    "enrichment requested and produced nothing: \
-                                     {failed}/{calls} inference calls failed"
-                                );
-                            }
-                            enrich_outcome?;
-                        } // end 'enrichment: block (tiered vs legacy field-model)
+                        }
+
+                        if !pass.runs_at_install() {
+                            // No un-stamp needed: the entry stamp above
+                            // already wrote `false` for this pass. Taking
+                            // the request back here as a second write was
+                            // the previous shape; it left a window where
+                            // the entry write landed and the un-stamp
+                            // failed, stranding a permanent false positive.
+                            tracing::info!(
+                                corpus = %recipe.corpus.id,
+                                pass = pass.id(),
+                                "install: skipping auto-enrichment for {} recipe — {}",
+                                pass.id(),
+                                pass.deferred_hint().unwrap_or("it needs an explicit build"),
+                            );
+                        } else {
+                            let ctx = crate::enrichment::pass::EnrichmentContext {
+                                recipe,
+                                index_path,
+                                index: &index,
+                                embed: self.embed.clone(),
+                                inference: inference.clone(),
+                                tiered_provider: self.tiered_provider(),
+                                entity_extractor: self.chunk_entity_extractor(),
+                                progress: progress.as_ref(),
+                            };
+                            pass.run(&ctx).await?;
+                        }
                     }
                     None => {
                         tracing::warn!(
@@ -2141,10 +1827,13 @@ impl CorpusEngine {
                         // (`sovereign-tools/src/enrichment_checker.rs`).
                         // A WARN in a log nobody tails is not a surface.
                         //
-                        // Same decider as the entry stamp above, so the two
-                        // recipe types that are deliberately never enriched
-                        // at install stay unstamped here too.
-                        if install_time_enrichment_expected(&enrichment_config.enrichment_type) {
+                        // Same decider as the entry stamp above — the pass
+                        // registry — so a deferred pass stays unstamped here
+                        // too, and an unregistered type is an error on this
+                        // path exactly as it is on the other.
+                        let pass = crate::enrichment::pass::EnrichmentPassRegistry::builtin()
+                            .resolve(&enrichment_config.enrichment_type)?;
+                        if pass.runs_at_install() {
                             if let Err(e) = index.set_enrichment_requested(true) {
                                 tracing::warn!(
                                     corpus = %recipe.corpus.id,
