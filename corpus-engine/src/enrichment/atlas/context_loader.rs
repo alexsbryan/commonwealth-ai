@@ -57,6 +57,20 @@ pub enum LoadAtlasError {
     },
     /// `atoms.json` unreadable or unparseable.
     Read(String),
+    /// The filter admitted atoms and the embedder refused every one of them.
+    ///
+    /// Distinct from [`Self::FilterExcludedAll`] because the two send an
+    /// operator to opposite places: that one means the knobs are too tight,
+    /// this one means the embed slot is down or the model is not loaded. They
+    /// were the same outcome until ei-3-index made the seed a hard failure,
+    /// and the message an operator then saw was "no atom-bearing entries
+    /// (0/0) -- nothing to index", which reads as "this atlas has nothing to
+    /// index" and is a substitution ARCH 18.3 forbids.
+    EmbedRefusedAll {
+        corpus_id: String,
+        attempted: usize,
+        last_error: String,
+    },
 }
 
 impl std::fmt::Display for LoadAtlasError {
@@ -80,6 +94,17 @@ impl std::fmt::Display for LoadAtlasError {
                  Lower --atlas-min-description-chars (currently {min_description_chars}) \
                  or check --atlas-depth, or pass --atlas-include claim,tension if the \
                  atlas only carries non-Entity surfaces."
+            ),
+            Self::EmbedRefusedAll {
+                corpus_id,
+                attempted,
+                last_error,
+            } => write!(
+                f,
+                "atlas-context: the embedder refused every one of the {attempted} atom(s) \
+                 admitted for `{corpus_id}` (last: {last_error}). The embed slot is down or \
+                 its model is not loaded -- load it and re-run \
+                 `svrn atlas backfill-ann {corpus_id}`. This is NOT a filter problem."
             ),
             Self::Read(e) => write!(f, "read atlas atoms.json: {e}"),
         }
@@ -146,6 +171,40 @@ pub async fn backfill_ann(
         "backfill-ann: wrote ANN seed table"
     );
     Ok(BackfillOutcome::Built(stats))
+}
+
+/// Sync bridge for [`backfill_ann`] — the atlas writer
+/// (`writer::write_atlas_full`) is sync at every lifecycle point that writes
+/// the v2 store, and the seed table is written in that same write. Runs the
+/// async backfill on a dedicated-thread runtime through the atlas module's ONE
+/// such bridge (`store::run_blocking`, the same one `write_store_blocking`
+/// uses), so it is safe whether or not an ambient tokio runtime exists.
+///
+/// One writer, one bridge: this is a thin wrapper over [`backfill_ann`], never
+/// a second implementation of it (ARCH §10.6).
+pub fn backfill_ann_blocking(
+    embed: &EmbedFn,
+    atlas_dir: &Path,
+    corpus_id: &str,
+    filter: &AtlasContextFilter,
+) -> Result<BackfillOutcome, String> {
+    let fut = backfill_ann(embed, atlas_dir, corpus_id, filter);
+    match tokio::runtime::Handle::try_current() {
+        Ok(h) if h.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread => {
+            // Drive the backfill on the AMBIENT runtime, not a fresh one. The
+            // embedder is a closure the caller built on that runtime -- an HTTP
+            // client whose connection pool is bound to its reactor, or a
+            // channel to a resident slot task -- and driving it from a foreign
+            // reactor hangs or reports a dead IO driver. `block_in_place` hands
+            // the worker back to the scheduler for the duration, so the caller
+            // (the daemon, mid-ingest) keeps serving.
+            tokio::task::block_in_place(|| h.block_on(fut))
+        }
+        // No ambient runtime (a plain sync caller), or a current-thread one
+        // where `block_in_place` panics: the atlas module's own bridge, a
+        // dedicated thread with its own reactor.
+        _ => super::store::run_blocking(fut),
+    }
 }
 
 /// Truncate atlas-entity text for embedding. Embed models cap context
@@ -550,7 +609,9 @@ pub async fn load_atlas_context(
         });
     }
 
-    let mut entries: Vec<AtlasEntry> = Vec::with_capacity(payloads.len());
+    let attempted = payloads.len();
+    let mut entries: Vec<AtlasEntry> = Vec::with_capacity(attempted);
+    let mut last_embed_error: Option<String> = None;
     let t0 = Instant::now();
     for (atom_id, name, text) in payloads {
         match embed(&text).await {
@@ -567,8 +628,21 @@ pub async fn load_atlas_context(
                     error = %e,
                     "atlas-context: embed failed; entry skipped"
                 );
+                last_embed_error = Some(e.to_string());
             }
         }
+    }
+    // Every admitted atom refused. A per-entry warn is the right shape for a
+    // few drops in a large atlas; a TOTAL refusal is a different fact and the
+    // caller must be able to tell it from "the filter admitted nothing"
+    // (ARCH 18.3 -- absence is reported, never defaulted into a neighbouring
+    // outcome).
+    if entries.is_empty() {
+        return Err(LoadAtlasError::EmbedRefusedAll {
+            corpus_id: atlas_corpus_id.to_string(),
+            attempted,
+            last_error: last_embed_error.unwrap_or_else(|| "no error recorded".into()),
+        });
     }
     tracing::info!(
         corpus = atlas_corpus_id,

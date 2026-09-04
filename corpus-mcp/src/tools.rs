@@ -217,6 +217,10 @@ impl Server {
                     "has_atlas": a.present,
                     "atom_count": a.atom_count,
                     "ontology_declared": a.ontology_declared,
+                    // ANN seed-table coverage. `null` means there is no seed
+                    // table and the corpus CANNOT ground -- distinct from a
+                    // table that covers zero atoms, so it is never a 0.
+                    "atoms_embedded": a.embedded_atoms,
                 })
             })
             .collect();
@@ -418,6 +422,11 @@ struct AtlasFacts {
     present: bool,
     atom_count: Option<u64>,
     ontology_declared: bool,
+    /// Rows in `atlas/atoms_ann.lance`, from the summary. `None` = no seed
+    /// table: this corpus answers from chunks alone, which is the one fact a
+    /// client needs to know before trusting a connected answer
+    /// (EPISTEMIC_INDEX section 1, Ideas row -- coverage is reported).
+    embedded_atoms: Option<u64>,
 }
 
 impl AtlasFacts {
@@ -429,8 +438,17 @@ impl AtlasFacts {
             Some(n) => format!("{n} atoms"),
             None => "atom count not cached".to_string(),
         };
+        // Three states, three sentences (ARCH 18.3). "no seed table" is a
+        // degradation the client acts on; "coverage unknown" is a stale cache,
+        // not an absence; neither is rendered as a zero.
+        let ann = match (self.embedded_atoms, self.atom_count) {
+            (Some(rows), Some(atoms)) => format!("{rows}/{atoms} atoms embedded"),
+            (Some(rows), None) => format!("{rows} atoms embedded"),
+            (None, _) if self.atom_count.is_none() => "seed-table coverage not cached".to_string(),
+            (None, _) => "NO seed table - cannot ground, run `svrn atlas backfill-ann`".to_string(),
+        };
         format!(
-            "atlas present ({count}, {})",
+            "atlas present ({count}, {}, {ann})",
             if self.ontology_declared {
                 "ontology declared"
             } else {
@@ -446,6 +464,14 @@ fn atlas_facts(atlas_dir: &Path) -> AtlasFacts {
     AtlasFacts {
         present,
         atom_count: summary.as_ref().map(|s| s.atom_count),
+        // Through the summary, never by opening the Lance table: this host
+        // promises not to write into an index, `read_current_summary` never
+        // computes, and the summary is where the coverage is derived once
+        // (ARCH 10.6).
+        embedded_atoms: summary
+            .as_ref()
+            .and_then(|s| s.ann.as_ref())
+            .map(|a| a.embedded_atoms),
         // The summary's projection is `None` for an undeclared corpus; a stale
         // or missing summary falls back to the file itself so a fresh atlas
         // is not reported as undeclared.
@@ -760,7 +786,41 @@ mod tests {
         assert!(!f.ontology_declared);
         assert_eq!(
             f.describe(),
-            "atlas present (atom count not cached, no declared ontology)"
+            "atlas present (atom count not cached, no declared ontology, \
+             seed-table coverage not cached)"
         );
     }
+
+    /// ei-3-index: the coverage row's absence branch, which is the sentence a
+    /// client acts on. Watched failing before the field existed -- `corpus_list`
+    /// described an atlas with 1,748 SEP siblings' exact shape (atoms, a v2
+    /// store, no seed table) as "atlas present (N atoms, no declared
+    /// ontology)", with nothing to say it could not ground.
+    #[test]
+    fn a_seedless_atlas_says_it_cannot_ground_rather_than_reporting_zero() {
+        let dir = tempfile::tempdir().unwrap();
+        let atlas = dir.path().join("atlas");
+        std::fs::create_dir_all(&atlas).unwrap();
+        std::fs::write(atlas.join("atoms.json"), ONE_ENTITY_ATOMS_JSON).unwrap();
+        // Persist a CURRENT summary, the way an ingest does; this host only
+        // ever reads one.
+        corpus_engine::enrichment::atlas::read_or_compute_atlas_summary(&atlas)
+            .unwrap()
+            .unwrap();
+
+        let f = atlas_facts(&atlas);
+        assert_eq!(f.atom_count, Some(1));
+        assert_eq!(
+            f.embedded_atoms, None,
+            "no atoms_ann.lance is an absence, never a coverage of zero"
+        );
+        let described = f.describe();
+        assert!(
+            described.contains("NO seed table") && described.contains("backfill-ann"),
+            "a seedless atlas must say so and name the fix: {described}"
+        );
+    }
+
+    /// One extracted Entity in the on-disk `atoms.json` shape.
+    const ONE_ENTITY_ATOMS_JSON: &str = r#"{"schema_version":"2","atoms":[{"atom_type":"Entity","data":{"id":"entity-0001","canonical_name":"guest logbook","entity_type":"work","first_appearance":{"chunk_id":"sec_00001","passage_preview":"signed into the guest logbook"},"description":"A physical record kept by the front door to track overnight guests.","salience":0.33,"enrichment_depth":"extracted","provenance":{"signal_kind":"llm_batch"}}}]}"#;
 }

@@ -36,6 +36,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use super::ann_store::{ann_table_mtime_ms, ann_table_present, ann_table_rows};
 use super::atoms::AtomType;
 use super::{atoms_content_hash, read_atlas_atoms, AtomEnvelope};
 use crate::enrichment::pipeline::atlas::EnrichmentDepth;
@@ -54,7 +55,13 @@ const SUMMARY_FILE: &str = "_summary.json";
 // the whole thing this file exists to avoid. `specializes` rides along because
 // a count without the hierarchy cannot answer "how many coins" for a corpus
 // where `sceatta` is one.
-const SCHEMA_VERSION: u32 = 4;
+// v5 (2026-09-04) adds `ann` and the `ann_mtime_ms` cache key: the ANN seed
+// table's coverage (ei-3-index; EPISTEMIC_INDEX section 1, Ideas row, where
+// the artifacts are mandatory and coverage is REPORTED). The table is a
+// second INPUT to the summary, so it is a second KEY -- a summary computed
+// between the atoms write and the seed write must not stay "current" once the
+// table lands.
+const SCHEMA_VERSION: u32 = 5;
 
 /// Atlas-level statistics carried in mesh gossip and shown in
 /// `sovereign corpus status` / `sovereign mesh status`.
@@ -108,6 +115,34 @@ pub struct AtlasSummary {
     /// wire. Added in schema v3.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ontology: Option<OntologySummary>,
+    /// ANN seed-table coverage: how many of this atlas's atoms carry an
+    /// embedding the walk can seed on. `None` means there is NO seed table --
+    /// the corpus cannot ground, which is a different fact from a table that
+    /// covers zero atoms, so it is never rendered as `0` (ARCH 18.3).
+    /// Added in schema v5.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ann: Option<AnnSummary>,
+    /// `atoms_ann.lance` mtime (ms since epoch) when the summary was computed;
+    /// `0` when there was no table. The SECOND cache key, alongside
+    /// `atoms_mtime_ms`/`atoms_size_bytes`: the seed table is written after
+    /// `atoms.json`, so keying on the atoms file alone would freeze a
+    /// no-coverage summary in place for the life of the atlas. Added in v5.
+    #[serde(default)]
+    pub ann_mtime_ms: u64,
+}
+
+/// The ANN seed table's contribution to the summary -- the coverage row
+/// `corpus_list` and `svrn corpus status` print (EPISTEMIC_INDEX section 1).
+///
+/// One ratio, two honest numbers: `embedded_atoms` of the summary's own
+/// `atom_count`. The denominator is that field rather than a second count, so
+/// this file holds ONE atom census (ARCH 10.6).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AnnSummary {
+    /// Rows in `atoms_ann.lance`. The production grounding filter admits a
+    /// subset of atoms (extracted depth, a signal floor), so this is normally
+    /// well below `atom_count`; a shortfall is not a defect, a zero is.
+    pub embedded_atoms: u64,
 }
 
 /// The headline facts about a declared ontology, for a caller that wants to
@@ -151,6 +186,8 @@ impl AtlasSummary {
             atom_counts: BTreeMap::new(),
             subtype_counts: BTreeMap::new(),
             ontology: None,
+            ann: None,
+            ann_mtime_ms: 0,
         }
     }
 }
@@ -211,6 +248,29 @@ pub fn compute_summary(atlas_dir: &Path) -> io::Result<AtlasSummary> {
         atom_counts,
         subtype_counts,
         ontology: read_ontology_summary(atlas_dir),
+        ann: read_ann_summary(atlas_dir),
+        ann_mtime_ms: ann_table_mtime_ms(atlas_dir),
+    })
+}
+
+/// Count `atoms_ann.lance`'s rows for the summary. `None` when there is no
+/// table or it cannot be read -- absence, reported as absence.
+///
+/// Opening Lance needs a reactor and this function is sync, so it borrows the
+/// atlas module's ONE sync bridge (`store::run_blocking`, the same one
+/// `write_store_blocking` uses) rather than standing a second runtime up
+/// (ARCH 10.6). The cost is a table open over tens-to-hundreds of rows, paid
+/// only on a cache miss; the atoms.json parse above it is the larger term.
+fn read_ann_summary(atlas_dir: &Path) -> Option<AnnSummary> {
+    if !ann_table_present(atlas_dir) {
+        return None;
+    }
+    let rows =
+        super::store::run_blocking(async move { Ok::<_, String>(ann_table_rows(atlas_dir).await) })
+            .ok()
+            .flatten()?;
+    Some(AnnSummary {
+        embedded_atoms: rows,
     })
 }
 
@@ -307,6 +367,7 @@ pub fn read_current_summary(atlas_dir: &Path) -> Option<AtlasSummary> {
     let cached = read_summary_file(atlas_dir)?;
     (cached.atoms_mtime_ms == live_mtime_ms
         && cached.atoms_size_bytes == live_size
+        && cached.ann_mtime_ms == ann_table_mtime_ms(atlas_dir)
         && cached.schema_version == SCHEMA_VERSION)
         .then_some(cached)
 }
@@ -562,6 +623,97 @@ mod tests {
         assert_ne!(s1.atom_count, s2.atom_count);
         assert_eq!(s2.tier2_count, 2);
         assert_ne!(s1.fingerprint, s2.fingerprint);
+    }
+
+    // ── ANN coverage (ei-3-index) ────────────────────────────────────────────
+
+    /// Build a real `atoms_ann.lance` beside the atoms so the coverage row has
+    /// something to count. Uses the ONE writer (`context_loader::backfill_ann`)
+    /// rather than hand-rolling a Lance table, so the test cannot drift from
+    /// what an ingest actually produces.
+    fn seed_table_for(dir: &Path) {
+        let embed: crate::types::EmbedFn = std::sync::Arc::new(|text: &str| {
+            let n = text.len() as f32;
+            Box::pin(async move { Ok(vec![n, 1.0, 0.0, 0.0]) })
+        });
+        let filter = crate::enrichment::atlas::context_filter::AtlasContextFilter {
+            min_description_chars: 1,
+            depth_allowlist: vec!["extracted".into()],
+            max_entries: None,
+            top_k: 3,
+            include_claims: false,
+            include_tensions: false,
+            include_configurations: false,
+            include_declared_claim_types: false,
+        };
+        let out = crate::enrichment::atlas::context_loader::backfill_ann_blocking(
+            &embed, dir, "t", &filter,
+        )
+        .expect("seed table builds");
+        assert!(matches!(
+            out,
+            crate::enrichment::atlas::context_loader::BackfillOutcome::Built(_)
+        ));
+    }
+
+    /// ei-3-index bar 5 — coverage is a COUNT of what the seed table holds, and
+    /// its absence is `None`, never `Some(0)`. Watched failing before the
+    /// field existed: every summary in the fleet reported atoms and said
+    /// nothing about whether any of them could seed a walk.
+    #[test]
+    fn the_summary_reports_seed_table_coverage_and_absence_apart() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("atlas");
+        write_atoms(
+            &dir,
+            &[EnrichmentDepth::Extracted, EnrichmentDepth::Extracted],
+        );
+
+        let before = compute_summary(&dir).unwrap();
+        assert_eq!(before.atom_count, 2);
+        assert!(
+            before.ann.is_none(),
+            "no seed table is an absence, not a coverage of zero"
+        );
+
+        seed_table_for(&dir);
+        let after = compute_summary(&dir).unwrap();
+        assert_eq!(
+            after.ann.as_ref().map(|a| a.embedded_atoms),
+            Some(2),
+            "both extracted entities seed the walk"
+        );
+    }
+
+    /// ei-3-index bar 6 — THE cache-key regression this order had to avoid.
+    /// Watched failing with the v4 key (atoms mtime + size + schema only):
+    /// the summary computed between the atoms write and the seed write stayed
+    /// "current" forever, so `corpus_list` reported "NO seed table" for an
+    /// atlas that had one — permanently, because nothing ever touches
+    /// `atoms.json` again. The seed table is a second INPUT, so it is a
+    /// second KEY.
+    #[test]
+    fn a_summary_cached_before_the_seed_table_is_stale_once_it_lands() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("atlas");
+        write_atoms(&dir, &[EnrichmentDepth::Extracted]);
+
+        // The 0-coverage summary an eager `corpus status` persists mid-build.
+        let pre = read_or_compute_summary(&dir).unwrap().unwrap();
+        assert!(pre.ann.is_none());
+        assert!(
+            read_current_summary(&dir).is_some(),
+            "cache is current pre-seed"
+        );
+
+        seed_table_for(&dir);
+
+        assert!(
+            read_current_summary(&dir).is_none(),
+            "a summary that predates the seed table must not read as current"
+        );
+        let healed = read_or_compute_summary(&dir).unwrap().unwrap();
+        assert_eq!(healed.ann.as_ref().map(|a| a.embedded_atoms), Some(1));
     }
 }
 

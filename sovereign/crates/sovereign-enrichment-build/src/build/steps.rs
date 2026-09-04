@@ -475,6 +475,20 @@ async fn run_backfill_step(
         ));
     };
     let atlas_dir = paths::index_root(corpus).join(ATLAS_DIRNAME);
+    // Since ei-3-index the Resolve step writes the seed table in the same write
+    // as the v2 store, so on a plan where nothing after Resolve rewrote
+    // `atoms.json` the table is already current and re-embedding every atom
+    // would double the build's embed cost for an identical result. The
+    // freshness test is `ann_store::ann_table_is_fresh` -- the same one the
+    // daemon's post-write path used (ARCH 10.6, one decider) -- and it is
+    // false the moment Configure or Tensions restamps `atoms.json`, which is
+    // exactly when this step must run.
+    if ann_table_is_fresh(&atlas_dir) {
+        println!("  · atlas/{ANN_TABLE_DIRNAME} is current for atoms.json; nothing to re-embed");
+        return Ok(StepOutcome::did(format!(
+            "skipped -- atlas/{ANN_TABLE_DIRNAME} already current for atoms.json"
+        )));
+    }
     let filter = AtlasContextFilter::default();
     match backfill_ann(embedder, &atlas_dir, corpus, &filter).await {
         Ok(BackfillOutcome::Built(stats)) => {

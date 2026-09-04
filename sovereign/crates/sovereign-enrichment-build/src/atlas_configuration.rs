@@ -20,6 +20,7 @@ use corpus_engine::enrichment::atlas::{
         parse_configurations, summarise_atlas, AtlasSummary, AtlasSummaryParams,
         ConfigurationsOutput, Phase8ParseItem,
     },
+    ann_store::AtlasSeeding,
     read_atlas_atoms, read_atlas_edges, write_atlas_configurations, write_atlas_full, AtomEnvelope,
     Configuration, ATLAS_DIRNAME,
 };
@@ -345,6 +346,14 @@ pub fn finalize_configurations(
         &oppositions,
         &edges_file.edges,
         &trajectories,
+        // Phase 8 rewrites atoms.json to add Configuration atoms, which makes
+        // any existing seed table stale by mtime. It holds no embedder, and
+        // threading one here would duplicate the decision: the build's Backfill
+        // step is LAST in the plan (`plan::Step::all`) and reseeds from the
+        // atoms this write just produced.
+        &AtlasSeeding::Deferred(
+            "atlas-configuration rewrite; the build's Backfill step is last in the plan and reseeds",
+        ),
     )
     .map_err(|e| format!("rewriting atoms.json: {e}"))?;
 

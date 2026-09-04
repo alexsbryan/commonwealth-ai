@@ -20,8 +20,8 @@
 use std::path::{Path, PathBuf};
 
 use corpus_engine::enrichment::atlas::{
-    resolve_entities_and_events_with, resolve_step_3b_with, write_atlas, write_atlas_full,
-    ResolutionPolicy, ATLAS_DIRNAME,
+    ann_store::AtlasSeeding, resolve_entities_and_events_with, resolve_step_3b_with, write_atlas,
+    write_atlas_full, ResolutionPolicy, ATLAS_DIRNAME,
 };
 use corpus_engine::enrichment::pipeline::{
     ExtractedQuestion, Phase1Output, PipelinePhase, SectionExtraction,
@@ -315,6 +315,13 @@ pub async fn resolve_into_dir(
             &typed.new_oppositions,
             &edges,
             &step_3b.trajectories,
+            // The resolve step is where the atlas becomes real, and it is the
+            // only lifecycle point that holds BOTH the finished atom set and an
+            // embedder. So it writes the seed table here, in the same write as
+            // the v2 store (ei-3-index; EPISTEMIC_INDEX section 1, Ideas row).
+            // `embed` is the query-side closure the build was handed: the table
+            // and the queries that search it must share one vector space.
+            &AtlasSeeding::With(embed.clone()),
         );
         match result {
             Ok(w) => {
@@ -380,6 +387,10 @@ pub async fn resolve_into_dir(
 
     println!("  ✓ wrote {}", written.atoms_path.display());
     println!("  ✓ wrote {}", written.edges_path.display());
+    // The seed table's own line, in its own words -- a deferred or empty seed
+    // reads differently from a written one, and none of the three is a zero
+    // (ARCH 18.3).
+    println!("  ✓ {}", written.seed.describe());
 
     // Record what this atlas was extracted under, beside the atoms. The
     // atlas directory has to answer that on its own — corpus-engine cannot

@@ -88,7 +88,8 @@ pub use schema_validation::{
 pub use stable_key::StableAtomKey;
 pub use summary::{
     compute_summary as compute_atlas_summary,
-    read_or_compute_summary as read_or_compute_atlas_summary, AtlasSummary, OntologySummary,
+    read_or_compute_summary as read_or_compute_atlas_summary, AnnSummary, AtlasSummary,
+    OntologySummary,
 };
 pub use vital_tier::{tier_sizes as vital_tier_sizes, vital_tier};
 pub use writer::{
