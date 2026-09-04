@@ -43,7 +43,7 @@ the cheapest shape this list can take.
 | `commonwealth-core` | 8,860 | 55 | Identity, roster, capabilities, the mesh clock, the shared vocabulary. |
 | `commonwealth-transport` | 2,746 | 57 / 265 | The peer wire — the direct TCP path, and iroh behind an optional feature. TWO closures because it ships in two configurations: 57 default, 265 with `iroh`. Three in-repo consumers force the feature on, and under resolver-2 unification any `--workspace` gate run builds the 265 — so the DEFAULT is the configuration this repo's own gates never compile. The 2026-09-04 lift is the first thing that did; it builds, and carries 23 tests where the iroh path carries 39. |
 | `commonwealth-state` | 2,360 | 76 | `MeshStore` and the replicated state it holds. |
-| `commonwealth-discovery` | 3,228 | 101 | Founder/joiner, announce, the peer table. |
+| `commonwealth-discovery` | 3,228 | 82 | Founder/joiner, announce, the peer table. |
 | `commonwealth-rail-core` | 2,258 | 42 | The fold: vocabulary, Ed25519 authorship, admission into one total order, the per-actor sync digest. Zero I/O. |
 | `commonwealth-rail` | 674 | 43 | The journal: the append-only JSONL log under `<root>/rings/<ns>/`. |
 
@@ -52,8 +52,16 @@ the two rail crates re-measured at 1e (2026-09-04) and both are unchanged. Their
 line figures move with 1e's `RingVerifier` seam — `commonwealth-rail` read 659
 at that commit and not the 657 recorded here, a two-line drift corrected in
 passing.
-`commonwealth-discovery`'s 101 is the number to watch: four of its ten modules
-are scheduled for deletion, and the closure should come *down* when they go.
+`commonwealth-discovery` came DOWN 101 -> 82 on 2026-09-04, and not from a
+module deletion. Phase 0 removed the TLS and gossip-peer-selection modules and
+left their dependencies in the manifest: `rcgen` and `rand` had zero references
+in `src/` or `tests/`, under comments still naming the subsystems that used
+them. Dropping the two lines cut 16 crates from the closure. Found while
+writing this package's crate docs — nobody looked for it, and no gate can:
+`cargo` does not warn on an unused dependency, and the layer map governs which
+edges are LEGAL, never which are LIVE. Worth a periodic sweep of every package
+crate, since a deletion campaign that removes code and leaves manifests keeps
+paying for what it deleted.
 
 **Shared leaves** — the global `[[package_leaf]]` set. The commonwealth package
 takes exactly three of them, and none is a concession:

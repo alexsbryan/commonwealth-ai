@@ -21,11 +21,7 @@ hex = "0.4"
 mdns-sd = "0.12"
 hostname = { workspace = true }
 
-# TLS certificate generation
-rcgen = "0.13"
 
-# Gossip peer selection
-rand = "0.9"
 
 # Hardware detection
 sysinfo = "0.35"
