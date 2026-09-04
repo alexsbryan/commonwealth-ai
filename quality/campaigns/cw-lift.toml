@@ -195,7 +195,7 @@ kill         = "K2 — AppState (commonwealth-api/src/state.rs:585, 2,659 lines,
 id           = "cw-twin-visibility"
 one_line     = "CLAIM: we can SEE a dead twin, not just a coupling"
 derives_from = "OFF-PLAN. Added 2026-09-04 after auditing what the campaign's instruments can actually detect."
-status       = "answered-negative"
+status       = "answered — first pass NEGATIVE and WRONG; corrected same day"
 # THE CAMPAIGN'S HEADLINE IS TWIN REMOVAL AND NOTHING MEASURES A TWIN.
 #
 # scripts/nc-boundary.py measures REFERENCE WIDTH ACROSS AN EDGE. A perfect
@@ -259,10 +259,46 @@ status       = "answered-negative"
 # additive work" is not available on this branch of the work. Said plainly
 # rather than by manufacturing a cut to satisfy it.
 #
-# THE SUCCESSOR INSTRUMENT IS NOT A PROGRAM. A DECIDER CENSUS: enumerate the
-# substrate's six-to-eight questions (order, admission, dedup, convergence,
-# identity, membership) and list every implementation of each. Three rows of it
-# were filled in by hand in an afternoon, above.
+# ── CORRECTION, SAME DAY. THE SENTENCE ABOVE ("neither instrument can see that
+# and neither ever could") IS WRONG, AND THE INSTRUMENT ALREADY EXISTED. ──
+#
+# There are FOUR discovery feeds and I ran one before concluding none served:
+#   converge census  NAME · converge roles ROLE · converge shape SHAPE
+#   converge verb    JOB  · dry-report          BEHAVIOUR
+# `converge shape` matches (field name, field type) sets, IDF-weighted, and
+# NEVER compares a type name — the renamed-fork detector I said did not exist.
+# It found the whole thing in ~8 seconds. The §19 miss is mine: I surveyed for
+# a tool, found dry-report, and stopped surveying.
+#
+# CONVERGE SHAPE, commonwealth/crates + sovereign-mesh, graph 18f6e0fbc:
+# 543 typed shapes, 1,917 cross-crate candidates, 18 pairs past both gates in
+# 8 groups. SIX cross the family line, and the DERIVES are the finding:
+#   JoinRequest      == JoinRequestWire   Deserialize-only <-> Serialize-only
+#   RingSyncResponse == SyncReply         Serialize-only   <-> Deserialize-only
+#   LeasedUnit       == LeasedPayload     NO SERDE         <-> Deserialize
+#   GossipRequest/Resp == Gossip*Wire     both             <-> Deserialize
+#   MeshWire == core::Mesh == MeshWire == PersistedMesh    FOUR COPIES
+#   ModelFileInfo    == ModelFileInfo     both <-> both, SAME NAME, no excuse
+# Plus inside commonwealth: CorpusHostingView == CorpusHosting, and
+# GossipStoreEntry == AllRow == StoreEntry (the MeshStore row, typed 3x).
+# 191 lines across the twelve declarations; the cut is about half.
+#
+# THIS IS nc-22a's DISEASE VERBATIM — "a closed type with no extension point
+# leaves a consumer no move except to fork it". Five of six forks exist because
+# the owner derived only ONE half of serde, or none. LeasedPayload is declared
+# INSIDE A FUNCTION BODY and already carries #[allow(dead_code)] on a field it
+# does not use: drift starting, in the shape that ended as five dead UI
+# branches in a shipped build.
+#
+# CONVERGE VERB IS CLEAN CROSS-FAMILY: 29 job clusters repo-wide, exactly one
+# with a home in both families (hex-formatting a NodeId, 3 lines). The
+# duplication is entirely in the SHAPE tier.
+#
+# SEQUENCING: these six forks ARE the cut the operator asked for. They are
+# CONVERGENCE, not extraction, and none needs the rail to be a crate — so they
+# are available NOW, ahead of 1b. Small in lines (~95), large in class: a
+# forked wire type drifts silently and no gate here sees it. `converge shape`
+# is the gate that would, and today it is a mirror with no exit code.
 floor        = 0.0
 target       = 1.0
 direction    = "higher_is_better"
