@@ -37,7 +37,7 @@ commonwealth-ai/
 ├── corpus-engine-sections/    # Section detectors — corpus-engine's segmentation vocabulary as a regex-only leaf
 ├── corpus-engine-vocab/       # Atlas vocabulary — AtomsFile/AtomEnvelope, Edge, kind taxonomy, OntologyPolicies + declaration types, lookup_key, StableAtomKey (serde + kernel-types + blake3 leaf)
 ├── corpus-engine-watchers/    # Lint/test/project-index watchers + result stores (carved out of corpus-engine)
-├── corpus-mcp/                # Thin knowledge host — cited search + atlas atom lookup over MCP/stdio against ANY OpenAI-compatible endpoint; no llama.cpp/ort/iroh
+├── corpus-mcp/                # Thin knowledge host — `ask` (cited passages + the map of ideas the atlas walk traversed), cited search, atlas atom lookup, over MCP/stdio against ANY OpenAI-compatible endpoint; no llama.cpp/ort/iroh
 ├── sovereign-recipes/         # Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build)
 ├── sovereign/                 # Local AI assistant (CLI / desktop / server)
 ├── commonwealth/              # Mesh coordination daemon
@@ -69,7 +69,7 @@ weights (created by `svrn setup`, gitignored).
 | `corpus-engine-yield` | `YieldHook` cooperative foreground-yield contract — a Tier-0 leaf (one trait, zero deps) shared by the data plane and the watchers so the daemon's `Arc<dyn YieldHook>` has one trait identity on both. Also carries the seam's **liveness bound**: `MAX_FOREGROUND_DEFERRAL` (300 s) + `DeferralBudget`, because `should_yield()` is a level predicate that any request cadence shorter than the yield window pins true forever — see "Foreground yield is bounded" below. Since 2026-09-02 it also carries the WRITE side, `ForegroundSignal` + `ForegroundLease`: the daemon installs both halves on the corpus engine, and every `Runtime` turn holds a lease on its stream handle for the turn's whole life, so ingest, enrichment and the newsworthy tick park for the entire turn (measured: background commits inside one grounded turn 42 → 1). Until then the only bump site was `chat_completions`, which the product's own chat paths never cross. | — |
 | `corpus-engine-sections` | Section detectors (`SectionDetector`, `DetectedSection`, `ChapterRegexDetector`, `TocAnchoredDetector`) — corpus-engine's own segmentation vocabulary, carved into a `regex`-only leaf so the studio `SectionTool` shares the ONE implementation by reaching DOWN, instead of corpus-engine reaching UP into `sovereign-contracts` (noun-convergence rung 2) | `regex` |
 | `corpus-engine-vocab` | The atlas vocabulary — `AtomsFile` / `AtomEnvelope` + the eleven atom kinds (`atoms`), `Edge` / `EdgesFile` (`edges`), `EnrichmentDepth` + the eight `string_enum_with_other!` kind enums (`taxonomy`), `lookup_key` (`canonical`), `StableAtomKey` (`stable_key`, an inherent `impl AtomEnvelope` so it must live with the type), and — Step 3 — `OntologyPolicies` + its five axes and the navigation section (`ontology`, `ontology::navigation`: `NavigationPolicy` / `WalkPolicy` / `SeedPolicy` per `QuestionKind`, spec §2.2 defaults) with everything an author declares under `ontology::decl` (`OntologyTypeDecl`, `TypeKind`, `AttrDecl`, `OntologyV1`, the investigation `EntityTypeDecl` / `RelationshipTypeDecl` / `PatternDecl`, `OntologyVocabulary`; the shape of `atlas/ontology.json`). Carved out 2026-09-03 (enrichment-as-plugin Steps 2–3) so a thin host can READ `atlas/atoms.json` without linking the 162k lines that write it; corpus-engine re-exports every item at its historical path (`enrichment::atlas::{atoms,edges,stable_key}`, `enrichment::pipeline::atlas::*`, `atlas_canonical`), so no in-repo importer changed. Declared `[[package_leaf]]`; `sovereign-core`'s evidence-loop gazetteer and `sovereign-cli-llm`'s scrub/scaffold commands name it directly, and the three lookalike `atoms.json` shapes they carried are gone — `corpus-engine/xtask/tests/atoms_file_census.rs` pins the count at ONE | `kernel-types`, `serde`, `serde_json`, `blake3` |
-| `corpus-mcp` | The thin knowledge host (enrichment-as-plugin Step 5, 2026-09-03): `corpus-mcp --base-url http://localhost:8080/v1 --corpus sep` serves `corpus_list` / `corpus_search` (cited chunks via `CorpusIndex::search`) / `atoms_lookup` (tier 1.5: `atlas/atoms.json` through `corpus_engine_vocab::atoms::AtomsFile`) / `corpus_ontology` (`atlas/ontology.json` through `read_atlas_ontology` — the file is an `AtlasOntologyFile` envelope, and parsing it as bare `OntologyPolicies` silently reads as "declared nothing"; fixed 2026-09-04, pinned by `ontology_reads_the_envelope_not_bare_policies` and by `acceptance.sh` judging the read on a corpus that DECLARED types) over MCP-on-stdio, against ANY OpenAI-compatible endpoint. Host capability is DETECTED (`GET /oicp/v1/capabilities`; 404 = the baseline path), the embed model id comes from `GET /v1/models` unless `--embed-model` says otherwise, and a width mismatch between an index and the endpoint degrades that corpus to full-text with a printed notice. Declared `[[package]]` (with two grandfathered engine edges to code-intel crates); `tests/no_inference_stack.rs` pins the third-party closure; `acceptance.sh` is the end-to-end proof against a real `llama-server`. `corpus_list` reports each atlas's atom count from the CURRENT `_summary.json` only (`read_current_summary`, never computes or writes — the host promises not to write), whether an ontology was declared, and (ei-3-index) its ANN seed-table coverage — `atoms_embedded` in the structured row, and in the text either `N/M atoms embedded` or `NO seed table - cannot ground, run \`svrn atlas backfill-ann\``. A missing table is that sentence, never a zero, because it is the one fact a client needs before trusting a connected answer. Composition is the CLIENT's: `corpus_search` is tier 1 alone, nothing from the atlas or ontology enters its ranking; the client calls `atoms_lookup` / `corpus_ontology` itself. NOT here, by design: the atom-grounded ranking in `sovereign-core` | `corpus-engine`, `corpus-engine-vocab`, `oicp-types`, `sovereign-contracts` |
+| `corpus-mcp` | The thin knowledge host (enrichment-as-plugin Step 5, 2026-09-03): `corpus-mcp --base-url http://localhost:8080/v1 --corpus sep` serves `corpus_list` / `corpus_search` (cited chunks via `CorpusIndex::search`) / `atoms_lookup` (tier 1.5: `atlas/atoms.json` through `corpus_engine_vocab::atoms::AtomsFile`) / `corpus_ontology` (`atlas/ontology.json` through `read_atlas_ontology` — the file is an `AtlasOntologyFile` envelope, and parsing it as bare `OntologyPolicies` silently reads as "declared nothing"; fixed 2026-09-04, pinned by `ontology_reads_the_envelope_not_bare_policies` and by `acceptance.sh` judging the read on a corpus that DECLARED types) over MCP-on-stdio, against ANY OpenAI-compatible endpoint. Host capability is DETECTED (`GET /oicp/v1/capabilities`; 404 = the baseline path), the embed model id comes from `GET /v1/models` unless `--embed-model` says otherwise, and a width mismatch between an index and the endpoint degrades that corpus to full-text with a printed notice. Declared `[[package]]` (with two grandfathered engine edges to code-intel crates); `tests/no_inference_stack.rs` pins the third-party closure; `acceptance.sh` is the end-to-end proof against a real `llama-server`. `corpus_list` reports each atlas's atom count from the CURRENT `_summary.json` only (`read_current_summary`, never computes or writes — the host promises not to write), whether an ontology was declared, and (ei-3-index) its ANN seed-table coverage — `atoms_embedded` in the structured row, and in the text either `N/M atoms embedded` or `NO seed table - cannot ground, run \`svrn atlas backfill-ann\``. A missing table is that sentence, never a zero, because it is the one fact a client needs before trusting a connected answer. **`ask` is the composed default since ei-4-walk (2026-09-04)** (`EPISTEMIC_INDEX.md` §4): embed ONCE, tier 1, then the walk — `corpus_engine::enrichment::atlas::ground`, the same function `sovereign-core::apply_atlas_grounding` calls — resolved against the host's own `CorpusIndex` handles through the two-method `EvidenceFetcher`, returning cited passages PLUS a map section (nodes traversed, their kinds, the edges followed) and every degradation as a sentence. No generation and no chat client: §4 hands the model on the other side of the wire its evidence and its map, so the closure is unchanged. The host loads each atlas ONCE at open on its long-lived runtime (`open_and_attach_ann_seed_table` requires it) and passes NO atom bag — building one re-embeds every entity per call — so the walk seeds from the ANN table alone and NAMES the missing name-match half rather than losing it quietly. A passage the search ranked and the walk cited is ONE passage carrying both facts: merging rather than deduplicating is load-bearing, because dropping the walk's copy discards its attribution (measured on wessex-hoard: three themes reached, one creditable). The four earlier tools stay as the advanced surface; `corpus_search` is still tier 1 alone with nothing from the atlas in its ranking. NOT here, by design: the atom-grounded RANKING in `sovereign-core` | `corpus-engine`, `corpus-engine-vocab`, `oicp-types`, `sovereign-contracts` |
 | `corpus-engine-watchers` | Lint/test/project-index watchers + their SQLite result stores + coordinator (carved out of corpus-engine, R4 Step 1 — cuts the watcher-edit rebuild set 22→12 crates, measured). Compiles unconditionally; the SCIP `CodeWatcher` stays in corpus-engine | `corpus-engine-notes`, `corpus-engine-yield`, `rusqlite`, `notify` |
 | `sovereign-recipes`  | Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build) | —                                       |
 | `sovereign`          | Local agent runtime                           | `corpus-engine`, `corpus-engine-scip`, `oicp-types`, `kernel-types` |
@@ -812,9 +812,32 @@ identical schema for a full index or a shard.
 
 ```
 ~/.svrnmesh/indexes/
-├── wikipedia/
+├── wikipedia/                           # WIKI-CLASS: a link graph, not an atom store
 │   ├── _corpus_meta.json                # authoritative metadata
-│   └── chunks.lance/{...}
+│   ├── chunks.lance/{...}
+│   └── atlas/
+│       ├── articles.lance/              # row per in-scope article. v2 (2026-09-04) adds
+│       │                                # `atom_id` (AtomId::entity_content_hash over
+│       │                                # title+corpus — ONE derivation, shared with the
+│       │                                # fetched/newsworthy layers) and `chunk_id` (the
+│       │                                # article's lowest chunk = its evidence anchor).
+│       │                                # Without them the store serves the neighbor API
+│       │                                # but REFUSES the grounding walk, by name.
+│       └── edges.lance/                 # row per (source, section, target) wikilink, with
+│                                        # `link_text` + `source_section_path` — the two
+│                                        # per-edge STRINGS `neighbors_for_axis` filters on
+│                                        # and a 10-byte CSR record cannot hold. This is why
+│                                        # wikipedia has no atoms.lance/edges.csr and is not
+│                                        # a gap: two faces read this one store —
+│                                        # `ColumnarWikipediaGraph` (the neighbor API) and
+│                                        # `WikiAtlasProvider` (the walk's `AtlasProvider`).
+│                                        # The six relationship labels ride as DATA in a
+│                                        # column beside the closed `EdgeType::Involves`;
+│                                        # they are not enum arms (spec §3, principle 9).
+│                                        # `wikipedia_graph.db` (2.4 GB SQLite) and the
+│                                        # `export-columnar` verb retired in W4; the build
+│                                        # is one step, `atlas wikipedia build-graph`.
+│                                        # See docs/specs/WIKIPEDIA_ATLAS_V2.md.
 ├── stackexchange-shard-0-6200000/       # same schema as a full index
 └── enron-sample-onemailbox/             # architecture-over-Enron substrate paths
     ├── _corpus_meta.json
@@ -2689,9 +2712,51 @@ code, and both pipelines share `shared_head_steps()` — which knowledge
 sources exist is a property of the install, not of the intent label. The
 injection helpers themselves (`apply_atlas_grounding`,
 `apply_raptor_grounding`, `meta_atlas_boost`, `fan_out_decomposed_queries`,
-`expand_from_top_sources`, …) are unchanged `impl Runtime` methods under
+`expand_from_top_sources`, …) are `impl Runtime` methods under
 `runtime/retrieval/` (the 2026-07-12 split of the former 5,000-line
-`retrieval.rs` into 11 concern modules); both handlers build a
+`retrieval.rs` into 11 concern modules);
+
+**`apply_atlas_grounding` is a CALLER since ei-4-walk (2026-09-04), not the
+walk.** The walk itself is `corpus_engine::enrichment::atlas::ground` and its
+policy — seed kinds, edge kinds, hops, evidence budget — comes from the
+corpus's own `atlas/ontology.json` `navigation` section
+(`EPISTEMIC_INDEX.md` §2.2), not from constants at the call site. What stays
+here is what only a `Runtime` can do: choose the atlases in scope (through
+`ground::candidate_atlas_ids`, the one home of the chunk → atlas id
+derivation, replacing an inline `format!("{}-{}", corpus_id, title)`), embed
+the question through the lane's provider, and fetch a chunk — the two methods
+of `ground::EvidenceFetcher`. `corpus-mcp`'s `ask` implements the same two and
+gets the same walk, which is the point (§10.6: one walk, two hosts).
+
+The question's KIND selects the row, by centroid over the map's own exemplars
+(`atlas_traversal::question_kind`, ARCH §2.4 — the router's method, ported
+here via `extractors::column_aware::HeaderClassifier`). Failing either gate is
+an ABSTAIN, and an abstain runs `WalkPolicy::unfiltered` — the pre-policy
+behaviour written down as data — so "unclassified" is one code path with the
+classified cases and is always named in the ledger, never a silent second
+walk. `atlas_navigate_ann` survives as a thin caller under that same
+unfiltered row, so the eval CLI and the evidence-site wiring tests keep the
+walk they were calibrated against.
+
+**The evidence budget is spent ACROSS the ideas the walk reached, not down the
+first one.** `ground::resolve_evidence` fetches each request's realisable
+chunks into its own queue and then round-robins, one per request per lap, in
+walk-score order. The loop it replaced (inherited verbatim from this file)
+took every hit a request offered before moving on — and for an atlas whose
+`EvidenceSite` carries no article filter (every whole-corpus atlas: literary,
+wessex-hoard, wikipedia) one search returns up to thirty passages and all are
+accepted, so the first idea consumed the entire budget. Measured on
+wessex-hoard 2026-09-04: three themes reached, three requests emitted,
+`added: 12`, and all twelve belonged to one theme. The graph's whole
+contribution is that it reaches several connected ideas; spending the budget
+on one of them threw that away at the last step.
+
+`WalkLedger` and `ResolveLedger` carry every seed, hop, drop and budget
+decision, at `debug` under the `retrieval_audit` target and in the returned
+value so `ask` can render it — a zero yield always says WHICH zero it is.
+`DEFAULT_BUDGET` is 12, read off `ceil(KQ_PER_CORPUS_LIMIT * 0.6)` rather than
+off prose; `the_default_budget_is_the_live_fetch_budget` fails if either side
+moves alone. both handlers build a
 `PipelineState` and call
 `pipeline.run(...)`, then keep their post-pipeline concerns (evidence-shape
 routing + route-aware expansion + prompt/request assembly on the KQ side;
