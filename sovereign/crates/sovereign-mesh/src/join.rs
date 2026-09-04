@@ -41,85 +41,19 @@ use tracing::{debug, info, warn};
 /// (rather than importing) because commonwealth-api doesn't export it
 /// publicly, and duplicating the shape is cheaper than the churn of
 /// making it public.
-#[derive(Debug, Serialize)]
-struct JoinRequestWire {
-    join_key: String,
-    joining_node_name: String,
-    joining_node_addresses: Vec<SocketAddr>,
-    /// Stable NodeId the joiner has persisted at
-    /// `<data_dir>/node_id`. The founder honours this as the
-    /// member's `node_id` in the mesh if it's either (a) not
-    /// already taken, or (b) already present under the same name
-    /// (rejoin path). Absent on pre-stable-identity builds; the
-    /// `#[serde(default, skip_serializing_if = "Option::is_none")]`
-    /// on the founder side keeps the wire format backward-compatible.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    proposed_node_id: Option<NodeId>,
-    /// This node's Ed25519 identity pubkey (see
-    /// `commonwealth_core::ids::NodePubkey`). Pre-identity founders
-    /// ignore it (serde default on their side); identity-aware
-    /// founders record it after verifying `pubkey_proof`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    node_pubkey: Option<commonwealth_core::ids::NodePubkey>,
-    /// Hex Ed25519 proof of possession over
-    /// `"cwth-join-pubkey-binding:" || proposed_node_id || name`.
-    /// Always sent together with `node_pubkey`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pubkey_proof: Option<String>,
-}
+// `JoinRequestWire` and `JoinResponseWire` were mirrors of the founder's own
+// types, forked only because that side derived one half of serde each. Both
+// halves now; one type each.
+use commonwealth_api::routes_internal::{
+    JoinRequest as JoinRequestWire, JoinResponse as JoinResponseWire,
+};
 
 /// Members transit as a flat Vec because `HashMap<NodeId, _>` doesn't
 /// round-trip through JSON (NodeId is an array, not a string key).
 /// See `commonwealth_api::routes_internal::MeshWire`.
-#[derive(Debug, Deserialize)]
-struct MeshWire {
-    id: commonwealth_core::ids::MeshId,
-    name: String,
-    /// Zeroed when the founder runs a pre-split build; the joiner then
-    /// authorizes on `invite_key_hash` via the compat arm in
-    /// `Mesh::gossip_authorized` until that founder upgrades.
-    #[serde(default)]
-    mesh_secret: [u8; 32],
-    #[serde(rename = "join_key_hash")]
-    invite_key_hash: [u8; 32],
-    #[serde(default)]
-    invite_version: u64,
-    #[serde(default)]
-    invite_expires_at: Option<u64>,
-    #[serde(default)]
-    require_encryption: bool,
-    members: Vec<commonwealth_core::mesh::MemberRecord>,
-    peers: Vec<commonwealth_core::mesh::MeshPeering>,
-}
-
-impl MeshWire {
-    fn into_mesh(self) -> Mesh {
-        use std::collections::HashMap;
-        let members = self
-            .members
-            .into_iter()
-            .map(|m| (m.node_id, m))
-            .collect::<HashMap<_, _>>();
-        Mesh {
-            id: self.id,
-            name: self.name,
-            mesh_secret: self.mesh_secret,
-            invite_key_hash: self.invite_key_hash,
-            invite_version: self.invite_version,
-            invite_expires_at: self.invite_expires_at,
-            require_encryption: self.require_encryption,
-            members,
-            peers: self.peers,
-        }
-    }
-}
-
-/// Mirror of the server-side `JoinResponse`.
-#[derive(Debug, Deserialize)]
-struct JoinResponseWire {
-    assigned_node_id: NodeId,
-    mesh: MeshWire,
-}
+// The fourth declaration of this shape lived here. One projection now:
+// `commonwealth_core::mesh::MeshSnapshot`.
+use commonwealth_core::mesh::MeshWire;
 
 /// Outcome of a successful handshake. The caller replaces its local
 /// placeholder mesh with `mesh` and records `assigned_node_id` as

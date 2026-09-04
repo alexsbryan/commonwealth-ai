@@ -17,6 +17,7 @@ use commonwealth_inference::inference_plan::InferencePlan;
 use crate::state::AppState;
 
 use super::MeshWire;
+use commonwealth_core::mesh::SecretDisclosure;
 
 /// POST /internal/gossip — pairwise mesh-state exchange.
 ///
@@ -118,15 +119,19 @@ pub async fn gossip(
     //   on the wire every 10s even between two fully upgraded nodes — the
     //   request half of P4b stopped sending it and the reply half did not.
     // - `Legacy`: the security rule above. Never, at any point.
-    let mut wire = MeshWire::from(&*mesh);
-    if report.auth_arm() != GossipAuthArm::RawSecret {
-        wire.mesh_secret = [0u8; 32];
+    let disclosure = if report.auth_arm() == GossipAuthArm::RawSecret {
+        SecretDisclosure::Disclose
+    } else {
+        SecretDisclosure::Redact
+    };
+    if disclosure == SecretDisclosure::Redact {
         tracing::debug!(
             mesh = %mesh.name,
             arm = ?report.auth_arm(),
             "gossip: redacted mesh_secret from the reply"
         );
     }
+    let wire = MeshWire::for_peer(&mesh, disclosure);
     // Our own proof, so the caller can authorize this REPLY without needing our
     // raw secret either. Both directions or neither — a reply the caller must
     // fall back to raw-secret comparison for keeps the credential on the wire.
@@ -147,7 +152,13 @@ pub async fn gossip(
     }))
 }
 
-#[derive(Debug, Deserialize)]
+/// Derives BOTH halves. `sovereign-mesh` declared a `GossipRequestWire` mirror
+/// because this side offered only `Deserialize`; the two were minted 14
+/// seconds apart on 2026-04-14 (`16838feca`, `50a7a03a3`). The
+/// `skip_serializing_if` attributes below were already here and INERT under a
+/// Deserialize-only derive — they become load-bearing now, and they are what
+/// makes the bytes identical to what the mirror wrote.
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GossipRequest {
     pub mesh: MeshWire,
     /// Who is sending. Absent on a pre-proof peer.

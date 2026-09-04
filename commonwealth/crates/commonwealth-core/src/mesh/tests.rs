@@ -696,3 +696,110 @@ fn merge_rejects_mismatched_invite_key_hash() {
 }
 
 mod gossip_auth;
+
+// ── The snapshot's wire shape ────────────────────────────────────────
+//
+// Both regressions this shape has suffered were FIELD DROPS inside a
+// hand-written conversion, and both shipped green: `mesh_secret` zero-filled
+// on 2026-08-26, and `invite_version` pinned at 0 so invite rotations stopped
+// propagating. Nothing in the repo would have gone red for either. A shape
+// test is the only instrument that catches that class, and there was none.
+
+fn probe_mesh() -> Mesh {
+    // Reuses the existing helper rather than minting a second constructor.
+    let mut m = mesh_with(vec![], MeshId::generate(), [9u8; 32]);
+    m.mesh_secret = [7u8; 32];
+    m.invite_version = 42;
+    m.invite_expires_at = Some(1234);
+    m.require_encryption = true;
+    m
+}
+
+/// The exact key set, pinned as a literal list. A test that derived the
+/// expected keys from the struct would agree with any change to it.
+#[test]
+fn the_snapshot_carries_exactly_these_wire_keys() {
+    let snap = MeshWire::for_peer(&probe_mesh(), SecretDisclosure::Disclose);
+    let v: serde_json::Value = serde_json::to_value(&snap).unwrap();
+    let obj = v.as_object().expect("snapshot serialises to an object");
+    let mut got: Vec<&str> = obj.keys().map(|k| k.as_str()).collect();
+    got.sort_unstable();
+    assert_eq!(
+        got,
+        vec![
+            "id",
+            "invite_expires_at",
+            "invite_version",
+            "join_key_hash", // NOT `invite_key_hash` — dropping this rename made every round 422
+            "members",
+            "mesh_secret",
+            "name",
+            "peers",
+            "require_encryption",
+        ],
+        "the snapshot's wire keys changed — this is a fleet-wide break"
+    );
+}
+
+/// The `invite_version` regression, pinned. A conversion that hardcodes 0
+/// here stops invite rotation propagating, silently, with gossip green.
+#[test]
+fn invite_version_survives_the_round_trip() {
+    let snap = MeshWire::for_peer(&probe_mesh(), SecretDisclosure::Disclose);
+    assert_eq!(snap.invite_version, 42);
+    let back = snap.into_mesh();
+    assert_eq!(
+        back.invite_version, 42,
+        "a rotation cannot propagate without it"
+    );
+    assert_eq!(back.invite_expires_at, Some(1234));
+    assert!(back.require_encryption);
+}
+
+/// The `mesh_secret` regression, pinned from both directions — and the reason
+/// `SecretDisclosure` has no `Default`.
+#[test]
+fn disclosure_decides_the_secret_and_nothing_else() {
+    let m = probe_mesh();
+    let disclosed = MeshWire::for_peer(&m, SecretDisclosure::Disclose);
+    let redacted = MeshWire::for_peer(&m, SecretDisclosure::Redact);
+
+    assert_eq!(disclosed.mesh_secret, [7u8; 32]);
+    assert_eq!(
+        redacted.mesh_secret, [0u8; 32],
+        "redaction zeroes, never omits"
+    );
+
+    // Redaction must touch NOTHING else — the 2026-08-26 failure was a
+    // conversion quietly zeroing more than it was asked to.
+    assert_eq!(disclosed.invite_key_hash, redacted.invite_key_hash);
+    assert_eq!(disclosed.invite_version, redacted.invite_version);
+    assert_eq!(disclosed.invite_expires_at, redacted.invite_expires_at);
+    assert_eq!(disclosed.require_encryption, redacted.require_encryption);
+    assert_eq!(disclosed.id, redacted.id);
+
+    // A redacted snapshot still deserialises on a pre-split peer as "not set",
+    // which is the same value an absent field would have defaulted to.
+    let json = serde_json::to_string(&redacted).unwrap();
+    let back: MeshWire = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.mesh_secret, [0u8; 32]);
+}
+
+/// A pre-split peer omits the fields it does not know; every one of them must
+/// default rather than fail the parse.
+#[test]
+fn a_pre_split_peers_payload_still_parses() {
+    let json = serde_json::json!({
+        "id": MeshId::generate(),
+        "name": "old",
+        "join_key_hash": vec![0u8; 32],
+        "members": [],
+        "peers": [],
+    });
+    let back: MeshWire =
+        serde_json::from_value(json).expect("a pre-split payload must still parse");
+    assert_eq!(back.mesh_secret, [0u8; 32]);
+    assert_eq!(back.invite_version, 0);
+    assert_eq!(back.invite_expires_at, None);
+    assert!(!back.require_encryption);
+}

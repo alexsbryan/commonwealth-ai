@@ -347,6 +347,137 @@ pub enum PeerTrustLevel {
 pub use crate::mesh_merge::MergeReport;
 use crate::mesh_merge::{MemberOutcome, MergeArm, RefusalReason, SkipReason};
 
+/// Whether a snapshot carries the gossip credential to its recipient.
+///
+/// **No `Default`, deliberately.** Every construction site must name its
+/// choice. Until 2026-09-04 this decision was three `if` statements mutating a
+/// `pub mesh_secret` field AFTER a `From<&Mesh>` impl had already copied it in
+/// — and one of the three sites was correct only by CONTAINING NO SUCH LINE
+/// (`mesh_admin.rs`, the join reply, where the joiner legitimately needs the
+/// secret). A rule spread across three sites, one of them an absence, is a
+/// rule that gets forgotten, and this one was: `routes_internal/gossip.rs`
+/// records that the credential rode the wire every 10s between two fully
+/// upgraded nodes because "the request half of P4b stopped sending it and the
+/// reply half did not". Making it an argument is ARCH §7 / §10 —
+/// structural, not remembered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SecretDisclosure {
+    /// The recipient receives `mesh_secret` verbatim. Correct for a join
+    /// reply — a joiner has no other channel to obtain it — and for a peer
+    /// this node has not yet confirmed can authorize without it.
+    Disclose,
+    /// `mesh_secret` is zeroed. A pre-split peer's `#[serde(default)]` reads
+    /// the zeros as "not set", which is the same value it would have derived
+    /// from an absent field, so redaction costs no compatibility.
+    Redact,
+}
+
+/// The JSON projection of a [`Mesh`], as it crosses between peers.
+///
+/// Named `MeshWire` because that is what three of its four declarations were
+/// already called — converging the tree's own vocabulary rather than minting a
+/// fourth word for it (ARCH §19). `MeshSnapshot` was the first choice and is
+/// taken: `sovereign-mesh::dst::MeshSnapshot` is the DST harness's frozen
+/// ALL-NODE view (`Vec<NodeView>` + `online_truth`), a different concept that
+/// keeps its name.
+///
+/// It exists for exactly one reason: `Mesh::members` is a
+/// `HashMap<NodeId, MemberRecord>`, `NodeId` is `[u8; 16]`, and serde_json
+/// cannot use a byte array as an object key. That justifies ONE projection.
+/// There were four — `commonwealth-api::MeshWire`, two private `MeshWire`s in
+/// `sovereign-mesh` (`gossip.rs`, `join.rs`), and the field set again in
+/// `PersistedMesh` — each with its own hand-written conversion, and the
+/// conversions are where this shape has actually failed twice (see
+/// `invite_version` below).
+///
+/// `PersistedMesh` is deliberately NOT folded in. It carries `self_node_id`,
+/// spells its id key `mesh_id` with no serde alias, and always holds the true
+/// secret. Disk and wire answer to different compatibility clocks — a disk
+/// format migrates in place, a wire format cannot — and one type serving both
+/// is the defect, not the convergence.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MeshWire {
+    pub id: MeshId,
+    pub name: String,
+    /// Gossip auth. Zeroed when [`SecretDisclosure::Redact`].
+    /// `#[serde(default)]` — not `skip_serializing_if` — because redaction
+    /// ZEROES rather than omits, and a pre-split peer must read the same
+    /// "not set" value either way.
+    #[serde(default)]
+    pub mesh_secret: [u8; 32],
+    /// Serialized under its historical name. `gossip.rs` records that dropping
+    /// this rename made every gossip round 422.
+    #[serde(rename = "join_key_hash")]
+    pub invite_key_hash: [u8; 32],
+    #[serde(default)]
+    pub invite_expires_at: Option<u64>,
+    /// Monotonic invite counter. **Must ride the wire.** `merge_invite_from`
+    /// adopts a peer's invite only when this is strictly newer, so a mirror
+    /// that dropped it pinned every peer at version 0 and silently stopped
+    /// rotations propagating — with gossip still green. The same conversion
+    /// zero-filled `mesh_secret` the same way on 2026-08-26.
+    #[serde(default)]
+    pub invite_version: u64,
+    #[serde(default)]
+    pub require_encryption: bool,
+    pub members: Vec<MemberRecord>,
+    pub peers: Vec<MeshPeering>,
+}
+
+impl MeshWire {
+    /// Project a [`Mesh`] for one recipient, naming whether the credential
+    /// goes with it. There is no `From<&Mesh>` on purpose — an impl that
+    /// copied the secret in and left redaction to the caller is precisely the
+    /// shape that failed.
+    pub fn for_peer(m: &Mesh, disclosure: SecretDisclosure) -> Self {
+        Self {
+            id: m.id,
+            name: m.name.clone(),
+            mesh_secret: match disclosure {
+                SecretDisclosure::Disclose => m.mesh_secret,
+                SecretDisclosure::Redact => [0u8; 32],
+            },
+            invite_key_hash: m.invite_key_hash,
+            invite_expires_at: m.invite_expires_at,
+            invite_version: m.invite_version,
+            require_encryption: m.require_encryption,
+            members: m.members.values().cloned().collect(),
+            peers: m.peers.clone(),
+        }
+    }
+
+    /// Reassemble into a [`Mesh`].
+    ///
+    /// Duplicate `node_id`s collapse last-wins — as they always have in all
+    /// four hand-written copies of this — but they are now REPORTED rather
+    /// than absorbed in silence (ARCH §18.3). A peer sending duplicates is
+    /// either buggy or hostile and the operator should be able to see it.
+    pub fn into_mesh(self) -> Mesh {
+        let seen = self.members.len();
+        let members: HashMap<NodeId, MemberRecord> =
+            self.members.into_iter().map(|m| (m.node_id, m)).collect();
+        if members.len() != seen {
+            tracing::warn!(
+                mesh = %self.id,
+                sent = seen,
+                distinct = members.len(),
+                "mesh snapshot carried duplicate node_ids — later records won"
+            );
+        }
+        Mesh {
+            id: self.id,
+            name: self.name,
+            mesh_secret: self.mesh_secret,
+            invite_key_hash: self.invite_key_hash,
+            invite_expires_at: self.invite_expires_at,
+            invite_version: self.invite_version,
+            require_encryption: self.require_encryption,
+            members,
+            peers: self.peers,
+        }
+    }
+}
+
 impl Mesh {
     /// Merge another view of this mesh into `self`. Per-member
     /// `last_seen` acts as the Lamport-ish clock: the record with

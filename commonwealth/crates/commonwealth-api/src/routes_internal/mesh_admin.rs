@@ -592,7 +592,16 @@ pub async fn storage_budget_set(
 //     at rest via `Mesh::invite_key_hash`.
 //   - Timing-attack-resistant equality lives in `membership::verify_join_key`.
 
-#[derive(Debug, Deserialize)]
+/// A node asking to join. Derives BOTH halves: `sovereign-mesh` declared a
+/// `JoinRequestWire` mirror of it — same fields, same doc comments,
+/// copy-edited — purely because this side offered only `Deserialize`. The two
+/// were minted 28 seconds apart on 2026-04-14 (`1f5694e8f`, `8f3f00c17`).
+///
+/// The three optionals carry `skip_serializing_if` as well as `default`, so
+/// the bytes this now WRITES are identical to what the mirror wrote: omitted
+/// rather than nulled, which is what keeps a pre-identity founder's serde
+/// seeing exactly the input it saw before.
+#[derive(Debug, Serialize, Deserialize)]
 pub struct JoinRequest {
     pub join_key: String,
     pub joining_node_name: String,
@@ -605,18 +614,18 @@ pub struct JoinRequest {
     /// Backward-compatible: older joiners don't send this field;
     /// `#[serde(default)]` makes the founder accept those requests
     /// unchanged.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proposed_node_id: Option<NodeId>,
     /// The joiner's Ed25519 identity pubkey (the future dial-by-key
     /// transport identity). Optional and serde-defaulted: pre-identity
     /// joiners omit it and are admitted exactly as before.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub node_pubkey: Option<commonwealth_core::ids::NodePubkey>,
     /// Hex Ed25519 proof of possession over
     /// `"cwth-join-pubkey-binding:" || proposed_node_id || name`.
     /// Required whenever `node_pubkey` is present; a bad or missing
     /// proof is a loud 401, never a silent admit-without-key.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pubkey_proof: Option<String>,
 }
 
@@ -626,80 +635,19 @@ pub struct JoinRequest {
 /// default — which crashes `serde_json` with "key must be a string".
 /// We flatten to a Vec at the transport boundary, then reassemble
 /// on the joiner side in `sovereign-mesh::join`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MeshWire {
-    pub id: commonwealth_core::ids::MeshId,
-    pub name: String,
-    /// Gossip-auth credential. `#[serde(default)]` so a pre-split peer's
-    /// payload (which has no such field) deserializes to the zeroed "not set"
-    /// value that `Mesh::gossip_authorized` recognises.
-    #[serde(default)]
-    pub mesh_secret: [u8; 32],
-    /// Serialized under its historical name — a joiner or peer on a pre-split
-    /// build reads this snapshot by that key, so renaming the Rust field must
-    /// not rename the wire field.
-    #[serde(rename = "join_key_hash")]
-    pub invite_key_hash: [u8; 32],
-    /// Invite TTL, carried so a joiner inherits it atomically with membership
-    /// and every member can enforce the same expiry.
-    #[serde(default)]
-    pub invite_expires_at: Option<u64>,
-    /// Monotonic invite counter. Must ride the wire or a rotation cannot
-    /// propagate: `Mesh::merge_invite_from` adopts a peer's invite only when
-    /// this is strictly newer, so a mirror that drops it pins every peer at
-    /// version 0 and silently restores the node-local rotate.
-    #[serde(default)]
-    pub invite_version: u64,
-    /// Mesh-wide encryption policy carried in the join snapshot so a
-    /// joiner inherits it atomically with membership. `#[serde(default)]`
-    /// keeps wire bytes identical for pre-policy peers.
-    #[serde(default)]
-    pub require_encryption: bool,
-    pub members: Vec<commonwealth_core::mesh::MemberRecord>,
-    pub peers: Vec<commonwealth_core::mesh::MeshPeering>,
-}
+// `MeshWire` was one of FOUR declarations of this shape, each with its own
+// hand-written `From<&Mesh>` — and those conversions are where it failed
+// twice (a zero-filled `mesh_secret` on 2026-08-26, and an `invite_version`
+// that pinned every peer's invite at 0). It is now the one projection in
+// `commonwealth_core::mesh`, and the redaction that used to be a `pub` field
+// mutation after the fact is an argument to `MeshSnapshot::for_peer`.
+pub use commonwealth_core::mesh::{MeshWire, SecretDisclosure};
 
-impl From<&Mesh> for MeshWire {
-    fn from(m: &Mesh) -> Self {
-        Self {
-            id: m.id,
-            name: m.name.clone(),
-            mesh_secret: m.mesh_secret,
-            invite_key_hash: m.invite_key_hash,
-            invite_version: m.invite_version,
-            invite_expires_at: m.invite_expires_at,
-            require_encryption: m.require_encryption,
-            members: m.members.values().cloned().collect(),
-            peers: m.peers.clone(),
-        }
-    }
-}
-
-impl MeshWire {
-    /// Reassemble into a `Mesh`. Callers use this on the joiner side
-    /// to adopt the founder's state.
-    pub fn into_mesh(self) -> Mesh {
-        use std::collections::HashMap;
-        let members = self
-            .members
-            .into_iter()
-            .map(|m| (m.node_id, m))
-            .collect::<HashMap<_, _>>();
-        Mesh {
-            id: self.id,
-            name: self.name,
-            mesh_secret: self.mesh_secret,
-            invite_key_hash: self.invite_key_hash,
-            invite_version: self.invite_version,
-            invite_expires_at: self.invite_expires_at,
-            require_encryption: self.require_encryption,
-            members,
-            peers: self.peers,
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
+/// The founder's reply to a join.
+///
+/// Derives BOTH halves: `sovereign-mesh` declared a `JoinResponseWire` mirror
+/// of it purely because this side offered only `Serialize`.
+#[derive(Debug, Serialize, Deserialize)]
 pub struct JoinResponse {
     /// Freshly-assigned id for the joining node.
     pub assigned_node_id: NodeId,
@@ -811,7 +759,13 @@ pub async fn join(
             }
             Ok(Json(JoinResponse {
                 assigned_node_id: new_id,
-                mesh: MeshWire::from(&*mesh),
+                // Disclose, and now it SAYS so. A joiner has no other
+                // channel to obtain the gossip credential, so withholding it
+                // here would admit a node that can never authorize. This was
+                // previously correct by the absence of a redaction line —
+                // indistinguishable, to a reader, from the bug of forgetting
+                // one.
+                mesh: MeshWire::for_peer(&mesh, SecretDisclosure::Disclose),
             }))
         }
         Err(e) => {

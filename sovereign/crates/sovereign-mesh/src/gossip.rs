@@ -1182,7 +1182,6 @@ async fn gossip_with_peer(
     now_secs: u64,
     peer_is_post_split: bool,
 ) -> Result<(Mesh, commonwealth_core::mesh::GossipAuth), GossipError> {
-    let mut wire = MeshWire::from(my_view);
     // Stop putting the raw credential on the wire the moment the peer can
     // authorize without it. `peer_is_post_split` is our own observation from a
     // previous round (`AppState::peer_confirmed_post_split`), not the peer's
@@ -1192,9 +1191,14 @@ async fn gossip_with_peer(
     // that authorizes on raw-secret comparison, and withholding would partition
     // it. That is the back-compat half, and it retires itself as the fleet
     // upgrades — no flag day, and no round where both sides are stuck.
-    if peer_is_post_split {
-        wire.mesh_secret = [0u8; 32];
-    }
+    let wire = MeshWire::for_peer(
+        my_view,
+        if peer_is_post_split {
+            SecretDisclosure::Redact
+        } else {
+            SecretDisclosure::Disclose
+        },
+    );
     let body = GossipRequestWire {
         mesh: wire,
         from: Some(self_id),
@@ -1253,27 +1257,13 @@ pub enum GossipError {
 // HashMap<NodeId, MemberRecord> → Vec<MemberRecord> for serde is
 // the whole reason MeshWire exists.
 
-#[derive(Debug, Serialize)]
-struct GossipRequestWire {
-    mesh: MeshWire,
-    /// Who we are, so the peer can bind our proof to us. Omitted rather than
-    /// nulled so a pre-proof peer's serde sees byte-identical input.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    from: Option<NodeId>,
-    /// Proof we hold `mesh_secret`, so an upgraded pair never has to put the
-    /// raw credential on the wire.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    mesh_proof: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GossipResponseWire {
-    mesh: MeshWire,
-    #[serde(default)]
-    from: Option<NodeId>,
-    #[serde(default)]
-    mesh_proof: Option<String>,
-}
+// `GossipRequestWire` / `GossipResponseWire` were mirrors of the server's own
+// types. The request one existed because that side derived `Deserialize` only;
+// the RESPONSE one had no reason at all — `GossipResponse` already derived
+// both halves and was already re-exported. It was a pure duplicate.
+use commonwealth_api::routes_internal::{
+    GossipRequest as GossipRequestWire, GossipResponse as GossipResponseWire,
+};
 
 /// The gossip round's wire shape. A THIRD mirror of
 /// `commonwealth_api::routes_internal::MeshWire` (the others live in
@@ -1287,94 +1277,12 @@ struct GossipResponseWire {
 /// - `invite_key_hash` keeps its historical wire name. Renaming the Rust field
 ///   without this made every gossip round fail with 422, which is exactly how
 ///   the two `gossip_integration` round-trip tests caught it.
-#[derive(Debug, Serialize, Deserialize)]
-struct MeshWire {
-    id: MeshId,
-    name: String,
-    #[serde(default)]
-    mesh_secret: [u8; 32],
-    #[serde(rename = "join_key_hash")]
-    invite_key_hash: [u8; 32],
-    #[serde(default)]
-    invite_version: u64,
-    #[serde(default)]
-    invite_expires_at: Option<u64>,
-    #[serde(default)]
-    require_encryption: bool,
-    members: Vec<MemberRecord>,
-    peers: Vec<MeshPeering>,
-}
-
-impl From<&Mesh> for MeshWire {
-    fn from(m: &Mesh) -> Self {
-        Self {
-            id: m.id,
-            name: m.name.clone(),
-            mesh_secret: m.mesh_secret,
-            invite_key_hash: m.invite_key_hash,
-            invite_version: m.invite_version,
-            invite_expires_at: m.invite_expires_at,
-            require_encryption: m.require_encryption,
-            members: m.members.values().cloned().collect(),
-            peers: m.peers.clone(),
-        }
-    }
-}
-
-impl MeshWire {
-    fn into_mesh(self) -> Mesh {
-        use std::collections::HashMap;
-        let members = self
-            .members
-            .into_iter()
-            .map(|m| (m.node_id, m))
-            .collect::<HashMap<_, _>>();
-        Mesh {
-            mesh_secret: self.mesh_secret,
-            invite_expires_at: self.invite_expires_at,
-            id: self.id,
-            name: self.name,
-            invite_key_hash: self.invite_key_hash,
-            // Carry it. Hardcoding 0 here pins every peer's invite at version
-            // 0 on arrival, so `merge_invite_from` never sees a newer one and a
-            // rotation stops propagating — silently, with gossip still green.
-            // This exact function zero-filled `mesh_secret` the same way on
-            // 2026-08-26; that is why the audit for hardcoded conversion
-            // fields is part of the ritual now, not a one-off.
-            invite_version: self.invite_version,
-            require_encryption: self.require_encryption,
-            members,
-            peers: self.peers,
-        }
-    }
-}
-
-#[cfg(test)]
-mod gossip_client_tests {
-    use super::gossip_client;
-
-    /// The gossip HTTP client must be ONE process-wide instance, because a
-    /// `reqwest::Client` owns its connection pool: a fresh client per round
-    /// drops the pool, and the peer's iroh `HttpBridge` then dials a fresh
-    /// QUIC connection for the new TCP connection. Measured cost of getting
-    /// this wrong (RuggedFox → BeefyMac, concurrent A/B, one 3-min window):
-    /// p50 189 ms and 2 dial timeouts, versus p50 38.8 ms and 0 when the
-    /// connection is reused.
-    ///
-    /// Pointer identity is the honest assertion here — two `Client` values
-    /// that merely compare equal would still be two pools.
-    #[test]
-    fn gossip_client_is_one_shared_pool_per_process() {
-        let a = gossip_client().expect("gossip client builds");
-        let b = gossip_client().expect("gossip client builds");
-        assert!(
-            std::ptr::eq(a, b),
-            "gossip must reuse ONE reqwest::Client — a per-round client throws \
-             away the connection pool and forces a fresh QUIC handshake to every \
-             peer on every round"
-        );
-    }
-}
+// The third of four declarations of this shape lived here, with its own
+// `From<&Mesh>` and `into_mesh`. It is now `commonwealth_core::mesh::
+// MeshSnapshot` — the projection and both conversions in one place, which is
+// where this shape failed twice: a zero-filled `mesh_secret` on 2026-08-26 and
+// an `invite_version` that pinned every peer's invite at 0, both green.
+use commonwealth_core::mesh::{MeshWire, SecretDisclosure};
 
 #[cfg(test)]
 mod select_round_peers_tests {
