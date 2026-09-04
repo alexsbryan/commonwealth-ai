@@ -92,3 +92,57 @@ Verify on each peer:
 - `~/.svrnmesh/indexes/sep-<slug>/atlas/atoms.json` exists
 - `sovereign enrich query sep-<slug> "<probe>"` returns results
 - `sovereign mesh status` still healthy on both
+
+## The INDEX backfill (`backfill_index.sh`) — a different job from the one above
+
+`run_batch.sh` BUILDS atlases (`enrich sep-ingest` + `enrich build`, LLM work,
+hours per peer). `backfill_index.sh` completes atlases that already exist: the
+v2 store (`atoms.lance` + `edges.csr`) and the ANN seed table
+(`atoms_ann.lance`). No extraction, no chat model — one embed call per atom.
+
+Since ei-3-index (2026-09-04) `atoms_ann.lance` is a mandatory artifact of the
+atlas WRITE, so nothing built from that commit forward needs this. It exists
+for the ~1,770 SEP per-article atlases built before it, of which **22 had a
+seed table and 662 had a v2 store**. An atlas without the table loads,
+enumerates, reports nothing wrong and cannot ground — every answer over it
+falls back to cosine over chunks.
+
+```bash
+./backfill_index.sh --dry-run              # worklist + the projected price
+./backfill_index.sh                        # every sep-* atlas on this host
+./backfill_index.sh --limit 20             # smoke run
+./backfill_index.sh brothers-karamazov-book-1
+```
+
+It is a DRIVER over two existing verbs — `svrn atlas migrate-all <id>` for the
+store, `svrn atlas backfill-ann <ids...>` for the table. No filter, threshold
+or table is re-derived here; the one writer stays
+`corpus_engine::enrichment::atlas::context_loader::backfill_ann`.
+
+**Measured price on the Halo (2026-09-04, before any run):** 88,801 atoms clear
+the production grounding filter across the 1,770 `sep-*` atlases (the sum of
+`tier2_count` over their summaries, which is the same population the filter
+admits); embed throughput **14.0/s** serial keep-alive against the resident
+1024-d slot (40 calls, 71.2 ms each); 1,108 atlases need their store built
+first. **~106 min of embedding**, plus store builds and ~40 s of session
+bootstrap per CLI invocation (`--batch`, default 100, amortises that).
+
+**It does not self-throttle, because there is nothing to throttle.**
+`load_atlas_context` awaits one embed call at a time — the job is strictly
+serial by construction. That matters on this host: a parallel embed fan
+OOM-killed the daemon on 2026-05-31, and the daemon was OOM-killed four more
+times on 2026-09-04. The only load knob is "stop", and the ledger makes
+stopping free.
+
+**Ledger + resume.** `backfill-index.jsonl` (beside this README, in git — the
+`logs/` dir is gitignored) gets one line per corpus the moment its batch
+reports: corpus, state (`built` / `no-seedable` / `failed`), whether the v2
+store was `had` or `built`, rows/of, seconds. A re-run skips anything already
+recorded done and retries `failed`. A corpus with no line in its batch's output
+is `failed`, never counted as done. The closing table is had / built / failed
+**by name**.
+
+Status: the SEP sweep is parked as its own order (ei-3b, seat decision
+2026-09-04 — 106 min of sustained embed on a box that killed the daemon four
+times that day). `brothers-karamazov-book-1` is in the ledger: 16/16 atoms
+embedded, v2 store already present, 49 s wall of which ~1 s was embedding.
