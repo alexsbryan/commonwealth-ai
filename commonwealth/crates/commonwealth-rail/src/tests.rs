@@ -294,3 +294,69 @@ fn a_torn_last_line_is_reported_rather_than_quietly_dropped() {
         f.gaps
     );
 }
+
+/// **The rail can now delete, and the deletion sticks.** This is the whole
+/// point of the sealed floor, exercised the only way that proves it: lines are
+/// physically removed from a journal on disk, and then the node has to still
+/// be right and still be quiet.
+///
+/// Before the floor, each of the three assertions below failed in a different
+/// way — the compacted node reported three `SequenceHole`s, advertised nothing
+/// at all for the actor, and had its whole holding pushed back at it on the
+/// next sixty-second round. Compaction amplified traffic and then undid
+/// itself, which is why "the rail cannot delete anything at any granularity"
+/// was true.
+#[test]
+fn a_compacted_journal_stays_complete_and_stops_the_prefix_coming_back() {
+    let (dir_a, dir_b) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (a, b) = (open(dir_a.path()), open(dir_b.path()));
+    let r = ring();
+
+    // Alex writes three acts and then seals them — through the ordinary door,
+    // under the ordinary key, taking the next ordinary seq. There is no
+    // second authoring path and no setting.
+    for what in ["one", "two", "three"] {
+        a.append(record(what), &key(1), &r).unwrap();
+    }
+    let seal = a.append(RailAct::Seal, &key(1), &r).unwrap();
+    assert_eq!(seal.kind.seq, 3, "a seal is just the actor's next op");
+    a.append(record("after"), &key(1), &r).unwrap();
+
+    // B is a peer that received everything and has NOT compacted.
+    b.ingest_all(&a.read().unwrap().0).unwrap();
+
+    // A now retires what the seal covers, by deleting the lines.
+    let path = a.dir().join("ring_oplog.jsonl");
+    let kept: String = std::fs::read_to_string(&path)
+        .unwrap()
+        .lines()
+        .filter(|l| {
+            serde_json::from_str::<Op<SignedOp>>(l)
+                .map(|o| o.kind.seq >= seal.kind.seq)
+                .unwrap_or(true)
+        })
+        .map(|l| format!("{l}\n"))
+        .collect();
+    std::fs::write(&path, kept).unwrap();
+    assert_eq!(a.read().unwrap().0.len(), 2, "the prefix is really gone");
+
+    // 1. A compacted node is not a broken one.
+    let fa = a.admit(&r, &Ed25519Verifier).unwrap();
+    assert!(fa.is_complete(), "{:?}", fa.gaps);
+    assert_eq!(applied(&fa), vec!["after"]);
+
+    // 2. It can still say what it needs, from the floor rather than from zero.
+    assert_eq!(
+        a.digest().unwrap(),
+        Digest::from([(actor_of(&key(1)), 4)]),
+        "a compacted actor must make a claim, not fall silent"
+    );
+
+    // 3. So the peer that still holds the retired prefix sends none of it.
+    assert!(
+        b.ops_missing_from(&a.digest().unwrap()).unwrap().is_empty(),
+        "the retired prefix must not come back every sixty seconds"
+    );
+    assert_eq!(a.ingest_all(&[]).unwrap(), 0);
+    assert_eq!(a.read().unwrap().0.len(), 2, "and it stays deleted");
+}

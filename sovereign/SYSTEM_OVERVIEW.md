@@ -4458,7 +4458,7 @@ line, bad signature, unknown signer, rewritten id, sequence hole, sequence
 fork, dangling correction, newer-format line), five about money. Not one of
 the first eight knows what an expense is, and a tool-lending board needs every
 one of them. So the line is now `RailAct` inside `Op<SignedOp>` —
-`Record{payload}` or `Correct{corrects, replacement?}`, a per-actor `seq`, and
+`Record{payload}`, `Correct{corrects, replacement?}` or `Seal`, a per-actor `seq`, and
 an Ed25519 signature over a domain-separated message that binds the namespace,
 so an op lifted from one ring and replayed into another fails the signature
 rather than a downstream check. **`Op.actor` is the signing public key**,
@@ -4561,6 +4561,36 @@ regardless of history. *Contiguous* is load-bearing — a node holding seq 0 and
 2 that advertised `2` would be answered "nothing above 2" and seq 1 would
 never arrive, sitting as a permanent `SequenceHole` while both sides believed
 they were in sync. An actor absent from the digest asks for everything.
+
+**The run counts from a SEALED FLOOR, and that is what lets the rail delete**
+(2026-09-04). Until then the mark was contiguous *from zero*: `digest`
+early-returned for any actor whose seq 0 it did not hold, and `admit` walked
+`0..=highest`. So a node that retired an old prefix advertised NOTHING for that
+actor, every peer read that as "I hold none of theirs" and re-sent the whole
+holding every 60s, while `admit` reported one `SequenceHole` per retired op
+forever. **Compaction amplified traffic, undid itself, and looked like
+breakage** — the rail could not delete anything at any granularity, which is
+not a substrate a third party builds on. The floor is `RailAct::Seal`: an act
+that retires everything its author wrote before it. It carries **no actor and
+no range** — the floor is whoever signed it, at the seal's own `seq` — so
+sealing somebody else's history is unwritable rather than refused (§7.1), and a
+seal cannot claim past what its author reached. **Authored, never configured**:
+a local truncation setting would put the disagreement one layer up, two peers
+with different floors and one re-sending forever; a seal is a signed op in the
+same total order as every other act, and the seal itself is how the floor
+travels. `sync::sealed_floors` is the ONE reading of it (§10.6), and *which ops
+it is handed is the safety question*: `admit` hands it only ops that passed the
+signature, roster and fork checks, so a forged seal — the exact line a hostile
+peer would push at `/internal/ring/sync`, which ingests as-signed — retires
+nothing (§18.3); `digest` hands it the whole holding, the same trust the
+contiguous mark beside it has always had, because being wrong there costs a
+round while being wrong in `admit` states a total over a subset and calls it
+complete. **The wire type did NOT change**: a peer's only use for the digest is
+*which ops do I send*, and the answer is `(mark, ∞)` whether the run started at
+zero or at a floor, so a build that knows about seals writes a byte-identical
+digest to one that does not for the same holding — nothing to default, no
+version to tag, and one fewer thing an old peer can fail to parse across a
+60-second exchange between mixed builds.
 
 Two idempotent calls converge both directions: `{digest, ops: []}` pulls what
 we lack and learns the peer's digest; `{digest', ops: what_they_lack}` pushes

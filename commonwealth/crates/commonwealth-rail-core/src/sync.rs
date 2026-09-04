@@ -16,8 +16,8 @@
 //!
 //! # The digest is a CONTIGUOUS high-water mark, and that word is load-bearing
 //!
-//! Per actor, the highest `n` such that this node holds every op `0..=n` from
-//! them — **not** the highest seq it holds. A maximum cannot express a hole: a
+//! Per actor, the highest `n` such that this node needs nothing at or below
+//! `n` — **not** the highest seq it holds. A maximum cannot express a hole: a
 //! node holding seq 0 and 2 would advertise `2`, the peer would answer
 //! "nothing above 2", and seq 1 would never arrive. It would sit in the
 //! admission report as a permanent [`SequenceHole`](crate::RailGap::SequenceHole)
@@ -25,6 +25,32 @@
 //!
 //! An actor missing from the digest means "I hold nothing of theirs", so the
 //! peer sends everything. Absence is a request, never a default.
+//!
+//! # The run starts at the sealed FLOOR, and that is what lets the rail delete
+//!
+//! "Contiguous from zero" is the same maximum problem one level down. A node
+//! that retires an old prefix holds no seq 0, so it could claim nothing at
+//! all — every peer read that as *I have none of theirs* and re-sent the whole
+//! holding, every sixty seconds, forever. **Compaction amplified traffic and
+//! then undid itself**, which is why the rail could not delete anything at any
+//! granularity.
+//!
+//! So the run counts from a floor: the `seq` of the actor's own highest
+//! [`Seal`](crate::RailAct::Seal), by [`sealed_floors`]. Nothing below it is
+//! wanted, nothing below it is sent, and [`admit`](crate::admit) does not call
+//! it a hole.
+//!
+//! **The floor is authored, never configured.** A local truncation setting
+//! would put the disagreement back one layer up — two nodes with different
+//! floors, one re-sending forever. A seal is a signed op in the same total
+//! order as every other act, so peers agree about it by the mechanism they
+//! already have, and the seal itself is how the floor travels.
+//!
+//! **The wire type does not change, and that is deliberate.** A peer uses the
+//! digest for exactly one decision — which ops to send — and the answer is
+//! `(mark, ∞)` whether the run started at zero or at a floor. Putting the
+//! floor on the wire as well would add a second thing an old peer can fail to
+//! parse and buy nothing; see the compatibility note on [`Digest`].
 //!
 //! # Everyone republishes everything they hold
 //!
@@ -40,17 +66,63 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use oplog::Op;
 
-use crate::SignedOp;
+use crate::{RailAct, SignedOp};
 
 /// Per-actor contiguous high-water marks. `{actor_pubkey_hex → n}`.
+///
+/// `n` means **"I need nothing at or below this"** — which is a strict
+/// generalisation of the old reading ("I hold every op `0..=n`"), identical
+/// whenever nothing is sealed. That is why the sealed floor did NOT become a
+/// second field here: a peer's only use for this map is to answer *which ops
+/// do I send*, and `(n, ∞)` is that answer either way.
+///
+/// It matters because this crosses the wire every sixty seconds between peers
+/// that may be on different builds (`sovereign-mesh/src/ring_sync.rs`), and
+/// disk and wire are different compatibility clocks. A digest written by a
+/// build that knows about seals is byte-identical to one written by a build
+/// that does not, for the same holding — so neither side can fail to read the
+/// other, and there is nothing to default and no version to tag.
 pub type Digest = BTreeMap<String, u64>;
 
-/// What this node can honestly claim to hold, per actor.
+/// Where each actor's history still starts. `{actor_pubkey_hex → seq}`.
+pub(crate) type Floors = BTreeMap<String, u64>;
+
+/// The ONE reading of a [`Seal`](crate::RailAct::Seal) (ARCH §10.6).
+///
+/// An actor's floor is the `seq` of their own highest seal, because a seal
+/// retires everything its author wrote before it. Never having sealed is a
+/// floor of zero, which is exactly the behaviour this rail had before seals
+/// existed.
+///
+/// **Which ops you hand it is the whole safety question.** [`admit`](crate::admit)
+/// hands it only ops that passed the signature and roster checks, so a forged
+/// or unclaimed seal retires nothing — a seal is the one act that makes the
+/// rail stop asking for history, and treating an unauthenticated one as
+/// authoritative would let a single pushed line erase a member's past on every
+/// node that received it (ARCH §18.3). [`digest`] hands it the whole holding,
+/// which is the same trust the contiguous mark beside it has always had:
+/// the digest says what to ASK for, and being wrong there costs a round, while
+/// being wrong in `admit` states a total over a subset and calls it complete.
+pub(crate) fn sealed_floors<'a>(ops: impl IntoIterator<Item = &'a Op<SignedOp>>) -> Floors {
+    let mut floors = Floors::new();
+    for op in ops {
+        if matches!(op.kind.act, RailAct::Seal) {
+            let floor = floors.entry(op.actor.clone()).or_insert(0);
+            *floor = (*floor).max(op.kind.seq);
+        }
+    }
+    floors
+}
+
+/// What this node can honestly claim to need nothing below, per actor.
 ///
 /// See the module docs: this is the **contiguous** mark, so a hole below the
 /// maximum lowers it and the peer re-sends from there. Healing a hole is
-/// therefore automatic rather than a separate repair path.
+/// therefore automatic rather than a separate repair path. The run counts from
+/// the actor's sealed floor, so a node that has compacted a retired prefix
+/// still makes a claim instead of falling silent.
 pub fn digest(ops: &[Op<SignedOp>]) -> Digest {
+    let floors = sealed_floors(ops);
     let mut by_actor: BTreeMap<&str, BTreeSet<u64>> = BTreeMap::new();
     for op in ops {
         by_actor
@@ -61,13 +133,16 @@ pub fn digest(ops: &[Op<SignedOp>]) -> Digest {
     by_actor
         .into_iter()
         .filter_map(|(actor, seqs)| {
-            // Absent from the digest is the honest answer when seq 0 itself is
-            // missing — "I have some of their ops but not from the start" is
-            // indistinguishable from "I have none" for the purpose of asking.
-            if !seqs.contains(&0) {
+            // Absent from the digest is the honest answer when the floor
+            // itself is missing — "I have some of their ops but not from
+            // where their history starts" is indistinguishable from "I have
+            // none" for the purpose of asking. A sealed actor cannot reach
+            // this: the floor IS the seal's own seq, so holding the seal is
+            // holding the floor.
+            let mut n = floors.get(actor).copied().unwrap_or(0);
+            if !seqs.contains(&n) {
                 return None;
             }
-            let mut n = 0u64;
             while seqs.contains(&(n + 1)) {
                 n += 1;
             }
@@ -78,7 +153,10 @@ pub fn digest(ops: &[Op<SignedOp>]) -> Digest {
 
 /// Every op this node holds that `theirs` says the peer is missing.
 ///
-/// Author-blind on purpose (see the module docs). Ordered by
+/// A mark of `n` means the peer needs nothing at or below `n`, sealed or held
+/// alike, so honouring the floor is the same `>` this always was — the peer's
+/// retired prefix is simply never above its own mark. Author-blind on purpose
+/// (see the module docs). Ordered by
 /// `(actor, seq)` so the wire payload is deterministic — two nodes with the
 /// same holdings produce byte-identical bodies, which makes a diff of two
 /// captures mean something.
@@ -99,6 +177,7 @@ pub fn ops_missing_from(ops: &[Op<SignedOp>], theirs: &Digest) -> Vec<Op<SignedO
 mod tests {
     use super::*;
     use crate::tests_support::{key, record, signed};
+    use crate::RailAct;
 
     fn actor(seed: u8) -> String {
         crate::actor_of(&key(seed))
@@ -168,6 +247,66 @@ mod tests {
 
     /// Two nodes with the same holdings must produce the same bytes, or a
     /// captured payload diff means nothing.
+    // ── the sealed floor ─────────────────────────────────
+
+    fn seal(seed: u8, seq: u64, ts: i64) -> Op<SignedOp> {
+        signed(&key(seed), ts, seq, RailAct::Seal)
+    }
+
+    /// **Truncation must not undo itself.** Before the floor existed,
+    /// `digest` early-returned `None` for any actor whose seq 0 it did not
+    /// hold — so a node that compacted a sealed prefix advertised NOTHING for
+    /// that actor, every peer read that as "I have none of theirs", and the
+    /// whole holding came back on the next sixty-second round. Compaction
+    /// amplified traffic and then reversed itself.
+    ///
+    /// The first assertion is the negative control: the same holding with no
+    /// seal in it really is unadvertisable, so the second cannot pass on a
+    /// digest that was never empty.
+    #[test]
+    fn a_compacted_actor_is_advertised_from_its_seal_instead_of_not_at_all() {
+        let no_seal = vec![op(1, 3, 103), op(1, 4, 104)];
+        assert!(
+            digest(&no_seal).is_empty(),
+            "control: nothing sealed, nothing contiguous from 0, nothing to claim"
+        );
+
+        let compacted = vec![seal(1, 3, 103), op(1, 4, 104)];
+        assert_eq!(
+            digest(&compacted),
+            Digest::from([(actor(1), 4)]),
+            "the mark counts from the sealed floor, not from zero"
+        );
+    }
+
+    /// **A peer must not re-send a sealed prefix, ever.** This is the same
+    /// defect seen from the other end: the responder holds the retired ops
+    /// and, reading a digest that could not name a floor, shipped all of them
+    /// every round.
+    #[test]
+    fn a_peer_never_re_sends_what_the_seal_retired() {
+        // The prefix the seal retires, and what is left after compaction. The
+        // peer is a node that never compacted, so it holds both.
+        let retired: Vec<_> = (0..3).map(|s| op(1, s, 100 + s as i64)).collect();
+        let compacted = vec![seal(1, 3, 103), op(1, 4, 104)];
+        let peer_holds: Vec<_> = retired.iter().chain(&compacted).cloned().collect();
+        assert!(
+            ops_missing_from(&peer_holds, &digest(&compacted)).is_empty(),
+            "the retired prefix is not wanted and must not be sent"
+        );
+
+        // And the seal still travels to a peer that has not got it yet: a
+        // node cannot honour a floor it has never seen.
+        assert_eq!(
+            ops_missing_from(&peer_holds, &digest(&retired))
+                .iter()
+                .map(|o| o.kind.seq)
+                .collect::<Vec<_>>(),
+            vec![3, 4],
+            "the seal itself is an op, and it is how the floor propagates"
+        );
+    }
+
     #[test]
     fn the_payload_order_is_content_derived_not_arrival_order() {
         let a = vec![op(1, 0, 10), op(2, 0, 11), op(1, 1, 12)];

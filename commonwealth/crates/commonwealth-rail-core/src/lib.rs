@@ -210,6 +210,24 @@ pub enum RailAct {
         corrects: OpId,
         replacement: Option<Payload>,
     },
+    /// Everything this key wrote **before this op** is retired. The rail stops
+    /// asking for it, stops sending it, and stops calling its absence a hole.
+    ///
+    /// A seal carries no `actor` and no range, and both omissions are the
+    /// design (ARCH §7.1 — unrepresentable rather than checked):
+    ///
+    /// - **No actor**, so sealing someone else's history cannot be written.
+    ///   The floor a seal raises is the floor of whoever signed it, and the
+    ///   signature is the only field on the line a writer cannot forge for
+    ///   somebody else (ARCH §18.1).
+    /// - **No range**, so the floor is the seal's own `seq`. A seal cannot
+    ///   claim past what its author has actually reached, and a node that
+    ///   holds the seal necessarily holds the floor — which is what keeps the
+    ///   contiguous run in [`digest`] non-empty for a compacted actor.
+    ///
+    /// It carries no payload, so an app's reducer never sees it
+    /// ([`AdmittedOp::applies`] is false); it is delivery, not meaning.
+    Seal,
 }
 
 impl RailAct {
@@ -251,6 +269,7 @@ impl RailAct {
         match self {
             Self::Record { payload } => Some(payload),
             Self::Correct { replacement, .. } => replacement.as_ref(),
+            Self::Seal => None,
         }
     }
 }
@@ -374,7 +393,7 @@ pub trait RingVerifier: Send + Sync {
 
 /// The shipped verifier: Ed25519 over the exact bytes [`RingSigner`]'s own
 /// implementation signs. The one production answer, and the reason
-/// [`sig::verify_ring_op`] is no longer reachable from outside this crate —
+/// `sig::verify_ring_op` is no longer reachable from outside this crate —
 /// leaving it public would leave the hardcode next to the seam, which is how
 /// the asymmetry comes back (ARCH §7).
 pub struct Ed25519Verifier;

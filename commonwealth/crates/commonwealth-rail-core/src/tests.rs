@@ -604,3 +604,112 @@ fn a_permissive_verifier_still_cannot_admit_a_stranger() {
     assert!(f.ops.is_empty());
     assert!(matches!(f.gaps.as_slice(), [RailGap::UnknownSigner { .. }]));
 }
+
+// ── the sealed floor ─────────────────────────────────────────
+
+/// A `Seal` whose author signed it, at `seq`, plus one act above it. The
+/// holding a node has after it compacts everything the seal retired.
+fn sealed_then(seq: u64, what: &str) -> Vec<Op<SignedOp>> {
+    vec![
+        signed(&key(1), 100 + seq as i64, seq, RailAct::Seal),
+        signed(&key(1), 101 + seq as i64, seq + 1, record(what)),
+    ]
+}
+
+/// **Compaction must not look like breakage.** Before the floor existed,
+/// `admit` walked `0..=highest` and a node that had retired a sealed prefix
+/// reported one `SequenceHole` per retired op — permanently, and to every
+/// housemate, while being in perfect health.
+///
+/// The first assertion is the negative control: the same two ops WITHOUT the
+/// seal are three holes, so the second cannot pass on a holding that was
+/// never missing anything.
+#[test]
+fn a_sealed_prefix_is_retired_rather_than_reported_as_a_hole() {
+    let unsealed = vec![signed(&key(1), 104, 4, record("after"))];
+    assert_eq!(
+        admitted(&unsealed).gaps.len(),
+        4,
+        "control: with nothing sealed, seqs 0..=3 are four holes"
+    );
+
+    let f = admitted(&sealed_then(3, "after"));
+    assert!(
+        f.is_complete(),
+        "a compacted node is not a broken one: {:?}",
+        f.gaps
+    );
+    assert_eq!(applied(&f), vec!["after"]);
+}
+
+/// **A refused seal retires nothing (ARCH §18.3).** A seal is the one act that
+/// makes the rail stop asking for history, so a seal the rail could not
+/// authenticate must be a refusal and never an absence. This one names `alex`
+/// as its actor and is signed with a key that is not alex's — the exact op a
+/// hostile peer would push at `/internal/ring/sync`, which ingests as-signed.
+///
+/// If the floor came from the seal ops a node HOLDS rather than the ones it
+/// ADMITS, one forged line would retire a member's whole history on every node
+/// that received it.
+#[test]
+fn a_seal_the_rail_refused_retires_nothing() {
+    let act = RailAct::Seal;
+    let body = serde_json::to_string(&act).unwrap();
+    let forged = Op::new(
+        SignedOp {
+            seq: 3,
+            // cy's key, over a line that claims to be alex's.
+            sig: sign_ring_op(&key(3), NS, 103, 3, &body),
+            act,
+        },
+        103,
+        actor_of(&key(1)),
+    );
+    let f = admitted(&[forged, signed(&key(1), 104, 4, record("after"))]);
+
+    assert!(
+        f.gaps.iter().any(
+            |g| matches!(g, RailGap::BadSignature { actor, .. } if *actor == actor_of(&key(1)))
+        ),
+        "the forged seal is refused, not silently ignored: {:?}",
+        f.gaps
+    );
+    for missing in 0..=3 {
+        assert!(
+            f.gaps.contains(&RailGap::SequenceHole {
+                actor: actor_of(&key(1)),
+                missing,
+            }),
+            "seq {missing} is still missing — a refused seal did not retire it: {:?}",
+            f.gaps
+        );
+    }
+    assert!(!f.is_complete());
+}
+
+/// **A seal is bounded by the key that signed it.** `RailAct::Seal` carries no
+/// actor, so sealing somebody else's history is unwritable rather than
+/// refused — but the floor derivation still has to key on the signer and not,
+/// say, apply the highest seal in the journal to everyone.
+#[test]
+fn a_seal_retires_only_the_history_of_the_key_that_signed_it() {
+    let mut ops = sealed_then(3, "after");
+    // bo holds only their seq 2 — seqs 0 and 1 have not arrived, and alex's
+    // seal says nothing about that.
+    ops.push(signed(&key(2), 110, 2, record("bo-late")));
+    let f = admitted(&ops);
+    assert_eq!(
+        f.gaps,
+        vec![
+            RailGap::SequenceHole {
+                actor: actor_of(&key(2)),
+                missing: 0
+            },
+            RailGap::SequenceHole {
+                actor: actor_of(&key(2)),
+                missing: 1
+            },
+        ],
+        "alex is sealed, bo is not"
+    );
+}

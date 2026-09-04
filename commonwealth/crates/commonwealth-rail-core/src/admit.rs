@@ -98,6 +98,10 @@ pub enum RailGap {
     /// This actor's ops jump over a sequence number. Something they wrote has
     /// not reached us — the one condition that distinguishes "nothing
     /// happened" from "it never arrived."
+    ///
+    /// Counted from that actor's sealed floor, so what a
+    /// [`Seal`](crate::RailAct::Seal) retired is absent by agreement rather
+    /// than missing.
     SequenceHole { actor: String, missing: u64 },
     /// One actor used one sequence number for two different ops. Equivocation
     /// or a lost counter after a restart; either way both ops are excluded,
@@ -355,15 +359,6 @@ pub fn admit(
     }
     let mut forked: BTreeSet<OpId> = BTreeSet::new();
     for (actor, by_seq) in &seqs {
-        let highest = by_seq.keys().copied().next_back().unwrap_or(0);
-        for n in 0..=highest {
-            if !by_seq.contains_key(&n) {
-                gaps.push(RailGap::SequenceHole {
-                    actor: (*actor).to_string(),
-                    missing: n,
-                });
-            }
-        }
         for (seq, ids) in by_seq {
             if ids.len() > 1 {
                 let mut ids = ids.clone();
@@ -378,6 +373,30 @@ pub fn admit(
         }
     }
     admitted.retain(|id, _| !forked.contains(id));
+
+    // Holes are audited from each actor's SEALED FLOOR, not from zero, or a
+    // node that has retired what a seal covers reports one hole per retired
+    // op — permanently, to every housemate, while being in perfect health.
+    // That report is what made compaction indistinguishable from breakage.
+    //
+    // The floors come from ops that survived BOTH the signature/roster checks
+    // above and the fork exclusion just now: a seal the rail refused, or one
+    // it cannot choose between, retires nothing. Suppressing a hole is a claim
+    // of completeness, and a claim of completeness may only rest on an act the
+    // rail could actually authenticate (ARCH §18.3).
+    let floors = crate::sync::sealed_floors(admitted.values().map(|c| c.op));
+    for (actor, by_seq) in &seqs {
+        let floor = floors.get(*actor).copied().unwrap_or(0);
+        let highest = by_seq.keys().copied().next_back().unwrap_or(0);
+        for n in floor..=highest {
+            if !by_seq.contains_key(&n) {
+                gaps.push(RailGap::SequenceHole {
+                    actor: (*actor).to_string(),
+                    missing: n,
+                });
+            }
+        }
+    }
 
     // ── the void set: commutative, and it never resurrects ───
     //
@@ -416,6 +435,10 @@ pub fn admit(
                     corrects,
                     replacement,
                 } => (Some(corrects.clone()), replacement.clone()),
+                // A seal is delivery, not meaning: it voids nothing and
+                // carries nothing, so `applies()` is false and no reducer
+                // sees it.
+                RailAct::Seal => (None, None),
             };
             AdmittedOp {
                 id: a.id.clone(),
@@ -438,6 +461,10 @@ pub fn admit(
         namespace,
         verifier = verifier.name(),
         held = ops.len(),
+        // The one input that stops a gap being REPORTED, so it belongs on the
+        // event a reader already looks at when asking why a node claims
+        // completeness (ARCH §9.1). `{}` when nothing is sealed.
+        sealed = ?floors,
         admitted = out.len(),
         applied,
         voided = voided.len(),
