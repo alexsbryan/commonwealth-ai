@@ -43,7 +43,7 @@ use crate::state::AppState;
 /// snapshot — a rail, not a cap: the exchange still goes through.
 const RING_PAYLOAD_WARN_BYTES: usize = crate::server::MAX_REQUEST_BODY_BYTES / 2;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RingSyncRequest {
     /// Which ring's journal. Named explicitly because this is peer-to-peer
     /// traffic and carries no grant — the grant scoping in `routes_rail` is
@@ -58,7 +58,7 @@ pub struct RingSyncRequest {
     pub ops: Vec<Op<SignedOp>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RingSyncResponse {
     pub namespace: String,
     /// What THIS node holds, so the caller can compute what to send next.
@@ -67,6 +67,11 @@ pub struct RingSyncResponse {
     pub ops: Vec<Op<SignedOp>>,
     /// How many of the caller's ops were new here. Zero is the steady state,
     /// not a failure.
+    ///
+    /// `#[serde(default)]` on the READ side only — this node always writes it.
+    /// It preserves exactly the tolerance the sovereign-mesh client carried
+    /// before it stopped declaring its own copy of this struct.
+    #[serde(default)]
     pub ingested: usize,
 }
 
