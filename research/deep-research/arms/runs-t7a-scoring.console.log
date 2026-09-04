@@ -1,0 +1,43 @@
+== t7a DRB-I RACE SCORING — terminal marker file ==
+unit: dr-t7a-scoring.service (systemd-run --user)
+marker shapes:
+  per-task progress: "  id <n>: overall=<v> (...) (X.Y min, 4 dims parsed)"
+  terminal SUCCESS:  "  X/9 tasks scored" + "  -> .../race_result.txt"
+  terminal FAILURE:  "exit 2:" | "exit 3:" | "FAILED" | "Traceback" | "exit 4"
+scoring: 9 judge calls (tasks 56 58 59 62 65 69 78 83 90), task 95 SKIPPED
+  (never-ran — pre-registered cumulative-search cap stop)
+skip: [95] — never-ran (pre-registered cap stop); named in the manifest, excluded from the means over scored rows only
+judge guard: Qwen3.8-27B-UD-Q6_K_XL loaded
+output root: research/deep-research/drb/overall-derivation/flights/race-20260820T151153
+== arm t7a (fresh judge calls) ==
+  id 56: ERROR — task 56: judge failed after 10 retries — Failed to generate content: openai chat/completions 503: {"error":"host busy: ~51546 ms predicted wait at queue position 1","reason":"local_queue_full","retry_after_secs":52} (recorded, flight continues)
+  id 58: ERROR — task 58: judge failed after 10 retries — Failed to generate content: openai chat/completions 503: {"error":"host busy: ~68287 ms predicted wait at queue position 1","reason":"local_queue_full","retry_after_secs":69} (recorded, flight continues)
+skip: [95] — never-ran (pre-registered cap stop); named in the manifest, excluded from the means over scored rows only
+judge guard: Qwen3.8-27B-UD-Q6_K_XL loaded
+output root: research/deep-research/drb/overall-derivation/flights/race-20260820T151739
+== arm t7a (fresh judge calls) ==
+skip: [95] — never-ran (pre-registered cap stop); named in the manifest, excluded from the means over scored rows only
+judge guard: Qwen3.8-27B-UD-Q6_K_XL loaded
+output root: research/deep-research/drb/overall-derivation/flights/race-20260820T151943
+== arm t7a (fresh judge calls) ==
+  id 56: overall=0.0593 (8.3 min, 4 dims parsed)
+  id 58: overall=0.1676 (5.0 min, 4 dims parsed)
+  id 59: overall=0.1930 (4.4 min, 4 dims parsed)
+  id 62: overall=0.2652 (6.8 min, 4 dims parsed)
+WARNING:root:ID: 65 - 1 criteria without exact matches: {'comprehensiveness:Comprehensive Application of Modern Control Strategy for Design'}
+  id 65: overall=0.0700 (4.7 min, 4 dims parsed)
+WARNING:root:ID: 69 - 1 criteria without exact matches: {'instruction_following:Provision and Detail of Explanation on Connections between A2A vs. MCP'}
+  id 69: overall=0.2811 (4.3 min, 4 dims parsed)
+WARNING:root:ID: 78 - 1 criteria without exact matches: {'instruction_following:Response to Query on Post-DBS Adjustments and Comfort/Well-being Support'}
+  id 78: overall=0.0739 (3.8 min, 4 dims parsed)
+  id 83: overall=0.0284 (5.0 min, 4 dims parsed)
+  id 90: overall=0.2725 (5.2 min, 4 dims parsed)
+  id 95: NEVER-RAN (pre-registered cap stop) — skipped, no judge call
+  -> research/deep-research/drb/overall-derivation/flights/race-20260820T151943/t7a/race_result.txt
+     Comprehensiveness: 15.5255
+     Insight: 13.4210
+     Instruction Following: 17.8394
+     Readability: 17.4066
+     Overall Score: 15.6783
+  9/9 tasks scored
+manifest: research/deep-research/drb/overall-derivation/flights/race-20260820T151943/manifest.json

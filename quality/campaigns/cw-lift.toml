@@ -360,6 +360,32 @@ status       = "open"
 # third untyped copy) under a doc comment claiming it mirrors the mesh loop
 # (§7.2, prose not test); model_fetch.rs's spawn_test_server is a hand-rolled
 # replica of the CLIENT's own types citing a circular dep that does not exist.
+#
+# ── PROGRESS 2026-09-04. THREE OF SIX CONVERGED, AND THE INSTRUMENT LIED ──
+# 6e35ef8c9 ModelFileInfo + ListResponse -> commonwealth_core::model, plus the
+#   path itself (spelled 5x) as MODELS_LIST_PATH / model_file_url. The structs
+#   never drifted; the CONTRACT did — 637448086 taught the server HTTP Range in
+#   2026-06 and the client half never learned, while rpc_warm_http hand-built
+#   its own range URLs.
+# 1268bf587 LeasedUnit -> commonwealth_core::knowledge with is_live_at(), and
+#   THE PULLER NOW READS ITS LEASE. The #[allow(dead_code)] field was the only
+#   guard a partition leaves it (a 410 heartbeat cannot arrive during one).
+#   HEARTBEAT_INTERVAL stops being from_secs(100)-beside-a-comment and becomes
+#   LEASE_MS / 3. Same commit: RingSyncRequest/Response gain their missing
+#   serde halves; SyncReply and two serde_json::json! request bodies deleted.
+#
+# THE AFTER-NUMBER I FIRST READ WAS WRONG, and the reason is now note
+# b2639704: the SCIP index does NOT evict symbols of kind='unknown' even when
+# last_indexed_head == HEAD exactly. It kept reporting LeasedPayload and
+# SyncReply as live forks after both were deleted. Measured: of 13,632 real
+# sovereign-mesh symbols only those 2 are stale, both declared unusually (one
+# inside a function body, one a private struct). File-level eviction is fine.
+# TRUE state: 8 groups -> 5; cross-family forks 6 -> 3.
+# Caught only by checking the tree against the tool. `git grep` the type before
+# believing any report that says a fork still exists.
+#
+# REMAINING: the Mesh family (MeshWire x3 + core::Mesh, the largest), the
+# Gossip pair, and CorpusHostingView/GossipStoreEntry inside commonwealth.
 floor        = 11.0
 target       = 5.0
 direction    = "lower_is_better"
