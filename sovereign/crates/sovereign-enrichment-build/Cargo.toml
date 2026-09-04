@@ -39,6 +39,8 @@ description = "The atlas enrichment build orchestrator and its phase drivers, be
 # The atlas itself: atoms, edges, resolution, the pipeline registry and the
 # `EnrichProgress` event the orchestrator emits. Knowledge layer — down.
 corpus-engine = { workspace = true, features = ["treesitter"] }
+# The atlas vocabulary leaf — `OntologyPolicies` as recorded in atlas/ontology.json.
+corpus-engine-vocab = { workspace = true }
 # `atlas_context_manager::backfill_ann` (the ONE ANN-seed writer, which the
 # Backfill step drives) and `enrich::EXIT_CANCELLED`. Same layer.
 sovereign-tools = { workspace = true, features = ["treesitter"] }

@@ -26,8 +26,13 @@ use syn::{Attribute, Fields, Item};
 /// Source files parsed for recipe-facing config types, in render order.
 const SOURCES: &[&str] = &[
     "src/recipe.rs",
-    "src/recipe_ontology.rs",
-    "src/enrichment/ontology/language.rs",
+    "src/recipe_ontology/mod.rs",
+    "src/recipe_ontology/language.rs",
+    // The declaration types (investigation entity/relationship/pattern decls,
+    // the version-1 ontology types, `OntologyVocabulary`) live in the
+    // `corpus-engine-vocab` leaf since 2026-09-03; the generator parses
+    // SOURCE, so it reads them where they are declared.
+    "../corpus-engine-vocab/src/ontology/decl.rs",
     "src/filters/mod.rs",
     "src/filters/boilerplate.rs",
     "src/filters/knowledge_density.rs",
@@ -39,8 +44,8 @@ const SKIP_TYPES: &[&str] = &["ResolvedParameters", "ParameterValue"];
 
 const HEADER: &str = "# Recipe schema reference\n\
 \n\
-> **Generated** from `corpus-engine/src/recipe.rs` (+ `recipe_ontology.rs`, the\n\
-> ontology declaration languages in `enrichment/ontology/language.rs`, and the\n\
+> **Generated** from `corpus-engine/src/recipe.rs` (+ `recipe_ontology/`, the\n\
+> declaration types in `corpus-engine-vocab/src/ontology/decl.rs`, and the\n\
 > filter config types) by\n\
 > the `recipe_schema` test. Do not edit by hand — regenerate with\n\
 > `UPDATE_RECIPE_SCHEMA=1 cargo test -p corpus-engine --test main recipe_schema`.\n\
@@ -402,9 +407,12 @@ fn recipe_schema_descriptor_is_fresh() {
     // `OntologyBlock`/`OntologyVocabulary` moved to their own module (ARCH
     // §3.1 size ratchet); they are re-exported from `recipe`, but this gate
     // parses SOURCE, so it reads them where they are declared.
-    let recipe_ont_file = descriptor::parse(&manifest.join("src/recipe_ontology.rs"));
+    let recipe_ont_file = descriptor::parse(&manifest.join("src/recipe_ontology/mod.rs"));
     let filters_file = descriptor::parse(&manifest.join("src/filters/mod.rs"));
-    let ontology_file = descriptor::parse(&manifest.join("src/enrichment/ontology/language.rs"));
+    // Every declaration type — the version-1 ontology types AND the
+    // investigation decls — is in the leaf now (enrichment-as-plugin Step 3).
+    let ontology_file =
+        descriptor::parse(&manifest.join("../corpus-engine-vocab/src/ontology/decl.rs"));
     let registry = corpus_engine::enrichment::ontology::OntologyLanguageRegistry::builtin();
     let versions: Vec<u32> = registry.versions().map(|l| l.version()).collect();
     // The `[enrichment.ontology]` surface, for the recipe-author tool schema's
@@ -427,7 +435,7 @@ fn recipe_schema_descriptor_is_fresh() {
         "type":               descriptor::struct_fields(&ontology_file, "OntologyTypeDecl"),
         "v1":                 descriptor::struct_fields(&ontology_file, "OntologyV1"),
         "versions":           versions,
-        "vocabulary":         descriptor::struct_fields(&recipe_ont_file, "OntologyVocabulary"),
+        "vocabulary":         descriptor::struct_fields(&ontology_file, "OntologyVocabulary"),
         "voices":             descriptor::struct_fields(&ontology_file, "VoicesDecl"),
     });
 
@@ -444,11 +452,11 @@ fn recipe_schema_descriptor_is_fresh() {
     let desc = serde_json::json!({
         "acquire":    descriptor::variants_with_required(&recipe_file, "AcquirerConfig"),
         "chunk":      descriptor::variant_keys(&recipe_file, "ChunkerConfig"),
-        "comparison": descriptor::variant_keys(&recipe_file, "Comparison"),
+        "comparison": descriptor::variant_keys(&ontology_file, "Comparison"),
         "extract":    descriptor::variants_with_required(&recipe_file, "ExtractorConfig"),
         "filter":     descriptor::variant_keys(&filters_file, "FilterConfig"),
         "ontology":   ontology,
-        "pattern":    descriptor::variant_keys(&recipe_file, "PatternDecl"),
+        "pattern":    descriptor::variant_keys(&ontology_file, "PatternDecl"),
     });
     // Sorted keys at EVERY depth, pretty-printed, trailing newline (checked-in
     // file hygiene; the consumer uses `serde_json::from_str`, which ignores

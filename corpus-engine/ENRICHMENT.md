@@ -351,7 +351,7 @@ it was enriched:
 ### Custom ontology (version 1)
 
 A recipe's `[enrichment.ontology]` block is versioned. `version` (absent = 0)
-selects a declaration language in `src/enrichment/ontology/language.rs`;
+selects a declaration language in `src/recipe_ontology/language.rs` (recipe parsing, so it lives with the recipe; what it parses INTO is `corpus_engine_vocab::ontology`);
 every language parses to `OntologyPolicies` (`src/enrichment/ontology/mod.rs`)
 — shape, assertion, identity, change, derivation, prose — and that struct is
 all the pipeline reads. Version 0 is the prose `guidance` block every

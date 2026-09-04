@@ -8,9 +8,15 @@
 //! [`crate::recipe`], so a caller's import is unchanged.
 //!
 //! The block is versioned data, not code: `version` selects an
-//! [`OntologyLanguage`](crate::enrichment::ontology::OntologyLanguage) from a
-//! registry, and that language — never this module — decides what the rest of
-//! the keys mean (ARCH §6.2, §4).
+//! [`OntologyLanguage`](language::OntologyLanguage) from a registry, and
+//! that language — never this module — decides what the rest of the keys
+//! mean (ARCH §6.2, §4). The languages are recipe parsing, so they live in
+//! [`language`] beside the block; what they parse INTO — `OntologyPolicies`
+//! and the declaration types — is the `corpus-engine-vocab` leaf
+//! (`corpus_engine_vocab::ontology`), so a reader of `atlas/ontology.json`
+//! needs neither this crate nor the languages.
+
+pub mod language;
 
 use serde::{Deserialize, Serialize};
 
@@ -42,8 +48,8 @@ pub struct OntologyBlock {
 impl OntologyBlock {
     /// The language this block's `version` selects, or an error naming the
     /// highest version this engine reads (the `check_schema_version` wording).
-    pub fn language(&self) -> Result<&'static dyn crate::enrichment::ontology::OntologyLanguage> {
-        let registry = crate::enrichment::ontology::OntologyLanguageRegistry::builtin();
+    pub fn language(&self) -> Result<&'static dyn language::OntologyLanguage> {
+        let registry = language::OntologyLanguageRegistry::builtin();
         registry.get(self.version).ok_or_else(|| {
             Error::Recipe(format!(
                 "[enrichment.ontology] declares version = {} but this engine supports \
@@ -58,7 +64,7 @@ impl OntologyBlock {
     /// Parse the block into policies through its language. `Recipe::from_toml`
     /// has already run this once (eager, so structural errors surface at load);
     /// callers after load may treat `Err` as unreachable but must not hide it.
-    pub fn policies(&self) -> Result<crate::enrichment::ontology::OntologyPolicies> {
+    pub fn policies(&self) -> Result<corpus_engine_vocab::ontology::OntologyPolicies> {
         self.language()?.parse(&self.body)
     }
 }
@@ -86,21 +92,11 @@ pub struct OntologyConfig {
     pub vocabulary: Option<OntologyVocabulary>,
 }
 
-/// Per-domain term overrides for the configurable atlas pipeline's vocabulary.
-/// Maps onto the engine's `Vocabulary`; any omitted term uses a generic default.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-pub struct OntologyVocabulary {
-    #[serde(default)]
-    pub concern_term: Option<String>,
-    #[serde(default)]
-    pub position_term: Option<String>,
-    #[serde(default)]
-    pub tension_term: Option<String>,
-    #[serde(default)]
-    pub absence_term: Option<String>,
-    #[serde(default)]
-    pub evidence_term: Option<String>,
-}
+// `OntologyVocabulary` lives in the `corpus-engine-vocab` leaf since
+// 2026-09-03 (`corpus_engine_vocab::ontology::decl`): the policies it feeds
+// are there, and a thin host reading `atlas/ontology.json` needs the type
+// without this crate. Re-exported at the historical path.
+pub use corpus_engine_vocab::ontology::decl::OntologyVocabulary;
 
 #[cfg(test)]
 mod tests {

@@ -141,7 +141,7 @@ impl Runtime {
             .iter()
             .filter_map(|id| provider.graph(id).map(|g| (id.clone(), g)))
             .collect();
-        let vocabs: Vec<&corpus_engine::enrichment::ontology::OntologyPolicies> =
+        let vocabs: Vec<&corpus_engine_vocab::ontology::OntologyPolicies> =
             graphs.iter().filter_map(|(_, g)| g.ontology()).collect();
         let entity_types = enumerable_types(&vocabs);
         tracing::debug!(
@@ -333,7 +333,7 @@ impl Runtime {
             != Some("0");
         let mut best: HashMap<String, Candidate> = HashMap::new();
         for (id, graph) in &graphs {
-            for view in graph.atoms_of_kind(corpus_engine::enrichment::atlas::AtomType::Entity) {
+            for view in graph.atoms_of_kind(corpus_engine_vocab::atoms::AtomType::Entity) {
                 // Equal, or a declared `specializes` descendant: an atlas that
                 // declares `sceatta specializes coin` answers "which coins"
                 // with the sceattas too. `is_subtype_of` is inert for a corpus
@@ -448,9 +448,7 @@ impl Runtime {
             // Keyed by display string so identical relations dedup without
             // colliding with entity names.
             if include_relations {
-                for view in
-                    graph.atoms_of_kind(corpus_engine::enrichment::atlas::AtomType::Relation)
-                {
+                for view in graph.atoms_of_kind(corpus_engine_vocab::atoms::AtomType::Relation) {
                     let label = view.label().trim();
                     // First evidence ref grounds the relationship; skip
                     // relations with no label or no evidence (same guard as
@@ -464,7 +462,7 @@ impl Runtime {
                     let parts: Vec<String> = view
                         .participants()
                         .filter_map(|pid| graph.atom(pid))
-                        .filter(|a| a.kind() == corpus_engine::enrichment::atlas::AtomType::Entity)
+                        .filter(|a| a.kind() == corpus_engine_vocab::atoms::AtomType::Entity)
                         .filter_map(|a| {
                             let n = a.name().trim();
                             (!n.is_empty()).then(|| n.to_string())
@@ -843,7 +841,7 @@ impl Runtime {
             let Some(graph) = provider.graph(id) else {
                 continue;
             };
-            for view in graph.atoms_of_kind(corpus_engine::enrichment::atlas::AtomType::Claim) {
+            for view in graph.atoms_of_kind(corpus_engine_vocab::atoms::AtomType::Claim) {
                 let content = view.content().trim();
                 if content.is_empty() {
                     continue;

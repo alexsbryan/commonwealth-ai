@@ -12438,6 +12438,7 @@ version = "0.6.0"
 dependencies = [
  "chrono",
  "corpus-engine",
+ "corpus-engine-vocab",
  "oicp-client",
  "oicp-types",
  "reqwest 0.12.28",

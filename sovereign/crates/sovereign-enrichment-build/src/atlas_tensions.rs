@@ -37,7 +37,7 @@ use corpus_engine::enrichment::atlas::{
     },
     read_atlas_atoms, read_atlas_ontology, write_tension_candidates, AtomEnvelope, ATLAS_DIRNAME,
 };
-use corpus_engine::enrichment::ontology::OntologyPolicies;
+use corpus_engine_vocab::ontology::OntologyPolicies;
 
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;

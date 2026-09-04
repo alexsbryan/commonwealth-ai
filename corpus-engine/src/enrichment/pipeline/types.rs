@@ -185,20 +185,10 @@ impl FromStr for PipelinePhase {
 
 // ── Domain vocabulary + prompt envelope ───────────────────────
 
-/// Epistemic vocabulary for one pipeline (scaffold §8.1 of the spec).
-/// Lives on the `Pipeline` trait; the CLI prints these in `show`
-/// headers and the `query` LOCATE output so the terminology matches
-/// the domain.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Vocabulary {
-    pub canonical_concern_term: String,
-    pub position_term: String,
-    pub tension_term: String,
-    pub absence_term: String,
-    /// What a single piece of grounding evidence is called
-    /// ("paragraph", "passage", "snippet").
-    pub evidence_term: String,
-}
+// `Vocabulary` — the five resolved terms a pipeline prints — lives in the
+// `corpus-engine-vocab` leaf since 2026-09-03, beside the `OntologyPolicies`
+// that derive it. Re-exported at the historical path.
+pub use corpus_engine_vocab::ontology::Vocabulary;
 
 /// Chat message prompt ready to submit to an OpenAI-compatible endpoint.
 ///

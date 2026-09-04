@@ -1,7 +1,7 @@
 # Recipe schema reference
 
-> **Generated** from `corpus-engine/src/recipe.rs` (+ `recipe_ontology.rs`, the
-> ontology declaration languages in `enrichment/ontology/language.rs`, and the
+> **Generated** from `corpus-engine/src/recipe.rs` (+ `recipe_ontology/`, the
+> declaration types in `corpus-engine-vocab/src/ontology/decl.rs`, and the
 > filter config types) by
 > the `recipe_schema` test. Do not edit by hand — regenerate with
 > `UPDATE_RECIPE_SCHEMA=1 cargo test -p corpus-engine --test main recipe_schema`.
@@ -175,87 +175,6 @@ TOML mirror of [`crate::enrichment::reconciliation::ReconciliationPolicy`]. Kept
 | `judge_when_uncertain` | `bool` | no | `default_true()` | Escalate uncertain candidates to the calibrated judge. |
 | `judge_trials` | `u8` | no | `default_judge_trials()` | Judge trial count when escalation fires. |
 | `column_aware` | `Option<crate::extractors::column_aware::ColumnAwareConfig>` | no | type default | Column-aware extractor configuration. `None` to skip the column-aware pass entirely (the multi-origin merger still runs on whatever other signals the corpus produces). |
-
-## `EntityTypeDecl`
-
-One typed entity an investigation extracts. The recipe author declares the *shape* — name, description, expected attribute keys — and the investigation pipeline generates the LLM extraction prompt directly from this schema. No Rust required. Example: ```toml [[enrichment.entity_types]] name = "company" description = "A corporation or legal entity" attributes = ["name", "ticker", "cik", "role"] ```
-
-| TOML key | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `name` | `String` | **yes** | — |  |
-| `description` | `String` | no | type default |  |
-| `attributes` | `Vec<String>` | no | type default | Attribute keys the LLM should try to populate on each extracted instance. Free-form — the LLM extracts whatever keys it can locate in the chunk; missing keys land as null. |
-
-## `RelationshipTypeDecl`
-
-One typed relationship the investigation extracts (e.g. `revenue`, `investment`, `cloud_commitment`, `board_seat`). Combined with [`EntityTypeDecl`], the schema fully drives the LLM extraction prompt.
-
-| TOML key | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `name` | `String` | **yes** | — |  |
-| `description` | `String` | no | type default |  |
-| `attributes` | `Vec<String>` | no | type default | Attribute keys for the relationship instance — typically numeric (`amount_usd`, `percentage_of_total`) or temporal (`date`, `period`, `duration_years`). |
-| `directional` | `bool` | no | `default_true()` | `true` for asymmetric relationships (A → B is different from B → A: e.g. `revenue` and `investment`). `false` for symmetric ones (e.g. `co_membership`). |
-
-## `PatternDecl` (select with `type = "…"`)
-
-A graph-level pattern to detect once the relationship graph is built. The investigation pipeline runs every declared [`PatternDecl`] after the graph is populated; matches land in `pattern_findings.json` for the audit step.
-
-### `type = "circular_flow"`
-
-Money / influence flows in a cycle: A→B→C→A. Powered by petgraph's Tarjan SCC; filters cycles with `len >= min_entities` whose edges all match `edge_types`.
-
-| TOML key | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `name` | `String` | no | `default_name_circular_flow()` |  |
-| `description` | `String` | no | type default |  |
-| `min_entities` | `u32` | no | `default_circular_flow_min_entities()` |  |
-| `edge_types` | `Vec<String>` | **yes** | — |  |
-
-### `type = "role_overlap"`
-
-Same pair of entities connected by two edge types that represent distinct roles. Canonical example: `(investor, customer)` — A invests in B AND A is a major customer of B's product. `entity_roles` maps a free-form role name (used in narration) to a typed-edge specifier `"<edge_type>.<from|to>"` describing which side of the edge the entity sits on.
-
-| TOML key | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `name` | `String` | no | `default_name_role_overlap()` |  |
-| `description` | `String` | no | type default |  |
-| `entity_roles` | `BTreeMap<String, String>` | **yes** | — |  |
-
-### `type = "threshold"`
-
-Numeric-attribute threshold over edges of a single type. E.g. "revenue concentration > 10%": find revenue edges whose `percentage_of_total` attribute exceeds 0.10.
-
-| TOML key | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `name` | `String` | no | `default_name_threshold()` |  |
-| `description` | `String` | no | type default |  |
-| `edge_type` | `String` | **yes** | — |  |
-| `attribute` | `String` | **yes** | — |  |
-| `threshold` | `f64` | **yes** | — |  |
-| `comparison` | `Comparison` | no | `default_comparison()` |  |
-
-### `type = "custom_sql"`
-
-**Reserved — not yet implemented.** Recipe authors can declare `type = "custom_sql"` today; the runtime parses it cleanly and the validator surfaces a warning so the author knows it won't run yet. The future implementation will execute `query` on a read-only SQLite connection materialised from the relationship graph, with `set_authorizer` rejecting `ATTACH` / `PRAGMA` / `load_extension`, a 5-second statement timeout, and single-statement enforcement. See SYSTEM_OVERVIEW.md §3.10 for the back-compat rationale: reserving the shape now lets us land the SQL escape hatch later without forcing a schema migration on recipes already in the wild.
-
-| TOML key | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `name` | `String` | no | `default_name_custom_sql()` |  |
-| `description` | `String` | no | type default |  |
-| `query` | `String` | **yes** | — | SQL query against `entities` / `relationships` / `pattern_findings` tables. Validation is parse-only today; execution arrives in a follow-up PR. |
-
-## `Comparison`
-
-Comparison operator for [`PatternDecl::Threshold`]. Strict (`gt`/`lt`) by default — boundary-equal cases are rare in the investigation domain and the recipe author can opt into inclusive comparisons explicitly.
-
-Allowed values:
-
-- `greater_than`
-- `greater_or_equal`
-- `less_than`
-- `less_or_equal`
-- `equal`
 
 ## `ClusteringToml`
 
@@ -804,6 +723,87 @@ Per-domain term overrides for the configurable atlas pipeline's vocabulary. Maps
 | `tension_term` | `Option<String>` | no | type default |  |
 | `absence_term` | `Option<String>` | no | type default |  |
 | `evidence_term` | `Option<String>` | no | type default |  |
+
+## `EntityTypeDecl`
+
+One typed entity an investigation extracts. The recipe author declares the *shape* — name, description, expected attribute keys — and the investigation pipeline generates the LLM extraction prompt directly from this schema. No Rust required. Example: ```toml [[enrichment.entity_types]] name = "company" description = "A corporation or legal entity" attributes = ["name", "ticker", "cik", "role"] ```
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | `String` | **yes** | — |  |
+| `description` | `String` | no | type default |  |
+| `attributes` | `Vec<String>` | no | type default | Attribute keys the LLM should try to populate on each extracted instance. Free-form — the LLM extracts whatever keys it can locate in the chunk; missing keys land as null. |
+
+## `RelationshipTypeDecl`
+
+One typed relationship the investigation extracts (e.g. `revenue`, `investment`, `cloud_commitment`, `board_seat`). Combined with [`EntityTypeDecl`], the schema fully drives the LLM extraction prompt.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | `String` | **yes** | — |  |
+| `description` | `String` | no | type default |  |
+| `attributes` | `Vec<String>` | no | type default | Attribute keys for the relationship instance — typically numeric (`amount_usd`, `percentage_of_total`) or temporal (`date`, `period`, `duration_years`). |
+| `directional` | `bool` | no | `default_true()` | `true` for asymmetric relationships (A → B is different from B → A: e.g. `revenue` and `investment`). `false` for symmetric ones (e.g. `co_membership`). |
+
+## `PatternDecl` (select with `type = "…"`)
+
+A graph-level pattern to detect once the relationship graph is built. The investigation pipeline runs every declared [`PatternDecl`] after the graph is populated; matches land in `pattern_findings.json` for the audit step.
+
+### `type = "circular_flow"`
+
+Money / influence flows in a cycle: A→B→C→A. Powered by petgraph's Tarjan SCC; filters cycles with `len >= min_entities` whose edges all match `edge_types`.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | `String` | no | `default_name_circular_flow()` |  |
+| `description` | `String` | no | type default |  |
+| `min_entities` | `u32` | no | `default_circular_flow_min_entities()` |  |
+| `edge_types` | `Vec<String>` | **yes** | — |  |
+
+### `type = "role_overlap"`
+
+Same pair of entities connected by two edge types that represent distinct roles. Canonical example: `(investor, customer)` — A invests in B AND A is a major customer of B's product. `entity_roles` maps a free-form role name (used in narration) to a typed-edge specifier `"<edge_type>.<from|to>"` describing which side of the edge the entity sits on.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | `String` | no | `default_name_role_overlap()` |  |
+| `description` | `String` | no | type default |  |
+| `entity_roles` | `BTreeMap<String, String>` | **yes** | — |  |
+
+### `type = "threshold"`
+
+Numeric-attribute threshold over edges of a single type. E.g. "revenue concentration > 10%": find revenue edges whose `percentage_of_total` attribute exceeds 0.10.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | `String` | no | `default_name_threshold()` |  |
+| `description` | `String` | no | type default |  |
+| `edge_type` | `String` | **yes** | — |  |
+| `attribute` | `String` | **yes** | — |  |
+| `threshold` | `f64` | **yes** | — |  |
+| `comparison` | `Comparison` | no | `default_comparison()` |  |
+
+### `type = "custom_sql"`
+
+**Reserved — not yet implemented.** Recipe authors can declare `type = "custom_sql"` today; the runtime parses it cleanly and the validator surfaces a warning so the author knows it won't run yet. The future implementation will execute `query` on a read-only SQLite connection materialised from the relationship graph, with `set_authorizer` rejecting `ATTACH` / `PRAGMA` / `load_extension`, a 5-second statement timeout, and single-statement enforcement. See SYSTEM_OVERVIEW.md §3.10 for the back-compat rationale: reserving the shape now lets us land the SQL escape hatch later without forcing a schema migration on recipes already in the wild.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | `String` | no | `default_name_custom_sql()` |  |
+| `description` | `String` | no | type default |  |
+| `query` | `String` | **yes** | — | SQL query against `entities` / `relationships` / `pattern_findings` tables. Validation is parse-only today; execution arrives in a follow-up PR. |
+
+## `Comparison`
+
+Comparison operator for [`PatternDecl::Threshold`]. Strict (`gt`/`lt`) by default — boundary-equal cases are rare in the investigation domain and the recipe author can opt into inclusive comparisons explicitly.
+
+Allowed values:
+
+- `greater_than`
+- `greater_or_equal`
+- `less_than`
+- `less_or_equal`
+- `equal`
 
 ## `OntologyV1`
 

@@ -11,6 +11,11 @@
 //! - [`edges`] — `Edge` / `EdgesFile`; the shape of `atlas/edges.json`.
 //! - [`taxonomy`] — `EnrichmentDepth` and the kind vocabularies every atom
 //!   names.
+//! - [`ontology`] — `OntologyPolicies` (five axes + prose) and, under
+//!   [`ontology::decl`], everything an author declares: `OntologyTypeDecl`,
+//!   `TypeKind`, `AttrDecl`, `OntologyV1`, the investigation
+//!   `EntityTypeDecl` / `RelationshipTypeDecl` / `PatternDecl`, and
+//!   `OntologyVocabulary`; the shape of `atlas/ontology.json`.
 //! - [`canonical`] — `lookup_key`, the canonical-name fold both the
 //!   resolver and retrieval-time lookups use.
 //! - [`stable_key`] — `StableAtomKey`, an atom's content-derived identity
@@ -26,5 +31,6 @@
 pub mod atoms;
 pub mod canonical;
 pub mod edges;
+pub mod ontology;
 pub mod stable_key;
 pub mod taxonomy;

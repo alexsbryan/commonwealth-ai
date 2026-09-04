@@ -709,185 +709,17 @@ impl Default for ReconciliationToml {
     }
 }
 
-impl ReconciliationToml {
-    /// Project this TOML shape onto the runtime policy struct.
-    pub fn to_policy(&self) -> crate::enrichment::reconciliation::ReconciliationPolicy {
-        crate::enrichment::reconciliation::ReconciliationPolicy {
-            name_similarity_threshold: self.name_similarity_threshold,
-            cross_origin_required_signals: self.cross_origin_required_signals,
-            judge_when_uncertain: self.judge_when_uncertain,
-            judge_trials: self.judge_trials,
-            // Declared identity keys are NOT read from here. They live on the
-            // atlas (`atlas/ontology.json`), because the reconciler runs over
-            // resolved atoms and the atlas is what records the policies that
-            // produced them — a recipe edited after the build would otherwise
-            // silently re-key a merge against criteria the atoms never saw.
-            // `enrich_cmd/atlas_reconcile.rs` fills the field from there.
-            identity: Default::default(),
-        }
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Investigation-pipeline schema (entity types, relationship types, patterns)
 // ---------------------------------------------------------------------------
-
-/// One typed entity an investigation extracts. The recipe author
-/// declares the *shape* — name, description, expected attribute
-/// keys — and the investigation pipeline generates the LLM
-/// extraction prompt directly from this schema. No Rust required.
-///
-/// Example:
-/// ```toml
-/// [[enrichment.entity_types]]
-/// name = "company"
-/// description = "A corporation or legal entity"
-/// attributes = ["name", "ticker", "cik", "role"]
-/// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EntityTypeDecl {
-    pub name: String,
-    #[serde(default)]
-    pub description: String,
-    /// Attribute keys the LLM should try to populate on each
-    /// extracted instance. Free-form — the LLM extracts whatever
-    /// keys it can locate in the chunk; missing keys land as null.
-    #[serde(default)]
-    pub attributes: Vec<String>,
-}
-
-/// One typed relationship the investigation extracts (e.g.
-/// `revenue`, `investment`, `cloud_commitment`, `board_seat`).
-/// Combined with [`EntityTypeDecl`], the schema fully drives the
-/// LLM extraction prompt.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RelationshipTypeDecl {
-    pub name: String,
-    #[serde(default)]
-    pub description: String,
-    /// Attribute keys for the relationship instance — typically
-    /// numeric (`amount_usd`, `percentage_of_total`) or temporal
-    /// (`date`, `period`, `duration_years`).
-    #[serde(default)]
-    pub attributes: Vec<String>,
-    /// `true` for asymmetric relationships (A → B is different
-    /// from B → A: e.g. `revenue` and `investment`). `false` for
-    /// symmetric ones (e.g. `co_membership`).
-    #[serde(default = "default_true")]
-    pub directional: bool,
-}
-
-/// A graph-level pattern to detect once the relationship graph is
-/// built. The investigation pipeline runs every declared
-/// [`PatternDecl`] after the graph is populated; matches land in
-/// `pattern_findings.json` for the audit step.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum PatternDecl {
-    /// Money / influence flows in a cycle: A→B→C→A. Powered by
-    /// petgraph's Tarjan SCC; filters cycles with `len >=
-    /// min_entities` whose edges all match `edge_types`.
-    CircularFlow {
-        #[serde(default = "default_name_circular_flow")]
-        name: String,
-        #[serde(default)]
-        description: String,
-        #[serde(default = "default_circular_flow_min_entities")]
-        min_entities: u32,
-        edge_types: Vec<String>,
-    },
-    /// Same pair of entities connected by two edge types that
-    /// represent distinct roles. Canonical example: `(investor,
-    /// customer)` — A invests in B AND A is a major customer of
-    /// B's product. `entity_roles` maps a free-form role name
-    /// (used in narration) to a typed-edge specifier
-    /// `"<edge_type>.<from|to>"` describing which side of the edge
-    /// the entity sits on.
-    RoleOverlap {
-        #[serde(default = "default_name_role_overlap")]
-        name: String,
-        #[serde(default)]
-        description: String,
-        entity_roles: BTreeMap<String, String>,
-    },
-    /// Numeric-attribute threshold over edges of a single type.
-    /// E.g. "revenue concentration > 10%": find revenue edges
-    /// whose `percentage_of_total` attribute exceeds 0.10.
-    Threshold {
-        #[serde(default = "default_name_threshold")]
-        name: String,
-        #[serde(default)]
-        description: String,
-        edge_type: String,
-        attribute: String,
-        threshold: f64,
-        #[serde(default = "default_comparison")]
-        comparison: Comparison,
-    },
-    /// **Reserved — not yet implemented.** Recipe authors can
-    /// declare `type = "custom_sql"` today; the runtime parses
-    /// it cleanly and the validator surfaces a warning so the
-    /// author knows it won't run yet. The future implementation
-    /// will execute `query` on a read-only SQLite connection
-    /// materialised from the relationship graph, with
-    /// `set_authorizer` rejecting `ATTACH` / `PRAGMA` /
-    /// `load_extension`, a 5-second statement timeout, and
-    /// single-statement enforcement. See SYSTEM_OVERVIEW.md §3.10
-    /// for the back-compat rationale: reserving the shape now lets
-    /// us land the SQL escape hatch later without forcing a
-    /// schema migration on recipes already in the wild.
-    CustomSql {
-        #[serde(default = "default_name_custom_sql")]
-        name: String,
-        #[serde(default)]
-        description: String,
-        /// SQL query against `entities` / `relationships` /
-        /// `pattern_findings` tables. Validation is parse-only
-        /// today; execution arrives in a follow-up PR.
-        query: String,
-    },
-}
-
-fn default_circular_flow_min_entities() -> u32 {
-    3
-}
-
-// A pattern's `name` defaults to its `type` (ONTOLOGY_PRIMITIVES.md §1.6
-// writes no name). One fn per variant because serde takes a zero-argument
-// path; `pattern_name_defaults_to_type` pins each to its wire tag.
-fn default_name_circular_flow() -> String {
-    "circular_flow".into()
-}
-
-fn default_name_role_overlap() -> String {
-    "role_overlap".into()
-}
-
-fn default_name_threshold() -> String {
-    "threshold".into()
-}
-
-fn default_name_custom_sql() -> String {
-    "custom_sql".into()
-}
-
-fn default_comparison() -> Comparison {
-    Comparison::GreaterThan
-}
-
-/// Comparison operator for [`PatternDecl::Threshold`]. Strict
-/// (`gt`/`lt`) by default — boundary-equal cases are rare in the
-/// investigation domain and the recipe author can opt into
-/// inclusive comparisons explicitly.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum Comparison {
-    GreaterThan,
-    GreaterOrEqual,
-    LessThan,
-    LessOrEqual,
-    Equal,
-}
+// The declaration types live in the `corpus-engine-vocab` leaf since
+// 2026-09-03 (`corpus_engine_vocab::ontology::decl`) — the same shapes the
+// version-1 ontology language converts into `OntologyTypeDecl`, so the
+// investigation schema and the ontology schema share ONE home. Re-exported at
+// the historical path; `recipe_schema` renders them from the leaf's source.
+pub use corpus_engine_vocab::ontology::decl::{
+    Comparison, EntityTypeDecl, PatternDecl, RelationshipTypeDecl,
+};
 
 fn default_enrichment_type() -> String {
     "field_model".to_string()
@@ -2138,7 +1970,7 @@ impl Recipe {
     /// `from_toml` already parsed the block eagerly, so a parse failure here
     /// means a `Recipe` built without the load boundary; it is logged, never
     /// swallowed silently.
-    pub fn custom_ontology(&self) -> Option<crate::enrichment::ontology::OntologyPolicies> {
+    pub fn custom_ontology(&self) -> Option<corpus_engine_vocab::ontology::OntologyPolicies> {
         let block = self.ontology_block()?;
         match block.policies() {
             Ok(p) if p.is_active() => Some(p),

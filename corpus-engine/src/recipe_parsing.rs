@@ -104,7 +104,7 @@ pub(crate) fn check_ontology_block(recipe: &Recipe) -> Result<()> {
         return Ok(());
     };
     let lang = block.language()?;
-    let registry = crate::enrichment::ontology::OntologyLanguageRegistry::builtin();
+    let registry = crate::recipe_ontology::language::OntologyLanguageRegistry::builtin();
     let mut later: Vec<(u32, &String)> = block
         .body
         .keys()
