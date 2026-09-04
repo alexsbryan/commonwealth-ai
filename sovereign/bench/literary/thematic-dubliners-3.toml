@@ -66,8 +66,8 @@ expected_facts = [
   "Dublin",
   "priest",
   "escape",
-  "childhood",
-  "disillusion",
+  "child",
+  "epiphan",
 ]
 expected_sources = []
 notes = """
@@ -77,8 +77,17 @@ concept that runs through the entire collection', and marks failing to
 surface it 'a load-bearing miss'. The template header names the
 densely-Dublin setting (North Richmond Street, the bazaar, the North
 Wall, Buenos Ayres) and the child protagonists of the first two
-stories. 'disillusion' is the reader's word for what the golden calls
-the epiphany endings — 'the boy's failure at Araby'.
+stories. 'child' comes from the template's 'child-protagonist
+stories'; 'epiphan' from the golden's own expected concept atom
+(canonical_name_contains_any = ["epiphany", "moment of recognition",
+"revelation"]) and the template's 'epiphany endings'.
+
+Both replaced words the first draft reached for — 'childhood' and
+'disillusion' — that appear in NEITHER in-repo dubliners file. They
+were the author's vocabulary, not the fixture's, which is the exact
+thing this file's header promises not to do. A fact you cannot trace
+to a source is unverifiable in both directions: you cannot tell a
+retrieval miss from a fact that was never there.
 """
 
 [[questions]]
