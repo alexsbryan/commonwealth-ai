@@ -165,6 +165,19 @@ impl ConfigDiff {
         if old_models.code != new_models.code {
             d.models_changed.push("models.code");
         }
+        if old_models.extra != new_models.extra {
+            // Same hole as context_size and code: `svrn model set-extra`
+            // wrote `[models.extra]`, this diff never read it, and the CLI
+            // reported "no config changes detected" while `/v1/models` kept
+            // not advertising the slot — so a pin on that name 503'd as
+            // "no node in this mesh advertises model" until a restart
+            // (2026-09-04, the seat's review engine). The factory rebuilds
+            // every slot from cfg, extras included.
+            d.models_changed.push("models.extra");
+        }
+        if old_models.max_extras_memory_gb != new_models.max_extras_memory_gb {
+            d.models_changed.push("models.max_extras_memory_gb");
+        }
         if old_models.context_size != new_models.context_size {
             // Hot-reloadable, NOT restart-required: the provider factory
             // reads `effective_context_size()` and rebuilds every slot from
@@ -561,6 +574,67 @@ mod tests {
             counter.load(Ordering::SeqCst),
             1,
             "a context change must actually rebuild the provider"
+        );
+    }
+
+    /// RED before the `models.extra` arm was added to `ConfigDiff`.
+    ///
+    /// `svrn model set-extra Qwen3.8-27B <file>` wrote `[models.extra]`, the
+    /// CLI reported "no config changes detected — nothing to reload", and
+    /// `/v1/models` never advertised the name — so every call pinned to it
+    /// answered 503 "no node in this mesh advertises model" until a restart.
+    /// The failing input is the writer's own output: a config that differs
+    /// from the running one ONLY in the extras map.
+    #[tokio::test]
+    async fn reload_applies_an_extra_slot_without_a_restart() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = write_cfg(&tmp, "/m/primary.gguf");
+        let initial = SetupConfig::load_from(&path).unwrap();
+        assert!(
+            initial.models().unwrap().extra.is_empty(),
+            "fixture starts with no extras"
+        );
+
+        let counter = Arc::new(AtomicUsize::new(0));
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            initial.clone(),
+            crate::daemon_services::fixtures::headless_with_factory(Arc::new(StubFactory {
+                build_count: Arc::clone(&counter),
+            })),
+        );
+
+        let mut modified = initial;
+        modified
+            .models
+            .as_mut()
+            .unwrap()
+            .extra
+            .insert("judge-27b".to_string(), PathBuf::from("/m/judge-27b.gguf"));
+        modified.save_to(&path).unwrap();
+
+        let base = spawn(Arc::clone(&daemon)).await;
+        let resp = reqwest::Client::new()
+            .post(format!("{base}/v1/admin/reload"))
+            .json(&serde_json::json!({ "config_path": path }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        let body: ReloadResponse = resp.json().await.unwrap();
+        assert_eq!(
+            body.reloaded_fields,
+            vec!["models.extra".to_string()],
+            "an added extra slot must be REPORTED as reloaded, not silently ignored"
+        );
+        assert!(
+            !body.restart_required,
+            "extras are built by the same factory — no restart"
+        );
+        assert_eq!(
+            counter.load(Ordering::SeqCst),
+            1,
+            "an extras change must actually rebuild the provider"
         );
     }
 
