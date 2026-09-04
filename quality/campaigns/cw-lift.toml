@@ -143,11 +143,38 @@ status       = "open"
 #     in anger. Counting an unearned deletion is the same sin as absorbing
 #     growth.
 # Decide which BEFORE 1f, not after.
+# ── THE DECLARED INSTRUMENT WAS MEASURING A DIFFERENT CAMPAIGN. ──
+# Until 2026-09-04 this bar named `scripts/deletion-manifest.py --verify`.
+# That script tracks the DELETION campaign's lanes — p1-bench-baselines,
+# p1-dr-flights, p0-root-junk, p2-code-certain — and contains no reference to
+# cw-lift at all. Running it reports on someone else's work. Every number in
+# this bar has therefore come from hand-summing per-commit diffs, and the
+# instrument field was decorative from the day it was declared.
+#
+# THIS IS THE FOURTH TIME IN THIS WORKSPACE THAT A HEADLINE BAR MEASURED
+# SOMETHING ADJACENT TO ITS THESIS (nc-redundant, hpr-cheaper v1, P3's crate
+# count, this) and the first time it was in a bar I wrote. Recorded rather
+# than quietly swapped: the pattern is the finding.
+#
+# MEASURED, and the two numbers below are DIFFERENT SCOPES rather than a
+# disagreement — stated because the gap is exactly the kind of thing that gets
+# reported as one number:
+#   -4,505   the instrument above, raw .rs lines over the LADDER's DONE rows
+#   -4,525   code lines (size-gate rule, comments and blanks excluded), from
+#            the per-rung actuals each worker measured
+# They corroborate to within 20 lines. Raw is the SMALLER cut because Phase 1
+# added heavily commented code — 1b landed +74 raw against +8 code, 1e +177
+# against +104 — which is the right direction for a substrate a third party
+# reads, and is why the code-line rule is the one the bar is scored on.
+# The instrument deliberately scores DECLARED RUNGS ONLY. Campaign work that
+# is not a ladder row (the lift fixes, the dead-dependency cut, the
+# kernel-types move) is real and is not counted here; hand-summing those three
+# in as well gives -4,424, and the difference is the point of having a rule.
 floor        = -4690.0
 floor_basis  = "source lines landed from the diffs, 2026-09-04: 0a -1,892 · 0b -3,155 · 0c +34 · 4a +107 · 1a +216 = -4,690 (the arithmetic block above)"
 target       = -3800.0
 direction    = "lower_is_better"
-instrument   = "scripts/deletion-manifest.py --verify"
+instrument   = "git show --numstat --format=\"\" $(sed -n 's/^#   [0-9][a-z]*  .*  \\([0-9a-f]\\{9\\}\\)  DONE.*/\\1/p' quality/campaigns/cw-lift.toml) -- '*.rs' | awk '{a+=$1;d+=$2} END {print a-d}'"
 kill         = "K4 — Phase 1a-1e Added overruns +900, or 1f's overruns +800. The extraction is costing more than the boundary is worth."
 
 [[bar]]
