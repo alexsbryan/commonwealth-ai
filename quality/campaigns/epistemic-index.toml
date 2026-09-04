@@ -1,0 +1,64 @@
+# Flight rules — read raw. Verdicts come from measurement rows
+# (~/.sovereign/comaintainer/bar-measurements.jsonl), never from prose here.
+# Defer/descope = edit a bar's `status`; git history is the ledger.
+id        = "epistemic-index"
+objective = "A TOML recipe with a custom ontology, ingested, yields epistemically indexed retrieval from the person's own llama-server"
+spec      = "sovereign/docs/specs/EPISTEMIC_INDEX.md"
+declared  = "2026-09-04"
+status    = "active"
+
+[[bar]]
+id           = "EI1-thematic-lane"
+one_line     = "A thematic question set on the literary lane: themes named, tensions cited, >=1 evidence passage per claim — baseline first, then +1 cited theme over it"
+derives_from = "EPISTEMIC_INDEX.md §6 row 1"
+status       = "open"
+# No instrument until the set exists (order ei-1-bar declares it): two runs
+# before any delta is read (ARCH §18.5). A number here before the set is
+# committed would be the drafting defect the campaign rules name.
+
+[[bar]]
+id           = "EI2-sep-unchanged"
+one_line     = "The SEP retrieval-prod lane stays within its noise band through every step (RUNBOOK §6)"
+derives_from = "EPISTEMIC_INDEX.md §6 row 2"
+status       = "open"
+direction    = "higher_is_better"
+
+[[bar]]
+id           = "EI3-recipe-to-answer"
+one_line     = "corpus-mcp/acceptance.sh runs recipe new -> ingest -> serve -> ask on the wessex fixture against a bare chat+embed endpoint; truth.json recall >= the daemon-built corpus"
+derives_from = "EPISTEMIC_INDEX.md §4, §6 row 3"
+status       = "open"
+
+[[bar]]
+id           = "EI4-self-describing-atlas"
+one_line     = "Every atlas dir written by any pipeline carries ontology.json, atoms.lance, edges.csr and atoms_ann.lance, and corpus_list reports coverage for each"
+derives_from = "EPISTEMIC_INDEX.md §1 Ideas + Map rows"
+status       = "open"
+
+[[bar]]
+id           = "EI5-one-walk"
+one_line     = "One grounding implementation in corpus-engine, driven by the corpus's navigation policy; sovereign-core and corpus-mcp both call it"
+derives_from = "EPISTEMIC_INDEX.md §1 Walk row, §2.2"
+status       = "open"
+
+[[bar]]
+id           = "EI6-no-inference-stack"
+one_line     = "The corpus binary's closure carries no llama.cpp / ort / iroh / mesh transport / runtime, ingest verb included"
+derives_from = "EPISTEMIC_INDEX.md §4, §4.1"
+status       = "open"
+target       = 1.0
+direction    = "higher_is_better"
+kill         = "if ingest cannot run without the stack, the build half of the criterion is false — say so, do not ship a daemon-backed ingest under the same verb"
+instrument   = '''python3 - <<'PY'
+import json, subprocess, sys
+out = subprocess.run(["cargo", "tree", "-p", "corpus-mcp", "-e", "normal", "--prefix", "none"],
+                     capture_output=True, text=True)
+if out.returncode != 0:
+    sys.exit(3)
+bad = {"llama-cpp-4", "llama-cpp-sys-4", "ort", "ort-sys", "iroh", "sovereign-inference",
+       "sovereign-gliner", "commonwealth-transport", "sovereign-core", "sovereign-tools"}
+names = {l.split()[0] for l in out.stdout.splitlines() if l.strip()}
+hit = sorted(bad & names)
+print("carries:", hit, file=sys.stderr)
+print(json.dumps({"value": 0.0 if hit else 1.0, "artifact": "corpus-mcp/Cargo.toml"}))
+PY'''
