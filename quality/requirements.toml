@@ -1,7 +1,7 @@
 # Requirement registry — GENERATED from research/clean-room/REQUIREMENTS.md.
 #
 # DO NOT EDIT BY HAND. Regenerate after an intentional spec change:
-#   UPDATE_REQUIREMENTS=1 cargo test -p kernel-types --test requirements_registry
+#   UPDATE_REQUIREMENTS=1 cargo test -p xtask --test requirements_registry
 #
 # `spec_hash` is the blake3 ContentHash of the specification at generation
 # time. A consumer that reads a different hash has a registry that no longer

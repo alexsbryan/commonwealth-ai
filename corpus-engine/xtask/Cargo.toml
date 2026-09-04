@@ -25,5 +25,21 @@ serde_json = { workspace = true }
 toml = { workspace = true }
 regex = { workspace = true }
 
+# The two workspace-hygiene generators in `tests/` (2026-09-04). They live
+# here, and not in the crate whose vocabulary they speak, because both read
+# the REPO ROOT — one parses `research/clean-room/REQUIREMENTS.md`, the other
+# shells `git ls-files` over the whole tree — and their old home
+# (`kernel-types`) is a GLOBAL `[[package_leaf]]` that must build standalone
+# with its tests. `xtask` is in no package, so nothing lifts it. DEV-only, so
+# `cargo build -p xtask` (what the CI ratchets job runs) is unaffected.
+[dev-dependencies]
+# The requirement vocabulary the registry generator renders.
+kernel-types = { workspace = true }
+# The `covers:` tag scanner's AST reader. Same version/features as
+# corpus-engine's and kernel-types' were (ARCH §8.2 — one version per
+# third-party crate across the workspace).
+syn = { version = "2", features = ["full", "extra-traits"] }
+quote = "1"
+
 [lints]
 workspace = true

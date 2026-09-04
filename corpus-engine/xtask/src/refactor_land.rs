@@ -20,7 +20,7 @@
 
 use std::process::Command;
 
-const CONFORMANCE_TARGET: &[&str] = &["test", "-p", "kernel-types", "--test", "conformance_tags"];
+const CONFORMANCE_TARGET: &[&str] = &["test", "-p", "xtask", "--test", "conformance_tags"];
 
 fn run_conformance(regen: bool) -> std::process::Output {
     let mut c = Command::new("cargo");

@@ -6686,11 +6686,8 @@ dependencies = [
  "blake3",
  "getrandom 0.3.4",
  "hex",
- "quote",
  "serde",
  "serde_json",
- "syn 2.0.118",
- "toml 0.8.2",
  "trybuild",
 ]
 
@@ -16415,8 +16412,11 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "arch-layers",
+ "kernel-types",
+ "quote",
  "regex",
  "serde_json",
+ "syn 2.0.118",
  "toml 0.8.2",
 ]
 

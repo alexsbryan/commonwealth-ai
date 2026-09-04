@@ -342,7 +342,7 @@ Five artifacts, joined; the runner judges nothing itself:
 
 | Artifact | Answers | Kept honest by |
 |---|---|---|
-| `quality/requirements.toml` | what the spec obliges | generated from the spec and byte-gated against its hash (`kernel-types/tests/requirements_registry.rs`) |
+| `quality/requirements.toml` | what the spec obliges | generated from the spec and byte-gated against its hash (`corpus-engine/xtask/tests/requirements_registry.rs`) |
 | `quality/conformance/<crate>.toml` | which TEST claims each requirement | generated from `covers:` doc tags (`<crate>/tests/main/conformance_tags.rs`) |
 | `target/nextest/<profile>/junit.xml` | what that test last did | written by nextest itself |
 | `sovereign/docs/cli-contract.toml` | which JOURNEY STEP claims each requirement | four gates in `sovereign-cli/tests/main/cli_contract_journeys.rs` |
@@ -366,7 +366,7 @@ That is why the class is checked mechanically rather than trusted.
 `#[test]`, then regenerate that crate's manifest:
 
 ```bash
-UPDATE_CONFORMANCE_TAGS=1 cargo test -p sovereign-core --test main conformance_tags
+UPDATE_CONFORMANCE_TAGS=1 cargo test -p xtask --test conformance_tags
 svrn conformance --family GR
 ```
 

@@ -11,7 +11,7 @@
 //! # This is a registry, not a snapshot
 //!
 //! `quality/requirements.toml` is GENERATED from the specification by
-//! `kernel-types/tests/requirements_registry.rs` and byte-gated against it.
+//! `corpus-engine/xtask/tests/requirements_registry.rs` and byte-gated against it.
 //! Editing the prose without regenerating fails a gate; editing the generated
 //! file by hand fails the same gate. The registry carries [`Registry::spec_hash`]
 //! so a consumer can refuse to render a verdict against a spec it has not read

@@ -3,7 +3,7 @@
 //! `quality/conformance/<crate>.toml` per crate that carries any.
 //!
 //! ```text
-//! UPDATE_CONFORMANCE_TAGS=1 cargo test -p kernel-types --test conformance_tags
+//! UPDATE_CONFORMANCE_TAGS=1 cargo test -p xtask --test conformance_tags
 //! ```
 //!
 //! # The tag
@@ -26,10 +26,30 @@
 //! working in different crates avoid contending on one file. One scanner, many
 //! manifests, satisfies that with less code than the per-crate shape had.
 //!
-//! It lives here because this crate already owns the requirement vocabulary
-//! (`kernel_types::conformance`) and already reads the specification from the
-//! repo root. `syn` and `quote` are dev-dependencies; the four-dep runtime
-//! budget is untouched.
+//! # Why `xtask` and not `kernel-types`
+//!
+//! It lived in `kernel-types` "because this crate already reads the
+//! specification from the repo root" — which is the rationalisation, not the
+//! reason. `kernel-types` is a GLOBAL `[[package_leaf]]`: every declared
+//! package carries it, and a package must build standalone WITH ITS TESTS
+//! (`quality/ARCH_LAYERS.toml`, the `[[package_leaf]]` block). This scanner
+//! resolves the repo root and then shells `git ls-files` in it, so in the
+//! commonwealth lift of 2026-09-04 it reported `git ls-files failed in
+//! <lift>/crates` — and a third party who unpacks a source tarball has no
+//! `.git` at all, so it would fail there even with the data files carried.
+//! `boundary-gate` could not see it: it greps for `build.rs`, `include_str!`
+//! and `include_bytes!`, and this is a RUNTIME subprocess reach-out.
+//!
+//! It was NOT repaired by teaching the scanner to skip when `git` or the
+//! registry is absent. A check that passes because it could not find its
+//! subject is a gate that cannot fail (ARCH §18.1).
+//!
+//! `xtask` is where the eight blocking ratchets already live: back-of-house,
+//! in NO package so no lift carries it, already resolving the repo root,
+//! already reading `quality/*.toml`, and already DRIVING this generator —
+//! `xtask::refactor_land` runs it as step 1 of the post-split landing chain.
+//! `kernel-types`, `syn` and `quote` are dev-dependencies of `xtask`, so the
+//! `cargo build -p xtask` the CI ratchets job runs is untouched.
 //!
 //! # The join key is the thing most likely to be silently wrong
 //!
@@ -51,6 +71,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use syn::{Attribute, Item};
 
+#[path = "shared/repo_root.rs"]
+mod repo_root;
+use repo_root::repo_root;
+
 /// Where the per-crate manifests live, relative to the repo root.
 const OUT_DIR: &str = "quality/conformance";
 /// The marker a manifest from the OTHER generator carries in its header.
@@ -64,7 +88,7 @@ const FOREIGN_GENERATOR: &str = "conformance-tags.mjs";
 /// The registry every tag must resolve against.
 const REGISTRY: &str = "quality/requirements.toml";
 /// The command that regenerates everything this test gates.
-const REGEN: &str = "UPDATE_CONFORMANCE_TAGS=1 cargo test -p kernel-types --test conformance_tags";
+const REGEN: &str = "UPDATE_CONFORMANCE_TAGS=1 cargo test -p xtask --test conformance_tags";
 
 /// What one `covers:` tag claims.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -75,13 +99,6 @@ struct Claim {
     file: String,
     line: usize,
     asserts: usize,
-}
-
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("kernel-types sits directly under the repo root")
-        .to_path_buf()
 }
 
 // ─── Where a test's name comes from ─────────────────────────────────────────

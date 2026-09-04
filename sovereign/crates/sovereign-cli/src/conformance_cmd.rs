@@ -382,7 +382,7 @@ pub async fn run(args: &[String]) -> i32 {
         // to the clause.
         println!(
             "\n  Claim a `structural` one:  /// covers: <ID>  above a #[test], then\n    \
-             UPDATE_CONFORMANCE_TAGS=1 cargo test -p kernel-types --test conformance_tags\n\
+             UPDATE_CONFORMANCE_TAGS=1 cargo test -p xtask --test conformance_tags\n\
              \n  Claim a `cli` one:  requirements = [\"<ID>\"]  on the journey step whose\n    \
              expect block falsifies the clause, in {MANIFEST}\n    \
              (the step must assert OUTPUT, not just an exit code — the gates refuse the rest)"

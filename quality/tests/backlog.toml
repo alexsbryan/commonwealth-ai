@@ -1682,7 +1682,7 @@ found = "2026-08-31"
 class = "instrument-defect"
 tier = 3
 surface = "rust-unit"
-target = "kernel-types/tests/requirements_registry.rs"
+target = "corpus-engine/xtask/tests/requirements_registry.rs"
 failure = """THE REQUIREMENT DENOMINATOR IS 625 AND IT IS NOT 635, NOT 513, AND
 NOT A RANGE. Three different figures had been in circulation, each used in a
 coverage fraction, before the committed parser settled it. A denominator nobody

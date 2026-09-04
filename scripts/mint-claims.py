@@ -20,7 +20,7 @@ is reported, not overwritten, because a second independent proof is a decision
 for a person to make.
 
 AFTER THIS RUNS, TWO THINGS ARE STILL REQUIRED and neither is optional:
-  1. UPDATE_CONFORMANCE_TAGS=1 cargo test -p kernel-types --test conformance_tags
+  1. UPDATE_CONFORMANCE_TAGS=1 cargo test -p xtask --test conformance_tags
      regenerates quality/conformance/*.toml from the tags.
   2. A FULL suite run. `svrn conformance` refuses a claim whose source file
      changed after the report was written — and adding the tag IS that change,
@@ -152,7 +152,7 @@ def main():
           + ("" if a.write else "   (DRY RUN — pass --write to apply)"))
     if a.write and minted:
         print("\nNow, and both are required:\n"
-              "  UPDATE_CONFORMANCE_TAGS=1 cargo test -p kernel-types --test conformance_tags\n"
+              "  UPDATE_CONFORMANCE_TAGS=1 cargo test -p xtask --test conformance_tags\n"
               "  ./scripts/sovereign-test.sh --human        # FULL run; a filtered one\n"
               "                                             # makes every other claim never-ran")
     return 0

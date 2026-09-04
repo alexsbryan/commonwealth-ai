@@ -1,6 +1,6 @@
 # Conformance tags in `sovereign-cli` — GENERATED. DO NOT EDIT BY HAND.
 #
-#   UPDATE_CONFORMANCE_TAGS=1 cargo test -p kernel-types --test conformance_tags
+#   UPDATE_CONFORMANCE_TAGS=1 cargo test -p xtask --test conformance_tags
 #
 # Each claim maps a requirement id from research/clean-room/REQUIREMENTS.md
 # to the test that proves it. `test` is `<junit classname>::<junit name>`, so

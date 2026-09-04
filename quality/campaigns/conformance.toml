@@ -45,7 +45,7 @@ kill         = "Stays green => STOP. The instrument is blind and every number be
 [[bar]]
 id           = "denominator-exact"
 one_line     = "The registry carries exactly 625 in-scope requirements"
-derives_from = "The 112-requirement miscount above. A range is not a denominator, so this bar is an equality dressed as a threshold: the parser panics rather than defaults, and the per-family histogram is pinned in kernel-types/tests/requirements_registry.rs."
+derives_from = "The 112-requirement miscount above. A range is not a denominator, so this bar is an equality dressed as a threshold: the parser panics rather than defaults, and the per-family histogram is pinned in corpus-engine/xtask/tests/requirements_registry.rs."
 status       = "open"
 target       = 625.0
 direction    = "near_zero"

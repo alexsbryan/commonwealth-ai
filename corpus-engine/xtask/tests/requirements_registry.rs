@@ -4,7 +4,7 @@
 //! pattern: parse → render → compare, with an env var to regenerate.
 //!
 //! ```text
-//! UPDATE_REQUIREMENTS=1 cargo test -p kernel-types --test requirements_registry
+//! UPDATE_REQUIREMENTS=1 cargo test -p xtask --test requirements_registry
 //! ```
 //!
 //! This is a plain `#[test]` in a workspace member, so it rides the live
@@ -14,14 +14,41 @@
 //!
 //! The parser lives in `requirements_registry/spec_parser.rs` and carries the
 //! reasoning behind its refusals.
+//!
+//! # Why `xtask` and not `kernel-types`
+//!
+//! It reads the REPO ROOT — the specification, the registry, the hand-authored
+//! enforceability column — so it is workspace hygiene, not a property of any
+//! one crate. It lived in `kernel-types` because that crate owns the
+//! requirement vocabulary, and `kernel-types` is a GLOBAL `[[package_leaf]]`:
+//! every declared package carries it, and a package must build standalone
+//! WITH ITS TESTS (`quality/ARCH_LAYERS.toml`, the `[[package_leaf]]` block).
+//! The commonwealth lift of 2026-09-04 priced that: `CARGO_MANIFEST_DIR
+//! .parent()` resolved to `<lift>/crates/`, the spec was not there, and the
+//! test failed for a third party who had done nothing wrong. `boundary-gate`
+//! could not see it — it greps for `build.rs`, `include_str!` and
+//! `include_bytes!`, and this is a RUNTIME `std::fs` reach-out, not a
+//! compile-time embed.
+//!
+//! It was NOT repaired by teaching the test to skip when the files are absent.
+//! A check that passes because it could not find its subject is a gate that
+//! cannot fail (ARCH §18.1).
+//!
+//! `xtask` is where the eight blocking ratchets already live: back-of-house
+//! (`quality/ARCH_LAYERS.toml` `backstage`), in NO package so no lift carries
+//! it, already resolving the repo root and already reading `quality/*.toml`.
+//! It stays a `#[test]` rather than becoming a ninth gate, so the CI job it
+//! rides does not change either.
 
+#[path = "shared/repo_root.rs"]
+mod repo_root;
 #[path = "requirements_registry/spec_parser.rs"]
 mod spec_parser;
 
 use kernel_types::conformance::{Enforceability, ReqLevel, RequirementRegistry};
+use repo_root::repo_root;
 use spec_parser::{parse, SPEC};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
 
 /// The generated registry, relative to the repo root.
 const OUT: &str = "quality/requirements.toml";
@@ -32,7 +59,7 @@ const HEADER: &str = "\
 # Requirement registry — GENERATED from research/clean-room/REQUIREMENTS.md.
 #
 # DO NOT EDIT BY HAND. Regenerate after an intentional spec change:
-#   UPDATE_REQUIREMENTS=1 cargo test -p kernel-types --test requirements_registry
+#   UPDATE_REQUIREMENTS=1 cargo test -p xtask --test requirements_registry
 #
 # `spec_hash` is the blake3 ContentHash of the specification at generation
 # time. A consumer that reads a different hash has a registry that no longer
@@ -90,14 +117,6 @@ const FAMILY_COUNTS: &[(&str, usize)] = &[
     ("X-ST", 5),
 ];
 
-/// Repo root — kernel-types sits directly under it.
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("kernel-types has no parent")
-        .to_path_buf()
-}
-
 #[test]
 fn requirements_registry_is_fresh() {
     let root = repo_root();
@@ -127,7 +146,7 @@ fn requirements_registry_is_fresh() {
 
     let committed = std::fs::read_to_string(&out_path).unwrap_or_else(|e| {
         panic!(
-            "cannot read {} ({e}).\nRegenerate:\n  UPDATE_REQUIREMENTS=1 cargo test -p kernel-types --test requirements_registry",
+            "cannot read {} ({e}).\nRegenerate:\n  UPDATE_REQUIREMENTS=1 cargo test -p xtask --test requirements_registry",
             out_path.display()
         )
     });
@@ -135,7 +154,7 @@ fn requirements_registry_is_fresh() {
         panic!(
             "{OUT} is stale against {SPEC}.\n{}\n\
              The spec and the registry must land in the same commit.\n\
-             Regenerate:\n  UPDATE_REQUIREMENTS=1 cargo test -p kernel-types --test requirements_registry",
+             Regenerate:\n  UPDATE_REQUIREMENTS=1 cargo test -p xtask --test requirements_registry",
             first_diff(&committed, &rendered)
         );
     }

@@ -43,7 +43,7 @@
 102	corpus-engine-yield
 60	corpus-engine-yield::tests
 3793	corpus-engine/xtask
-955	corpus-engine/xtask::tests
+2196	corpus-engine/xtask::tests
 51885	corpus-engine::tests
 1069	kernel-types
 2227	kernel-types::tests

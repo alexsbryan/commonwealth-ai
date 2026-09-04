@@ -771,7 +771,7 @@ It **runs nothing**. It joins five artifacts and owns no judgement of its own:
 **311 `cli`** plus 11 `desktop` (a command and an assertion on its output, and
 nothing else). The rest are 9 `model` and 34 `review`.
 
-- **`structural`** — put `/// covers: GR-19` above a `#[test]` and regenerate that crate's manifest with `UPDATE_CONFORMANCE_TAGS=1 cargo test -p <crate> --test main conformance_tags`. A tag naming an unknown id, or over a body with no assertion, fails the generator rather than being counted.
+- **`structural`** — put `/// covers: GR-19` above a `#[test]` and regenerate that crate's manifest with `UPDATE_CONFORMANCE_TAGS=1 cargo test -p xtask --test conformance_tags`. A tag naming an unknown id, or over a body with no assertion, fails the generator rather than being counted.
 - **`cli`** — put `requirements = ["UI-17"]` on the journey step whose `expect` block falsifies the clause. Gates refuse an id the spec does not state, a requirement no command can observe, a step asserting only an exit code, and a claim on a step no lane runs.
 
 Offering only the first route is how 311 `cli`-class requirements got covered by

@@ -49,15 +49,15 @@ serde_json = { workspace = true, optional = true }
 wire-fixture = ["dep:serde_json"]
 
 [dev-dependencies]
-# The requirements-registry generator renders `quality/requirements.toml`
-# (`tests/requirements_registry.rs`). DEV ONLY — the runtime four-dep budget
-# above still holds; consumers of the registry (xtask) bring their own toml.
-toml = { workspace = true }
-# The workspace-wide `covers:` tag scanner (`tests/conformance_tags.rs`). ONE
-# scanner, N per-crate manifests — the partitioning is about the output files,
-# not about the scanner. Same version/features as corpus-engine's (ARCH §8.2).
-syn = { version = "2", features = ["full", "extra-traits"] }
-quote = "1"
+# NO `toml`, `syn` or `quote`. They were here for the requirements-registry
+# generator and the workspace-wide `covers:` tag scanner, which read the REPO
+# ROOT and therefore could not survive a lift of this crate — it is a GLOBAL
+# `[[package_leaf]]`, so every declared package carries it and its tests. Both
+# moved to `corpus-engine/xtask/tests/` on 2026-09-04 after the commonwealth
+# lift failed on exactly those two (`490 passed, 2 failed`, both leaf-side).
+# The dev surface of a liftable leaf is part of its contract: keep it to what
+# a third party with only this directory can actually run.
+#
 # Wire-form assertions only. Not a runtime dep of the kernel.
 serde_json = { workspace = true }
 # The compile-fail harness for `judgement_reds` — the structural half of the

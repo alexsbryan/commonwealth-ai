@@ -5,7 +5,7 @@
 # requirement can be settled mechanically, if at all. It lives apart precisely
 # so regenerating the registry cannot clobber it.
 #
-# `assert_every_column_resolves` in kernel-types/tests/requirements_registry.rs
+# `assert_every_column_resolves` in corpus-engine/xtask/tests/requirements_registry.rs
 # asserts the two id sets are EQUAL, so a requirement cannot arrive
 # unclassified and a class cannot outlive its requirement.
 #
