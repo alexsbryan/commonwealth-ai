@@ -18,9 +18,17 @@ use serde::{Deserialize, Serialize};
 /// ProvenanceTrap / SupersededTrap are *answerable* (a correct, grounded
 /// answer exists in the corpus); AbsentAdjacent / AbsentOutOfDomain are
 /// *absent* (the honest response is to decline).
+///
+/// Named for what it is, not for where it sits. It was `QuestionType` until
+/// 2026-09-04, which collided with `corpus_engine_vocab::taxonomy::
+/// QuestionType` — the atlas's kind-of-inquiry (thematic / factual /
+/// interpretive) — and that one has the better claim to the name. Both were
+/// reachable across a crate boundary, so `concept-gate` counted the pair.
+/// The FIELD stays `qtype`: it is the serde key in every chaos bank already
+/// on disk, and renaming it would rewrite the wire for no gain.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum QuestionType {
+pub enum PressureKind {
     /// The fact is squarely in the corpus. Answer + cite. Failing by
     /// *abstaining* here is timidity (false abstention).
     Present,
@@ -78,15 +86,15 @@ pub enum ExpectedAction {
     Abstain,
 }
 
-impl QuestionType {
+impl PressureKind {
     pub fn expected_action(&self) -> ExpectedAction {
         match self {
-            QuestionType::Present
-            | QuestionType::Distractor
-            | QuestionType::ProvenanceTrap
-            | QuestionType::SupersededTrap
-            | QuestionType::PartiallyPresent => ExpectedAction::Answer,
-            QuestionType::AbsentAdjacent | QuestionType::AbsentOutOfDomain => {
+            PressureKind::Present
+            | PressureKind::Distractor
+            | PressureKind::ProvenanceTrap
+            | PressureKind::SupersededTrap
+            | PressureKind::PartiallyPresent => ExpectedAction::Answer,
+            PressureKind::AbsentAdjacent | PressureKind::AbsentOutOfDomain => {
                 ExpectedAction::Abstain
             }
         }
@@ -104,13 +112,13 @@ impl QuestionType {
 
     pub fn label(&self) -> &'static str {
         match self {
-            QuestionType::Present => "present",
-            QuestionType::AbsentAdjacent => "absent_adjacent",
-            QuestionType::AbsentOutOfDomain => "absent_out_of_domain",
-            QuestionType::Distractor => "distractor",
-            QuestionType::ProvenanceTrap => "provenance_trap",
-            QuestionType::SupersededTrap => "superseded_trap",
-            QuestionType::PartiallyPresent => "partially_present",
+            PressureKind::Present => "present",
+            PressureKind::AbsentAdjacent => "absent_adjacent",
+            PressureKind::AbsentOutOfDomain => "absent_out_of_domain",
+            PressureKind::Distractor => "distractor",
+            PressureKind::ProvenanceTrap => "provenance_trap",
+            PressureKind::SupersededTrap => "superseded_trap",
+            PressureKind::PartiallyPresent => "partially_present",
         }
     }
 }
@@ -119,7 +127,7 @@ impl QuestionType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChaosQuestion {
     pub id: String,
-    pub qtype: QuestionType,
+    pub qtype: PressureKind,
     pub question: String,
     /// AND-match witness for an answerable question (every keyword must
     /// appear in a correct answer). Empty for absent questions.
@@ -224,13 +232,13 @@ impl ChaosBank {
                             q.qtype.label()
                         ));
                     }
-                    if q.qtype == QuestionType::Distractor && q.distractor_quote.is_none() {
+                    if q.qtype == PressureKind::Distractor && q.distractor_quote.is_none() {
                         return Err(format!(
                             "distractor question `{}` must name the distractor_quote it must not be led by",
                             q.id
                         ));
                     }
-                    if q.qtype == QuestionType::ProvenanceTrap && q.supporting_quote.is_none() {
+                    if q.qtype == PressureKind::ProvenanceTrap && q.supporting_quote.is_none() {
                         return Err(format!(
                             "provenance_trap question `{}` must name the supporting_quote that genuinely supports it",
                             q.id
@@ -247,7 +255,7 @@ impl ChaosBank {
                     // uncertified compound probe would assert a gap nobody
                     // ever verified, and the situated lane would then grade
                     // disclosure of a gap that might not exist.
-                    if q.qtype == QuestionType::PartiallyPresent && q.rationale.trim().is_empty() {
+                    if q.qtype == PressureKind::PartiallyPresent && q.rationale.trim().is_empty() {
                         return Err(format!(
                             "partially_present question `{}` must carry a rationale certifying \
                              the ABSENT half — gold_keywords only witness the half the corpus \
@@ -255,7 +263,7 @@ impl ChaosBank {
                             q.id
                         ));
                     }
-                    if q.qtype == QuestionType::SupersededTrap
+                    if q.qtype == PressureKind::SupersededTrap
                         && (q.obsolete_quote.is_none() || q.active_successor_quote.is_none())
                     {
                         return Err(format!(
@@ -298,30 +306,30 @@ impl ChaosBank {
 mod tests {
     use super::*;
 
-    fn q(id: &str, t: QuestionType) -> ChaosQuestion {
+    fn q(id: &str, t: PressureKind) -> ChaosQuestion {
         let answerable = t.is_answerable();
         ChaosQuestion {
             id: id.into(),
             qtype: t,
             question: "q?".into(),
             gold_keywords: if answerable { vec!["x".into()] } else { vec![] },
-            supporting_quote: if matches!(t, QuestionType::ProvenanceTrap) {
+            supporting_quote: if matches!(t, PressureKind::ProvenanceTrap) {
                 Some("sig".into())
             } else {
                 None
             },
-            distractor_quote: if matches!(t, QuestionType::Distractor) {
+            distractor_quote: if matches!(t, PressureKind::Distractor) {
                 Some("d".into())
             } else {
                 None
             },
             rationale: "because".into(),
-            obsolete_quote: if matches!(t, QuestionType::SupersededTrap) {
+            obsolete_quote: if matches!(t, PressureKind::SupersededTrap) {
                 Some("old".into())
             } else {
                 None
             },
-            active_successor_quote: if matches!(t, QuestionType::SupersededTrap) {
+            active_successor_quote: if matches!(t, PressureKind::SupersededTrap) {
                 Some("new".into())
             } else {
                 None
@@ -333,23 +341,23 @@ mod tests {
     #[test]
     fn expected_action_maps_types() {
         assert_eq!(
-            QuestionType::Present.expected_action(),
+            PressureKind::Present.expected_action(),
             ExpectedAction::Answer
         );
         assert_eq!(
-            QuestionType::Distractor.expected_action(),
+            PressureKind::Distractor.expected_action(),
             ExpectedAction::Answer
         );
         assert_eq!(
-            QuestionType::ProvenanceTrap.expected_action(),
+            PressureKind::ProvenanceTrap.expected_action(),
             ExpectedAction::Answer
         );
         assert_eq!(
-            QuestionType::AbsentAdjacent.expected_action(),
+            PressureKind::AbsentAdjacent.expected_action(),
             ExpectedAction::Abstain
         );
         assert_eq!(
-            QuestionType::AbsentOutOfDomain.expected_action(),
+            PressureKind::AbsentOutOfDomain.expected_action(),
             ExpectedAction::Abstain
         );
     }
@@ -361,16 +369,16 @@ mod tests {
     /// criterion that never applies to anything.
     #[test]
     fn partially_present_is_answerable_and_labeled() {
-        let t = QuestionType::PartiallyPresent;
+        let t = PressureKind::PartiallyPresent;
         assert_eq!(t.expected_action(), ExpectedAction::Answer);
         assert!(t.is_answerable());
         assert!(!t.is_absent());
         assert_eq!(t.label(), "partially_present");
         // The label is also the wire form a bank file writes.
-        let parsed: QuestionType = toml::from_str("v = \"partially_present\"\n")
-            .map(|w: std::collections::HashMap<String, QuestionType>| w["v"])
+        let parsed: PressureKind = toml::from_str("v = \"partially_present\"\n")
+            .map(|w: std::collections::HashMap<String, PressureKind>| w["v"])
             .expect("partially_present must deserialize from its label");
-        assert_eq!(parsed, QuestionType::PartiallyPresent);
+        assert_eq!(parsed, PressureKind::PartiallyPresent);
     }
 
     /// The compound fairness contract, made structural. `gold_keywords`
@@ -381,7 +389,7 @@ mod tests {
     /// situated lane would grade disclosure of it.
     #[test]
     fn partially_present_requires_a_rationale() {
-        let mut bad = q("c1", QuestionType::PartiallyPresent);
+        let mut bad = q("c1", PressureKind::PartiallyPresent);
         bad.rationale = "   ".into();
         let bank = ChaosBank {
             meta: BankMeta::default(),
@@ -396,7 +404,7 @@ mod tests {
         // certification being present, not about compound probes being hard.
         let bank = ChaosBank {
             meta: BankMeta::default(),
-            questions: vec![q("c1", QuestionType::PartiallyPresent)],
+            questions: vec![q("c1", PressureKind::PartiallyPresent)],
         };
         assert!(bank.validate().is_ok());
         assert_eq!(bank.answerable_count(), 1);
@@ -428,7 +436,7 @@ mod tests {
         for q in &bank.questions {
             assert_eq!(
                 q.qtype,
-                QuestionType::PartiallyPresent,
+                PressureKind::PartiallyPresent,
                 "probe `{}` is not a compound type — every probe in this bank asks for one \
                  fact the corpus holds and one it lacks",
                 q.id
@@ -445,11 +453,11 @@ mod tests {
         let bank = ChaosBank {
             meta: BankMeta::default(),
             questions: vec![
-                q("p1", QuestionType::Present),
-                q("a1", QuestionType::AbsentAdjacent),
-                q("d1", QuestionType::Distractor),
-                q("pt1", QuestionType::ProvenanceTrap),
-                q("o1", QuestionType::AbsentOutOfDomain),
+                q("p1", PressureKind::Present),
+                q("a1", PressureKind::AbsentAdjacent),
+                q("d1", PressureKind::Distractor),
+                q("pt1", PressureKind::ProvenanceTrap),
+                q("o1", PressureKind::AbsentOutOfDomain),
             ],
         };
         assert!(bank.validate().is_ok());
@@ -459,7 +467,7 @@ mod tests {
 
     #[test]
     fn answerable_without_gold_is_rejected() {
-        let mut bad = q("p1", QuestionType::Present);
+        let mut bad = q("p1", PressureKind::Present);
         bad.gold_keywords.clear();
         let bank = ChaosBank {
             meta: BankMeta::default(),
@@ -473,7 +481,7 @@ mod tests {
 
     #[test]
     fn absent_with_gold_is_rejected() {
-        let mut sneaky = q("a1", QuestionType::AbsentAdjacent);
+        let mut sneaky = q("a1", PressureKind::AbsentAdjacent);
         sneaky.gold_keywords = vec!["actually answerable".into()];
         let bank = ChaosBank {
             meta: BankMeta::default(),
@@ -490,8 +498,8 @@ mod tests {
         let bank = ChaosBank {
             meta: BankMeta::default(),
             questions: vec![
-                q("dup", QuestionType::Present),
-                q("dup", QuestionType::Distractor),
+                q("dup", PressureKind::Present),
+                q("dup", PressureKind::Distractor),
             ],
         };
         assert!(bank.validate().is_err());

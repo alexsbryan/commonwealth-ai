@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use sovereign_core::traits::InferenceProvider;
-use sovereign_eval::chaos_monkey::{score, AgentAction, CalibrationReport, Gates, QuestionType};
+use sovereign_eval::chaos_monkey::{score, AgentAction, CalibrationReport, Gates, PressureKind};
 use sovereign_eval::flywheel::generators::corpus::{AbsentSource, CorpusGenerator};
 use sovereign_eval::flywheel::{
     by_id, generator_ids, validate_fairness, DeterministicVerifier, Observation, Probe,
@@ -339,7 +339,7 @@ async fn run_and_verify(
 
     // Provenance caveat — only for out-of-domain answers (mirrors chaos).
     let caveat_present =
-        if probe.qtype == QuestionType::AbsentOutOfDomain && action == AgentAction::Answered {
+        if probe.qtype == PressureKind::AbsentOutOfDomain && action == AgentAction::Answered {
             Some(caveat_credit(
                 classify_caveat(judge, judge_model, &visible).await,
             ))

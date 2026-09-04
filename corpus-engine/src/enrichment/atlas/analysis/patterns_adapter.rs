@@ -17,10 +17,10 @@
 //!
 //! ## What projects, and what does not
 //!
-//! - Every `Entity` atom becomes a `graph::Entity`. Its `entity_type` is
-//!   the DECLARED type name where one was declared (the parser stores it as
-//!   `EntityType::Other("coin")`), which is what a `PatternDecl`'s
-//!   `entity_roles` names.
+//! - Every `Entity` atom becomes a `graph::InvestigationEntity`. Its
+//!   `entity_type` is the DECLARED type name where one was declared (the
+//!   parser stores it as `EntityType::Other("coin")`), which is what a
+//!   `PatternDecl`'s `entity_roles` names.
 //! - A `Relation` atom with EXACTLY TWO participants becomes a
 //!   `graph::Relationship` from the first to the second. The detectors are
 //!   binary-edge algorithms — a cycle is over edges, a role overlap is a
@@ -33,7 +33,7 @@
 
 use crate::enrichment::atlas::atoms::{AtomEnvelope, AtomsFile};
 use crate::enrichment::investigation::graph::{
-    Entity, ExtractionExcerpt, PatternFinding, Relationship,
+    ExtractionExcerpt, InvestigationEntity, PatternFinding, Relationship,
 };
 
 /// On-disk shape of `atlas/pattern_findings.json` — what the declared
@@ -68,7 +68,7 @@ impl PatternFindingsOutput {
 /// The projected graph, plus what could not be projected.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct InvestigationGraph {
-    pub entities: Vec<Entity>,
+    pub entities: Vec<InvestigationEntity>,
     pub relationships: Vec<Relationship>,
     /// `Relation` atoms whose participant count was not exactly two. Named
     /// so a corpus whose patterns find nothing can tell "no matches" from
@@ -86,7 +86,7 @@ pub fn to_investigation_graph(atoms: &AtomsFile) -> InvestigationGraph {
     let mut out = InvestigationGraph::default();
     for a in &atoms.atoms {
         match a {
-            AtomEnvelope::Entity(e) => out.entities.push(Entity {
+            AtomEnvelope::Entity(e) => out.entities.push(InvestigationEntity {
                 id: e.id.as_str().to_string(),
                 canonical_name: e.canonical_name.clone(),
                 entity_type: e.entity_type.as_str_repr().to_string(),

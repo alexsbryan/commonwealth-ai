@@ -5,7 +5,7 @@
 //! with `asset_kind = "xlsx"` via its **`parsed_form` parquet cache**
 //! — no re-parsing of the raw bytes via calamine — and emits
 //! [`Entity`](crate::enrichment::atlas::atoms::Entity) atoms with
-//! `Provenance { signal_kind: ColumnHeader, ... }` so the multi-origin
+//! `SignalProvenance { signal_kind: ColumnHeader, ... }` so the multi-origin
 //! merger can fold them with their email-body cousins.
 //!
 //! Column-header semantics — "Employee", "Counterparty", "Customer" —
@@ -23,7 +23,7 @@ use arrow::array::{Array, RecordBatch, StringArray};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use serde::{Deserialize, Serialize};
 
-use crate::enrichment::atlas::atoms::{AtomId, ChunkRef, Entity, Provenance, SignalKind};
+use crate::enrichment::atlas::atoms::{AtomId, ChunkRef, Entity, SignalKind, SignalProvenance};
 use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
 use crate::error::{Error, Result};
 
@@ -361,7 +361,7 @@ pub(crate) fn l2_normalize(v: &mut [f32]) {
 /// `source_doc_id` is what the asset store's ledger recorded as the
 /// first-seen document — typically the original filename + the
 /// content-hash short id; threaded through onto each emitted
-/// Entity's [`Provenance`].
+/// Entity's [`SignalProvenance`].
 pub fn extract_entities_from_parquet(
     parsed_form_path: &Path,
     source_doc_id: &str,
@@ -555,7 +555,7 @@ fn emit_entities_from_batches(
                     affiliation: None,
                     role: None,
                     participants: Vec::new(),
-                    provenance: Provenance::new(
+                    provenance: SignalProvenance::new(
                         "column_aware",
                         source_doc_id,
                         SignalKind::ColumnHeader,
@@ -687,7 +687,7 @@ mod tests {
         // "Notes" is not a classified header — content there must not
         // produce entities.
         assert!(!names.contains("first row"));
-        // Provenance carries column_aware + ColumnHeader.
+        // SignalProvenance carries column_aware + ColumnHeader.
         for e in &entities {
             assert_eq!(e.provenance.extractor_id, "column_aware");
             assert_eq!(e.provenance.source_doc_id, "spread:fixture");

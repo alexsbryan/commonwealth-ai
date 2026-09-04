@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use corpus_engine::enrichment::atlas::atoms::{
-    AtomEnvelope, AtomId, ChunkRef, Entity, Provenance, SignalKind,
+    AtomEnvelope, AtomId, ChunkRef, Entity, SignalKind, SignalProvenance,
 };
 use corpus_engine::enrichment::atlas::projection::project;
 use corpus_engine::enrichment::atlas::{
@@ -406,7 +406,7 @@ fn two_coins_sharing_an_external_id_merge_into_one_same_as_claim() {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-            provenance: Provenance::new("ext", doc, kind),
+            provenance: SignalProvenance::new("ext", doc, kind),
             attributes: serde_json::Map::new(),
             concept_kind: None,
         };

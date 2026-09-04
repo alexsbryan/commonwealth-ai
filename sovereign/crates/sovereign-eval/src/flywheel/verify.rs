@@ -20,7 +20,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::chaos_monkey::{AgentAction, ExpectedAction, QuestionType, ResultRow};
+use crate::chaos_monkey::{AgentAction, ExpectedAction, PressureKind, ResultRow};
 use crate::flywheel::det_checks::{contains_ci, gold_match};
 use crate::flywheel::probe::{AbsentKind, Oracle, Probe};
 
@@ -110,7 +110,7 @@ impl DeterministicVerifier {
                 // ProvenanceTrap: did the genuinely-supporting passage make it
                 // into retrieval? (Deterministic proxy, mirrors the chaos bench.)
                 let cite = match (probe.qtype, supporting_quote, answered) {
-                    (QuestionType::ProvenanceTrap, Some(sig), true) => {
+                    (PressureKind::ProvenanceTrap, Some(sig), true) => {
                         Some(obs.chunks.iter().any(|c| contains_ci(c, sig)))
                     }
                     _ => None,
@@ -241,7 +241,7 @@ mod tests {
         Probe {
             id: "p".into(),
             query: "q".into(),
-            qtype: QuestionType::Present,
+            qtype: PressureKind::Present,
             oracle: Oracle::Witness {
                 gold_keywords: gold.iter().map(|s| s.to_string()).collect(),
                 supporting_quote: None,
@@ -254,8 +254,8 @@ mod tests {
 
     fn absent(kind: AbsentKind, held_out: Option<Vec<String>>) -> Probe {
         let qtype = match kind {
-            AbsentKind::Adjacent => QuestionType::AbsentAdjacent,
-            AbsentKind::OutOfDomain => QuestionType::AbsentOutOfDomain,
+            AbsentKind::Adjacent => PressureKind::AbsentAdjacent,
+            AbsentKind::OutOfDomain => PressureKind::AbsentOutOfDomain,
         };
         Probe {
             id: "a".into(),

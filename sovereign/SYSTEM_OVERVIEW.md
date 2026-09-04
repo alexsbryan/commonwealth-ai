@@ -1143,7 +1143,7 @@ Grounded in the source:
   CHAPTER IX — "Twice a year the trust's auditor comes out from Saltern Cross…"
 ```
 
-`locate_quote_in_chunks` (`grounding/citation.rs`) returns WHERE a quote
+`locate_quote_in_chunks` (`grounding/citation/quote_match.rs`) returns WHERE a quote
 verified — `Exact { chunk, verbatim }`, `Partial { chunk }` or `AcrossChunks`
 — instead of a bare bool, so `verify_pair` can attribute it. The grounding
 decision is unchanged: the `Partial`/`AcrossChunks` passes ARE the pre-locator
@@ -6493,6 +6493,61 @@ files currently sit above their entries inside the 50-line slack —
 `eval_cmd/runner.rs` +2. Only `approach_band.txt` was copied back from the
 `origin/main` worktree. `--tighten` banked the one real cut this session made:
 `judge.rs` 1,846 → 1,845, a duplicated `#[cfg(test)]` attribute removed.
+
+### 10.1m Both blocking gates were red ON MAIN, and both were paid rather than re-pinned — 2026-09-04
+
+`scripts/pre-push.sh` blocked on two gates. Neither failure was this branch's,
+and neither was re-pinned.
+
+**Approach band.** Baseline 170 files / 165,823 lines; `origin/main` measures
+**171 / 167,048** — stale by +1 file / +1,225 lines before this branch's first
+commit. HEAD measured 172 / 167,932. Instrument validated before the result
+(§18.4): a shell replication of arch-gate's walk agreed with arch-gate's own
+output to the line on the same tree (172 / 167,932), and was then run against
+`origin/main`'s tree.
+
+Paid, not banked — the three files this branch put in the band were split back
+out of it:
+
+| File | Before | After | Δ band |
+|------|--------|-------|---|
+| `serving-policy/src/fair_sched.rs` | 987 | 562 + `fair_sched/tests.rs` 424 | **−987** |
+| `grounding/citation.rs` | 987 | 757 + `citation/quote_match.rs` 250 | **−987** |
+| `grounding/citation_attribution.rs` | 848 | 704 + `citation_attribution/text.rs` 162 | **−848** |
+
+Band: **169 files / 165,110 lines** — one file and 713 lines BELOW the
+baseline, so nothing of this branch's is absorbed and main's own drift is paid
+off with it. `fair_sched` used the deterministic executor
+(`quality/refactors/plans/fair-sched-tests.toml`); the other two are concern
+seams the modules already had — `quote_match` owns "where does this text sit
+in the passages", `text` owns the title predicates — and each moved item is
+`pub(super)`, so neither split widened a surface.
+
+**Concept ratchet.** 39 duplicated names against a baseline of 35 (§10.1j
+pinned that 35 on `9d6969852`). All four crossers are `corpus-engine-vocab`'s,
+they exist verbatim on `origin/main`, and this branch never touched that crate
+— `9722bf821` (the vocab carve-out) is not an ancestor of the commit that
+pinned 35, which is the whole mechanism §10.1j warned about: a bare-count
+baseline cannot name what crossed, so a merge moves it silently.
+
+Dispositioned by renaming the side with the weaker claim to the name, per the
+convention `corpus-engine/src/index/provenance.rs` already states for this
+family (qualify, do not add a fifth bare noun):
+
+| Noun | Renamed | To | Why that side |
+|------|---------|----|---|
+| `Provenance` | `corpus_engine_vocab::atoms` | `SignalProvenance` | it records WHICH SIGNAL produced a surface form; `sovereign-contracts` owns the evidence-basis enum. `AtomProvenance` was taken by `corpus-engine-archaeology` |
+| `Clock` | `corpus_engine_vocab::ontology::decl` | `SupersessionClock` | an enum naming which clock ORDERS SUPERSESSION; `commonwealth_core::Clock` is the time-source trait |
+| `Entity` | `corpus_engine::…::investigation::graph` | `InvestigationEntity` | the atlas atom is the older, wider `Entity`; this is the investigation pipeline's own record (`String` id, recipe-declared type) |
+| `QuestionType` | `sovereign_eval::chaos_monkey` | `PressureKind` | its own doc says "the pressures the chaos monkey applies"; the atlas taxonomy's kind-of-inquiry has the claim to `QuestionType` |
+
+All four are wire-safe: every one is `#[serde(rename_all)]`-keyed or
+string-valued, so the VARIANT strings and field names are unchanged and no
+persisted file is rewritten. `PressureKind` is deliberately the same length as
+`QuestionType`: at `ChaosQuestionType` the rustfmt reflow alone added 104
+lines to `chaos_monkey/score.rs` (1,731 → 1,835) and broke the oversized
+ratchet's 50-line slack. The field stays `qtype` — it is the serde key in
+every chaos bank on disk.
 
 ### 10.2 cmnwlth deferrals
 

@@ -12,7 +12,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::graph::{Entity, Relationship};
+use super::graph::{InvestigationEntity, Relationship};
 
 /// Count *distinct* `from_entity_id` per `to_entity_id` over edges of
 /// `edge_type`, and stamp the count as `attribute` (a JSON number) on
@@ -26,7 +26,7 @@ use super::graph::{Entity, Relationship};
 /// the entity coalescing in `extract.rs` is load-bearing: variant
 /// surface forms must already have merged for the count to be right.
 pub fn stamp_edge_counts(
-    entities: &mut [Entity],
+    entities: &mut [InvestigationEntity],
     relationships: &[Relationship],
     edge_type: &str,
     attribute: &str,
@@ -53,10 +53,12 @@ pub fn stamp_edge_counts(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enrichment::investigation::graph::{Entity, ExtractionExcerpt, Relationship};
+    use crate::enrichment::investigation::graph::{
+        ExtractionExcerpt, InvestigationEntity, Relationship,
+    };
 
-    fn ent(id: &str, ty: &str) -> Entity {
-        Entity {
+    fn ent(id: &str, ty: &str) -> InvestigationEntity {
+        InvestigationEntity {
             id: id.into(),
             canonical_name: id.into(),
             entity_type: ty.into(),

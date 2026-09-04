@@ -248,11 +248,10 @@ impl<K: Journaled> Oplog<K> {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent).map_err(OplogError::Io)?;
         }
-        let mut line = serde_json::to_string(op)
-            .map_err(|e| OplogError::Serialise {
-                log: K::LABEL,
-                source: e,
-            })?;
+        let mut line = serde_json::to_string(op).map_err(|e| OplogError::Serialise {
+            log: K::LABEL,
+            source: e,
+        })?;
         line.push('\n');
         let mut f = OpenOptions::new()
             .create(true)
@@ -293,8 +292,7 @@ impl<K: Journaled> Oplog<K> {
             .map_err(OplogError::Io)?;
         let mut buf = String::new();
         for op in ops {
-            let line = serde_json::to_string(op)
-                .map_err(|e| OplogError::Serialise {
+            let line = serde_json::to_string(op).map_err(|e| OplogError::Serialise {
                 log: K::LABEL,
                 source: e,
             })?;

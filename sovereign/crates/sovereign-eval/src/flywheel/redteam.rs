@@ -406,7 +406,7 @@ const STOP_CAPS: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chaos_monkey::{AgentAction, QuestionType};
+    use crate::chaos_monkey::{AgentAction, PressureKind};
     use crate::flywheel::probe::{AbsentKind, Oracle, ProbeSource};
     use crate::flywheel::verify::{DeterministicVerifier, Observation};
 
@@ -437,7 +437,7 @@ mod tests {
         Probe {
             id: id.into(),
             query: query.into(),
-            qtype: QuestionType::Present,
+            qtype: PressureKind::Present,
             oracle: Oracle::Witness {
                 gold_keywords: gold.iter().map(|s| s.to_string()).collect(),
                 supporting_quote: None,
@@ -451,7 +451,7 @@ mod tests {
         Probe {
             id: id.into(),
             query: query.into(),
-            qtype: QuestionType::AbsentAdjacent,
+            qtype: PressureKind::AbsentAdjacent,
             oracle: Oracle::Absent {
                 held_out_witness: None,
                 kind: AbsentKind::Adjacent,

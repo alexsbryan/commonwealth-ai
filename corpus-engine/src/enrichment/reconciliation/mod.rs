@@ -3,7 +3,7 @@
 //! architecture-over-Enron push).
 //!
 //! The substrate work the whole push is named after. Operates on a
-//! `Vec<Entity>` whose atoms carry [`Provenance`] (AD-4) and produces
+//! `Vec<Entity>` whose atoms carry [`SignalProvenance`] (AD-4) and produces
 //! [`ReconciledEntity`]s — same canonical id across multiple
 //! surface-form mentions, with the merge signals that fired recorded
 //! so the audit log can reproduce the reasoning.
@@ -36,7 +36,7 @@ pub use signals::{MergeSignal, MergeSignalCheck};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enrichment::atlas::atoms::{AtomId, ChunkRef, Entity, Provenance, SignalKind};
+    use crate::enrichment::atlas::atoms::{AtomId, ChunkRef, Entity, SignalKind, SignalProvenance};
     use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
 
     fn ent(id: &str, name: &str, et: EntityType, signal_kind: SignalKind, doc: &str) -> Entity {
@@ -53,7 +53,11 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-            provenance: Provenance::new(signal_kind_extractor_name(&signal_kind), doc, signal_kind),
+            provenance: SignalProvenance::new(
+                signal_kind_extractor_name(&signal_kind),
+                doc,
+                signal_kind,
+            ),
             attributes: serde_json::Map::new(),
             concept_kind: None,
         }

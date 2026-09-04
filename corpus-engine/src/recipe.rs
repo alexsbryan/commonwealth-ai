@@ -582,7 +582,7 @@ pub struct EnrichmentConfig {
 
     /// Architecture-over-Enron Phase 4: multi-origin reconciliation
     /// policy. `None` (the default) skips reconciliation entirely;
-    /// pipelines that don't carry [`crate::enrichment::atlas::atoms::Provenance`]
+    /// pipelines that don't carry [`crate::enrichment::atlas::atoms::SignalProvenance`]
     /// on their entity atoms produce nothing to reconcile across
     /// anyway. Recipes that enable described-asset + email
     /// extractors set this block to tune the merger.

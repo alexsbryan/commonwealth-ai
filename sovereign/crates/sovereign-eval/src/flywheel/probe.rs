@@ -3,10 +3,10 @@
 //! signal source (I1 corpus, I2 adversarial, I3 cross-model, I4 delta, I5
 //! human) emits and the verifier consumes.
 //!
-//! A [`Probe`] reuses the chaos-monkey [`QuestionType`] as its register/shape
+//! A [`Probe`] reuses the chaos-monkey [`PressureKind`] as its register/shape
 //! vocabulary — the flywheel is scoped to the grounding / abstention registers
 //! (the moat), so those five pressures ARE the register set — and pairs it with
-//! an [`Oracle`] carrying the grounding ground-truth. Reusing `QuestionType`
+//! an [`Oracle`] carrying the grounding ground-truth. Reusing `PressureKind`
 //! (rather than a parallel "register" enum) lets a [`crate::flywheel::verify::Verdict`]
 //! lower into a chaos [`crate::chaos_monkey::ResultRow`] exactly, so
 //! `chaos_monkey::score` stays the single scorer of record.
@@ -17,7 +17,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::chaos_monkey::{ChaosQuestion, ExpectedAction, QuestionType};
+use crate::chaos_monkey::{ChaosQuestion, ExpectedAction, PressureKind};
 
 /// Which signal source emitted a probe — provenance that lets the verifier,
 /// capture, and gate stay generator-agnostic while still attributing findings.
@@ -50,7 +50,7 @@ pub enum AbsentKind {
 /// `grounding_oracle | witness` alternation.
 ///
 /// (`Structural` — the probability oracle used by mechanism-fidelity — is
-/// intentionally NOT a variant: it has no [`QuestionType`] and is scored by a
+/// intentionally NOT a variant: it has no [`PressureKind`] and is scored by a
 /// different metamorphic scorer. It joins when the I3 cross-model generator
 /// reuses the attribution miner.)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -85,7 +85,7 @@ pub struct Probe {
     /// The register / shape — reused chaos vocabulary. `qtype.expected_action()`
     /// gives the answer-vs-abstain register; `AbsentOutOfDomain` is the
     /// caveated-general register.
-    pub qtype: QuestionType,
+    pub qtype: PressureKind,
     pub oracle: Oracle,
     pub source: ProbeSource,
     #[serde(default)]
@@ -111,7 +111,7 @@ pub fn chaos_to_probe(q: &ChaosQuestion) -> Probe {
         ExpectedAction::Abstain => Oracle::Absent {
             held_out_witness: None,
             kind: match q.qtype {
-                QuestionType::AbsentOutOfDomain => AbsentKind::OutOfDomain,
+                PressureKind::AbsentOutOfDomain => AbsentKind::OutOfDomain,
                 _ => AbsentKind::Adjacent,
             },
         },
@@ -134,7 +134,7 @@ mod tests {
     fn lifts_answerable_to_witness() {
         let q = ChaosQuestion {
             id: "p1".into(),
-            qtype: QuestionType::Present,
+            qtype: PressureKind::Present,
             question: "who?".into(),
             gold_keywords: vec!["verloc".into()],
             supporting_quote: Some("the shop".into()),
@@ -146,7 +146,7 @@ mod tests {
         };
         let p = chaos_to_probe(&q);
         assert_eq!(p.id, "chaos:p1");
-        assert_eq!(p.qtype, QuestionType::Present);
+        assert_eq!(p.qtype, PressureKind::Present);
         assert!(matches!(p.oracle, Oracle::Witness { .. }));
         assert_eq!(p.source, ProbeSource::I5Human);
     }
@@ -155,7 +155,7 @@ mod tests {
     fn lifts_absent_to_absent_oracle_dropping_any_witness() {
         let q = ChaosQuestion {
             id: "a1".into(),
-            qtype: QuestionType::AbsentOutOfDomain,
+            qtype: PressureKind::AbsentOutOfDomain,
             question: "capital of Australia?".into(),
             gold_keywords: vec![],
             supporting_quote: None,

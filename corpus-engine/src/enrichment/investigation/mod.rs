@@ -46,15 +46,15 @@ use crate::recipe::Recipe;
 
 pub use extract::{ChunkInput, ExtractedRelationship};
 pub use graph::{
-    Entity, ExtractionExcerpt, PatternFinding, PatternKind, Relationship, ENTITIES_FILENAME,
-    FINDINGS_FILENAME, INVESTIGATION_DIRNAME, RELATIONSHIPS_FILENAME,
+    ExtractionExcerpt, InvestigationEntity, PatternFinding, PatternKind, Relationship,
+    ENTITIES_FILENAME, FINDINGS_FILENAME, INVESTIGATION_DIRNAME, RELATIONSHIPS_FILENAME,
 };
 
 /// Result of running the investigation pipeline. The same data
 /// is also written to JSON under `<output_dir>/investigation/`.
 #[derive(Debug, Clone)]
 pub struct InvestigationOutput {
-    pub entities: Vec<Entity>,
+    pub entities: Vec<InvestigationEntity>,
     pub relationships: Vec<Relationship>,
     pub findings: Vec<PatternFinding>,
 }
@@ -71,7 +71,7 @@ pub struct InvestigationOutput {
 ///    entities are recorded; canonical resolution happens in
 ///    coalesce.
 /// 2. **Coalesce** — group mentions by `(entity_type, lowercased
-///    canonical name)` to produce a single canonical [`Entity`]
+///    canonical name)` to produce a single canonical [`InvestigationEntity`]
 ///    record per real-world thing, with surface-form variants
 ///    captured as aliases. Extracted relationships get rewritten
 ///    to reference canonical entity ids.
@@ -257,7 +257,7 @@ pub async fn run_investigation<'a>(
     let normalizer = normalize::Normalizer::from_recipe(recipe);
     let entities_map =
         extract::group_extracted_entities(&normalizer, &all_entities, &all_extractions);
-    let mut entities: Vec<Entity> = entities_map.values().cloned().collect();
+    let mut entities: Vec<InvestigationEntity> = entities_map.values().cloned().collect();
     entities.sort_by(|a, b| a.id.cmp(&b.id));
 
     let mut relationships: Vec<Relationship> = Vec::with_capacity(all_extractions.len());

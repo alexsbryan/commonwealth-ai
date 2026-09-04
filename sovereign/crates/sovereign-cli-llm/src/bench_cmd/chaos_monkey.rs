@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::Intent;
 use sovereign_eval::chaos_monkey::{
-    score, AgentAction, ChaosBank, ChaosQuestion, GateVerdict, Gates, QuestionType, ResultRow,
+    score, AgentAction, ChaosBank, ChaosQuestion, GateVerdict, Gates, PressureKind, ResultRow,
 };
 use sovereign_eval::flywheel::det_checks::{contains_ci, gold_match};
 use sovereign_inference::remote::RemoteApiProvider;
@@ -998,7 +998,7 @@ async fn score_question(
     // passage actually make it into retrieval? (Deterministic proxy for the
     // forced-choice attribution check — see FUTURE_RESEARCH grounding verifier.)
     let citation_faithful = match (q.qtype, &q.supporting_quote, answered) {
-        (QuestionType::ProvenanceTrap, Some(sig), true) => {
+        (PressureKind::ProvenanceTrap, Some(sig), true) => {
             Some(chunk_texts.iter().any(|c| contains_ci(c, sig)))
         }
         _ => None,
@@ -1007,7 +1007,7 @@ async fn score_question(
     // obsolete rule's text (dead law)? Deterministic, mirroring the
     // distractor check — `Some(true)` is the cardinal governance sin.
     let cited_obsolete = match (q.qtype, &q.obsolete_quote, answered) {
-        (QuestionType::SupersededTrap, Some(sig), true) => Some(contains_ci(&visible, sig)),
+        (PressureKind::SupersededTrap, Some(sig), true) => Some(contains_ci(&visible, sig)),
         _ => None,
     };
 
@@ -1015,7 +1015,7 @@ async fn score_question(
     // mandatory provenance caveat ("from general knowledge, not your sources")?
     // A second forced-choice judge call, mirroring the abstain classifier. Only
     // out-of-domain answered cases need it; everything else is `None`.
-    let caveat_present = if q.qtype == QuestionType::AbsentOutOfDomain && answered {
+    let caveat_present = if q.qtype == PressureKind::AbsentOutOfDomain && answered {
         // The typed GK verdict is deliberately NOT used here. The 2026-07-19
         // parity gate found `verdict == general_knowledge` is not a faithful
         // proxy for the prose-level caveat: on `ood-australia-capital` the
@@ -1050,7 +1050,7 @@ async fn score_question(
     let (asserted_value, asserted_value_grounded) = if answered
             && !naked
             && !chunk_texts.is_empty()
-            && q.qtype != QuestionType::AbsentOutOfDomain
+            && q.qtype != PressureKind::AbsentOutOfDomain
             // Mirror the gate's OWN scoping: it skips value/claim verification on
             // long-form answers (the verify_grounding >1800-char "out of gate
             // scope" pivot). Reducing an essay to one extracted "value" sweeps in

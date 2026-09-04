@@ -98,7 +98,7 @@ fn schema_version_constant_is_current() {
 fn v2_1_entity_without_provenance_loads_with_default() {
     // Entities written by a 2.1 reader carry no `provenance` field;
     // the 2.2 reader must give them a default-constructed
-    // `Provenance` so the schema-bump is back-compat.
+    // `SignalProvenance` so the schema-bump is back-compat.
     let toml_2_1_entity = r#"{
       "schema_version": "2.1",
       "atoms": [

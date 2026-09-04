@@ -43,7 +43,7 @@ use std::collections::HashSet;
 
 use super::super::atoms::{AtomId, Claim};
 use super::tension_policy::{DOCUMENT_DATE_ATTR, SAME_FIELD_CLOCK, SAME_FIELD_SUBJECT};
-use crate::enrichment::ontology::{AttrFamily, Clock, OntologyPolicies};
+use crate::enrichment::ontology::{AttrFamily, OntologyPolicies, SupersessionClock};
 
 /// One resolved `same` field value. Time values compare by overlap; text
 /// values by normalised equality (see the module doc).
@@ -87,7 +87,7 @@ pub(super) fn field_value(
 ///
 /// `change.supersedes` maps a claim type to `"document_date"` or to one of
 /// its own time attributes; a type not listed there folds on the corpus
-/// clock. `Clock::Narrative` and `Clock::None` name no attribute: nothing
+/// clock. `SupersessionClock::Narrative` and `SupersessionClock::None` name no attribute: nothing
 /// stamps a narrative position onto a claim yet, so the clock is vacuous
 /// and says so instead of inventing a key.
 fn clock_attr(claim: &Claim, policies: &OntologyPolicies) -> Option<String> {
@@ -97,8 +97,8 @@ fn clock_attr(claim: &Claim, policies: &OntologyPolicies) -> Option<String> {
         }
     }
     match policies.change.clock {
-        Clock::DocumentDate => Some(DOCUMENT_DATE_ATTR.to_string()),
-        Clock::Narrative | Clock::None => None,
+        SupersessionClock::DocumentDate => Some(DOCUMENT_DATE_ATTR.to_string()),
+        SupersessionClock::Narrative | SupersessionClock::None => None,
     }
 }
 

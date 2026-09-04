@@ -500,7 +500,7 @@ pub enum Deontic {
 /// corpus carries document dates; declared only for narrative time.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum Clock {
+pub enum SupersessionClock {
     /// The date of the document a claim appears in.
     #[default]
     DocumentDate,
@@ -561,7 +561,7 @@ pub struct VoicesDecl {
 pub struct ChangeDecl {
     /// The clock supersession folds on. Omit to derive `document_date`.
     #[serde(default)]
-    pub clock: Option<Clock>,
+    pub clock: Option<SupersessionClock>,
     /// Claim type → the clock it supersedes on: `"document_date"` or a
     /// time-family attribute of that type (`{ rule = "valid" }`). A later
     /// instance retires the earlier one for the same subject.

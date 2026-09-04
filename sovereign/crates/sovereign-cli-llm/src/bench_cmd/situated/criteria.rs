@@ -2,7 +2,7 @@
 //! The situatedness criterion vocabulary — a closed set, loaded as data.
 //!
 //! Unlike the moral bank, criteria here are **probe-independent**: which
-//! criteria apply to a probe is a function of its `QuestionType`, never of
+//! criteria apply to a probe is a function of its `PressureKind`, never of
 //! its content. That is what structurally prevents corpus vocabulary from
 //! reaching a criterion (`bench/situated/CRITERIA_DRAFT.md` — the
 //! teach-to-the-test audit), and it is what lets P5 judge a live turn
@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use sovereign_eval::chaos_monkey::QuestionType;
+use sovereign_eval::chaos_monkey::PressureKind;
 
 /// Wildcard in `applies_to`: this criterion applies to every question type.
 const ALL_TYPES: &str = "*";
@@ -59,7 +59,7 @@ pub struct Criterion {
 }
 
 impl Criterion {
-    pub fn applies(&self, qtype: QuestionType) -> bool {
+    pub fn applies(&self, qtype: PressureKind) -> bool {
         let label = qtype.label();
         self.applies_to.iter().any(|t| t == ALL_TYPES || t == label)
     }
@@ -88,7 +88,7 @@ pub struct BoundCriterion {
 
 /// Materialise the criteria that apply to one probe. Deterministic: the
 /// vocabulary's declaration order is preserved, so the bank is regenerable.
-pub fn bind(vocab: &Vocabulary, probe_id: &str, qtype: QuestionType) -> Vec<BoundCriterion> {
+pub fn bind(vocab: &Vocabulary, probe_id: &str, qtype: PressureKind) -> Vec<BoundCriterion> {
     vocab
         .criteria
         .iter()
@@ -179,7 +179,7 @@ fn validate(v: &Vocabulary) -> Result<(), String> {
     Ok(())
 }
 
-/// The chaos `QuestionType` labels, as `applies_to` may name them. An
+/// The chaos `PressureKind` labels, as `applies_to` may name them. An
 /// unknown label is a load error rather than a silently-never-applied
 /// criterion — the failure mode where a typo makes a behaviour invisible.
 const KNOWN_TYPES: &[&str] = &[
@@ -261,11 +261,11 @@ applies_to = ["*"]
         let (_d, p) = write_tmp(MINIMAL);
         let v = load(&p).unwrap();
         // `present` gets both: one targeted, one wildcard.
-        let present = bind(&v, "present-wife", QuestionType::Present);
+        let present = bind(&v, "present-wife", PressureKind::Present);
         assert_eq!(present.len(), 2);
         // An absent probe gets only the wildcard — the citation criterion
         // would be unanswerable there.
-        let absent = bind(&v, "absent-heat", QuestionType::AbsentAdjacent);
+        let absent = bind(&v, "absent-heat", PressureKind::AbsentAdjacent);
         assert_eq!(absent.len(), 1);
         assert_eq!(absent[0].key, "overstates_confidence");
     }
@@ -274,14 +274,14 @@ applies_to = ["*"]
     fn ids_are_content_derived_stable_and_probe_scoped() {
         let (_d, p) = write_tmp(MINIMAL);
         let v = load(&p).unwrap();
-        let a = bind(&v, "present-wife", QuestionType::Present);
-        let b = bind(&v, "present-wife", QuestionType::Present);
+        let a = bind(&v, "present-wife", PressureKind::Present);
+        let b = bind(&v, "present-wife", PressureKind::Present);
         assert_eq!(
             a.iter().map(|c| &c.id).collect::<Vec<_>>(),
             b.iter().map(|c| &c.id).collect::<Vec<_>>(),
             "regenerating the bank from identical inputs must be byte-stable"
         );
-        let other = bind(&v, "present-target", QuestionType::Present);
+        let other = bind(&v, "present-target", PressureKind::Present);
         assert_ne!(
             a[0].id, other[0].id,
             "same criterion on another probe is another id"
@@ -294,12 +294,12 @@ applies_to = ["*"]
     #[test]
     fn editing_criterion_text_changes_the_id() {
         let (_d, p) = write_tmp(MINIMAL);
-        let before = bind(&load(&p).unwrap(), "present-wife", QuestionType::Present)[0]
+        let before = bind(&load(&p).unwrap(), "present-wife", PressureKind::Present)[0]
             .id
             .clone();
         let (_d2, p2) =
             write_tmp(&MINIMAL.replace("points to a specific passage", "cites anything"));
-        let after = bind(&load(&p2).unwrap(), "present-wife", QuestionType::Present)[0]
+        let after = bind(&load(&p2).unwrap(), "present-wife", PressureKind::Present)[0]
             .id
             .clone();
         assert_ne!(
@@ -412,12 +412,12 @@ applies_to = ["*"]
         };
         let v = load(&path).unwrap();
         for qt in [
-            QuestionType::Present,
-            QuestionType::AbsentAdjacent,
-            QuestionType::AbsentOutOfDomain,
-            QuestionType::Distractor,
-            QuestionType::ProvenanceTrap,
-            QuestionType::SupersededTrap,
+            PressureKind::Present,
+            PressureKind::AbsentAdjacent,
+            PressureKind::AbsentOutOfDomain,
+            PressureKind::Distractor,
+            PressureKind::ProvenanceTrap,
+            PressureKind::SupersededTrap,
         ] {
             let bound = bind(&v, "probe", qt);
             assert!(

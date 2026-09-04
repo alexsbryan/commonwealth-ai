@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Entity / Relationship / PatternFinding data model for the
+//! InvestigationEntity / Relationship / PatternFinding data model for the
 //! investigation pipeline.
 //!
 //! Mirrors the literary atlas's atom/edge model conceptually but
@@ -32,7 +32,7 @@ use crate::error::{Error, Result};
 /// pipeline. The `entity_type` references one of the
 /// `[[enrichment.entity_types]]` declarations from the recipe.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Entity {
+pub struct InvestigationEntity {
     /// Stable identifier — generated as a slug of `canonical_name`
     /// + a short hash of the type. Stable across reruns of the
     /// same chunks so the relationship graph stays coherent under
@@ -158,7 +158,7 @@ pub const INVESTIGATION_DIRNAME: &str = "investigation";
 /// Creates `<dir>/investigation/` if missing.
 pub fn write_outputs(
     dir: &Path,
-    entities: &[Entity],
+    entities: &[InvestigationEntity],
     relationships: &[Relationship],
     findings: &[PatternFinding],
 ) -> Result<()> {
@@ -172,7 +172,13 @@ pub fn write_outputs(
 
 /// Read the three JSON files. Missing files surface as empty
 /// vectors so a partial run doesn't error the audit step.
-pub fn read_outputs(dir: &Path) -> Result<(Vec<Entity>, Vec<Relationship>, Vec<PatternFinding>)> {
+pub fn read_outputs(
+    dir: &Path,
+) -> Result<(
+    Vec<InvestigationEntity>,
+    Vec<Relationship>,
+    Vec<PatternFinding>,
+)> {
     let invest_dir = dir.join(INVESTIGATION_DIRNAME);
     Ok((
         read_json(&invest_dir.join(ENTITIES_FILENAME))?,
@@ -207,7 +213,7 @@ mod tests {
     fn round_trips_three_files_through_disk() {
         let dir = tempfile::tempdir().unwrap();
 
-        let entities = vec![Entity {
+        let entities = vec![InvestigationEntity {
             id: "e-nvda".into(),
             canonical_name: "NVIDIA Corporation".into(),
             entity_type: "company".into(),

@@ -13,6 +13,6 @@
 [[claim]]
 requirement = "FE-102"
 test = "serving-policy::fair_sched::tests::fair_share_cap_is_uncapped_for_a_lone_principal"
-file = "serving-policy/src/fair_sched.rs"
-line = 836
+file = "serving-policy/src/fair_sched/tests.rs"
+line = 274
 asserts = 2

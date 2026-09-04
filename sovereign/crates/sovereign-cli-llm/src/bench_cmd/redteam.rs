@@ -27,7 +27,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_eval::chaos_monkey::{
-    score, AgentAction, CalibrationReport, ChaosBank, QuestionType,
+    score, AgentAction, CalibrationReport, ChaosBank, PressureKind,
 };
 use sovereign_eval::flywheel::redteam::{
     AnswerTransform, AtlasLookup, AttributeOmissionDetector, BlanketAbstain, ConditionalTruncation,
@@ -370,7 +370,7 @@ struct Arm {
 
 struct ProbeOutcome {
     id: String,
-    qtype: QuestionType,
+    qtype: PressureKind,
     action: AgentAction,
     pass: bool,
     excerpt: String,
@@ -405,7 +405,7 @@ async fn score_arm(
     for cap in captured {
         let visible = transform.apply(&cap.probe, &cap.visible, &cap.chunks, ctx.atlas);
         let action = action_for(&visible, ctx, memo).await;
-        let caveat_present = if cap.probe.qtype == QuestionType::AbsentOutOfDomain
+        let caveat_present = if cap.probe.qtype == PressureKind::AbsentOutOfDomain
             && action == AgentAction::Answered
         {
             Some(caveat_credit(

@@ -476,7 +476,7 @@ fn strip_to_email(s: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enrichment::atlas::atoms::{AtomId, ChunkRef, Provenance};
+    use crate::enrichment::atlas::atoms::{AtomId, ChunkRef, SignalProvenance};
     use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
 
     fn ent(name: &str, et: EntityType) -> Entity {
@@ -493,7 +493,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-            provenance: Provenance::default(),
+            provenance: SignalProvenance::default(),
             attributes: serde_json::Map::new(),
             concept_kind: None,
         }

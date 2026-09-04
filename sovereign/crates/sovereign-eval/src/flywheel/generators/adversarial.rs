@@ -34,7 +34,7 @@ use rand::seq::SliceRandom;
 use rand::{RngCore, SeedableRng};
 use serde::{Deserialize, Serialize};
 
-use crate::chaos_monkey::QuestionType;
+use crate::chaos_monkey::PressureKind;
 use crate::flywheel::det_checks::{contains_ci, value_present};
 use crate::flywheel::generators::corpus::{claim_query, salient_terms};
 use crate::flywheel::probe::{AbsentKind, Oracle, Probe, ProbeSource};
@@ -1122,7 +1122,7 @@ pub fn case_to_probe(c: &StreamBCase) -> Probe {
             Probe {
                 id: format!("i2:{}", c.id),
                 query: claim_query(&c.claim),
-                qtype: QuestionType::Present,
+                qtype: PressureKind::Present,
                 oracle: Oracle::Witness {
                     gold_keywords: gold,
                     supporting_quote: None,
@@ -1135,7 +1135,7 @@ pub fn case_to_probe(c: &StreamBCase) -> Probe {
         CaseLabel::Ungrounded => Probe {
             id: format!("i2:{}", c.id),
             query: claim_query(&c.claim),
-            qtype: QuestionType::AbsentAdjacent,
+            qtype: PressureKind::AbsentAdjacent,
             oracle: Oracle::Absent {
                 held_out_witness: None,
                 kind: AbsentKind::Adjacent,
