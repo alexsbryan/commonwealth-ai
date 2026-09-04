@@ -173,6 +173,13 @@ id           = "EI4-self-describing-atlas"
 one_line     = "Every atlas dir written by any pipeline carries ontology.json plus the artifacts its store provider declares (atom-class: atoms.lance, edges.csr, atoms_ann.lance; wiki-class: articles.lance, edges.lance, a seed table), and corpus_list reports coverage for each"
 derives_from = "EPISTEMIC_INDEX.md §1 Ideas + Map rows"
 status       = "open"
+target       = 1.0
+direction    = "higher_is_better"
+kill         = "a pipeline that writes an atlas without naming its AtlasSeeding — that is the enum's invariant, and a bypass is a defect, not a miss"
+# Registered 2026-09-04 (operator, directive f109a039). Measure-on-landing: one
+# live-model build (~8 min) per row. The disk-wide ratio is deliberately NOT the
+# instrument — it measures history (2/27 non-SEP dirs complete, all legacy).
+instrument   = "scripts/ei4-fresh-build.sh"
 
 [[bar]]
 id           = "EI5-one-walk"
