@@ -108,6 +108,16 @@ pub trait WikipediaGraphApi: Send + Sync {
 pub struct ColumnarWikipediaGraph {
     articles: lancedb::Table,
     edges: lancedb::Table,
+    /// Whether `articles.lance` carries the v2 columns (`atom_id`, `chunk_id`).
+    /// Read once at open, from the SCHEMA rather than from a version file, so a
+    /// store cannot claim a shape it does not have.
+    ///
+    /// The neighbor API never touches those columns, so a v1 store keeps
+    /// serving `neighbors` / `record` / the axis filters exactly as before —
+    /// this flag exists so the OTHER face of the store, the grounding-walk
+    /// provider, can refuse a v1 store by name instead of returning atoms with
+    /// no id and no evidence (ARCH §18.3).
+    has_v2_columns: bool,
 }
 
 /// One edge row's queried fields (the columns the neighbor API reads).
@@ -148,7 +158,31 @@ impl ColumnarWikipediaGraph {
             .execute()
             .await
             .map_err(|e| format!("open edges.lance: {e}"))?;
-        Ok(Self { articles, edges })
+        let schema = articles
+            .schema()
+            .await
+            .map_err(|e| format!("read articles.lance schema: {e}"))?;
+        let has = |c: &str| schema.field_with_name(c).is_ok();
+        let has_v2_columns = has("atom_id") && has("chunk_id");
+        if !has_v2_columns {
+            tracing::info!(
+                dir = %atlas_dir.display(),
+                "wiki columnar store is format v1 (no atom_id/chunk_id): neighbor API serves, \
+                 grounding-walk provider will refuse; rebuild with `atlas wikipedia build-graph`"
+            );
+        }
+        Ok(Self {
+            articles,
+            edges,
+            has_v2_columns,
+        })
+    }
+
+    /// Whether this store carries the v2 article columns — see
+    /// [`WIKI_STORE_FORMAT_VERSION`](crate::enrichment::atlas::wiki_store::WIKI_STORE_FORMAT_VERSION).
+    /// The grounding-walk provider requires them; the neighbor API does not.
+    pub fn has_v2_columns(&self) -> bool {
+        self.has_v2_columns
     }
 
     /// Edge rows matching a Lance `only_if` filter. Errors degrade to an empty
@@ -545,11 +579,12 @@ pub async fn open_wikipedia_graph(
 mod tests {
     use super::*;
     use crate::enrichment::atlas::wiki_store::{
-        write_wikipedia_columnar_store, WikiArticleRow, WikiEdgeRow,
+        wiki_atom_id, write_wikipedia_columnar_store, WikiArticleRow, WikiEdgeRow,
     };
 
     fn art(title: &str, contested: bool) -> WikiArticleRow {
         WikiArticleRow {
+            atom_id: wiki_atom_id(title, "wiki-test"),
             title: title.into(),
             wikidata_qid: format!("Q-{title}"),
             revision_id: 10,
@@ -557,6 +592,7 @@ mod tests {
             pov_total: if contested { 2 } else { 0 },
             citation_total: 3,
             is_contested: contested,
+            chunk_id: String::new(),
         }
     }
 
@@ -638,7 +674,7 @@ mod tests {
     #[tokio::test]
     async fn open_wikipedia_graph_serves_the_columnar_store_and_nothing_else() {
         use crate::enrichment::atlas::wiki_store::{
-            write_wikipedia_columnar_store, WikiArticleRow, WikiEdgeRow,
+            wiki_atom_id, write_wikipedia_columnar_store, WikiArticleRow, WikiEdgeRow,
         };
         let tmp = tempfile::tempdir().unwrap();
         let indexes_dir = tmp.path();
@@ -655,6 +691,7 @@ mod tests {
         std::fs::create_dir_all(&atlas_dir).unwrap();
         let articles = vec![
             WikiArticleRow {
+                atom_id: wiki_atom_id("A", "wiki-test"),
                 title: "A".into(),
                 wikidata_qid: String::new(),
                 revision_id: -1,
@@ -662,8 +699,10 @@ mod tests {
                 pov_total: 0,
                 citation_total: 0,
                 is_contested: false,
+                chunk_id: String::new(),
             },
             WikiArticleRow {
+                atom_id: wiki_atom_id("B", "wiki-test"),
                 title: "B".into(),
                 wikidata_qid: String::new(),
                 revision_id: -1,
@@ -671,6 +710,7 @@ mod tests {
                 pov_total: 0,
                 citation_total: 0,
                 is_contested: false,
+                chunk_id: String::new(),
             },
         ];
         let edges = vec![WikiEdgeRow {

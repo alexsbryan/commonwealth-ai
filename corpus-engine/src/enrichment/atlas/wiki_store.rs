@@ -49,7 +49,13 @@ use crate::index::StoredChunkWithMetadata;
 /// Wiki columnar store schema version. Bump on any `articles.lance` /
 /// `edges.lance` column change (e.g. the Layer-1 cluster/bridge columns or a
 /// future article-embedding column).
-pub const WIKI_STORE_FORMAT_VERSION: u32 = 1;
+///
+/// **v2 (2026-09-04)** added `atom_id` + `chunk_id` to `articles.lance`. Without
+/// them the store cannot answer [`super::provider::AtlasProvider`]: the walk
+/// keys on an atom id where the neighbor API keys on a title, and
+/// `atom_evidence` has no chunk to hand back. A v1 store has neither column and
+/// must be rebuilt (`svrn atlas wikipedia build-graph`).
+pub const WIKI_STORE_FORMAT_VERSION: u32 = 2;
 
 /// The columnar article store directory name (a Lance table under `atlas/`).
 pub const ARTICLES_LANCE_DIRNAME: &str = "articles.lance";
@@ -64,6 +70,12 @@ pub(crate) const EDGES_TABLE: &str = "edges";
 /// SEP store convention.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WikiArticleRow {
+    /// Content-hash atom id — [`wiki_atom_id`]. The walk's key, and the seed
+    /// table's. Distinct from `title`, which is the link graph's key: the two
+    /// faces of this store address the same article by different handles
+    /// because their questions differ, and both are stored so neither has to
+    /// derive the other's.
+    pub atom_id: String,
     /// Canonical article title (the neighbor-API + link-graph key).
     pub title: String,
     /// Wikidata QID (`""` if absent).
@@ -80,6 +92,12 @@ pub struct WikiArticleRow {
     /// section) — the `has_contested_section` signal, denormalised to the
     /// article so the check is a single column read.
     pub is_contested: bool,
+    /// The chunk this article's atom cites — its evidence anchor, and the
+    /// join key to `chunks.lance` for the migrated seed table. The LOWEST
+    /// chunk id among the article's chunks: deterministic across rebuilds
+    /// (a `HashMap` iteration order is not), and the lead section, since the
+    /// chunker emits in document order.
+    pub chunk_id: String,
 }
 
 /// One link-graph edge as v2 columns — row per
@@ -107,6 +125,7 @@ pub struct WikiEdgeRow {
 
 fn articles_schema() -> Arc<Schema> {
     Arc::new(Schema::new(vec![
+        Field::new("atom_id", DataType::Utf8, false),
         Field::new("title", DataType::Utf8, false),
         Field::new("wikidata_qid", DataType::Utf8, false),
         Field::new("revision_id", DataType::Int64, false),
@@ -114,6 +133,7 @@ fn articles_schema() -> Arc<Schema> {
         Field::new("pov_total", DataType::Int64, false),
         Field::new("citation_total", DataType::Int64, false),
         Field::new("is_contested", DataType::Boolean, false),
+        Field::new("chunk_id", DataType::Utf8, false),
     ]))
 }
 
@@ -134,6 +154,7 @@ fn articles_batch(rows: &[WikiArticleRow], sch: &Arc<Schema>) -> Result<RecordBa
         Arc::new(StringArray::from(rows.iter().map(f).collect::<Vec<_>>())) as arrow_array::ArrayRef
     };
     let cols: Vec<arrow_array::ArrayRef> = vec![
+        str_col(&|r| r.atom_id.as_str()),
         str_col(&|r| r.title.as_str()),
         str_col(&|r| r.wikidata_qid.as_str()),
         Arc::new(Int64Array::from(
@@ -151,6 +172,7 @@ fn articles_batch(rows: &[WikiArticleRow], sch: &Arc<Schema>) -> Result<RecordBa
         Arc::new(BooleanArray::from(
             rows.iter().map(|r| r.is_contested).collect::<Vec<_>>(),
         )),
+        str_col(&|r| r.chunk_id.as_str()),
     ];
     RecordBatch::try_new(sch.clone(), cols).map_err(|e| format!("articles record batch: {e}"))
 }
@@ -285,6 +307,46 @@ pub async fn write_wikipedia_columnar_store(
 /// [`WIKI_STORE_FORMAT_VERSION`] if it ever moves.
 pub const SECTION_PATH_DELIMITER: char = '\u{203a}';
 
+/// The atom id for a wiki article — `entity-<16 hex of sha256(title|corpus_id)>`.
+///
+/// Identity from ESSENCE, not from a counter (ARCH §7.5). Wikipedia's atoms
+/// carried `entity-0001`, `entity-0002`, … assigned in sorted-title order, so
+/// inserting a single article shifted the id of every article after it: the ids
+/// were stable only for a corpus that never changed, which is not a property
+/// anything could safely cite. The hash is stable under insertion, deletion and
+/// rebuild, and depends on nothing but the article and the corpus it is in.
+///
+/// The tuple is `(title, corpus_id)` — the convention `ATLAS_STORAGE_V2.md`
+/// describes for content-hash ids, where `corpus_id` is what makes ids from two
+/// corpora unequal even for the same article title.
+///
+/// The fields are LENGTH-PREFIXED, not joined by a separator. A `"{title}|{corpus}"`
+/// join is ambiguous the moment a title contains the separator — `("a|b", "c")`
+/// and `("a", "b|c")` hash identically, which is a silent atom merge — and
+/// wikipedia titles are arbitrary user text. The test
+/// `wiki_atom_id_depends_on_the_article_and_the_corpus_and_nothing_else`
+/// pins that case; it failed on the separator version, which is why this is
+/// framed rather than joined.
+///
+/// 16 hex is 64 bits: at wikipedia's 1.67M atoms the birthday probability of
+/// any collision is about 8e-8, and [`wiki_rows_from_chunks`] REFUSES the build
+/// on one rather than letting two articles silently become one atom (§18.3).
+pub fn wiki_atom_id(title: &str, corpus_id: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update((title.len() as u64).to_le_bytes());
+    h.update(title.as_bytes());
+    h.update((corpus_id.len() as u64).to_le_bytes());
+    h.update(corpus_id.as_bytes());
+    let d = h.finalize();
+    let mut out = String::with_capacity(7 + 16);
+    out.push_str("entity-");
+    for b in &d[..8] {
+        out.push_str(&format!("{b:02x}"));
+    }
+    out
+}
+
 /// Counters from a direct chunks → columnar build — what the CLI prints as a
 /// sanity check, and what the build ledger records.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -308,6 +370,9 @@ pub struct WikiIngestSummary {
 
 struct AggregatedArticle {
     title: String,
+    /// Lowest chunk id seen for this article — the evidence anchor. Lowest
+    /// rather than first-seen because chunk arrival order is not stable.
+    min_chunk_id: u64,
     wikidata_qid: Option<String>,
     revision_id: Option<i64>,
     pov_total: i64,
@@ -319,6 +384,7 @@ impl AggregatedArticle {
     fn new(title: String) -> Self {
         Self {
             title,
+            min_chunk_id: u64::MAX,
             wikidata_qid: None,
             revision_id: None,
             pov_total: 0,
@@ -424,8 +490,9 @@ pub fn classify_relationship(section_path: &[String], link_text: &str) -> String
 /// link graph names. Dangling targets ride on `edges.target_in_scope = false`,
 /// which is why the neighbor query needs no join back to `articles`.
 pub fn wiki_rows_from_chunks(
+    corpus_id: &str,
     chunks: Vec<StoredChunkWithMetadata>,
-) -> (Vec<WikiArticleRow>, Vec<WikiEdgeRow>, WikiIngestSummary) {
+) -> Result<(Vec<WikiArticleRow>, Vec<WikiEdgeRow>, WikiIngestSummary), String> {
     let mut articles: HashMap<String, AggregatedArticle> = HashMap::new();
     let mut chunks_with_metadata = 0usize;
     let mut chunks_without_metadata = 0usize;
@@ -457,6 +524,7 @@ pub fn wiki_rows_from_chunks(
         let entry = articles
             .entry(article_title.clone())
             .or_insert_with(|| AggregatedArticle::new(article_title));
+        entry.min_chunk_id = entry.min_chunk_id.min(chunk.id);
 
         // Per-article fields come from the first metadata that carries them —
         // Wikipedia revisions identify the same article across its sections.
@@ -521,9 +589,24 @@ pub fn wiki_rows_from_chunks(
     }
     let dangling_targets = dangling.len();
 
-    let article_rows: Vec<WikiArticleRow> = articles
-        .values()
-        .map(|a| WikiArticleRow {
+    // Mint the content-hash ids, and REFUSE on a collision rather than let two
+    // articles become one atom. `by_id` is the check, not a convenience: an id
+    // that two titles share is a silent merge, which is the failure §18.3 names.
+    let mut by_id: HashMap<String, &str> = HashMap::with_capacity(articles.len());
+    let mut article_rows: Vec<WikiArticleRow> = Vec::with_capacity(articles.len());
+    for a in articles.values() {
+        let atom_id = wiki_atom_id(&a.title, corpus_id);
+        if let Some(other) = by_id.insert(atom_id.clone(), a.title.as_str()) {
+            if other != a.title {
+                return Err(format!(
+                    "wiki atom id collision: {atom_id} is both {other:?} and {:?} in corpus \
+                     {corpus_id} — widen wiki_atom_id before rebuilding",
+                    a.title
+                ));
+            }
+        }
+        article_rows.push(WikiArticleRow {
+            atom_id,
             title: a.title.clone(),
             wikidata_qid: a.wikidata_qid.clone().unwrap_or_default(),
             revision_id: a.revision_id.unwrap_or(-1),
@@ -531,8 +614,16 @@ pub fn wiki_rows_from_chunks(
             pov_total: a.pov_total,
             citation_total: a.citation_total,
             is_contested: a.is_contested(),
-        })
-        .collect();
+            // Every in-scope article was reached THROUGH a chunk, so the
+            // sentinel is unreachable; it would mean an article aggregated
+            // from no chunk at all.
+            chunk_id: if a.min_chunk_id == u64::MAX {
+                String::new()
+            } else {
+                a.min_chunk_id.to_string()
+            },
+        });
+    }
 
     let summary = WikiIngestSummary {
         articles: article_rows.len(),
@@ -553,7 +644,7 @@ pub fn wiki_rows_from_chunks(
         revision_id_max = ?summary.revision_id_max,
         "wiki columnar: aggregated chunks into store rows"
     );
-    (article_rows, edge_rows, summary)
+    Ok((article_rows, edge_rows, summary))
 }
 
 /// The whole direct build: chunks → rows → `articles.lance` + `edges.lance`.
@@ -561,9 +652,10 @@ pub fn wiki_rows_from_chunks(
 /// `WikipediaGraph::ingest_from_chunks` + `export_columnar`.
 pub async fn build_wikipedia_columnar_store_from_chunks(
     atlas_dir: &Path,
+    corpus_id: &str,
     chunks: Vec<StoredChunkWithMetadata>,
 ) -> Result<WikiIngestSummary, String> {
-    let (articles, edges, summary) = wiki_rows_from_chunks(chunks);
+    let (articles, edges, summary) = wiki_rows_from_chunks(corpus_id, chunks)?;
     write_wikipedia_columnar_store(atlas_dir, &articles, &edges).await?;
     Ok(summary)
 }
@@ -577,6 +669,7 @@ mod tests {
 
     fn art(title: &str, pov: i64) -> WikiArticleRow {
         WikiArticleRow {
+            atom_id: wiki_atom_id(title, "wiki-test"),
             title: title.into(),
             wikidata_qid: format!("Q-{title}"),
             revision_id: 100,
@@ -584,6 +677,7 @@ mod tests {
             pov_total: pov,
             citation_total: 5,
             is_contested: pov > 0,
+            chunk_id: format!("chunk-{title}"),
         }
     }
 
@@ -639,7 +733,8 @@ mod tests {
         };
         let mut out = Vec::new();
         for b in &batches {
-            let (title, qid) = (s(b, "title"), s(b, "wikidata_qid"));
+            let (aid, title, qid) = (s(b, "atom_id"), s(b, "title"), s(b, "wikidata_qid"));
+            let cid = s(b, "chunk_id");
             let (rev, pov, cit) = (
                 i(b, "revision_id"),
                 i(b, "pov_total"),
@@ -648,6 +743,7 @@ mod tests {
             let (insc, cont) = (bo(b, "in_scope"), bo(b, "is_contested"));
             for k in 0..b.num_rows() {
                 out.push(WikiArticleRow {
+                    atom_id: aid.value(k).to_string(),
                     title: title.value(k).to_string(),
                     wikidata_qid: qid.value(k).to_string(),
                     revision_id: rev.value(k),
@@ -655,6 +751,7 @@ mod tests {
                     pov_total: pov.value(k),
                     citation_total: cit.value(k),
                     is_contested: cont.value(k),
+                    chunk_id: cid.value(k).to_string(),
                 });
             }
         }
@@ -903,7 +1000,7 @@ mod tests {
     async fn direct_build_serves_the_whole_neighbor_api() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
-        let summary = build_wikipedia_columnar_store_from_chunks(dir, fixture())
+        let summary = build_wikipedia_columnar_store_from_chunks(dir, "wiki-test", fixture())
             .await
             .unwrap();
 
@@ -976,7 +1073,7 @@ mod tests {
     async fn axis_filter_matches_section_path_link_text_and_target_title() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
-        build_wikipedia_columnar_store_from_chunks(dir, fixture())
+        build_wikipedia_columnar_store_from_chunks(dir, "wiki-test", fixture())
             .await
             .unwrap();
         let g = ColumnarWikipediaGraph::open(dir).await.unwrap();
@@ -1072,9 +1169,141 @@ mod tests {
             url: None,
             metadata_raw: Some("{not json".into()),
         });
-        let (_, _, summary) = wiki_rows_from_chunks(chunks);
+        let (_, _, summary) = wiki_rows_from_chunks("wiki-test", chunks).unwrap();
         assert_eq!(summary.chunks_with_metadata, 4);
         assert_eq!(summary.chunks_without_metadata, 2);
         assert_eq!(summary.articles, 2);
+    }
+
+    /// The atom id is a function of the article and its corpus, and of nothing
+    /// else — not of position, not of insertion order, not of the rest of the
+    /// corpus. That is the whole difference from the counter ids it replaces
+    /// (`entity-0001`…, assigned in sorted-title order, so inserting one
+    /// article shifted every id after it).
+    #[test]
+    fn wiki_atom_id_depends_on_the_article_and_the_corpus_and_nothing_else() {
+        let a = wiki_atom_id("Roman Empire", "wikipedia");
+        assert_eq!(a, wiki_atom_id("Roman Empire", "wikipedia"));
+        assert!(a.starts_with("entity-"));
+        assert_eq!(a.len(), "entity-".len() + 16);
+        // Same title, different corpus → different atom. This is what makes an
+        // id unique across the federation without a registry.
+        assert_ne!(a, wiki_atom_id("Roman Empire", "wikipedia-newsworthy"));
+        // Different title, same corpus → different atom.
+        assert_ne!(a, wiki_atom_id("Roman Republic", "wikipedia"));
+        // The framing must be unambiguous. A `"{title}|{corpus}"` join makes
+        // these two the SAME atom, which is a silent merge of two articles;
+        // this assertion failed on that version and is why the fields are
+        // length-prefixed.
+        assert_ne!(
+            wiki_atom_id("a|b", "c"),
+            wiki_atom_id("a", "b|c"),
+            "the (title, corpus) tuple must not be ambiguous under the framing"
+        );
+        // And the length prefix must not itself collide across a shift.
+        assert_ne!(wiki_atom_id("ab", "c"), wiki_atom_id("a", "bc"));
+    }
+
+    /// The evidence anchor is the LOWEST chunk id of the article, so a rebuild
+    /// picks the same chunk whatever order the index streams rows in. The
+    /// fixture feeds the higher id first for exactly that reason.
+    #[tokio::test]
+    async fn chunk_anchor_is_the_lowest_chunk_not_the_first_seen() {
+        let chunks = vec![
+            chunk(
+                900,
+                "Albert Einstein",
+                meta_with(vec!["Later"], "body", None, vec![("X", "x")]),
+            ),
+            chunk(
+                7,
+                "Albert Einstein",
+                meta_with(vec!["Lead"], "lead", None, vec![("Y", "y")]),
+            ),
+        ];
+        let (articles, _, _) = wiki_rows_from_chunks("wikipedia", chunks).unwrap();
+        assert_eq!(articles.len(), 1);
+        assert_eq!(articles[0].chunk_id, "7");
+        assert_eq!(
+            articles[0].atom_id,
+            wiki_atom_id("Albert Einstein", "wikipedia")
+        );
+    }
+
+    /// A v1 store — no `atom_id`, no `chunk_id` — still serves the neighbor API
+    /// and says so about the walk. The failing input is a real one: it is the
+    /// shape of every `articles.lance` written before 2026-09-04, including the
+    /// installed wikipedia index at the time of the change.
+    #[tokio::test]
+    async fn a_v1_store_serves_neighbors_and_reports_that_it_cannot_serve_the_walk() {
+        use arrow_array::Array;
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+
+        // The v1 articles schema, verbatim: seven columns, no atom_id/chunk_id.
+        let v1 = Arc::new(Schema::new(vec![
+            Field::new("title", DataType::Utf8, false),
+            Field::new("wikidata_qid", DataType::Utf8, false),
+            Field::new("revision_id", DataType::Int64, false),
+            Field::new("in_scope", DataType::Boolean, false),
+            Field::new("pov_total", DataType::Int64, false),
+            Field::new("citation_total", DataType::Int64, false),
+            Field::new("is_contested", DataType::Boolean, false),
+        ]));
+        let batch = RecordBatch::try_new(
+            v1.clone(),
+            vec![
+                Arc::new(StringArray::from(vec!["Alpha", "Beta"])) as arrow_array::ArrayRef,
+                Arc::new(StringArray::from(vec!["", ""])),
+                Arc::new(Int64Array::from(vec![-1i64, -1])),
+                Arc::new(BooleanArray::from(vec![true, true])),
+                Arc::new(Int64Array::from(vec![0i64, 0])),
+                Arc::new(Int64Array::from(vec![0i64, 0])),
+                Arc::new(BooleanArray::from(vec![false, false])),
+            ],
+        )
+        .unwrap();
+        write_table(
+            dir,
+            ARTICLES_LANCE_DIRNAME,
+            ARTICLES_TABLE,
+            v1,
+            vec![batch],
+            None,
+        )
+        .await
+        .unwrap();
+        // Edges are unchanged between v1 and v2, so the real writer serves.
+        let esch = edges_schema();
+        let erows = vec![edge("Alpha", "Beta", "topical", "Lead", 1, true)];
+        write_table(
+            dir,
+            EDGES_LANCE_DIRNAME,
+            EDGES_TABLE,
+            esch.clone(),
+            vec![edges_batch(&erows, &esch).unwrap()],
+            Some("source_title"),
+        )
+        .await
+        .unwrap();
+
+        let g = ColumnarWikipediaGraph::open(dir).await.unwrap();
+        // It knows what it is …
+        assert!(!g.has_v2_columns());
+        // … and the neighbor API is entirely unaffected by the missing columns.
+        let n = g.neighbors("Alpha", 10).await;
+        assert_eq!(n.len(), 1);
+        assert_eq!(n[0].title, "Beta");
+        assert!(g.record("Alpha").await.is_some());
+
+        // A store the current writer produces answers the other way.
+        let tmp2 = tempfile::tempdir().unwrap();
+        build_wikipedia_columnar_store_from_chunks(tmp2.path(), "wiki-test", fixture())
+            .await
+            .unwrap();
+        assert!(ColumnarWikipediaGraph::open(tmp2.path())
+            .await
+            .unwrap()
+            .has_v2_columns());
     }
 }

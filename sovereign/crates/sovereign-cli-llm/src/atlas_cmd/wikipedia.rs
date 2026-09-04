@@ -239,13 +239,14 @@ async fn cmd_build_graph(args: &[String]) -> i32 {
         atlas_dir.display()
     );
     let t_build = std::time::Instant::now();
-    let summary = match build_wikipedia_columnar_store_from_chunks(&atlas_dir, chunks).await {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error: build: {e}");
-            return 1;
-        }
-    };
+    let summary =
+        match build_wikipedia_columnar_store_from_chunks(&atlas_dir, &corpus_id, chunks).await {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("error: build: {e}");
+                return 1;
+            }
+        };
     let build_ms = t_build.elapsed().as_millis();
 
     eprintln!();
