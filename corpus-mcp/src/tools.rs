@@ -32,11 +32,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Result};
-use corpus_engine::enrichment::atlas::context::{open_and_attach_ann_seed_table, AtlasGraph};
 use corpus_engine::enrichment::atlas::ground;
 use corpus_engine::enrichment::atlas::summary::read_current_summary;
 use corpus_engine::enrichment::atlas::writer::{read_atlas_ontology, AtlasOntologyFile};
-use corpus_engine::enrichment::atlas::AtlasProvider;
+use corpus_engine::enrichment::atlas::{open_walk_provider, AtlasProvider};
 use corpus_engine::{CorpusEngine, CorpusIndex, EmbedFn, ScoredChunk};
 use corpus_engine_vocab::atoms::{AtomEnvelope, AtomsFile};
 use serde_json::{json, Value};
@@ -55,15 +54,21 @@ struct Served {
     dims: usize,
     /// The index width matches the endpoint's, so the vector leg runs.
     vector: bool,
-    /// The v2 atlas store, with its ANN seed table attached, or `None` for a
-    /// corpus that has no atlas (or no seed table to attach).
+    /// Whatever the grounding walk can read for this corpus — an atom-class
+    /// store or a wiki-class one, decided by `open_walk_provider` — or `None`
+    /// for a corpus with no atlas at all.
+    ///
+    /// It is the TRAIT and not `AtlasGraph` because which class a corpus is
+    /// was never `ask`'s business, and holding the concrete type made the MCP
+    /// host silently blind to every wiki-class corpus while the daemon could
+    /// walk it.
     ///
     /// Loaded ONCE at open, on the host's long-lived runtime, because that is
-    /// what `open_and_attach_ann_seed_table` requires — the held
-    /// `lancedb::Table` is queried later, and opening it on a throwaway
-    /// runtime would invalidate it. Loading per `ask` call would also pay the
-    /// atoms.lance read on every question.
-    graph: Option<AtlasGraph>,
+    /// what the ANN seed table requires — the held `lancedb::Table` is queried
+    /// later, and opening it on a throwaway runtime would invalidate it.
+    /// Loading per `ask` call would also pay the atoms.lance read on every
+    /// question.
+    walk: Option<std::sync::Arc<dyn AtlasProvider>>,
 }
 
 pub struct Server {
@@ -112,20 +117,21 @@ impl Server {
                     profile.embed_model, profile.embed_dims
                 );
             }
-            // The atlas, if this corpus has one. Absence is normal (a corpus
-            // that was never enriched) and is REPORTED by `ask` rather than
-            // rendered as a walk that found nothing.
-            let atlas_dir = indexes_dir.join(&id).join("atlas");
-            let graph = match AtlasGraph::load_from_disk(&id, &atlas_dir) {
-                Ok(g) => {
-                    let g = open_and_attach_ann_seed_table(&id, &atlas_dir, g).await;
-                    if !g.has_ann_seed_table() {
+            // Whatever the walk can read here, atom-class or wiki-class —
+            // `open_walk_provider` is the one decider, so this host cannot
+            // disagree with the daemon about what a corpus is. Absence is
+            // normal (a corpus that was never enriched) and is REPORTED by
+            // `ask` rather than rendered as a walk that found nothing; the
+            // error text names WHICH store was missing (ARCH §18.3).
+            let walk = match open_walk_provider(&indexes_dir, &id).await {
+                Ok(p) => {
+                    if !p.has_ann_seed_table() {
                         eprintln!(
                             "corpus-mcp: corpus `{id}`: atlas has no `atoms_ann.lance` — `ask` \
                              will walk from name matches only; run `svrn atlas backfill-ann {id}`"
                         );
                     }
-                    Some(g)
+                    Some(p)
                 }
                 Err(e) => {
                     eprintln!("corpus-mcp: corpus `{id}`: no atlas to walk ({e})");
@@ -137,7 +143,7 @@ impl Server {
                 index,
                 dims,
                 vector,
-                graph,
+                walk,
             });
         }
         if served.is_empty() {
@@ -341,7 +347,7 @@ impl Server {
         // embeddings of one question would be two vector spaces (see
         // `sovereign-core/src/embed_fn.rs`), so there is exactly one call.
         let wants_vector =
-            targets.iter().any(|t| t.vector) || targets.iter().any(|t| t.graph.is_some());
+            targets.iter().any(|t| t.vector) || targets.iter().any(|t| t.walk.is_some());
         let embedding = if wants_vector {
             (self.embed)(question).await?
         } else {
@@ -364,13 +370,11 @@ impl Server {
         }
 
         // ── the walk ─────────────────────────────────────────────────────
-        // Widened to the trait once, here: the walk speaks `AtlasProvider`,
-        // and which store fulfils it is not `ask`'s business (the wiki-class
-        // store is a second implementor).
-        let graphs: Vec<&dyn AtlasProvider> = targets
-            .iter()
-            .filter_map(|t| t.graph.as_ref().map(|g| g as &dyn AtlasProvider))
-            .collect();
+        // Already the trait — `open_walk_provider` widened at the source, so
+        // which store fulfils it is not `ask`'s business (the wiki-class store
+        // is a second implementor) and no class name appears here at all.
+        let graphs: Vec<&dyn AtlasProvider> =
+            targets.iter().filter_map(|t| t.walk.as_deref()).collect();
         let (policy, policy_source) = ground::navigation_policy_for(&graphs);
         let selection =
             ground::select_walk(&embedding, &policy, policy_source, Some(&self.embed)).await;

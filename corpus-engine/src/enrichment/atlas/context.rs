@@ -1297,22 +1297,26 @@ pub async fn build_persistent_ann_seed_table(
     Ok(AnnBuildStats { resolved, total })
 }
 
-/// ATLAS_STORAGE_V2 3b: open the persistent ANN seed table under `atlas_dir` and
-/// attach it to `graph`. MUST run on the caller's long-lived async runtime — the
-/// held `lancedb::Table` is queried later by [`atlas_navigate_ann`], so opening
-/// it on a throwaway runtime (e.g. the sync `load_from_disk` bridge) would
-/// invalidate it; see [`AtlasGraph::with_ann_seed_table`]. No-op when no table
-/// is present; a present-but-unreadable table is non-fatal (the graph keeps its
-/// v1 cosine seed path). The single attach path shared by the daemon's
-/// `AtlasContextManager` and the eval's `--atlas-seed ann` verify, so both load
-/// the ANN exactly as the daemon does.
-pub async fn open_and_attach_ann_seed_table(
-    corpus_id: &str,
-    atlas_dir: &Path,
-    graph: AtlasGraph,
-) -> AtlasGraph {
+/// ATLAS_STORAGE_V2 3b: open the persistent ANN seed table under `atlas_dir`,
+/// if there is one the walk can use.
+///
+/// The ONE opener (ARCH §10.6), and it is store-class agnostic on purpose: the
+/// seed table is a property of the ATLAS DIRECTORY, not of the backend holding
+/// the atoms, so an atom-class store and a wiki-class one get their vector
+/// seeding by the same path and cannot drift into two answers about whether a
+/// corpus can seed at all. [`open_and_attach_ann_seed_table`] is the atom-class
+/// caller; [`super::provider::open_walk_provider`] is the class-agnostic one.
+///
+/// MUST run on the caller's long-lived async runtime — the held
+/// `lancedb::Table` is queried later by [`atlas_navigate_ann`], so opening it
+/// on a throwaway runtime (e.g. the sync `load_from_disk` bridge) would
+/// invalidate it; see [`AtlasGraph::with_ann_seed_table`]. `None` means "no
+/// vector seeding here"; a present-but-unreadable table is `None` too, but
+/// NAMED at warn (ARCH §18.3) rather than passed off as absence — the two are
+/// different facts and the log says which one happened.
+pub async fn open_ann_seed_table(corpus_id: &str, atlas_dir: &Path) -> Option<Arc<AnnSeedTable>> {
     if !crate::enrichment::atlas::ann_store::ann_table_present(atlas_dir) {
-        return graph;
+        return None;
     }
     match AnnSeedTable::open_for_atlas(atlas_dir).await {
         Ok(ann) => {
@@ -1320,7 +1324,7 @@ pub async fn open_and_attach_ann_seed_table(
                 corpus = corpus_id,
                 "atlas-graph: ANN seed table attached (v2 seeding)"
             );
-            graph.with_ann_seed_table(Arc::new(ann))
+            Some(Arc::new(ann))
         }
         Err(e) => {
             tracing::warn!(
@@ -1328,8 +1332,23 @@ pub async fn open_and_attach_ann_seed_table(
                 error = %e,
                 "atlas-graph: ANN seed table present but unreadable; using v1 cosine seeding"
             );
-            graph
+            None
         }
+    }
+}
+
+/// [`open_ann_seed_table`] attached to an atom-class `graph`; the graph
+/// unchanged when there is none. The single attach path shared by the daemon's
+/// `AtlasContextManager` and the eval's `--atlas-seed ann` verify, so both load
+/// the ANN exactly as the daemon does.
+pub async fn open_and_attach_ann_seed_table(
+    corpus_id: &str,
+    atlas_dir: &Path,
+    graph: AtlasGraph,
+) -> AtlasGraph {
+    match open_ann_seed_table(corpus_id, atlas_dir).await {
+        Some(ann) => graph.with_ann_seed_table(ann),
+        None => graph,
     }
 }
 

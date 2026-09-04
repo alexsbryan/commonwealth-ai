@@ -187,6 +187,118 @@ impl AtlasProvider for AtlasGraph {
     }
 }
 
+/// Open whatever the grounding walk can read for one atlas — the ONE place
+/// that decides which store class a corpus is (ARCH §10.6).
+///
+/// # The order is the whole logic
+///
+/// An atom store is tried FIRST, because a corpus that has one is atom-class
+/// by definition. Only when [`AtlasGraph::load_from_disk`] refuses — which it
+/// does for wikipedia, by design, since wikipedia carries no `atoms.lance` —
+/// does the wiki-class store get its turn, and only if
+/// [`wikipedia_graph_present`](crate::wikipedia_graph_present) says there is
+/// one. That predicate is the ONE answer to "does this corpus have a link
+/// graph", so this does not re-derive the question.
+///
+/// # Why it is a free function and not a trait method
+///
+/// [`AtlasProvider`] deliberately carries no `open` (see the module doc):
+/// construction differs completely between a Lance preload and a columnar
+/// mmap, and a constructor in the trait would force one store's lifecycle
+/// onto the other. But the CHOICE between them is not a lifecycle detail —
+/// it is one decision that every host must make identically, and before this
+/// existed each host made it for itself. `sovereign-tools`'
+/// `AtlasContextManager::walk_provider` and `corpus-mcp`'s host both call
+/// this now, so a corpus cannot be atom-class to the daemon and unreadable to
+/// the MCP host.
+///
+/// # Seeding is class-agnostic
+///
+/// Both branches attach the ANN seed table through
+/// [`open_ann_seed_table`](super::context::open_ann_seed_table), because the
+/// table is a property of the atlas DIRECTORY rather than of the backend. A
+/// wiki-class store therefore gets vector seeding the moment its table is
+/// built, with no second wiring.
+///
+/// # Errors
+///
+/// `Err` NAMES what was missing rather than collapsing to a bare `None`
+/// (ARCH §18.3): a corpus with no store at all and a corpus whose wiki store
+/// is present but unusable (a v1 store with no `atom_id`/`chunk_id`, which
+/// cannot be cited and so must not be walked) are different facts, and the
+/// caller's degradation text says which. Callers fall back to their
+/// bag-of-atoms path; this function never substitutes one class for the other
+/// silently.
+///
+/// MUST run on the caller's long-lived async runtime — see
+/// [`open_ann_seed_table`](super::context::open_ann_seed_table) for why the
+/// held `lancedb::Table` cannot come from a throwaway one. Sync callers use
+/// [`open_walk_provider_blocking`].
+pub async fn open_walk_provider(
+    indexes_dir: &std::path::Path,
+    atlas_corpus_id: &str,
+) -> Result<Arc<dyn AtlasProvider>, String> {
+    let atlas_dir = indexes_dir.join(atlas_corpus_id).join(super::ATLAS_DIRNAME);
+    let started = std::time::Instant::now();
+
+    let atom_err = match AtlasGraph::load_from_disk(atlas_corpus_id, &atlas_dir) {
+        Ok(g) => {
+            let g = super::context::open_and_attach_ann_seed_table(atlas_corpus_id, &atlas_dir, g)
+                .await;
+            tracing::info!(
+                corpus = atlas_corpus_id,
+                backend = "atom-class",
+                seed_table = g.has_ann_seed_table(),
+                load_ms = started.elapsed().as_millis(),
+                "walk provider: opened"
+            );
+            return Ok(Arc::new(g) as Arc<dyn AtlasProvider>);
+        }
+        Err(e) => e,
+    };
+
+    if !crate::wikipedia_graph_present(indexes_dir, atlas_corpus_id) {
+        return Err(format!(
+            "no store the walk can read for `{atlas_corpus_id}`: {atom_err}; and no wiki-class \
+             store (articles.lance + edges.lance) under {}",
+            atlas_dir.display()
+        ));
+    }
+
+    match crate::WikiAtlasProvider::open(&atlas_dir, atlas_corpus_id).await {
+        Ok(p) => {
+            let ann = super::context::open_ann_seed_table(atlas_corpus_id, &atlas_dir).await;
+            let p = match ann {
+                Some(a) => p.with_ann_seed_table(a),
+                None => p,
+            };
+            tracing::info!(
+                corpus = atlas_corpus_id,
+                backend = "wiki-class",
+                atoms = p.atom_count(),
+                edges = p.edge_count(),
+                seed_table = p.has_ann_seed_table(),
+                load_ms = started.elapsed().as_millis(),
+                "walk provider: opened"
+            );
+            Ok(Arc::new(p) as Arc<dyn AtlasProvider>)
+        }
+        Err(e) => Err(format!(
+            "wiki-class store present but unusable for `{atlas_corpus_id}`: {e}"
+        )),
+    }
+}
+
+/// [`open_walk_provider`] for a sync caller, bridged through the atlas
+/// module's ONE async-from-sync bridge. Lifecycle time only — corpus load,
+/// never the hot query path.
+pub fn open_walk_provider_blocking(
+    indexes_dir: &std::path::Path,
+    atlas_corpus_id: &str,
+) -> Result<Arc<dyn AtlasProvider>, String> {
+    super::store::run_blocking(open_walk_provider(indexes_dir, atlas_corpus_id))
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::atoms::{AtomType, ChunkRef};

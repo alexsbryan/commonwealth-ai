@@ -335,3 +335,83 @@ async fn a_seed_table_is_reported_by_both_accessors() {
     assert!(p.has_ann_seed_table());
     assert!(p.ann_seed_table().is_some());
 }
+
+/// The class DECIDER, over the same two fixtures the conformance runs use.
+///
+/// `open_walk_provider` is the one place that answers "which store does the
+/// walk read for this corpus" (ARCH §10.6) — before it existed, the daemon's
+/// `AtlasContextManager` and the corpus-mcp host each answered it separately,
+/// and the MCP host answered it wrong: it held a concrete `AtlasGraph`, so
+/// every wiki-class corpus was invisible to `ask` while the daemon walked it
+/// happily.
+///
+/// The fourth case is the one that earns the test. Cases 1-3 all still pass if
+/// the two branches are swapped, because no corpus in them has both stores;
+/// only `decider-both` can fail when the order is wrong, and it is the order
+/// that is the whole logic.
+#[tokio::test]
+async fn open_walk_provider_picks_the_class_and_names_absence() {
+    use corpus_engine::enrichment::atlas::{open_walk_provider, ATLAS_DIRNAME};
+
+    let tmp = tempfile::tempdir().unwrap();
+    let indexes = tmp.path();
+    let atlas_dir_for = |corpus: &str| {
+        let d = indexes.join(corpus).join(ATLAS_DIRNAME);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    };
+
+    // 1. Neither store. The absence is NAMED — both misses, in one message —
+    //    rather than collapsing to a bare "no atlas" the caller cannot explain
+    //    to a user (ARCH §18.3).
+    // `let Err(..) else` rather than `expect_err`: the Ok side is
+    // `Arc<dyn AtlasProvider>`, and the trait is deliberately not `Debug`.
+    let Err(err) = open_walk_provider(indexes, "decider-nothing").await else {
+        panic!("a corpus with no store at all must not yield a provider");
+    };
+    assert!(
+        err.contains("no v2 atlas store"),
+        "the atom-class miss must be named: {err}"
+    );
+    assert!(
+        err.contains("wiki-class"),
+        "the wiki-class miss must be named too: {err}"
+    );
+
+    // 2. Atom-class only.
+    let atoms_dir = atlas_dir_for("decider-atoms");
+    let (_, a_atom, _) = atom_class(&atoms_dir, "decider-atoms");
+    let p = open_walk_provider(indexes, "decider-atoms").await.unwrap();
+    assert_eq!(p.atlas_corpus_id(), "decider-atoms");
+    assert!(
+        p.atom(&a_atom).is_some(),
+        "the atom-class store must answer for its own atom"
+    );
+
+    // 3. Wiki-class only — reached ONLY because the atom store refused, which
+    //    is how wikipedia (no atoms.lance, by design) becomes walkable at all.
+    let wiki_dir = atlas_dir_for("decider-wiki");
+    let (_, a_wiki, _) = wiki_class(&wiki_dir, "decider-wiki").await;
+    let p = open_walk_provider(indexes, "decider-wiki").await.unwrap();
+    assert_eq!(p.atlas_corpus_id(), "decider-wiki");
+    assert!(
+        p.atom(&a_wiki).is_some(),
+        "the wiki-class store must answer for its own atom"
+    );
+
+    // 4. BOTH present: the atom store wins. A corpus that has an atom store is
+    //    atom-class by definition, and this is the only case in the test that
+    //    can tell a correct order from a reversed one.
+    let both_dir = atlas_dir_for("decider-both");
+    let (_, b_atom, _) = atom_class(&both_dir, "decider-both");
+    let (_, b_wiki, _) = wiki_class(&both_dir, "decider-both").await;
+    let p = open_walk_provider(indexes, "decider-both").await.unwrap();
+    assert!(
+        p.atom(&b_atom).is_some(),
+        "with both stores on disk the ATOM store must be the one opened"
+    );
+    assert!(
+        p.atom(&b_wiki).is_none(),
+        "and the wiki store's atom ids must not resolve through it"
+    );
+}

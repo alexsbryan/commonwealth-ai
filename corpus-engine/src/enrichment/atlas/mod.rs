@@ -81,7 +81,7 @@ pub use ground::{
     MapNode, MapSection, PolicySource, WalkLedger, WalkSelection, MAP_NODE_CAP,
 };
 pub use ingestion::{AtlasData, AtlasIngestion, AtlasIngestionConfig};
-pub use provider::AtlasProvider;
+pub use provider::{open_walk_provider, open_walk_provider_blocking, AtlasProvider};
 pub use registry::AtlasIngestionRegistry;
 pub use resolution::{
     fold, resolve_entities_and_events, resolve_entities_and_events_with, resolve_step_3b,

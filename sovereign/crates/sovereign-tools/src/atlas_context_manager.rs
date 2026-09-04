@@ -86,13 +86,22 @@ pub struct AtlasContextManager {
     /// entry so corrupt atlases aren't re-parsed every turn. Sync
     /// `RwLock` — read from the sync provider trait on the hot path.
     graph_dirs: Arc<std::sync::RwLock<HashMap<String, PathBuf>>>,
-    /// Wiki-class walk providers, memoised beside `graphs` and for the same
-    /// reason: `WikiAtlasProvider` holds its articles and its adjacency
-    /// RESIDENT, so re-opening one per query would re-read the whole store.
+    /// Walk providers that are NOT the atom-class store, memoised beside
+    /// `graphs` and for the same reason: a wiki-class `WikiAtlasProvider`
+    /// holds its articles and its adjacency RESIDENT, so re-opening one per
+    /// query would re-read the whole store.
+    ///
     /// Separate map rather than a widened `graphs`, because `graphs` is the
     /// CONCRETE `AtlasGraph` that `atom_enum` needs for `atoms_of_kind` and
-    /// `edge_degree` — neither of which is on the walk's trait.
-    wiki_providers: Arc<std::sync::RwLock<HashMap<String, Arc<corpus_engine::WikiAtlasProvider>>>>,
+    /// `edge_degree` — neither of which is on the walk's trait. Typed as the
+    /// TRAIT and not as `WikiAtlasProvider`, because which non-atom class a
+    /// corpus is belongs to `open_walk_provider`, not to this cache; a third
+    /// backend lands here with no change to this field.
+    non_atom_providers: Arc<
+        std::sync::RwLock<
+            HashMap<String, Arc<dyn corpus_engine::enrichment::atlas::AtlasProvider>>,
+        >,
+    >,
     /// Per-corpus query-bump map, in-memory mirror of each atlas's
     /// `triage_bumps.json`. Loaded at init time, mutated on every
     /// `record_match`, persisted by [`flush_bumps`] (debounced via
@@ -128,7 +137,7 @@ impl AtlasContextManager {
             contexts: Arc::new(RwLock::new(HashMap::new())),
             graphs: Arc::new(RwLock::new(HashMap::new())),
             graph_dirs: Arc::new(std::sync::RwLock::new(HashMap::new())),
-            wiki_providers: Arc::new(std::sync::RwLock::new(HashMap::new())),
+            non_atom_providers: Arc::new(std::sync::RwLock::new(HashMap::new())),
             bumps: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -548,50 +557,41 @@ impl AtlasContextProvider for AtlasContextManager {
             return Some(g as Arc<dyn corpus_engine::enrichment::atlas::AtlasProvider>);
         }
         if let Some(p) = self
-            .wiki_providers
+            .non_atom_providers
             .try_read()
             .ok()
             .and_then(|m| m.get(atlas_corpus_id).cloned())
         {
-            return Some(p as Arc<dyn corpus_engine::enrichment::atlas::AtlasProvider>);
+            return Some(p);
         }
-        if !corpus_engine::wikipedia_graph_present(&self.indexes_dir, atlas_corpus_id) {
-            return None;
-        }
-        let atlas_dir = self
-            .indexes_dir
-            .join(atlas_corpus_id)
-            .join(corpus_engine::enrichment::atlas::ATLAS_DIRNAME);
-        let started = std::time::Instant::now();
+        // Everything above is a CACHE lookup. The class decision itself is
+        // `open_walk_provider`, the one decider in corpus-engine, so this host
+        // and corpus-mcp cannot disagree about what a corpus is (ARCH §10.6).
         // Sync open through the atlas module's ONE async bridge; lifecycle
         // time, on the first query that reaches this corpus.
-        match corpus_engine::WikiAtlasProvider::open_blocking(&atlas_dir, atlas_corpus_id) {
+        match corpus_engine::enrichment::atlas::open_walk_provider_blocking(
+            &self.indexes_dir,
+            atlas_corpus_id,
+        ) {
             Ok(p) => {
-                tracing::info!(
-                    corpus = atlas_corpus_id,
-                    backend = "wiki-columnar",
-                    atoms = p.atom_count(),
-                    edges = p.edge_count(),
-                    load_ms = started.elapsed().as_millis(),
-                    "walk provider: wiki-class store opened"
-                );
-                let p = Arc::new(p);
-                if let Ok(mut m) = self.wiki_providers.try_write() {
+                if let Ok(mut m) = self.non_atom_providers.try_write() {
                     m.entry(atlas_corpus_id.to_string())
                         .or_insert_with(|| Arc::clone(&p));
                 }
-                Some(p as Arc<dyn corpus_engine::enrichment::atlas::AtlasProvider>)
+                Some(p)
             }
             Err(e) => {
-                // Reported, never defaulted (ARCH §18.3). A v1 wiki store
-                // refuses here BY NAME — it has no atom_id/chunk_id, so every
-                // atom would be identity-less and un-citable — and the caller
-                // falls back to bag-of-atoms rather than walking a store that
-                // cannot answer.
-                tracing::warn!(
+                // Reported, never defaulted (ARCH §18.3). The decider's message
+                // names WHICH store was missing or unusable — a v1 wiki store
+                // refuses BY NAME, since without atom_id/chunk_id every atom
+                // would be identity-less and un-citable — and the caller falls
+                // back to bag-of-atoms rather than walking a store that cannot
+                // answer. `debug`, not `warn`: most corpora simply have no
+                // atlas, and that is not a fault.
+                tracing::debug!(
                     corpus = atlas_corpus_id,
                     error = %e,
-                    "walk provider: wiki store present but unusable; this atlas is not walked"
+                    "walk provider: nothing here the walk can read; this atlas is not walked"
                 );
                 None
             }
@@ -955,7 +955,7 @@ mod tests {
             "an atom-class atlas must still resolve"
         );
         assert_eq!(
-            mgr.wiki_providers.read().unwrap().len(),
+            mgr.non_atom_providers.read().unwrap().len(),
             0,
             "an atom-class atlas must not be opened as a wiki store"
         );
@@ -977,9 +977,9 @@ mod tests {
         assert_eq!(w.edges_from(&alpha).len(), 1);
 
         // Memoised: a second call does not re-open the resident store.
-        assert_eq!(mgr.wiki_providers.read().unwrap().len(), 1);
+        assert_eq!(mgr.non_atom_providers.read().unwrap().len(), 1);
         assert!(AtlasContextProvider::walk_provider(&mgr, "wikish").is_some());
-        assert_eq!(mgr.wiki_providers.read().unwrap().len(), 1);
+        assert_eq!(mgr.non_atom_providers.read().unwrap().len(), 1);
 
         // Neither store present: None, and the caller's bag fallback is
         // unchanged by this method existing.

@@ -831,6 +831,13 @@ identical schema for a full index or a shard.
 │                                        # a gap: two faces read this one store —
 │                                        # `ColumnarWikipediaGraph` (the neighbor API) and
 │                                        # `WikiAtlasProvider` (the walk's `AtlasProvider`).
+│                                        # WHICH face a host gets is not the host's choice:
+│                                        # `enrichment::atlas::open_walk_provider` is the one
+│                                        # decider (atom store first, then wiki-class), and
+│                                        # the daemon's `AtlasContextManager::walk_provider`
+│                                        # and corpus-mcp's `ask` are both its callers, so a
+│                                        # corpus cannot be walkable to one and invisible to
+│                                        # the other.
 │                                        # The six relationship labels ride as DATA in a
 │                                        # column beside the closed `EdgeType::Involves`;
 │                                        # they are not enum arms (spec §3, principle 9).
@@ -6743,6 +6750,17 @@ takes two files OFF the over-ceiling set and drops one into the band — the
 accepted at ei-7c's merge with the numbers in that commit. Until those land,
 main's arch-gate names exactly one file and one owner, which is what a
 ratchet is for.
+
+**ei-4 settles its one file: accepted, because the carve was priced and does
+not reach.** The row above offers "a mechanical `mod tests` carve or a row
+here", and the carve does not clear the band: `ground.rs` is 1,165 lines of
+which `mod tests` is 209 (lines 957-1,165), so the `<stem>/tests.rs` split
+lands it at **956** — still between 800 and 1,200, so it buys a smaller
+number and not an exit, at the cost of a second file. Accepted instead:
+
+| Item | Location | Why deferred |
+|------|----------|--------------|
+| The walk, as one function | `corpus-engine/src/enrichment/atlas/ground.rs` (new, 1,165 — the +1 file / +1,350 lines named above) | `ground()`, the question-kind selection and the drop ledger are one decision path; `resolve.rs` (501) was already split out of it to keep it under the ceiling. The only seam that would take it under 800 is the ledger, and the ledger is what makes the walk glassbox (ARCH §9) — splitting it from the walk it records is the wrong cut. Due when a second walk shape needs the same ledger. |
 
 ### 10.1j Concept ratchet RE-PINNED on main — 2026-09-03 (+2, and the gate cannot say which two)
 
