@@ -4627,6 +4627,19 @@ that has never seen this ring holds no `rings/<ns>` directory, so
 `run_one_round` finds no namespaces and returns early (`:117`, `:124`) and
 never dials. **The only direction that can bootstrap it is the bounded one.**
 
+**The sealed floor is the precondition for moving that ceiling, not the move.**
+Measured as a pair over one journal: a `Seal` appended while the retired lines
+are still on disk sends the identical body and is still refused —
+`ops_missing_from` is author-blind over what the node HOLDS, and an empty
+digest is missing all of it. **Deleting the retired lines is the whole
+mitigation**, and then it works: the suffix fits, and a peer that has never
+seen the ring lands on a journal `admit` calls COMPLETE, because the seal
+travels as its own op and holes are counted from the floor. Mutating that seal
+to an ordinary `Record` reports 10,000 `SequenceHole`s instead, so the floor
+is load-bearing and not the delete alone. What does not exist at HEAD is
+either half of the routine: no verb authors a seal and nothing removes a
+retired prefix, so the ceiling above is exactly where it stands.
+
 **`svrn ring` is the verb** (`sovereign-cli-llm/src/ring_cmd/`, ring-deploy
 S4): `ring new` scaffolds an app (page, reducer, and the reducer's tests),
 `ring roster add <person> --self` binds a name to the node key it signs with,

@@ -698,23 +698,33 @@ const CEILING_FIXTURE_BODY_BYTES: usize = 594;
 /// convergence assertion below meaningless.
 fn seed(journal: &RingJournal, key: &SigningKey, n: usize) -> usize {
     let payload = body_of_size(CEILING_FIXTURE_BODY_BYTES);
-    let actor = key.actor();
-    let mut ops = Vec::with_capacity(n);
-    for seq in 0..n as u64 {
-        let ts = 1_700_000_000i64 + seq as i64;
-        let act = RailAct::Record {
-            payload: payload.clone(),
-        };
-        let sig = commonwealth_rail::sign_ring_op(
-            key,
-            journal.namespace(),
-            ts,
-            seq,
-            &commonwealth_rail::body_json(&act),
-        );
-        ops.push(Op::new(SignedOp { seq, sig, act }, ts, actor.clone()));
-    }
+    let ops: Vec<_> = (0..n as u64)
+        .map(|seq| {
+            signed(
+                key,
+                journal.namespace(),
+                seq,
+                RailAct::Record {
+                    payload: payload.clone(),
+                },
+            )
+        })
+        .collect();
     journal.ingest_all(&ops).unwrap()
+}
+
+/// One op, signed for its own `(namespace, ts, seq)` exactly as the door
+/// signs it — so its `OpId` is distinct and its signature actually verifies.
+fn signed(key: &SigningKey, namespace: &str, seq: u64, act: RailAct) -> Op<SignedOp> {
+    let ts = 1_700_000_000i64 + seq as i64;
+    let sig = commonwealth_rail::sign_ring_op(
+        key,
+        namespace,
+        ts,
+        seq,
+        &commonwealth_rail::body_json(&act),
+    );
+    Op::new(SignedOp { seq, sig, act }, ts, key.actor())
 }
 
 fn solo_roster(key: &SigningKey) -> Roster {
@@ -924,6 +934,123 @@ async fn the_pull_direction_carries_what_the_push_direction_is_refused() {
             .ops
             .len(),
         "two nodes, one answer"
+    );
+}
+
+/// **Does the sealed floor (`dc9010181`) move the ceiling? Only the DELETE
+/// does, and nothing in the tree performs it.**
+///
+/// Two arms over the same journal, and the pair is the finding:
+///
+/// - **A seal alone buys nothing on the wire.** `ops_missing_from` is
+///   author-blind over what this node HOLDS, and a peer with an empty digest
+///   is missing all of it, so appending a `Seal` while the retired lines are
+///   still on disk sends exactly the same body. Still 413.
+/// - **Deleting the retired lines is the whole mitigation.** The same push
+///   after compaction carries the suffix only, fits, and lands a fresh peer
+///   on a ring `admit` calls COMPLETE — the floor travels as the seal's own
+///   op, so what was retired is absent by agreement rather than a hole.
+///
+/// The delete is done here, by this test, because there is no production
+/// routine that does it: `RailAct::Seal` is reachable through `append`, and
+/// `grep -rn "compact\|truncate"` over the rail crates, the API and
+/// `ring_cmd` finds no writer that removes a retired prefix and no verb that
+/// authors a seal. So at HEAD the ceiling is exactly where the tests above
+/// put it, and the sealed floor is the *precondition* for moving it rather
+/// than the move.
+#[tokio::test]
+async fn a_seal_moves_the_ceiling_only_once_the_retired_lines_are_deleted() {
+    const RETIRED: u64 = 10_000;
+    const KEPT: u64 = 500;
+    let key = SigningKey::from_bytes(&[1u8; 32]);
+    let dir = tempfile::tempdir().unwrap();
+    let (_holder, journal) = node(dir.path(), &key, RETIRED as usize);
+
+    // The seal takes the actor's next ordinary seq, then work continues.
+    let payload = body_of_size(CEILING_FIXTURE_BODY_BYTES);
+    let mut tail = vec![signed(&key, NS, RETIRED, RailAct::Seal)];
+    tail.extend((RETIRED + 1..=RETIRED + KEPT).map(|seq| {
+        signed(
+            &key,
+            NS,
+            seq,
+            RailAct::Record {
+                payload: payload.clone(),
+            },
+        )
+    }));
+    assert_eq!(journal.ingest_all(&tail).unwrap(), tail.len());
+
+    let push = |journal: &RingJournal| RingSyncRequest {
+        namespace: NS.to_string(),
+        digest: journal.digest().unwrap(),
+        ops: journal.ops_missing_from(&Digest::new()).unwrap(),
+    };
+
+    // ARM 1 — sealed, not compacted. The body is unchanged.
+    let before = push(&journal);
+    assert_eq!(before.ops.len(), (RETIRED + KEPT + 1) as usize);
+    let peer_dir = tempfile::tempdir().unwrap();
+    let (peer, _) = node(peer_dir.path(), &SigningKey::from_bytes(&[2u8; 32]), 0);
+    let (status, _) = sync_raw(peer, &before).await;
+    assert_eq!(
+        status,
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "a seal is an op, not a delete: {} ops still go out",
+        before.ops.len()
+    );
+
+    // ARM 2 — the delete the rail has no routine for. Same filter shape as
+    // `commonwealth-rail`'s own journal drill: keep the seal and everything
+    // above it, keep anything unparseable rather than losing it.
+    let path = journal.dir().join("ring_oplog.jsonl");
+    let kept: String = std::fs::read_to_string(&path)
+        .unwrap()
+        .lines()
+        .filter(|l| {
+            serde_json::from_str::<Op<SignedOp>>(l)
+                .map(|o| o.kind.seq >= RETIRED)
+                .unwrap_or(true)
+        })
+        .map(|l| format!("{l}\n"))
+        .collect();
+    std::fs::write(&path, kept).unwrap();
+    assert_eq!(
+        journal.read().unwrap().0.len(),
+        (KEPT + 1) as usize,
+        "the prefix is really gone"
+    );
+
+    let after = push(&journal);
+    let peer_dir = tempfile::tempdir().unwrap();
+    let (peer, peer_journal) = node(peer_dir.path(), &SigningKey::from_bytes(&[2u8; 32]), 0);
+    peer_journal.set_roster(&solo_roster(&key)).unwrap();
+    let resp = sync_once(peer, NS, after.digest.clone(), after.ops.clone()).await;
+    assert_eq!(
+        resp.ingested,
+        (KEPT + 1) as usize,
+        "the suffix fits and lands"
+    );
+
+    // And the peer that has never seen this ring reads a COMPLETE journal:
+    // the seal came with it, so `admit` counts holes from the floor.
+    let admitted = peer_journal
+        .admit(&solo_roster(&key), &Ed25519Verifier)
+        .unwrap();
+    assert!(
+        admitted.is_complete(),
+        "a compacted bootstrap is not a broken one: {:?}",
+        admitted.gaps
+    );
+    assert_eq!(
+        admitted.applied().count(),
+        KEPT as usize,
+        "the seal itself carries no payload"
+    );
+    assert_eq!(
+        peer_journal.digest().unwrap(),
+        journal.digest().unwrap(),
+        "two nodes, one claim"
     );
 }
 
