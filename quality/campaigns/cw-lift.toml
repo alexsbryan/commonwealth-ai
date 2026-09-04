@@ -9,7 +9,7 @@ objective = "Commonwealth becomes a liftable substrate package in-repo, so a sov
 spec      = "the approved plan, 2026-09-03; commonwealth/BOUNDARY.md is its committed half"
 register  = "quality/ARCH_LAYERS.toml"
 declared  = "2026-09-04"
-status    = "open"
+status    = "active"
 
 # ── THE CLAIM ───────────────────────────────────────────────────────────────
 #
@@ -69,7 +69,9 @@ status    = "open"
 id           = "cw-net-deletion"
 one_line     = "CLAIM: extracting a boundary can be net-DELETING, not just net-moving"
 derives_from = "quality/DELETION.md — the workspace runs +622k/-179k over 90 days, 29 lines deleted per 100 added"
-status       = "at-risk"
+status       = "open"
+# (was "at-risk" — the loader's closed set is open/deferred/descoped; the
+# risk is the arithmetic below, and it stays open until it is paid)
 # THE ARITHMETIC HAS DRIFTED AND IT IS RECORDED HERE RATHER THAN DISCOVERED AT
 # 1f. Landed, source lines from the diffs:
 #
@@ -98,6 +100,7 @@ status       = "at-risk"
 #     growth.
 # Decide which BEFORE 1f, not after.
 floor        = -4690.0
+floor_basis  = "source lines landed from the diffs, 2026-09-04: 0a -1,892 · 0b -3,155 · 0c +34 · 4a +107 · 1a +216 = -4,690 (the arithmetic block above)"
 target       = -3800.0
 direction    = "lower_is_better"
 instrument   = "scripts/deletion-manifest.py --verify"
@@ -121,6 +124,7 @@ status       = "open"
 # commonwealth -> sovereign was 11 types / 38 refs (2026-08-20), now 12 / 39,
 # all from commonwealth-api, all R6-tracked. Worth one look, not an order.
 floor        = 95.0
+floor_basis  = "python3 scripts/nc-boundary.py, 2026-09-04, fresh SCIP index at 83c0caebf: 95 types / 595 refs (101 / 616 at campaign start)"
 target       = 88.0
 direction    = "lower_is_better"
 instrument   = "python3 scripts/nc-boundary.py  (read the banner — it names the commit the INDEX describes, not your tree)"
@@ -130,7 +134,8 @@ kill         = "a NEW [[exception]] row is needed in ARCH_LAYERS.toml. The edge 
 id           = "cw-rail-closure"
 one_line     = "CLAIM: the rail is a genuine primitive, not an artifact of this codebase"
 derives_from = "RE-DERIVED 2026-09-04, before 1b, from 1a's own measurement"
-status       = "re-derived"
+status       = "open"
+# (was "re-derived" — RE-DERIVED 2026-09-04; still open, see below)
 # ── P3 (<= 20 CRATES) WAS FALSIFIED BEFORE THE WORK IT GATES EVEN STARTED ──
 #
 # `commonwealth-rail-core` must contain `oplog`. `oplog`'s full closure,
@@ -159,10 +164,14 @@ status       = "re-derived"
 # [[forbid]] blocks minted at 1a already enforce for oplog.
 #
 # The count is kept as a TRACKED number so a rise is visible; it is no longer
-# a pass/fail.
-floor        = 28.0
-target       = 50.0
-direction    = "tracked"
+# a pass/fail. The loader has no "tracked" direction (closed set: higher /
+# lower / near_zero), so the tracking is expressed as lower_is_better with the
+# expected ceiling as the floor and oplog's bare closure as the target — a
+# rise past 50 reads as failed, which is the visibility the prose asked for.
+floor        = 50.0
+floor_basis  = "expected 45-50 once the signature stack is priced (2026-09-04, the ed25519 paragraph above); 28 = oplog's full closure measured at 1a (33b003a2e)"
+target       = 28.0
+direction    = "lower_is_better"
 instrument   = "cargo tree -p commonwealth-rail-core -e normal --prefix none | awk '{print $1}' | sort -u | wc -l"
 kill         = "K1 — the canon composition forces either side to grow a dependency or a shim. The boundary is not where we think it is."
 
@@ -186,6 +195,7 @@ status       = "open"
 # BUILDING THE DAEMON, which is why this bar's instrument is a build and not a
 # gate. Same caveat commonwealth/BOUNDARY.md already carries.
 floor        = 3.0
+floor_basis  = "measured 2026-09-04: the three blocker classes above — direct commonwealth-* deps in sovereign-cli-daemon (Cargo.toml:56-63), two unconditional iroh forcings, one mesh-mint-to-boot site (daemon_cmd/mod.rs:1174-1186)"
 target       = 0.0
 direction    = "lower_is_better"
 instrument   = "count of (direct commonwealth-* deps in sovereign-cli-daemon) + (unconditional iroh feature forcings) + (mesh-mint-to-boot sites)"
@@ -195,7 +205,9 @@ kill         = "K2 — AppState (commonwealth-api/src/state.rs:585, 2,659 lines,
 id           = "cw-twin-visibility"
 one_line     = "CLAIM: we can SEE a dead twin, not just a coupling"
 derives_from = "OFF-PLAN. Added 2026-09-04 after auditing what the campaign's instruments can actually detect."
-status       = "answered — first pass NEGATIVE and WRONG; corrected same day"
+status       = "open"
+# (was "answered — first pass NEGATIVE and WRONG; corrected same day"; the
+# bar stays open until its instrument measures it)
 # THE CAMPAIGN'S HEADLINE IS TWIN REMOVAL AND NOTHING MEASURES A TWIN.
 #
 # scripts/nc-boundary.py measures REFERENCE WIDTH ACROSS AN EDGE. A perfect
@@ -300,6 +312,7 @@ status       = "answered — first pass NEGATIVE and WRONG; corrected same day"
 # forked wire type drifts silently and no gate here sees it. `converge shape`
 # is the gate that would, and today it is a mirror with no exit code.
 floor        = 0.0
+floor_basis  = "structural — svrn code dry-report ran 2026-09-04 and found no copy-paste twin (the RAN block above); zero is the measured start"
 target       = 1.0
 direction    = "higher_is_better"
 status_note  = "kill bar FIRED as written — dry-report is a similarity report and is shipped as one; it answers who copy-pasted, never who re-derived"
@@ -387,6 +400,7 @@ status       = "open"
 # REMAINING: the Mesh family (MeshWire x3 + core::Mesh, the largest), the
 # Gossip pair, and CorpusHostingView/GossipStoreEntry inside commonwealth.
 floor        = 11.0
+floor_basis  = "svrn code converge shape over commonwealth/crates + sovereign-mesh, 2026-09-04, before the three convergences: 11 cross-family groups (the six forks enumerated above)"
 target       = 5.0
 direction    = "lower_is_better"
 instrument   = "svrn code converge shape --include commonwealth/crates --include sovereign/crates/sovereign-mesh — count cross-family groups before/after"
@@ -412,6 +426,7 @@ status       = "open"
 # repo already rot while reading as authoritative, and none has a closure
 # trigger.
 floor        = 0.0
+floor_basis  = "structural — the ledger holds no live grant until 1f lands; zero is the state at declaration (2026-09-04)"
 target       = 6.0
 direction    = "higher_is_better"
 instrument   = "the ledger's own as-of reader, counting live grants"
