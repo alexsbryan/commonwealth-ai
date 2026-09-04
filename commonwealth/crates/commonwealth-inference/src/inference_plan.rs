@@ -107,4 +107,29 @@ mod tests {
         assert_eq!(back.assignments.len(), 1);
         assert_eq!(back.assignments[0].layers.count(), 32);
     }
+
+    /// Ported from `commonwealth_core::scheduler` when that fork was deleted
+    /// (2026-09-03). It was the ONE test the dead copy had and this live copy
+    /// did not — the same asymmetry `lib.rs:3-13` records for `model`,
+    /// `model_aliases` and `oicp_registry`: "core's 13 tests covered a copy
+    /// nobody ran and the copy everyone ran had one."
+    ///
+    /// It is a real gate, not a tautology: `TransitionState` rides
+    /// `InferencePlan` over the wire (`commonwealth-api`
+    /// `routes_internal/gossip.rs:206` takes `Json<InferencePlan>`), so a
+    /// serde asymmetry is a mesh wire break with nothing else red. Watched
+    /// failing on `#[serde(rename = "ready")]` over `Loading`, which makes two
+    /// variants share one wire token: `Ready` came back as `Loading`.
+    #[test]
+    fn transition_state_serde_roundtrip() {
+        for state in [
+            TransitionState::Loading,
+            TransitionState::Ready,
+            TransitionState::Complete,
+        ] {
+            let json = serde_json::to_string(&state).unwrap();
+            let back: TransitionState = serde_json::from_str(&json).unwrap();
+            assert_eq!(state, back);
+        }
+    }
 }

@@ -21,9 +21,7 @@ pub mod peer_addr;
 pub mod peer_health;
 pub mod pipeline_aliases;
 pub use oicp_types as oicp;
-pub mod oicp_registry;
 pub mod partition;
-pub mod scheduler;
 
 pub use clock::{Clock, SystemClock, TestClock};
 pub use error::{Error, Result};

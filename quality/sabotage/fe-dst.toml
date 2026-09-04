@@ -28,16 +28,6 @@ breaks = "Joining MUST be by a short human-transcribable key. The receiving side
 expected = "CAUGHT"
 
 [[mutant]]
-id = "fe-6-peering_key_generation_and_verification"
-requirement = "FE-6"
-target = "commonwealth/crates/commonwealth-discovery/src/peering.rs"
-find = "pub fn generate_peering_key() -> String {\n    membership::generate_join_key()\n}"
-replace = "pub fn generate_peering_key() -> String {\n    \"cwth-0000-0000-0000\".to_string()\n}"
-mustFail = ["peering_key_generation_and_verification"]
-breaks = "Identity keys MUST be protected by an anti-downgrade rule: a relayed record without the key MUST NOT strip a known one."
-expected = "CAUGHT"
-
-[[mutant]]
 id = "fe-6-stable_key_handles_claim_without_evidenc"
 requirement = "FE-6"
 target = "commonwealth/crates/commonwealth-api/src/routes_inference.rs"

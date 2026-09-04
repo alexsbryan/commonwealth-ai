@@ -76,6 +76,13 @@ def load():
     for s in d["spec"]:
         if s["status"] == "exists-untagged":
             kind = "tag"
+        elif s["status"] == "subject-deleted":
+            # The code this clause claimed was DELETED — usually because it had
+            # no callers, which means the clause never had a live
+            # implementation. It is write-work again. Falling through to the
+            # `continue` below would make a lost proof indistinguishable from a
+            # kept one (ARCH §18.3).
+            kind = "write"
         elif s["id"] in NO_ROUTE:
             kind = "blocked"
         else:

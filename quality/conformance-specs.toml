@@ -512,10 +512,21 @@ existing = '''commonwealth/crates/commonwealth-discovery/src/gossip.rs:422::goss
 [[spec]]
 id = "FE-21"
 family = "FE"
-status = "exists-untagged"
+status = "subject-deleted"
 clause = '''Round-trip latency between members MUST be measured periodically and shared, as a smoothed estimate.'''
-target = '''commonwealth/crates/commonwealth-discovery/src/latency_probe.rs:124::update_record'''
-existing = '''commonwealth/crates/commonwealth-discovery/src/latency_probe.rs:254::latency_prober_ewma_smoothing'''
+# 2026-09-03. `commonwealth-discovery/src/latency_probe.rs` was deleted: 296
+# lines with ZERO callers anywhere in the workspace. So this clause never had a
+# production implementation — it had an unreachable one, and a test that
+# exercised the unreachable one. The requirement is NOT retired; the false
+# claim that it was covered is. This reads as queue work of kind `write` again,
+# which is the honest state (ARCH §18.3 — absence is reported, never
+# defaulted). Do not restore the file to close it: measure the RTT on the path
+# peers actually use.
+retired = '''subject deleted (latency_probe.rs, 0 callers) — the clause is now an open gap, not a covered one'''
+# Not a claim about where the fix goes — a grouping key, so the item renders in
+# the queue instead of clustering under an empty path. RTT belongs wherever the
+# peer wire already is; picking the site is part of the write.
+target = '''commonwealth/crates/commonwealth-transport/src/'''
 
 [[spec]]
 id = "FE-23"

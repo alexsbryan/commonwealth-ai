@@ -11,11 +11,9 @@ pub mod inference_plan;
 // one. Re-exported, not re-declared: one decider, one name
 // (`ARCH_PRINCIPLES` §10.6). Surfaced by nc-22c shape matching, which sees a
 // fork that was renamed or copied — the case a name-based census cannot.
-pub use commonwealth_core::{model, model_aliases, oicp, oicp_registry};
+pub use commonwealth_core::{model, model_aliases, oicp};
 pub mod plan;
 pub mod store_adapter;
-pub mod tier_router;
-pub mod topology;
 
 pub mod orchestrator;
 pub mod scheduler;
@@ -38,4 +36,3 @@ pub use plan::{
     SchedulingStrategy, Tier, TierQueueDepths, UnavailableReason,
 };
 pub use store_adapter::InferenceStateStore;
-pub use topology::TopologyEvent;

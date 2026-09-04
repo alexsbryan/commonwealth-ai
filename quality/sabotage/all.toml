@@ -984,16 +984,6 @@ breaks = "Hardware capability MUST be detected, not configured, with a fallback 
 expected = "CAUGHT"
 
 [[mutant]]
-id = "fe-24-highest_priority_wins"
-requirement = "FE-24"
-target = "commonwealth/crates/commonwealth-inference/src/tier_router.rs"
-find = "// Sort rules by priority (highest first).\n    let mut rules = router.routing_rules.clone();\n    rules.sort_by(|a, b| b.priority.cmp(&a.priority));\n\n    for rule in &rules {\n        if evaluate_condition(&rule.condition, request) {\n            return rule.target;\n        }\n    }"
-replace = "// Last-writer-wins logic instead of strictest-wins.\n    // This violates the requirement that policies must merge stricter-wins.\n    let mut final_target = router.default_tier;\n    \n    // Iterate through all matching rules and overwrite with the last one found,\n    // effectively ignoring priority or treating them as simple overrides rather than constraints.\n    // To ensure this specific test fails (where Quality hint should win), we can simply\n    // reverse the sort order so lower priorities are processed later, or just pick a default wrong behavior.\n    // However, to strictly violate \"stricter wins\" in a way that breaks the logic:\n    // Let's assume 'Throughput' is less strict than 'Quality'. If we process low priority first\n    // and high priority second, it might still work if we want higher. \n    // But wait, the current code sorts HIGH to LOW. High priority (20) runs first -> returns Tier::Quality.\n    // To make it fail, we need Tier::Throughput to be returned instead.\n    // We can achieve this by sorting ASCENDING (lowest priority first), so Priority 5 runs before Priority 20?\n    // No, if we return immediately on match in a loop:\n    // Ascending: Priority 5 matches -> Returns Throughput. Test expects Quality. FAILS.\n\n    let mut rules = router.routing_rules.clone();\n    rules.sort_by(|a, b| a.priority.cmp(&b.priority)); // Changed from descending to ascending\n\n    for rule in &rules {\n        if evaluate_condition(&rule.condition, request) {\n            return rule.target;\n        }\n    }"
-mustFail = ["highest_priority_wins"]
-breaks = "Policy that must only ever tighten (such as an encryption requirement) MUST merge **stricter-wins**, not last-writer-wins."
-expected = "CAUGHT"
-
-[[mutant]]
 id = "fe-26-a_guest_and_a_peer_dialing_one_key_land_"
 requirement = "FE-26"
 target = "commonwealth/crates/commonwealth-transport/src/iroh.rs"

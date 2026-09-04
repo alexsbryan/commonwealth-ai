@@ -531,8 +531,9 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // ---- commonwealth (the estate's own web app + shards; Mesh / LocalDaemon) ----
     ("commonwealth/crates/commonwealth-knowledge/src/shard_manager.rs", Class::Mesh, 3),
     // `http_embed_fn` moved DOWN to corpus-engine 2026-09-03 (enrichment-as-
-    // plugin Step 5); what stays here is the `/v1/models` reconstruction probe.
-    ("commonwealth/crates/commonwealth-knowledge/src/embed_http.rs", Class::LocalDaemon, 1),
+    // plugin Step 5). What was left behind — the `/v1/models` reconstruction
+    // probe, `embed_model_info` — had ZERO callers, so the file went with the
+    // rest of the dead-twin sweep the same day and its row went with it.
     // The `POST /v1/embeddings` EmbedFn constructor. The URL is the CALLER's:
     // the daemon's own endpoint from commonwealth-knowledge, or the operator's
     // `--base-url` from corpus-mcp — an operator-owned target, so it carries
