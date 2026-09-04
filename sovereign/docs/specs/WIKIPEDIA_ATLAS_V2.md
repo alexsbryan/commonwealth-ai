@@ -52,12 +52,31 @@ adjacency. The columnar store is therefore the **drop-in replacement for the SQL
   lint clean across 24 crates. **Live verify (chaos QA over wiki-grounded questions)
   pending** — needs a backfilled wiki columnar store, so it rides with W4.
 
+- **W4 — DONE (2026-09-04).** The columnar store IS the build output:
+  `wiki_store::wiki_rows_from_chunks` aggregates the chunks and
+  `build_wikipedia_columnar_store_from_chunks` writes both tables, so
+  `atlas wikipedia build-graph` no longer goes through SQLite. The SQLite
+  `wikipedia_graph.db` (2.4 GB installed), the `wikipedia_graph` module, the
+  `export-columnar` verb and `open_wikipedia_graph`'s fallback are all deleted;
+  `Neighbor` / `ArticleRecord` / `WikipediaGraphApi` moved to
+  `wikipedia_columnar`, and `wikipedia_graph_present` is the ONE predicate for
+  "does this corpus have a link graph" (it was asked in three places by two
+  different means, two of which stat'd the retired `.db` path). The gate that
+  let the SQLite go is `direct_build_matches_sqlite_two_step`, which asserted
+  the direct build against the two-step across the whole neighbor API on the
+  same chunks; it is cited in the retirement commit and could not outlive the
+  backend it compared against, so `direct_build_serves_the_whole_neighbor_api`
+  + `axis_filter_matches_section_path_link_text_and_target_title` replace it
+  with value assertions.
+
 **Remaining:**
-- **W4** — make the columnar store the build output directly + retire the SQLite +
-  `atoms.json`/`edges.json`/`atoms.rkyv` for wiki (the ~3.4 GB → few-hundred-MB
-  unification). Then the live W3 chaos-QA verify. Open question still: whether wiki's
-  `atoms.rkyv`/`AtlasGraph` is used elsewhere (typed-enumeration) and must also move
-  before the rkyv delete.
+- **`atoms.json` / `edges.json` for wiki (2.14 GB)** are NOT retired and are not
+  residue: `store::build_and_write_store` reads both as the v2 rebuild source
+  and `store_needs_build` gates on `atoms.json`'s mtime. Backlog
+  `cdd84398`.
+- **W5** — article embeddings → ANN, superseded by the one-store-provider work:
+  the seed table is MIGRATED from the chunk index's existing vectors rather
+  than embedded fresh (EPISTEMIC_INDEX §3 Wikipedia row).
 
 ## Current state — the same structure stored three times (~3.4 GB)
 

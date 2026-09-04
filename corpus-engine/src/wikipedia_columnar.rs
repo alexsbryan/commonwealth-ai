@@ -1,19 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! WIKIPEDIA_ATLAS_V2 — W2: the columnar `WikipediaGraph` reader.
+//! The wiki link graph — `articles.lance` + `edges.lance`, and the only backend
+//! that serves it.
 //!
-//! `ColumnarWikipediaGraph` serves the same query surface as the SQLite
-//! [`crate::wikipedia_graph::WikipediaGraph`] — `neighbors` / `neighbors_for_axis`
-//! / `co_neighbors` / `reverse_neighbors` / `has_contested_section` / `record` —
-//! over the v2 columnar store (`articles.lance` + `edges.lance`,
-//! [`crate::enrichment::atlas::wiki_store`]) via Lance predicate queries +
-//! Rust-side aggregation. It is the drop-in the runtime swaps in for the SQLite
-//! graph (W3); W4 retires the SQLite + the 1.39 GB `edges.json`.
+//! `ColumnarWikipediaGraph` answers the [`WikipediaGraphApi`] surface —
+//! `neighbors` / `neighbors_for_axis` / `co_neighbors` / `reverse_neighbors` /
+//! `has_contested_section` / `record` — over the v2 columnar store written by
+//! [`crate::enrichment::atlas::wiki_store`], via Lance predicate queries plus
+//! Rust-side aggregation.
 //!
-//! The wiki neighbor queries are predicate-shaped (axis filtering matches the
-//! link's `source_section_path` / `link_text` / `target_title`), which is Lance's
-//! strength: `WHERE source_title = ?` with predicate pushdown, then the SQLite's
-//! `GROUP BY (target, rel) / SUM(occurrence) / ORDER / LIMIT` folded in Rust over
-//! the bounded per-article edge set.
+//! The wiki neighbor queries are predicate-shaped — axis filtering matches a
+//! link's `source_section_path` / `link_text` / `target_title` — which is
+//! Lance's strength: `WHERE source_title = ?` with predicate pushdown over a
+//! BTree scalar index, then the `GROUP BY (target, rel) / SUM(occurrence) /
+//! ORDER / LIMIT` folded in Rust over the bounded per-article edge set.
+//!
+//! **W4 (2026-09-04): the SQLite `wikipedia_graph.db` is retired** and this is
+//! the sole backend. It was never the model — it was a build aggregator that
+//! `export_columnar` dumped back out to these same two tables — and
+//! `wiki_store::wiki_rows_from_chunks` now writes them from the chunks
+//! directly. `open_wikipedia_graph` has no fallback left to pick.
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -24,7 +29,79 @@ use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
 
 use crate::enrichment::atlas::wiki_store::{ARTICLES_TABLE, EDGES_TABLE};
-use crate::wikipedia_graph::{ArticleRecord, Neighbor, WikipediaGraph, WikipediaGraphApi};
+
+// ─── The wiki link-graph query surface ───────────────────────────────────────
+//
+// `Neighbor` / `ArticleRecord` / `WikipediaGraphApi` moved here from
+// `wikipedia_graph` when the SQLite backend was retired (WIKIPEDIA_ATLAS_V2 W4).
+// They live with the reader that serves them: there is one backend now, and a
+// type whose only implementor is in this file has no reason to sit in another.
+
+/// A one-hop neighbor in the link graph.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Neighbor {
+    /// Target article title, canonical form (spaces, not underscores).
+    pub title: String,
+    /// Coarse relationship class derived from section + link text.
+    /// One of `topical | causal | contested | defines | action | see-also`.
+    /// Open text carried as DATA beside the closed `EdgeType` kind, never as a
+    /// new enum arm (ARCH principle 9; EPISTEMIC_INDEX one-store-provider).
+    pub relationship_type: String,
+    /// How many sections of the source article link here. Higher =
+    /// stronger structural signal, and the ranking key: the neighbor
+    /// queries order by this summed across sections.
+    pub occurrence_count: i64,
+    /// True iff the target is itself an in-scope article (it has an
+    /// `articles.lance` row). Dangling link targets are `false`.
+    pub in_scope: bool,
+}
+
+/// A single article record. Exposed so callers can read derived
+/// signals (cluster_id, bridge_score, contested totals) without a
+/// second round-trip when both are needed.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ArticleRecord {
+    pub title: String,
+    pub wikidata_qid: Option<String>,
+    pub revision_id: Option<i64>,
+    pub in_scope: bool,
+    /// Layer-1 slot (HDBSCAN cluster). Not written yet — always `None`.
+    pub cluster_id: Option<i64>,
+    /// Layer-1 slot (bridge detection). Not written yet — always `None`.
+    pub bridge_score: Option<f64>,
+    pub pov_total: i64,
+    pub citation_total: i64,
+}
+
+/// The query surface the runtime consumes from a Wikipedia link graph.
+/// `#[async_trait]` keeps it `dyn`-safe (the methods are async) so the runtime
+/// holds `Arc<dyn WikipediaGraphApi>` (`LaneSources::wikipedia_graph`).
+///
+/// One implementor since W4: [`ColumnarWikipediaGraph`]. The trait stays
+/// because the runtime, the bridge builder and the CLI all hold the graph
+/// behind it, and because the one-store-provider work gives wiki-class a
+/// second face (`AtlasProvider`) over the same two tables.
+#[async_trait::async_trait]
+pub trait WikipediaGraphApi: Send + Sync {
+    async fn neighbors(&self, title: &str, limit: usize) -> Vec<Neighbor>;
+    async fn neighbors_for_axis(
+        &self,
+        title: &str,
+        axis_terms: &[String],
+        limit: usize,
+    ) -> Vec<Neighbor>;
+    async fn co_neighbors(
+        &self,
+        titles: &[String],
+        axis_terms: &[String],
+        limit: usize,
+    ) -> Vec<Neighbor>;
+    async fn reverse_neighbors(&self, title: &str, limit: usize) -> Vec<Neighbor>;
+    async fn has_contested_section(&self, title: &str) -> bool;
+    async fn record(&self, title: &str) -> Option<ArticleRecord>;
+    async fn article_count(&self) -> usize;
+    async fn edge_count(&self) -> usize;
+}
 
 /// Columnar (`articles.lance` + `edges.lance`) reader for the wiki link graph —
 /// the v2 replacement for the SQLite `WikipediaGraph`, same query API.
@@ -126,7 +203,7 @@ impl ColumnarWikipediaGraph {
     }
 
     /// Outbound neighbors of `title`, grouped by (target, relationship_type),
-    /// ranked by summed occurrence. Mirrors `WikipediaGraph::neighbors`.
+    /// ranked by summed occurrence.
     pub async fn neighbors(&self, title: &str, limit: usize) -> Vec<Neighbor> {
         let rows = self
             .edge_rows(format!("source_title = {}", sql_lit(title)))
@@ -136,7 +213,7 @@ impl ColumnarWikipediaGraph {
 
     /// Axis-filtered outbound neighbors — keep edges whose `target_title`,
     /// `link_text`, or `source_section_path` contains any axis term
-    /// (case-insensitive). Mirrors `WikipediaGraph::neighbors_for_axis`.
+    /// (case-insensitive).
     pub async fn neighbors_for_axis(
         &self,
         title: &str,
@@ -158,7 +235,6 @@ impl ColumnarWikipediaGraph {
 
     /// Co-citation: targets linked from EVERY input title (intersection),
     /// axis-filtered, ranked by summed occurrence. Mirrors
-    /// `WikipediaGraph::co_neighbors`.
     pub async fn co_neighbors(
         &self,
         titles: &[String],
@@ -226,7 +302,7 @@ impl ColumnarWikipediaGraph {
     }
 
     /// Inbound neighbors (articles linking TO `title`), grouped by
-    /// (source, relationship_type). Mirrors `WikipediaGraph::reverse_neighbors`
+    /// (source, relationship_type).
     /// (`in_scope = true` — the source is an in-scope article by construction).
     pub async fn reverse_neighbors(&self, title: &str, limit: usize) -> Vec<Neighbor> {
         let rows = self
@@ -269,7 +345,6 @@ impl ColumnarWikipediaGraph {
     }
 
     /// Whether the article has any contested section. Mirrors
-    /// `WikipediaGraph::has_contested_section`.
     pub async fn has_contested_section(&self, title: &str) -> bool {
         let Some(b) = self.article_row(title).await else {
             return false;
@@ -284,7 +359,7 @@ impl ColumnarWikipediaGraph {
     }
 
     /// Full article record. `cluster_id` / `bridge_score` are Layer-1 slots not
-    /// yet in the columnar store → `None`. Mirrors `WikipediaGraph::record`.
+    /// yet in the columnar store → `None`.
     pub async fn record(&self, title: &str) -> Option<ArticleRecord> {
         let b = self.article_row(title).await?;
         let s = |n: &str| {
@@ -317,7 +392,7 @@ impl ColumnarWikipediaGraph {
         })
     }
 
-    /// Articles in scope. Mirrors `WikipediaGraph::article_count`.
+    /// Articles in scope.
     pub async fn article_count(&self) -> usize {
         self.articles
             .count_rows(Some("in_scope = true".to_string()))
@@ -326,14 +401,13 @@ impl ColumnarWikipediaGraph {
     }
 
     /// Total edge rows (per `(source, section, target)`). Mirrors
-    /// `WikipediaGraph::edge_count`.
     pub async fn edge_count(&self) -> usize {
         self.edges.count_rows(None).await.unwrap_or(0)
     }
 }
 
 #[async_trait::async_trait]
-impl crate::wikipedia_graph::WikipediaGraphApi for ColumnarWikipediaGraph {
+impl WikipediaGraphApi for ColumnarWikipediaGraph {
     async fn neighbors(&self, title: &str, limit: usize) -> Vec<Neighbor> {
         ColumnarWikipediaGraph::neighbors(self, title, limit).await
     }
@@ -417,12 +491,35 @@ fn fold_by_target_rel(rows: Vec<EdgeLite>, limit: usize) -> Vec<Neighbor> {
     out
 }
 
-/// Open the wiki link graph for `corpus_id` as a backend-agnostic
-/// [`WikipediaGraphApi`] — the v2 columnar store (`atlas/articles.lance` +
-/// `atlas/edges.lance`) if present, else the SQLite `wikipedia_graph.db`. The
-/// per-corpus gate the runtime loaders (chat / server / desktop) share (W3):
-/// once W4 writes the columnar store for a corpus, the runtime reads it; until
-/// then, the SQLite. `None` if neither is present (or both fail to open).
+/// Open the wiki link graph for `corpus_id` — the v2 columnar store
+/// (`atlas/articles.lance` + `atlas/edges.lance`). The per-corpus gate the
+/// runtime loaders (chat / server / desktop) share.
+///
+/// `None` means this corpus has no link graph, which is the ordinary answer for
+/// every non-wiki corpus. Since W4 there is no second backend to fall through
+/// to, so a store that is PRESENT but fails to open returns `None` with a
+/// `warn` naming the error — an absence reported, never a silent substitution
+/// (ARCH §18.3).
+/// Whether `corpus_id` has a wiki link graph on disk — both tables of the v2
+/// columnar store present.
+///
+/// ONE decider for the question (ARCH §10.6). It was asked in three places by
+/// two different means: `open_wikipedia_graph` inlined the two `exists()`
+/// checks, while `meta-atlas align` and `atlas migrate-all` each stat'd the
+/// SQLite `wikipedia_graph.db` — a path that no longer exists, so those two
+/// would have silently answered "no link graph" for every corpus forever.
+pub fn wikipedia_graph_present(indexes_dir: &Path, corpus_id: &str) -> bool {
+    let atlas_dir = indexes_dir
+        .join(corpus_id)
+        .join(crate::enrichment::atlas::ATLAS_DIRNAME);
+    atlas_dir
+        .join(crate::enrichment::atlas::wiki_store::ARTICLES_LANCE_DIRNAME)
+        .exists()
+        && atlas_dir
+            .join(crate::enrichment::atlas::wiki_store::EDGES_LANCE_DIRNAME)
+            .exists()
+}
+
 pub async fn open_wikipedia_graph(
     indexes_dir: &Path,
     corpus_id: &str,
@@ -430,29 +527,14 @@ pub async fn open_wikipedia_graph(
     let atlas_dir = indexes_dir
         .join(corpus_id)
         .join(crate::enrichment::atlas::ATLAS_DIRNAME);
-    let columnar_present = atlas_dir
-        .join(crate::enrichment::atlas::wiki_store::ARTICLES_LANCE_DIRNAME)
-        .exists()
-        && atlas_dir
-            .join(crate::enrichment::atlas::wiki_store::EDGES_LANCE_DIRNAME)
-            .exists();
-    if columnar_present {
+    if wikipedia_graph_present(indexes_dir, corpus_id) {
         match ColumnarWikipediaGraph::open(&atlas_dir).await {
             Ok(g) => {
                 tracing::info!(corpus = %corpus_id, backend = "columnar", "wikipedia graph loaded (v2)");
                 return Some(Arc::new(g) as Arc<dyn WikipediaGraphApi>);
             }
             Err(e) => {
-                tracing::warn!(corpus = %corpus_id, error = %e, "columnar wiki graph open failed; falling back to sqlite");
-            }
-        }
-    }
-    let db_path = WikipediaGraph::default_db_path(indexes_dir, corpus_id);
-    if db_path.exists() {
-        match WikipediaGraph::open(&db_path, corpus_id) {
-            Ok(g) => return Some(Arc::new(g) as Arc<dyn WikipediaGraphApi>),
-            Err(e) => {
-                tracing::warn!(corpus = %corpus_id, error = %e, "sqlite wiki graph open failed");
+                tracing::warn!(corpus = %corpus_id, error = %e, "columnar wiki graph present but failed to open; this corpus has no link graph this boot");
             }
         }
     }
@@ -550,11 +632,11 @@ mod tests {
         assert!(g.record("nope").await.is_none());
     }
 
-    /// W3 gate: `open_wikipedia_graph` returns `None` when nothing's present,
+    /// The gate: `open_wikipedia_graph` returns `None` when no store is present,
     /// and selects the columnar backend once `atlas/articles.lance` +
     /// `atlas/edges.lance` exist for the corpus.
     #[tokio::test]
-    async fn open_wikipedia_graph_prefers_columnar_when_present() {
+    async fn open_wikipedia_graph_serves_the_columnar_store_and_nothing_else() {
         use crate::enrichment::atlas::wiki_store::{
             write_wikipedia_columnar_store, WikiArticleRow, WikiEdgeRow,
         };
@@ -562,7 +644,8 @@ mod tests {
         let indexes_dir = tmp.path();
         let corpus_id = "wiki-test";
 
-        // Nothing present yet → None (no columnar store, no SQLite db).
+        // Nothing present yet → None. Since W4 there is no SQLite to fall to,
+        // so this is the whole of "no link graph for this corpus".
         assert!(open_wikipedia_graph(indexes_dir, corpus_id).await.is_none());
 
         // Write a columnar store at <indexes>/<corpus>/atlas/.
@@ -603,7 +686,7 @@ mod tests {
             .await
             .unwrap();
 
-        // Now the gate picks the columnar backend and serves neighbors.
+        // With the store present the gate serves neighbors from it.
         let g = open_wikipedia_graph(indexes_dir, corpus_id)
             .await
             .expect("columnar graph selected");

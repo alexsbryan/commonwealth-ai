@@ -185,11 +185,7 @@ async fn cmd_align(args: &[String]) -> i32 {
     }
 
     // Detect a link graph for the right corpus (generic — not wiki-specific).
-    let right_has_link_graph = corpus_engine::wikipedia_graph::WikipediaGraph::default_db_path(
-        &indexes_dir,
-        &right_corpus,
-    )
-    .exists();
+    let right_has_link_graph = corpus_engine::wikipedia_graph_present(&indexes_dir, &right_corpus);
 
     eprintln!(
         "bridge align: {} driver topics ({} slugs without an atlas) · right={} (link_graph={}) · k={} · model={} · {}",

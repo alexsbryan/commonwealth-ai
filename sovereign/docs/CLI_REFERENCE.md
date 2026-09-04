@@ -453,7 +453,7 @@ Atlas-style structural enrichment of an installed corpus (Wikipedia today). Oper
 | `budget` | Show or set the per-corpus Tier-2 enrichment budget (top-N articles) |
 | `status` | Per-corpus atlas readiness — atom counts, Tier-2 progress, token spend |
 
-The graph DB lives at `<data-dir>/indexes/<corpus-id>/wikipedia_graph.db`.
+The link graph lives at `<data-dir>/indexes/<corpus-id>/atlas/{articles,edges}.lance`. It replaced a SQLite `wikipedia_graph.db` in WIKIPEDIA_ATLAS_V2 W4; `atlas wikipedia build-graph` writes it directly from the indexed chunks, and the `export-columnar` verb that used to convert between them is gone.
 
 ### `svrn bench`
 

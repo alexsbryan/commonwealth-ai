@@ -26,7 +26,7 @@ use crate::atlas_canonical::lookup_key;
 use crate::error::{Error, Result};
 use crate::index::CorpusIndex;
 use crate::types::EmbedFn;
-use crate::wikipedia_graph::WikipediaGraph;
+use crate::wikipedia_columnar::{open_wikipedia_graph, WikipediaGraphApi};
 
 use super::adjudicate::{AdjudicateFn, AdjudicationRequest};
 use super::edges::{
@@ -170,15 +170,19 @@ pub async fn build_bridge(
     }
 
     let right_index = CorpusIndex::open(&cfg.indexes_dir.join(&cfg.right_corpus_id)).await?;
+    // The link graph is the columnar wiki store since WIKIPEDIA_ATLAS_V2 W4;
+    // `open_wikipedia_graph` is the one gate that finds it, and it already
+    // warns and returns `None` when a present store fails to open, so the
+    // co-neighbour signal degrades exactly as it did before.
     let graph = if cfg.right_has_link_graph {
-        let p = WikipediaGraph::default_db_path(&cfg.indexes_dir, &cfg.right_corpus_id);
-        match WikipediaGraph::open(&p, &cfg.right_corpus_id) {
-            Ok(g) => Some(g),
-            Err(e) => {
-                tracing::warn!(path = %p.display(), error = %e, "bridge: link graph open failed; continuing without co-neighbour signal");
-                None
-            }
+        let g = open_wikipedia_graph(&cfg.indexes_dir, &cfg.right_corpus_id).await;
+        if g.is_none() {
+            tracing::warn!(
+                corpus = %cfg.right_corpus_id,
+                "bridge: no link graph for the right corpus; continuing without the co-neighbour signal"
+            );
         }
+        g
     } else {
         None
     };
@@ -272,7 +276,7 @@ pub async fn build_bridge(
             };
             if let Some(g) = &graph {
                 ctx.co_neighbor_overlap =
-                    co_neighbor_overlap(g, &right.title, &left.entity_keys).await;
+                    co_neighbor_overlap(g.as_ref(), &right.title, &left.entity_keys).await;
             }
 
             let score = stack.evaluate(&left, &right, &ctx);
@@ -364,7 +368,7 @@ pub async fn build_bridge(
 /// `LinkGraphCoNeighbor` signal reads. `0` when the candidate has no
 /// neighbours or the left side names nothing.
 async fn co_neighbor_overlap(
-    g: &WikipediaGraph,
+    g: &dyn WikipediaGraphApi,
     right_title: &str,
     left_keys: &BTreeSet<String>,
 ) -> f32 {

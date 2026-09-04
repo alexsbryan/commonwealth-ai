@@ -84,14 +84,10 @@ pub mod update;
 // moved to `stores` so callers that only need NoteStore/FeatureStore
 // don't drag in 5 grammar crates.
 
-// Wikipedia link graph (Atlas-style enrichment, Layer 0) — rusqlite,
-// no tree-sitter. Gated by `stores`.
-#[cfg(feature = "stores")]
-pub mod wikipedia_graph;
-
-// WIKIPEDIA_ATLAS_V2 W2 — the columnar (Lance) `WikipediaGraph` reader, serving
-// the same neighbor API over `articles.lance` + `edges.lance`. Reuses
-// `wikipedia_graph`'s `Neighbor`/`ArticleRecord`, so it shares the `stores` gate.
+// Wikipedia link graph (Atlas-style enrichment, Layer 0) — `articles.lance` +
+// `edges.lance` and the reader that serves them. The SQLite `wikipedia_graph`
+// module was retired in WIKIPEDIA_ATLAS_V2 W4 and its types moved here. Gated
+// by `stores` (Lance).
 #[cfg(feature = "stores")]
 pub mod wikipedia_columnar;
 
@@ -204,12 +200,9 @@ pub use types::{
 // crates to depend on different versions of the same logical type.
 
 #[cfg(feature = "stores")]
-pub use wikipedia_columnar::{open_wikipedia_graph, ColumnarWikipediaGraph};
-#[cfg(feature = "stores")]
-pub use wikipedia_graph::{
-    ArticleRecord as WikipediaArticleRecord, IngestSummary as WikipediaGraphIngestSummary,
-    Neighbor as WikipediaNeighbor, StalenessCaution as WikipediaStaleness, WikipediaGraph,
-    WikipediaGraphApi,
+pub use wikipedia_columnar::{
+    open_wikipedia_graph, wikipedia_graph_present, ArticleRecord as WikipediaArticleRecord,
+    ColumnarWikipediaGraph, Neighbor as WikipediaNeighbor, WikipediaGraphApi,
 };
 
 // The watcher_coordinator, lint/test result stores, and the

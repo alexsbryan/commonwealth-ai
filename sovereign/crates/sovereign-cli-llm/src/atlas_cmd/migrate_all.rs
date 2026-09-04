@@ -9,10 +9,13 @@
 //!     reader) + `atoms_ann.lance` (ANN seeding) for those that already carry an
 //!     embeddings cache + the per-corpus `atlas/.read_v2` flip (so the daemon /
 //!     desktop read v2 instead of the rkyv archive).
-//!   - **wiki-class corpora** (those with a SQLite link graph) -> columnar
-//!     `articles.lance` + `edges.lance` (the structural wiki end-state). Wiki has
-//!     no atom embeddings, so it gets NO atoms.lance / ANN / read_v2 — its reader
-//!     is `ColumnarWikipediaGraph`, picked by `open_wikipedia_graph` when present.
+//!   - **wiki-class corpora** (those with the columnar `articles.lance` +
+//!     `edges.lance` link graph) are REPORTED and skipped. Since
+//!     WIKIPEDIA_ATLAS_V2 W4 there is no SQLite for this command to convert
+//!     from, and the only build path — `atlas wikipedia build-graph` — reads
+//!     the chunk index, which this command never opens. A row that says "not
+//!     this command" is the honest answer; silently counting it as migrated
+//!     would not be (ARCH §18.3).
 //!
 //! Idempotent: skips a store/columnar already current vs its source, and an ANN
 //! table that already exists for an unchanged store. Re-runnable and safe to
@@ -28,7 +31,7 @@ use std::path::Path;
 use corpus_engine::enrichment::atlas::ann_store::ann_table_present;
 use corpus_engine::enrichment::atlas::store::{build_and_write_store, store_needs_build};
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
-use corpus_engine::WikipediaGraph;
+use corpus_engine::wikipedia_graph_present;
 
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
@@ -44,13 +47,11 @@ pub async fn run(args: &[String]) -> i32 {
         }
     };
     let mut flip = true; // the migration flips read_v2 by default
-    let mut skip_wiki = false;
     let mut only: Option<String> = None;
     for a in &rest {
         match a.as_str() {
             "--flip" => flip = true,
             "--no-flip" => flip = false,
-            "--skip-wiki" => skip_wiki = true,
             "-h" | "--help" => {
                 print_help();
                 return 0;
@@ -101,7 +102,7 @@ pub async fn run(args: &[String]) -> i32 {
         return 0;
     }
     eprintln!(
-        "atlas migrate-all: {} atlas-bearing corpora; flip={flip} skip_wiki={skip_wiki}",
+        "atlas migrate-all: {} atlas-bearing corpora; flip={flip}",
         corpora.len()
     );
 
@@ -131,43 +132,19 @@ pub async fn run(args: &[String]) -> i32 {
     for corpus_id in &corpora {
         let atlas_dir = indexes_dir.join(corpus_id).join(ATLAS_DIRNAME);
 
-        // Wiki-class: a SQLite link graph means the columnar end-state, not atoms.
-        let wiki_db = WikipediaGraph::default_db_path(&indexes_dir, corpus_id);
-        if wiki_db.exists() {
-            if skip_wiki {
-                println!(
-                    "{corpus_id:<46} {:>7} {:>8} {:>5}  wiki (skipped)",
-                    "-", "-", "-"
-                );
-                continue;
-            }
-            let columnar = atlas_dir.join("articles.lance");
-            if columnar.exists() && newer_than(&columnar, &wiki_db) {
-                println!(
-                    "{corpus_id:<46} {:>7} {:>8} {:>5}  wiki (current)",
-                    "-", "-", "-"
-                );
-                continue;
-            }
-            match WikipediaGraph::open(&wiki_db, corpus_id) {
-                Ok(g) => match g.export_columnar(&atlas_dir).await {
-                    Ok(()) => {
-                        wikis += 1;
-                        println!(
-                            "{corpus_id:<46} {:>7} {:>8} {:>5}  wiki columnar",
-                            "-", "-", "-"
-                        );
-                    }
-                    Err(e) => {
-                        errs += 1;
-                        println!("{corpus_id:<46}  ERROR wiki export: {e}");
-                    }
-                },
-                Err(e) => {
-                    errs += 1;
-                    println!("{corpus_id:<46}  ERROR wiki open: {e}");
-                }
-            }
+        // Wiki-class: a corpus with the columnar link graph is on the wiki
+        // track, not the atom track. There is nothing for THIS command to
+        // migrate any more — the SQLite it used to convert from is retired
+        // (WIKIPEDIA_ATLAS_V2 W4), and the only build path is
+        // `atlas wikipedia build-graph`, which needs the chunk index this
+        // command never opens. So it reports and moves on; it does not
+        // pretend to have done work (ARCH §18.3).
+        if wikipedia_graph_present(&indexes_dir, corpus_id) {
+            wikis += 1;
+            println!(
+                "{corpus_id:<46} {:>7} {:>8} {:>5}  wiki columnar (not this command)",
+                "-", "-", "-"
+            );
             continue;
         }
 
@@ -291,10 +268,11 @@ fn print_help() {
     println!(
         "  sovereign atlas migrate-all --no-flip       build v2 artifacts but do NOT flip read_v2"
     );
-    println!("  sovereign atlas migrate-all --skip-wiki     skip wiki-class (columnar) corpora");
     println!("  sovereign atlas migrate-all <corpus_id>     migrate one corpus");
     println!(
         "\natom corpora -> atoms.lance + edges.csr (+ atoms_ann.lance if embedded) + .read_v2"
     );
-    println!("wiki-class   -> articles.lance + edges.lance (columnar; no atoms.lance/ANN/read_v2)");
+    println!(
+        "wiki-class   -> articles.lance + edges.lance, built by `atlas wikipedia build-graph`"
+    );
 }

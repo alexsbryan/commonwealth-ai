@@ -93,8 +93,8 @@ const HELP: Help = Help {
         HelpSection::Notes(
             "Atlas commands operate against an already-installed corpus index. Install \
              the corpus first via `svrn corpus install <id>` (or `svrn \
-             recipe run`). The graph DB lives alongside the LanceDB table at \
-             `<data-dir>/indexes/<corpus-id>/wikipedia_graph.db` by default.",
+             recipe run`). The wiki link graph lives alongside the LanceDB table at \
+             `<data-dir>/indexes/<corpus-id>/atlas/{articles,edges}.lance`.",
         ),
     ],
 };

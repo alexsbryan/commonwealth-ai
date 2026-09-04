@@ -462,12 +462,17 @@ pub async fn publish_snapshot(opts: PublishOptions) -> Result<PublishOutcome> {
     // index_dir BEFORE the (slow) tar pass. The view is just a list of
     // file paths + manifest version — cheap to hold, cheap to clone
     // into the blocking task.
-    let chunks_lance_path = opts.index_dir.join("chunks.lance");
-    let lance_view = if chunks_lance_path.is_dir() {
-        Some(LanceSnapshotView::open(&chunks_lance_path).await?)
-    } else {
-        None
-    };
+    let mut lance_views: Vec<(PathBuf, LanceSnapshotView)> = Vec::new();
+    for dataset in lance_datasets_under(&opts.index_dir) {
+        let view = LanceSnapshotView::open(&dataset).await?;
+        tracing::debug!(
+            dataset = %dataset.display(),
+            version = view.version,
+            data_files = view.data_files.len(),
+            "snapshot: anchored a transactional Lance view"
+        );
+        lance_views.push((dataset, view));
+    }
 
     // Tar + zstd are blocking I/O over multi-GB data; offload from the
     // tokio reactor so the runtime stays responsive. The tar bundles exactly
@@ -477,9 +482,9 @@ pub async fn publish_snapshot(opts: PublishOptions) -> Result<PublishOutcome> {
     let mut opts_for_tar = opts.clone();
     opts_for_tar.sibling_index_dirs = bundlable_siblings;
     let manifest_for_tar = manifest.clone();
-    let lance_for_tar = lance_view.clone();
+    let lance_for_tar = lance_views.clone();
     tokio::task::spawn_blocking(move || {
-        write_snapshot_archive(&manifest_for_tar, &opts_for_tar, lance_for_tar.as_ref())
+        write_snapshot_archive(&manifest_for_tar, &opts_for_tar, &lance_for_tar)
     })
     .await
     .map_err(|e| Error::Database(format!("snapshot tar task panicked: {e}")))??;
@@ -605,7 +610,7 @@ pub fn compression_workers() -> u32 {
 fn write_snapshot_archive(
     manifest: &SnapshotManifest,
     opts: &PublishOptions,
-    lance_view: Option<&LanceSnapshotView>,
+    lance_views: &[(PathBuf, LanceSnapshotView)],
 ) -> Result<()> {
     if let Some(parent) = opts.output_path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -688,18 +693,27 @@ fn write_snapshot_archive(
 
     let index_prefix = snapshot_index_path(&manifest.corpus_id);
 
-    if let Some(view) = lance_view {
-        // Walk index_dir top-level entries, deferring chunks.lance to
-        // the Lance-aware path below for transactional consistency.
-        append_dir_skipping(&mut tar, &index_prefix, &opts.index_dir, &["chunks.lance"])?;
-        let lance_archive_prefix = format!("{index_prefix}/chunks.lance");
-        let chunks_lance_dir = opts.index_dir.join("chunks.lance");
-        append_lance_snapshot(&mut tar, &lance_archive_prefix, &chunks_lance_dir, view)?;
-    } else {
-        // No lance dataset present (catalog corpora, etc.) — fall back
-        // to the naive walk. Safe because there's no LanceDB writer
-        // racing with us.
+    if lance_views.is_empty() {
+        // No Lance dataset present (catalog corpora, etc.) — the naive
+        // walk is correct because there is no LanceDB writer to race.
         tar.append_dir_all(&index_prefix, &opts.index_dir)?;
+    } else {
+        // Every Lance dataset gets the transactional capture, not just
+        // `chunks.lance`. The atlas datasets (`atoms.lance`, `articles.lance`,
+        // `edges.lance`, `atoms_ann.lance`) used to ride the naive recursive
+        // walk, which can tar a fragment written after the manifest it was
+        // reading — the same fragment-drop this function exists to prevent,
+        // avoided for the chunk table and not for the atlas beside it.
+        let deferred: std::collections::HashSet<PathBuf> =
+            lance_views.iter().map(|(p, _)| p.clone()).collect();
+        append_dir_skipping(&mut tar, &index_prefix, &opts.index_dir, &deferred)?;
+        for (dataset, view) in lance_views {
+            let rel = dataset
+                .strip_prefix(&opts.index_dir)
+                .map_err(|e| Error::Database(format!("lance dataset outside index dir: {e}")))?;
+            let prefix = format!("{index_prefix}/{}", rel.to_string_lossy());
+            append_lance_snapshot(&mut tar, &prefix, dataset, view)?;
+        }
     }
 
     if let Some(enrichment_dir) = opts.enrichment_dir.as_ref() {
@@ -729,29 +743,31 @@ fn write_snapshot_archive(
     Ok(())
 }
 
-/// Append every top-level entry of `src` to `tar` under `prefix`,
-/// except those whose top-level name is in `skip`. Directories below
-/// the skipped names are not walked. Used to defer `chunks.lance/`
-/// (Lance-aware capture) while still grabbing siblings like
-/// `_corpus_meta.json`, `atlas/`, `wikipedia_graph.db`.
+/// Append every entry of `src` to `tar` under `prefix`, except the directories
+/// in `deferred` — the Lance datasets, which [`append_lance_snapshot`] captures
+/// transactionally afterwards. Everything else (`_corpus_meta.json`, the atlas
+/// sidecars, `investigation/`) rides the ordinary walk.
+///
+/// `deferred` holds ABSOLUTE paths and is honoured at every depth, not only the
+/// top level: the atlas datasets live one level down under `atlas/`.
 fn append_dir_skipping<W: io::Write>(
     tar: &mut tar::Builder<W>,
     prefix: &str,
     src: &Path,
-    skip: &[&str],
+    deferred: &std::collections::HashSet<PathBuf>,
 ) -> Result<()> {
     for entry in std::fs::read_dir(src)? {
         let entry = entry?;
         let name_owned = entry.file_name();
         let name = name_owned.to_string_lossy();
-        if skip.iter().any(|s| *s == name.as_ref()) {
+        let path = entry.path();
+        if deferred.contains(&path) {
             continue;
         }
-        let path = entry.path();
         let archive_path = format!("{prefix}/{name}");
         let file_type = entry.file_type()?;
         if file_type.is_dir() {
-            append_dir_recursive(tar, &archive_path, &path)?;
+            append_dir_skipping(tar, &archive_path, &path, deferred)?;
         } else if file_type.is_file() {
             if is_ephemeral_artifact(&name) {
                 continue;
@@ -762,6 +778,35 @@ fn append_dir_skipping<W: io::Write>(
         }
     }
     Ok(())
+}
+
+/// Every Lance dataset inside a corpus index dir: the chunk table, and each
+/// `*.lance` dataset under `atlas/`.
+///
+/// A Lance dataset is a DIRECTORY holding `_versions/` — the discriminator used
+/// here, so a future atlas table is captured transactionally the day it is
+/// written rather than the day someone remembers to add its name to a list
+/// (ARCH §7: structural, not remembered).
+fn lance_datasets_under(index_dir: &Path) -> Vec<PathBuf> {
+    fn is_dataset(p: &Path) -> bool {
+        p.is_dir() && p.join("_versions").is_dir()
+    }
+    let mut out = Vec::new();
+    let chunks = index_dir.join("chunks.lance");
+    if is_dataset(&chunks) {
+        out.push(chunks);
+    }
+    let atlas = index_dir.join(crate::enrichment::atlas::ATLAS_DIRNAME);
+    if let Ok(rd) = std::fs::read_dir(&atlas) {
+        let mut found: Vec<PathBuf> = rd
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| is_dataset(p))
+            .collect();
+        found.sort();
+        out.extend(found);
+    }
+    out
 }
 
 /// Local-only artifacts that must NEVER ship in a distributed snapshot:

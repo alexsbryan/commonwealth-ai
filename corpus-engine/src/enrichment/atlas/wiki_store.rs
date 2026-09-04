@@ -770,4 +770,311 @@ mod tests {
             2
         );
     }
+
+    // ── the direct build (W4) ────────────────────────────────────────────────
+    //
+    // These carried over from `wikipedia_graph::tests` when the SQLite was
+    // retired: they exercise the AGGREGATION, so they belong beside it. The
+    // one they replace, `direct_build_matches_sqlite_two_step`, asserted the
+    // direct build against the two-step it supersedes and is cited in the
+    // retirement commit; it could not survive the backend it compared against.
+
+    use crate::extractors::wikipedia_types::WikiLink;
+    use crate::wikipedia_columnar::{ColumnarWikipediaGraph, Neighbor};
+
+    fn meta_with(
+        section_path: Vec<&str>,
+        section_type: &str,
+        pov_count: Option<i64>,
+        outgoing: Vec<(&str, &str)>,
+    ) -> String {
+        let m = WikipediaChunkMetadata {
+            section_name: section_path.last().unwrap_or(&"").to_string(),
+            section_path: section_path.iter().map(|s| s.to_string()).collect(),
+            section_depth: 0,
+            section_type: section_type.to_string(),
+            citation_needed_count: None,
+            pov_count,
+            clarification_needed_count: None,
+            update_count: None,
+            is_flagged_stable: None,
+            outgoing_links: outgoing
+                .into_iter()
+                .map(|(t, l)| WikiLink {
+                    target_title: t.to_string(),
+                    link_text: l.to_string(),
+                })
+                .collect(),
+            revision_id: Some(42),
+            wikidata_qid: None,
+            page_id: None,
+        };
+        serde_json::to_string(&m).unwrap()
+    }
+
+    fn chunk(id: u64, title: &str, metadata_raw: String) -> StoredChunkWithMetadata {
+        StoredChunkWithMetadata {
+            id,
+            title: Some(title.to_string()),
+            url: Some(format!(
+                "https://en.wikipedia.org/wiki/{}",
+                title.replace(' ', "_")
+            )),
+            metadata_raw: Some(metadata_raw),
+        }
+    }
+
+    /// Einstein links out from a Lead and a Criticism section; Special
+    /// relativity links back from Origins, twice (the chunker repeating a
+    /// section). Photoelectric effect is linked but never a source, so it is
+    /// the dangling target.
+    fn fixture() -> Vec<StoredChunkWithMetadata> {
+        vec![
+            chunk(
+                1,
+                "Albert Einstein",
+                meta_with(
+                    vec!["Lead"],
+                    "lead",
+                    None,
+                    vec![
+                        ("Special relativity", "special relativity"),
+                        ("Photoelectric effect", "photoelectric effect"),
+                    ],
+                ),
+            ),
+            chunk(
+                2,
+                "Albert Einstein",
+                meta_with(
+                    vec!["Criticism"],
+                    "controversy",
+                    Some(2),
+                    vec![("Special relativity", "criticism of relativity")],
+                ),
+            ),
+            chunk(
+                3,
+                "Special relativity",
+                meta_with(
+                    vec!["Origins"],
+                    "history",
+                    None,
+                    vec![
+                        ("Albert Einstein", "Einstein"),
+                        ("Photoelectric effect", "photoelectric effect"),
+                    ],
+                ),
+            ),
+            chunk(
+                4,
+                "Special relativity",
+                meta_with(
+                    vec!["Origins"],
+                    "history",
+                    None,
+                    vec![("Albert Einstein", "Einstein")],
+                ),
+            ),
+        ]
+    }
+
+    /// The whole `WikipediaGraphApi` surface, from chunks through the direct
+    /// build to the reader, against VALUES rather than against another
+    /// implementation's output. Every assertion here has a nameable failing
+    /// input: drop `target_in_scope` and the dangling assertion goes red; lose
+    /// the section split and Einstein's Special-relativity occurrence falls
+    /// from 2 to 1; break `classify_relationship` and the `contested` label
+    /// goes; drop `source_section_path` from the edge row and the
+    /// axis-by-section case returns empty.
+    /// A neighbor set as sorted `(title, relationship_type, occurrence, in_scope)`
+    /// tuples — the whole answer, so an assertion pins what the API returns
+    /// rather than one field of one row.
+    fn rows(ns: Vec<Neighbor>) -> Vec<(String, String, i64, bool)> {
+        let mut v: Vec<_> = ns
+            .into_iter()
+            .map(|n| (n.title, n.relationship_type, n.occurrence_count, n.in_scope))
+            .collect();
+        v.sort();
+        v
+    }
+
+    #[tokio::test]
+    async fn direct_build_serves_the_whole_neighbor_api() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        let summary = build_wikipedia_columnar_store_from_chunks(dir, fixture())
+            .await
+            .unwrap();
+
+        // Two in-scope sources; Photoelectric effect is a target only.
+        assert_eq!(summary.articles, 2);
+        assert_eq!(summary.dangling_targets, 1);
+        assert_eq!(summary.chunks_with_metadata, 4);
+        assert_eq!(summary.chunks_without_metadata, 0);
+        // Einstein: Lead + Criticism; Special relativity: Origins (the two
+        // chunks of it collapse to one section).
+        assert_eq!(summary.sections, 3);
+        assert_eq!(summary.revision_id_max, Some(42));
+
+        let g = ColumnarWikipediaGraph::open(dir).await.unwrap();
+        assert_eq!(g.article_count().await, 2);
+
+        // The whole neighbor set, exactly. Grouping is by (target,
+        // relationship_type) — NOT by target — so Einstein's two links to
+        // Special relativity stay two rows: the Lead one classifies `topical`,
+        // the Criticism one `contested`. Asserting the set rather than a field
+        // is what makes that visible; an earlier draft of this test asserted
+        // `occurrence_count == 2` for a summed target and was simply wrong
+        // about the API.
+        assert_eq!(
+            rows(g.neighbors("Albert Einstein", 50).await),
+            vec![
+                ("Photoelectric effect".into(), "topical".into(), 1, false),
+                ("Special relativity".into(), "contested".into(), 1, true),
+                ("Special relativity".into(), "topical".into(), 1, true),
+            ],
+        );
+        // The dedupe: Special relativity's Origins section is two chunks
+        // repeating the same links, and collapses to one edge each. The
+        // `Origins` path classifies both `causal`.
+        assert_eq!(
+            rows(g.neighbors("Special relativity", 50).await),
+            vec![
+                ("Albert Einstein".into(), "causal".into(), 1, true),
+                ("Photoelectric effect".into(), "causal".into(), 1, false),
+            ],
+        );
+        // reverse_neighbors is the in-edge view of the same edges. Note the
+        // `in_scope` flag flips meaning with the direction: here the returned
+        // article is the SOURCE, and both sources are in-scope, so both are
+        // true even though the article being asked about is dangling.
+        assert_eq!(
+            rows(g.reverse_neighbors("Photoelectric effect", 50).await),
+            vec![
+                ("Albert Einstein".into(), "topical".into(), 1, true),
+                ("Special relativity".into(), "causal".into(), 1, true),
+            ],
+        );
+
+        // The contested signal rides on the article, from the Criticism section.
+        assert!(g.has_contested_section("Albert Einstein").await);
+        assert!(!g.has_contested_section("Special relativity").await);
+
+        let rec = g.record("Albert Einstein").await.expect("record");
+        assert_eq!(rec.title, "Albert Einstein");
+        assert!(rec.in_scope);
+        assert_eq!(rec.pov_total, 2);
+        assert_eq!(rec.revision_id, Some(42));
+    }
+
+    /// The axis filter, one term per column it matches. These three columns are
+    /// the reason the wiki store is `edges.lance` and not the `edges.csr`
+    /// adjacency — a 10-byte CSR record has nowhere to put a section path or a
+    /// link text.
+    #[tokio::test]
+    async fn axis_filter_matches_section_path_link_text_and_target_title() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        build_wikipedia_columnar_store_from_chunks(dir, fixture())
+            .await
+            .unwrap();
+        let g = ColumnarWikipediaGraph::open(dir).await.unwrap();
+
+        let hits = |ns: &[Neighbor]| {
+            let mut v: Vec<String> = ns.iter().map(|n| n.title.clone()).collect();
+            v.sort();
+            v
+        };
+
+        // (a) matches `source_section_path` — only the Criticism-section link.
+        let by_section = g
+            .neighbors_for_axis("Albert Einstein", &["criticism".to_string()], 50)
+            .await;
+        assert_eq!(hits(&by_section), vec!["Special relativity".to_string()]);
+        // That link was classified from its section, so it carries the label.
+        assert_eq!(by_section[0].relationship_type, "contested");
+
+        // (b) matches `link_text` — "Einstein" is anchor text on Special
+        //     relativity's out-edge, and appears in no section path here.
+        let by_text = g
+            .neighbors_for_axis("Special relativity", &["einstein".to_string()], 50)
+            .await;
+        assert_eq!(hits(&by_text), vec!["Albert Einstein".to_string()]);
+
+        // (c) matches `target_title`.
+        let by_title = g
+            .neighbors_for_axis("Albert Einstein", &["photoelectric".to_string()], 50)
+            .await;
+        assert_eq!(hits(&by_title), vec!["Photoelectric effect".to_string()]);
+
+        // A term matching nothing returns nothing — the failing input that
+        // makes the three above mean something.
+        let miss = g
+            .neighbors_for_axis("Albert Einstein", &["zeppelin".to_string()], 50)
+            .await;
+        assert!(miss.is_empty());
+
+        // co_neighbors: the concept both articles reach.
+        let both = vec![
+            "Albert Einstein".to_string(),
+            "Special relativity".to_string(),
+        ];
+        let shared = g.co_neighbors(&both, &[], 50).await;
+        assert_eq!(hits(&shared), vec!["Photoelectric effect".to_string()]);
+    }
+
+    /// The classifier's section-path rules beat its link-text rules, and the
+    /// default is `topical`. Kept from `wikipedia_graph::tests` — the function
+    /// moved here, so its test did too.
+    #[test]
+    fn relationship_classifier_orders_section_over_link_text() {
+        // Section path wins even when the link text says "is".
+        assert_eq!(
+            classify_relationship(&["Criticism".to_string()], "is a physicist"),
+            "contested"
+        );
+        assert_eq!(
+            classify_relationship(&["Origins".to_string()], "Industrial Revolution"),
+            "causal"
+        );
+        assert_eq!(
+            classify_relationship(&["See also".to_string()], "anything"),
+            "see-also"
+        );
+        // No section signal → link-text verb prefixes.
+        assert_eq!(
+            classify_relationship(&[], "led to widespread famine"),
+            "causal"
+        );
+        assert_eq!(classify_relationship(&[], "is a mammal"), "defines");
+        // Neither → topical.
+        assert_eq!(
+            classify_relationship(&["Lead".to_string()], "Vienna"),
+            "topical"
+        );
+    }
+
+    /// A chunk with no metadata, and one with metadata but no resolvable
+    /// title, are both counted and neither crashes the build.
+    #[tokio::test]
+    async fn chunks_without_usable_metadata_are_counted_not_dropped_silently() {
+        let mut chunks = fixture();
+        chunks.push(StoredChunkWithMetadata {
+            id: 99,
+            title: Some("No Metadata".into()),
+            url: None,
+            metadata_raw: None,
+        });
+        chunks.push(StoredChunkWithMetadata {
+            id: 100,
+            title: Some("Bad Metadata".into()),
+            url: None,
+            metadata_raw: Some("{not json".into()),
+        });
+        let (_, _, summary) = wiki_rows_from_chunks(chunks);
+        assert_eq!(summary.chunks_with_metadata, 4);
+        assert_eq!(summary.chunks_without_metadata, 2);
+        assert_eq!(summary.articles, 2);
+    }
 }
