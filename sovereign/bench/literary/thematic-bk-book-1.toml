@@ -1,0 +1,315 @@
+# Thematic question set for `brothers-karamazov-book-1` — the EI1 bar
+# (`quality/campaigns/epistemic-index.toml`, `EPISTEMIC_INDEX.md` §6 row 1).
+#
+# WHY THIS FILE EXISTS, AND WHY IT IS A `[bank]` AND NOT A NEW HARNESS
+# ────────────────────────────────────────────────────────────────────
+# §6 asks for "themes named, tensions cited, ≥1 evidence passage per
+# claim". Three numbers. The retrieval-judge surface already emits all
+# three from one run, so nothing new was written to get them:
+#
+#   * `category` rolls the report up per axis. Two categories here —
+#     `theme` and `tension` — so "themes named" and "tensions cited"
+#     are separate rows, not one blended average.
+#   * In `--synth` mode `fact_score` scores `expected_facts` against
+#     the model's ANSWER and `synth.chunks_fact_score` scores the SAME
+#     facts against the retrieved passages
+#     (`eval_cmd/runner.rs:1824-1826`). Claim-made vs claim-evidenced,
+#     from one call.
+#   * In plain retrieval mode `fact_score` scores against the FULL
+#     chunk text rather than the ~200-char snippets synth mode sees,
+#     which is the unbiased evidence number. Both modes are baselined:
+#     `baselines/thematic-bk-book-1-synth-isolated/` and
+#     `baselines/thematic-bk-book-1/`.
+#
+# So the evidence axis is measured twice, once exactly (retrieval mode,
+# deterministic, RUNBOOK §6 band = exact) and once as the model saw it
+# (synth mode, LLM in the loop, band ±0.04–0.06).
+#
+# `expected_sources` IS DELIBERATELY EMPTY ON EVERY QUESTION.
+# All 41 chunks of this corpus carry `title = "brothers-karamazov-book-1"`
+# and `url = None`, so `score_sources_titles` would return 1.0 for any
+# retrieval whatsoever, including a wrong one. A check with no failing
+# input you can name is not a check (ARCH §18.1) — the bank scores on
+# facts only and the source column reads 0/0.
+#
+# MATCH SEMANTICS (`eval_cmd/score.rs:148-174`, `keyword_tokens:209`)
+# ────────────────────────────────────────────────────────────────────
+# A fact matches iff EVERY alphanumeric run of ≥3 chars in it appears
+# as a case-insensitive substring of the haystack. Unordered, and
+# tokens of ≤2 chars are free. Two consequences this file is authored
+# around, both inherited from `bk-book-1.toml`'s declared policy:
+#
+#   * STEMS, NOT INFLECTIONS. "elope" covers elope/eloped/elopement;
+#     "submiss" covers submission/submissive. A model narrating in a
+#     different tense or part of speech has not made a different
+#     claim and must not score as if it had.
+#   * EVERY EXTRA WORD IS AN EXTRA CONJUNCT. Facts are kept to 1–3
+#     content stems. "spiritual authority" is two conjuncts and is
+#     legitimate; a sentence-long fact would be scoring the model's
+#     phrasing, not its reading.
+#
+# AUTHORING POLICY
+# ────────────────────────────────────────────────────────────────────
+# Every fact below was checked against the corpus text as installed
+# (`~/.svrnmesh/indexes/brothers-karamazov-book-1/chunks.lance`, 41
+# chunks over 5 chapters, `chapters.json` sec_0001..sec_0005). The
+# `notes` field names the chapter that evidences the theme or holds
+# both poles of the tension, so a reviewer can check a miss against
+# the text without re-reading the book.
+#
+# A `tension` question is authored only where BOTH poles are stated in
+# Book I. Book I is a chronicle, not an argument, and the temptation
+# is to import the novel's famous oppositions (Grand Inquisitor,
+# patricide, Ivan's rebellion) that Book I does not yet contain. Those
+# are leakage, not themes — the same failure `bk-book-1.toml`'s
+# `forbidden_event_atoms` anti-tests guard the extraction side against.
+# Each tension entry names the sentence that carries the second pole.
+#
+# WHAT THE FIRST BASELINE ACTUALLY MEASURED — READ BEFORE COMPARING
+# ────────────────────────────────────────────────────────────────────
+# The atlas walk did NOT run. Every question in the 2026-09-04 baseline
+# emitted, from the daemon:
+#
+#   WARN atlas-context: atom store present but no ANN seed table —
+#   this corpus cannot ground; run `svrn atlas backfill-ann
+#   brothers-karamazov-book-1`
+#
+# `~/.svrnmesh/indexes/brothers-karamazov-book-1/atlas/` holds
+# atoms.lance, edges.csr, configurations.json and 85 resolved atoms,
+# and NO `atoms_ann.lance`. The top-level `sep` atlas is missing it
+# too. That is not a broken box — it is `EPISTEMIC_INDEX.md` §1's
+# Ideas row stated as a fact of this machine ("seed table optional;
+# SEP: 22 of 1,770 atlases"), and it is what §7 step 3 exists to fix.
+#
+# So this baseline is TODAY'S RETRIEVAL PATH WITH THE ATLAS WALK DARK:
+# dense + FTS over 41 chunks, the atlas graph lazy-loaded but unable to
+# seed. It was NOT repaired before measuring, deliberately. Running
+# `backfill-ann` first would have baselined a configuration no user of
+# this corpus has, and the delta §6 row 1 asks for (+1 cited theme with
+# evidence) would then have been measured against a floor that already
+# contained half the change. The seed table becoming mandatory is a
+# step of this campaign, and this number is what it will be read
+# against.
+#
+# When ANN lands, RE-RUN — do not adjust. Two runs, both committed, and
+# the old dated snapshots stay where they are.
+#
+# HOW TO RUN IT (both modes; neither needs a flag this file invents)
+# ────────────────────────────────────────────────────────────────────
+#   svrn bench all --bench-root sovereign/bench \
+#     --filter literary/thematic-bk-book-1 --retrieval-limit 20
+#   svrn bench all --bench-root sovereign/bench \
+#     --filter literary/thematic-bk-book-1 --synth --isolate
+#
+# `--retrieval-limit 20` is not a tuning choice. The corpus is 41
+# chunks and the default limit is 30, which would hand retrieval three
+# quarters of the book and score the corpus's size rather than its
+# retrieval. 20 is what the synth path actually surfaced here
+# (`retrieved_chunk_count` 20 and 12 on the two questions that
+# completed the 2026-09-04 probe), so the two modes score over the
+# same evidence window. It was checked for sensitivity rather than
+# assumed: the same bank scores 27/44 at limit 5 and 41/44 at limit
+# 20, so the number moves with the window and is not a ceiling.
+#
+# BASELINE, NOT TARGET. This file is the instrument for EI1's
+# `floor_basis`. The bar it serves is "+1 cited theme with evidence
+# over baseline" (§6 row 1) and that delta is read only after the two
+# committed runs, never off one (ARCH §18.5).
+
+[bank]
+name = "literary-thematic-bk-v1"
+corpus = "brothers-karamazov-book-1"
+description = """
+Six thematic questions over Book I of The Brothers Karamazov — three
+asking what the section is about (`theme`) and three asking where its
+commitments collide (`tension`). The unit of resolution is the FACT,
+not the question: 6 questions carry 44 expected facts, so a single
+fact flipping moves an axis by ~0.02 rather than ~0.17.
+
+v1 (2026-09-04): authored for the epistemic-index campaign's EI1 bar
+against the installed 41-chunk corpus. Every fact verified present in
+the source text; every tension verified to have both poles inside
+Book I.
+"""
+
+# The corpus is 41 chunks. Synth turns on the resident 35B run 30-90s;
+# retrieval mode is sub-second. The ceiling catches a wedged slot
+# rather than grading the box.
+[bank.latency_budget]
+default_p95_ms = 120000
+max_per_question_ms = 600000
+
+# ── theme ─────────────────────────────────────────────────────────
+#
+# "What is this about." §2's navigation table routes this kind at
+# Configuration + concept Entity seeds; the resolved atlas for this
+# corpus holds three Configurations, so a walk that works should reach
+# labels close to these.
+
+[[questions]]
+id = "bk_thematic_overview"
+category = "theme"
+question = "What is Book I of The Brothers Karamazov about? Name the themes it establishes and say what each is grounded in."
+expected_facts = [
+  "father",
+  "neglect",
+  "abandon",
+  "sensual",
+  "money",
+  "monaster",
+  "buffoon",
+  "senseless",
+]
+expected_sources = []
+notes = """
+The whole-section question. All five chapters contribute: Fyodor's
+'senselessness' as a national type (Ch. I), the serial abandonment of
+all three sons (Ch. II-III), the money that mediates every relation
+(Ch. I-III), and the monastery as the counter-world (Ch. IV-V).
+'monaster' is a stem so monastery/monastic both count. 'buffoon' is
+the narrator's own word — 'an ill-natured buffoon and nothing more'
+(Ch. I), 'a new comic part in which to play the buffoon' (Ch. I),
+'an insolent propensity for making buffoons of others' (Ch. IV).
+"""
+
+[[questions]]
+id = "bk_fatherhood_theme"
+category = "theme"
+question = "What does Book I say about fatherhood, and which passages establish it?"
+expected_facts = [
+  "forgot",
+  "Grigory",
+  "abandon",
+  "guardian",
+  "Yefim",
+  "cottage",
+  "orphan",
+]
+expected_sources = []
+notes = """
+Ch. II-III. The load-bearing sentence is that the neglect is not
+malice: 'not from malice, nor because of his matrimonial grievances,
+but simply because he forgot him.' The servant Grigory raises Mitya
+in the cottage; the general's widow carries off Ivan and Alyosha;
+Yefim Petrovitch Polenov educates them and doubles their legacy —
+'God would repay her for the orphans', 'took a personal interest in
+the orphans'. Every fact here is a name or a stem the text supplies
+verbatim; none is a word only a critic would reach for.
+"""
+
+[[questions]]
+id = "bk_eldership_theme"
+category = "theme"
+question = "What is an elder, as Book I explains it, and why does the institution matter to this monastery?"
+expected_facts = [
+  "elder",
+  "Zossima",
+  "submiss",
+  "obedien",
+  "renounc",
+  "freedom",
+  "confess",
+  "pilgrim",
+]
+expected_sources = []
+notes = """
+Ch. V, which is structurally an essay on the institution. 'An elder
+was one who took your soul, your will, into his soul and his will.
+When you choose an elder, you renounce your own will and yield it to
+him in complete submission, complete self-abnegation.' The monastery
+'had not been distinguished by anything in particular till then' and
+was glorious 'through its elders, to see and hear whom pilgrims had
+flocked for thousands of miles'. 'submiss' and 'obedien' and 'renounc'
+are stems.
+"""
+
+# ── tension ───────────────────────────────────────────────────────
+#
+# "Where does it disagree." Both poles must be in Book I. Each entry's
+# note names the sentence carrying the SECOND pole, because that is
+# the one an extractor or a walk is likely to miss — the first pole is
+# usually the chapter's surface subject.
+
+[[questions]]
+id = "bk_tension_submission_freedom"
+category = "tension"
+question = "Book I presents the elder's authority as a road to freedom. Where does the text itself complicate that claim?"
+expected_facts = [
+  "submiss",
+  "freedom",
+  "obedien",
+  "pride",
+  "bondage",
+  "two-edged",
+]
+expected_sources = []
+notes = """
+The strongest tension in Book I because Dostoevsky states both poles
+in one paragraph of Ch. V. Pole A: 'after a life of obedience, to
+attain perfect freedom, that is, from self'. Pole B, four sentences
+later: 'may be a two-edged weapon and it may lead some not to
+humility and complete self-control but to the most Satanic pride,
+that is, to bondage and not to freedom.' 'two-edged' tokenises to
+['two','edged'] and 'two' is everywhere, so 'edged' is the token that
+actually decides it — it occurs once in the corpus, in that sentence.
+'self' was considered and dropped: it is a substring of himself /
+self-love / yourself and would have matched any answer at all.
+"""
+
+[[questions]]
+id = "bk_tension_faith_unbelief"
+category = "tension"
+question = "How does Book I set faith against unbelief, and which characters carry each side?"
+expected_facts = [
+  "Alyosha",
+  "Ivan",
+  "atheist",
+  "realist",
+  "miracle",
+  "immortal",
+  "socialis",
+  "Babel",
+]
+expected_sources = []
+notes = """
+Ch. IV-V. Pole A: Alyosha 'was more of a realist than any one' and
+'Faith does not, in the realist, spring from the miracle but the
+miracle from faith'; 'I want to live for immortality, and I will
+accept no compromise.' Pole B: Ivan is named 'the learned atheist',
+and the narrator's gloss on the alternative — 'socialism is not merely
+the labor question, it is before all things the atheistic question
+... the tower of Babel built without God'. The Babel sentence is the
+second pole and the one most likely to be missed; it is in the same
+chunk as the immortality vow.
+"""
+
+[[questions]]
+id = "bk_tension_spiritual_secular_authority"
+category = "tension"
+question = "Where do spiritual authority and secular or legal authority come into conflict in Book I?"
+expected_facts = [
+  "monaster",
+  "lawsuit",
+  "Ivan",
+  "ecclesiastical",
+  "court",
+  "clerical",
+  "elder",
+]
+expected_sources = []
+notes = """
+Ch. II and Ch. III, joined in Ch. V. Pole A: the monastery and its
+elders. Pole B: Miüsov's 'endless lawsuit' with the monastery over
+fishing and wood-cutting rights, which he pursues because 'he
+regarded it as his duty as a citizen and a man of culture to open an
+attack upon the "clericals"'; and Ivan's article 'on a subject which
+was being debated everywhere at the time — the position of the
+ecclesiastical courts', which 'penetrated into the famous monastery'
+and bewildered the inmates. Both poles meet in Ch. V, where Miüsov
+makes the still-dragging lawsuit his pretext for visiting the elder.
+Miüsov is the natural name for the secular pole and is NOT used as a
+fact: `char::is_alphanumeric` is true for 'ü', so the token is the
+literal 'miüsov' and an answer spelling it 'Miusov' would score a
+miss on orthography rather than on reading. Ivan carries the same
+pole through the ecclesiastical-courts article and is ASCII.
+"""

@@ -1,0 +1,210 @@
+# Thematic question set for `dubliners-3` — the second half of the EI1
+# bar (`quality/campaigns/epistemic-index.toml`, `EPISTEMIC_INDEX.md`
+# §6 row 1). Companion to `thematic-bk-book-1.toml`, which carries the
+# full rationale for the bank shape, the two-category split, and the
+# match semantics; this file states only what differs.
+#
+# THIS BANK HAS NEVER RUN. READ THAT BEFORE READING ANY NUMBER.
+# ────────────────────────────────────────────────────────────────────
+# The `dubliners-3` corpus is not installed on the box that authored
+# this (2026-09-04, RuggedFox: `~/.svrnmesh/indexes/` holds
+# `dubliners-test`, an atlas + chapters.json with no `chunks.lance`,
+# not the fixture). `bench all` marks a bank whose index is missing as
+# STALE, and `sovereign-ci-bench.sh` grades stale as `PASS(warn:setup)`
+# — which is precisely how this lane spent months "measuring nothing
+# and reporting green" before 2026-08-07 (see `README.md` §History).
+# So there is no `baselines/thematic-dubliners-3*/` directory and there
+# must not be one until a box with the corpus produces it. A missing
+# baseline on a retrieval bank auto-seeds on first run
+# (`bench_cmd/discover.rs:41` `baseline_required`), so the first box to
+# install the fixture and run this mints it; nothing here needs editing.
+#
+# ITS FACTS ARE VERIFIED AGAINST THE REPO, NOT AGAINST INSTALLED TEXT.
+# `thematic-bk-book-1.toml`'s facts were each checked against the
+# corpus as installed. These could not be — the text is not on this
+# box. Every fact below is instead taken from in-repo material that
+# was hand-authored and reviewed against the fixture:
+# `dubliners-3.toml` (the extraction golden) and
+# `sovereign-cli-llm/src/enrich_cmd/templates/dubliners-3.toml` (the
+# chapter-selection template, whose header prose names the fixture's
+# structural features). Nothing here is recalled from the stories at
+# large. The first box to run this should expect to correct facts that
+# turn out to be absent from the three-story slice, and should treat
+# such a correction as a bank fix rather than a retrieval miss.
+
+[bank]
+name = "literary-thematic-dubliners-v1"
+corpus = "dubliners-3"
+description = """
+Six thematic questions over the Dubliners three-story fixture (THE
+SISTERS / ARABY / EVELINE) — three `theme`, three `tension`, matching
+the bk-book-1 thematic bank's shape so the two are comparable.
+
+Where bk-book-1 tests thematic reading over a chronicle with a stated
+narrator, this fixture tests it over three short works with unnamed
+first-person narrators and free indirect discourse — the same
+adversarial axis `dubliners-3.toml` was built for on the extraction
+side, carried to the retrieval side.
+
+v1 (2026-09-04): authored for the epistemic-index campaign's EI1 bar.
+NEVER RUN — see the header. Facts are sourced from the in-repo golden,
+not from installed corpus text.
+"""
+
+[bank.latency_budget]
+default_p95_ms = 120000
+max_per_question_ms = 600000
+
+# ── theme ─────────────────────────────────────────────────────────
+
+[[questions]]
+id = "dub_thematic_overview"
+category = "theme"
+question = "What are these three stories about? Name the themes they share and say what each is grounded in."
+expected_facts = [
+  "paralysis",
+  "Dublin",
+  "priest",
+  "escape",
+  "childhood",
+  "disillusion",
+]
+expected_sources = []
+notes = """
+`dubliners-3.toml` calls paralysis 'the single most important concept
+in Dubliners, named in The Sisters paragraph 1' and 'the structural
+concept that runs through the entire collection', and marks failing to
+surface it 'a load-bearing miss'. The template header names the
+densely-Dublin setting (North Richmond Street, the bazaar, the North
+Wall, Buenos Ayres) and the child protagonists of the first two
+stories. 'disillusion' is the reader's word for what the golden calls
+the epiphany endings — 'the boy's failure at Araby'.
+"""
+
+[[questions]]
+id = "dub_paralysis_theme"
+category = "theme"
+question = "The word paralysis appears in the first paragraph of The Sisters. What work does it do across these three stories?"
+expected_facts = [
+  "paralysis",
+  "simony",
+  "gnomon",
+  "Flynn",
+  "stroke",
+  "Eveline",
+  "railing",
+]
+expected_sources = []
+notes = """
+The three words the boy ponders in The Sisters paragraph 1 are named
+verbatim in `dubliners-3.toml`: 'paralysis', 'gnomon', 'simony'. The
+same file records the cross-story reach — 'Eveline literally paralyses
+at the dock' — and the closing image, 'Eveline's paralysed clutch at
+the railing' (template header). 'stroke' is one of the golden's own
+description keywords for Flynn's decline.
+"""
+
+[[questions]]
+id = "dub_confinement_theme"
+category = "theme"
+question = "How do these stories use place, and what does the elsewhere they point to represent?"
+expected_facts = [
+  "Dublin",
+  "bazaar",
+  "Araby",
+  "Buenos",
+  "North Wall",
+  "home",
+]
+expected_sources = []
+notes = """
+The template header: 'Each story is densely Dublin — North Richmond
+Street, the bazaar Araby, the docks at the North Wall, Buenos Ayres as
+a destination.' The pattern the question asks for is that every named
+elsewhere (the bazaar, Buenos Ayres) is reached for and not arrived
+at. 'North Wall' is two conjuncts, both from the template header.
+'Buenos' is used rather than 'Buenos Ayres' because Joyce's spelling
+is Ayres and a model may write Aires — the surname alone avoids
+scoring orthography.
+"""
+
+# ── tension ───────────────────────────────────────────────────────
+
+[[questions]]
+id = "dub_tension_duty_desire"
+category = "tension"
+question = "Eveline has a choice to make. What are the two claims on her, and which passages carry each?"
+expected_facts = [
+  "Eveline",
+  "Frank",
+  "father",
+  "duty",
+  "promise",
+  "mother",
+  "Buenos",
+]
+expected_sources = []
+notes = """
+`dubliners-3.toml` states the tension directly as an expected question
+atom: 'Eveline: structural question about duty vs. desire.' Pole A is
+the household — the golden's relation atom for Eveline's father is
+labelled paternal / authority / constraint / violent / control / fear,
+and Miss Gavan and the Stores hold her in place. Pole B is Frank, 'the
+sailor with the ticket to Buenos Ayres'. The mother's promise is the
+hinge that makes it a tension rather than a preference.
+"""
+
+[[questions]]
+id = "dub_tension_sacred_corrupt"
+category = "tension"
+question = "Father Flynn is a priest and also something the stories are uneasy about. Where does the text hold both?"
+expected_facts = [
+  "Flynn",
+  "priest",
+  "simony",
+  "chalice",
+  "Eliza",
+  "decline",
+  "rites",
+]
+expected_sources = []
+notes = """
+Pole A: the office. `dubliners-3.toml` has Father O'Rourke performing
+the last rites and Eliza speaking 'at length about Father Flynn's
+decline'; Flynn is the boy's instructor (the golden's relation atom:
+mentor / instruction / lessons). Pole B: the unease. 'simony' is one
+of the three words of paragraph 1 and the golden expects it as a
+concept atom — it is the word for selling the sacred, set beside a
+priest whose faculties have failed. 'chalice' is drawn from the
+golden's simony gloss ('sin, buying, spiritual') and the story's
+broken-chalice detail; if the first run shows it absent from the
+fixture slice, correct the bank, not the retrieval.
+"""
+
+[[questions]]
+id = "dub_tension_narrator_visible"
+category = "tension"
+question = "Two of these stories are told by an unnamed boy and one is told about Eveline from outside. Where does the telling itself become the subject?"
+expected_facts = [
+  "narrat",
+  "unnamed",
+  "Eveline",
+  "interior",
+  "recognition",
+  "Araby",
+]
+expected_sources = []
+notes = """
+The reading-level counterpart to `dubliners-3.toml`'s hardest
+extraction anti-test. That file FORBIDS 'the narrator' as a Person
+atom — he is a voice, not an entity. This question asks the opposite
+of the same fact: an answer that discusses narration as a technique
+is right, and one that treats the narrator as a character is wrong.
+The template header supplies both halves: unnamed first-person
+narrators in The Sisters and Araby, and free indirect discourse in
+Eveline, where 'sentences like "she was tired" report her interior
+state directly'. 'narrat' is a stem covering narrator/narration/
+narrative. This is the one question here whose answer key is a
+technique rather than a plot fact, and it is deliberate: the bar is
+whether the walk can reach a claim about form.
+"""

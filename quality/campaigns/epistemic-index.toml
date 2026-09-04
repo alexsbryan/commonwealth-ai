@@ -12,9 +12,76 @@ id           = "EI1-thematic-lane"
 one_line     = "A thematic question set on the literary lane: themes named, tensions cited, >=1 evidence passage per claim — baseline first, then +1 cited theme over it"
 derives_from = "EPISTEMIC_INDEX.md §6 row 1"
 status       = "open"
-# No instrument until the set exists (order ei-1-bar declares it): two runs
-# before any delta is read (ARCH §18.5). A number here before the set is
-# committed would be the drafting defect the campaign rules name.
+direction    = "higher_is_better"
+# The set landed 2026-09-04 (order ei-1-bar): sovereign/bench/literary/
+# thematic-bk-book-1.toml (6 questions / 44 facts, corpus installed here) and
+# thematic-dubliners-3.toml (6 questions / 39 facts, corpus NOT installed on
+# any box yet — NEVER RUN, and the file says so at the top).
+#
+# NO TARGET IS SET AND THAT IS DELIBERATE. §6 row 1's bar is "+1 cited theme
+# with evidence over baseline", which is a DELTA on a number nothing had
+# measured. This instrument is the floor_basis it will be read against. A
+# target minted in the same commit as the first measurement is a target fitted
+# to the data (§18.6); the operator ratifies one from these numbers.
+#
+# THE VALUE IS "CITED WITH EVIDENCE", one number for the bar's own unit:
+# expected facts the ANSWER named AND the RETRIEVED PASSAGES carried, over all
+# expected facts. Both halves come from one synth run — `fact_score` scores
+# the answer, `synth.chunks_fact_score` scores the same facts against the
+# passages (`eval_cmd/runner.rs:1824-1826`) — so "named" and "evidenced" are
+# never two runs that could disagree about the world. Naming a theme the
+# passages do not carry scores zero here and would score 1.0 on answer text
+# alone; that asymmetry is the point.
+#
+# Noise: this lane puts an LLM in the loop, so it is the synth band, ±0.04-0.06
+# (RUNBOOK §6), NOT the exact retrieval band. The companion retrieval-mode
+# baseline under baselines/thematic-bk-book-1/ is the deterministic evidence
+# number and moves exactly; read it when the question is "did retrieval
+# change", and this one when it is "did the answer change".
+#
+# Reads the newest COMMITTED dated baseline, so `commit` can never be a HEAD
+# that did not produce the number, and staleness shows as age rather than as a
+# silently fresh-looking value. Per-category rollup goes to stderr so the
+# render shows theme vs tension separately rather than one blended average.
+kill         = "if the cited-with-evidence rate can only be raised by loosening the fact list, the walk did not improve and the bank did — re-read §18.6 before touching either"
+instrument   = '''python3 - <<'PY'
+import glob, json, subprocess, sys
+BASE = "sovereign/bench/literary/baselines/thematic-bk-book-1-synth-isolated"
+best = None  # (commit_time, sha, path) -> newest COMMITTED dated snapshot
+for p in sorted(glob.glob(BASE + "/20*.json")):  # dated files; skips latest.json
+    out = subprocess.run(["git", "log", "-n1", "--format=%ct %H", "--", p],
+                         capture_output=True, text=True).stdout.split()
+    if len(out) != 2:
+        continue  # uncommitted artifact cannot attribute a ref — skipped
+    t = int(out[0])
+    if best is None or t > best[0]:
+        best = (t, out[1], p)
+if best is None:
+    sys.exit(3)  # no committed baseline — absent, named by exit code
+_, sha, path = best
+rows = json.load(open(path)).get("results") or []
+den = named = evid = cited = 0
+by = {}
+for r in rows:
+    if r.get("error"):
+        continue  # a failed turn is not a zero; it is excluded and counted
+    syn = r.get("synth") or {}
+    ans = set(r["fact_score"]["matched"])
+    chk = set((syn.get("chunks_fact_score") or {}).get("matched") or [])
+    tot = r["fact_score"]["total_expected"]
+    den += tot; named += len(ans); evid += len(chk); cited += len(ans & chk)
+    a = by.setdefault(r["category"], [0, 0, 0, 0])
+    a[0] += tot; a[1] += len(ans); a[2] += len(chk); a[3] += len(ans & chk)
+errs = sum(1 for r in rows if r.get("error"))
+if den == 0:
+    sys.exit(3)  # every row errored, or the bank is empty — not a zero score
+for k, (t, n, e, c) in sorted(by.items()):
+    print(f"{k}: named {n}/{t} evidenced {e}/{t} cited-with-evidence {c}/{t}",
+          file=sys.stderr)
+print(f"rows {len(rows)} errored {errs} | named {named}/{den} evidenced {evid}/{den}",
+      file=sys.stderr)
+print(json.dumps({"value": round(cited / den, 4), "commit": sha, "artifact": path}))
+PY'''
 
 [[bar]]
 id           = "EI2-sep-unchanged"
@@ -22,6 +89,52 @@ one_line     = "The SEP retrieval-prod lane stays within its noise band through 
 derives_from = "EPISTEMIC_INDEX.md §6 row 2"
 status       = "open"
 direction    = "higher_is_better"
+# floor_basis recorded 2026-09-04 (order ei-1-bar) by running the lane twice
+# on RuggedFox against the committed baseline. NOTHING WAS WRITTEN TO SET THIS
+# FLOOR: sovereign/bench/sep/baselines/questions-prod-isolated/2026-08-10.json
+# has been in the repo since 2026-08-10 and already IS the floor. The two runs
+# were the check that it still holds on this box, not an attempt to mint a
+# replacement — re-minting a baseline requires adjudicating every per-question
+# diff first (RUNBOOK §6), which no step of this campaign has done.
+#
+# noise_band is 0.0 BY LANE KIND, not by choice. RUNBOOK §6: retrieval recall
+# on a HARD lane is exact — embeddings and ANN are stable, so any delta is
+# real. The ±0.04-0.06 band belongs to synth lanes and must not be borrowed
+# here to wave a regression through. The three committed snapshots span
+# 0.9182 (07-16) -> 0.9308 (07-17) -> 0.9497 (08-10); that spread is code
+# changing, not the same code flapping.
+#
+# The value is fact recall (retrieval), which is what "unchanged" means for
+# this lane. Source recall is printed to stderr rather than blended in: the
+# two move for different reasons and averaging them hides which one broke.
+noise_band   = 0.0
+kill         = "if a step needs the synth band to render green on a retrieval lane, the step regressed retrieval — name an owner and a measurement (ARCH §18.5), do not widen the band"
+instrument   = '''python3 - <<'PY'
+import glob, json, subprocess, sys
+BASE = "sovereign/bench/sep/baselines/questions-prod-isolated"
+best = None
+for p in sorted(glob.glob(BASE + "/20*.json")):
+    out = subprocess.run(["git", "log", "-n1", "--format=%ct %H", "--", p],
+                         capture_output=True, text=True).stdout.split()
+    if len(out) != 2:
+        continue
+    t = int(out[0])
+    if best is None or t > best[0]:
+        best = (t, out[1], p)
+if best is None:
+    sys.exit(3)
+_, sha, path = best
+rows = [r for r in (json.load(open(path)).get("results") or []) if not r.get("error")]
+fm = sum(len(r["fact_score"]["matched"]) for r in rows)
+ft = sum(r["fact_score"]["total_expected"] for r in rows)
+sm = sum(len(r["source_score"]["matched"]) for r in rows)
+st = sum(r["source_score"]["total_expected"] for r in rows)
+if ft == 0:
+    sys.exit(3)
+print(f"n={len(rows)} fact {fm}/{ft} source {sm}/{st}"
+      + (f" ({sm / st:.4f})" if st else ""), file=sys.stderr)
+print(json.dumps({"value": round(fm / ft, 4), "commit": sha, "artifact": path}))
+PY'''
 
 [[bar]]
 id           = "EI3-recipe-to-answer"

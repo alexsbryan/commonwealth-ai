@@ -1,0 +1,1051 @@
+{
+  "bank_name": "literary-thematic-bk-v1",
+  "corpus": "brothers-karamazov-book-1",
+  "limit": 20,
+  "started_at_unix": 1788537231,
+  "results": [
+    {
+      "question_id": "bk_thematic_overview",
+      "category": "theme",
+      "question": "What is Book I of The Brothers Karamazov about? Name the themes it establishes and say what each is grounded in.",
+      "retrieved": [
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.031513646,
+          "snippet": "brothers-karamazov-book-1  when he made the acquaintance of the young man,  who interested him extremely, and with whom he sometimes argued and not  without an inner pang compared himself in acquirements.  “He is proud,” he used to say, “he will never be in want of pence; he  has got money enough to go abroad now. What does he want here? Every  one can see that he hasn’t come for money, for his father would never  give him any. He has no taste for drink and dissipation, and yet his  father can’t do without him. They get on so well together!”  That was the truth; the young man had an unmistakab…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.03053613,
+          "snippet": "brothers-karamazov-book-1  sorry to lose you, Alyosha;  would you believe it, I’ve really grown fond of you? Well, it’s a good  opportunity. You’ll pray for us sinners; we have sinned too much here.  I’ve always been thinking who would pray for me, and whether there’s  any one in the world to do it. My dear boy, I’m awfully stupid about  that. You wouldn’t believe it. Awfully. You see, however stupid I am  about it, I keep thinking, I keep thinking—from time to time, of  course, not all the while. It’s impossible, I think, for the devils to  forget to drag me down to hell with their hooks when…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.030000001,
+          "snippet": "brothers-karamazov-book-1  his children’s education. As for the slaps she  had given him, he drove all over the town telling the story.  It happened that the old lady died soon after this, but she left the  boys in her will a thousand roubles each “for their instruction, and so  that all be spent on them exclusively, with the condition that it be so  portioned out as to last till they are twenty-one, for it is more than  adequate provision for such children. If other people think fit to  throw away their money, let them.” I have not read the will myself, but  I heard there was something queer …"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.02932363,
+          "snippet": "brothers-karamazov-book-1  He explained that this was his strong  desire, and that he was solemnly asking his consent as his father. The  old man knew that the elder Zossima, who was living in the monastery  hermitage, had made a special impression upon his “gentle boy.”  “That is the most honest monk among them, of course,” he observed,  after listening in thoughtful silence to Alyosha, and seeming scarcely  surprised at his request. “H’m!... So that’s where you want to be, my  gentle boy?”  He was half drunk, and suddenly he grinned his slow half-drunken grin,  which was not without a certai…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.028068138,
+          "snippet": "brothers-karamazov-book-1  even atheists joined them in their applause.  Finally some sagacious persons opined that the article was nothing but  an impudent satirical burlesque. I mention this incident particularly  because this article penetrated into the famous monastery in our  neighborhood, where the inmates, being particularly interested in the  question of the ecclesiastical courts, were completely bewildered by  it. Learning the author’s name, they were interested in his being a  native of the town and the son of “that Fyodor Pavlovitch.” And just  then it was that the author himself ma…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.02792121,
+          "snippet": "brothers-karamazov-book-1  Book I. The History Of A Family  Chapter I.  Fyodor Pavlovitch Karamazov  Alexey Fyodorovitch Karamazov was the third son of Fyodor Pavlovitch  Karamazov, a land owner well known in our district in his own day, and  still remembered among us owing to his gloomy and tragic death, which  happened thirteen years ago, and which I shall describe in its proper  place. For the present I will only say that this “landowner”—for so we  used to call him, although he hardly spent a day of his life on his own  estate—was a strange type, yet one pretty frequently to be met with, a…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.027619049,
+          "snippet": "brothers-karamazov-book-1  them, blessed them, and dismissed them. Of  late he had become so weak through attacks of illness that he was  sometimes unable to leave his cell, and the pilgrims waited for him to  come out for several days. Alyosha did not wonder why they loved him  so, why they fell down before him and wept with emotion merely at  seeing his face. Oh! he understood that for the humble soul of the  Russian peasant, worn out by grief and toil, and still more by the  everlasting injustice and everlasting sin, his own and the world’s, it  was the greatest need and comfort to find som…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.027587518,
+          "snippet": "brothers-karamazov-book-1  sixpenny lessons and afterwards getting  paragraphs on street incidents into the newspapers under the signature  of “Eye-Witness.” These paragraphs, it was said, were so interesting  and piquant that they were soon taken. This alone showed the young  man’s practical and intellectual superiority over the masses of needy  and unfortunate students of both sexes who hang about the offices of  the newspapers and journals, unable to think of anything better than  everlasting entreaties for copying and translations from the French.  Having once got into touch with the edito…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.027504552,
+          "snippet": "brothers-karamazov-book-1  somehow bloated and seemed more irresponsible, more  uneven, had sunk into a sort of incoherence, used to begin one thing  and go on with another, as though he were letting himself go  altogether. He was more and more frequently drunk. And, if it had not  been for the same servant Grigory, who by that time had aged  considerably too, and used to look after him sometimes almost like a  tutor, Fyodor Pavlovitch might have got into terrible scrapes.  Alyosha’s arrival seemed to affect even his moral side, as though  something had awakened in this prematurely old man whi…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.027205883,
+          "snippet": "brothers-karamazov-book-1  the value of money, not, of course, in a  literal sense. When he was given pocket-money, which he never asked  for, he was either terribly careless of it so that it was gone in a  moment, or he kept it for weeks together, not knowing what to do with  it.  In later years Pyotr Alexandrovitch Miüsov, a man very sensitive on the  score of money and bourgeois honesty, pronounced the following  judgment, after getting to know Alyosha:  “Here is perhaps the one man in the world whom you might leave alone  without a penny, in the center of an unknown town of a million  inha…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.027120493,
+          "snippet": "brothers-karamazov-book-1  boyhood and youth, but will only mention a  few of the most important events. Of the elder, Ivan, I will only say  that he grew into a somewhat morose and reserved, though far from timid  boy. At ten years old he had realized that they were living not in  their own home but on other people’s charity, and that their father was  a man of whom it was disgraceful to speak. This boy began very early,  almost in his infancy (so they say at least), to show a brilliant and  unusual aptitude for learning. I don’t know precisely why, but he left  the family of Yefim Petrovitch…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.027119253,
+          "snippet": "brothers-karamazov-book-1  very successfully, though, no doubt, not  over-scrupulously. Sofya Ivanovna was the daughter of an obscure  deacon, and was left from childhood an orphan without relations. She  grew up in the house of a general’s widow, a wealthy old lady of good  position, who was at once her benefactress and tormentor. I do not know  the details, but I have only heard that the orphan girl, a meek and  gentle creature, was once cut down from a halter in which she was  hanging from a nail in the loft, so terrible were her sufferings from  the caprice and everlasting nagging of this …"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.027118042,
+          "snippet": "brothers-karamazov-book-1  beat his wife but was beaten by her, for she  was a hot-tempered, bold, dark-browed, impatient woman, possessed of  remarkable physical strength. Finally, she left the house and ran away  from Fyodor Pavlovitch with a destitute divinity student, leaving  Mitya, a child of three years old, in her husband’s hands. Immediately  Fyodor Pavlovitch introduced a regular harem into the house, and  abandoned himself to orgies of drunkenness. In the intervals he used to  drive all over the province, complaining tearfully to each and all of  Adelaïda Ivanovna’s having left him,…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.026975945,
+          "snippet": "brothers-karamazov-book-1  will be no  more rich nor poor, no exalted nor humbled, but all will be as the  children of God, and the true Kingdom of Christ will come.” That was  the dream in Alyosha’s heart.  The arrival of his two brothers, whom he had not known till then,  seemed to make a great impression on Alyosha. He more quickly made  friends with his half-brother Dmitri (though he arrived later) than  with his own brother Ivan. He was extremely interested in his brother  Ivan, but when the latter had been two months in the town, though they  had met fairly often, they were still not int…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.026919758,
+          "snippet": "brothers-karamazov-book-1  even in his earliest youth. Coming at twenty  to his father’s house, which was a very sink of filthy debauchery, he,  chaste and pure as he was, simply withdrew in silence when to look on  was unbearable, but without the slightest sign of contempt or  condemnation. His father, who had once been in a dependent position,  and so was sensitive and ready to take offense, met him at first with  distrust and sullenness. “He does not say much,” he used to say, “and  thinks the more.” But soon, within a fortnight indeed, he took to  embracing him and kissing him terribly oft…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.02691622,
+          "snippet": "brothers-karamazov-book-1  brother Alexey I find it most difficult  to speak in this introduction. Yet I must give some preliminary account  of him, if only to explain one queer fact, which is that I have to  introduce my hero to the reader wearing the cassock of a novice. Yes,  he had been for the last year in our monastery, and seemed willing to  be cloistered there for the rest of his life.  Chapter IV.  The Third Son, Alyosha  He was only twenty, his brother Ivan was in his twenty-fourth year at  the time, while their elder brother Dmitri was twenty-seven. First of  all, I must explain tha…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.026830135,
+          "snippet": "brothers-karamazov-book-1  carrosse._’ How do you know  there are no hooks, darling? When you’ve lived with the monks you’ll  sing a different tune. But go and get at the truth there, and then come  and tell me. Anyway it’s easier going to the other world if one knows  what there is there. Besides, it will be more seemly for you with the  monks than here with me, with a drunken old man and young harlots ...  though you’re like an angel, nothing touches you. And I dare say  nothing will touch you there. That’s why I let you go, because I hope  for that. You’ve got all your wits about you. You w…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.026610645,
+          "snippet": "brothers-karamazov-book-1  except that fragment. That is how it was with  him. He remembered one still summer evening, an open window, the  slanting rays of the setting sun (that he recalled most vividly of  all); in a corner of the room the holy image, before it a lighted lamp,  and on her knees before the image his mother, sobbing hysterically with  cries and moans, snatching him up in both arms, squeezing him close  till it hurt, and praying for him to the Mother of God, holding him out  in both arms to the image as though to put him under the Mother’s  protection ... and suddenly a nurse r…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.02638889,
+          "snippet": "brothers-karamazov-book-1  diversion. He was suddenly seized with the  desire to see the monastery and the holy man. As his lawsuit with the  monastery still dragged on, he made it the pretext for seeing the  Superior, in order to attempt to settle it amicably. A visitor coming  with such laudable intentions might be received with more attention and  consideration than if he came from simple curiosity. Influences from  within the monastery were brought to bear on the elder, who of late had  scarcely left his cell, and had been forced by illness to deny even his  ordinary visitors. In the end h…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.024954073,
+          "snippet": "brothers-karamazov-book-1  old legend. But here is a recent instance.  A monk was suddenly commanded by his elder to quit Athos, which he  loved as a sacred place and a haven of refuge, and to go first to  Jerusalem to do homage to the Holy Places and then to go to the north  to Siberia: “There is the place for thee and not here.” The monk,  overwhelmed with sorrow, went to the Œcumenical Patriarch at  Constantinople and besought him to release him from his obedience. But  the Patriarch replied that not only was he unable to release him, but  there was not and could not be on earth a power whi…"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "father",
+          "abandon",
+          "sensual",
+          "money",
+          "monaster",
+          "buffoon",
+          "senseless"
+        ],
+        "missing": [
+          "neglect"
+        ],
+        "total_expected": 8,
+        "ratio": 0.875
+      },
+      "embed_ms": 76,
+      "search_ms": 40,
+      "corpora_hit": [
+        "brothers-karamazov-book-1"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "bk_fatherhood_theme",
+      "category": "theme",
+      "question": "What does Book I say about fatherhood, and which passages establish it?",
+      "retrieved": [
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.03306011,
+          "snippet": "brothers-karamazov-book-1  when he made the acquaintance of the young man,  who interested him extremely, and with whom he sometimes argued and not  without an inner pang compared himself in acquirements.  “He is proud,” he used to say, “he will never be in want of pence; he  has got money enough to go abroad now. What does he want here? Every  one can see that he hasn’t come for money, for his father would never  give him any. He has no taste for drink and dissipation, and yet his  father can’t do without him. They get on so well together!”  That was the truth; the young man had an unmistakab…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.03201844,
+          "snippet": "brothers-karamazov-book-1  sorry to lose you, Alyosha;  would you believe it, I’ve really grown fond of you? Well, it’s a good  opportunity. You’ll pray for us sinners; we have sinned too much here.  I’ve always been thinking who would pray for me, and whether there’s  any one in the world to do it. My dear boy, I’m awfully stupid about  that. You wouldn’t believe it. Awfully. You see, however stupid I am  about it, I keep thinking, I keep thinking—from time to time, of  course, not all the while. It’s impossible, I think, for the devils to  forget to drag me down to hell with their hooks when…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.03175403,
+          "snippet": "brothers-karamazov-book-1  even in his earliest youth. Coming at twenty  to his father’s house, which was a very sink of filthy debauchery, he,  chaste and pure as he was, simply withdrew in silence when to look on  was unbearable, but without the slightest sign of contempt or  condemnation. His father, who had once been in a dependent position,  and so was sensitive and ready to take offense, met him at first with  distrust and sullenness. “He does not say much,” he used to say, “and  thinks the more.” But soon, within a fortnight indeed, he took to  embracing him and kissing him terribly oft…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.031257633,
+          "snippet": "brothers-karamazov-book-1  very successfully, though, no doubt, not  over-scrupulously. Sofya Ivanovna was the daughter of an obscure  deacon, and was left from childhood an orphan without relations. She  grew up in the house of a general’s widow, a wealthy old lady of good  position, who was at once her benefactress and tormentor. I do not know  the details, but I have only heard that the orphan girl, a meek and  gentle creature, was once cut down from a halter in which she was  hanging from a nail in the loft, so terrible were her sufferings from  the caprice and everlasting nagging of this …"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.029957524,
+          "snippet": "brothers-karamazov-book-1  He explained that this was his strong  desire, and that he was solemnly asking his consent as his father. The  old man knew that the elder Zossima, who was living in the monastery  hermitage, had made a special impression upon his “gentle boy.”  “That is the most honest monk among them, of course,” he observed,  after listening in thoughtful silence to Alyosha, and seeming scarcely  surprised at his request. “H’m!... So that’s where you want to be, my  gentle boy?”  He was half drunk, and suddenly he grinned his slow half-drunken grin,  which was not without a certai…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.029324897,
+          "snippet": "brothers-karamazov-book-1  Book I. The History Of A Family  Chapter I.  Fyodor Pavlovitch Karamazov  Alexey Fyodorovitch Karamazov was the third son of Fyodor Pavlovitch  Karamazov, a land owner well known in our district in his own day, and  still remembered among us owing to his gloomy and tragic death, which  happened thirteen years ago, and which I shall describe in its proper  place. For the present I will only say that this “landowner”—for so we  used to call him, although he hardly spent a day of his life on his own  estate—was a strange type, yet one pretty frequently to be met with, a…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.027272727,
+          "snippet": "brothers-karamazov-book-1  elder was one who took your soul, your will,  into his soul and his will. When you choose an elder, you renounce your  own will and yield it to him in complete submission, complete  self-abnegation. This novitiate, this terrible school of abnegation, is  undertaken voluntarily, in the hope of self-conquest, of self-mastery,  in order, after a life of obedience, to attain perfect freedom, that  is, from self; to escape the lot of those who have lived their whole  life without finding their true selves in themselves. This institution  of elders is not founded on theory…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.02705156,
+          "snippet": "brothers-karamazov-book-1  sixpenny lessons and afterwards getting  paragraphs on street incidents into the newspapers under the signature  of “Eye-Witness.” These paragraphs, it was said, were so interesting  and piquant that they were soon taken. This alone showed the young  man’s practical and intellectual superiority over the masses of needy  and unfortunate students of both sexes who hang about the offices of  the newspapers and journals, unable to think of anything better than  everlasting entreaties for copying and translations from the French.  Having once got into touch with the edito…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.026998598,
+          "snippet": "brothers-karamazov-book-1  dispose realists to belief. The genuine realist, if  he is an unbeliever, will always find strength and ability to  disbelieve in the miraculous, and if he is confronted with a miracle as  an irrefutable fact he would rather disbelieve his own senses than  admit the fact. Even if he admits it, he admits it as a fact of nature  till then unrecognized by him. Faith does not, in the realist, spring  from the miracle but the miracle from faith. If the realist once  believes, then he is bound by his very realism to admit the miraculous  also. The Apostle Thomas said that …"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.026992753,
+          "snippet": "brothers-karamazov-book-1  except that fragment. That is how it was with  him. He remembered one still summer evening, an open window, the  slanting rays of the setting sun (that he recalled most vividly of  all); in a corner of the room the holy image, before it a lighted lamp,  and on her knees before the image his mother, sobbing hysterically with  cries and moans, snatching him up in both arms, squeezing him close  till it hurt, and praying for him to the Mother of God, holding him out  in both arms to the image as though to put him under the Mother’s  protection ... and suddenly a nurse r…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.02638889,
+          "snippet": "brothers-karamazov-book-1  them, blessed them, and dismissed them. Of  late he had become so weak through attacks of illness that he was  sometimes unable to leave his cell, and the pilgrims waited for him to  come out for several days. Alyosha did not wonder why they loved him  so, why they fell down before him and wept with emotion merely at  seeing his face. Oh! he understood that for the humble soul of the  Russian peasant, worn out by grief and toil, and still more by the  everlasting injustice and everlasting sin, his own and the world’s, it  was the greatest need and comfort to find som…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.026387472,
+          "snippet": "brothers-karamazov-book-1  the value of money, not, of course, in a  literal sense. When he was given pocket-money, which he never asked  for, he was either terribly careless of it so that it was gone in a  moment, or he kept it for weeks together, not knowing what to do with  it.  In later years Pyotr Alexandrovitch Miüsov, a man very sensitive on the  score of money and bourgeois honesty, pronounced the following  judgment, after getting to know Alyosha:  “Here is perhaps the one man in the world whom you might leave alone  without a penny, in the center of an unknown town of a million  inha…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.026153848,
+          "snippet": "brothers-karamazov-book-1  beat his wife but was beaten by her, for she  was a hot-tempered, bold, dark-browed, impatient woman, possessed of  remarkable physical strength. Finally, she left the house and ran away  from Fyodor Pavlovitch with a destitute divinity student, leaving  Mitya, a child of three years old, in her husband’s hands. Immediately  Fyodor Pavlovitch introduced a regular harem into the house, and  abandoned himself to orgies of drunkenness. In the intervals he used to  drive all over the province, complaining tearfully to each and all of  Adelaïda Ivanovna’s having left him,…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.026144907,
+          "snippet": "brothers-karamazov-book-1  boyhood and youth, but will only mention a  few of the most important events. Of the elder, Ivan, I will only say  that he grew into a somewhat morose and reserved, though far from timid  boy. At ten years old he had realized that they were living not in  their own home but on other people’s charity, and that their father was  a man of whom it was disgraceful to speak. This boy began very early,  almost in his infancy (so they say at least), to show a brilliant and  unusual aptitude for learning. I don’t know precisely why, but he left  the family of Yefim Petrovitch…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.026036484,
+          "snippet": "brothers-karamazov-book-1  snigger. In a man so depraved this  might, of course, mean no more than sensual attraction. As he had  received no dowry with his wife, and had, so to speak, taken her “from  the halter,” he did not stand on ceremony with her. Making her feel  that she had “wronged” him, he took advantage of her phenomenal  meekness and submissiveness to trample on the elementary decencies of  marriage. He gathered loose women into his house, and carried on orgies  of debauchery in his wife’s presence. To show what a pass things had  come to, I may mention that Grigory, the gloomy, s…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.025991563,
+          "snippet": "brothers-karamazov-book-1  making an impression on his mind that  he remembered all the rest of his life. The Moscow lady died, and Mitya  passed into the care of one of her married daughters. I believe he  changed his home a fourth time later on. I won’t enlarge upon that now,  as I shall have much to tell later of Fyodor Pavlovitch’s firstborn,  and must confine myself now to the most essential facts about him,  without which I could not begin my story.  In the first place, this Mitya, or rather Dmitri Fyodorovitch, was the  only one of Fyodor Pavlovitch’s three sons who grew up in the belie…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.025746822,
+          "snippet": "brothers-karamazov-book-1  even atheists joined them in their applause.  Finally some sagacious persons opined that the article was nothing but  an impudent satirical burlesque. I mention this incident particularly  because this article penetrated into the famous monastery in our  neighborhood, where the inmates, being particularly interested in the  question of the ecclesiastical courts, were completely bewildered by  it. Learning the author’s name, they were interested in his being a  native of the town and the son of “that Fyodor Pavlovitch.” And just  then it was that the author himself ma…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.025746822,
+          "snippet": "brothers-karamazov-book-1  somehow bloated and seemed more irresponsible, more  uneven, had sunk into a sort of incoherence, used to begin one thing  and go on with another, as though he were letting himself go  altogether. He was more and more frequently drunk. And, if it had not  been for the same servant Grigory, who by that time had aged  considerably too, and used to look after him sometimes almost like a  tutor, Fyodor Pavlovitch might have got into terrible scrapes.  Alyosha’s arrival seemed to affect even his moral side, as though  something had awakened in this prematurely old man whi…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.025678061,
+          "snippet": "brothers-karamazov-book-1  old legend. But here is a recent instance.  A monk was suddenly commanded by his elder to quit Athos, which he  loved as a sacred place and a haven of refuge, and to go first to  Jerusalem to do homage to the Holy Places and then to go to the north  to Siberia: “There is the place for thee and not here.” The monk,  overwhelmed with sorrow, went to the Œcumenical Patriarch at  Constantinople and besought him to release him from his obedience. But  the Patriarch replied that not only was he unable to release him, but  there was not and could not be on earth a power whi…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.02564935,
+          "snippet": "brothers-karamazov-book-1  his children’s education. As for the slaps she  had given him, he drove all over the town telling the story.  It happened that the old lady died soon after this, but she left the  boys in her will a thousand roubles each “for their instruction, and so  that all be spent on them exclusively, with the condition that it be so  portioned out as to last till they are twenty-one, for it is more than  adequate provision for such children. If other people think fit to  throw away their money, let them.” I have not read the will myself, but  I heard there was something queer …"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "forgot",
+          "Grigory",
+          "abandon",
+          "Yefim",
+          "cottage",
+          "orphan"
+        ],
+        "missing": [
+          "guardian"
+        ],
+        "total_expected": 7,
+        "ratio": 0.85714287
+      },
+      "embed_ms": 69,
+      "search_ms": 25,
+      "corpora_hit": [
+        "brothers-karamazov-book-1"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "bk_eldership_theme",
+      "category": "theme",
+      "question": "What is an elder, as Book I explains it, and why does the institution matter to this monastery?",
+      "retrieved": [
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.033333335,
+          "snippet": "brothers-karamazov-book-1  elder. I must digress to explain what  an “elder” is in Russian monasteries, and I am sorry that I do not feel  very competent to do so. I will try, however, to give a superficial  account of it in a few words. Authorities on the subject assert that  the institution of “elders” is of recent date, not more than a hundred  years old in our monasteries, though in the orthodox East, especially  in Sinai and Athos, it has existed over a thousand years. It is  maintained that it existed in ancient times in Russia also, but through  the calamities which overtook Russia—the …"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.032522473,
+          "snippet": "brothers-karamazov-book-1  old legend. But here is a recent instance.  A monk was suddenly commanded by his elder to quit Athos, which he  loved as a sacred place and a haven of refuge, and to go first to  Jerusalem to do homage to the Holy Places and then to go to the north  to Siberia: “There is the place for thee and not here.” The monk,  overwhelmed with sorrow, went to the Œcumenical Patriarch at  Constantinople and besought him to release him from his obedience. But  the Patriarch replied that not only was he unable to release him, but  there was not and could not be on earth a power whi…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.031257633,
+          "snippet": "brothers-karamazov-book-1  He explained that this was his strong  desire, and that he was solemnly asking his consent as his father. The  old man knew that the elder Zossima, who was living in the monastery  hermitage, had made a special impression upon his “gentle boy.”  “That is the most honest monk among them, of course,” he observed,  after listening in thoughtful silence to Alyosha, and seeming scarcely  surprised at his request. “H’m!... So that’s where you want to be, my  gentle boy?”  He was half drunk, and suddenly he grinned his slow half-drunken grin,  which was not without a certai…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.031054404,
+          "snippet": "brothers-karamazov-book-1  elder was one who took your soul, your will,  into his soul and his will. When you choose an elder, you renounce your  own will and yield it to him in complete submission, complete  self-abnegation. This novitiate, this terrible school of abnegation, is  undertaken voluntarily, in the hope of self-conquest, of self-mastery,  in order, after a life of obedience, to attain perfect freedom, that  is, from self; to escape the lot of those who have lived their whole  life without finding their true selves in themselves. This institution  of elders is not founded on theory…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.030550372,
+          "snippet": "brothers-karamazov-book-1  them, blessed them, and dismissed them. Of  late he had become so weak through attacks of illness that he was  sometimes unable to leave his cell, and the pilgrims waited for him to  come out for several days. Alyosha did not wonder why they loved him  so, why they fell down before him and wept with emotion merely at  seeing his face. Oh! he understood that for the humble soul of the  Russian peasant, worn out by grief and toil, and still more by the  everlasting injustice and everlasting sin, his own and the world’s, it  was the greatest need and comfort to find som…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.030303031,
+          "snippet": "brothers-karamazov-book-1  sacrifices, and that to sacrifice, for  instance, five or six years of their seething youth to hard and tedious  study, if only to multiply tenfold their powers of serving the truth  and the cause they have set before them as their goal—such a sacrifice  is utterly beyond the strength of many of them. The path Alyosha chose  was a path going in the opposite direction, but he chose it with the  same thirst for swift achievement. As soon as he reflected seriously he  was convinced of the existence of God and immortality, and at once he  instinctively said to himself: “…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.029726775,
+          "snippet": "brothers-karamazov-book-1  when he made the acquaintance of the young man,  who interested him extremely, and with whom he sometimes argued and not  without an inner pang compared himself in acquirements.  “He is proud,” he used to say, “he will never be in want of pence; he  has got money enough to go abroad now. What does he want here? Every  one can see that he hasn’t come for money, for his father would never  give him any. He has no taste for drink and dissipation, and yet his  father can’t do without him. They get on so well together!”  That was the truth; the young man had an unmistakab…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.029571647,
+          "snippet": "brothers-karamazov-book-1  sorry to lose you, Alyosha;  would you believe it, I’ve really grown fond of you? Well, it’s a good  opportunity. You’ll pray for us sinners; we have sinned too much here.  I’ve always been thinking who would pray for me, and whether there’s  any one in the world to do it. My dear boy, I’m awfully stupid about  that. You wouldn’t believe it. Awfully. You see, however stupid I am  about it, I keep thinking, I keep thinking—from time to time, of  course, not all the while. It’s impossible, I think, for the devils to  forget to drag me down to hell with their hooks when…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.028991597,
+          "snippet": "brothers-karamazov-book-1  carrosse._’ How do you know  there are no hooks, darling? When you’ve lived with the monks you’ll  sing a different tune. But go and get at the truth there, and then come  and tell me. Anyway it’s easier going to the other world if one knows  what there is there. Besides, it will be more seemly for you with the  monks than here with me, with a drunken old man and young harlots ...  though you’re like an angel, nothing touches you. And I dare say  nothing will touch you there. That’s why I let you go, because I hope  for that. You’ve got all your wits about you. You w…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.028991597,
+          "snippet": "brothers-karamazov-book-1  brother Alexey I find it most difficult  to speak in this introduction. Yet I must give some preliminary account  of him, if only to explain one queer fact, which is that I have to  introduce my hero to the reader wearing the cassock of a novice. Yes,  he had been for the last year in our monastery, and seemed willing to  be cloistered there for the rest of his life.  Chapter IV.  The Third Son, Alyosha  He was only twenty, his brother Ivan was in his twenty-fourth year at  the time, while their elder brother Dmitri was twenty-seven. First of  all, I must explain tha…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.02889813,
+          "snippet": "brothers-karamazov-book-1  diversion. He was suddenly seized with the  desire to see the monastery and the holy man. As his lawsuit with the  monastery still dragged on, he made it the pretext for seeing the  Superior, in order to attempt to settle it amicably. A visitor coming  with such laudable intentions might be received with more attention and  consideration than if he came from simple curiosity. Influences from  within the monastery were brought to bear on the elder, who of late had  scarcely left his cell, and had been forced by illness to deny even his  ordinary visitors. In the end h…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.02857726,
+          "snippet": "brothers-karamazov-book-1  even atheists joined them in their applause.  Finally some sagacious persons opined that the article was nothing but  an impudent satirical burlesque. I mention this incident particularly  because this article penetrated into the famous monastery in our  neighborhood, where the inmates, being particularly interested in the  question of the ecclesiastical courts, were completely bewildered by  it. Learning the author’s name, they were interested in his being a  native of the town and the son of “that Fyodor Pavlovitch.” And just  then it was that the author himself ma…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.027313266,
+          "snippet": "brothers-karamazov-book-1  not to humility and complete self-control  but to the most Satanic pride, that is, to bondage and not to freedom.  The elder Zossima was sixty-five. He came of a family of landowners,  had been in the army in early youth, and served in the Caucasus as an  officer. He had, no doubt, impressed Alyosha by some peculiar quality  of his soul. Alyosha lived in the cell of the elder, who was very fond  of him and let him wait upon him. It must be noted that Alyosha was  bound by no obligation and could go where he pleased and be absent for  whole days. Though he wore the mo…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.02707152,
+          "snippet": "brothers-karamazov-book-1  But this little episode was not without  an influence upon Fyodor Pavlovitch—and a very original one. He  suddenly took a thousand roubles to our monastery to pay for requiems  for the soul of his wife; but not for the second, Alyosha’s mother, the  “crazy woman,” but for the first, Adelaïda Ivanovna, who used to thrash  him. In the evening of the same day he got drunk and abused the monks  to Alyosha. He himself was far from being religious; he had probably  never put a penny candle before the image of a saint. Strange impulses  of sudden feeling and sudden thought …"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.02631579,
+          "snippet": "brothers-karamazov-book-1  sixpenny lessons and afterwards getting  paragraphs on street incidents into the newspapers under the signature  of “Eye-Witness.” These paragraphs, it was said, were so interesting  and piquant that they were soon taken. This alone showed the young  man’s practical and intellectual superiority over the masses of needy  and unfortunate students of both sexes who hang about the offices of  the newspapers and journals, unable to think of anything better than  everlasting entreaties for copying and translations from the French.  Having once got into touch with the edito…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.025833335,
+          "snippet": "brothers-karamazov-book-1  the value of money, not, of course, in a  literal sense. When he was given pocket-money, which he never asked  for, he was either terribly careless of it so that it was gone in a  moment, or he kept it for weeks together, not knowing what to do with  it.  In later years Pyotr Alexandrovitch Miüsov, a man very sensitive on the  score of money and bourgeois honesty, pronounced the following  judgment, after getting to know Alyosha:  “Here is perhaps the one man in the world whom you might leave alone  without a penny, in the center of an unknown town of a million  inha…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.025645241,
+          "snippet": "brothers-karamazov-book-1  boyhood and youth, but will only mention a  few of the most important events. Of the elder, Ivan, I will only say  that he grew into a somewhat morose and reserved, though far from timid  boy. At ten years old he had realized that they were living not in  their own home but on other people’s charity, and that their father was  a man of whom it was disgraceful to speak. This boy began very early,  almost in his infancy (so they say at least), to show a brilliant and  unusual aptitude for learning. I don’t know precisely why, but he left  the family of Yefim Petrovitch…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.02487715,
+          "snippet": "brothers-karamazov-book-1  his children’s education. As for the slaps she  had given him, he drove all over the town telling the story.  It happened that the old lady died soon after this, but she left the  boys in her will a thousand roubles each “for their instruction, and so  that all be spent on them exclusively, with the condition that it be so  portioned out as to last till they are twenty-one, for it is more than  adequate provision for such children. If other people think fit to  throw away their money, let them.” I have not read the will myself, but  I heard there was something queer …"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.024096385,
+          "snippet": "brothers-karamazov-book-1  Book I. The History Of A Family  Chapter I.  Fyodor Pavlovitch Karamazov  Alexey Fyodorovitch Karamazov was the third son of Fyodor Pavlovitch  Karamazov, a land owner well known in our district in his own day, and  still remembered among us owing to his gloomy and tragic death, which  happened thirteen years ago, and which I shall describe in its proper  place. For the present I will only say that this “landowner”—for so we  used to call him, although he hardly spent a day of his life on his own  estate—was a strange type, yet one pretty frequently to be met with, a…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.023527794,
+          "snippet": "brothers-karamazov-book-1  sometimes also to be found in the last, could have  married such a worthless, puny weakling, as we all called him, I won’t  attempt to explain. I knew a young lady of the last “romantic”  generation who after some years of an enigmatic passion for a  gentleman, whom she might quite easily have married at any moment,  invented insuperable obstacles to their union, and ended by throwing  herself one stormy night into a rather deep and rapid river from a high  bank, almost a precipice, and so perished, entirely to satisfy her own  caprice, and to be like Shakespeare’s O…"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "elder",
+          "Zossima",
+          "submiss",
+          "obedien",
+          "renounc",
+          "freedom",
+          "confess",
+          "pilgrim"
+        ],
+        "missing": [],
+        "total_expected": 8,
+        "ratio": 1.0
+      },
+      "embed_ms": 74,
+      "search_ms": 23,
+      "corpora_hit": [
+        "brothers-karamazov-book-1"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "bk_tension_submission_freedom",
+      "category": "tension",
+      "question": "Book I presents the elder's authority as a road to freedom. Where does the text itself complicate that claim?",
+      "retrieved": [
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.032786883,
+          "snippet": "brothers-karamazov-book-1  old legend. But here is a recent instance.  A monk was suddenly commanded by his elder to quit Athos, which he  loved as a sacred place and a haven of refuge, and to go first to  Jerusalem to do homage to the Holy Places and then to go to the north  to Siberia: “There is the place for thee and not here.” The monk,  overwhelmed with sorrow, went to the Œcumenical Patriarch at  Constantinople and besought him to release him from his obedience. But  the Patriarch replied that not only was he unable to release him, but  there was not and could not be on earth a power whi…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.031513646,
+          "snippet": "brothers-karamazov-book-1  elder. I must digress to explain what  an “elder” is in Russian monasteries, and I am sorry that I do not feel  very competent to do so. I will try, however, to give a superficial  account of it in a few words. Authorities on the subject assert that  the institution of “elders” is of recent date, not more than a hundred  years old in our monasteries, though in the orthodox East, especially  in Sinai and Athos, it has existed over a thousand years. It is  maintained that it existed in ancient times in Russia also, but through  the calamities which overtook Russia—the …"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.031159421,
+          "snippet": "brothers-karamazov-book-1  elder was one who took your soul, your will,  into his soul and his will. When you choose an elder, you renounce your  own will and yield it to him in complete submission, complete  self-abnegation. This novitiate, this terrible school of abnegation, is  undertaken voluntarily, in the hope of self-conquest, of self-mastery,  in order, after a life of obedience, to attain perfect freedom, that  is, from self; to escape the lot of those who have lived their whole  life without finding their true selves in themselves. This institution  of elders is not founded on theory…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.030550372,
+          "snippet": "brothers-karamazov-book-1  not to humility and complete self-control  but to the most Satanic pride, that is, to bondage and not to freedom.  The elder Zossima was sixty-five. He came of a family of landowners,  had been in the army in early youth, and served in the Caucasus as an  officer. He had, no doubt, impressed Alyosha by some peculiar quality  of his soul. Alyosha lived in the cell of the elder, who was very fond  of him and let him wait upon him. It must be noted that Alyosha was  bound by no obligation and could go where he pleased and be absent for  whole days. Though he wore the mo…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.03053613,
+          "snippet": "brothers-karamazov-book-1  He explained that this was his strong  desire, and that he was solemnly asking his consent as his father. The  old man knew that the elder Zossima, who was living in the monastery  hermitage, had made a special impression upon his “gentle boy.”  “That is the most honest monk among them, of course,” he observed,  after listening in thoughtful silence to Alyosha, and seeming scarcely  surprised at his request. “H’m!... So that’s where you want to be, my  gentle boy?”  He was half drunk, and suddenly he grinned his slow half-drunken grin,  which was not without a certai…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.030158732,
+          "snippet": "brothers-karamazov-book-1  sorry to lose you, Alyosha;  would you believe it, I’ve really grown fond of you? Well, it’s a good  opportunity. You’ll pray for us sinners; we have sinned too much here.  I’ve always been thinking who would pray for me, and whether there’s  any one in the world to do it. My dear boy, I’m awfully stupid about  that. You wouldn’t believe it. Awfully. You see, however stupid I am  about it, I keep thinking, I keep thinking—from time to time, of  course, not all the while. It’s impossible, I think, for the devils to  forget to drag me down to hell with their hooks when…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.029857397,
+          "snippet": "brothers-karamazov-book-1  when he made the acquaintance of the young man,  who interested him extremely, and with whom he sometimes argued and not  without an inner pang compared himself in acquirements.  “He is proud,” he used to say, “he will never be in want of pence; he  has got money enough to go abroad now. What does he want here? Every  one can see that he hasn’t come for money, for his father would never  give him any. He has no taste for drink and dissipation, and yet his  father can’t do without him. They get on so well together!”  That was the truth; the young man had an unmistakab…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.029631255,
+          "snippet": "brothers-karamazov-book-1  sacrifices, and that to sacrifice, for  instance, five or six years of their seething youth to hard and tedious  study, if only to multiply tenfold their powers of serving the truth  and the cause they have set before them as their goal—such a sacrifice  is utterly beyond the strength of many of them. The path Alyosha chose  was a path going in the opposite direction, but he chose it with the  same thirst for swift achievement. As soon as he reflected seriously he  was convinced of the existence of God and immortality, and at once he  instinctively said to himself: “…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.029462365,
+          "snippet": "brothers-karamazov-book-1  even atheists joined them in their applause.  Finally some sagacious persons opined that the article was nothing but  an impudent satirical burlesque. I mention this incident particularly  because this article penetrated into the famous monastery in our  neighborhood, where the inmates, being particularly interested in the  question of the ecclesiastical courts, were completely bewildered by  it. Learning the author’s name, they were interested in his being a  native of the town and the son of “that Fyodor Pavlovitch.” And just  then it was that the author himself ma…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.029324897,
+          "snippet": "brothers-karamazov-book-1  dispose realists to belief. The genuine realist, if  he is an unbeliever, will always find strength and ability to  disbelieve in the miraculous, and if he is confronted with a miracle as  an irrefutable fact he would rather disbelieve his own senses than  admit the fact. Even if he admits it, he admits it as a fact of nature  till then unrecognized by him. Faith does not, in the realist, spring  from the miracle but the miracle from faith. If the realist once  believes, then he is bound by his very realism to admit the miraculous  also. The Apostle Thomas said that …"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.027389705,
+          "snippet": "brothers-karamazov-book-1  diversion. He was suddenly seized with the  desire to see the monastery and the holy man. As his lawsuit with the  monastery still dragged on, he made it the pretext for seeing the  Superior, in order to attempt to settle it amicably. A visitor coming  with such laudable intentions might be received with more attention and  consideration than if he came from simple curiosity. Influences from  within the monastery were brought to bear on the elder, who of late had  scarcely left his cell, and had been forced by illness to deny even his  ordinary visitors. In the end h…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.02698413,
+          "snippet": "brothers-karamazov-book-1  them, blessed them, and dismissed them. Of  late he had become so weak through attacks of illness that he was  sometimes unable to leave his cell, and the pilgrims waited for him to  come out for several days. Alyosha did not wonder why they loved him  so, why they fell down before him and wept with emotion merely at  seeing his face. Oh! he understood that for the humble soul of the  Russian peasant, worn out by grief and toil, and still more by the  everlasting injustice and everlasting sin, his own and the world’s, it  was the greatest need and comfort to find som…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.026631393,
+          "snippet": "brothers-karamazov-book-1  Book I. The History Of A Family  Chapter I.  Fyodor Pavlovitch Karamazov  Alexey Fyodorovitch Karamazov was the third son of Fyodor Pavlovitch  Karamazov, a land owner well known in our district in his own day, and  still remembered among us owing to his gloomy and tragic death, which  happened thirteen years ago, and which I shall describe in its proper  place. For the present I will only say that this “landowner”—for so we  used to call him, although he hardly spent a day of his life on his own  estate—was a strange type, yet one pretty frequently to be met with, a…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.026430186,
+          "snippet": "brothers-karamazov-book-1  his children’s education. As for the slaps she  had given him, he drove all over the town telling the story.  It happened that the old lady died soon after this, but she left the  boys in her will a thousand roubles each “for their instruction, and so  that all be spent on them exclusively, with the condition that it be so  portioned out as to last till they are twenty-one, for it is more than  adequate provision for such children. If other people think fit to  throw away their money, let them.” I have not read the will myself, but  I heard there was something queer …"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.025849212,
+          "snippet": "brothers-karamazov-book-1  sometimes also to be found in the last, could have  married such a worthless, puny weakling, as we all called him, I won’t  attempt to explain. I knew a young lady of the last “romantic”  generation who after some years of an enigmatic passion for a  gentleman, whom she might quite easily have married at any moment,  invented insuperable obstacles to their union, and ended by throwing  herself one stormy night into a rather deep and rapid river from a high  bank, almost a precipice, and so perished, entirely to satisfy her own  caprice, and to be like Shakespeare’s O…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.025603391,
+          "snippet": "brothers-karamazov-book-1  boyhood and youth, but will only mention a  few of the most important events. Of the elder, Ivan, I will only say  that he grew into a somewhat morose and reserved, though far from timid  boy. At ten years old he had realized that they were living not in  their own home but on other people’s charity, and that their father was  a man of whom it was disgraceful to speak. This boy began very early,  almost in his infancy (so they say at least), to show a brilliant and  unusual aptitude for learning. I don’t know precisely why, but he left  the family of Yefim Petrovitch…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.025353016,
+          "snippet": "brothers-karamazov-book-1  the value of money, not, of course, in a  literal sense. When he was given pocket-money, which he never asked  for, he was either terribly careless of it so that it was gone in a  moment, or he kept it for weeks together, not knowing what to do with  it.  In later years Pyotr Alexandrovitch Miüsov, a man very sensitive on the  score of money and bourgeois honesty, pronounced the following  judgment, after getting to know Alyosha:  “Here is perhaps the one man in the world whom you might leave alone  without a penny, in the center of an unknown town of a million  inha…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.02480974,
+          "snippet": "brothers-karamazov-book-1  snigger. In a man so depraved this  might, of course, mean no more than sensual attraction. As he had  received no dowry with his wife, and had, so to speak, taken her “from  the halter,” he did not stand on ceremony with her. Making her feel  that she had “wronged” him, he took advantage of her phenomenal  meekness and submissiveness to trample on the elementary decencies of  marriage. He gathered loose women into his house, and carried on orgies  of debauchery in his wife’s presence. To show what a pass things had  come to, I may mention that Grigory, the gloomy, s…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.02456299,
+          "snippet": "brothers-karamazov-book-1  even in his earliest youth. Coming at twenty  to his father’s house, which was a very sink of filthy debauchery, he,  chaste and pure as he was, simply withdrew in silence when to look on  was unbearable, but without the slightest sign of contempt or  condemnation. His father, who had once been in a dependent position,  and so was sensitive and ready to take offense, met him at first with  distrust and sullenness. “He does not say much,” he used to say, “and  thinks the more.” But soon, within a fortnight indeed, he took to  embracing him and kissing him terribly oft…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.023690078,
+          "snippet": "brothers-karamazov-book-1  beat his wife but was beaten by her, for she  was a hot-tempered, bold, dark-browed, impatient woman, possessed of  remarkable physical strength. Finally, she left the house and ran away  from Fyodor Pavlovitch with a destitute divinity student, leaving  Mitya, a child of three years old, in her husband’s hands. Immediately  Fyodor Pavlovitch introduced a regular harem into the house, and  abandoned himself to orgies of drunkenness. In the intervals he used to  drive all over the province, complaining tearfully to each and all of  Adelaïda Ivanovna’s having left him,…"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "submiss",
+          "freedom",
+          "obedien",
+          "pride",
+          "bondage",
+          "two-edged"
+        ],
+        "missing": [],
+        "total_expected": 6,
+        "ratio": 1.0
+      },
+      "embed_ms": 72,
+      "search_ms": 22,
+      "corpora_hit": [
+        "brothers-karamazov-book-1"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "bk_tension_faith_unbelief",
+      "category": "tension",
+      "question": "How does Book I set faith against unbelief, and which characters carry each side?",
+      "retrieved": [
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.033333335,
+          "snippet": "brothers-karamazov-book-1  dispose realists to belief. The genuine realist, if  he is an unbeliever, will always find strength and ability to  disbelieve in the miraculous, and if he is confronted with a miracle as  an irrefutable fact he would rather disbelieve his own senses than  admit the fact. Even if he admits it, he admits it as a fact of nature  till then unrecognized by him. Faith does not, in the realist, spring  from the miracle but the miracle from faith. If the realist once  believes, then he is bound by his very realism to admit the miraculous  also. The Apostle Thomas said that …"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.032002047,
+          "snippet": "brothers-karamazov-book-1  sorry to lose you, Alyosha;  would you believe it, I’ve really grown fond of you? Well, it’s a good  opportunity. You’ll pray for us sinners; we have sinned too much here.  I’ve always been thinking who would pray for me, and whether there’s  any one in the world to do it. My dear boy, I’m awfully stupid about  that. You wouldn’t believe it. Awfully. You see, however stupid I am  about it, I keep thinking, I keep thinking—from time to time, of  course, not all the while. It’s impossible, I think, for the devils to  forget to drag me down to hell with their hooks when…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.031099323,
+          "snippet": "brothers-karamazov-book-1  carrosse._’ How do you know  there are no hooks, darling? When you’ve lived with the monks you’ll  sing a different tune. But go and get at the truth there, and then come  and tell me. Anyway it’s easier going to the other world if one knows  what there is there. Besides, it will be more seemly for you with the  monks than here with me, with a drunken old man and young harlots ...  though you’re like an angel, nothing touches you. And I dare say  nothing will touch you there. That’s why I let you go, because I hope  for that. You’ve got all your wits about you. You w…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.031009614,
+          "snippet": "brothers-karamazov-book-1  some of great dignity in the monastery,  one, for instance, of the older monks distinguished for his strict  keeping of fasts and vows of silence. But the majority were on Father  Zossima’s side and very many of them loved him with all their hearts,  warmly and sincerely. Some were almost fanatically devoted to him, and  declared, though not quite aloud, that he was a saint, that there could  be no doubt of it, and, seeing that his end was near, they anticipated  miracles and great glory to the monastery in the immediate future from  his relics. Alyosha had unquestio…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.029906955,
+          "snippet": "brothers-karamazov-book-1  when he made the acquaintance of the young man,  who interested him extremely, and with whom he sometimes argued and not  without an inner pang compared himself in acquirements.  “He is proud,” he used to say, “he will never be in want of pence; he  has got money enough to go abroad now. What does he want here? Every  one can see that he hasn’t come for money, for his father would never  give him any. He has no taste for drink and dissipation, and yet his  father can’t do without him. They get on so well together!”  That was the truth; the young man had an unmistakab…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.029709507,
+          "snippet": "brothers-karamazov-book-1  them, blessed them, and dismissed them. Of  late he had become so weak through attacks of illness that he was  sometimes unable to leave his cell, and the pilgrims waited for him to  come out for several days. Alyosha did not wonder why they loved him  so, why they fell down before him and wept with emotion merely at  seeing his face. Oh! he understood that for the humble soul of the  Russian peasant, worn out by grief and toil, and still more by the  everlasting injustice and everlasting sin, his own and the world’s, it  was the greatest need and comfort to find som…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.028949544,
+          "snippet": "brothers-karamazov-book-1  sixpenny lessons and afterwards getting  paragraphs on street incidents into the newspapers under the signature  of “Eye-Witness.” These paragraphs, it was said, were so interesting  and piquant that they were soon taken. This alone showed the young  man’s practical and intellectual superiority over the masses of needy  and unfortunate students of both sexes who hang about the offices of  the newspapers and journals, unable to think of anything better than  everlasting entreaties for copying and translations from the French.  Having once got into touch with the edito…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.028850146,
+          "snippet": "brothers-karamazov-book-1  brother Alexey I find it most difficult  to speak in this introduction. Yet I must give some preliminary account  of him, if only to explain one queer fact, which is that I have to  introduce my hero to the reader wearing the cassock of a novice. Yes,  he had been for the last year in our monastery, and seemed willing to  be cloistered there for the rest of his life.  Chapter IV.  The Third Son, Alyosha  He was only twenty, his brother Ivan was in his twenty-fourth year at  the time, while their elder brother Dmitri was twenty-seven. First of  all, I must explain tha…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.028778467,
+          "snippet": "brothers-karamazov-book-1  sacrifices, and that to sacrifice, for  instance, five or six years of their seething youth to hard and tedious  study, if only to multiply tenfold their powers of serving the truth  and the cause they have set before them as their goal—such a sacrifice  is utterly beyond the strength of many of them. The path Alyosha chose  was a path going in the opposite direction, but he chose it with the  same thirst for swift achievement. As soon as he reflected seriously he  was convinced of the existence of God and immortality, and at once he  instinctively said to himself: “…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.027046785,
+          "snippet": "brothers-karamazov-book-1  Book I. The History Of A Family  Chapter I.  Fyodor Pavlovitch Karamazov  Alexey Fyodorovitch Karamazov was the third son of Fyodor Pavlovitch  Karamazov, a land owner well known in our district in his own day, and  still remembered among us owing to his gloomy and tragic death, which  happened thirteen years ago, and which I shall describe in its proper  place. For the present I will only say that this “landowner”—for so we  used to call him, although he hardly spent a day of his life on his own  estate—was a strange type, yet one pretty frequently to be met with, a…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.02667141,
+          "snippet": "brothers-karamazov-book-1  old legend. But here is a recent instance.  A monk was suddenly commanded by his elder to quit Athos, which he  loved as a sacred place and a haven of refuge, and to go first to  Jerusalem to do homage to the Holy Places and then to go to the north  to Siberia: “There is the place for thee and not here.” The monk,  overwhelmed with sorrow, went to the Œcumenical Patriarch at  Constantinople and besought him to release him from his obedience. But  the Patriarch replied that not only was he unable to release him, but  there was not and could not be on earth a power whi…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.026511315,
+          "snippet": "brothers-karamazov-book-1  of reckless drinking. And just at that  time his wife’s family received the news of her death in Petersburg.  She had died quite suddenly in a garret, according to one story, of  typhus, or as another version had it, of starvation. Fyodor Pavlovitch  was drunk when he heard of his wife’s death, and the story is that he  ran out into the street and began shouting with joy, raising his hands  to Heaven: “Lord, now lettest Thou Thy servant depart in peace,” but  others say he wept without restraint like a little child, so much so  that people were sorry for him, in spit…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.026373627,
+          "snippet": "brothers-karamazov-book-1  snigger. In a man so depraved this  might, of course, mean no more than sensual attraction. As he had  received no dowry with his wife, and had, so to speak, taken her “from  the halter,” he did not stand on ceremony with her. Making her feel  that she had “wronged” him, he took advantage of her phenomenal  meekness and submissiveness to trample on the elementary decencies of  marriage. He gathered loose women into his house, and carried on orgies  of debauchery in his wife’s presence. To show what a pass things had  come to, I may mention that Grigory, the gloomy, s…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.026289009,
+          "snippet": "brothers-karamazov-book-1  He explained that this was his strong  desire, and that he was solemnly asking his consent as his father. The  old man knew that the elder Zossima, who was living in the monastery  hermitage, had made a special impression upon his “gentle boy.”  “That is the most honest monk among them, of course,” he observed,  after listening in thoughtful silence to Alyosha, and seeming scarcely  surprised at his request. “H’m!... So that’s where you want to be, my  gentle boy?”  He was half drunk, and suddenly he grinned his slow half-drunken grin,  which was not without a certai…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.026279628,
+          "snippet": "brothers-karamazov-book-1  elder was one who took your soul, your will,  into his soul and his will. When you choose an elder, you renounce your  own will and yield it to him in complete submission, complete  self-abnegation. This novitiate, this terrible school of abnegation, is  undertaken voluntarily, in the hope of self-conquest, of self-mastery,  in order, after a life of obedience, to attain perfect freedom, that  is, from self; to escape the lot of those who have lived their whole  life without finding their true selves in themselves. This institution  of elders is not founded on theory…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.026234567,
+          "snippet": "brothers-karamazov-book-1  except that fragment. That is how it was with  him. He remembered one still summer evening, an open window, the  slanting rays of the setting sun (that he recalled most vividly of  all); in a corner of the room the holy image, before it a lighted lamp,  and on her knees before the image his mother, sobbing hysterically with  cries and moans, snatching him up in both arms, squeezing him close  till it hurt, and praying for him to the Mother of God, holding him out  in both arms to the image as though to put him under the Mother’s  protection ... and suddenly a nurse r…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.026200134,
+          "snippet": "brothers-karamazov-book-1  even atheists joined them in their applause.  Finally some sagacious persons opined that the article was nothing but  an impudent satirical burlesque. I mention this incident particularly  because this article penetrated into the famous monastery in our  neighborhood, where the inmates, being particularly interested in the  question of the ecclesiastical courts, were completely bewildered by  it. Learning the author’s name, they were interested in his being a  native of the town and the son of “that Fyodor Pavlovitch.” And just  then it was that the author himself ma…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.02585639,
+          "snippet": "brothers-karamazov-book-1  his children’s education. As for the slaps she  had given him, he drove all over the town telling the story.  It happened that the old lady died soon after this, but she left the  boys in her will a thousand roubles each “for their instruction, and so  that all be spent on them exclusively, with the condition that it be so  portioned out as to last till they are twenty-one, for it is more than  adequate provision for such children. If other people think fit to  throw away their money, let them.” I have not read the will myself, but  I heard there was something queer …"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.025807526,
+          "snippet": "brothers-karamazov-book-1  with a peculiar earnestness. From him Alyosha  learnt all the details of the important affair which had of late formed  such a close and remarkable bond between the two elder brothers.  Dmitri’s enthusiastic references to Ivan were the more striking in  Alyosha’s eyes since Dmitri was, compared with Ivan, almost uneducated,  and the two brothers were such a contrast in personality and character  that it would be difficult to find two men more unlike.  It was at this time that the meeting, or, rather gathering of the  members of this inharmonious family took place in …"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.025794938,
+          "snippet": "brothers-karamazov-book-1  lady who had brought up their mother.  She was still alive, and had not, all those eight years, forgotten the  insult done her. All that time she was obtaining exact information as  to her Sofya’s manner of life, and hearing of her illness and hideous  surroundings she declared aloud two or three times to her retainers:  “It serves her right. God has punished her for her ingratitude.”  Exactly three months after Sofya Ivanovna’s death the general’s widow  suddenly appeared in our town, and went straight to Fyodor Pavlovitch’s  house. She spent only half an hour in th…"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "Alyosha",
+          "Ivan",
+          "atheist",
+          "realist",
+          "miracle",
+          "immortal",
+          "socialis",
+          "Babel"
+        ],
+        "missing": [],
+        "total_expected": 8,
+        "ratio": 1.0
+      },
+      "embed_ms": 73,
+      "search_ms": 22,
+      "corpora_hit": [
+        "brothers-karamazov-book-1"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "bk_tension_spiritual_secular_authority",
+      "category": "tension",
+      "question": "Where do spiritual authority and secular or legal authority come into conflict in Book I?",
+      "retrieved": [
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.03181818,
+          "snippet": "brothers-karamazov-book-1  old legend. But here is a recent instance.  A monk was suddenly commanded by his elder to quit Athos, which he  loved as a sacred place and a haven of refuge, and to go first to  Jerusalem to do homage to the Holy Places and then to go to the north  to Siberia: “There is the place for thee and not here.” The monk,  overwhelmed with sorrow, went to the Œcumenical Patriarch at  Constantinople and besought him to release him from his obedience. But  the Patriarch replied that not only was he unable to release him, but  there was not and could not be on earth a power whi…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.031778056,
+          "snippet": "brothers-karamazov-book-1  sorry to lose you, Alyosha;  would you believe it, I’ve really grown fond of you? Well, it’s a good  opportunity. You’ll pray for us sinners; we have sinned too much here.  I’ve always been thinking who would pray for me, and whether there’s  any one in the world to do it. My dear boy, I’m awfully stupid about  that. You wouldn’t believe it. Awfully. You see, however stupid I am  about it, I keep thinking, I keep thinking—from time to time, of  course, not all the while. It’s impossible, I think, for the devils to  forget to drag me down to hell with their hooks when…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.030330881,
+          "snippet": "brothers-karamazov-book-1  elder. I must digress to explain what  an “elder” is in Russian monasteries, and I am sorry that I do not feel  very competent to do so. I will try, however, to give a superficial  account of it in a few words. Authorities on the subject assert that  the institution of “elders” is of recent date, not more than a hundred  years old in our monasteries, though in the orthodox East, especially  in Sinai and Athos, it has existed over a thousand years. It is  maintained that it existed in ancient times in Russia also, but through  the calamities which overtook Russia—the …"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.030000001,
+          "snippet": "brothers-karamazov-book-1  even atheists joined them in their applause.  Finally some sagacious persons opined that the article was nothing but  an impudent satirical burlesque. I mention this incident particularly  because this article penetrated into the famous monastery in our  neighborhood, where the inmates, being particularly interested in the  question of the ecclesiastical courts, were completely bewildered by  it. Learning the author’s name, they were interested in his being a  native of the town and the son of “that Fyodor Pavlovitch.” And just  then it was that the author himself ma…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.029761907,
+          "snippet": "brothers-karamazov-book-1  He explained that this was his strong  desire, and that he was solemnly asking his consent as his father. The  old man knew that the elder Zossima, who was living in the monastery  hermitage, had made a special impression upon his “gentle boy.”  “That is the most honest monk among them, of course,” he observed,  after listening in thoughtful silence to Alyosha, and seeming scarcely  surprised at his request. “H’m!... So that’s where you want to be, my  gentle boy?”  He was half drunk, and suddenly he grinned his slow half-drunken grin,  which was not without a certai…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.029642545,
+          "snippet": "brothers-karamazov-book-1  sacrifices, and that to sacrifice, for  instance, five or six years of their seething youth to hard and tedious  study, if only to multiply tenfold their powers of serving the truth  and the cause they have set before them as their goal—such a sacrifice  is utterly beyond the strength of many of them. The path Alyosha chose  was a path going in the opposite direction, but he chose it with the  same thirst for swift achievement. As soon as he reflected seriously he  was convinced of the existence of God and immortality, and at once he  instinctively said to himself: “…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.029571647,
+          "snippet": "brothers-karamazov-book-1  diversion. He was suddenly seized with the  desire to see the monastery and the holy man. As his lawsuit with the  monastery still dragged on, he made it the pretext for seeing the  Superior, in order to attempt to settle it amicably. A visitor coming  with such laudable intentions might be received with more attention and  consideration than if he came from simple curiosity. Influences from  within the monastery were brought to bear on the elder, who of late had  scarcely left his cell, and had been forced by illness to deny even his  ordinary visitors. In the end h…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.029009879,
+          "snippet": "brothers-karamazov-book-1  not to humility and complete self-control  but to the most Satanic pride, that is, to bondage and not to freedom.  The elder Zossima was sixty-five. He came of a family of landowners,  had been in the army in early youth, and served in the Caucasus as an  officer. He had, no doubt, impressed Alyosha by some peculiar quality  of his soul. Alyosha lived in the cell of the elder, who was very fond  of him and let him wait upon him. It must be noted that Alyosha was  bound by no obligation and could go where he pleased and be absent for  whole days. Though he wore the mo…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.02857726,
+          "snippet": "brothers-karamazov-book-1  when he made the acquaintance of the young man,  who interested him extremely, and with whom he sometimes argued and not  without an inner pang compared himself in acquirements.  “He is proud,” he used to say, “he will never be in want of pence; he  has got money enough to go abroad now. What does he want here? Every  one can see that he hasn’t come for money, for his father would never  give him any. He has no taste for drink and dissipation, and yet his  father can’t do without him. They get on so well together!”  That was the truth; the young man had an unmistakab…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.028298203,
+          "snippet": "brothers-karamazov-book-1  them, blessed them, and dismissed them. Of  late he had become so weak through attacks of illness that he was  sometimes unable to leave his cell, and the pilgrims waited for him to  come out for several days. Alyosha did not wonder why they loved him  so, why they fell down before him and wept with emotion merely at  seeing his face. Oh! he understood that for the humble soul of the  Russian peasant, worn out by grief and toil, and still more by the  everlasting injustice and everlasting sin, his own and the world’s, it  was the greatest need and comfort to find som…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.027651515,
+          "snippet": "brothers-karamazov-book-1  dispose realists to belief. The genuine realist, if  he is an unbeliever, will always find strength and ability to  disbelieve in the miraculous, and if he is confronted with a miracle as  an irrefutable fact he would rather disbelieve his own senses than  admit the fact. Even if he admits it, he admits it as a fact of nature  till then unrecognized by him. Faith does not, in the realist, spring  from the miracle but the miracle from faith. If the realist once  believes, then he is bound by his very realism to admit the miraculous  also. The Apostle Thomas said that …"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.02744361,
+          "snippet": "brothers-karamazov-book-1  carrosse._’ How do you know  there are no hooks, darling? When you’ve lived with the monks you’ll  sing a different tune. But go and get at the truth there, and then come  and tell me. Anyway it’s easier going to the other world if one knows  what there is there. Besides, it will be more seemly for you with the  monks than here with me, with a drunken old man and young harlots ...  though you’re like an angel, nothing touches you. And I dare say  nothing will touch you there. That’s why I let you go, because I hope  for that. You’ve got all your wits about you. You w…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.027205883,
+          "snippet": "brothers-karamazov-book-1  snigger. In a man so depraved this  might, of course, mean no more than sensual attraction. As he had  received no dowry with his wife, and had, so to speak, taken her “from  the halter,” he did not stand on ceremony with her. Making her feel  that she had “wronged” him, he took advantage of her phenomenal  meekness and submissiveness to trample on the elementary decencies of  marriage. He gathered loose women into his house, and carried on orgies  of debauchery in his wife’s presence. To show what a pass things had  come to, I may mention that Grigory, the gloomy, s…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.027118042,
+          "snippet": "brothers-karamazov-book-1  elder was one who took your soul, your will,  into his soul and his will. When you choose an elder, you renounce your  own will and yield it to him in complete submission, complete  self-abnegation. This novitiate, this terrible school of abnegation, is  undertaken voluntarily, in the hope of self-conquest, of self-mastery,  in order, after a life of obedience, to attain perfect freedom, that  is, from self; to escape the lot of those who have lived their whole  life without finding their true selves in themselves. This institution  of elders is not founded on theory…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.026041668,
+          "snippet": "brothers-karamazov-book-1  sixpenny lessons and afterwards getting  paragraphs on street incidents into the newspapers under the signature  of “Eye-Witness.” These paragraphs, it was said, were so interesting  and piquant that they were soon taken. This alone showed the young  man’s practical and intellectual superiority over the masses of needy  and unfortunate students of both sexes who hang about the offices of  the newspapers and journals, unable to think of anything better than  everlasting entreaties for copying and translations from the French.  Having once got into touch with the edito…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.025603864,
+          "snippet": "brothers-karamazov-book-1  beat his wife but was beaten by her, for she  was a hot-tempered, bold, dark-browed, impatient woman, possessed of  remarkable physical strength. Finally, she left the house and ran away  from Fyodor Pavlovitch with a destitute divinity student, leaving  Mitya, a child of three years old, in her husband’s hands. Immediately  Fyodor Pavlovitch introduced a regular harem into the house, and  abandoned himself to orgies of drunkenness. In the intervals he used to  drive all over the province, complaining tearfully to each and all of  Adelaïda Ivanovna’s having left him,…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.025326537,
+          "snippet": "brothers-karamazov-book-1  will be no  more rich nor poor, no exalted nor humbled, but all will be as the  children of God, and the true Kingdom of Christ will come.” That was  the dream in Alyosha’s heart.  The arrival of his two brothers, whom he had not known till then,  seemed to make a great impression on Alyosha. He more quickly made  friends with his half-brother Dmitri (though he arrived later) than  with his own brother Ivan. He was extremely interested in his brother  Ivan, but when the latter had been two months in the town, though they  had met fairly often, they were still not int…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.024749469,
+          "snippet": "brothers-karamazov-book-1  with his own designs. He gathered only that the  young man was frivolous, unruly, of violent passions, impatient, and  dissipated, and that if he could only obtain ready money he would be  satisfied, although only, of course, for a short time. So Fyodor  Pavlovitch began to take advantage of this fact, sending him from time  to time small doles, installments. In the end, when four years later,  Mitya, losing patience, came a second time to our little town to settle  up once for all with his father, it turned out to his amazement that he  had nothing, that it was diff…"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0245408,
+          "snippet": "brothers-karamazov-book-1  very successfully, though, no doubt, not  over-scrupulously. Sofya Ivanovna was the daughter of an obscure  deacon, and was left from childhood an orphan without relations. She  grew up in the house of a general’s widow, a wealthy old lady of good  position, who was at once her benefactress and tormentor. I do not know  the details, but I have only heard that the orphan girl, a meek and  gentle creature, was once cut down from a halter in which she was  hanging from a nail in the loft, so terrible were her sufferings from  the caprice and everlasting nagging of this …"
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.024527187,
+          "snippet": "brothers-karamazov-book-1  acknowledged at the time that that  was the only object of his visit. But it can hardly have been the whole  reason of it. It is more probable that he himself did not understand  and could not explain what had suddenly arisen in his soul, and drawn  him irresistibly into a new, unknown, but inevitable path. Fyodor  Pavlovitch could not show him where his second wife was buried, for he  had never visited her grave since he had thrown earth upon her coffin,  and in the course of years had entirely forgotten where she was buried.  Fyodor Pavlovitch, by the way, had for …"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "monaster",
+          "lawsuit",
+          "Ivan",
+          "ecclesiastical",
+          "court",
+          "elder"
+        ],
+        "missing": [
+          "clerical"
+        ],
+        "total_expected": 7,
+        "ratio": 0.85714287
+      },
+      "embed_ms": 70,
+      "search_ms": 22,
+      "corpora_hit": [
+        "brothers-karamazov-book-1"
+      ],
+      "vector_eligible": true
+    }
+  ]
+}
