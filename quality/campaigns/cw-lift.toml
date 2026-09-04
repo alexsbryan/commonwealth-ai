@@ -52,6 +52,15 @@ status    = "open"
 #   R   the ratchets + the push decision                      <- OFF-PLAN
 #   G   gate integrity: two gates that pass without running   <- OFF-PLAN
 #
+# G's first finding was RE-DIAGNOSED 2026-09-04 after it reproduced on a
+# one-file commit. `scripts/pre-commit.sh` is not diff-size sensitive: it
+# `export`s the whole work atlas (`work_in_flight --scope=` matches
+# everything), which measured 4,716,818 bytes against an ARG_MAX of 1,048,576.
+# Every child `python3`/`grep` has been dying with E2BIG, and the hook is
+# advisory so the commit proceeds. Both its checks have been silently off on
+# this host for as long as the atlas has been that big. Fix is ~2 lines: export
+# the PATH to a temp file, not the payload.
+#
 # 1b-1d SEVERING THE RAIL is the critical path. Phase 2 is the hard
 # precondition for ALL sovereign-mesh work; nothing may touch that crate's
 # substrate-shaped code before it lands.
