@@ -47,6 +47,7 @@ status    = "active"
 #   1c  consumers name the rail, facade gone  b94d399eb  DONE      -10
 #   1d  re-derived: the last knowledge edge      84e6fd1c0  DONE        0
 #   1e  RingVerifier seam (Membership DROPPED)  34d308b85  DONE     +104
+#   S   the rail's sealed floor — it can delete   dc9010181  DONE     +171
 #   ── open ──
 #   1f  DESCOPED 2026-09-04 — canon x rail was a way to EXERCISE the work, not
 #       a product. Operator: "there's no current genuine product interest in
@@ -116,11 +117,14 @@ status       = "open"
 #           through six files. Against a remaining allowance of +351.
 #   -------
 #   -4,525  LANDED THROUGH 1e. One rung still open, at its budget CEILING:
+#     +171  S ACTUAL (dc9010181), the sealed floor. 151 of the 171 are TESTS;
+#           the mechanism is TWENTY lines (sync +12, admit +6, lib +2).
 #     +550  1f  <- DESCOPED, see the ladder. Was the largest single line in
 #           the plan and it is no longer spent.
 #   -------
-#   -3,975  vs the floor of -3,800 -> CLEARED BY 175 as projected WITH 1f.
-#   -4,525  the position WITHOUT it -> clears by 725.
+#   -4,354  LANDED. Floor is -3,800, so it CLEARS BY 554 with nothing
+#           outstanding but Phase 2, whose two largest rungs (2b, 2e) are
+#           DELETIONS. This bar is no longer at risk from either direction.
 #
 # Dropping 1f is not how this bar was won — Phase 1 cleared the floor on its
 # own actuals before the descope, and the descope was a signal decision rather

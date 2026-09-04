@@ -15,9 +15,9 @@
 1023	commonwealth/crates/commonwealth-inference::tests
 2836	commonwealth/crates/commonwealth-knowledge
 662	commonwealth/crates/commonwealth-knowledge::tests
-450	commonwealth/crates/commonwealth-rail
-1116	commonwealth/crates/commonwealth-rail-core
-217	commonwealth/crates/commonwealth-rail-core::tests
+490	commonwealth/crates/commonwealth-rail
+1212	commonwealth/crates/commonwealth-rail-core
+253	commonwealth/crates/commonwealth-rail-core::tests
 2	commonwealth/crates/commonwealth-rail::tests
 966	commonwealth/crates/commonwealth-state
 659	commonwealth/crates/commonwealth-state::tests
