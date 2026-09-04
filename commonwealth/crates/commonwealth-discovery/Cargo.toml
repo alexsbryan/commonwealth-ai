@@ -1,6 +1,6 @@
 [package]
 name = "commonwealth-discovery"
-description = "mDNS discovery, gossip protocol, and latency probing for Commonwealth"
+description = "Founding and joining a Commonwealth mesh: join keys, mDNS discovery, local hardware survey"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

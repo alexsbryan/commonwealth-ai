@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Node identity keys — the Ed25519 keypair behind
-//! [`NodePubkey`](commonwealth_core::ids::NodePubkey).
+//! [`commonwealth_core::ids::NodePubkey`].
 //!
 //! The 32-byte seed persisted at `<data_dir>/node_key` is, byte for
 //! byte, a valid iroh `SecretKey`: when the dial-by-key transport

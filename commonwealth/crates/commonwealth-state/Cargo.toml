@@ -1,5 +1,6 @@
 [package]
 name = "commonwealth-state"
+description = "MeshStore — a small gossip-replicated SQLite key/value store shared by every node in a mesh"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

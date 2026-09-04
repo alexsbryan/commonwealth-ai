@@ -25,11 +25,12 @@ use commonwealth_core::ids::NodeId;
 use crate::{PeerContact, PeerEndpoint, PeerTransport, TrafficClass};
 
 /// Routes each [`TrafficClass`] to a transport, falling back to
-/// `default` (the IP overlay) per dial — UNLESS the class is in
-/// [`Self::required`], in which case it fails CLOSED (no plaintext
-/// fallback). The mesh-wide encryption policy drives the required set:
-/// when `Mesh::require_encryption` is on, the daemon puts every class
-/// in it, so an encrypted mesh never degrades a dial to plaintext.
+/// `default` (the IP overlay) per dial — UNLESS the class was named
+/// required at construction ([`Self::with_required`]), in which case it
+/// fails CLOSED (no plaintext fallback). The mesh-wide encryption policy
+/// drives that set: when `Mesh::require_encryption` is on, the daemon
+/// puts every class in it, so an encrypted mesh never degrades a dial to
+/// plaintext.
 #[derive(Debug)]
 pub struct RoutedTransport {
     per_class: HashMap<TrafficClass, Arc<dyn PeerTransport>>,

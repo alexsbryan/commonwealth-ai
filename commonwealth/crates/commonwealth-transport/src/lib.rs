@@ -1,44 +1,82 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The PeerTransport seam — how this node reaches a mesh peer.
+//! One question, asked in one place: how does this node reach that peer?
 //!
-//! Today every peer conversation is HTTP to an IP the peer gossiped
-//! (the Tailscale/LAN overlay provides reachability). This crate
-//! exists so that fact lives in exactly one place: call sites ask
-//! "give me dialable endpoints for this peer and this kind of
-//! traffic" instead of `format!("http://{ip}:{port}/…")`. A future
-//! transport that dials by node identity rather than by IP (e.g.
-//! iroh — QUIC by Ed25519 key with hole-punching and relays) slots
-//! in behind the same trait without touching call sites.
+//! # What this is for
 //!
-//! Deliberate altitude: the transport resolves *(peer, traffic
-//! class) → ordered candidate base URLs*. It does NOT own the HTTP
-//! client — call sites keep their existing `reqwest` clients and
-//! per-class timeouts (gossip 3s, status probe 800ms, inference
-//! 1800s), which is what makes the IP path provably unchanged by
-//! this seam. Route paths (`/internal/gossip`, `/v1`, …) also stay
-//! at call sites: the transport is below the route layer.
+//! Every part of a daemon that talks to a peer used to build its own URL —
+//! `format!("http://{ip}:{port}/internal/gossip")`, and a different spelling
+//! two files over. That works right up until "reach a peer" stops meaning "we
+//! know its IP": a node behind a NAT with no VPN has no address anyone can
+//! write into a string. This crate is the seam that makes that a
+//! one-implementation change instead of a hundred call-site ones.
 //!
-//! Migration order is encoded by [`TrafficClass`], not by config:
-//! when a second transport arrives, a `RoutedTransport` that maps
-//! classes to transports (gossip first, blob transfer next,
-//! inference streaming last) implements [`PeerTransport`] and slots
-//! into the same `Arc<dyn PeerTransport>` with zero call-site churn.
-//! Until there are two transports, no such registry exists.
+//! A call site asks [`PeerTransport::endpoints`] for a [`PeerContact`] and a
+//! [`TrafficClass`], and gets back ordered [`PeerEndpoint`]s to try in turn.
+//! [`peer_contact`] is the one conversion from a
+//! [`commonwealth_core::mesh::MemberRecord`] to what a transport
+//! is allowed to see. Two implementations ship: [`IpTransport`], the overlay
+//! path everything runs on today, and `iroh::IrohTransport` behind the `iroh`
+//! feature, which dials by Ed25519 key. [`RoutedTransport`] composes them per
+//! class.
 //!
-//! Out of scope, by design: the loopback self-probe, worker-pod
-//! pinned-TLS endpoints (separate trust model, already seamed via
-//! `PinnedTransport`), and the raw TCP that spawned
-//! `llama-server`/`rpc-server` processes speak to each other
-//! (third-party binaries; they stay on the IP overlay until a
-//! tunnel-proxy is worth building) — that tensor-split RPC is the sole
-//! residual plaintext on an ENCRYPTED mesh.
+//! [`identity`] is the sibling half: the node's own Ed25519 keypair, persisted
+//! as a 32-byte seed at `<data_dir>/node_key`. That file is byte-for-byte a
+//! valid iroh secret key, which is the point — verifying a peer's identity and
+//! being able to dial it become the same fact rather than two systems that
+//! have to agree.
 //!
-//! The join handshake was historically out of scope (pre-membership —
-//! no `PeerContact` yet), but an encrypted mesh now joins over iroh:
-//! the invite carries the founder's dial string and
-//! `sovereign-mesh::join::perform_encrypted_join` dials by key, so the
-//! join secret never crosses plaintext. A plaintext mesh still joins
-//! over the IP overlay.
+//! # Three decisions worth knowing before reading the code
+//!
+//! **The seam resolves an address and stops.** It hands back scheme and
+//! authority — `http://100.64.0.2:9742` — and nothing else. Route paths stay
+//! at call sites, and so do the `reqwest` clients and their per-class timeouts
+//! (gossip 3s, status probe 800ms, inference 1800s). That narrowness is what
+//! let the seam land under live traffic with the IP path provably unchanged:
+//! there was no behaviour left in it to change. It also sets the altitude — the
+//! transport is below the route layer, and a question that needs a path or a
+//! body is being asked one layer too low.
+//!
+//! **[`TrafficClass`] is the migration order, and it is in the type system.**
+//! The seven variants partition every peer conversation in the codebase.
+//! Moving to a new transport is not a config flip and not a rewrite: it is
+//! mapping one class to a different transport in a [`RoutedTransport`], whose
+//! candidates are concatenated ahead of the default's. Gossip goes first,
+//! blob transfer next, inference streaming last. Because call sites already
+//! try candidates in order and stop at the first success, per-dial fallback to
+//! the IP path is free — a failed dial degrades on the *same* request.
+//!
+//! **Opportunistic by default, fail-closed on demand.** That free fallback is
+//! wrong when the mesh has declared itself encrypted, because degrading to the
+//! IP path means degrading to plaintext. So a class can be named *required* at
+//! construction ([`RoutedTransport::with_required`]), and a required class
+//! whose encrypted transport yields no candidates returns none — the dial
+//! fails rather than quietly downgrading. `Mesh::require_encryption` is what
+//! puts every class in that set.
+//!
+//! # What a `PeerContact` deliberately does not carry
+//!
+//! Addresses, the Ed25519 key, and the iroh relay and direct hints. Not
+//! capabilities, not status, not anything else on the member record — the
+//! struct exists so that "which fields may influence dialing" is a decision
+//! made once, in [`peer_contact`], rather than at every transport that could
+//! have taken a `&MemberRecord` and read whatever it liked.
+//!
+//! # What is out of scope, and one of them is a real hole
+//!
+//! The loopback self-probe and worker-pod pinned-TLS endpoints are separate
+//! trust models and stay separate. The join handshake used to be out of scope
+//! too — pre-membership, no `PeerContact` yet — but an encrypted mesh now
+//! joins over iroh: the invite carries the founder's dial string, so the join
+//! secret never crosses plaintext. A plaintext mesh still joins over the IP
+//! overlay.
+//!
+//! [`TrafficClass::RpcTensor`] is the hole and is worth saying plainly. It is
+//! the raw ggml tensor-split byte stream between spawned `llama-server` /
+//! `rpc-server` processes — third-party binaries speaking TCP, not HTTP, on
+//! per-worker ports that are advertised rather than uniform. [`IpTransport`]
+//! returns no candidates for it, discovery does its own probing, and on an
+//! otherwise encrypted mesh **this is the one remaining plaintext path**.
+//! Closing it needs a tunnel-proxy sidecar, which nobody has built.
 
 pub mod identity;
 mod ip;

@@ -18,10 +18,11 @@
 //!
 //! What they DID share was a defect: nothing named them, so the set was not
 //! enumerable and a missing case was invisible. The per-record decision now
-//! lands as a [`MemberOutcome`], and [`MergeReport::record`] is the ONE place
-//! an outcome becomes a number — five scattered increments and two duplicated
-//! `warn!` blocks before. A new path cannot compile without deciding its
-//! outcome, and a new outcome cannot compile without the fold handling it.
+//! lands as a [`MemberOutcome`], which one crate-private fold on
+//! [`MergeReport`] turns into a number — the ONE place that happens, against
+//! five scattered increments and two duplicated `warn!` blocks before. A new
+//! path cannot compile without deciding its outcome, and a new outcome cannot
+//! compile without the fold handling it.
 //!
 //! **The fields are private, and that is the half that makes the rest true.**
 //! An exhaustive fold stops a new OUTCOME going uncounted; it does nothing
@@ -29,8 +30,8 @@
 //! entirely. Both doors are now shut by the compiler, and both were watched
 //! shutting: a fifth variant the fold does not handle fails with E0004, and a
 //! direct tally from the round loop fails with E0616. Reads go through
-//! accessors; the only writers are [`MergeReport::record`] and the two
-//! constructors.
+//! accessors on [`MergeReport`]; the only writers are its crate-private
+//! `record` fold and its two constructors.
 //!
 //! Two properties the merge loop needs, which is why the variants are shaped
 //! this way:

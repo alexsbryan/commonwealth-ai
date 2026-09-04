@@ -65,7 +65,7 @@ impl From<&MemberRecord> for EndpointClaim {
 ///
 /// A tombstoned row may legitimately share a key with a rejoined node — a
 /// genuine rejoin stamps activity newer than the removal and wins the LWW
-/// ([`MemberRecord::effective_at`]). A naive "no two rows share a key" would
+/// ([`MemberRecord::event_time`]). A naive "no two rows share a key" would
 /// fire on every legitimate rejoin and be switched off within a week.
 /// `active` on BOTH sides is what keeps this from crying wolf.
 ///

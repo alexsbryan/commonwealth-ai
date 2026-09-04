@@ -22,8 +22,8 @@ use crate::ids::{MeshId, NodeId, NodePubkey};
 /// Accumulate-then-compare rather than early return: the loop runs all 32
 /// bytes regardless of input, so the timing carries no information.
 /// Whether the operator has declared the fleet fully post-split, so
-/// [`Mesh::gossip_authorized`] may refuse the legacy arm instead of falling
-/// back to it. Off by default — see `sovereign/DEFAULTS_LEDGER.md`.
+/// `Mesh::gossip_authorized_with` may refuse the legacy arm instead of
+/// falling back to it. Off by default — see `sovereign/DEFAULTS_LEDGER.md`.
 ///
 /// Read once: this sits in the gossip hot path, and a knob whose value can
 /// change mid-run would make "which predicate authorized this round" depend on
@@ -132,14 +132,14 @@ pub struct Mesh {
     /// `[0u8; 32]` means "not set", which happens two ways: a peer running a
     /// pre-split build (the field is absent from its wire payload and serde
     /// defaults it), or a `mesh.json` written before the split and not yet
-    /// migrated. Both are handled by [`Mesh::gossip_authorized`].
+    /// migrated. Both are handled by `Mesh::gossip_authorized_with`.
     #[serde(default)]
     pub mesh_secret: [u8; 32],
 
     /// Join admission — "may this node in". BLAKE3 hash of the invite key;
     /// the raw key is never persisted. Rotates freely, and rotation is
-    /// invisible to gossip because [`Mesh::gossip_authorized`] does not read
-    /// it once both sides carry a `mesh_secret`.
+    /// invisible to gossip because `Mesh::gossip_authorized_with` does not
+    /// read it once both sides carry a `mesh_secret`.
     ///
     /// Serialized under its historical name so wire and `mesh.json` bytes stay
     /// identical for pre-split peers.
@@ -292,7 +292,11 @@ impl MemberRecord {
     /// LWW key in [`Mesh::merge_from`]: a removal stamped after the node's last
     /// heartbeat out-competes stale live copies, but a rejoin whose `last_seen`
     /// post-dates the removal out-competes the tombstone.
-    fn event_time(&self) -> u64 {
+    ///
+    /// Public because it is the ONE ordering rule for a member record and
+    /// `sovereign-mesh`'s gossip loop reasons about it in a comment for want
+    /// of a name it could call (ARCH §10.6).
+    pub fn event_time(&self) -> u64 {
         self.last_seen.max(self.removed_at.unwrap_or(0))
     }
 }
@@ -491,7 +495,7 @@ impl Mesh {
     /// updated 0" in tracing logs — useful for noticing when gossip
     /// is actually converging vs. spinning.
     ///
-    /// Rejects outright when [`Mesh::gossip_authorized`] says no — that's the
+    /// Rejects outright when `gossip_authorized_with` says no — that's the
     /// auth boundary. Anyone who knows our mesh_id (public via mDNS) but not
     /// the mesh secret shouldn't be able to inject members into our view.
     pub fn merge_from(&mut self, self_node_id: NodeId, other: &Mesh) -> MergeReport {
@@ -569,8 +573,8 @@ impl Mesh {
     }
 
     /// Decide what one incoming member record does to the local roster, and
-    /// apply it. Returns the decision; [`MergeReport::record`] is what turns
-    /// it into a number.
+    /// apply it. Returns the decision; [`MergeReport`]'s own `record` fold is
+    /// what turns it into a number.
     ///
     /// Split out of the round loop so the four paths are four returns rather
     /// than five scattered counter increments and two `continue`s. The

@@ -34,19 +34,8 @@ pub struct RetentionGc {
     interval: Duration,
     /// `None` = sweep every app in the store (the original,
     /// whole-store behaviour). `Some(app_id)` = bound exactly one
-    /// namespace and leave every other app's entries alone.
-    ///
-    /// WHY THE SCOPE EXISTS. A `MeshStore` is shared by apps with
-    /// opposite retention semantics. The contributions ledger is an
-    /// append-only event log that grows without bound and is read only
-    /// over a trailing window, so old rows are provably dead. But the
-    /// SAME store holds processed-shards dedup markers
-    /// (`PROCESSED_SHARDS_APP_ID`) and ingestion-handoff records
-    /// (`corpus-engine/handoff:*`) that are written once and
-    /// deliberately never rewritten — deleting those on age re-opens
-    /// ingest work the mesh already completed. A daemon that needs the
-    /// ledger bounded must therefore be able to say so without
-    /// inheriting a whole-store delete.
+    /// namespace and leave every other app's entries alone. Set by
+    /// [`RetentionGc::scoped_to_app`], whose docs carry the why.
     app_scope: Option<String>,
 }
 
@@ -60,7 +49,18 @@ impl RetentionGc {
         }
     }
 
-    /// Restrict this GC to a single `app_id`. See [`RetentionGc::app_scope`].
+    /// Restrict this GC to a single `app_id`, leaving every other app's
+    /// entries alone. Unset, it sweeps the whole store.
+    ///
+    /// Scope it unless you have checked every app sharing the store. One
+    /// [`MeshStore`] holds apps with opposite retention semantics: the
+    /// contributions ledger is an append-only event log read only over a
+    /// trailing window, so old rows there are provably dead — but the same
+    /// store holds processed-shard dedup markers
+    /// (`crate::processed_shards::PROCESSED_SHARDS_APP_ID`) and
+    /// ingestion-handoff records (`corpus-engine/handoff:*`) that are written
+    /// once and deliberately never rewritten. Deleting those on age re-opens
+    /// ingest work the mesh already finished.
     pub fn scoped_to_app(mut self, app_id: impl Into<String>) -> Self {
         self.app_scope = Some(app_id.into());
         self

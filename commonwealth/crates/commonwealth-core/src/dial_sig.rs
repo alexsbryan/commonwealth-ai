@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Signed iroh dial-info — tamper-evidence for the mutable reachability
-//! fields (`relay_url` + `iroh_direct_addrs`) on a [`MemberRecord`].
+//! fields (`relay_url` + `iroh_direct_addrs`) on a
+//! [`MemberRecord`](crate::mesh::MemberRecord).
 //!
 //! Those fields ride last-writer-wins gossip, so without a signature a
 //! peer past the `invite_key_hash` auth boundary could publish a
