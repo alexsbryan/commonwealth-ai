@@ -561,7 +561,7 @@ impl RpcShardWarmer for MeshRpcShardWarmer {
                 let urls = merge_bases(
                     transport_bases
                         .iter()
-                        .map(|b| format!("{b}/internal/v1/models/file/{}", req.model_id)),
+                        .map(|b| commonwealth_core::model::model_file_url(b, &req.model_id)),
                     source_urls,
                 );
                 // Per-file lists get the same transport-first merge. The file
@@ -582,7 +582,7 @@ impl RpcShardWarmer for MeshRpcShardWarmer {
                         merge_bases(
                             transport_bases
                                 .iter()
-                                .map(|b| format!("{b}/internal/v1/models/file/{name}")),
+                                .map(|b| commonwealth_core::model::model_file_url(b, &name)),
                             urls_for_file,
                         )
                     })
@@ -823,7 +823,7 @@ async fn orchestrate_warm(
                     .map(|f| {
                         ordered_bases
                             .iter()
-                            .map(|b| format!("{b}/internal/v1/models/file/{f}"))
+                            .map(|b| commonwealth_core::model::model_file_url(b, f))
                             .collect()
                     })
                     .collect();

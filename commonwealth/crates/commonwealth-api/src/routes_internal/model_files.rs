@@ -52,17 +52,9 @@ use tokio_util::io::ReaderStream;
 
 use crate::state::AppState;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModelFileInfo {
-    pub name: String,
-    pub size_bytes: u64,
-    pub sha256: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ListResponse {
-    pub files: Vec<ModelFileInfo>,
-}
+// The wire vocabulary lives in `commonwealth_core::model` — both ends of
+// this protocol must agree on it, and that is the lowest crate both reach.
+pub use commonwealth_core::model::{ModelFileInfo, ModelFileListing};
 
 #[derive(Debug, Serialize)]
 pub struct ErrorBody {
@@ -135,7 +127,7 @@ fn cached_or_compute_sha(path: &Path, size: u64, mtime: i64) -> std::io::Result<
 
 /// GET /internal/v1/models/list — enumerate this daemon's
 /// servable GGUF files with verification metadata.
-pub async fn list_model_files(State(state): State<AppState>) -> Json<ListResponse> {
+pub async fn list_model_files(State(state): State<AppState>) -> Json<ModelFileListing> {
     let allowlist = state.inner.servable_model_files.load();
     let mut files = Vec::with_capacity(allowlist.len());
     for path in allowlist.iter() {
@@ -191,7 +183,7 @@ pub async fn list_model_files(State(state): State<AppState>) -> Json<ListRespons
             sha256: sha,
         });
     }
-    Json(ListResponse { files })
+    Json(ModelFileListing { files })
 }
 
 /// Parse a single HTTP byte-range header (`bytes=START-END`, open-ended
@@ -469,8 +461,8 @@ mod tests {
 
     fn router(state: AppState) -> Router {
         Router::new()
-            .route("/internal/v1/models/list", get(list_model_files))
-            .route("/internal/v1/models/file/{name}", get(serve_model_file))
+            .route(commonwealth_core::model::MODELS_LIST_PATH, get(list_model_files))
+            .route(commonwealth_core::model::MODEL_FILE_ROUTE, get(serve_model_file))
             .with_state(state)
     }
 
@@ -499,7 +491,7 @@ mod tests {
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
         let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
-        let parsed: ListResponse = serde_json::from_slice(&bytes).unwrap();
+        let parsed: ModelFileListing = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(parsed.files.len(), 1);
         assert_eq!(parsed.files[0].name, "Darwin-9B-Opus.Q4_K_M.gguf");
         assert_eq!(parsed.files[0].size_bytes, 4);

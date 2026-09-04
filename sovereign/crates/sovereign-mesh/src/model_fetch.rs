@@ -10,28 +10,19 @@
 //!     configured GGUF is missing from disk and at least one mesh
 //!     peer advertises it on `/internal/v1/models/list`
 //!
-//! The wire types here mirror the server side; they are kept in
-//! this crate (instead of imported from commonwealth-api) because
-//! sovereign-mesh already depends on commonwealth-api transitively
-//! for AppState integration but reaching that direction for two
-//! types adds a non-trivial import path. Duplication here is small
-//! and the wire format is locked by the integration tests below.
+//! The wire types come from `commonwealth_core::model`. They were declared
+//! here as well until 2026-09-04, under a header claiming the commonwealth-api
+//! dependency was only transitive and that the tests below locked the wire
+//! format. Both claims were false: the dependency is direct and declared in
+//! this crate's Cargo.toml, and `spawn_test_server` serialises THIS file's own
+//! types, so it proved the client agreed with itself. What the fork actually
+//! cost is visible at `rpc_warm_http.rs` — the server grew HTTP Range support
+//! in 2026-06 and this client still cannot ask for one.
 
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModelFileInfo {
-    pub name: String,
-    pub size_bytes: u64,
-    pub sha256: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ListResponse {
-    pub files: Vec<ModelFileInfo>,
-}
+pub use commonwealth_core::model::{ModelFileInfo, ModelFileListing};
 
 #[derive(Debug, thiserror::Error)]
 pub enum FetchError {
@@ -57,11 +48,8 @@ pub enum FetchError {
 pub async fn list_peer_files(
     http: &reqwest::Client,
     peer_base: &str,
-) -> Result<ListResponse, FetchError> {
-    let url = format!(
-        "{}/internal/v1/models/list",
-        peer_base.trim_end_matches('/')
-    );
+) -> Result<ModelFileListing, FetchError> {
+    let url = commonwealth_core::model::models_list_url(peer_base);
     let resp = http.get(&url).send().await?;
     if !resp.status().is_success() {
         return Err(FetchError::HttpStatus(resp.status()));
@@ -95,10 +83,9 @@ pub async fn fetch_model_to_dir(
     let final_path = dest_dir.join(&info.name);
     let partial_path = dest_dir.join(format!(".{}.{}.partial", info.name, std::process::id()));
 
-    let url = format!(
-        "{}/internal/v1/models/file/{}",
-        peer_base.trim_end_matches('/'),
-        urlencoding::encode(&info.name),
+    let url = commonwealth_core::model::model_file_url(
+        peer_base,
+        &urlencoding::encode(&info.name),
     );
     let resp = http.get(&url).send().await?;
     if !resp.status().is_success() {
@@ -199,7 +186,7 @@ mod tests {
                         sha256: sha,
                     });
                 }
-                axum::Json(ListResponse { files })
+                axum::Json(ModelFileListing { files })
             }
         };
         let dir_for_serve = dir_owned.clone();
