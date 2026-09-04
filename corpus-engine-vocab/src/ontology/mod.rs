@@ -35,7 +35,7 @@ use decl::{
     OntologyTypeDecl, OntologyVocabulary, PatternDecl, SupersessionClock, TensionDecl, TypeKind,
     VoicesDecl,
 };
-pub use navigation::{NavigationPolicy, QuestionKind, SeedPolicy, WalkPolicy};
+pub use navigation::{NavigationPolicy, QuestionKind, SeedPolicy, WalkPolicy, DEFAULT_BUDGET};
 
 /// Epistemic vocabulary for one pipeline (scaffold §8.1 of the spec).
 /// Lives on the `Pipeline` trait; the CLI prints these in `show`

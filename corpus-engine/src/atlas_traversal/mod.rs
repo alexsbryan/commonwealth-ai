@@ -13,6 +13,13 @@
 //! the classifier *does* match, the plan captures everything the
 //! traversal engine needs to walk the atlas deterministically.
 //!
+//! Its sibling `question_kind.rs` answers a DIFFERENT question and
+//! by a different method: which row of the navigation table a
+//! reader's question selects, by centroid over the map's own
+//! exemplars (ARCH §2.4). The two do not overlap — this one names a
+//! target entity for the brief assembler, that one names a walk —
+//! and neither replaces the other.
+//!
 //! The brief assembler (`brief.rs`) renders a `TraversalResult`
 //! into prose. Every atom carries an `enrichment_depth` tag and
 //! the assembler calibrates language on it: `Extracted` atoms
@@ -26,9 +33,11 @@
 pub mod brief;
 pub mod classifier;
 pub mod engine;
+pub mod question_kind;
 pub mod spans;
 
 pub use brief::{assemble_brief, depth_frame_records, Brief};
 pub use classifier::{classify_query, classify_query_with, QueryPlan, QueryTarget};
 pub use engine::{traverse, TraversalResult};
+pub use question_kind::{KindScore, KindSource, QuestionKindClassifier};
 pub use spans::{detect_atom_spans, AtomSpan};

@@ -40,6 +40,7 @@ pub mod doc_to_atoms;
 pub use corpus_engine_vocab::edges;
 pub mod embeddings;
 pub mod evidence_site;
+pub mod ground;
 pub mod ingestion;
 pub mod migrate_ids;
 pub mod ontology_coverage;
@@ -49,6 +50,7 @@ pub mod registry;
 pub mod resolution;
 pub mod resolution_identity;
 pub mod resolution_ontology;
+pub mod resolve;
 pub mod schema_validation;
 pub mod section_cache;
 pub use corpus_engine_vocab::stable_key;
@@ -72,9 +74,13 @@ pub use cross_corpus::{
     DetectorSummary, MatchTrace, PeerAtomRef, RejectionBucket, RejectionSample,
 };
 pub use edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
-pub use provider::AtlasProvider;
 pub use embeddings::atoms_content_hash;
+pub use ground::{
+    candidate_atlas_ids, ground, navigation_policy_for, select_walk, Degradation, Grounding,
+    MapNode, MapSection, PolicySource, WalkLedger, WalkSelection, MAP_NODE_CAP,
+};
 pub use ingestion::{AtlasData, AtlasIngestion, AtlasIngestionConfig};
+pub use provider::AtlasProvider;
 pub use registry::AtlasIngestionRegistry;
 pub use resolution::{
     fold, resolve_entities_and_events, resolve_entities_and_events_with, resolve_step_3b,
@@ -82,6 +88,7 @@ pub use resolution::{
     TrajectoryTransition,
 };
 pub use resolution_ontology::ResolutionPolicy;
+pub use resolve::{resolve_evidence, EvidenceFetcher, ResolveLedger, ResolvedChunk};
 pub use schema_validation::{
     build_report as build_schema_validation_report, compare_across_corpora, count_open_questions,
     count_transitions_without_trigger, count_ungrounded_claims, SchemaComparison,

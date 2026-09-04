@@ -4,11 +4,16 @@
 //! `shape` says what exists and `derivation` what was inferred; this section
 //! says how a reader WALKS the atlas for each kind of question: which atom
 //! kinds to seed on, which edge kinds to follow, how many hops, and how much
-//! evidence to keep. It is data with a schema. Nothing reads it yet (ei-4,
-//! the walker, is the first consumer); what this file fixes is the shape and
-//! the pre-registered defaults — the spec's table, verbatim — so that a
-//! pipeline or recipe that declares no navigation gets exactly those rows,
-//! and a tuned row is a reviewable diff against them.
+//! evidence to keep. It is data with a schema. Its one consumer is the walk
+//! (`corpus-engine::enrichment::atlas::ground`, ei-4-walk 2026-09-04), which
+//! reads a row per question kind and executes it; what this file fixes is the
+//! shape and the pre-registered defaults — the spec's table, verbatim — so
+//! that a pipeline or recipe that declares no navigation gets exactly those
+//! rows, and a tuned row is a reviewable diff against them.
+//!
+//! A row also carries the [`WalkPolicy::exemplars`] that classify a question
+//! ONTO its kind, so the map answers both "which row" and "how to walk it"
+//! from one declaration.
 //!
 //! Closed sets are enums (ARCH §2): the question kinds are [`QuestionKind`],
 //! the seed kinds reuse [`AtomType`] / [`EntityType`], the edges reuse
@@ -105,12 +110,54 @@ pub struct WalkPolicy {
     /// How many atoms the walk keeps as evidence requests.
     #[serde(default)]
     pub budget: u32,
+    /// What a question of this kind SOUNDS like — the exemplar phrases the
+    /// walker embeds into one centroid per kind to classify open text onto
+    /// the closed set (ARCH §2.4, principle 9).
+    ///
+    /// They live HERE, in the map, and not in the walker's `.rs`, because a
+    /// corpus whose readers phrase a kind differently ("what does this
+    /// catalogue cover" for a numismatic atlas) retunes its classifier by
+    /// editing its own declaration — the same way it retunes seeds and edges.
+    /// The defaults below are the spec's own glosses of the five kinds
+    /// (`EPISTEMIC_INDEX.md` §2.2, column 1), so the pre-registered table and
+    /// the pre-registered exemplars are one artifact.
+    ///
+    /// An EMPTY list is load-bearing: that kind gets no centroid and can
+    /// never be classified, which is how a corpus switches a row off without
+    /// deleting it. Every row empty means the classifier cannot be built at
+    /// all, and the walker says so rather than guessing a kind.
+    #[serde(default)]
+    pub exemplars: Vec<String>,
 }
 
-/// The evidence budget every default row carries — today's atlas-grounding
-/// glue in `sovereign-core` keeps 6 (`EPISTEMIC_INDEX.md` §1, Walk row: "2
-/// hops, budget 6"). One number, one home; the rows below all cite it.
-pub const DEFAULT_BUDGET: u32 = 6;
+/// The evidence budget every default row carries.
+///
+/// TWELVE, read off the live call site rather than off prose: atlas grounding
+/// keeps `((KQ_PER_CORPUS_LIMIT as f32) * 0.6).ceil()` with
+/// `KQ_PER_CORPUS_LIMIT = 20` (`sovereign-core/src/runtime/prompts.rs`), which
+/// is 12. `EPISTEMIC_INDEX.md` §1's Walk row said "budget 6" and this constant
+/// was minted from that sentence; the sentence was wrong about the code, and a
+/// default pre-registered from a mis-citation would have HALVED the evidence
+/// budget of the SEP lane the same campaign is holding flat (principle 4 —
+/// cite, don't recall). The spec row is corrected in the same commit.
+///
+/// The two cannot silently diverge again:
+/// `sovereign-core::runtime::retrieval::atlas_grounding`'s
+/// `the_default_budget_is_the_live_fetch_budget` test asserts the formula
+/// against this constant, and fails if either side moves alone.
+///
+/// One number, one home; the rows below all cite it.
+pub const DEFAULT_BUDGET: u32 = 12;
+
+/// The pre-registered exemplars for one kind — `EPISTEMIC_INDEX.md` §2.2's own
+/// gloss of the kind, plus the two or three phrasings a reader actually types.
+///
+/// Deliberately SHORT and few: a centroid of four phrases is what the router's
+/// axis classifiers use (`scope_classifier.rs`), and a long list drifts toward
+/// a keyword bag, which is the thing §2.4 says not to build.
+fn exemplars(of: &[&str]) -> Vec<String> {
+    of.iter().map(|s| s.to_string()).collect()
+}
 
 impl WalkPolicy {
     /// thematic: seed on Configuration and concept Entity; walk Involves →
@@ -125,6 +172,12 @@ impl WalkPolicy {
             walk: vec![EdgeType::Involves, EdgeType::Tension, EdgeType::Grounds],
             hops: 2,
             budget: DEFAULT_BUDGET,
+            exemplars: exemplars(&[
+                "what is this about",
+                "what are the themes",
+                "what does this work say as a whole",
+                "summarise what this is concerned with",
+            ]),
         }
     }
 
@@ -139,6 +192,12 @@ impl WalkPolicy {
             walk: vec![EdgeType::Transition, EdgeType::Causes],
             hops: 2,
             budget: DEFAULT_BUDGET,
+            exemplars: exemplars(&[
+                "how does this change",
+                "how did it develop over time",
+                "what happens to them over the course of it",
+                "trace the arc of this",
+            ]),
         }
     }
 
@@ -156,6 +215,12 @@ impl WalkPolicy {
             walk: vec![EdgeType::Tension, EdgeType::OpposesIn],
             hops: 1,
             budget: DEFAULT_BUDGET,
+            exemplars: exemplars(&[
+                "where does it disagree",
+                "what tensions does it raise",
+                "which claims contradict each other",
+                "what are the objections to this position",
+            ]),
         }
     }
 
@@ -170,6 +235,12 @@ impl WalkPolicy {
             walk: Vec::new(),
             hops: 0,
             budget: DEFAULT_BUDGET,
+            exemplars: exemplars(&[
+                "which ones are there",
+                "list all of them",
+                "how many of these does it record",
+                "enumerate the items",
+            ]),
         }
     }
 
@@ -184,6 +255,40 @@ impl WalkPolicy {
             walk: vec![EdgeType::Involves],
             hops: 1,
             budget: DEFAULT_BUDGET,
+            exemplars: exemplars(&[
+                "who is this person",
+                "tell me about this one",
+                "what is this thing",
+                "give me the entry for it",
+            ]),
+        }
+    }
+
+    /// The row a walk uses when NO kind was established — the classifier
+    /// abstained, could not be built, or the corpus switched every row off.
+    ///
+    /// It is not a sixth question kind and it is not a guess. It is the
+    /// STATUS QUO ANTE, written down: no seed-kind filter, no edge-kind
+    /// filter, two hops, [`DEFAULT_BUDGET`] — exactly what
+    /// `apply_atlas_grounding` did before it read a map at all. Naming it as
+    /// data means "unclassified" runs one code path with the classified
+    /// cases instead of a second branch, and means the walk cannot silently
+    /// become a different walk when classification fails (ARCH §18.3: the
+    /// substitution is named, in the ledger and in `ask`'s result text).
+    ///
+    /// Empty `seed.kinds` and empty `walk` both mean UNFILTERED here rather
+    /// than "nothing", which is why `hops` carries the distinction: a row
+    /// with `hops: 0` enumerates its seeds (the enumeration row) and a row
+    /// with `hops > 0` and no edge list follows every edge kind.
+    pub fn unfiltered() -> Self {
+        Self {
+            seed: SeedPolicy::default(),
+            walk: Vec::new(),
+            hops: 2,
+            budget: DEFAULT_BUDGET,
+            // Never classified onto, so it needs no exemplars — it is the
+            // row you get when classification did not happen.
+            exemplars: Vec::new(),
         }
     }
 }
@@ -241,6 +346,21 @@ impl NavigationPolicy {
     /// Every row in table order.
     pub fn rows(&self) -> impl Iterator<Item = (QuestionKind, &WalkPolicy)> {
         QuestionKind::ALL.iter().map(move |k| (*k, self.walk(*k)))
+    }
+
+    /// The kinds this table can actually classify onto — every row that
+    /// carries at least one exemplar, in table order.
+    ///
+    /// A row with no exemplars gets no centroid and is unreachable by
+    /// classification (it can still be selected by a caller that already
+    /// knows the kind). An EMPTY result means this map declares no
+    /// classifier at all, and the walker reports that rather than guessing:
+    /// absence is reported, never defaulted (principle 6).
+    pub fn classifiable(&self) -> Vec<(QuestionKind, &[String])> {
+        self.rows()
+            .filter(|(_, w)| !w.exemplars.is_empty())
+            .map(|(k, w)| (k, w.exemplars.as_slice()))
+            .collect()
     }
 }
 

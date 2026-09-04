@@ -8,9 +8,10 @@
 //! ```
 //!
 //! Speaks MCP over stdio (newline-delimited JSON-RPC 2.0: `initialize`,
-//! `tools/list`, `tools/call`). Four tools: `corpus_list`, `corpus_search`
-//! (cited chunks), `atoms_lookup` (declared atlas atoms) and
-//! `corpus_ontology` (what the corpus declared). No sovereign daemon, no local
+//! `tools/list`, `tools/call`). Five tools: `ask` (the default — cited
+//! passages plus the map of ideas the atlas walk traversed to find them),
+//! `corpus_list`, `corpus_search` (cited chunks), `atoms_lookup` (declared
+//! atlas atoms) and `corpus_ontology` (what the corpus declared). No sovereign daemon, no local
 //! model, no mesh — the dep tree carries no llama.cpp, ort or iroh, and
 //! `tests/no_inference_stack.rs` fails if it ever does.
 //!
@@ -19,6 +20,7 @@
 //! Tier 1 (cited chunk search) and tier 1.5 (read what enrichment produced)
 //! cross the seam; the ranking is the separate RAG extraction.
 
+mod ask;
 mod host;
 mod mcp;
 mod tools;

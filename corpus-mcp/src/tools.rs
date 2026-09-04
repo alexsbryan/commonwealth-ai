@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The four tools, and the corpora they run over.
+//! The tools, and the corpora they run over.
 //!
+//! - `ask` — the default (`EPISTEMIC_INDEX.md` §4): embed once, tier 1, walk
+//!   the atlas under the corpus's own navigation policy, resolve the walk's
+//!   evidence, and return cited passages plus a map section. The four below
+//!   stay as the advanced surface for a client that wants the layers apart.
+//!   Composition and rendering live in [`crate::ask`]; the WALK is
+//!   `corpus_engine::enrichment::atlas::ground`, the same function
+//!   `sovereign-core` calls (ei-4-walk: one walk, two hosts).
 //! - `corpus_list` — what is served, with the one fact a caller needs before
 //!   searching: whether the vector leg is live for that corpus.
 //! - `corpus_search` — tier 1: cited chunks from `CorpusIndex::search` (the
@@ -25,8 +32,11 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Result};
+use corpus_engine::enrichment::atlas::context::{open_and_attach_ann_seed_table, AtlasGraph};
+use corpus_engine::enrichment::atlas::ground;
 use corpus_engine::enrichment::atlas::summary::read_current_summary;
 use corpus_engine::enrichment::atlas::writer::{read_atlas_ontology, AtlasOntologyFile};
+use corpus_engine::enrichment::atlas::AtlasProvider;
 use corpus_engine::{CorpusEngine, CorpusIndex, EmbedFn, ScoredChunk};
 use corpus_engine_vocab::atoms::{AtomEnvelope, AtomsFile};
 use serde_json::{json, Value};
@@ -45,6 +55,15 @@ struct Served {
     dims: usize,
     /// The index width matches the endpoint's, so the vector leg runs.
     vector: bool,
+    /// The v2 atlas store, with its ANN seed table attached, or `None` for a
+    /// corpus that has no atlas (or no seed table to attach).
+    ///
+    /// Loaded ONCE at open, on the host's long-lived runtime, because that is
+    /// what `open_and_attach_ann_seed_table` requires — the held
+    /// `lancedb::Table` is queried later, and opening it on a throwaway
+    /// runtime would invalidate it. Loading per `ask` call would also pay the
+    /// atoms.lance read on every question.
+    graph: Option<AtlasGraph>,
 }
 
 pub struct Server {
@@ -93,11 +112,32 @@ impl Server {
                     profile.embed_model, profile.embed_dims
                 );
             }
+            // The atlas, if this corpus has one. Absence is normal (a corpus
+            // that was never enriched) and is REPORTED by `ask` rather than
+            // rendered as a walk that found nothing.
+            let atlas_dir = indexes_dir.join(&id).join("atlas");
+            let graph = match AtlasGraph::load_from_disk(&id, &atlas_dir) {
+                Ok(g) => {
+                    let g = open_and_attach_ann_seed_table(&id, &atlas_dir, g).await;
+                    if !g.has_ann_seed_table() {
+                        eprintln!(
+                            "corpus-mcp: corpus `{id}`: atlas has no `atoms_ann.lance` — `ask` \
+                             will walk from name matches only; run `svrn atlas backfill-ann {id}`"
+                        );
+                    }
+                    Some(g)
+                }
+                Err(e) => {
+                    eprintln!("corpus-mcp: corpus `{id}`: no atlas to walk ({e})");
+                    None
+                }
+            };
             served.push(Served {
                 id,
                 index,
                 dims,
                 vector,
+                graph,
             });
         }
         if served.is_empty() {
@@ -132,9 +172,10 @@ impl Server {
     pub fn instructions(&self) -> String {
         format!(
             "corpus-mcp serves {} corpus(es) from a local corpus-engine index through `{}` \
-             ({}). `corpus_search` returns cited chunks; `atoms_lookup` and \
-             `corpus_ontology` read what enrichment produced and declared. Ranking by atlas \
-             atoms is not part of this host.",
+             ({}). `ask` is the default: cited passages plus the map of ideas the walk \
+             traversed to find them. `corpus_search` returns cited chunks alone; \
+             `atoms_lookup` and `corpus_ontology` read what enrichment produced and \
+             declared.",
             self.served.len(),
             self.profile.base_url,
             self.profile.kind.label()
@@ -147,6 +188,19 @@ impl Server {
             "description": format!("Corpus id. Served: {}.", self.served.iter().map(|s| s.id.as_str()).collect::<Vec<_>>().join(", "))
         });
         json!([
+            {
+                "name": "ask",
+                "description": "Ask a question of a corpus and get cited passages PLUS the map of ideas behind them. Embeds once, searches (vector + full-text), then walks the corpus's knowledge atlas from the ideas nearest the question along its typed edges — tensions, grounding, involvement — and fetches the passages those ideas cite. The result names every idea node traversed, its kind, and the edge followed, and states anything that was missing. Prefer this over corpus_search when the question is about what a collection SAYS, argues, or is about.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "question": { "type": "string", "description": "The question, in the reader's own words." },
+                        "corpus": corpus_prop.clone(),
+                        "limit": { "type": "integer", "description": format!("Top-K search passages before the walk adds its own (default {}).", self.default_limit) }
+                    },
+                    "required": ["question"]
+                }
+            },
             {
                 "name": "corpus_list",
                 "description": "List the corpora this host serves: index width, whether vector search is live, whether an atlas (atoms.json) is present and how many atoms it holds, and whether the corpus declared an ontology.",
@@ -193,6 +247,7 @@ impl Server {
 
     pub async fn call(&self, name: &str, args: &Value) -> Result<ToolOutcome> {
         match name {
+            "ask" => self.ask(args).await,
             "corpus_list" => Ok(self.corpus_list()),
             "corpus_search" => self.corpus_search(args).await,
             "atoms_lookup" => Ok(self.atoms_lookup(args)),
@@ -246,6 +301,133 @@ impl Server {
             is_error: false,
             structured: Some(json!({ "corpora": rows })),
         }
+    }
+
+    /// `ask` — the composed default (`EPISTEMIC_INDEX.md` §4).
+    ///
+    /// Embed once, tier 1, walk, resolve, render. Every step is a call into
+    /// `corpus_engine`; nothing about the walk is decided here, which is what
+    /// makes this host and `sovereign-core` two callers of ONE walk rather
+    /// than two walks that agree today.
+    async fn ask(&self, args: &Value) -> Result<ToolOutcome> {
+        let Some(question) = args["question"].as_str().filter(|q| !q.trim().is_empty()) else {
+            return Ok(refuse("ask needs a non-empty `question`"));
+        };
+        let limit = args["limit"]
+            .as_u64()
+            .map(|l| l as usize)
+            .unwrap_or(self.default_limit);
+        let targets: Vec<&Served> = match args["corpus"].as_str() {
+            Some(id) => match self.served.iter().find(|s| s.id == id) {
+                Some(s) => vec![s],
+                None => {
+                    return Ok(refuse(&format!(
+                        "corpus `{id}` is not served; served: {}",
+                        self.served
+                            .iter()
+                            .map(|s| s.id.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )))
+                }
+            },
+            None => self.served.iter().collect(),
+        };
+
+        // ── one embedding, for both the search and the walk ──────────────
+        //
+        // The walk seeds against `atoms_ann.lance`, which was built with the
+        // QUERY-side embedder; the same vector serves the chunk search. Two
+        // embeddings of one question would be two vector spaces (see
+        // `sovereign-core/src/embed_fn.rs`), so there is exactly one call.
+        let wants_vector =
+            targets.iter().any(|t| t.vector) || targets.iter().any(|t| t.graph.is_some());
+        let embedding = if wants_vector {
+            (self.embed)(question).await?
+        } else {
+            Vec::new()
+        };
+
+        // ── tier 1 ───────────────────────────────────────────────────────
+        let mut tier1: Vec<ScoredChunk> = Vec::new();
+        for t in &targets {
+            let emb: &[f32] = if t.vector { &embedding } else { &[] };
+            tier1.append(&mut t.index.search(emb, question, limit).await?);
+        }
+        if targets.len() > 1 {
+            tier1.sort_by(|a, b| {
+                b.score
+                    .partial_cmp(&a.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            tier1.truncate(limit);
+        }
+
+        // ── the walk ─────────────────────────────────────────────────────
+        // Widened to the trait once, here: the walk speaks `AtlasProvider`,
+        // and which store fulfils it is not `ask`'s business (the wiki-class
+        // store is a second implementor).
+        let graphs: Vec<&dyn AtlasProvider> = targets
+            .iter()
+            .filter_map(|t| t.graph.as_ref().map(|g| g as &dyn AtlasProvider))
+            .collect();
+        let (policy, policy_source) = ground::navigation_policy_for(&graphs);
+        let selection =
+            ground::select_walk(&embedding, &policy, policy_source, Some(&self.embed)).await;
+        // No atom BAG: building one re-embeds every entity per call
+        // (`context_loader::load_atlas_context`), which is minutes on a large
+        // atlas and is not what a per-question host can pay. The walk seeds
+        // from the ANN table alone and names the missing half as a
+        // degradation rather than losing it quietly.
+        let grounding = ground::ground(
+            question,
+            &embedding,
+            &[],
+            &graphs,
+            &selection,
+            /*max_seeds=*/ 12,
+        )
+        .await;
+
+        // ── resolve ──────────────────────────────────────────────────────
+        let fetcher = crate::ask::IndexEvidenceFetcher {
+            indexes: targets.iter().map(|t| (t.id.as_str(), &t.index)).collect(),
+        };
+        let allowed: Vec<String> = targets.iter().map(|t| t.id.clone()).collect();
+        let (grounded, resolve) = ground::resolve_evidence(
+            &grounding.requests,
+            grounding.budget,
+            Some(&allowed),
+            &fetcher,
+        )
+        .await;
+        // Anything tier 1 already returned is not new evidence — the walk's
+        // contribution is what it added, and double-listing a passage would
+        // make the map look like it did more than it did.
+        let seen: std::collections::HashSet<(Option<u64>, String)> = tier1
+            .iter()
+            .map(|c| (c.chunk_id, c.corpus_id.clone()))
+            .collect();
+        let grounded: Vec<_> = grounded
+            .into_iter()
+            .filter(|r| !seen.contains(&(r.chunk.chunk_id, r.chunk.corpus_id.clone())))
+            .collect();
+        eprintln!(
+            "corpus-mcp: ask -> row {}; tier1 {} + walk {} (of {} requests, {} dropped)",
+            selection.describe(),
+            tier1.len(),
+            grounded.len(),
+            resolve.considered,
+            resolve.considered.saturating_sub(resolve.added),
+        );
+
+        Ok(crate::ask::render(
+            question,
+            &tier1,
+            &grounded,
+            &grounding,
+            !graphs.is_empty(),
+        ))
     }
 
     async fn corpus_search(&self, args: &Value) -> Result<ToolOutcome> {
@@ -733,8 +915,16 @@ mod tests {
             "{}",
             out.text
         );
+        // `budget 12`, not 6: `DEFAULT_BUDGET` was corrected to the live
+        // fetch budget (`ceil(KQ_PER_CORPUS_LIMIT * 0.6)` = 12) when the walk
+        // started reading this table, because the 6 had been minted from a
+        // spec sentence that was wrong about the code — see the constant's
+        // doc and `the_default_budget_is_the_live_fetch_budget` in
+        // sovereign-core. The literal is spelled out here rather than
+        // interpolated from the constant on purpose: a test that reads the
+        // same constant the renderer reads cannot notice the number moving.
         assert!(
-            out.text.contains("navigation.thematic: seed Configuration, Entity, entity_type in [concept] | walk Involves → Tension → Grounds | hops 2 | budget 6"),
+            out.text.contains("navigation.thematic: seed Configuration, Entity, entity_type in [concept] | walk Involves → Tension → Grounds | hops 2 | budget 12"),
             "{}",
             out.text
         );

@@ -4,11 +4,11 @@
 //!
 //! # What this trait is for
 //!
-//! The walk (`ground`) asks an atlas nine questions and
-//! nothing else: what is this atom, what atoms are of this kind, what passages
-//! does this atom cite, what edges leave it, what edges enter it, where is
-//! your ANN seed table, what did you declare, what is your id, and where do
-//! your chunks live. Until now the only thing that could answer them was
+//! The walk (`ground`) asks an atlas eight questions and
+//! nothing else: what is this atom, what passages does this atom cite, what
+//! edges leave it, what edges enter it, where is your ANN seed table, what
+//! did you declare, what is your id, and where do your chunks live. Until now
+//! the only thing that could answer them was
 //! [`AtlasGraph`] — the v2 store, `atoms.lance` resident plus the `edges.csr`
 //! mmap — so "an atlas the walk can read" and "a v2 store on disk" were the
 //! same sentence.
@@ -21,7 +21,7 @@
 //! first implementor, and a second store implements it without touching the
 //! walk.
 //!
-//! # Why exactly these nine
+//! # Why exactly these eight
 //!
 //! ARCH §5.1 (trait surface) and §19 (the inventory outranks the plan): the
 //! set is what `ground.rs` and `atom_verbatim_excerpt` actually call, read off
@@ -31,10 +31,24 @@
 //! not call them and a method in a trait is a promise every future implementor
 //! must keep.
 //!
-//! [`Self::atoms_of_kind`] is the one member the walk does not call TODAY. It
-//! is in the set on the ei-4 order amendment's instruction, and it is the
-//! primitive the `enumeration` row (`hops: 0`, seeds are the answer) needs the
-//! moment a corpus declares one — see the method's own note.
+//! `atoms_of_kind` was in the first draft of this trait and is NOT here. No
+//! caller used it: the walk observes absent seed kinds over its seed POOL
+//! rather than scanning per kind, to keep an O(n) scan off the hot path, and
+//! the wiki-class backend does not want it either (wikipedia is one kind —
+//! 1.67M `Entity` articles — so a kind filter there is the identity function).
+//! A trait member that no implementor needs and no caller calls is inventory
+//! (§19), and it came out before the second implementor had to keep the
+//! promise.
+//!
+//! # The views are constructible, or this is not a seam
+//!
+//! [`AtomView`] and [`EvidenceRef`] are newtypes over `&AtomRecord` and
+//! `&ChunkRef`, and five of these eight members return them. Their tuple
+//! fields are private, so until [`AtomView::new`] / [`EvidenceRef::new`]
+//! existed a second backend could not build a single one of those five
+//! returns — the trait would have been implementable only by the module that
+//! defines the views. A seam that only its author can cross is not a seam;
+//! the constructors are part of the contract, not a convenience.
 //!
 //! # What is deliberately NOT here
 //!
@@ -48,7 +62,6 @@ use std::sync::Arc;
 use crate::enrichment::ontology::{OntologyPolicies, TypeIndex};
 
 use super::ann_store::AnnSeedTable;
-use super::atoms::AtomType;
 use super::context::{AtlasGraph, AtomView, EdgeView, EvidenceRef};
 use super::evidence_site::EvidenceSite;
 
@@ -57,7 +70,14 @@ use super::evidence_site::EvidenceSite;
 /// See the module doc for why the surface is this narrow. Implement it for a
 /// store, and `ground` walks it — the walk knows nothing
 /// about how atoms are held.
-pub trait AtlasProvider {
+///
+/// `Send + Sync` is not decoration. The walk is async (the ANN query awaits)
+/// and runs inside the retrieval pipeline's boxed `Send` future, so a
+/// provider held across that await must be both; without the bounds
+/// `sovereign-core` fails to compile with "future cannot be sent between
+/// threads safely" at the pipeline's step, several files from the cause.
+/// Every store that can be shared by a daemon already satisfies them.
+pub trait AtlasProvider: Send + Sync {
     /// This atlas's own id — an EXTRACTION address (`sep-freewill`), never a
     /// corpus to search. Ask [`Self::site`] for that.
     fn atlas_corpus_id(&self) -> &str;
@@ -70,14 +90,6 @@ pub trait AtlasProvider {
 
     /// One atom by id, or `None` when this store does not hold it.
     fn atom(&self, atom_id: &str) -> Option<AtomView<'_>>;
-
-    /// Every atom of one kind.
-    ///
-    /// Boxed because the concrete iterator differs per store and the trait is
-    /// used behind `dyn`. Potentially a full scan — a caller on the hot path
-    /// must know that, which is why `ground` observes absent
-    /// seed kinds over its seed POOL instead of calling this per kind.
-    fn atoms_of_kind<'a>(&'a self, kind: AtomType) -> Box<dyn Iterator<Item = AtomView<'a>> + 'a>;
 
     /// The passages one atom cites. Empty means the atom can never become a
     /// citation, which is a fact the walk's ledger reports rather than hides.
@@ -154,10 +166,6 @@ impl AtlasProvider for AtlasGraph {
         AtlasGraph::atom(self, atom_id)
     }
 
-    fn atoms_of_kind<'a>(&'a self, kind: AtomType) -> Box<dyn Iterator<Item = AtomView<'a>> + 'a> {
-        Box::new(AtlasGraph::atoms_of_kind(self, kind))
-    }
-
     fn atom_evidence(&self, atom_id: &str) -> Vec<EvidenceRef<'_>> {
         AtlasGraph::atom_evidence(self, atom_id)
     }
@@ -181,7 +189,100 @@ impl AtlasProvider for AtlasGraph {
 
 #[cfg(test)]
 mod tests {
+    use super::super::atoms::{AtomType, ChunkRef};
+    use super::super::projection::AtomRecord;
     use super::*;
+
+    /// A backend that is NOT `AtlasGraph` and does not live in `context.rs` —
+    /// the second implementor the trait exists for, standing in for
+    /// ei-7c's wiki-class store.
+    struct Elsewhere {
+        site: EvidenceSite,
+        record: AtomRecord,
+        ontology: Option<OntologyPolicies>,
+    }
+
+    impl Elsewhere {
+        fn new(ontology: Option<OntologyPolicies>) -> Self {
+            Self {
+                site: EvidenceSite::derive("elsewhere"),
+                record: AtomRecord {
+                    id: "atom-1".into(),
+                    kind: AtomType::Entity,
+                    name: "Offa".into(),
+                    label: String::new(),
+                    content: String::new(),
+                    subtype: "person".into(),
+                    description: "King of Mercia".into(),
+                    excerpt: String::new(),
+                    confidence: 0.0,
+                    salience: 1.0,
+                    aliases: Vec::new(),
+                    participants: Vec::new(),
+                    evidence: vec![ChunkRef::new("sec_0001", Some("a silver penny".into()))],
+                    payload: Vec::new(),
+                },
+                ontology,
+            }
+        }
+    }
+
+    impl AtlasProvider for Elsewhere {
+        fn atlas_corpus_id(&self) -> &str {
+            "elsewhere"
+        }
+        fn site(&self) -> &EvidenceSite {
+            &self.site
+        }
+        fn atom(&self, atom_id: &str) -> Option<AtomView<'_>> {
+            (atom_id == self.record.id).then(|| AtomView::new(&self.record))
+        }
+        fn atom_evidence(&self, atom_id: &str) -> Vec<EvidenceRef<'_>> {
+            if atom_id != self.record.id {
+                return Vec::new();
+            }
+            self.record.evidence.iter().map(EvidenceRef::new).collect()
+        }
+        fn edges_from(&self, _: &str) -> Vec<EdgeView<'_>> {
+            Vec::new()
+        }
+        fn edges_to(&self, _: &str) -> Vec<EdgeView<'_>> {
+            Vec::new()
+        }
+        fn ann_seed_table(&self) -> Option<&Arc<AnnSeedTable>> {
+            None
+        }
+        fn ontology(&self) -> Option<&OntologyPolicies> {
+            self.ontology.as_ref()
+        }
+    }
+
+    /// THE SEAM: a provider defined outside `context.rs` builds and returns
+    /// both view types. Four of the eight members return an `AtomView` or an
+    /// `EvidenceRef`, and their tuple fields are private — so before
+    /// `AtomView::new` / `EvidenceRef::new` existed, this impl block could not
+    /// be written at all and the trait was implementable only by its author's
+    /// own module.
+    ///
+    /// Failing input: make either constructor private again — this file stops
+    /// compiling, which is the loudest failure available and the right one.
+    #[test]
+    fn a_backend_outside_this_module_can_build_the_views() {
+        let p = Elsewhere::new(None);
+        let atom = p.atom("atom-1").expect("the record is there");
+        assert_eq!(atom.id(), "atom-1");
+        assert_eq!(atom.name(), "Offa");
+        assert_eq!(atom.kind(), AtomType::Entity);
+        assert_eq!(atom.subtype(), "person");
+
+        let ev = p.atom_evidence("atom-1");
+        assert_eq!(ev.len(), 1);
+        assert_eq!(ev[0].chunk_id(), "sec_0001");
+        assert_eq!(ev[0].passage_preview(), "a silver penny");
+        // …and an id it does not hold is absent, not an empty view.
+        assert!(p.atom("atom-2").is_none());
+        assert!(p.atom_evidence("atom-2").is_empty());
+    }
 
     /// The trait is usable behind `dyn` — which is the whole point, since the
     /// walk holds a heterogeneous slice of providers. Failing input: add a
@@ -198,48 +299,14 @@ mod tests {
     ///
     /// Two-sided deliberately (§18.1, "a zero count is not a positive
     /// control"): the `false` half alone is satisfied by a method that always
-    /// returns `false`, which is the exact regression this gate exists to
-    /// catch on the declared side.
+    /// returns `false`, which is the exact regression that matters on the
+    /// declared side.
     ///
     /// Failing inputs: return `true` from `is_subtype_of` when `ontology()`
     /// is `None`; or stop consulting `TypeIndex::is_a` so the `specializes`
     /// chain is not walked.
     #[test]
     fn is_subtype_of_answers_both_ways_without_a_declaration_check() {
-        struct Stub(Option<OntologyPolicies>);
-        impl AtlasProvider for Stub {
-            fn atlas_corpus_id(&self) -> &str {
-                "stub"
-            }
-            fn site(&self) -> &EvidenceSite {
-                unreachable!("not exercised by this test")
-            }
-            fn atom(&self, _: &str) -> Option<AtomView<'_>> {
-                None
-            }
-            fn atoms_of_kind<'a>(
-                &'a self,
-                _: AtomType,
-            ) -> Box<dyn Iterator<Item = AtomView<'a>> + 'a> {
-                Box::new(std::iter::empty())
-            }
-            fn atom_evidence(&self, _: &str) -> Vec<EvidenceRef<'_>> {
-                Vec::new()
-            }
-            fn edges_from(&self, _: &str) -> Vec<EdgeView<'_>> {
-                Vec::new()
-            }
-            fn edges_to(&self, _: &str) -> Vec<EdgeView<'_>> {
-                Vec::new()
-            }
-            fn ann_seed_table(&self) -> Option<&Arc<AnnSeedTable>> {
-                None
-            }
-            fn ontology(&self) -> Option<&OntologyPolicies> {
-                self.0.as_ref()
-            }
-        }
-
         // POSITIVE control: a declared `sceatta specializes coin`.
         let declared: OntologyPolicies = serde_json::from_value(serde_json::json!({
             "shape": { "types": [
@@ -248,7 +315,7 @@ mod tests {
             ] }
         }))
         .expect("the declaration parses");
-        let p = Stub(Some(declared));
+        let p = Elsewhere::new(Some(declared));
         assert!(
             p.is_subtype_of("sceatta", "coin"),
             "the specializes chain must be walked through TypeIndex::is_a"
@@ -256,11 +323,12 @@ mod tests {
         assert!(!p.is_subtype_of("coin", "sceatta"), "and only downward");
 
         // NEGATIVE control: the same two questions, undeclared.
-        let p = Stub(None);
+        let p = Elsewhere::new(None);
         assert!(!p.is_subtype_of("sceatta", "coin"));
         // …and a store with no seed table says so, rather than being asked
         // for one and returning an empty answer.
         assert!(!p.has_ann_seed_table());
-        assert!(p.atoms_of_kind(AtomType::Entity).next().is_none());
+        // The provided site label is derived, not re-implemented per backend.
+        assert_eq!(p.article_slug(), "elsewhere");
     }
 }

@@ -727,6 +727,18 @@ fn v2_store_present(atlas_dir: &Path) -> bool {
 pub struct AtomView<'a>(&'a AtomRecord);
 
 impl<'a> AtomView<'a> {
+    /// Wrap a projected record.
+    ///
+    /// PUBLIC because [`super::provider::AtlasProvider`] returns `AtomView`
+    /// from four of its eight members, and a backend that lives outside this
+    /// module cannot implement any of them without this. The tuple field
+    /// stays private: a view is a read-only window onto a record the store
+    /// owns, and callers must go through the accessors below (which is what
+    /// lets the projection change shape without touching them).
+    pub fn new(record: &'a AtomRecord) -> Self {
+        Self(record)
+    }
+
     pub fn id(&self) -> &'a str {
         self.0.id.as_str()
     }
@@ -797,6 +809,16 @@ impl<'a> AtomView<'a> {
 pub struct EvidenceRef<'a>(&'a ChunkRef);
 
 impl<'a> EvidenceRef<'a> {
+    /// Wrap an evidence anchor.
+    ///
+    /// PUBLIC for the same reason as [`AtomView::new`]: `atom_evidence` is an
+    /// [`super::provider::AtlasProvider`] member, and a second backend must be
+    /// able to return one. `Option`s stay intact behind the accessors — see
+    /// [`Self::raw`] for the un-defaulted view.
+    pub fn new(chunk_ref: &'a ChunkRef) -> Self {
+        Self(chunk_ref)
+    }
+
     pub fn chunk_id(&self) -> &'a str {
         self.0.chunk_id.as_str()
     }
@@ -967,7 +989,10 @@ pub fn contains_whole_word(haystack: &str, needle: &str) -> bool {
 /// definitional sentences ("X is Y").
 const MIN_VERBATIM_EXCERPT_CHARS: usize = 60;
 
-pub fn atom_verbatim_excerpt(graph: &AtlasGraph, atom_id: &str) -> Option<String> {
+pub fn atom_verbatim_excerpt(
+    graph: &dyn super::provider::AtlasProvider,
+    atom_id: &str,
+) -> Option<String> {
     // Deep-field read over the bounded navigation neighborhood (not a hot
     // scan path) — parse the full atom from its JSON payload blob.
     let atom = graph.atom(atom_id)?.atom_envelope()?;
@@ -1079,25 +1104,26 @@ pub fn atom_verbatim_excerpt(graph: &AtlasGraph, atom_id: &str) -> Option<String
     }
 }
 
-/// ANN-seeded atlas navigation (ATLAS_STORAGE_V2). Walk the typed graph from
-/// seeded atoms, expand 1-2 hops across weighted edges, and aggregate the
-/// evidence chunks by score density into [`ChunkRequest`]s — atlas's curated
-/// answer to "which source chunks should the retriever fetch for this question?".
+/// ANN-seeded atlas navigation — the UNFILTERED walk, kept as the name every
+/// existing caller already spells.
 ///
-/// # Seeds
-/// - **Vector seed (1a):** each graph's persistent ANN table
-///   ([`AtlasGraph::ann_seed_table`]) returns the nearest atom-ids DIRECTLY (the
-///   embed→atom-id join ran once at backfill, never per query), re-scored with the
-///   canonical [`cosine`] so the BFS sees stable weights. One global top-`max_seeds`
-///   pool across all graphs.
-/// - **Name-match seed (1b):** every bag atom whose `canonical_name` (or trailing
-///   token, or `[Argument: …]` name) appears literally in the question is
-///   force-seeded — catches compound questions a single embedding can't rank. The
-///   `atom_id` is read straight off the [`AtlasEntry`] (first-class since Phase B),
-///   so neither seed path reverse-resolves from `embed_text`.
+/// **This is now a thin caller.** The walk itself moved to
+/// [`super::ground::ground`] (ei-4-walk, 2026-09-04), where it is driven by
+/// the atlas's own navigation policy instead of by constants; §10.6 allows one
+/// implementation of a walk, and this is not it. What this function preserves
+/// is the pre-policy BEHAVIOUR — [`WalkPolicy::unfiltered`]: no seed-kind
+/// filter, no edge-kind filter, `max_hops` as passed — so the eval CLI, the
+/// evidence-site wiring test, and any caller that has not yet been given a map
+/// keep the walk they were calibrated against.
 ///
-/// Async only because the ANN query awaits; the BFS inner loop stays sync
-/// (resident atoms + `edges.csr` mmap) — the "hot BFS stays sync" invariant.
+/// A caller that HAS a map should call [`super::ground::ground`] with a
+/// [`super::ground::WalkSelection`] instead; that is the door
+/// `apply_atlas_grounding` and `corpus-mcp`'s `ask` go through.
+///
+/// # Seeds (unchanged, see [`super::ground::ground`] for the full account)
+/// - **Vector seed:** each graph's persistent ANN table returns nearest
+///   atom-ids directly, re-scored with the canonical [`cosine`].
+/// - **Name-match seed:** every bag atom literally named in the question.
 pub async fn atlas_navigate_ann(
     query_text: &str,
     query_embedding: &[f32],
@@ -1106,225 +1132,36 @@ pub async fn atlas_navigate_ann(
     max_seeds: usize,
     max_hops: usize,
 ) -> Vec<ChunkRequest> {
-    if query_embedding.is_empty() || atlases.is_empty() {
+    // The historical guard: this entry point returned nothing without a bag,
+    // because it predates ANN-only seeding. `ground` allows an empty bag (it
+    // is how `corpus-mcp` walks); keeping the guard HERE means no existing
+    // caller's behaviour changes on this path.
+    if atlases.is_empty() {
         return Vec::new();
     }
-    let graph_by_id: HashMap<&str, &AtlasGraph> = graphs
+    let mut selection = super::ground::WalkSelection::named(
+        corpus_engine_vocab::ontology::QuestionKind::Thematic,
+        &corpus_engine_vocab::ontology::NavigationPolicy::default(),
+        super::ground::PolicySource::PreRegistered,
+    );
+    selection.walk = corpus_engine_vocab::ontology::WalkPolicy::unfiltered();
+    selection.walk.hops = max_hops.min(u8::MAX as usize) as u8;
+    // Existing callers hold concrete `AtlasGraph`s; the walk speaks
+    // `AtlasProvider`. One widening, here, so no call site changes.
+    let providers: Vec<&dyn super::provider::AtlasProvider> = graphs
         .iter()
-        .map(|g| (g.atlas_corpus_id.as_str(), *g))
+        .map(|g| *g as &dyn super::provider::AtlasProvider)
         .collect();
-
-    // 1a. Vector seeds — each graph's ANN table returns the nearest atom-ids
-    // directly (no resolve), re-scored with cosine. One global top-`max_seeds`
-    // pool. A graph without a table contributes name-match seeds only (below).
-    let mut scored: Vec<(f32, String, String)> = Vec::new(); // (score, corpus_id, atom_id)
-    for graph in graphs {
-        let Some(ann) = graph.ann_seed_table() else {
-            continue;
-        };
-        match ann.nearest_with_vectors(query_embedding, max_seeds).await {
-            Ok(hits) => {
-                for (atom_id, vector) in hits {
-                    let score = cosine(query_embedding, &vector);
-                    scored.push((score, graph.atlas_corpus_id.clone(), atom_id));
-                }
-            }
-            Err(e) => tracing::warn!(
-                corpus = %graph.atlas_corpus_id,
-                "atlas_navigate_ann: ANN nearest failed ({e}); corpus contributes name-match seeds only"
-            ),
-        }
-    }
-    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-    scored.truncate(max_seeds);
-    let primary_seeds: Vec<(String, String, f32)> = scored
-        .into_iter()
-        .map(|(s, cid, aid)| (cid, aid, s))
-        .collect();
-
-    // 1b. Name-match seeds — `atom_id` read straight off the bag entry (no
-    // resolve). Force-seeds every atom literally named in the question, so a
-    // compound question a single embedding can't rank still reaches its atoms.
-    let q_lower = query_text.to_lowercase();
-    let mut name_seeds: Vec<(String, String, f32)> = Vec::new();
-    for ctx in atlases {
-        if !graph_by_id.contains_key(ctx.atlas_corpus_id.as_str()) {
-            continue;
-        }
-        for entry in &ctx.entries {
-            if entry.atom_id.is_empty() {
-                continue;
-            }
-            let name = entry.canonical_name.trim();
-            if name.len() < 4 {
-                continue;
-            }
-            let name_lower = name.to_lowercase();
-            let mut hit = contains_whole_word(&q_lower, &name_lower);
-            if !hit {
-                if let Some(last) = name_lower.split_whitespace().last() {
-                    if last.len() >= 4 && last != name_lower {
-                        hit = contains_whole_word(&q_lower, last);
-                    }
-                }
-            }
-            if !hit {
-                if let Some(rest) = entry.embed_text.strip_prefix("[Argument: ") {
-                    if let Some(end) = rest.find(']') {
-                        let arg_name = rest[..end].trim().to_lowercase();
-                        if arg_name.len() >= 4 {
-                            let toks: Vec<&str> = arg_name.split_whitespace().collect();
-                            for w in toks.windows(2) {
-                                let phrase = format!("{} {}", w[0], w[1]);
-                                if phrase.len() >= 6 && q_lower.contains(&phrase) {
-                                    hit = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            if !hit {
-                continue;
-            }
-            let s = cosine(query_embedding, &entry.embedding).max(0.6);
-            name_seeds.push((ctx.atlas_corpus_id.clone(), entry.atom_id.clone(), s));
-        }
-    }
-
-    // Merge vector + name seeds, dedup by (corpus_id, atom_id), keep the max
-    // score. Name additions are an intentional broadening beyond max_seeds.
-    let mut merged: HashMap<(String, String), f32> = HashMap::new();
-    for (cid, aid, s) in primary_seeds.into_iter().chain(name_seeds) {
-        merged
-            .entry((cid, aid))
-            .and_modify(|e| {
-                if s > *e {
-                    *e = s;
-                }
-            })
-            .or_insert(s);
-    }
-    let seeds: Vec<(String, String, f32)> = merged
-        .into_iter()
-        .filter(|((cid, _), _)| graph_by_id.contains_key(cid.as_str()))
-        .map(|((cid, aid), s)| (cid, aid, s))
-        .collect();
-
-    // 2. BFS expand from each seed — identical logic to atlas_navigate.
-    let mut neighborhood: HashMap<(String, String), f32> = HashMap::new();
-    for (atlas_id, atom_id, seed_score) in &seeds {
-        let Some(graph) = graph_by_id.get(atlas_id.as_str()) else {
-            continue;
-        };
-        let key = (atlas_id.clone(), atom_id.clone());
-        let entry = neighborhood.entry(key).or_insert(0.0);
-        *entry = entry.max(*seed_score);
-
-        let mut frontier: Vec<(String, f32)> = vec![(atom_id.clone(), *seed_score)];
-        let mut visited: HashSet<String> = HashSet::new();
-        visited.insert(atom_id.clone());
-        let decay = 0.6_f32;
-
-        for hop in 1..=max_hops {
-            let hop_decay = decay.powi(hop as i32);
-            let mut next_frontier: Vec<(String, f32)> = Vec::new();
-            for (current_id, current_score) in &frontier {
-                let mut consider = |neighbor_id: &str, edge_type: EdgeType, conf: f32| {
-                    if visited.contains(neighbor_id) {
-                        return;
-                    }
-                    let w = edge_weight(edge_type);
-                    if w <= 0.0 {
-                        return;
-                    }
-                    let neighbor_score = current_score * w * conf * hop_decay;
-                    if neighbor_score < 0.05 {
-                        return;
-                    }
-                    let key = (atlas_id.clone(), neighbor_id.to_string());
-                    let entry = neighborhood.entry(key).or_insert(0.0);
-                    if neighbor_score > *entry {
-                        *entry = neighbor_score;
-                    }
-                    visited.insert(neighbor_id.to_string());
-                    next_frontier.push((neighbor_id.to_string(), neighbor_score));
-                };
-                for edge in graph.edges_from(current_id) {
-                    consider(edge.target, edge.edge_type, edge.confidence);
-                }
-                for edge in graph.edges_to(current_id) {
-                    consider(edge.source, edge.edge_type, edge.confidence);
-                }
-            }
-            if next_frontier.is_empty() {
-                break;
-            }
-            frontier = next_frontier;
-        }
-    }
-
-    // 3. Emit ChunkRequests — identical logic to atlas_navigate.
-    // Keyed by the SITE (not a bare slug) so two atlases that share an article
-    // name under different parents cannot collide, and by the parsed SELECTOR
-    // so the addressing scheme travels with the request instead of being
-    // re-derived downstream.
-    let mut chunk_scores: HashMap<
-        (EvidenceSite, ChunkSelector),
-        (f32, String, Vec<String>, Vec<String>),
-    > = HashMap::new();
-    for ((atlas_id, atom_id), atom_weight) in &neighborhood {
-        let Some(graph) = graph_by_id.get(atlas_id.as_str()) else {
-            continue;
-        };
-        let evidence = graph.atom_evidence(atom_id);
-        let verbatim = atom_verbatim_excerpt(graph, atom_id);
-        for ev in evidence {
-            let chunk_id = ev.chunk_id().trim();
-            if chunk_id.is_empty() {
-                continue;
-            }
-            let preview = ev.passage_preview().trim();
-            let key = (graph.site.clone(), ChunkSelector::parse(chunk_id));
-            let entry = chunk_scores.entry(key).or_insert((
-                0.0,
-                preview.to_string(),
-                Vec::new(),
-                Vec::new(),
-            ));
-            entry.0 += atom_weight;
-            if preview.len() > entry.1.len() {
-                entry.1 = preview.to_string();
-            }
-            entry.2.push(atom_id.clone());
-            if let Some(line) = verbatim.as_ref() {
-                if !entry.3.iter().any(|existing| existing == line) {
-                    entry.3.push(line.clone());
-                }
-            }
-        }
-    }
-
-    let mut requests: Vec<ChunkRequest> = chunk_scores
-        .into_iter()
-        .map(
-            |((site, selector), (score, preview, motivating, verbatim))| ChunkRequest {
-                site,
-                selector,
-                passage_preview: preview,
-                score,
-                motivating_atoms: motivating,
-                verbatim_excerpts: verbatim,
-            },
-        )
-        .collect();
-    requests.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    requests
+    super::ground::ground(
+        query_text,
+        query_embedding,
+        atlases,
+        &providers,
+        &selection,
+        max_seeds,
+    )
+    .await
+    .requests
 }
 
 /// DARK (ontology-v1 P5, default **OFF**) — `SOVEREIGN_ATLAS_EMBED_ATTRIBUTES`.

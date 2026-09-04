@@ -3,7 +3,6 @@
 //! with bag-of-atoms fallback, plus the direct chunk-by-id
 //! fetch it (and atom-enum) uses.
 
-use corpus_engine::enrichment::atlas::evidence_site::ChunkSelector;
 use std::sync::Arc;
 
 use super::super::*;
@@ -78,6 +77,7 @@ impl Runtime {
         lane: &crate::runtime::Lane,
     ) -> crate::runtime::retrieval_ledger::StepLedger {
         use crate::runtime::retrieval_ledger::{DropReason, StepLedger};
+        use corpus_engine::enrichment::atlas::ground;
         if !atlas_grounding_enabled() {
             return StepLedger::injected(0).drop(DropReason::FeatureDisabled, 0);
         }
@@ -91,18 +91,20 @@ impl Runtime {
         // Scope atlas grounding to the corpora retrieval actually hit — not
         // every loaded atlas (at SEP's 1778-atlas scale that meant a
         // brute-force ANN seed over all of them, every query). Per retrieved
-        // chunk the candidate atlas is its own `corpus_id` plus
-        // `<corpus_id>-<title>` for parent / per-article splits (SEP: the "sep"
-        // chunk corpus -> "sep-<article>" atlases). `ensure_loaded` lazily
-        // warms only these; `provider.get(id)` below drops any with no atlas.
-        // `enabled_corpora` (conversation scope) is folded in so an explicitly
-        // scoped corpus grounds even if its chunks didn't rank this turn.
+        // chunk the candidate atlases are `candidate_atlas_ids`' answer, which
+        // is the ONE home of the chunk -> atlas id derivation; the
+        // `format!("{}-{}", corpus_id, title)` that used to sit here encoded
+        // SEP's per-article layout as a universal rule at a call site that
+        // could not be tested. `ensure_loaded` lazily warms only these;
+        // `provider.get(id)` below drops any with no atlas. `enabled_corpora`
+        // (conversation scope) is folded in so an explicitly scoped corpus
+        // grounds even if its chunks didn't rank this turn.
         let mut scoped: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         for c in chunks.iter() {
-            scoped.insert(c.corpus_id.clone());
-            if let Some(t) = c.title.as_deref().filter(|t| !t.is_empty()) {
-                scoped.insert(format!("{}-{}", c.corpus_id, t));
-            }
+            scoped.extend(ground::candidate_atlas_ids(
+                &c.corpus_id,
+                c.title.as_deref(),
+            ));
         }
         if let Some(enabled) = enabled_corpora {
             scoped.extend(enabled.iter().cloned());
@@ -147,218 +149,7 @@ impl Runtime {
             .filter_map(|id| provider.graph(id))
             .collect();
 
-        let mut ledger = StepLedger::default();
-        if !graphs.is_empty() {
-            // Graph-walk: cosine seeds → BFS expand 1-2 hops over
-            // typed edges (Tension / Grounds / Configures /
-            // Involves) → aggregate evidence ChunkRefs across the
-            // neighborhood → FTS-fetch each preview against the
-            // source corpus filtered to the atom's article. Output
-            // is real source chunks scored by atlas evidence
-            // density. Validated +3 essay over baseline at 6-atlas
-            // scale on the SEP eval.
-            let ctx_refs: Vec<&crate::atlas_context::AtlasContext> =
-                ctxs.iter().map(|c| c.as_ref()).collect();
-            let graph_refs: Vec<&crate::atlas_context::AtlasGraph> =
-                graphs.iter().map(|g| g.as_ref()).collect();
-            let max_seeds = ctxs.first().map(|c| c.top_k).unwrap_or(3).max(12);
-            // ATLAS_STORAGE_V2: one navigate. Each graph seeds from its persistent
-            // ANN table (atom-ids directly, no per-query resolve) plus name-match
-            // over the bag. The v1 sync cosine `atlas_navigate` was retired with
-            // `resolve_atom_id_from_entry` — bags are derived from the ANN table,
-            // so every loaded atlas already carries one.
-            tracing::debug!(
-                corpora = graph_refs.len(),
-                max_seeds,
-                "atlas-grounding: ANN navigate (v2)"
-            );
-            let requests = crate::atlas_context::atlas_navigate_ann(
-                query_text,
-                embedding,
-                &ctx_refs,
-                &graph_refs,
-                max_seeds,
-                /*max_hops=*/ 2,
-            )
-            .await;
-            // Production budget mirrors the eval-CLI's calibrated
-            // value (limit * 0.6, where limit is `KQ_PER_CORPUS_LIMIT
-            // = 20`). Calibrated against the SEP bank: budget=6 gave
-            // +22 sources / +6 essay / +6 dialectical_breadth vs
-            // baseline; budget=4 left ~10 bank-required articles
-            // unfetched even when their atlas was loaded.
-            let fetch_budget = ((KQ_PER_CORPUS_LIMIT as f32) * 0.6).ceil() as usize;
-            let mut graph_added = 0usize;
-            let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
-            // Why candidates did not become chunks. Logged beside
-            // `graph_added` so a zero yield always says WHICH zero it is:
-            // "nothing was relevant" and "every fetch missed" were
-            // indistinguishable, and that is what let the SEP scope defect
-            // survive unnoticed (note 81feaf78). Lifted into the pipeline's
-            // StepOutcome ledger in the next commit.
-            let considered = requests.len();
-            let mut dropped_not_allowed = 0usize;
-            let mut dropped_not_found = 0usize;
-            let mut dropped_no_title_match = 0usize;
-            let mut dropped_duplicate = 0usize;
-            for req in requests.iter().take(fetch_budget * 2) {
-                if graph_added >= fetch_budget {
-                    break;
-                }
-
-                // The corpus that actually HOLDS this chunk — never the atlas
-                // the atom was extracted from. For a per-article atlas those
-                // differ (`sep-freewill` vs `sep`) and the old code used the
-                // former for both, so every SEP fetch searched an index with
-                // no chunks in it. See `corpus_engine::enrichment::atlas::
-                // evidence_site` for the incident.
-                //
-                // The allow-list is now checked against the SAME corpus the
-                // fetch will search, so the two cannot disagree.
-                let corpus = req.site.chunk_corpus();
-                if let Some(allowed) = enabled_corpora {
-                    if !allowed.iter().any(|c| c.as_str() == corpus.as_str()) {
-                        dropped_not_allowed += 1;
-                        continue;
-                    }
-                }
-
-                match &req.selector {
-                    // Direct key, no search — conversation / vault atoms.
-                    ChunkSelector::RowId(row) => {
-                        let Some(mut boosted) = self.fetch_chunk_by_id(corpus.as_str(), *row).await
-                        else {
-                            dropped_not_found += 1;
-                            continue;
-                        };
-                        let key = format!(
-                            "{}|{}",
-                            boosted.title.clone().unwrap_or_default(),
-                            truncate_chars(&boosted.content, 80)
-                        );
-                        if !seen.insert(key) {
-                            dropped_duplicate += 1;
-                            continue;
-                        }
-                        boosted.score = req.score * 0.05;
-                        // Make atlas-fetched chunks competitive in
-                        // `cross_corpus_sort_cmp` against lance-fetched chunks
-                        // (which carry vector_distance from hybrid search).
-                        boosted.vector_distance =
-                            Some((1.0_f32 - (req.score / 2.0).min(1.0)).max(0.0));
-                        prepend_atlas_highlights(&mut boosted, req);
-                        chunks.push(boosted);
-                        graph_added += 1;
-                    }
-
-                    // Section slug — resolved by search scoped to the chunk
-                    // corpus, then filtered to the article WHEN THE SITE HAS
-                    // ONE. A self-hosted atlas spans its whole corpus and has
-                    // no article to filter on; the old code filtered
-                    // unconditionally against a value that was the corpus id
-                    // in exactly that case.
-                    ChunkSelector::Section(_) => {
-                        let req_scope = [corpus.as_str().to_string()];
-                        let fts_hits = self
-                            .search_corpus_indexes_with_overrides(
-                                &[],
-                                &format!("{} {}", req.article_slug(), req.passage_preview),
-                                30,
-                                "AtlasNavigate",
-                                None,
-                                Some(&req_scope),
-                                corpus_ceiling,
-                                lane,
-                            )
-                            .await;
-                        let mut matched_any = false;
-                        for hit in fts_hits {
-                            if let Some(article) = req.site.article() {
-                                if hit.title.as_deref() != Some(article) {
-                                    continue;
-                                }
-                            }
-                            matched_any = true;
-                            let key = format!(
-                                "{}|{}",
-                                hit.title.clone().unwrap_or_default(),
-                                truncate_chars(&hit.content, 80)
-                            );
-                            if !seen.insert(key) {
-                                dropped_duplicate += 1;
-                                continue;
-                            }
-                            let mut boosted = hit;
-                            boosted.score = req.score * 0.05;
-                            prepend_atlas_highlights(&mut boosted, req);
-                            chunks.push(boosted);
-                            graph_added += 1;
-                            if graph_added >= fetch_budget {
-                                break;
-                            }
-                        }
-                        if !matched_any {
-                            dropped_no_title_match += 1;
-                        }
-                    }
-                }
-            }
-
-            // The line whose absence hid the defect: candidates in, chunks
-            // out, and every drop accounted for by reason.
-            tracing::info!(
-                label,
-                considered,
-                graph_added,
-                dropped_not_allowed,
-                dropped_not_found,
-                dropped_no_title_match,
-                dropped_duplicate,
-                "atlas-grounding: fetch ledger"
-            );
-            ledger = StepLedger::injected(considered)
-                .drop(DropReason::OutOfScope, dropped_not_allowed)
-                .drop(DropReason::EvidenceUnresolvable, dropped_not_found)
-                .drop(DropReason::TitleMismatch, dropped_no_title_match)
-                .drop(DropReason::Duplicate, dropped_duplicate)
-                // Candidates past the fetch budget were never attempted. They
-                // are a DECISION, not a failure, and the accounting identity
-                // requires them named.
-                .drop(
-                    DropReason::BudgetExhausted,
-                    considered.saturating_sub(
-                        graph_added
-                            + dropped_not_allowed
-                            + dropped_not_found
-                            + dropped_no_title_match
-                            + dropped_duplicate,
-                    ),
-                );
-
-            // Adaptive triage: bump article slug per atlas to climb
-            // the Tier-2 enrichment queue.
-            for ctx in &ctxs {
-                provider.record_match(&ctx.atlas_corpus_id, &ctx.atlas_corpus_id);
-            }
-            if graph_added > 0 {
-                // Per-corpus breakdown of what graph-walk just pushed,
-                // so a downstream drop (cap / truncate / expand) can
-                // be pinned by comparing this against later sites
-                // (ARCH §0.1 glassbox).
-                let mut per_corpus: std::collections::BTreeMap<String, usize> =
-                    std::collections::BTreeMap::new();
-                let n = chunks.len();
-                for c in chunks.iter().skip(n - graph_added.min(n)) {
-                    *per_corpus.entry(c.corpus_id.clone()).or_insert(0) += 1;
-                }
-                tracing::info!(
-                    label,
-                    graph_added,
-                    per_corpus = ?per_corpus,
-                    "atlas-grounding: graph-walk fused (per-corpus injected counts)"
-                );
-            }
-        } else {
+        if graphs.is_empty() {
             // No graph layer loaded for any provider. Direct bag-of-
             // atoms injection — kept for older deployments + as a
             // safety net during graph-layer rollout.
@@ -384,29 +175,230 @@ impl Runtime {
             }
             // The bag path realises every candidate it builds, so
             // considered == added and the identity holds with no drops.
-            ledger = StepLedger::injected(bag_added);
+            return StepLedger::injected(bag_added);
+        }
+
+        // ── The walk, in corpus-engine, driven by the corpus's own map ──
+        //
+        // Everything from here to the fetch is `ground`'s: the seeds, the
+        // hops, the edge kinds and the budget come from the atlas's
+        // navigation policy (`EPISTEMIC_INDEX.md` §2.2) instead of from four
+        // constants that used to live at this call site. What remains here is
+        // what only a Runtime can do — pick the atlases, embed through the
+        // lane's provider, and fetch a chunk.
+        let ctx_refs: Vec<&crate::atlas_context::AtlasContext> =
+            ctxs.iter().map(|c| c.as_ref()).collect();
+        // Widened to the trait once, here. `apply_atlas_grounding` holds
+        // `Arc<AtlasGraph>` because that is what the daemon's
+        // `AtlasContextManager` hands out; the walk below neither knows nor
+        // needs to know which store is behind them.
+        let graph_refs: Vec<&dyn corpus_engine::enrichment::atlas::AtlasProvider> = graphs
+            .iter()
+            .map(|g| g.as_ref() as &dyn corpus_engine::enrichment::atlas::AtlasProvider)
+            .collect();
+        let max_seeds = ctxs.first().map(|c| c.top_k).unwrap_or(3).max(12);
+        let (policy, policy_source) = ground::navigation_policy_for(&graph_refs);
+        // The QUERY-side adapter: the classifier's centroids must sit in the
+        // same vector space as the question, which is the space the ANN seed
+        // tables were built in (see `embed_fn.rs`). Built per call and cheap —
+        // `shared_classifier` embeds the exemplars once per process.
+        let embed = crate::embed_fn::inference_to_embed_query_fn(Arc::clone(&self.inference));
+        let selection = ground::select_walk(embedding, &policy, policy_source, Some(&embed)).await;
+        tracing::debug!(
+            target: "retrieval_audit",
+            label,
+            corpora = graph_refs.len(),
+            max_seeds,
+            row = %selection.describe(),
+            "atlas-grounding: walking the map"
+        );
+
+        let grounding = ground::ground(
+            query_text,
+            embedding,
+            &ctx_refs,
+            &graph_refs,
+            &selection,
+            max_seeds,
+        )
+        .await;
+        for d in &grounding.degradations {
+            // NAMED, never defaulted (ARCH §18.3). A degraded walk and a walk
+            // over a thin atlas produce the same small number; only this line
+            // tells them apart.
+            tracing::info!(
+                label,
+                kind = grounding.kind.as_str(),
+                "atlas-grounding: {}",
+                d.sentence()
+            );
+        }
+
+        let before = chunks.len();
+        let fetcher = RuntimeEvidenceFetcher {
+            runtime: self,
+            corpus_ceiling,
+            lane,
+        };
+        let (fetched, resolve) = ground::resolve_evidence(
+            &grounding.requests,
+            grounding.budget,
+            enabled_corpora,
+            &fetcher,
+        )
+        .await;
+        let mut seen_in_pool: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for r in fetched {
+            let key = format!(
+                "{}|{}",
+                r.chunk.title.clone().unwrap_or_default(),
+                truncate_chars(&r.chunk.content, 80)
+            );
+            if seen_in_pool.insert(key) {
+                chunks.push(r.chunk);
+            }
+        }
+        let graph_added = chunks.len() - before;
+
+        // The line whose absence hid the defect: candidates in, chunks out,
+        // and every drop accounted for by reason.
+        tracing::info!(
+            label,
+            considered = resolve.considered,
+            graph_added,
+            dropped_not_allowed = resolve.out_of_scope,
+            dropped_not_found = resolve.unresolvable,
+            dropped_no_title_match = resolve.title_mismatch,
+            dropped_duplicate = resolve.duplicate,
+            "atlas-grounding: fetch ledger"
+        );
+        let ledger = StepLedger::injected(resolve.considered)
+            .drop(DropReason::OutOfScope, resolve.out_of_scope)
+            .drop(DropReason::EvidenceUnresolvable, resolve.unresolvable)
+            .drop(DropReason::TitleMismatch, resolve.title_mismatch)
+            .drop(DropReason::Duplicate, resolve.duplicate)
+            // Candidates past the fetch budget were never attempted. They
+            // are a DECISION, not a failure, and the accounting identity
+            // requires them named.
+            .drop(DropReason::BudgetExhausted, resolve.budget_exhausted());
+
+        // Adaptive triage: bump article slug per atlas to climb
+        // the Tier-2 enrichment queue.
+        for ctx in &ctxs {
+            provider.record_match(&ctx.atlas_corpus_id, &ctx.atlas_corpus_id);
+        }
+        if graph_added > 0 {
+            // Per-corpus breakdown of what graph-walk just pushed,
+            // so a downstream drop (cap / truncate / expand) can
+            // be pinned by comparing this against later sites
+            // (ARCH §0.1 glassbox).
+            let mut per_corpus: std::collections::BTreeMap<String, usize> =
+                std::collections::BTreeMap::new();
+            let n = chunks.len();
+            for c in chunks.iter().skip(n - graph_added.min(n)) {
+                *per_corpus.entry(c.corpus_id.clone()).or_insert(0) += 1;
+            }
+            tracing::info!(
+                label,
+                graph_added,
+                per_corpus = ?per_corpus,
+                "atlas-grounding: graph-walk fused (per-corpus injected counts)"
+            );
         }
         ledger
     }
 }
 
-/// Prepend the atlas verbatim excerpts harvested from the atoms that motivated
-/// this fetch — concept `defining_quote`s and claim `quotable_excerpt`s — so
-/// the article's exact words sit at the head of the passage. No-op when the
-/// motivating atoms carried neither field, which is most of them.
-fn prepend_atlas_highlights(
-    chunk: &mut corpus_engine::ScoredChunk,
-    req: &corpus_engine::enrichment::atlas::context::ChunkRequest,
-) {
-    if req.verbatim_excerpts.is_empty() {
-        return;
+/// The two fetches the walk's resolve step needs, over a live [`Runtime`].
+///
+/// Nothing but I/O: scope, budget, title filter, duplicate identity and
+/// scoring are all decided inside `corpus_engine`'s `resolve_evidence`, which
+/// `corpus-mcp` reaches through the same door. This type is the reason the
+/// two hosts cannot drift into two different walks (§10.6).
+struct RuntimeEvidenceFetcher<'a> {
+    runtime: &'a Runtime,
+    corpus_ceiling: Option<&'a [String]>,
+    lane: &'a crate::runtime::Lane,
+}
+
+impl corpus_engine::enrichment::atlas::ground::EvidenceFetcher for RuntimeEvidenceFetcher<'_> {
+    async fn by_row(
+        &self,
+        corpus: &kernel_types::CorpusId,
+        row: u64,
+    ) -> Option<corpus_engine::ScoredChunk> {
+        self.runtime.fetch_chunk_by_id(corpus.as_str(), row).await
     }
-    let mut head = String::from("[Atlas highlights]\n");
-    for ex in &req.verbatim_excerpts {
-        head.push_str(ex);
-        head.push('\n');
+
+    async fn by_search(
+        &self,
+        corpus: &kernel_types::CorpusId,
+        query: &str,
+        limit: usize,
+    ) -> Vec<corpus_engine::ScoredChunk> {
+        let scope = [corpus.as_str().to_string()];
+        self.runtime
+            .search_corpus_indexes_with_overrides(
+                &[],
+                query,
+                limit,
+                "AtlasNavigate",
+                None,
+                Some(&scope),
+                self.corpus_ceiling,
+                self.lane,
+            )
+            .await
     }
-    head.push('\n');
-    head.push_str(&chunk.content);
-    chunk.content = head;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The map's `DEFAULT_BUDGET` and this file's live fetch budget are ONE
+    /// number and must move together.
+    ///
+    /// They were not: `EPISTEMIC_INDEX.md` §1's Walk row said "budget 6", the
+    /// pre-registered default was minted from that sentence, and the live
+    /// call site had computed `ceil(20 * 0.6) = 12` since the SEP
+    /// calibration. Adopting the map's number would therefore have HALVED
+    /// atlas evidence on every corpus at the moment the walk started reading
+    /// the map — a regression handed to the SEP lane by a doc typo. The
+    /// default was corrected to the code (principle 4), and this test is what
+    /// keeps the correction from rotting: it fails if either side moves
+    /// alone.
+    ///
+    /// Failing input: set `DEFAULT_BUDGET` back to 6, or change
+    /// `KQ_PER_CORPUS_LIMIT` without re-deriving it.
+    #[test]
+    fn the_default_budget_is_the_live_fetch_budget() {
+        let live = ((KQ_PER_CORPUS_LIMIT as f32) * 0.6).ceil() as u32;
+        assert_eq!(
+            live,
+            corpus_engine_vocab::ontology::DEFAULT_BUDGET,
+            "the navigation table's default budget ({}) and the retrieval \
+             fetch budget ({live}) are one number",
+            corpus_engine_vocab::ontology::DEFAULT_BUDGET
+        );
+    }
+
+    /// The chunk -> atlas id derivation this file used to inline is the one in
+    /// corpus-engine, and it still produces what the SEP scope needs: the
+    /// parent corpus and its per-article child.
+    ///
+    /// Failing input: reinstate `format!("{}-{}", corpus_id, title)` here.
+    #[test]
+    fn the_scope_derivation_is_corpus_engines_and_still_reaches_sep_articles() {
+        use corpus_engine::enrichment::atlas::ground::candidate_atlas_ids;
+        let ids = candidate_atlas_ids("sep", Some("freewill"));
+        assert!(ids.contains(&"sep".to_string()));
+        assert!(ids.contains(&"sep-freewill".to_string()));
+        // A titleless chunk scopes to its own corpus only — never to a
+        // "<corpus>-" id that addresses nothing.
+        assert_eq!(
+            candidate_atlas_ids("wikipedia", None),
+            vec!["wikipedia".to_string()]
+        );
+    }
 }
