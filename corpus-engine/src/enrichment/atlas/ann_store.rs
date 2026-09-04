@@ -46,7 +46,20 @@ pub fn ann_table_present(atlas_dir: &Path) -> bool {
 ///
 /// Absent table → `false`. Table present but no `atoms.json` → `true`
 /// (nothing newer exists to embed). An unreadable mtime → `false` (rebuild).
+///
+/// Since ei-3c freshness is TWO questions, not one. mtime answers "was it
+/// embedded from these atoms"; it cannot answer "was it embedded from these
+/// KINDS", and that is the one that mattered — the seed population moved from
+/// the retrieval filter's Entity-only admission to the corpus's navigation map
+/// (`super::seed_population`), so every table on disk is fresh by mtime and
+/// wrong by population. A table whose recorded population is not the one this
+/// build derives is stale, and the check is deliberately cheap (one small read,
+/// two mtimes, no `ontology.json` parse) because the daemon runs it once per
+/// installed atlas at boot.
 pub fn ann_table_is_fresh(atlas_dir: &Path) -> bool {
+    if !super::seed_population::population_marker_is_current(atlas_dir) {
+        return false;
+    }
     let mtime = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
     let Some(table) = mtime(&ann_table_dir(atlas_dir)) else {
         return false;
@@ -452,12 +465,31 @@ mod tests {
         if let Some(t) = table_secs {
             let d = ann_table_dir(tmp.path());
             std::fs::create_dir_all(&d).unwrap();
+            // A table is written WITH its population marker since ei-3c, so a
+            // fixture exercising the MTIME clause has to write one too — else
+            // every case below short-circuits on the population clause and the
+            // mtime rule is never actually tested (§18.1).
+            let pop = super::super::seed_population::seed_population(tmp.path());
+            super::super::seed_population::write_population_marker(tmp.path(), &pop).unwrap();
             std::fs::File::open(&d)
                 .unwrap()
                 .set_modified(UNIX_EPOCH + Duration::from_secs(t))
                 .unwrap();
         }
         tmp
+    }
+
+    /// The population clause, watched failing: a table with the right mtime and
+    /// NO marker is the state every atlas on disk was in before ei-3c —
+    /// Entity-only, and fresh by mtime. It must read as stale.
+    #[test]
+    fn ann_table_is_fresh_table_without_a_population_marker_is_stale() {
+        let tmp = freshness_fixture(Some(1_000), Some(2_000));
+        std::fs::remove_file(super::super::seed_population::population_marker_path(
+            tmp.path(),
+        ))
+        .unwrap();
+        assert!(!ann_table_is_fresh(tmp.path()));
     }
 
     #[test]

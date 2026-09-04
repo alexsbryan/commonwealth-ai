@@ -16,6 +16,10 @@
 //! `sovereign_tools::atlas_context_manager::AtlasContextFilter` both resolve
 //! to this ONE definition (§10.6).
 
+use std::collections::BTreeSet;
+
+use super::atoms::{AtomEnvelope, AtomType};
+
 /// Filter applied during atlas-context loading. Mirrors the shape
 /// of the eval CLI's `AtlasLoadFilter` so the cache key derived
 /// here is comparable to what the CLI writes / reads.
@@ -63,6 +67,25 @@ pub struct AtlasContextFilter {
     /// Baked into [`Self::signature`], so a cache built with it off is
     /// correctly ignored when it flips on.
     pub include_declared_claim_types: bool,
+    /// The SEED POPULATION the corpus's own navigation map derived
+    /// (`seed_population::seed_population`), when this filter is being used to
+    /// AUTHOR the ANN seed table rather than to read a bag.
+    ///
+    /// `None` — the default, and what every read-side caller keeps — means
+    /// "the population is whatever the four booleans above admit", i.e. the
+    /// behaviour that existed before ei-3c. `Some` is set by
+    /// [`super::context_loader::backfill_ann`] and by nothing else: the ONE
+    /// writer derives it from `atlas/ontology.json`'s `navigation` section, so
+    /// the table's population is the MAP's decision and this filter is a
+    /// consumer of the table rather than its author (ARCH §10.6).
+    ///
+    /// It only ever WIDENS: [`Self::admits_atom`] unions it with the boolean
+    /// admission, so an operator's `SOVEREIGN_ATLAS_INCLUDE_CLAIMS=1` is never
+    /// switched back off by a map that names no Claim row.
+    ///
+    /// Baked into [`Self::signature`], so a bag built under one population is
+    /// not served under another.
+    pub seed_kinds: Option<BTreeSet<AtomType>>,
 }
 
 impl Default for AtlasContextFilter {
@@ -134,11 +157,59 @@ impl Default for AtlasContextFilter {
             include_tensions: false,
             include_configurations: false,
             include_declared_claim_types,
+            // No population: `Default` is the RETRIEVAL filter, and the seed
+            // population is attached by the one writer, at the one place it is
+            // derived. A default here would make this type the author again.
+            seed_kinds: None,
         }
     }
 }
 
 impl AtlasContextFilter {
+    /// Does this filter admit `atom` into the bag, on the strength of its KIND?
+    ///
+    /// The ONE admission predicate (ARCH §10.6). It was four `match` guards
+    /// spread through `load_atlas_context`'s loop, which is why a kind the
+    /// navigation map named as a seed could not be admitted at all: there was
+    /// nowhere to say so. Two clauses, unioned so the answer can only widen:
+    ///
+    /// 1. the [`Self::seed_kinds`] population the corpus's map derived, and
+    /// 2. what this filter itself admits — `Entity` and
+    ///    `ArgumentReconstruction` always (the atlas's baseline grounding
+    ///    surfaces, seeded since before any map existed), `Claim` under
+    ///    [`Self::include_claims`] or, narrower, under
+    ///    [`Self::include_declared_claim_types`] when the claim's `claim_kind`
+    ///    names a type the corpus DECLARED, and `Configuration` under
+    ///    [`Self::include_configurations`].
+    ///
+    /// `Tension` is deliberately absent: it is an EDGE surface, not an atom
+    /// kind, and rides on [`Self::include_tensions`] in its own pass.
+    ///
+    /// Failing input: an atlas whose map seeds `Claim`, with
+    /// `seed_kinds: None` — every claim is refused, which is the state ei-4
+    /// measured on wessex-hoard (49 claims, 0 seeds).
+    pub fn admits_atom(&self, atom: &AtomEnvelope, declared_claim_types: &[String]) -> bool {
+        if self
+            .seed_kinds
+            .as_ref()
+            .is_some_and(|p| p.contains(&atom.atom_type()))
+        {
+            return true;
+        }
+        match atom {
+            AtomEnvelope::Entity(_) | AtomEnvelope::ArgumentReconstruction(_) => true,
+            AtomEnvelope::Claim(c) => {
+                self.include_claims
+                    || (self.include_declared_claim_types
+                        && c.claim_kind
+                            .as_deref()
+                            .is_some_and(|k| declared_claim_types.iter().any(|t| t == k)))
+            }
+            AtomEnvelope::Configuration(_) => self.include_configurations,
+            _ => false,
+        }
+    }
+
     /// Stable signature used as the embeddings cache key. Must agree
     /// with `sovereign-cli::eval_cmd::runner::filter_signature` so a
     /// cache populated by either side is recognised by the other.
@@ -146,7 +217,8 @@ impl AtlasContextFilter {
         let mut depths = self.depth_allowlist.clone();
         depths.sort();
         format!(
-            "min_chars={};depth=[{}];max={};claims={};tensions={};configs={};declared_claims={}",
+            "min_chars={};depth=[{}];max={};claims={};tensions={};configs={};declared_claims={};\
+             population=[{}]",
             self.min_description_chars,
             depths.join(","),
             self.max_entries
@@ -156,6 +228,10 @@ impl AtlasContextFilter {
             self.include_tensions,
             self.include_configurations,
             self.include_declared_claim_types,
+            self.seed_kinds
+                .as_ref()
+                .map(|p| p.iter().map(AtomType::label).collect::<Vec<_>>().join(","))
+                .unwrap_or_default(),
         )
     }
 }

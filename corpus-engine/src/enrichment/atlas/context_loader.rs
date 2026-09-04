@@ -23,16 +23,19 @@
 //! Diagnostics are `tracing` events, not stderr: the same function runs
 //! inside the daemon.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use crate::enrichment::atlas::ann_store::ANN_TABLE_DIRNAME;
 use crate::enrichment::atlas::context::{
-    atom_attributes_suffix, build_persistent_ann_seed_table, AnnBuildStats, AtlasContext,
-    AtlasEntry,
+    build_persistent_ann_seed_table, render_atom_entry, AnnBuildStats, AtlasContext, AtlasEntry,
+};
+use crate::enrichment::atlas::seed_population::{
+    seed_population, write_population_marker,
 };
 use crate::enrichment::atlas::{
-    read_atlas_atoms, read_atlas_edges, read_atlas_ontology, AtomEnvelope, EdgeType,
+    read_atlas_atoms, read_atlas_edges, read_atlas_ontology, AtomEnvelope, AtomType, EdgeType,
 };
 use crate::types::EmbedFn;
 
@@ -144,6 +147,28 @@ pub async fn backfill_ann(
     corpus_id: &str,
     filter: &AtlasContextFilter,
 ) -> Result<BackfillOutcome, String> {
+    // The POPULATION is the map's decision, taken here — at the one writer —
+    // rather than at each of the four call sites that reach it (the atlas
+    // writer, `svrn atlas backfill-ann`, the `enrich build` Backfill step,
+    // `atlas migrate-all`). None of them passes it, none of them can get it
+    // wrong, and none of their signatures moved: the atlas dir is all the
+    // derivation needs (ARCH §10.6, §19).
+    let population = seed_population(atlas_dir);
+    let filter = &AtlasContextFilter {
+        seed_kinds: Some(population.kinds.clone()),
+        ..filter.clone()
+    };
+    tracing::info!(
+        corpus = corpus_id,
+        population = %population
+            .kinds
+            .iter()
+            .map(AtomType::label)
+            .collect::<Vec<_>>()
+            .join(","),
+        source = %population.source.label(),
+        "backfill-ann: seed population derived from the navigation map"
+    );
     let ctx = match load_atlas_context(embed, atlas_dir, corpus_id, filter.top_k, filter).await {
         Ok(ctx) => ctx,
         Err(LoadAtlasError::FilterExcludedAll {
@@ -163,10 +188,31 @@ pub async fn backfill_ann(
         Err(e) => return Err(e.to_string()),
     };
     let stats = build_persistent_ann_seed_table(atlas_dir, &ctx).await?;
+    // The marker rides with the table, written second so it is never newer
+    // than what it describes. Without it `ann_table_is_fresh` would keep an
+    // Entity-only table that merely post-dates `atoms.json` — which is every
+    // table on this box, and the reason a population change has to read as
+    // STALENESS rather than as an operator's problem to remember.
+    if let Err(e) = write_population_marker(atlas_dir, &population) {
+        // Not fatal: the table is on disk and correct. A missing marker reads
+        // as STALE, so the cost is a re-embed, never a wrong seed.
+        tracing::warn!(
+            corpus = corpus_id,
+            error = %e,
+            "backfill-ann: seed table written but its population marker was not; \
+             the table will read as stale and be rebuilt"
+        );
+    }
     tracing::info!(
         corpus = corpus_id,
         resolved = stats.resolved,
         total = stats.total,
+        population = %population
+            .kinds
+            .iter()
+            .map(AtomType::label)
+            .collect::<Vec<_>>()
+            .join(","),
         table = %atlas_dir.join(ANN_TABLE_DIRNAME).display(),
         "backfill-ann: wrote ANN seed table"
     );
@@ -315,214 +361,85 @@ pub async fn load_atlas_context(
     // backing atom's id; it seeds the v2 persistent ANN table. Empty only for
     // edge-derived Tension chunks, which have no single backing atom.
     let mut payloads: Vec<(String, String, String)> = Vec::new();
-    let mut total_entities = 0usize;
-    let mut total_claims = 0usize;
-    let mut kept_claims = 0usize;
-    let mut total_configurations = 0usize;
-    let mut kept_configurations = 0usize;
+    // Per-kind census, not six named counters. The population is a SET of atom
+    // kinds now (`seed_population`), so a fixed fan-out over entities / claims
+    // / configurations would go dark on exactly the kinds this order added.
+    let mut seen_by_kind: BTreeMap<AtomType, usize> = BTreeMap::new();
+    let mut kept_by_kind: BTreeMap<AtomType, usize> = BTreeMap::new();
+    let mut drop_kind = 0usize;
     let mut drop_placeholder = 0usize;
     let mut drop_short_desc = 0usize;
     let mut drop_depth = 0usize;
     let mut drop_cap = 0usize;
+    let mut drop_unrenderable: BTreeMap<AtomType, usize> = BTreeMap::new();
     for atom in &atoms.atoms {
-        match atom {
-            AtomEnvelope::Entity(e) => {
-                total_entities += 1;
-                // A NAMED atom is never a placeholder — names are first-class
-                // grounding signal. Drop only atoms with no name AND no
-                // description (truly empty); the signal_len floor below governs
-                // the rest. (Was `description.is_empty() && salience == 0.0`,
-                // which discarded named-but-unscored entities — exactly the
-                // baked-in signal the v2 migration must not lose.)
-                let is_placeholder = e.canonical_name.trim().is_empty() && e.description.is_empty();
-                if is_placeholder {
-                    drop_placeholder += 1;
-                    continue;
-                }
-                // Measure the atom's FULL embed signal — name + aliases +
-                // description — not the description alone. The embed text
-                // (render_atom_entry) is name+aliases+description, so a
-                // richly-named entity with a terse description ("Pierre
-                // Abelard", "abductive reasoning") is strong grounding signal
-                // and must NOT be dropped. Names are first-class.
-                let signal_len = e.canonical_name.len()
-                    + e.aliases.iter().map(|a| a.len()).sum::<usize>()
-                    + e.description.len();
-                if signal_len < filter.min_description_chars {
-                    drop_short_desc += 1;
-                    continue;
-                }
-                if !filter.depth_allowlist.is_empty() {
-                    // Match against the serialised form of EnrichmentDepth.
-                    // `serde_json` keeps it lowercase (snake_case) — same form
-                    // operators see in atoms.json.
-                    let depth_label = serde_json::to_string(&e.enrichment_depth)
-                        .unwrap_or_default()
-                        .trim_matches('"')
-                        .to_string();
-                    if !filter
-                        .depth_allowlist
-                        .iter()
-                        .any(|d| d.eq_ignore_ascii_case(&depth_label))
-                    {
-                        drop_depth += 1;
-                        continue;
-                    }
-                }
-                if let Some(cap) = filter.max_entries {
-                    if payloads.len() >= cap {
-                        drop_cap += 1;
-                        continue;
-                    }
-                }
-                let mut text = String::new();
-                text.push_str(&e.canonical_name);
-                text.push('\n');
-                if !e.aliases.is_empty() {
-                    text.push_str(&e.aliases.join(", "));
-                    text.push('\n');
-                }
-                text.push_str(&e.description);
-                text.push_str(&atom_attributes_suffix(&e.attributes));
-                if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
-                    text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
-                }
-                payloads.push((e.id.as_str().to_string(), e.canonical_name.clone(), text));
-            }
-            // `include_claims` is the corpus-wide switch. The declared-type
-            // arm is narrower and DARK: it admits only claims whose
-            // `claim_kind` names a type the author declared, so an undeclared
-            // corpus admits nothing new no matter how the knob is set.
-            AtomEnvelope::Claim(c)
-                if filter.include_claims
-                    || (filter.include_declared_claim_types
-                        && declared_claim_types
-                            .iter()
-                            .any(|t| Some(t.as_str()) == c.claim_kind.as_deref())) =>
-            {
-                total_claims += 1;
-                if !filter.depth_allowlist.is_empty() {
-                    let depth_label = serde_json::to_string(&c.enrichment_depth)
-                        .unwrap_or_default()
-                        .trim_matches('"')
-                        .to_string();
-                    if !filter
-                        .depth_allowlist
-                        .iter()
-                        .any(|d| d.eq_ignore_ascii_case(&depth_label))
-                    {
-                        drop_depth += 1;
-                        continue;
-                    }
-                }
-                if let Some(cap) = filter.max_entries {
-                    if payloads.len() >= cap {
-                        drop_cap += 1;
-                        continue;
-                    }
-                }
-                let act = serde_json::to_string(&c.discourse_act)
-                    .unwrap_or_default()
-                    .trim_matches('"')
-                    .to_string();
-                let status = serde_json::to_string(&c.epistemic_status)
-                    .unwrap_or_default()
-                    .trim_matches('"')
-                    .to_string();
-                let mut text = format!("[Claim: {act}, {status}] {content}", content = c.content);
-                text.push_str(&atom_attributes_suffix(&c.attributes));
-                if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
-                    text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
-                }
-                payloads.push((c.id.as_str().to_string(), article_slug.clone(), text));
-                kept_claims += 1;
-            }
-            AtomEnvelope::Configuration(cfg) if filter.include_configurations => {
-                total_configurations += 1;
-                if !filter.depth_allowlist.is_empty() {
-                    let depth_label = serde_json::to_string(&cfg.enrichment_depth)
-                        .unwrap_or_default()
-                        .trim_matches('"')
-                        .to_string();
-                    if !filter
-                        .depth_allowlist
-                        .iter()
-                        .any(|d| d.eq_ignore_ascii_case(&depth_label))
-                    {
-                        drop_depth += 1;
-                        continue;
-                    }
-                }
-                if let Some(cap) = filter.max_entries {
-                    if payloads.len() >= cap {
-                        drop_cap += 1;
-                        continue;
-                    }
-                }
-                let mut text = format!("[Configuration: {}] {}", cfg.label, cfg.description);
-                if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
-                    text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
-                }
-                payloads.push((cfg.id.as_str().to_string(), article_slug.clone(), text));
-                kept_configurations += 1;
-            }
-            AtomEnvelope::ArgumentReconstruction(a) => {
-                // Always include — these are the named-argument
-                // reconstructions Phase 1 extracted. Embed text is
-                // name + premises + conclusion so a question
-                // mentioning the argument name OR matching its
-                // content can seed navigation onto this atom. The
-                // article-slug `canonical_name` lets `score_sources`
-                // credit the article when the atom is in top-K.
-                if !filter.depth_allowlist.is_empty() {
-                    let depth_label = serde_json::to_string(&a.enrichment_depth)
-                        .unwrap_or_default()
-                        .trim_matches('"')
-                        .to_string();
-                    if !filter
-                        .depth_allowlist
-                        .iter()
-                        .any(|d| d.eq_ignore_ascii_case(&depth_label))
-                    {
-                        drop_depth += 1;
-                        continue;
-                    }
-                }
-                if let Some(cap) = filter.max_entries {
-                    if payloads.len() >= cap {
-                        drop_cap += 1;
-                        continue;
-                    }
-                }
-                let mut text = String::with_capacity(256);
-                text.push_str("[Argument: ");
-                text.push_str(&a.name);
-                text.push_str("] ");
-                for p in &a.premises {
-                    text.push_str(p);
-                    text.push(' ');
-                }
-                text.push_str(&a.conclusion);
-                // Append objection content so cosine seeding picks
-                // this argument when the question vocabulary
-                // overlaps with an objection (e.g. "Frankfurt"
-                // mentioned ⇒ Consequence Argument seeds).
-                for o in &a.objections {
-                    if !o.content.trim().is_empty() {
-                        text.push(' ');
-                        text.push_str(o.content.trim());
-                    } else if !o.name.trim().is_empty() {
-                        text.push(' ');
-                        text.push_str(o.name.trim());
-                    }
-                }
-                if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
-                    text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
-                }
-                payloads.push((a.id.as_str().to_string(), article_slug.clone(), text));
-            }
-            _ => continue,
+        let kind = atom.atom_type();
+        *seen_by_kind.entry(kind).or_default() += 1;
+        // ONE admission predicate (ARCH §10.6): the seed population the map
+        // derived, unioned with what the retrieval filter itself admits. It
+        // can only widen — a corpus whose map names no Claim still keeps the
+        // claims an operator switched on with `SOVEREIGN_ATLAS_INCLUDE_CLAIMS`.
+        if !filter.admits_atom(atom, &declared_claim_types) {
+            drop_kind += 1;
+            continue;
         }
+        // Entity-only quality gates. A NAMED atom is never a placeholder —
+        // names are first-class grounding signal — so drop only atoms with no
+        // name AND no description, and measure the FULL embed signal (name +
+        // aliases + description) against the floor rather than the description
+        // alone. (Was `description.is_empty() && salience == 0.0`, which
+        // discarded named-but-unscored entities.) The other kinds carry no
+        // name/description pair to measure, and their content IS the signal.
+        if let AtomEnvelope::Entity(e) = atom {
+            if e.canonical_name.trim().is_empty() && e.description.is_empty() {
+                drop_placeholder += 1;
+                continue;
+            }
+            let signal_len = e.canonical_name.len()
+                + e.aliases.iter().map(|a| a.len()).sum::<usize>()
+                + e.description.len();
+            if signal_len < filter.min_description_chars {
+                drop_short_desc += 1;
+                continue;
+            }
+        }
+        if !filter.depth_allowlist.is_empty() {
+            // Match against the serialised form of EnrichmentDepth. `serde_json`
+            // keeps it lowercase (snake_case) — the same form operators see in
+            // atoms.json.
+            let depth_label = serde_json::to_string(&atom.enrichment_depth())
+                .unwrap_or_default()
+                .trim_matches('"')
+                .to_string();
+            if !filter
+                .depth_allowlist
+                .iter()
+                .any(|d| d.eq_ignore_ascii_case(&depth_label))
+            {
+                drop_depth += 1;
+                continue;
+            }
+        }
+        if let Some(cap) = filter.max_entries {
+            if payloads.len() >= cap {
+                drop_cap += 1;
+                continue;
+            }
+        }
+        // The ONE renderer (`context::render_atom_entry`), not a second copy
+        // of it. This loop carried a byte-identical fork of that function's
+        // four arms until ei-3c — the same rendering the read-time bag builder
+        // uses, written twice, which is the fork §10.6 names and the reason a
+        // kind added to one side went missing on the other. `None` means the
+        // renderer has no shape for this kind: the atom was ADMITTED and could
+        // not be rendered, which is reported per kind below rather than folded
+        // into a filter drop (§18.3).
+        let Some((name, text)) = render_atom_entry(atom, &article_slug) else {
+            *drop_unrenderable.entry(kind).or_default() += 1;
+            continue;
+        };
+        payloads.push((atom.id().as_str().to_string(), name, text));
+        *kept_by_kind.entry(kind).or_default() += 1;
     }
 
     // Path 2 Phase B — fold Tension edges into the virtual-chunk pool.
@@ -586,14 +503,17 @@ pub async fn load_atlas_context(
 
     tracing::info!(
         corpus = atlas_corpus_id,
-        kept_entities = payloads.len() - kept_claims - kept_tensions - kept_configurations,
-        total_entities,
-        kept_claims,
-        total_claims,
+        population = %filter
+            .seed_kinds
+            .as_ref()
+            .map(|p| p.iter().map(AtomType::label).collect::<Vec<_>>().join(","))
+            .unwrap_or_else(|| "<retrieval filter>".to_string()),
+        seen = ?seen_by_kind,
+        kept = ?kept_by_kind,
+        unrenderable = ?drop_unrenderable,
         kept_tensions,
         total_tensions,
-        kept_configurations,
-        total_configurations,
+        drop_kind,
         drop_placeholder,
         min_description_chars = filter.min_description_chars,
         drop_short_desc,
@@ -602,6 +522,18 @@ pub async fn load_atlas_context(
         top_k,
         "atlas-context: filtered atoms.json (pre-embed)"
     );
+    // An ADMITTED kind the one renderer has no shape for is a hole in the
+    // population, not a filter decision — say so at warn (§18.3), because the
+    // corpus's own map asked for those seeds and did not get them.
+    for (kind, n) in &drop_unrenderable {
+        tracing::warn!(
+            corpus = atlas_corpus_id,
+            kind = kind.label(),
+            atoms = n,
+            "atlas-context: the seed population admits this kind and \
+             `render_atom_entry` has no shape for it; those atoms are NOT seeded"
+        );
+    }
     if payloads.is_empty() {
         return Err(LoadAtlasError::FilterExcludedAll {
             corpus_id: atlas_corpus_id.to_string(),
@@ -688,6 +620,7 @@ mod tests {
             include_tensions: false,
             include_configurations: false,
             include_declared_claim_types: false,
+            seed_kinds: None,
         }
     }
 
@@ -743,6 +676,94 @@ mod tests {
             }
         );
         assert!(!ann_table_present(&atlas), "no table may be written");
+    }
+
+    /// One Entity, one Claim and one Configuration in the on-disk shape, plus
+    /// an `ontology.json` whose navigation map seeds on Claim and
+    /// Configuration. Copied from real atlases (wessex-hoard's claim,
+    /// brothers-karamazov-book-1's configuration) so the fixture is not a
+    /// hopeful guess at the wire format.
+    fn atlas_with_a_claim_and_configuration_map(atlas: &std::path::Path) {
+        std::fs::create_dir_all(atlas).unwrap();
+        std::fs::write(
+            atlas.join("atoms.json"),
+            r#"{"schema_version":"2","atoms":[
+              {"atom_type":"Entity","data":{"id":"entity-0001","canonical_name":"guest logbook",
+               "entity_type":"work","first_appearance":{"chunk_id":"sec_00001","passage_preview":"p"},
+               "description":"A physical record kept by the front door.","salience":0.33,
+               "enrichment_depth":"extracted"}},
+              {"atom_type":"Claim","data":{"id":"claim-0001",
+               "content":"Prior to Aldfrith, English coins named mints or moneyers, never the ruler.",
+               "discourse_act":"assert","epistemic_status":"confident","scope":"universal",
+               "evidence":[{"chunk_id":"sec_00001","passage_preview":"p"}],
+               "anchor":"before him","claim_kind":"attribution","enrichment_depth":"extracted"}},
+              {"atom_type":"Configuration","data":{"id":"config-0001",
+               "label":"The Father as the Source of Structural Chaos",
+               "description":"An entropic centre that generates the novel's conflicts.",
+               "constituent_atoms":["entity-0001","claim-0001"],
+               "evidence":[{"chunk_id":"sec_0003"}],"confidence":0.92,
+               "interpretive_note":"An alternative reading makes him a passive victim.",
+               "enrichment_depth":"extracted"}}]}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            atlas.join("ontology.json"),
+            r#"{"schema_version":"1","ontology_version":1,"pipeline_id":"custom_atlas",
+              "policies":{"shape":{"types":[{"name":"attribution","kind":"claim"}]},
+              "navigation":{
+                "thematic":{"seed":{"kinds":["Configuration","Entity"]},"walk":[],"hops":2,"budget":12},
+                "trajectory":{"seed":{"kinds":[]},"walk":[],"hops":2,"budget":12},
+                "tension":{"seed":{"kinds":["Claim","Position"]},"walk":[],"hops":1,"budget":12},
+                "enumeration":{"seed":{"kinds":[]},"walk":[],"hops":0,"budget":12},
+                "lookup":{"seed":{"kinds":[]},"walk":[],"hops":1,"budget":12}}}}"#,
+        )
+        .unwrap();
+    }
+
+    /// ei-3c's whole point: the seed table's population is the corpus's
+    /// navigation map, not the retrieval filter. The filter passed in is the
+    /// PRODUCTION one — claims off, configurations off — and the map's
+    /// `tension` and `thematic` rows put both kinds in the table anyway.
+    ///
+    /// Failing input: `seed_population` narrowed to the filter's admission, or
+    /// `backfill_ann` not attaching the population — either drops the table to
+    /// the one Entity, which is the Entity-only state ei-4 measured on every
+    /// atlas on this box.
+    #[tokio::test]
+    async fn the_seed_table_population_is_the_maps_not_the_retrieval_filters() {
+        use crate::enrichment::atlas::ann_store::AnnSeedTable;
+        let tmp = tempfile::tempdir().unwrap();
+        let atlas = tmp.path().join("atlas");
+        atlas_with_a_claim_and_configuration_map(&atlas);
+
+        let out = backfill_ann(&unit_embed(), &atlas, "t", &grounding_filter())
+            .await
+            .expect("backfill succeeds");
+        assert_eq!(
+            out,
+            BackfillOutcome::Built(AnnBuildStats {
+                resolved: 3,
+                total: 3
+            }),
+            "entity + claim + configuration, all three seeded"
+        );
+
+        // Read the ids back OUT of the table, not off the stats: the done-when
+        // is that those KINDS land in it.
+        let table = AnnSeedTable::open_for_atlas(&atlas)
+            .await
+            .expect("table opens");
+        let mut ids = table
+            .nearest(&[1.0_f32, 1.0, 0.0, 0.0], 16)
+            .await
+            .expect("nearest");
+        ids.sort();
+        assert_eq!(ids, vec!["claim-0001", "config-0001", "entity-0001"]);
+
+        // …and the table records the population it was built under, so a later
+        // build that derives a different one rebuilds rather than trusting it.
+        assert!(crate::enrichment::atlas::seed_population::population_marker_is_current(&atlas));
+        assert!(ann_table_is_fresh(&atlas));
     }
 
     #[tokio::test]

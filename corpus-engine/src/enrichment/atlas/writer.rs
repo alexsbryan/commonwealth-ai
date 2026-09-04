@@ -221,9 +221,14 @@ pub fn write_atlas_full(
 /// out of 1,770. `atoms.json` is already on disk either way, so the recovery is
 /// always `svrn atlas backfill-ann <id>`.
 ///
-/// The grounding filter is `AtlasContextFilter::default()` — the universe the
-/// daemon seeds `atlas_navigate_ann` from. No other filter may be used here, or
-/// the table indexes atoms the query path never looks at.
+/// The POPULATION — which atom KINDS the table is built from — is NOT this
+/// function's decision and is not the filter's either. `backfill_ann` derives
+/// it from the corpus's own navigation map (`seed_population`), which is why
+/// this call still passes `AtlasContextFilter::default()`: the filter carries
+/// the quality knobs (`min_description_chars`, the depth allowlist, the cap)
+/// and the map carries the kinds. Before ei-3c the filter carried both, and
+/// since its production kind admission is Entity-only, the `tension` row —
+/// which seeds on Claim + Position — seeded nothing on any corpus on this box.
 fn seed_atlas(atlas_dir: &Path, seeding: &AtlasSeeding) -> io::Result<SeedOutcome> {
     let corpus_id = corpus_id_of(atlas_dir);
     let embed = match seeding {
@@ -265,7 +270,7 @@ fn seed_atlas(atlas_dir: &Path, seeding: &AtlasSeeding) -> io::Result<SeedOutcom
 /// description, so `write_atlas_full`'s signature does not grow a corpus-id
 /// parameter every caller would have to thread. Same derivation
 /// [`write_atlas_v2_store`] uses; one place, one answer.
-fn corpus_id_of(atlas_dir: &Path) -> String {
+pub(crate) fn corpus_id_of(atlas_dir: &Path) -> String {
     atlas_dir
         .parent()
         .and_then(|p| p.file_name())

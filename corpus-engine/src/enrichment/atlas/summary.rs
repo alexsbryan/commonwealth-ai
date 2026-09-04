@@ -645,6 +645,7 @@ mod tests {
             include_tensions: false,
             include_configurations: false,
             include_declared_claim_types: false,
+            seed_kinds: None,
         };
         let out = crate::enrichment::atlas::context_loader::backfill_ann_blocking(
             &embed, dir, "t", &filter,

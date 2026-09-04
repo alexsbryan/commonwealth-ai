@@ -53,6 +53,7 @@ pub mod resolution_ontology;
 pub mod resolve;
 pub mod schema_validation;
 pub mod section_cache;
+pub mod seed_population;
 pub use corpus_engine_vocab::stable_key;
 pub mod store;
 pub mod strategies;
