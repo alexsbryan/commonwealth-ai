@@ -1,0 +1,30 @@
+# judge.rs residual extraction: batched family, scan, prompts.
+# Coordinates surveyed 2026-09-03 (post tests-move file, 1,846 lines).
+[plan]
+subject = "sovereign/crates/sovereign-core/src/runtime/grounding/judge.rs"
+
+[[move]]
+start = 1235
+end = 1842
+dest = "sovereign/crates/sovereign-core/src/runtime/grounding/judge/batched.rs"
+
+[[move]]
+start = 557
+end = 1072
+dest = "sovereign/crates/sovereign-core/src/runtime/grounding/judge/scan.rs"
+
+[[move]]
+start = 396
+end = 443
+dest = "sovereign/crates/sovereign-core/src/runtime/grounding/judge/prompts.rs"
+
+[[patch]]
+start = 28
+end = 28
+body = """use sovereign_contracts::types::GateCallMechanism;
+mod batched;
+mod prompts;
+mod scan;
+pub(crate) use batched::*;
+pub(crate) use prompts::*;
+pub(crate) use scan::*;"""
