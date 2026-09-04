@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+serving-policy = { workspace = true }
 # The launch-shape vocabulary. `RpcServe` is the ONE reading of
 # `SOVEREIGN_RPC_SERVE`, shared with the two mesh surfaces and
 # commonwealth-api's `/status`, so nothing can advertise a worker this
@@ -18,10 +19,6 @@ libc = "0.2"
 # `child_main` carries it. Workspace-pinned, so no version skew (§8.2).
 tracing-subscriber = { workspace = true }
 sovereign-core = { workspace = true }
-# For `fair_sched::EtaEwma` — the ONE queue-wait prediction, shared with the
-# chat scheduler rather than reimplemented here (ARCH_PRINCIPLES §10.6).
-# Legal by the layer map: mesh-foundation sits below runtime.
-commonwealth-core = { workspace = true }
 # The pure-HTTP OICP client (RemoteApiProvider / SplitInferenceProvider) was
 # extracted here; re-exported at `sovereign_inference::remote::*`.
 oicp-client = { workspace = true }

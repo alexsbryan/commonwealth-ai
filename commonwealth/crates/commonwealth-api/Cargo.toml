@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+serving-policy = { workspace = true }
 kernel-types = { workspace = true }
 commonwealth-core = { workspace = true }
 commonwealth-transport = { workspace = true }

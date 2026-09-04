@@ -10,7 +10,6 @@ use std::pin::Pin;
 use async_trait::async_trait;
 use commonwealth_app::proxy::AppPortMap;
 use commonwealth_app::registry::AppRegistry;
-use commonwealth_core::fair_sched::{reciprocity_weight, SchedCore, TryGrant};
 use commonwealth_core::ids::HandoffId;
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::{Mesh, NodeStatus};
@@ -24,6 +23,7 @@ use commonwealth_knowledge::{
 use commonwealth_state::{ActivityEmitter, ContributionEmitter, MeshStore, PeerPreferenceStore};
 use corpus_engine::CorpusEngine;
 use futures::Stream;
+use serving_policy::fair_sched::{reciprocity_weight, SchedCore, TryGrant};
 
 use crate::openai_types::{ChatCompletionRequest, ChatCompletionResponse, StreamFrame};
 
@@ -648,7 +648,7 @@ pub struct AppStateInner {
     /// an incoming request carries a pipeline name like
     /// `commonwealth/sovereign-coder`. Loaded from the embedded
     /// `default_pipelines.toml` at `AppState::new` time.
-    pub pipeline_aliases: commonwealth_core::pipeline_aliases::PipelineAliasTable,
+    pub pipeline_aliases: serving_policy::pipeline_aliases::PipelineAliasTable,
     /// Dynamic slot-name aliases. Map keys are operator-friendly slot
     /// labels (`primary`, `fast`, `code`, `embed`) — possibly prefixed
     /// `commonwealth/` for namespaced lookups. Values are the GGUF
@@ -985,12 +985,12 @@ pub struct AppStateInner {
     /// shed here would double-queue against the inference slot queue's
     /// deliberate predicted-wait shed, which remains THE shed decider. The
     /// only rule this scheduler enforces is the per-principal equal share
-    /// ([`commonwealth_core::fair_sched::fair_share_cap`]), and `try_grant`
+    /// ([`serving_policy::fair_sched::fair_share_cap`]), and `try_grant`
     /// never leaves a waiter behind — so there is no second queue either.
     pub client_sched: Mutex<SchedCore<crate::principal::PrincipalKey>>,
 
     /// Concurrency budget divided among active principals by
-    /// [`commonwealth_core::fair_sched::fair_share_cap`]. See
+    /// [`serving_policy::fair_sched::fair_share_cap`]. See
     /// [`crate::admission::DEFAULT_CLIENT_FAIR_CONCURRENCY`] for how the
     /// default is derived and `SOVEREIGN_CLIENT_FAIR_CONCURRENCY` to override.
     pub client_fair_concurrency: std::sync::atomic::AtomicU32,
@@ -1698,7 +1698,7 @@ impl AppState {
                 knowledge_store,
                 model_aliases: ModelAliasTable::default_table(),
                 pipeline_aliases:
-                    commonwealth_core::pipeline_aliases::PipelineAliasTable::default_table(),
+                    serving_policy::pipeline_aliases::PipelineAliasTable::default_table(),
                 slot_aliases: ArcSwap::from_pointee(std::collections::HashMap::new()),
                 servable_model_files: ArcSwap::from_pointee(Vec::new()),
                 self_node_pubkey: std::sync::RwLock::new(None),
@@ -2229,7 +2229,7 @@ impl AppState {
     }
 
     /// The concurrency budget shared out by
-    /// [`commonwealth_core::fair_sched::fair_share_cap`].
+    /// [`serving_policy::fair_sched::fair_share_cap`].
     pub fn client_fair_concurrency(&self) -> u32 {
         self.inner
             .client_fair_concurrency

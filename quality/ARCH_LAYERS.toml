@@ -106,6 +106,13 @@ crates = [
     "sovereign-turn-client",
     "arch-layers",
     "sovereign-time",
+    # Serving policy — fair-share scheduling + pipeline alias resolution.
+    # Tier-0 for the same reason sovereign-time is: its consumers span the
+    # family line (commonwealth-api, sovereign-server, sovereign-inference,
+    # sovereign-cli-dev), so anywhere ABOVE layer 0 puts a cross-family edge
+    # back. See the two [[forbid]] blocks below — the layer entry alone would
+    # be a green gate enforcing nothing (§5.1).
+    "serving-policy",
 ]
 
 # The knowledge layer: corpus-engine + its carve-outs. "Self-contained by
@@ -303,6 +310,22 @@ from = "oicp-client"
 to = "sovereign-*"
 except = ["sovereign-contracts"]
 reason = "the OICP client meets the runtime at the contracts seam only; the inference vocabulary it borrows is oicp's own and moves down in its own rung"
+
+# serving-policy was minted 2026-09-03 by moving `fair_sched` out of
+# commonwealth-core, and `fair_sched` was the ONLY reason sovereign-inference
+# and sovereign-server depended on the mesh foundation at all. A dep in EITHER
+# direction here restores exactly the edges the move deleted, so both are
+# forbidden with no `except`. Its `[dependencies]` is serde + toml and nothing
+# in-repo; that is the contract, stated in its lib.rs and pinned here.
+[[forbid]]
+from = "serving-policy"
+to = "sovereign-*"
+reason = "a serving-policy that names the runtime is not tier-0, and the two cross-family edges this crate was minted to delete come straight back"
+
+[[forbid]]
+from = "serving-policy"
+to = "commonwealth-*"
+reason = "same rule pointing the other way — the module came OUT of commonwealth-core precisely so its runtime-tier consumers would stop reaching into the mesh foundation for it"
 
 [[forbid]]
 from = "commonwealth-core"

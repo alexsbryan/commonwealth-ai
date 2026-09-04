@@ -341,7 +341,7 @@ pub type TallyBody = GuardedBody<TallyGuard>;
 
 /// Concurrency the host can carry before the inference slot queue starts
 /// shedding — the numerator
-/// [`commonwealth_core::fair_sched::fair_share_cap`] divides among active
+/// [`serving_policy::fair_sched::fair_share_cap`] divides among active
 /// principals.
 ///
 /// **Derived, not picked.** The slot queue sheds when the predicted wait
@@ -478,7 +478,7 @@ pub async fn client_fairness_layer(
     let (outcome, cap, active, inflight) = {
         let mut sched = state.lock_client_sched();
         let active = sched.active_keys_including(&resolved.key);
-        let cap = commonwealth_core::fair_sched::fair_share_cap(budget, active);
+        let cap = serving_policy::fair_sched::fair_share_cap(budget, active);
         let inflight = sched.inflight_of(&resolved.key);
         // Weight is a constant: see the "never ranks" note above.
         let outcome = if enforcing {
@@ -496,7 +496,7 @@ pub async fn client_fairness_layer(
     // identified, the share it was measured against, and what was decided.
     // `target: "admission"` is a custom target — it is dark unless the
     // tracing filter lists it (see `quality/env-flags.toml`).
-    let granted = matches!(outcome, commonwealth_core::fair_sched::TryGrant::Granted);
+    let granted = matches!(outcome, serving_policy::fair_sched::TryGrant::Granted);
     tracing::debug!(
         target: "admission",
         principal = %resolved.key,

@@ -11,13 +11,6 @@
 # covers: tag over a body that cannot fail is refused by the generator.
 
 [[claim]]
-requirement = "FE-102"
-test = "commonwealth-core::fair_sched::tests::fair_share_cap_is_uncapped_for_a_lone_principal"
-file = "commonwealth/crates/commonwealth-core/src/fair_sched.rs"
-line = 836
-asserts = 2
-
-[[claim]]
 requirement = "FE-11"
 test = "commonwealth-core::mesh::tests::gossip_auth::rotating_the_invite_never_touches_the_mesh_secret"
 file = "commonwealth/crates/commonwealth-core/src/mesh/tests/gossip_auth.rs"

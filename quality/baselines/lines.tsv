@@ -49,6 +49,8 @@
 1267	oicp-types::tests
 255	quality/arch-layers
 313	quality/arch-layers::tests
+356	serving-policy
+418	serving-policy::tests
 1611	sovereign-mobile/src-tauri
 104	sovereign-mobile/src-tauri::tests
 4	sovereign/bench/agent-coding/problems/1.1-reverse-string/scaffold

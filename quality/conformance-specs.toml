@@ -423,9 +423,9 @@ id = "FE-102"
 family = "FE"
 status = "landed"
 clause = '''The client-fairness share rule MUST take **no weight argument**, so weight-ordering unfairness is *unexpressible* rather than merely avoided. A single caller alone on the host MUST be untouched.'''
-target = '''commonwealth/crates/commonwealth-core/src/fair_sched.rs:163::fair_share_cap'''
-existing = '''commonwealth/crates/commonwealth-core/src/fair_sched.rs:835::fair_share_cap_is_uncapped_for_a_lone_principal'''
-landed = '''commonwealth-core::fair_sched::tests::fair_share_cap_is_uncapped_for_a_lone_principal'''
+target = '''serving-policy/src/fair_sched.rs:163::fair_share_cap'''
+existing = '''serving-policy/src/fair_sched.rs:835::fair_share_cap_is_uncapped_for_a_lone_principal'''
+landed = '''serving-policy::fair_sched::tests::fair_share_cap_is_uncapped_for_a_lone_principal'''
 
 [[spec]]
 id = "FE-106"

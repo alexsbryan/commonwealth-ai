@@ -1936,6 +1936,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "serving-policy",
  "sha2 0.10.9",
  "sovereign-atos",
  "sovereign-core",
@@ -11642,6 +11643,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "serving-policy"
+version = "0.6.0"
+dependencies = [
+ "serde",
+ "toml 0.8.2",
+]
+
+[[package]]
 name = "servo_arc"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12207,6 +12216,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "serving-policy",
  "sha2 0.10.9",
  "sovereign-atos",
  "sovereign-cli-shared",
@@ -12539,7 +12549,6 @@ name = "sovereign-inference"
 version = "0.6.0"
 dependencies = [
  "async-trait",
- "commonwealth-core",
  "dirs 5.0.1",
  "encoding_rs",
  "futures",
@@ -12553,6 +12562,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "serving-policy",
  "sovereign-contracts",
  "sovereign-core",
  "sysinfo 0.34.2",
@@ -12700,7 +12710,6 @@ dependencies = [
  "async-trait",
  "axum",
  "chrono",
- "commonwealth-core",
  "commonwealth-tdd",
  "commonwealth-transport",
  "corpus-engine",
@@ -12713,6 +12722,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "serving-policy",
  "sovereign-contracts",
  "sovereign-core",
  "sovereign-gliner",

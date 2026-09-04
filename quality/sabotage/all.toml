@@ -76,7 +76,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-6-the_bound_is_a_wait_bound_not_a_ban_on_s"
 requirement = "CI-6"
-target = "commonwealth/crates/commonwealth-core/src/fair_sched.rs"
+target = "serving-policy/src/fair_sched.rs"
 find = "    pub fn predict_wait_ms(&self, position: u32, slots: usize, in_flight_elapsed_ms: u64) -> u64 {\n        let slots = (slots.max(1)) as u64;\n        ((position as u64).div_ceil(slots) * self.avg_turn_ms).saturating_sub(in_flight_elapsed_ms)\n    }"
 replace = "    pub fn predict_wait_ms(&self, position: u32, slots: usize, in_flight_elapsed_ms: u64) -> u64 {\n        let slots = (slots.max(1)) as u64;\n        // Mutation: Remove the subtraction of elapsed time to violate CI-6\n        // The requirement states a cooldown MUST be stamped at the end of the run,\n        // implying that `in_flight_elapsed_ms` should reduce the predicted wait.\n        // By ignoring it, we fail to account for work already done, causing false positives on shedding.\n        ((position as u64).div_ceil(slots) * self.avg_turn_ms)\n    }"
 mustFail = ["the_bound_is_a_wait_bound_not_a_ban_on_slow_turns"]

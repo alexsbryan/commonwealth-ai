@@ -24,7 +24,7 @@ use std::time::Duration;
 
 use arc_swap::ArcSwap;
 use axum::http::HeaderMap;
-use commonwealth_core::fair_sched::reciprocity_weight;
+use serving_policy::fair_sched::reciprocity_weight;
 
 use crate::auth::TenantId;
 use crate::scheduler::UserKey;

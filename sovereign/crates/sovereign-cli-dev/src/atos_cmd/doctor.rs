@@ -72,7 +72,7 @@ pub(crate) async fn cmd_doctor(_args: &[String]) -> i32 {
 
     // 5. Default pipelines loadable.
     let pipelines_ok = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        commonwealth_core::pipeline_aliases::PipelineAliasTable::default_table()
+        serving_policy::pipeline_aliases::PipelineAliasTable::default_table()
             .resolve("sovereign-coder")
             .is_some()
     }))

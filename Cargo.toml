@@ -10,6 +10,12 @@ members = [
     # layer-0 membrane beside oicp-types, deliberately NOT merged with it:
     # oicp is what a node advertises, this is what content IS.
     "kernel-types",
+    # Serving policy — fair-share scheduling + pipeline alias resolution.
+    # Minted 2026-09-03: `fair_sched` was the ONLY reason sovereign-inference
+    # and sovereign-server depended on commonwealth-core, so moving it here
+    # DELETES two cross-family edges instead of relocating them. Tier-0, and
+    # the empty in-repo dep list is the contract (see its lib.rs).
+    "serving-policy",
 
     # Knowledge layer (LanceDB + Tantivy + extractors + chunkers).
     "corpus-engine",
@@ -215,6 +221,7 @@ cognitive_complexity = "warn"
 oicp-client = { path = "oicp-client" }
 oicp-types = { path = "oicp-types" }
 kernel-types = { path = "kernel-types" }
+serving-policy = { path = "serving-policy" }
 corpus-engine = { path = "corpus-engine" }
 corpus-engine-scip = { path = "corpus-engine-scip" }
 corpus-engine-atos = { path = "corpus-engine-atos" }

@@ -6,7 +6,7 @@
 //! ------------
 //!
 //! When a client POSTs `/v1/chat/completions` with a model name that
-//! resolves to a [`PipelineResolution`](commonwealth_core::pipeline_aliases::PipelineResolution),
+//! resolves to a [`PipelineResolution`](serving_policy::pipeline_aliases::PipelineResolution),
 //! the handler constructs a [`Pipeline`] from the resolution and runs
 //! it against the request before falling into the existing priority
 //! routing. Each [`Middleware`] in the pipeline sees the mutable
@@ -83,7 +83,7 @@ pub struct PipelineContext {
     pub model_id: String,
     /// Per-pipeline context-injection flags loaded from the alias
     /// table. ContextInjector reads this.
-    pub context_config: commonwealth_core::pipeline_aliases::PipelineContextConfig,
+    pub context_config: serving_policy::pipeline_aliases::PipelineContextConfig,
     /// Feature the session is currently working on. Extracted from
     /// the `X-Feature-Id` request header; `None` if the plugin
     /// didn't inject one (ambiguous branch, or client isn't ATOS).
@@ -500,7 +500,7 @@ mod tests {
         registry.register(Arc::new(DecisionExtractor::new()));
 
         // Resolve the toml-declared chain.
-        let table = commonwealth_core::pipeline_aliases::PipelineAliasTable::default_table();
+        let table = serving_policy::pipeline_aliases::PipelineAliasTable::default_table();
         let resolution = table
             .resolve("sovereign-coder")
             .expect("sovereign-coder pipeline must exist in default_pipelines.toml");

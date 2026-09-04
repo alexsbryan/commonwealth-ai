@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Fair turn scheduler for the chat server — the async shell over the
-//! shared [`commonwealth_core::fair_sched::SchedCore`] policy.
+//! shared [`serving_policy::fair_sched::SchedCore`] policy.
 //!
 //! This is the successor to `busy.rs`'s flat semaphore on the *local*
 //! conversational API (`/v1/conversations/*`). The same policy core also
@@ -29,9 +29,7 @@ use std::time::Instant;
 
 use tokio::sync::Notify;
 
-use commonwealth_core::fair_sched::{
-    AdmitOutcome, ClaimOrStatus, QueueStatus, SchedCore, TryGrant,
-};
+use serving_policy::fair_sched::{AdmitOutcome, ClaimOrStatus, QueueStatus, SchedCore, TryGrant};
 
 /// Who a turn is attributed to, for fairness and reciprocity. `String`-keyed
 /// so the scheduler stays decoupled from `auth`/`mesh` types — the consult
