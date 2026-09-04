@@ -11,6 +11,10 @@ that falsifies it (ARCH §18.1).
 exist and most of their structural claims are false on the live path — that is
 the finding that produced this file.
 
+**Companion:** [GARDEN.md](./GARDEN.md) asks the other half. This document
+asks whether the types tell the truth; that one asks what shape the whole
+should take, and measures it. Render its current state with `scripts/garden.py`.
+
 ---
 
 ## 1. Why this exists — the derivation tax, measured

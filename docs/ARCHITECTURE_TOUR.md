@@ -42,6 +42,9 @@ its owner's disk.
 
 <p align="center"><img src="diagrams/01-territory.svg" alt="Sovereign is the assistant you talk to; it composes a local model (runs on your hardware) and corpus-engine (turns your sources into searchable, cited knowledge). cmnwlth is an optional mesh that federates both across machines you trust, by invitation. It speaks the ordinary OpenAI API so any OpenAI-compatible tool just works, with OICP adding only a thin layer on top for nodes to advertise what they do — no server in the middle, no account, and the real foundation is that you can read the source and check it yourself." width="820"></p>
 
+All eight figures, and what each one teaches, are indexed in
+[the flip-book](diagrams/README.md).
+
 Under the hood it speaks the ordinary **OpenAI API** — point any
 OpenAI-compatible tool at the daemon and it just works. **OICP** (the Open
 Inference Capabilities Protocol) is only a thin, additive layer on top of that,

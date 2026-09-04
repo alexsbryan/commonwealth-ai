@@ -218,3 +218,12 @@ research/deep-research/demo/p5/runs-t1c/
 
 # Strategy and competitive docs kept out of the public tree (operator direction 2026-09-02).
 *.private.md
+
+# Drift reports are GENERATED: ./drift_report.md is the default --output of
+# `svrn drift detect` and of the atlas drift report, with a .json sidecar
+# alongside. Four had been committed and the command rewrites them on every
+# run, so the tracked copy is only ever a stale snapshot of the last local run.
+/drift_report.md
+/drift_report.md.json
+/drift_report.*.md
+
