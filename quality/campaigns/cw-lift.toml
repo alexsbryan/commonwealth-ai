@@ -46,8 +46,8 @@ status    = "active"
 #   ── open ──
 #   1c  consumers name the rail, facade gone  b94d399eb  DONE      -10
 #   1d  re-derived: the last knowledge edge      84e6fd1c0  DONE        0
+#   1e  RingVerifier seam (Membership DROPPED)  34d308b85  DONE     +104
 #   ── open ──
-#   1e  RingVerifier + Membership — MEMBERSHIP MUST BE RE-DERIVED, see below
 #   1f  the acceptance ledger (canon x rail)
 #   2   route mesh work through the rail (measurement-gated)
 #   3   triage the application layer (unscoped until 2 settles)
@@ -102,24 +102,31 @@ status       = "open"
 #           rail +9, cli-llm -10, mesh 0.
 #        0  1d ACTUAL (84e6fd1c0) — one rustdoc link and a manifest line.
 #   -------
-#   -4,629  LANDED. Then the two rungs still open, at their budget CEILINGS:
-#     +351  1e (the +349 for 1b-1e, less the -2 those three actually spent)
+#     +104  1e ACTUAL (34d308b85) — 55 of it the three tests and their stub,
+#           29 the trait plus the shipped impl, 20 threading one parameter
+#           through six files. Against a remaining allowance of +351.
+#   -------
+#   -4,525  LANDED THROUGH 1e. One rung still open, at its budget CEILING:
 #     +550  1f
 #   -------
-#   -3,728  vs the floor of -3,800 -> MISSES BY ~72
+#   -3,975  vs the floor of -3,800 -> CLEARS BY 175
 #
-# READ THAT PROJECTION CORRECTLY, because it is a CEILING and not a forecast.
-# Three of the four Phase-1 rungs are landed and together they spent -2 against
-# a +349 allowance. The ~72 miss assumes 1e now spends its entire remaining
-# +351 and 1f its entire +550. On the evidence of 1b (+8 against a share of
-# +349), 1c (-10) and 1d (0), that is the pessimistic bound, not the expected
-# case: 1e at +100 would land -3,979 and CLEAR the floor with room.
+# ── THE K4-vs-1g DECISION IS RESOLVED BY NOT NEEDING TO BE MADE. ──
 #
-# CONSEQUENCE FOR THE K4-vs-1g DECISION the line above says to make before 1f:
-# it may not need making. Neither out should be spent until 1e's ACTUAL is
-# known — K4 would undo 1b's two-crate split on a projection that three
-# consecutive rungs have beaten, and 1g is forbidden from counting anyway.
-# DECIDE AFTER 1e, ON ITS NUMBER, not before it on this one.
+# The bar said to choose one of two outs before 1f. On 1e's actual number
+# neither is required: 1f can spend its ENTIRE +550 ceiling and the floor still
+# clears by 175. K4 would have undone 1b's two-crate split and 1g is forbidden
+# from counting toward any floor, so both were bad money.
+#
+# WHAT WENT WRONG WITH THE PROJECTION, worth keeping because it will recur: a
+# BUDGET CEILING was being read as a FORECAST. Every re-derivation of this bar
+# assumed each open rung would spend its full allowance, so the projected miss
+# grew (-39 -> -72) while the actual position IMPROVED at every single rung.
+# Landed Phase 1 spent +102 against +349. A bar that reports its pessimistic
+# bound as its position will always look like it is losing.
+#
+# 1f REMAINS THE ONLY UNKNOWN and it is the largest single line in the plan.
+# If it overruns +800 that is K4's other trigger and this arithmetic is back.
 #
 # A THIRD OUT NOBODY HAS COUNTED, surfaced by order 2's measurement: Phase 2
 # deletes the unsigned 10s full-snapshot push, and on the (a) reading it also
