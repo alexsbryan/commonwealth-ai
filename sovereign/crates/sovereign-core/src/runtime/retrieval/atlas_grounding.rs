@@ -144,9 +144,13 @@ impl Runtime {
             .iter()
             .filter_map(|id| provider.get(id))
             .collect();
-        let graphs: Vec<Arc<crate::atlas_context::AtlasGraph>> = corpus_ids
+        // `walk_provider`, not `graph`: the walk reads an `AtlasProvider`, and
+        // for a wiki-class corpus there is no `AtlasGraph` to hand back. Asking
+        // for the concrete type here is what kept wikipedia on the
+        // bag-of-atoms branch below no matter what store it had.
+        let graphs: Vec<Arc<dyn corpus_engine::enrichment::atlas::AtlasProvider>> = corpus_ids
             .iter()
-            .filter_map(|id| provider.graph(id))
+            .filter_map(|id| provider.walk_provider(id))
             .collect();
 
         if graphs.is_empty() {
@@ -188,14 +192,11 @@ impl Runtime {
         // lane's provider, and fetch a chunk.
         let ctx_refs: Vec<&crate::atlas_context::AtlasContext> =
             ctxs.iter().map(|c| c.as_ref()).collect();
-        // Widened to the trait once, here. `apply_atlas_grounding` holds
-        // `Arc<AtlasGraph>` because that is what the daemon's
-        // `AtlasContextManager` hands out; the walk below neither knows nor
-        // needs to know which store is behind them.
-        let graph_refs: Vec<&dyn corpus_engine::enrichment::atlas::AtlasProvider> = graphs
-            .iter()
-            .map(|g| g.as_ref() as &dyn corpus_engine::enrichment::atlas::AtlasProvider)
-            .collect();
+        // Already the trait — `walk_provider` widened at the source, so the
+        // walk below neither knows nor needs to know which store is behind
+        // them.
+        let graph_refs: Vec<&dyn corpus_engine::enrichment::atlas::AtlasProvider> =
+            graphs.iter().map(|g| g.as_ref()).collect();
         let max_seeds = ctxs.first().map(|c| c.top_k).unwrap_or(3).max(12);
         let (policy, policy_source) = ground::navigation_policy_for(&graph_refs);
         // The QUERY-side adapter: the classifier's centroids must sit in the

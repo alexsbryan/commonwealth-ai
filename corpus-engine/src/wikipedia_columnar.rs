@@ -815,6 +815,19 @@ impl WikiAtlasProvider {
         })
     }
 
+    /// [`Self::open`] from sync code — the daemon's `AtlasContextManager`
+    /// resolves a provider on a `Provider` trait method, which is sync.
+    ///
+    /// Bridges through `store::run_blocking`, the atlas module's ONE
+    /// async-from-sync bridge (ARCH §10.6), for the same reason
+    /// `LancePreload::open_blocking` does: Lance needs a tokio reactor, and a
+    /// fresh dedicated-thread runtime avoids both the nested-runtime panic and
+    /// `block_in_place`'s flavour constraints. Lifecycle-time only — corpus
+    /// load, never the hot query path.
+    pub fn open_blocking(atlas_dir: &Path, atlas_corpus_id: &str) -> Result<Self, String> {
+        crate::enrichment::atlas::store::run_blocking(Self::open(atlas_dir, atlas_corpus_id))
+    }
+
     /// Attach the migrated seed table. Separate from `open` because the table
     /// is built by its own lifecycle step and a provider without one is a
     /// legitimate state the walk names (`has_ann_seed_table`).

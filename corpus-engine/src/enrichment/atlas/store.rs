@@ -596,8 +596,13 @@ pub fn write_store_blocking(
 /// `AtlasGraph::load_from_disk` opening the v2 store off the hot query path),
 /// and — since the seed table joined the mandatory artifacts — the atlas
 /// writer's seed and the summary's row count. ONE such bridge for the whole
-/// atlas module (ARCH §10.6); do not spawn a second runtime elsewhere.
-pub(super) fn run_blocking<T, F>(fut: F) -> Result<T, String>
+/// crate (ARCH §10.6); do not spawn a second runtime elsewhere.
+///
+/// `pub(crate)` rather than `pub(super)` since 2026-09-04: the wiki-class
+/// `AtlasProvider` (`crate::wikipedia_columnar`) sits outside this module and
+/// needs the same sync open, and a second bridge for it would be the second
+/// implementation of one thing.
+pub(crate) fn run_blocking<T, F>(fut: F) -> Result<T, String>
 where
     T: Send,
     F: std::future::Future<Output = Result<T, String>> + Send,

@@ -1693,6 +1693,31 @@ pub trait AtlasContextProvider: Send + Sync {
         None
     }
 
+    /// Whatever the GROUNDING WALK can read for this atlas — an
+    /// [`AtlasProvider`](super::provider::AtlasProvider), which the v2 atom
+    /// store is one of and the wiki-class columnar store is another.
+    ///
+    /// Distinct from [`Self::graph`] because they are distinct questions, and
+    /// collapsing them would cost something either way. `graph` answers "give
+    /// me the atom store", concretely: `atom_enum` calls `atoms_of_kind` and
+    /// `edge_degree` on it, neither of which is on the trait — `atoms_of_kind`
+    /// was deliberately removed from it, because the walk does not call it.
+    /// This one answers "give me something the walk can read", and for a
+    /// wiki-class corpus there is no `AtlasGraph` to hand back and never will
+    /// be (`WIKIPEDIA_ATLAS_V2.md`: its edges carry per-edge strings a CSR
+    /// cannot hold).
+    ///
+    /// The default delegates, so every existing implementor is already correct
+    /// and an atom-class corpus behaves exactly as before. Only a provider that
+    /// can serve a NON-atom store overrides it.
+    fn walk_provider(
+        &self,
+        atlas_corpus_id: &str,
+    ) -> Option<Arc<dyn super::provider::AtlasProvider>> {
+        self.graph(atlas_corpus_id)
+            .map(|g| g as Arc<dyn super::provider::AtlasProvider>)
+    }
+
     /// Ensure the given atlas corpora are loaded (bag + graph + ANN seed
     /// table), loading any not already resident. The lazy-load hook for
     /// scoped grounding: the runtime derives the query-relevant corpus set

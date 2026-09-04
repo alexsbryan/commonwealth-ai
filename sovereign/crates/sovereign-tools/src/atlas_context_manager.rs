@@ -86,6 +86,13 @@ pub struct AtlasContextManager {
     /// entry so corrupt atlases aren't re-parsed every turn. Sync
     /// `RwLock` — read from the sync provider trait on the hot path.
     graph_dirs: Arc<std::sync::RwLock<HashMap<String, PathBuf>>>,
+    /// Wiki-class walk providers, memoised beside `graphs` and for the same
+    /// reason: `WikiAtlasProvider` holds its articles and its adjacency
+    /// RESIDENT, so re-opening one per query would re-read the whole store.
+    /// Separate map rather than a widened `graphs`, because `graphs` is the
+    /// CONCRETE `AtlasGraph` that `atom_enum` needs for `atoms_of_kind` and
+    /// `edge_degree` — neither of which is on the walk's trait.
+    wiki_providers: Arc<std::sync::RwLock<HashMap<String, Arc<corpus_engine::WikiAtlasProvider>>>>,
     /// Per-corpus query-bump map, in-memory mirror of each atlas's
     /// `triage_bumps.json`. Loaded at init time, mutated on every
     /// `record_match`, persisted by [`flush_bumps`] (debounced via
@@ -121,6 +128,7 @@ impl AtlasContextManager {
             contexts: Arc::new(RwLock::new(HashMap::new())),
             graphs: Arc::new(RwLock::new(HashMap::new())),
             graph_dirs: Arc::new(std::sync::RwLock::new(HashMap::new())),
+            wiki_providers: Arc::new(std::sync::RwLock::new(HashMap::new())),
             bumps: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -519,6 +527,77 @@ impl AtlasContextProvider for AtlasContextManager {
         state.dirty = true;
     }
 
+    /// The walk's provider for this atlas: the v2 atom store when there is
+    /// one, else the wiki-class columnar store.
+    ///
+    /// The ORDER is the whole logic. An atom store is tried first because a
+    /// corpus that has one is atom-class by definition; only when
+    /// `AtlasGraph::load_from_disk` refuses — which it does for wikipedia, by
+    /// design, since wikipedia carries no `atoms.lance` — does the wiki store
+    /// get its turn. `wikipedia_graph_present` is the ONE predicate for "does
+    /// this corpus have a link graph" (`corpus_engine::wikipedia_graph_present`),
+    /// so this does not re-derive the question.
+    ///
+    /// `None` means neither store is here, and the caller's bag-of-atoms
+    /// fallback is unchanged by this method existing.
+    fn walk_provider(
+        &self,
+        atlas_corpus_id: &str,
+    ) -> Option<Arc<dyn corpus_engine::enrichment::atlas::AtlasProvider>> {
+        if let Some(g) = self.graph(atlas_corpus_id) {
+            return Some(g as Arc<dyn corpus_engine::enrichment::atlas::AtlasProvider>);
+        }
+        if let Some(p) = self
+            .wiki_providers
+            .try_read()
+            .ok()
+            .and_then(|m| m.get(atlas_corpus_id).cloned())
+        {
+            return Some(p as Arc<dyn corpus_engine::enrichment::atlas::AtlasProvider>);
+        }
+        if !corpus_engine::wikipedia_graph_present(&self.indexes_dir, atlas_corpus_id) {
+            return None;
+        }
+        let atlas_dir = self
+            .indexes_dir
+            .join(atlas_corpus_id)
+            .join(corpus_engine::enrichment::atlas::ATLAS_DIRNAME);
+        let started = std::time::Instant::now();
+        // Sync open through the atlas module's ONE async bridge; lifecycle
+        // time, on the first query that reaches this corpus.
+        match corpus_engine::WikiAtlasProvider::open_blocking(&atlas_dir, atlas_corpus_id) {
+            Ok(p) => {
+                tracing::info!(
+                    corpus = atlas_corpus_id,
+                    backend = "wiki-columnar",
+                    atoms = p.atom_count(),
+                    edges = p.edge_count(),
+                    load_ms = started.elapsed().as_millis(),
+                    "walk provider: wiki-class store opened"
+                );
+                let p = Arc::new(p);
+                if let Ok(mut m) = self.wiki_providers.try_write() {
+                    m.entry(atlas_corpus_id.to_string())
+                        .or_insert_with(|| Arc::clone(&p));
+                }
+                Some(p as Arc<dyn corpus_engine::enrichment::atlas::AtlasProvider>)
+            }
+            Err(e) => {
+                // Reported, never defaulted (ARCH §18.3). A v1 wiki store
+                // refuses here BY NAME — it has no atom_id/chunk_id, so every
+                // atom would be identity-less and un-citable — and the caller
+                // falls back to bag-of-atoms rather than walking a store that
+                // cannot answer.
+                tracing::warn!(
+                    corpus = atlas_corpus_id,
+                    error = %e,
+                    "walk provider: wiki store present but unusable; this atlas is not walked"
+                );
+                None
+            }
+        }
+    }
+
     fn graph(
         &self,
         atlas_corpus_id: &str,
@@ -803,6 +882,138 @@ mod tests {
         let dirs = mgr.graph_dirs.read().unwrap();
         assert_eq!(dirs.len(), 1);
         assert!(dirs.contains_key("t1"));
+    }
+
+    /// A wiki-class atlas: `articles.lance` + `edges.lance`, no atom store.
+    async fn write_wiki_fixture(indexes: &Path, corpus: &str) {
+        use corpus_engine::enrichment::atlas::wiki_store::build_wikipedia_columnar_store_from_chunks;
+        use corpus_engine::extractors::wikipedia_types::{WikiLink, WikipediaChunkMetadata};
+        use corpus_engine::index::StoredChunkWithMetadata;
+        let atlas = indexes.join(corpus).join(ATLAS_DIRNAME);
+        std::fs::create_dir_all(&atlas).unwrap();
+        let meta = |links: Vec<(&str, &str)>| {
+            serde_json::to_string(&WikipediaChunkMetadata {
+                section_name: "Lead".into(),
+                section_path: vec!["Lead".into()],
+                section_depth: 0,
+                section_type: "lead".into(),
+                citation_needed_count: None,
+                pov_count: None,
+                clarification_needed_count: None,
+                update_count: None,
+                is_flagged_stable: None,
+                outgoing_links: links
+                    .into_iter()
+                    .map(|(t, l)| WikiLink {
+                        target_title: t.into(),
+                        link_text: l.into(),
+                    })
+                    .collect(),
+                revision_id: Some(1),
+                wikidata_qid: None,
+                page_id: None,
+            })
+            .unwrap()
+        };
+        let ch = |id: u64, title: &str, m: String| StoredChunkWithMetadata {
+            id,
+            title: Some(title.into()),
+            url: None,
+            metadata_raw: Some(m),
+        };
+        build_wikipedia_columnar_store_from_chunks(
+            &atlas,
+            corpus,
+            vec![
+                ch(1, "Alpha", meta(vec![("Beta", "beta")])),
+                ch(2, "Beta", meta(vec![])),
+            ],
+        )
+        .await
+        .unwrap();
+    }
+
+    /// `walk_provider` resolves BY STORE, and each class gets its own.
+    ///
+    /// The failing input is the reason this exists: before it, the walk asked
+    /// for `graph()` — the concrete atom store — so a wiki-class corpus
+    /// returned `None` however good its store was, and grounding silently took
+    /// the bag-of-atoms branch. So the assertion that matters is the wiki one
+    /// being SOME, and the atom one still being the atom store.
+    #[tokio::test]
+    async fn walk_provider_serves_each_class_from_its_own_store_and_memoizes() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_atlas_fixture(tmp.path(), "atomish", EMPTY_ATOMS);
+        write_wiki_fixture(tmp.path(), "wikish").await;
+        let mgr = manager_for(tmp.path());
+        mgr.init_from_cache().await;
+
+        // Atom-class: the atom store, and NOT a wiki provider — nothing lands
+        // in the wiki map for it.
+        assert!(
+            AtlasContextProvider::walk_provider(&mgr, "atomish").is_some(),
+            "an atom-class atlas must still resolve"
+        );
+        assert_eq!(
+            mgr.wiki_providers.read().unwrap().len(),
+            0,
+            "an atom-class atlas must not be opened as a wiki store"
+        );
+
+        // Wiki-class: no atom store at all, so `graph()` refuses …
+        assert!(
+            AtlasContextProvider::graph(&mgr, "wikish").is_none(),
+            "a wiki-class atlas has no AtlasGraph, by design"
+        );
+        // … and `walk_provider` is what makes it walkable.
+        let w = AtlasContextProvider::walk_provider(&mgr, "wikish")
+            .expect("a wiki-class atlas must resolve through walk_provider");
+        assert_eq!(w.atlas_corpus_id(), "wikish");
+        let alpha = corpus_engine::enrichment::atlas::wiki_store::wiki_atom_id("Alpha", "wikish");
+        assert!(
+            w.atom(&alpha).is_some(),
+            "the wiki provider must serve atoms"
+        );
+        assert_eq!(w.edges_from(&alpha).len(), 1);
+
+        // Memoised: a second call does not re-open the resident store.
+        assert_eq!(mgr.wiki_providers.read().unwrap().len(), 1);
+        assert!(AtlasContextProvider::walk_provider(&mgr, "wikish").is_some());
+        assert_eq!(mgr.wiki_providers.read().unwrap().len(), 1);
+
+        // Neither store present: None, and the caller's bag fallback is
+        // unchanged by this method existing.
+        assert!(AtlasContextProvider::walk_provider(&mgr, "nope").is_none());
+    }
+
+    /// The lazy path does NOT attach an ANN seed table — for the wiki provider
+    /// as for the atom graph — so the walk sees `has_ann_seed_table() == false`
+    /// and REPORTS the absence rather than reading it as an empty result.
+    ///
+    /// This is pinned because the two arms of the wikipedia lane A/B (walk with
+    /// no seed table vs walk with the migrated one) would otherwise be
+    /// silently identical if the table never reached the provider: both would
+    /// be the no-table arm, and the comparison would read as "no effect".
+    #[tokio::test]
+    async fn a_lazily_opened_wiki_provider_reports_its_missing_seed_table() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_wiki_fixture(tmp.path(), "wikish").await;
+        let mgr = manager_for(tmp.path());
+        mgr.init_from_cache().await;
+        let w = AtlasContextProvider::walk_provider(&mgr, "wikish").expect("wiki provider");
+        assert!(
+            !w.has_ann_seed_table(),
+            "the lazy path attaches no seed table; the walk must be able to say so"
+        );
+        assert!(w.ann_seed_table().is_none());
+        // And the atlas dir genuinely has no table — the assertion above is
+        // about the LAZY PATH, so the fixture must not be quietly supplying one.
+        assert!(!tmp
+            .path()
+            .join("wikish")
+            .join(ATLAS_DIRNAME)
+            .join("atoms_ann.lance")
+            .exists());
     }
 
     #[tokio::test]
