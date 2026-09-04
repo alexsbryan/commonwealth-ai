@@ -728,3 +728,63 @@ fn governance_template_labels_reach_the_vocabulary() {
         Some("valid")
     );
 }
+
+// ── The navigation section (ei-2-map) ───────────────────────────────────────
+
+/// A version-1 block that says nothing about navigation gets the spec's
+/// pre-registered table; one that writes a row keeps that row and defaults
+/// the rest; and the policies round-trip through JSON — the shape
+/// `atlas/ontology.json` records. Failing input: drop `navigation` from
+/// `V1_KEYS` (the key becomes a validate warning and the row is lost), or the
+/// `#[serde(default = …)]` on a `NavigationPolicy` field.
+#[test]
+fn v1_navigation_round_trips_toml_and_json_with_defaults() {
+    use corpus_engine::enrichment::ontology::{NavigationPolicy, QuestionKind};
+
+    let absent = policies_of("version = 1\n");
+    assert_eq!(absent.navigation, NavigationPolicy::default());
+
+    let one_row = policies_of(
+        "version = 1\n\
+         [enrichment.ontology.navigation.tension]\n\
+         seed = { kinds = [\"Claim\"] }\n\
+         walk = [\"Tension\"]\n\
+         hops = 2\n\
+         budget = 8\n",
+    );
+    let tension = one_row.navigation.walk(QuestionKind::Tension);
+    assert_eq!(
+        tension.seed.kinds,
+        vec![corpus_engine_vocab::atoms::AtomType::Claim]
+    );
+    assert_eq!(
+        tension.walk,
+        vec![corpus_engine_vocab::edges::EdgeType::Tension]
+    );
+    assert_eq!((tension.hops, tension.budget), (2, 8));
+    assert_eq!(
+        one_row.navigation.walk(QuestionKind::Thematic),
+        NavigationPolicy::default().walk(QuestionKind::Thematic),
+        "an unwritten row is the default row"
+    );
+
+    let json = serde_json::to_string(&one_row).unwrap();
+    let back: OntologyPolicies = serde_json::from_str(&json).unwrap();
+    assert_eq!(back, one_row);
+}
+
+/// An edge kind the atlas does not carry refuses at load, naming the section
+/// and a valid spelling (§18.3: refuse, never default). The spec table writes
+/// "Opposition"; the on-disk edge is `OpposesIn`, and that is what the error
+/// offers. Failing input: `#[serde(other)]` or a string-typed `walk`.
+#[test]
+fn v1_navigation_unknown_edge_kind_is_refused_naming_the_valid_ones() {
+    let err = load_err(
+        "version = 1\n\
+         [enrichment.ontology.navigation.tension]\n\
+         walk = [\"Opposition\"]\n",
+    );
+    assert!(err.contains("navigation"), "names the section: {err}");
+    assert!(err.contains("Opposition"), "names the offender: {err}");
+    assert!(err.contains("OpposesIn"), "names a valid kind: {err}");
+}

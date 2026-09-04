@@ -168,6 +168,7 @@ const V1_KEYS: &[&str] = &[
     "tension",
     "derive",
     "patterns",
+    "navigation",
 ];
 
 impl OntologyLanguage for V1 {

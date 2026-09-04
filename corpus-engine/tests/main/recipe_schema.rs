@@ -33,6 +33,9 @@ const SOURCES: &[&str] = &[
     // `corpus-engine-vocab` leaf since 2026-09-03; the generator parses
     // SOURCE, so it reads them where they are declared.
     "../corpus-engine-vocab/src/ontology/decl.rs",
+    // The navigation section (`[enrichment.ontology.navigation]`): the policy
+    // struct IS the TOML shape, so it is rendered from where it is declared.
+    "../corpus-engine-vocab/src/ontology/navigation.rs",
     "src/filters/mod.rs",
     "src/filters/boilerplate.rs",
     "src/filters/knowledge_density.rs",

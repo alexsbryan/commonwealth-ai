@@ -2074,14 +2074,15 @@ mod store_io_tests {
             "some prose guidance",
             Default::default(),
         );
-        super::super::writer::write_atlas_ontology(&atlas_dir, 1, &empty).unwrap();
+        super::super::writer::write_atlas_ontology(&atlas_dir, "custom_atlas", 1, &empty).unwrap();
         let prose_only = AtlasGraph::load_from_disk("wessex-hoard", &atlas_dir).unwrap();
         assert!(prose_only.ontology().is_none());
 
         // Declared types → the walk answers.
         let mut declared = crate::enrichment::ontology::OntologyPolicies::default();
         declared.shape.types = vec![decl("coin", None), decl("sceatta", Some("coin"))];
-        super::super::writer::write_atlas_ontology(&atlas_dir, 1, &declared).unwrap();
+        super::super::writer::write_atlas_ontology(&atlas_dir, "custom_atlas", 1, &declared)
+            .unwrap();
         let g = AtlasGraph::load_from_disk("wessex-hoard", &atlas_dir).unwrap();
         assert_eq!(g.ontology().unwrap().shape.types.len(), 2);
         assert!(g.is_subtype_of("sceatta", "coin"));

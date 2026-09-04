@@ -629,6 +629,13 @@ impl super::genre::AtlasGenre for CustomOntology {
         Some(&self.vocabulary)
     }
 
+    /// The recipe's own policies, unchanged: an author-declared map is what
+    /// the author wrote. Terms are filled by `Pipeline::declared_ontology`
+    /// from `vocabulary()`, which derives from these same policies.
+    fn declaration(&self) -> OntologyPolicies {
+        self.policies.clone()
+    }
+
     /// `None` when the ontology declares no types — the dispatcher then
     /// composes today's Phase 1 under this genre's system prompt, which is
     /// invariant I1 expressed as control flow.

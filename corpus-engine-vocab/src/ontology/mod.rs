@@ -4,9 +4,11 @@
 //!
 //! Five axes plus prose (`ONTOLOGY_PRIMITIVES.md` §0.1, §2): what exists
 //! (shape), what is said (assertion), what is the same (identity), what
-//! changes (change), what follows (derivation). The composer, parser,
-//! resolver, tension selector, supersession fold, build report and inspector
-//! read [`OntologyPolicies`] and nothing else; the recipe's `version` selects
+//! changes (change), what follows (derivation) — and, since ei-2-map, the
+//! map's third role, how to walk it (`navigation`, `EPISTEMIC_INDEX.md`
+//! §2.2). The composer, parser, resolver, tension selector, supersession
+//! fold, build report and inspector read [`OntologyPolicies`] and nothing
+//! else; the recipe's `version` selects
 //! a declaration language (corpus-engine's `recipe_ontology::language`) that
 //! parses TOML into these structs and is never consulted again. That is what
 //! makes a version 2 cheap.
@@ -23,6 +25,7 @@
 //! linking the engine that extracted to it (enrichment-as-plugin Step 3).
 
 pub mod decl;
+pub mod navigation;
 
 use std::collections::BTreeMap;
 
@@ -31,12 +34,13 @@ use serde::{Deserialize, Serialize};
 use decl::{
     Clock, OntologyTypeDecl, OntologyVocabulary, PatternDecl, TensionDecl, TypeKind, VoicesDecl,
 };
+pub use navigation::{NavigationPolicy, QuestionKind, SeedPolicy, WalkPolicy};
 
 /// Epistemic vocabulary for one pipeline (scaffold §8.1 of the spec).
 /// Lives on the `Pipeline` trait; the CLI prints these in `show`
 /// headers and the `query` LOCATE output so the terminology matches
 /// the domain.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Vocabulary {
     pub canonical_concern_term: String,
     pub position_term: String,
@@ -74,6 +78,12 @@ pub struct OntologyPolicies {
     /// The author's prose and vocabulary terms.
     #[serde(default)]
     pub prose: ProsePolicy,
+    /// How a reader walks this atlas, per question kind. Defaults to the
+    /// spec's pre-registered table; not an axis of what the corpus SAYS, so
+    /// it bumps no declaration version (`ONTOLOGY_PRIMITIVES.md` §0.1: an
+    /// additive field with a default). Nothing reads it before the walker.
+    #[serde(default)]
+    pub navigation: NavigationPolicy,
 }
 
 /// Axis 1 — what a thing is.
@@ -165,6 +175,22 @@ pub struct ProsePolicy {
     /// type → `position_term`. Unset terms fall back in [`OntologyPolicies::vocabulary`].
     #[serde(default)]
     pub terms: OntologyVocabulary,
+}
+
+/// The reverse of [`OntologyPolicies::vocabulary`]: the five resolved terms a
+/// pipeline prints, recorded as term overrides. A built-in pipeline's map
+/// writes its terms this way, so `atlas/ontology.json` records the EFFECTIVE
+/// vocabulary — `vocabulary()` of the result is the input, term for term.
+impl From<&Vocabulary> for OntologyVocabulary {
+    fn from(v: &Vocabulary) -> Self {
+        OntologyVocabulary {
+            concern_term: Some(v.canonical_concern_term.clone()),
+            position_term: Some(v.position_term.clone()),
+            tension_term: Some(v.tension_term.clone()),
+            absence_term: Some(v.absence_term.clone()),
+            evidence_term: Some(v.evidence_term.clone()),
+        }
+    }
 }
 
 impl OntologyPolicies {

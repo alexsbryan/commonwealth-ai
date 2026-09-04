@@ -66,6 +66,13 @@ pub trait AtlasGenre: Send + Sync + std::fmt::Debug + 'static {
     fn vocabulary(&self) -> Option<&Vocabulary> {
         None
     }
+    /// What the genre declares for `atlas/ontology.json` — see
+    /// `Pipeline::declaration`. Defaults to the literary genre's map
+    /// (`ontologies/literary_atlas.toml`), which is what every genre's
+    /// Phase 1 emits unless it says otherwise.
+    fn declaration(&self) -> crate::enrichment::ontology::OntologyPolicies {
+        super::declaration::LITERARY.clone()
+    }
 
     /// Whether the literary-framed Phase-1b coverage top-up applies. A genre
     /// whose atoms are not literary should say no rather than be asked about

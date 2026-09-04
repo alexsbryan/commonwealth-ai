@@ -483,21 +483,77 @@ fn ontology_outcome(corpus: &str, atlas_dir: &Path) -> ToolOutcome {
         "Ontology declared by `{corpus}` (ontology v{}, file schema {}):\n",
         file.ontology_version, file.schema_version
     );
+    // Who wrote the map: an author (the custom pipeline) or a built-in genre
+    // writing its fixed vocabulary down. A file from before ei-2-map carries
+    // no pipeline id; say so rather than guess.
+    if file.pipeline_id.is_empty() {
+        text.push_str("- declared by: unrecorded (written before pipeline ids were kept)\n");
+    } else if file.is_author_declared() {
+        text.push_str("- declared by: the recipe author (custom atlas)\n");
+    } else {
+        text.push_str(&format!(
+            "- declared by: the built-in `{}` pipeline, writing its fixed vocabulary down\n",
+            file.pipeline_id
+        ));
+    }
     if policies.shape.types.is_empty() {
         text.push_str("- declared types: none (prose-only / version-0 block)\n");
     } else {
-        let mut by_kind: HashMap<String, Vec<&str>> = HashMap::new();
+        let mut by_kind: HashMap<String, Vec<String>> = HashMap::new();
         for t in &policies.shape.types {
+            // `name` is what the atoms carry; `label` is what the corpus
+            // calls it (the literary genre's `concept (theme)`).
+            let shown = match &t.label {
+                Some(label) if label != &t.name => format!("{} ({label})", t.name),
+                _ => t.name.clone(),
+            };
             by_kind
                 .entry(format!("{:?}", t.kind).to_lowercase())
                 .or_default()
-                .push(t.name.as_str());
+                .push(shown);
         }
         let mut kinds: Vec<_> = by_kind.into_iter().collect();
         kinds.sort();
         for (k, names) in kinds {
             text.push_str(&format!("- {k} types: {}\n", names.join(", ")));
         }
+    }
+    text.push_str(&format!(
+        "- derivation: configurations={} arguments={}\n",
+        policies.derivation.configurations, policies.derivation.arguments
+    ));
+    // The navigation table, one row per question kind, in the on-disk tags.
+    for (kind, walk) in policies.navigation.rows() {
+        let mut seeds: Vec<String> = walk.seed.kinds.iter().map(tag).collect();
+        if !walk.seed.entity_types.is_empty() {
+            let narrow: Vec<&str> = walk
+                .seed
+                .entity_types
+                .iter()
+                .map(|e| e.as_str_repr())
+                .collect();
+            seeds.push(format!("entity_type in [{}]", narrow.join(", ")));
+        }
+        if walk.seed.declared {
+            seeds.push("declared types + subtypes".to_string());
+        }
+        let edges: Vec<String> = walk.walk.iter().map(tag).collect();
+        text.push_str(&format!(
+            "- navigation.{}: seed {} | walk {} | hops {} | budget {}\n",
+            kind.as_str(),
+            if seeds.is_empty() {
+                "none".to_string()
+            } else {
+                seeds.join(", ")
+            },
+            if edges.is_empty() {
+                "none".to_string()
+            } else {
+                edges.join(" → ")
+            },
+            walk.hops,
+            walk.budget
+        ));
     }
     let v = policies.vocabulary();
     text.push_str(&format!(
@@ -518,6 +574,15 @@ fn ontology_outcome(corpus: &str, atlas_dir: &Path) -> ToolOutcome {
         is_error: false,
         structured,
     }
+}
+
+/// The on-disk spelling of a closed-set tag, read back through serde so the
+/// display can never disagree with what the parser accepts.
+fn tag<T: serde::Serialize>(t: T) -> String {
+    serde_json::to_string(&t)
+        .unwrap_or_default()
+        .trim_matches('"')
+        .to_string()
 }
 
 fn read_atoms(path: &Path) -> Result<AtomsFile> {
@@ -591,6 +656,7 @@ mod tests {
         let atlas = dir.path().join("atlas");
         write_atlas_ontology(
             &atlas,
+            "custom_atlas",
             1,
             &declared(&[("coin", TypeKind::Entity), ("mint", TypeKind::Entity)]),
         )
@@ -614,6 +680,43 @@ mod tests {
         assert!(out.text.contains("ontology v1"), "{}", out.text);
         let types = &out.structured.as_ref().unwrap()["policies"]["shape"]["types"];
         assert_eq!(types.as_array().map(Vec::len), Some(2));
+    }
+
+    /// Done-when: `corpus_ontology` on a freshly built literary atlas lists
+    /// `theme`, says who wrote the map, and shows the navigation table.
+    /// Failing input: the literary TOML without `label = "theme"`, or the
+    /// display dropping labels.
+    #[test]
+    fn ontology_lists_the_literary_theme_and_the_navigation_table() {
+        use corpus_engine::enrichment::pipeline::{Pipeline, PipelineRegistry};
+        let dir = tempfile::tempdir().unwrap();
+        let atlas = dir.path().join("atlas");
+        let p = PipelineRegistry::builtin().get("literary_atlas").unwrap();
+        write_atlas_ontology(
+            &atlas,
+            p.id(),
+            AtlasOntologyFile::BUILTIN_ONTOLOGY_VERSION,
+            &p.declared_ontology(),
+        )
+        .unwrap();
+        let out = ontology_outcome("bk", &atlas);
+        assert!(!out.is_error, "{}", out.text);
+        assert!(out.text.contains("concept (theme)"), "{}", out.text);
+        assert!(
+            out.text.contains("built-in `literary_atlas`"),
+            "{}",
+            out.text
+        );
+        assert!(
+            out.text.contains("navigation.thematic: seed Configuration, Entity, entity_type in [concept] | walk Involves → Tension → Grounds | hops 2 | budget 6"),
+            "{}",
+            out.text
+        );
+        assert!(
+            out.text.contains("navigation.tension:") && out.text.contains("OpposesIn"),
+            "{}",
+            out.text
+        );
     }
 
     #[test]

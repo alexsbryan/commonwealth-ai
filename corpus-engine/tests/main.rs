@@ -64,6 +64,8 @@ mod ontology_resolution_e2e;
 mod ontology_retrieval_e2e;
 #[path = "main/parquet_ingest_e2e.rs"]
 mod parquet_ingest_e2e;
+#[path = "main/pipeline_ontology.rs"]
+mod pipeline_ontology;
 #[path = "main/probe_index_residency.rs"]
 mod probe_index_residency;
 #[path = "main/query_sharing_cache_invalidation.rs"]

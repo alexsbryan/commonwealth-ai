@@ -147,6 +147,10 @@ impl Pipeline for ReferentialAtlasPipeline {
         self.inner.vocabulary()
     }
 
+    fn declaration(&self) -> crate::enrichment::ontology::OntologyPolicies {
+        super::declaration::REFERENTIAL.clone()
+    }
+
     // ── System preambles ──────────────────────────────────────
 
     fn phase1_system(&self) -> &'static str {

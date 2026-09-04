@@ -462,7 +462,8 @@ mod tests {
             .identity
             .identity
             .insert("coin".into(), vec!["find_id".into()]);
-        super::super::writer::write_atlas_ontology(tmp.path(), 1, &policies).unwrap();
+        super::super::writer::write_atlas_ontology(tmp.path(), "custom_atlas", 1, &policies)
+            .unwrap();
 
         let s = compute_summary(tmp.path()).unwrap();
         let o = s.ontology.expect("the declaration is recorded");

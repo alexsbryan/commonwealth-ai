@@ -384,25 +384,41 @@ pub async fn resolve_into_dir(
     // Record what this atlas was extracted under, beside the atoms. The
     // atlas directory has to answer that on its own — corpus-engine cannot
     // read this config.json, and `_summary.json` is a derived cache that must
-    // be reproducible from the atlas dir alone. Only a declared ontology is
-    // written; a prose-only custom atlas leaves no file, and readers treat
-    // absence as "declares nothing".
-    if let Some(spec) = cfg.ontology.as_ref() {
-        if policies.has_declarations() {
+    // be reproducible from the atlas dir alone. EVERY pipeline writes it
+    // (EPISTEMIC_INDEX §1, Map row): a built-in genre writes its fixed
+    // vocabulary down through the same struct, a prose-only custom atlas
+    // writes its terms and the navigation defaults. The map is the
+    // pipeline's own (`declared_ontology`), not this config's — one decider.
+    match super::pipeline_resolve::resolve_pipeline(cfg) {
+        Some(pipeline) => {
+            let map = pipeline.declared_ontology();
+            let ontology_version = cfg
+                .ontology
+                .as_ref()
+                .map(|spec| spec.ontology_version)
+                .unwrap_or(
+                    corpus_engine::enrichment::atlas::AtlasOntologyFile::BUILTIN_ONTOLOGY_VERSION,
+                );
             match corpus_engine::enrichment::atlas::write_atlas_ontology(
                 atlas_dir,
-                spec.ontology_version,
-                &policies,
+                pipeline.id(),
+                ontology_version,
+                &map,
             ) {
                 Ok(path) => println!(
-                    "  ✓ wrote {} ({} declared type(s), ontology version {})",
+                    "  ✓ wrote {} ({} declared type(s), ontology version {}, pipeline {})",
                     path.display(),
-                    policies.shape.types.len(),
-                    spec.ontology_version
+                    map.shape.types.len(),
+                    ontology_version,
+                    pipeline.id()
                 ),
                 Err(e) => eprintln!("warning: writing ontology.json: {e}"),
             }
         }
+        None => eprintln!(
+            "warning: pipeline `{}` is not registered; ontology.json not written",
+            cfg.pipeline_id
+        ),
     }
     if want_3b {
         println!("  ✓ wrote {}", written.trajectories_path.display());

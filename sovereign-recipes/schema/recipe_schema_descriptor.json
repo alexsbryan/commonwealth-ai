@@ -297,7 +297,8 @@
       "change",
       "tension",
       "derive",
-      "patterns"
+      "patterns",
+      "navigation"
     ],
     "versions": [
       0,

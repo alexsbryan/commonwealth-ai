@@ -104,6 +104,9 @@ impl super::genre::AtlasGenre for ConversationGenre {
     fn id(&self) -> &'static str {
         PIPELINE_ID
     }
+    fn declaration(&self) -> crate::enrichment::ontology::OntologyPolicies {
+        super::declaration::CONVERSATION.clone()
+    }
 
     fn name(&self) -> &'static str {
         "Conversation history — atlas atom graph"

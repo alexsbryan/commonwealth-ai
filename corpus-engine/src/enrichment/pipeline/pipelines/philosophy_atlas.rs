@@ -167,6 +167,10 @@ impl Pipeline for PhilosophyAtlasPipeline {
         self.inner.vocabulary()
     }
 
+    fn declaration(&self) -> crate::enrichment::ontology::OntologyPolicies {
+        super::declaration::PHILOSOPHY.clone()
+    }
+
     // ── System preambles ──────────────────────────────────────
 
     fn phase1_system(&self) -> &'static str {

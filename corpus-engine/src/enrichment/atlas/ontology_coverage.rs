@@ -332,6 +332,7 @@ attributes = [{ name = "reigned", type = "time", range = true }]
         AtlasOntologyFile {
             schema_version: "1.0".into(),
             ontology_version: 1,
+            pipeline_id: "custom_atlas".into(),
             policies: policies(),
         }
     }

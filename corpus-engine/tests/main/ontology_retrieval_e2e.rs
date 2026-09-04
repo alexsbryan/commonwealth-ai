@@ -126,7 +126,7 @@ fn the_enumeration_probe_answers_with_the_authors_noun() {
 
     // The resolve step's writer, and the reader retrieval uses. Not a
     // hand-built struct — if the round trip breaks, this test breaks.
-    write_atlas_ontology(&atlas_dir, 1, &numismatics_policies()).unwrap();
+    write_atlas_ontology(&atlas_dir, "custom_atlas", 1, &numismatics_policies()).unwrap();
     let policies = read_atlas_ontology(&atlas_dir)
         .map(|f| f.policies)
         .filter(|p| p.has_declarations())
@@ -214,7 +214,7 @@ fn a_prose_only_ontology_is_not_a_vocabulary() {
         "Extract, as claims, every NORMATIVE STATEMENT.",
         Default::default(),
     );
-    write_atlas_ontology(&atlas_dir, 1, &prose).unwrap();
+    write_atlas_ontology(&atlas_dir, "custom_atlas", 1, &prose).unwrap();
 
     let read_back = read_atlas_ontology(&atlas_dir).expect("the file exists and parses");
     assert!(!read_back.policies.has_declarations());

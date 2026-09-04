@@ -820,6 +820,7 @@ Allowed values:
 | `tension` | `TensionDecl` | no | type default | Which claim types can be in tension, and what makes two comparable. |
 | `derive` | `DeriveDecl` | no | type default | Opt-in derivation passes (interpretive configurations, arguments). |
 | `patterns` | `Vec<PatternDecl>` | no | type default | Graph patterns to detect over declared relation/event types. Same shapes as `[[enrichment.patterns]]` (`PatternDecl`). |
+| `navigation` | `NavigationPolicy` | no | type default | `[enrichment.ontology.navigation]` — how a reader walks the atlas per question kind (`NavigationPolicy`). Omit it, or any row, to take the spec's pre-registered defaults; the policy struct IS the TOML shape. |
 
 ## `OntologyTypeDecl`
 
@@ -997,6 +998,51 @@ A structural source for a declared type: a file already holding it as a table, i
 | `configurations` | `Option<bool>` | no | type default | Run the interpretive-configuration rollups (Phase 8). Default true. |
 | `arguments` | `Option<bool>` | no | type default | Reconstruct arguments. Default false. |
 
+## `QuestionKind`
+
+What a READER asks — the five question kinds the navigation table is keyed by. Not to be confused with `taxonomy::QuestionType`, which classifies a Question ATOM the text itself raises; `QuestionKind::Thematic` is "what is this about?" asked of the atlas, `QuestionType::Thematic` is a question the work poses. Classification of open text onto this set is a centroid per kind (ARCH §2.4), seeded from these names — the walker's concern, not this file's.
+
+Allowed values:
+
+- `thematic` — "What is this about?", "what are the themes?"
+- `trajectory` — "How does X change?"
+- `tension` — "Where does it disagree with itself?"
+- `enumeration` — "Which X are there?" — a declared type and its subtypes, listed.
+- `lookup` — "Who is X?" — one entity by name.
+
+## `SeedPolicy`
+
+Where a walk starts. `kinds` are on-disk `atom_type` tags (`Entity`, `State`, `Claim`, `Position`, `Configuration`, …); `entity_types` narrows an `Entity` seed to the listed `entity_type` values (`concept`, `person`, …) and is ignored when empty; `declared` seeds on the declared types under `shape.types` and their subtypes — the enumeration row. A pipeline that does not produce a kind simply does not list it; the walker skips absent kinds and says so in its ledger.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `kinds` | `Vec<AtomType>` | no | type default | Atom kinds to seed on — the `atom_type` tag as written on disk. |
+| `entity_types` | `Vec<EntityType>` | no | type default | When `kinds` includes `Entity`, only entities of these types (`concept`, `person`, `work`, …). Empty means any entity. |
+| `declared` | `bool` | no | type default | Also seed on the declared types (`shape.types`) and their subtypes. |
+
+## `WalkPolicy`
+
+One row of the navigation table: how to walk for one question kind.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `seed` | `SeedPolicy` | no | type default | Where the walk starts. |
+| `walk` | `Vec<EdgeType>` | no | type default | Edge kinds to follow, in order of preference — the `edge_type` tag as written on disk (`Involves`, `Tension`, `Grounds`, `Transition`, …). Empty means no walk: seeds are the answer (the enumeration row). |
+| `hops` | `u8` | no | type default | How many edge hops from a seed. `0` enumerates the seeds only. |
+| `budget` | `u32` | no | type default | How many atoms the walk keeps as evidence requests. |
+
+## `NavigationPolicy`
+
+`[enrichment.ontology.navigation]` — one [`WalkPolicy`] per [`QuestionKind`]. Every row defaults to the spec's pre-registered value (`EPISTEMIC_INDEX.md` §2.2), so a block that omits the section, or a row, gets that row. A row you write replaces the default row whole: set every key you mean, because an omitted `seed` is an empty seed, not the default.
+
+| TOML key | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `thematic` | `WalkPolicy` | no | `WalkPolicy::thematic()` | "What is this about?" — Configuration + concept Entity; Involves → Tension → Grounds; 2 hops. |
+| `trajectory` | `WalkPolicy` | no | `WalkPolicy::trajectory()` | "How does X change?" — Entity + State; Transition, Causes; 2 hops. |
+| `tension` | `WalkPolicy` | no | `WalkPolicy::tension()` | "Where does it disagree?" — Claim + Position; Tension, OpposesIn; 1 hop. |
+| `enumeration` | `WalkPolicy` | no | `WalkPolicy::enumeration()` | "Which X?" — the declared types and subtypes; no walk. |
+| `lookup` | `WalkPolicy` | no | `WalkPolicy::lookup()` | "Who is X?" — Entity by name; Involves; 1 hop. |
+
 ## `ComposeMode`
 
 Allowed values:
@@ -1106,7 +1152,7 @@ is refused at load, naming the line to add — never dropped.
 
 ## `version = 1`
 
-Keys: `guidance`, `vocabulary`, `must_not`, `types`, `voices`, `change`, `tension`, `derive`, `patterns`
+Keys: `guidance`, `vocabulary`, `must_not`, `types`, `voices`, `change`, `tension`, `derive`, `patterns`, `navigation`
 
 Version 1 declares your own types. `version = 1` under `[enrichment.ontology]`
 selects it; the tables above (`OntologyV1`, `OntologyTypeDecl`, `AttrDecl`,
@@ -1155,8 +1201,26 @@ grades = ["die-link", "hoard-context", "stylistic", "metrological"]
 between = ["attribution"]
 ```
 
+`[enrichment.ontology.navigation]` is the map's third role: how a reader walks
+the atlas for each question kind — `thematic`, `trajectory`, `tension`,
+`enumeration`, `lookup` — as seed kinds, edge kinds, hops and budget (the
+`NavigationPolicy` / `WalkPolicy` / `SeedPolicy` tables above). Every row has a
+pre-registered default (`sovereign/docs/specs/EPISTEMIC_INDEX.md` §2.2); omit
+the section, or a row, to take it. A row you write replaces the default row
+whole. Kinds and edges are spelled as the atoms and edges carry them on disk
+(`Configuration`, `Entity`, `concept`; `Involves`, `Tension`, `OpposesIn`); an
+unknown spelling refuses at load naming the valid ones.
+
+```toml
+[enrichment.ontology.navigation.tension]
+seed = { kinds = ["Claim"] }
+walk = ["Tension"]
+hops = 2
+budget = 8
+```
+
 Keys: `guidance`, `vocabulary`, `must_not`, `types`, `voices`, `change`,
-`tension`, `derive`, `patterns`. `recipe validate` checks that every
+`tension`, `derive`, `patterns`, `navigation`. `recipe validate` checks that every
 `specializes`, `role_of`, `from`, `to`, `participants`, `of`, `subject` and
 `ref … of` names a declared type or one of the base entity kinds the atlas
 already emits (`person`, `concept`, `institution`, `work`, `place`,

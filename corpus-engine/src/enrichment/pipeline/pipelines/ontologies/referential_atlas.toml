@@ -1,0 +1,38 @@
+# The referential atlas's map (EPISTEMIC_INDEX.md §2.1) — encyclopedias, wikis,
+# reference works described in editorial third person. See literary_atlas.toml
+# for the conventions.
+
+[[types]]
+name = "person"
+kind = "entity"
+description = "A person the section describes or cites; split from the works they wrote."
+
+[[types]]
+name = "place"
+kind = "entity"
+description = "A named location."
+
+[[types]]
+name = "concept"
+kind = "entity"
+description = "A named idea, term or theory the section explains."
+
+[[types]]
+name = "institution"
+kind = "entity"
+description = "An organisation, body or school."
+
+[[types]]
+name = "work"
+kind = "entity"
+description = "A cited or described work."
+
+[[types]]
+name = "event"
+kind = "entity"
+description = "A historical event the section treats as a thing in its own right — an entity of type `event`, distinct from the Event atom that carries participants and a section position."
+
+[derive]
+# Phase 1 uses the shared section-extraction schema, which carries
+# `argument_reconstructions`.
+arguments = true

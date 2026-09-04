@@ -1,0 +1,33 @@
+# The philosophy atlas's map (EPISTEMIC_INDEX.md §2.1) — see literary_atlas.toml
+# for the conventions. Nouns and descriptions are the Phase-1 prompt's own.
+
+[[types]]
+name = "person"
+kind = "entity"
+label = "philosopher"
+description = "A philosopher or author the article discusses or cites."
+
+[[types]]
+name = "concept"
+kind = "entity"
+description = "A named philosophical notion — a position, thesis, distinction or term. Carries the article's defining sentence (`defining_quote`) when it has one."
+
+[[types]]
+name = "institution"
+kind = "entity"
+description = "A school or organisation."
+
+[[types]]
+name = "work"
+kind = "entity"
+description = "A cited text."
+
+[[types]]
+name = "place"
+kind = "entity"
+description = "A genuinely important site; rare in philosophy."
+
+[derive]
+# Phase 1 emits `ArgumentReconstruction` atoms: a named argument as the
+# article reconstructs it — premises, conclusion, objections.
+arguments = true

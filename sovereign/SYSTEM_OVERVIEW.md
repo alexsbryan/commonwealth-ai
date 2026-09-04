@@ -65,7 +65,7 @@ weights (created by `svrn setup`, gitignored).
 | `corpus-engine-archaeology` | Git history mining + rough-edge surfacing + atom-provenance eval (carved out) | — |
 | `corpus-engine-yield` | `YieldHook` cooperative foreground-yield contract — a Tier-0 leaf (one trait, zero deps) shared by the data plane and the watchers so the daemon's `Arc<dyn YieldHook>` has one trait identity on both. Also carries the seam's **liveness bound**: `MAX_FOREGROUND_DEFERRAL` (300 s) + `DeferralBudget`, because `should_yield()` is a level predicate that any request cadence shorter than the yield window pins true forever — see "Foreground yield is bounded" below. Since 2026-09-02 it also carries the WRITE side, `ForegroundSignal` + `ForegroundLease`: the daemon installs both halves on the corpus engine, and every `Runtime` turn holds a lease on its stream handle for the turn's whole life, so ingest, enrichment and the newsworthy tick park for the entire turn (measured: background commits inside one grounded turn 42 → 1). Until then the only bump site was `chat_completions`, which the product's own chat paths never cross. | — |
 | `corpus-engine-sections` | Section detectors (`SectionDetector`, `DetectedSection`, `ChapterRegexDetector`, `TocAnchoredDetector`) — corpus-engine's own segmentation vocabulary, carved into a `regex`-only leaf so the studio `SectionTool` shares the ONE implementation by reaching DOWN, instead of corpus-engine reaching UP into `sovereign-contracts` (noun-convergence rung 2) | `regex` |
-| `corpus-engine-vocab` | The atlas vocabulary — `AtomsFile` / `AtomEnvelope` + the eleven atom kinds (`atoms`), `Edge` / `EdgesFile` (`edges`), `EnrichmentDepth` + the eight `string_enum_with_other!` kind enums (`taxonomy`), `lookup_key` (`canonical`), `StableAtomKey` (`stable_key`, an inherent `impl AtomEnvelope` so it must live with the type), and — Step 3 — `OntologyPolicies` + its five axes (`ontology`) with everything an author declares under `ontology::decl` (`OntologyTypeDecl`, `TypeKind`, `AttrDecl`, `OntologyV1`, the investigation `EntityTypeDecl` / `RelationshipTypeDecl` / `PatternDecl`, `OntologyVocabulary`; the shape of `atlas/ontology.json`). Carved out 2026-09-03 (enrichment-as-plugin Steps 2–3) so a thin host can READ `atlas/atoms.json` without linking the 162k lines that write it; corpus-engine re-exports every item at its historical path (`enrichment::atlas::{atoms,edges,stable_key}`, `enrichment::pipeline::atlas::*`, `atlas_canonical`), so no in-repo importer changed. Declared `[[package_leaf]]`; `sovereign-core`'s evidence-loop gazetteer and `sovereign-cli-llm`'s scrub/scaffold commands name it directly, and the three lookalike `atoms.json` shapes they carried are gone — `corpus-engine-vocab/tests/atoms_file_census.rs` pins the count at ONE | `kernel-types`, `serde`, `serde_json`, `blake3` |
+| `corpus-engine-vocab` | The atlas vocabulary — `AtomsFile` / `AtomEnvelope` + the eleven atom kinds (`atoms`), `Edge` / `EdgesFile` (`edges`), `EnrichmentDepth` + the eight `string_enum_with_other!` kind enums (`taxonomy`), `lookup_key` (`canonical`), `StableAtomKey` (`stable_key`, an inherent `impl AtomEnvelope` so it must live with the type), and — Step 3 — `OntologyPolicies` + its five axes and the navigation section (`ontology`, `ontology::navigation`: `NavigationPolicy` / `WalkPolicy` / `SeedPolicy` per `QuestionKind`, spec §2.2 defaults) with everything an author declares under `ontology::decl` (`OntologyTypeDecl`, `TypeKind`, `AttrDecl`, `OntologyV1`, the investigation `EntityTypeDecl` / `RelationshipTypeDecl` / `PatternDecl`, `OntologyVocabulary`; the shape of `atlas/ontology.json`). Carved out 2026-09-03 (enrichment-as-plugin Steps 2–3) so a thin host can READ `atlas/atoms.json` without linking the 162k lines that write it; corpus-engine re-exports every item at its historical path (`enrichment::atlas::{atoms,edges,stable_key}`, `enrichment::pipeline::atlas::*`, `atlas_canonical`), so no in-repo importer changed. Declared `[[package_leaf]]`; `sovereign-core`'s evidence-loop gazetteer and `sovereign-cli-llm`'s scrub/scaffold commands name it directly, and the three lookalike `atoms.json` shapes they carried are gone — `corpus-engine-vocab/tests/atoms_file_census.rs` pins the count at ONE | `kernel-types`, `serde`, `serde_json`, `blake3` |
 | `corpus-mcp` | The thin knowledge host (enrichment-as-plugin Step 5, 2026-09-03): `corpus-mcp --base-url http://localhost:8080/v1 --corpus sep` serves `corpus_list` / `corpus_search` (cited chunks via `CorpusIndex::search`) / `atoms_lookup` (tier 1.5: `atlas/atoms.json` through `corpus_engine_vocab::atoms::AtomsFile`) / `corpus_ontology` (`atlas/ontology.json` through `read_atlas_ontology` — the file is an `AtlasOntologyFile` envelope, and parsing it as bare `OntologyPolicies` silently reads as "declared nothing"; fixed 2026-09-04, pinned by `ontology_reads_the_envelope_not_bare_policies` and by `acceptance.sh` judging the read on a corpus that DECLARED types) over MCP-on-stdio, against ANY OpenAI-compatible endpoint. Host capability is DETECTED (`GET /oicp/v1/capabilities`; 404 = the baseline path), the embed model id comes from `GET /v1/models` unless `--embed-model` says otherwise, and a width mismatch between an index and the endpoint degrades that corpus to full-text with a printed notice. Declared `[[package]]` (with two grandfathered engine edges to code-intel crates); `tests/no_inference_stack.rs` pins the third-party closure; `acceptance.sh` is the end-to-end proof against a real `llama-server`. `corpus_list` reports each atlas's atom count from the CURRENT `_summary.json` only (`read_current_summary`, never computes or writes — the host promises not to write) and whether an ontology was declared. Composition is the CLIENT's: `corpus_search` is tier 1 alone, nothing from the atlas or ontology enters its ranking; the client calls `atoms_lookup` / `corpus_ontology` itself. NOT here, by design: the atom-grounded ranking in `sovereign-core` | `corpus-engine`, `corpus-engine-vocab`, `oicp-types`, `sovereign-contracts` |
 | `corpus-engine-watchers` | Lint/test/project-index watchers + their SQLite result stores + coordinator (carved out of corpus-engine, R4 Step 1 — cuts the watcher-edit rebuild set 22→12 crates, measured). Compiles unconditionally; the SCIP `CodeWatcher` stays in corpus-engine | `corpus-engine-notes`, `corpus-engine-yield`, `rusqlite`, `notify` |
 | `sovereign-recipes`  | Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build) | —                                       |
@@ -1327,7 +1327,26 @@ means one thing.
   `atlas/ontology.json`
   (`writer::write_atlas_ontology`) so the atlas dir records what it was
   extracted under, and `_summary.json` (SCHEMA_VERSION 3) carries an
-  `OntologySummary` read back from it. **Retrieval reads that file back
+  `OntologySummary` read back from it. **Since ei-2-map (2026-09-04) EVERY
+  pipeline writes it** (`EPISTEMIC_INDEX.md` §1, Map row): the map is
+  `Pipeline::declared_ontology()` — `Pipeline::declaration()` (the override
+  point) with the vocabulary terms and the Phase-8 flag filled from their one
+  decider each — and the envelope carries `pipeline_id`, so a reader can tell
+  an author's declaration (`custom_atlas`) from a genre writing its fixed
+  vocabulary down. The built-in vocabularies are DATA:
+  `pipeline/pipelines/ontologies/<id>.toml`, the body of a version-1
+  `[enrichment.ontology]` block parsed by the same language a recipe goes
+  through (`pipelines/declaration.rs`), so "no private kinds" (§3) is a
+  parse failure rather than a rule. A built-in declares the `entity_type`
+  its atoms actually carry and puts the genre's noun on `label` — the
+  literary map is `concept (theme)`, `person (character)` — because
+  `traverse_enumerate` matches declared names against `entity_type`;
+  `Configuration` and `ArgumentReconstruction` are closed kinds and are
+  recorded on the derivation axis (`configurations`, `arguments`), not as
+  types. `OntologyPolicies.navigation` (`ontology/navigation.rs`) is the
+  map's third role — seed kinds, edge kinds, hops and budget per
+  `QuestionKind` — with the spec's §2.2 table as the default of every row;
+  nothing reads it before the walker (ei-4). **Retrieval reads that file back
   (P5).** `AtlasGraph::load_lance_from_disk` attaches the policies to the
   graph, dropping a set with no declared types to `None` — so `ontology()`
   being `Some` IS the "this corpus declared something" gate, checked once at
@@ -1395,9 +1414,10 @@ means one thing.
   as a State, and States have no attributes map — reads as a declaration with
   nowhere to land rather than as a model failure (§18.3). `projection::
   attributes_of` is the one accessor, beside `subtype_of` (§10.6). The resolve step writes
-  `atlas/ontology.json` (`writer::write_atlas_ontology`) so the atlas dir
-  records what it was extracted under, and `_summary.json` (SCHEMA_VERSION 3)
-  carries an `OntologySummary` read back from it. Design:
+  `atlas/ontology.json` (`writer::write_atlas_ontology`) for every pipeline
+  so the atlas dir records what it was extracted under (see §3 above for the
+  built-in maps and the navigation section), and `_summary.json`
+  (SCHEMA_VERSION 3) carries an `OntologySummary` read back from it. Design:
   `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md`, `ONTOLOGY_MIGRATION.md`.
   State at `~/.svrnmesh/indexes/<corpus>/atlas/`. Deep-dive:
   [`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md). Beyond the LLM
