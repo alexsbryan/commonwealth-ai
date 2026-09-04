@@ -31,9 +31,7 @@ use crate::enrichment::atlas::ann_store::ANN_TABLE_DIRNAME;
 use crate::enrichment::atlas::context::{
     build_persistent_ann_seed_table, render_atom_entry, AnnBuildStats, AtlasContext, AtlasEntry,
 };
-use crate::enrichment::atlas::seed_population::{
-    seed_population, write_population_marker,
-};
+use crate::enrichment::atlas::seed_population::{seed_population, write_population_marker};
 use crate::enrichment::atlas::{
     read_atlas_atoms, read_atlas_edges, read_atlas_ontology, AtomEnvelope, AtomType, EdgeType,
 };
