@@ -21,10 +21,17 @@
 #
 #   --prefix <s>    corpus-id prefix to sweep (default `sep-`). Ignored when
 #                   corpus ids are given positionally.
-#   --batch <n>     corpora per `backfill-ann` invocation (default 100). This is
-#                   an AMORTISATION knob, not a parallelism one: each CLI start
-#                   pays ~40 s of session bootstrap (wiki graph + meta-atlas),
-#                   and the embed inside is strictly serial either way.
+#   --batch <n>     corpora per `backfill-ann` invocation (default 40). A
+#                   RESUME-GRANULARITY knob, never a parallelism one: the embed
+#                   inside is strictly serial either way, and the ledger lands
+#                   its lines when a batch reports, so a smaller batch means
+#                   less to redo after a stop.
+#                     This was an AMORTISATION knob until ei-3b step 0. Each CLI
+#                   start used to pay ~40 s of session bootstrap (wiki graph +
+#                   meta-atlas) because the verb asked for a `ChatSession`; it
+#                   now takes an embedder and an atlas dir, and one atlas went
+#                   6,911,000 kB peak RSS / 52.4 s -> 173,000 kB / 4.7 s. Large
+#                   batches no longer buy anything, so the default came down.
 #   --limit <n>     stop after n corpora. Use for a smoke run.
 #   --force         re-do corpora the ledger already records as done.
 #   --dry-run       print the worklist and the projected cost, run nothing.
@@ -56,7 +63,7 @@ LOG_DIR=${LOG_DIR:-$HERE/logs}
 LEDGER=${LEDGER:-$HERE/backfill-index.jsonl}
 
 PREFIX="sep-"
-BATCH=100
+BATCH=40
 LIMIT=""
 FORCE=0
 DRY=0

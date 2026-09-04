@@ -124,8 +124,16 @@ the production grounding filter across the 1,770 `sep-*` atlases (the sum of
 `tier2_count` over their summaries, which is the same population the filter
 admits); embed throughput **14.0/s** serial keep-alive against the resident
 1024-d slot (40 calls, 71.2 ms each); 1,108 atlases need their store built
-first. **~106 min of embedding**, plus store builds and ~40 s of session
-bootstrap per CLI invocation (`--batch`, default 100, amortises that).
+first. **~106 min of embedding**, plus store builds.
+
+Session bootstrap USED to be the other half of that price — ~40 s per CLI
+invocation, which is what `--batch` existed to amortise. It is gone. `svrn
+atlas backfill-ann` no longer builds a `ChatSession` (ei-3b step 0), and on
+one atlas the same work went **6,911,000 kB peak RSS / 52.4 s → 173,000 kB /
+4.7 s**, byte-identical output. So `--batch` is now a resume-granularity
+knob, not a cost one, and its default is 40: the ledger lands a line per
+corpus when a batch reports, so a smaller batch means less to redo after a
+stop, and it now costs nothing to ask for.
 
 **It does not self-throttle, because there is nothing to throttle.**
 `load_atlas_context` awaits one embed call at a time — the job is strictly
