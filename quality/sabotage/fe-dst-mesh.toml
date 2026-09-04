@@ -18,7 +18,21 @@ requirement = "FE-4"
 target = "commonwealth/crates/commonwealth-rail-core/src/sig.rs"
 find = "pub fn sign_ring_op(\n    key: &SigningKey,\n    namespace: &str,\n    ts_unix: i64,\n    seq: u64,\n    body_json: &str,\n) -> String {\n    let actor = actor_of(key);\n    let msg = ring_op_message(namespace, ts_unix, &actor, seq, body_json);\n    hex::encode(key.sign(&msg).to_bytes())\n}"
 replace = "pub fn sign_ring_op(\n    _key: &SigningKey,\n    _namespace: &str,\n    _ts_unix: i64,\n    _seq: u64,\n    _body_json: &str,\n) -> String {\n    \"deadbeef\".to_string()\n}"
-mustFail = ["a_signature_verifies_under_the_key_that_made_it"]
+# Two independent tests die under this mutation, and until 2026-09-04 the bank
+# declared one. `sign_ring_op` returning "deadbeef" is 4 bytes, which
+# `Ed25519Verifier` rejects at its 64-byte length check, so the seam test's own
+# NEGATIVE CONTROL (the fixture asserted admissible under the shipped verifier
+# before it is asserted refused under a stub) fails too. Declaring it is not
+# belt-and-braces: `adjudicate()` returns CAUGHT if ANY declared test failed, so
+# widening can only widen what counts as the kill — it cannot flip a CAUGHT to a
+# SURVIVED. What it buys is that the next run MEASURES the second death instead
+# of a reader arguing for it (ARCH §18.1, §7.2 — an assertion in prose is not a
+# test). Bare names resolve by unique suffix; note this one lives at
+# `commonwealth-rail-core::tests::`, not `sig::tests::`.
+mustFail = [
+  "a_signature_verifies_under_the_key_that_made_it",
+  "admission_asks_the_verifier_it_was_handed_and_not_a_hardcoded_one",
+]
 breaks = "Joining MUST be by a short human-transcribable key. The receiving side MUST store only a hash and discard the plaintext."
 expected = "CAUGHT"
 
