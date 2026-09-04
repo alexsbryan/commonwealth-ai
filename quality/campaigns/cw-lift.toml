@@ -307,6 +307,66 @@ instrument   = "svrn code dry-report (textual, validated) — NOT sufficient for
 kill         = "the instrument cannot distinguish 'same shape, both live and both needed' from 'same shape, one dead'. Then it is a similarity report, ship it as one — a ranked list of lookalikes read as a deletion worklist is worse than no list."
 
 [[bar]]
+id           = "cw-wire-contract-halves"
+one_line     = "CLAIM: a peer-to-peer message is ONE type both ends import, not two halves of a serde contract"
+derives_from = "three read-only investigations, 2026-09-04, over the six cross-family shape forks"
+status       = "open"
+# THE PATTERN. commonwealth-api is the schema owner for three peer-to-peer
+# protocols whose other end is in sovereign-mesh, and it declares every message
+# with only the SERVER's half of serde. sovereign-mesh needed the mirror half
+# three times and forked three times. The request side is worse: NextUnitRequest,
+# RingSyncRequest and the corpus handoff bodies are answered by hand-built
+# serde_json::json! literals (auto_ingest.rs:850/1050/1148, ring_sync.rs:196/215)
+# — a typo in a key name compiles.
+#
+# TWO PREMISES OF MINE WERE FALSE AND ARE CORRECTED HERE:
+#   - "routes_internal submodules are private so the types are unimportable" —
+#     mod.rs is a PUBLIC FACADE (:69, :74 pub use). Resolves since ddbf789a7
+#     (2026-04-30). sovereign-mesh already names commonwealth_api:: 72x/12 files.
+#   - "GossipRequest derives both halves" — it derives Deserialize only
+#     (gossip.rs:150).
+# Both fork pairs were minted WITHIN 30 SECONDS of each other on 2026-04-14
+# (1f5694e8f 15:11:05 / 8f3f00c17 15:11:33; 16838feca 19:02:23 / 50a7a03a3
+# 19:02:37). Adjacent commits, one sitting. There was never a visibility
+# decision; the three in-tree comments asserting one are rationalisations.
+#
+# THE ABSTRACTION IS DISCLOSURE-VS-STORAGE, NOT DOMAIN-VS-WIRE. All nine Mesh
+# fields cross the wire in every mirror. The real split is that mesh_secret
+# crosses or not per peer/direction, expressed as post-hoc mutation of a pub
+# field at three sites — one correct by ABSENCE of a line. Design:
+# MeshSnapshot::for_peer(&Mesh, SecretDisclosure) with a no-Default enum, so
+# every site names its choice (§7/§10 structural-not-remembered).
+# PersistedMesh is NOT converged: self_node_id, key `mesh_id` with no serde
+# alias, inverted secret polarity. Disk and wire are different compatibility
+# clocks; flattening strands every mesh.json in the fleet.
+#
+# THREE LIVE DEFECTS FOUND, not just duplication:
+#   1. the puller ignores its own lease expiry (#[allow(dead_code)] on
+#      lease_expires_at_ms) — the one guard a partition leaves it, since its
+#      only other signal is a 410 that cannot arrive. Bounded: merge dedupes by
+#      unit_id (sharding.rs:780-783), so wasted work, not corruption.
+#   2. the mesh_secret redaction rule was already forgotten once — the
+#      credential rode the wire every 10s between two upgraded nodes because
+#      "the request half of P4b stopped sending it and the reply half did not"
+#      (routes_internal/gossip.rs:110-120).
+#   3. the model-file endpoint grew HTTP Range/206 in 637448086 (2026-06-05)
+#      and its client half never learned; a THIRD fork (rpc_warm_http.rs:564/
+#      585/826) hand-builds range URLs. The file URL is spelled five times.
+# Plus: Mesh::gossip_authorized DOES NOT EXIST — six intra-doc links across four
+# crates cite it, including two of the mirrors' own justifications.
+#
+# THE TESTS DO NOT TEST THIS: sovereign-mesh/src/ring_sync.rs has ZERO tests in
+# 251 lines; rail_e2e.rs:471-496 drives both sides with serde_json::Value (a
+# third untyped copy) under a doc comment claiming it mirrors the mesh loop
+# (§7.2, prose not test); model_fetch.rs's spawn_test_server is a hand-rolled
+# replica of the CLIENT's own types citing a circular dep that does not exist.
+floor        = 11.0
+target       = 5.0
+direction    = "lower_is_better"
+instrument   = "svrn code converge shape --include commonwealth/crates --include sovereign/crates/sovereign-mesh — count cross-family groups before/after"
+kill         = "converging a pair forces commonwealth-core to grow a dependency. Then the type is not core vocabulary and belongs elsewhere, or stays forked with the reason written down."
+
+[[bar]]
 id           = "cw-ledger-closes-itself"
 one_line     = "CLAIM: the acceptance ledger is USED, not just built — and closure fires without a human"
 derives_from = "P4; the feedback_creation_closure_loop failure mode, named verbatim"
