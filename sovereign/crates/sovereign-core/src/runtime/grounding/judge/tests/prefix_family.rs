@@ -72,9 +72,22 @@ impl InferenceProvider for CaptureProvider {
 #[test]
 fn one_renderer_owns_the_family() {
     const SRC: &str = include_str!("../../judge.rs");
+    // (2026-09-03 split) the family's renderer lives in the module
+    // family now; the census covers every production file of judge,
+    // concatenated, so the one-renderer rule spans the family.
+    const BATCHED_SRC: &str = include_str!("../batched.rs");
+    const PROMPTS_SRC: &str = include_str!("../prompts.rs");
+    const SCAN_SRC: &str = include_str!("../scan.rs");
     // Production code only: the test module legitimately names the
     // literals to assert against them.
-    let prod = SRC.split("\n#[cfg(test)]").next().unwrap_or(SRC);
+    let prod = format!(
+        "{}{}{}{}",
+        SRC.split("\n#[cfg(test)]").next().unwrap_or(SRC),
+        BATCHED_SRC,
+        PROMPTS_SRC,
+        SCAN_SRC
+    );
+    let prod = prod.as_str();
     let mut offenders: Vec<String> = Vec::new();
     let mut in_renderer = false;
     for (i, line) in prod.lines().enumerate() {
@@ -92,8 +105,10 @@ fn one_renderer_owns_the_family() {
         // `CHUNK_JUDGE_PASSAGE_CHARS`) is deliberately referenced from two
         // crates — that sharing IS the fix — so it is guarded by the
         // single-render check below instead.
-        let is_definition =
-            l.starts_with("const PASSAGES_SCAFFOLD") || l.starts_with("const PASSAGE_SEP");
+        let is_definition = l.starts_with("const PASSAGES_SCAFFOLD")
+            || l.starts_with("pub(crate) const PASSAGES_SCAFFOLD")
+            || l.starts_with("const PASSAGE_SEP")
+            || l.starts_with("pub(crate) const PASSAGE_SEP");
         if in_renderer || is_definition {
             continue;
         }
