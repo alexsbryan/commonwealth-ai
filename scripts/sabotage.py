@@ -14,6 +14,10 @@ test it names dies under the mutation it names.
              overclaim and must NOT be counted.
   STALE    — `find` no longer occurs exactly once. The bank is lying about what
              it covers; fix the mutant, never this script.
+  SUBJECT-GONE — the target file is not on disk. A DELETION, not a drift: the
+             entry must be retired with a reason or repointed. Its own verdict
+             because the retirement ledger has to tell "the subject was
+             deleted" apart from "the find string moved".
 
 WHY THIS EXISTS. Hand-adjudicating "does this test prove GR-19?" measured 22%
 accurate on 2026-08-31 (note cf566968). This replaces the judgement with a run,
@@ -374,8 +378,37 @@ def mark_stale(m, src: str) -> bool:
     Returns whether the mutant was marked. Separated from `main` so the
     self-test can drive it without a repo checkout.
     """
-    if src.count(m["find"]) != 1:
+    n = src.count(m["find"])
+    if n != 1:
         m["verdict"] = "STALE"
+        m["detail"] = (
+            f"`find` occurs {n}x in {m['target']} (needs exactly 1) — the bank "
+            "is describing code that moved or forked. Fix the mutant."
+        )
+        return True
+    return False
+
+
+def mark_subject_gone(m, exists: bool) -> bool:
+    """SUBJECT-GONE iff this mutant's target file is not on disk.
+
+    Separate from STALE on purpose. STALE says the bank is lying about code
+    that still exists — fix the mutant. SUBJECT-GONE says the code was
+    deliberately deleted, and the honest response is to retire the entry with a
+    reason (a retired entry is evidence; a deleted one is nothing) or repoint
+    it at whatever inherited the behaviour. Collapsing the two would make a
+    deletion read as a drift and lose the reason.
+
+    Returns whether the mutant was marked, so the caller can skip the read that
+    would otherwise raise.
+    """
+    if not exists:
+        m["verdict"] = "SUBJECT-GONE"
+        m["detail"] = (
+            f"target {m['target']} is not on disk — the subject was deleted. "
+            "Retire this entry with a reason, or repoint it at whatever "
+            "inherited the behaviour."
+        )
         return True
     return False
 
@@ -711,6 +744,21 @@ def self_test() -> int:
           not mark_stale(m, src) and "verdict" not in m,
           f"verdict={m.get('verdict')}")
 
+    # 8h. A deleted target is SUBJECT-GONE, and is decided before the read —
+    #     the bug this replaces was a FileNotFoundError that killed the whole
+    #     bank, so the control below asserts the read is SKIPPED, not merely
+    #     that the verdict differs.
+    m = mutant([])
+    check("a target that is not on disk is SUBJECT-GONE, not a traceback",
+          mark_subject_gone(m, False) and m["verdict"] == "SUBJECT-GONE"
+          and "not on disk" in m["detail"],
+          f"verdict={m.get('verdict')} detail={m.get('detail')}")
+
+    m = mutant([])
+    check("a target that exists is NOT subject-gone (the control)",
+          not mark_subject_gone(m, True) and "verdict" not in m,
+          f"verdict={m.get('verdict')}")
+
     # 7. A killed run must UNWIND, or `run_phase`'s finally never restores the
     #    mutated tree. Python's default SIGTERM does not unwind.
     import os as _os
@@ -783,8 +831,17 @@ def main():
         return 2
 
     # STALE check first — cheap, and a lying bank invalidates everything after.
+    # Existence is checked BEFORE the read, and is its own verdict. Until
+    # 2026-09-03 this line was a bare `read_text()`, so one deleted target
+    # raised FileNotFoundError and took down adjudication of the entire bank
+    # with a traceback and an exit code indistinguishable from a real failure.
+    # Deletion is a routine, frequent event here — a whole refactor phase is
+    # deletions — and "the subject is gone" is a different fact from "the find
+    # string moved" (ARCH §18.3: absence is reported, never defaulted).
     for m in bank:
-        mark_stale(m, (ROOT / m["target"]).read_text())
+        path = ROOT / m["target"]
+        if not mark_subject_gone(m, path.is_file()):
+            mark_stale(m, path.read_text())
 
     live = [m for m in bank if "verdict" not in m]
 
@@ -861,6 +918,13 @@ def main():
         exp = m.get("expected", "CAUGHT")
         mark = "ok " if m["verdict"] == exp else "BAD"
         print(f"  {mark} {m['verdict']:16s} {m.get('requirement','-'):8s} {m['id']}")
+        # The verdict alone does not say WHY for the two arms that are about
+        # the bank rather than the suite. A bare `BAD SUBJECT-GONE` sends the
+        # reader diffing TOML against the tree by hand; the detail names the
+        # path and the two ways out (ARCH §9.1 — a branch with no visible
+        # decision).
+        if m["verdict"] in ("SUBJECT-GONE", "STALE") and m.get("detail"):
+            print(f"       {m['detail']}")
 
     if a.json:
         Path(a.json).write_text(json.dumps({"counts": counts, "mutants": bank}, indent=1, default=str))

@@ -556,9 +556,9 @@ expected = "CAUGHT"
 [[mutant]]
 id = "en-21-entity_content_hash_differs_across_corpo"
 requirement = "EN-21"
-target = "corpus-engine/src/enrichment/atlas/atoms.rs"
-find = "    pub fn entity_content_hash(\n        canonical_name: &str,\n        entity_type: &crate::enrichment::pipeline::atlas::EntityType,\n        corpus_id: &str,\n    ) -> Self {\n        let key = crate::atlas_canonical::lookup_key(canonical_name);\n        let input = format!(\"entity|{key}|{}|{corpus_id}\", entity_type.as_str_repr());\n        Self(format!(\"entity-{}\", short_hash(&input)))\n    }"
-replace = "    pub fn entity_content_hash(\n        canonical_name: &str,\n        entity_type: &crate::enrichment::pipeline::atlas::EntityType,\n        _corpus_id: &str,\n    ) -> Self {\n        let key = crate::atlas_canonical::lookup_key(canonical_name);\n        let input = format!(\"entity|{key}|{}\", entity_type.as_str_repr());\n        Self(format!(\"entity-{}\", short_hash(&input)))\n    }"
+target = "corpus-engine-vocab/src/atoms.rs"
+find = "    pub fn entity_content_hash(\n        canonical_name: &str,\n        entity_type: &crate::taxonomy::EntityType,\n        corpus_id: &str,\n    ) -> Self {\n        let key = crate::canonical::lookup_key(canonical_name);\n        let input = format!(\"entity|{key}|{}|{corpus_id}\", entity_type.as_str_repr());\n        Self(format!(\"entity-{}\", short_hash(&input)))\n    }"
+replace = "    pub fn entity_content_hash(\n        canonical_name: &str,\n        entity_type: &crate::taxonomy::EntityType,\n        _corpus_id: &str,\n    ) -> Self {\n        let key = crate::canonical::lookup_key(canonical_name);\n        let input = format!(\"entity|{key}|{}\", entity_type.as_str_repr());\n        Self(format!(\"entity-{}\", short_hash(&input)))\n    }"
 mustFail = ["entity_content_hash_differs_across_corpora"]
 breaks = "A deterministic strategy SHOULD lift an indexed source-code corpus into the same typed graph \u2014 content-hash nodes, generated summaries as descriptions, bounded function and call edges \u2014 so that code b"
 expected = "CAUGHT"
@@ -866,7 +866,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-7-gossip_may_not_admit_a_second_active_mem"
 requirement = "FE-7"
-target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+target = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
 find = "    pub fn merge_from(&mut self, self_node_id: NodeId, other: &Mesh) -> MergeReport {\n        self.merge_from_authenticated(self_node_id, other, &GossipAuth::none())\n    }"
 replace = "    pub fn merge_from(&mut self, self_node_id: NodeId, other: &Mesh) -> MergeReport {\n        // MUTATION: Bypass authentication and specific active-member guards by directly merging\n        // without checking for duplicate active endpoint keys in the target mesh.\n        let mut report = MergeReport::default();\n        \n        // Simplistic merge that ignores the \"active in exactly one\" constraint\n        // effectively allowing a node to be added as an active member even if its key is already used elsewhere,\n        // or failing to reject it properly during gossip merge.\n        for (id, member) in other.members.iter() {\n            if !self.members.contains_key(id) {\n                self.members.insert(*id, (*member).clone());\n                report.added += 1;\n            }\n        }\n        report\n    }"
 mustFail = ["gossip_may_not_admit_a_second_active_member_on_one_endpoint_key"]
@@ -886,7 +886,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-12-an_invite_with_no_expiry_never_lapses"
 requirement = "FE-12"
-target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+target = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
 find = "    pub fn invite_expired_at(&self, now: u64) -> bool {\n        matches!(self.invite_expires_at, Some(exp) if now >= exp)\n    }"
 replace = "    pub fn invite_expired_at(&self, _now: u64) -> bool {\n        false\n    }"
 mustFail = ["an_invite_with_no_expiry_never_lapses"]
@@ -906,7 +906,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-14-a_bad_proof_is_refused_and_does_not_fall"
 requirement = "FE-14"
-target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+target = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
 find = "        let arm = self.gossip_authorized_with(other, auth);\n        if arm == GossipAuthArm::Refused {\n            return MergeReport::refused();\n        }"
 replace = "        // MUTATION: Ignore the specific refusal from gossip_authorized_with and\n        // fall through to legacy logic (invite_key_hash check) which might succeed.\n        // This violates FE-14 because a bad proof falls back instead of refusing hard."
 mustFail = ["a_bad_proof_is_refused_and_does_not_fall_back_to_the_legacy_arm"]
@@ -926,7 +926,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-16-a_peer_with_neither_proof_nor_secret_is_"
 requirement = "FE-16"
-target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+target = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
 find = "let mut report =\n            MergeReport::for_round(arm, arm != GossipAuthArm::Proof && !other.has_mesh_secret());"
 replace = "let mut report =\n            MergeReport::for_round(arm, true);"
 mustFail = ["a_peer_with_neither_proof_nor_secret_is_still_pre_split"]

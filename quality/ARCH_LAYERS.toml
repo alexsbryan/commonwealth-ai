@@ -546,6 +546,35 @@ crates = [
     "corpus-mcp",
 ]
 
+[[package]]
+name = "commonwealth"
+doc = "commonwealth/BOUNDARY.md"
+# The mesh substrate — declared 2026-09-03, BEFORE the work that moves code
+# into and out of it, because no gate in this repo can tell "the files moved"
+# from "the boundary holds". layer-gate's "no sovereign" property is seven
+# hand-enumerated [[forbid]] blocks above (:305-341); a crate added to the
+# mesh-foundation layer list gets no forbid rule and prints green. ARCH §18.1.
+#
+# Green on the day it is declared, with zero [[exception]] rows: the four
+# crates' entire internal dependency surface is commonwealth-core plus the
+# kernel-types / oicp-types leaves. That is a property to hold, not one to
+# reach — a new row here is a regression, not bookkeeping.
+#
+# WHAT IS NOT IN IT. commonwealth-{knowledge,inference,api} are applications on
+# this substrate (577-690-crate closures, all three name corpus-engine), and so
+# is sovereign-mesh. sovereign-mesh holds substrate-SHAPED code — a MeshStore
+# replication path, a founder/joiner handshake — whose external consumers are
+# ~15 of ~234 crossing refs. Extracting it as a peer of these four would fork
+# the deciders this package owns: two replication paths, two orderings, two
+# admission rules. §10.6 at crate scale. Substrate found elsewhere is rehomed
+# HERE or deleted, never mirrored.
+crates = [
+    "commonwealth-core",
+    "commonwealth-transport",
+    "commonwealth-state",
+    "commonwealth-discovery",
+]
+
 # ── Grandfathered violations (the burn-down list) ────────────────────────────
 
 [[exception]]

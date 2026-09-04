@@ -70,7 +70,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-8-an_lww_update_may_not_move_a_key_onto_a_"
 requirement = "FE-8"
-target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+target = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
 find = "    pub fn merge_from(&mut self, self_node_id: NodeId, other: &Mesh) -> MergeReport {\n        self.merge_from_authenticated(self_node_id, other, &GossipAuth::none())\n    }"
 replace = "    pub fn merge_from(&mut self, self_node_id: NodeId, other: &Mesh) -> MergeReport {\n        let mut report = self.merge_from_authenticated(self_node_id, other, &GossipAuth::none());\n        // Mutation: Automatically activate memberships during merge to violate FE-8\n        for member in self.members.values_mut() {\n            if !member.is_active() && member.node_pubkey.is_some() {\n                member.activate();\n            }\n        }\n        report\n    }"
 mustFail = ["an_lww_update_may_not_move_a_key_onto_a_second_active_member"]
@@ -90,7 +90,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-8-gossip_may_not_admit_a_second_active_mem"
 requirement = "FE-8"
-target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+target = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
 find = "    pub fn merge_from(&mut self, self_node_id: NodeId, other: &Mesh) -> MergeReport {\n        self.merge_from_authenticated(self_node_id, other, &GossipAuth::none())\n    }"
 replace = "    pub fn merge_from(&mut self, self_node_id: NodeId, other: &Mesh) -> MergeReport {\n        let report = self.merge_from_authenticated(self_node_id, other, &GossipAuth::none());\n        // MUTATION: Automatically activate members upon gossip merge to violate FE-8\n        for member_id in report.added() {\n            if let Some(member) = self.members.get_mut(&member_id) {\n                member.active = true;\n            }\n        }\n        report\n    }"
 mustFail = ["gossip_may_not_admit_a_second_active_member_on_one_endpoint_key"]
@@ -150,7 +150,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-12-an_invite_with_no_expiry_never_lapses"
 requirement = "FE-12"
-target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+target = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
 find = "    pub fn invite_expired_at(&self, now: u64) -> bool {\n        matches!(self.invite_expires_at, Some(exp) if now >= exp)\n    }"
 replace = "    pub fn invite_expired_at(&self, _now: u64) -> bool {\n        false\n    }"
 mustFail = ["an_invite_with_no_expiry_never_lapses"]
@@ -180,7 +180,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-13-a_peer_with_neither_proof_nor_secret_is_"
 requirement = "FE-13"
-target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+target = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
 find = "        let mut report =\n            MergeReport::for_round(arm, arm != GossipAuthArm::Proof && !other.has_mesh_secret());"
 replace = "        // MUTATION: Always set peer_pre_split to true regardless of auth arm or secret state.\n        // This violates the requirement that upgraded peers (post-split) should not be\n        // considered 'pre-split' when they have valid credentials/proofs. It forces\n        // legacy behavior even for authenticated post-split nodes.\n        let mut report =\n            MergeReport::for_round(arm, true);"
 mustFail = ["a_peer_with_neither_proof_nor_secret_is_still_pre_split"]
@@ -190,7 +190,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-14-a_bad_proof_is_refused_and_does_not_fall"
 requirement = "FE-14"
-target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+target = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
 find = "        let arm = self.gossip_authorized_with(other, auth);\n        if arm == GossipAuthArm::Refused {\n            return MergeReport::refused();\n        }"
 replace = "        let mut arm = self.gossip_authorized_with(other, auth);\n        // MUTATION: If the proof fails but the legacy invite key matches, fall back to it.\n        // This violates FE-14 which requires a hard refusal on failed proofs,\n        // preventing weaker predicates from taking over via fall-through.\n        if arm == GossipAuthArm::Refused && other.has_mesh_secret() {\n             // Simulate falling through to a weaker authentication method (legacy)\n             // by changing the result to Accepted instead of Refusing immediately.\n             arm = GossipAuthArm::Accepted;\n        }\n        if arm == GossipAuthArm::Refused {\n            return MergeReport::refused();\n        }"
 mustFail = ["a_bad_proof_is_refused_and_does_not_fall_back_to_the_legacy_arm"]
@@ -210,7 +210,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-14-a_proof_from_a_different_secret_is_refus"
 requirement = "FE-14"
-target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+target = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
 find = "    pub fn verify_mesh_proof(&self, proof: &str, sender: NodeId, now_secs: u64) -> bool {\n        if !self.has_mesh_secret() {\n            return false;\n        }\n        let window = now_secs / PROOF_WINDOW_SECS;\n        // Constant-time compare on each candidate: a proof is a secret-derived\n        // value, and `String == String` short-circuits.\n        [window, window.saturating_sub(1)].iter().any(|w| {\n            let expected = Self::proof_for(&self.mesh_secret, self.id, sender, *w);\n            crate::ct::constant_time_eq(expected.as_bytes(), proof.as_bytes())\n        })\n    }"
 replace = "    pub fn verify_mesh_proof(&self, proof: &str, sender: NodeId, now_secs: u64) -> bool {\n        if !self.has_mesh_secret() {\n            return false;\n        }\n        // BUG: Ignoring the `sender` argument allows replay attacks by different peers\n        // and fails to bind the proof to the specific node identity.\n        let window = now_secs / PROOF_WINDOW_SECS;\n        [window, window.saturating_sub(1)].iter().any(|w| {\n            let expected = Self::proof_for(&self.mesh_secret, self.id, *w); \n            crate::ct::constant_time_eq(expected.as_bytes(), proof.as_bytes())\n        })\n    }"
 mustFail = ["a_proof_from_a_different_secret_is_refused"]
@@ -270,7 +270,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-16-a_peer_with_neither_proof_nor_secret_is_"
 requirement = "FE-16"
-target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+target = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
 find = "        let mut report =\n            MergeReport::for_round(arm, arm != GossipAuthArm::Proof && !other.has_mesh_secret());"
 replace = "        // MUTATION: Violates FE-16 by relying on the remote's mesh_secret field\n        // (which may be zeroed deliberately) rather than local observation of proof.\n        // This causes upgraded nodes with zeroed secrets to incorrectly flag peers as pre-split,\n        // blocking rotation when both sides are actually post-split/upgraded.\n        let is_pre_split = if arm == GossipAuthArm::RawSecret {\n            other.mesh_secret == [0u8; 32]\n        } else {\n            false\n        };\n        let mut report =\n            MergeReport::for_round(arm, is_pre_split);"
 mustFail = ["a_peer_with_neither_proof_nor_secret_is_still_pre_split"]

@@ -143,7 +143,11 @@ doc records absorbing "~40 copy-pasted" helpers, and a census on 2026-08-31
 found 35 live again under fifteen names, plus 150 direct `SystemTime::now()`
 reads. The closure loop is `cargo xtask clock-gate` (baseline
 `quality/baselines/clock_reads.txt`, shrink-only): a new hand-read clock fails
-the gate and is told which island decider to ask. Sites needing sub-second
+the gate and is told which island decider to ask. It joined `pre-push.sh` and
+`ci.yml` on 2026-09-03 (2.5s warm); before that it ran in NO automatic gate,
+only `cargo xtask quality` — and because the baseline is path-keyed, any
+refactor RELOCATING one of the 97 baselined files minted a new key and went red
+only when a human happened to type that command. Sites needing sub-second
 precision ride the baseline — no decider offers nanos.
 - `oplog.rs` — **`Op<K>` + `Oplog<K>`**, one append-only JSONL journal with
   four tenants declaring `Journaled`: `enrichment::governance`,
@@ -268,8 +272,19 @@ governs since 2026-09-03: the crate sets and the shared-leaf budgets
 are declared as `[[package]]` / `[[package_leaf]]` blocks in
 `quality/ARCH_LAYERS.toml` (schema v3), beside the layer map and behind
 the same parser, so layer-gate, boundary-gate and `arch_report` cannot
-drift on what a boundary means. `code-intel` is the second
-(`docs/CODE_TOOLING_BOUNDARY.md`).
+drift on what a boundary means. Four are declared: `studio`, `code-intel`
+(`docs/CODE_TOOLING_BOUNDARY.md`), `corpus-mcp` (`corpus-mcp/README.md`)
+and — since 2026-09-03 — `commonwealth` (`commonwealth/BOUNDARY.md`), the
+mesh substrate: `commonwealth-{core,transport,state,discovery}`, 17,194
+lines, zero `[[exception]]` rows on the day it was declared. It was
+declared BEFORE the work that moves code across it, because layer-gate
+cannot see liftability — its "no sovereign" property is seven
+hand-enumerated `[[forbid]]` blocks, and a crate added to the
+`mesh-foundation` layer list gets no forbid rule and prints green
+(§18.1). `commonwealth-{knowledge,inference,api}` are NOT in it; nor is
+`sovereign-mesh`, which holds substrate-shaped code with ~15 of ~234
+external refs and would fork the deciders the package owns if extracted
+as a peer (§10.6 at crate scale).
 
 ```
 crates/
