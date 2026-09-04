@@ -207,6 +207,37 @@ logical name (`endpoint.model = "primary"`, resolving per machine — one alread
 rented A6000 through a tunnel), which is exactly how the judge-heterogeneity risk was
 found.
 
+## The sibling customer: federated media libraries (Jellyswarrm-shaped)
+
+A second external customer, deliberately **not** work-plane: a federated-library proxy
+(Jellyswarrm — combines multiple Jellyfin servers into one; 880 stars on manual config)
+exercises fabric, identity, data, routing, and evidence — five of six services — with no
+jobs anywhere. That is the boundary check: the six-service split is not secretly
+"everything is the work plane," and this customer proves the data-plane rails
+independently. It is rung 1's residency pattern ("play from the holder, transcode where
+the media lives") in consumer-visible form.
+
+**The adapter verdict** (the question this customer forces): the adapter still exists —
+it shrinks, and its deployment inverts. Commonwealth absorbs reachability (iroh by node
+key replaces VPN/port-forwards), the server registry and shared API keys (grants), user
+mapping and cross-server user sync (the mesh principal), and feed fan-out/merge (the
+federation seam). What stays is irreducible substrate-side never: the Jellyfin API
+emulation the client ecosystem demands (clients speak Jellyfin, and that is the product),
+provider-ID item dedup, playback session semantics, and client-quirk maintenance. The
+centralized always-up proxy someone must host becomes a **local shim beside each node**.
+License note: GPL-2 vs this repo's AGPL keeps it a separate distribution, never absorbed
+code.
+
+Design gaps it exposes (added to the ledger, not yet scheduled):
+
+1. **The federated-query seam is corpus-shaped** — the fan-out/merge/serving-wall
+   machinery (`commonwealth-knowledge`) must become item-type-generic. Same move as
+   `JobKind`, on the data side; this customer is its second proof.
+2. **External-provider-ID identity (§7.5)** — cross-server item identity is TMDB/IMDB
+   ids, not content hashes; provider-id must be a first-class identity form.
+3. **The binary streaming plane** — sustained multi-Mbps over iroh is unmeasured; LAN
+   fine, WAN gated on the same relay-floor unknown as Track A2's tensor tunnel bench.
+
 ## What we will NOT do
 
 - **Invent sandboxing.** No seatbelt-profile authorship, no firewall DSL. OCI runtimes
