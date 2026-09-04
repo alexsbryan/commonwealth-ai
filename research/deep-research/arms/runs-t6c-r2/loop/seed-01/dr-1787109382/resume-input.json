@@ -1,7 +1,0 @@
-{
-  "icd": "resume_input",
-  "version": 1,
-  "run_id": "dr-1787109382",
-  "backend": "mock",
-  "mock_deck_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/decks/seed-01"
-}
