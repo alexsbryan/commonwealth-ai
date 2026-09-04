@@ -1,7 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Atlas on-disk writer — serialise `AtomsFile`, `EdgesFile`, and
 //! the (currently placeholder) trajectories index into the
-//! `atlas/` subdirectory of a corpus.
+//! `atlas/` subdirectory of a corpus, then the v2 store and the ANN seed
+//! table that make it readable and groundable.
+//!
+//! Since ei-3-index the write produces FOUR artifacts, not one: `atoms.json`
+//! (the canonical export), `atoms.lance` + `edges.csr` (the v2 store, the read
+//! path) and `atoms_ann.lance` (the seed table the walk grounds on). The last
+//! is why [`write_atlas_full`] takes an [`AtlasSeeding`]: it is mandatory, and
+//! a caller that cannot supply an embedder says so rather than silently
+//! omitting the artifact.
 //!
 //! Step 3a only emits entity + event atoms and `Involves` edges;
 //! the trajectories index is written as an empty object so the
@@ -21,9 +29,12 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use super::ann_store::{AtlasSeeding, SeedOutcome};
 use super::atoms::{
     AtomEnvelope, AtomsFile, Claim, Configuration, Entity, Event, Question, Relation, State,
 };
+use super::context_filter::AtlasContextFilter;
+use super::context_loader::{backfill_ann_blocking, BackfillOutcome};
 use super::edges::{Edge, EdgesFile};
 use super::resolution::Trajectory;
 
@@ -60,6 +71,16 @@ impl TrajectoriesFile {
 /// Thin wrapper over [`write_atlas_full`] for the common Step 3a
 /// case. Callers that run Step 3a + Step 3b in one pass go through
 /// `write_atlas_full` directly.
+///
+/// Seeding is [`AtlasSeeding::Deferred`] here, and that is the one place the
+/// choice is made rather than passed: a step-3a write is a PARTIAL atlas —
+/// entities and events only, no claims, questions, positions or oppositions —
+/// so a seed table built from it would index a fraction of the atoms and then
+/// look fresh (`ann_table_is_fresh` compares against `atoms.json`, which the
+/// 3b write restamps). The 3b write through `write_atlas_full` seeds the whole
+/// atlas. Callers with no 3b pass at all (`awareness` extract/filter, the
+/// engine's structural sidecar) get the deferred report and the
+/// `svrn atlas backfill-ann` recovery, not a half-built table.
 pub fn write_atlas(
     atlas_dir: &Path,
     entities: &[Entity],
@@ -80,6 +101,9 @@ pub fn write_atlas(
         &[],
         edges,
         &std::collections::BTreeMap::new(),
+        &AtlasSeeding::Deferred(
+            "step-3a partial write (entities + events only); the step-3b write seeds",
+        ),
     )
 }
 
@@ -93,6 +117,10 @@ pub fn write_atlas(
 /// - `atlas/edges.json` — every edge.
 /// - `atlas/trajectories.json` — per-entity / per-relation state
 ///   sequences per spec §6.4.
+/// - `atlas/atoms.lance` + `atlas/edges.csr` — the v2 store, the read path.
+/// - `atlas/atoms_ann.lance` — the ANN seed table, when `seeding` supplies an
+///   embedder. This is the artifact that decides whether the corpus can ground
+///   at all, so `seeding` has no default: see [`AtlasSeeding`].
 ///
 /// Atomic: each file lands via sibling `.tmp` + rename so a crash
 /// mid-write can't leave partial state.
@@ -110,6 +138,7 @@ pub fn write_atlas_full(
     oppositions: &[crate::enrichment::atlas::atoms::Opposition],
     edges: &[Edge],
     trajectories: &std::collections::BTreeMap<String, Trajectory>,
+    seeding: &AtlasSeeding,
 ) -> io::Result<AtlasWritten> {
     fs::create_dir_all(atlas_dir)?;
 
@@ -168,11 +197,81 @@ pub fn write_atlas_full(
     // `sovereign atlas migrate-all`.
     write_atlas_v2_store(atlas_dir, &atoms_file.atoms, edges)?;
 
+    // …then the seed table, from the `atoms.json` just written. Third artifact
+    // of the same write, not a later step somebody remembers to run.
+    let seed = seed_atlas(atlas_dir, seeding)?;
+
     Ok(AtlasWritten {
         atoms_path,
         edges_path,
         trajectories_path,
+        seed,
     })
+}
+
+/// Write `atlas/atoms_ann.lance` for the atlas just written, through the ONE
+/// backfill writer (`context_loader::backfill_ann`, the same call
+/// `svrn atlas backfill-ann` and the `enrich build` Backfill step make —
+/// ARCH §19, §10.6). Runs AFTER `atoms.json` because that is the backfill's
+/// input, and after the v2 store so a seeded atlas always has a store.
+///
+/// **Fail-hard on `With`**, exactly as the v2 store write is: a caller that
+/// said it would seed and could not has produced an atlas that cannot ground,
+/// and reporting that as a warning is how SEP ended up with 22 seeded atlases
+/// out of 1,770. `atoms.json` is already on disk either way, so the recovery is
+/// always `svrn atlas backfill-ann <id>`.
+///
+/// The grounding filter is `AtlasContextFilter::default()` — the universe the
+/// daemon seeds `atlas_navigate_ann` from. No other filter may be used here, or
+/// the table indexes atoms the query path never looks at.
+fn seed_atlas(atlas_dir: &Path, seeding: &AtlasSeeding) -> io::Result<SeedOutcome> {
+    let corpus_id = corpus_id_of(atlas_dir);
+    let embed = match seeding {
+        AtlasSeeding::Deferred(why) => {
+            tracing::info!(
+                corpus = corpus_id,
+                atlas = %atlas_dir.display(),
+                reason = why,
+                "atlas write: ANN seed table deferred; this corpus cannot ground until \
+                 `svrn atlas backfill-ann` runs"
+            );
+            return Ok(SeedOutcome::Deferred(why));
+        }
+        AtlasSeeding::With(embed) => embed,
+    };
+    let filter = AtlasContextFilter::default();
+    match backfill_ann_blocking(embed, atlas_dir, &corpus_id, &filter).map_err(io::Error::other)? {
+        BackfillOutcome::Built(stats) => {
+            tracing::info!(
+                corpus = corpus_id,
+                rows = stats.resolved,
+                of = stats.total,
+                "atlas write: ANN seed table written; this corpus grounds"
+            );
+            Ok(SeedOutcome::Written {
+                rows: stats.resolved,
+                of: stats.total,
+            })
+        }
+        BackfillOutcome::NoSeedableAtoms {
+            min_description_chars,
+        } => Ok(SeedOutcome::NoSeedableAtoms {
+            min_description_chars,
+        }),
+    }
+}
+
+/// The corpus id an atlas dir belongs to — its parent directory's name. Self
+/// description, so `write_atlas_full`'s signature does not grow a corpus-id
+/// parameter every caller would have to thread. Same derivation
+/// [`write_atlas_v2_store`] uses; one place, one answer.
+fn corpus_id_of(atlas_dir: &Path) -> String {
+    atlas_dir
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_string()
 }
 
 /// Write the v2 store (`atoms.lance` + `edges.csr`) from the just-written atoms
@@ -188,12 +287,7 @@ fn write_atlas_v2_store(
     atoms: &[AtomEnvelope],
     edges: &[Edge],
 ) -> io::Result<()> {
-    let corpus_id = atlas_dir
-        .parent()
-        .and_then(|p| p.file_name())
-        .and_then(|s| s.to_str())
-        .unwrap_or("");
-    super::store::write_store_blocking(atlas_dir, corpus_id, atoms, edges)
+    super::store::write_store_blocking(atlas_dir, &corpus_id_of(atlas_dir), atoms, edges)
         .map(|_| ())
         .map_err(io::Error::other)
 }
@@ -203,6 +297,10 @@ pub struct AtlasWritten {
     pub atoms_path: PathBuf,
     pub edges_path: PathBuf,
     pub trajectories_path: PathBuf,
+    /// What this write did about `atoms_ann.lance`. Carried back so the
+    /// resolve step prints it and no caller can read a deferred write as a
+    /// seeded one (ARCH §18.3 — absence is reported, never defaulted).
+    pub seed: SeedOutcome,
 }
 
 /// Write the resolution-failure file to
@@ -266,15 +364,26 @@ impl ResolutionFailuresFile {
 /// that must be reproducible from the atlas dir alone. So the resolve step
 /// writes the policies down beside the atoms.
 ///
-/// Absent for every corpus that declares no ontology, and for every atlas
-/// built before ontology v1 — readers treat absence as "no declaration",
-/// never as an error.
+/// Written by EVERY pipeline since ei-2-map (`EPISTEMIC_INDEX.md` §1, Map
+/// row: an atlas that cannot describe itself is not an atlas) — a built-in
+/// genre writes its fixed vocabulary down through the same struct. Absent
+/// only for an atlas built before then; readers treat absence as "no
+/// declaration", never as an error.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct AtlasOntologyFile {
     pub schema_version: String,
-    /// The `[enrichment.ontology] version` the policies were parsed under.
+    /// The `[enrichment.ontology] version` the policies were parsed under —
+    /// or [`Self::BUILTIN_ONTOLOGY_VERSION`] for a built-in pipeline's map,
+    /// which is written in that language rather than parsed from a recipe.
     #[serde(default)]
     pub ontology_version: u32,
+    /// The pipeline that extracted under these policies, as the registry
+    /// spells it (`literary_atlas`, `custom_atlas`, …). Tells a reader
+    /// whether the map was DECLARED by an author (`custom_atlas`) or WRITTEN
+    /// DOWN by a genre. Empty on a file written before ei-2-map; readers
+    /// report that, never guess.
+    #[serde(default)]
+    pub pipeline_id: String,
     /// What the pipeline read. Same struct the recipe parses into, so a
     /// reader never re-derives it.
     pub policies: crate::enrichment::ontology::OntologyPolicies,
@@ -285,13 +394,26 @@ impl AtlasOntologyFile {
     /// File name under `atlas/`. The ONE spelling — the writer and the
     /// summary reader below both go through it.
     pub const FILE: &'static str = "ontology.json";
+    /// The declaration language a built-in pipeline's map is written in
+    /// (`pipelines/ontologies/*.toml` are version-1 block bodies). One number,
+    /// one home: the resolve step records it and `declaration.rs` parses under it.
+    pub const BUILTIN_ONTOLOGY_VERSION: u32 = 1;
+
+    /// Was this map declared by a recipe author, as opposed to written down
+    /// by a built-in genre? The custom pipeline reports `custom_atlas`.
+    pub fn is_author_declared(&self) -> bool {
+        self.pipeline_id == "custom_atlas"
+    }
 }
 
 /// Write `atlas/ontology.json`. Called from the resolve step after
-/// [`write_atlas_full`], which is the only place that knows both the atlas
-/// directory and the corpus's `EnrichConfig`.
+/// [`write_atlas_full`] for every pipeline: `policies` is
+/// `Pipeline::declared_ontology()`, `pipeline_id` is `Pipeline::id()`, and
+/// `ontology_version` is the recipe's for the custom path or
+/// [`AtlasOntologyFile::BUILTIN_ONTOLOGY_VERSION`] otherwise.
 pub fn write_atlas_ontology(
     atlas_dir: &Path,
+    pipeline_id: &str,
     ontology_version: u32,
     policies: &crate::enrichment::ontology::OntologyPolicies,
 ) -> io::Result<PathBuf> {
@@ -302,6 +424,7 @@ pub fn write_atlas_ontology(
         &AtlasOntologyFile {
             schema_version: AtlasOntologyFile::SCHEMA_VERSION.to_string(),
             ontology_version,
+            pipeline_id: pipeline_id.to_string(),
             policies: policies.clone(),
         },
     )?;
@@ -687,5 +810,148 @@ mod tests {
             })
             .collect();
         assert!(stray.is_empty());
+    }
+
+    // ── the four-artifact contract (ei-3-index) ──────────────────────────────
+
+    /// One extracted Entity with enough signal to clear the grounding filter's
+    /// floor, in a corpus dir shaped like a real index root so
+    /// `corpus_id_of` finds a name.
+    fn seedable_entity() -> Entity {
+        Entity {
+            id: AtomId::entity(1),
+            canonical_name: "guest logbook".into(),
+            aliases: Vec::new(),
+            entity_type: EntityType::Concept,
+            first_appearance: ChunkRef::new("sec_0001", None),
+            description: "A physical record kept by the front door to track \
+                          overnight guests."
+                .into(),
+            defining_quote: None,
+            salience: 0.33,
+            enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
+            provenance: Default::default(),
+            attributes: serde_json::Map::new(),
+            concept_kind: None,
+        }
+    }
+
+    /// Deterministic 4-d embedder. Same shape as `context_loader`'s.
+    fn unit_embed() -> crate::types::EmbedFn {
+        std::sync::Arc::new(|text: &str| {
+            let n = text.len() as f32;
+            Box::pin(async move { Ok(vec![n, 1.0, 0.0, 0.0]) })
+        })
+    }
+
+    /// An embedder that always refuses, for the fail-hard case.
+    fn dead_embed() -> crate::types::EmbedFn {
+        std::sync::Arc::new(|_: &str| {
+            Box::pin(async move { Err(crate::error::Error::Embed("embed slot down".into())) })
+        })
+    }
+
+    fn write_seeded(atlas_dir: &Path, seeding: &AtlasSeeding) -> io::Result<AtlasWritten> {
+        write_atlas_full(
+            atlas_dir,
+            &[seedable_entity()],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &std::collections::BTreeMap::new(),
+            seeding,
+        )
+    }
+
+    /// ei-3-index bar 1 — the whole point of the order. Watched failing before
+    /// the change with `atoms_ann.lance` absent from a write that produced
+    /// `atoms.json`, `atoms.lance` and `edges.csr`: the exact on-disk shape
+    /// 1,748 of 1,770 SEP atlases were in, which loads and enumerates and
+    /// cannot ground.
+    #[test]
+    fn a_seeded_write_leaves_all_four_artifacts() {
+        let dir = tempdir().unwrap();
+        let atlas_dir = dir.path().join("wessex-fixture").join("atlas");
+        let written = write_seeded(&atlas_dir, &AtlasSeeding::With(unit_embed())).unwrap();
+
+        for artifact in ["atoms.json", "atoms.lance", "edges.csr", "atoms_ann.lance"] {
+            assert!(
+                atlas_dir.join(artifact).exists(),
+                "{artifact} missing from a seeded atlas write"
+            );
+        }
+        assert_eq!(written.seed, SeedOutcome::Written { rows: 1, of: 1 });
+    }
+
+    /// ei-3-index bar 2 — a deferral is REPORTED, not silently identical to a
+    /// seeded write. Watched failing with `AtlasWritten` carrying no seed
+    /// field at all, which is how a caller could not tell the two apart.
+    #[test]
+    fn a_deferred_write_names_the_reason_and_writes_no_table() {
+        let dir = tempdir().unwrap();
+        let atlas_dir = dir.path().join("deferred-fixture").join("atlas");
+        let written =
+            write_seeded(&atlas_dir, &AtlasSeeding::Deferred("no embedder here")).unwrap();
+
+        assert_eq!(written.seed, SeedOutcome::Deferred("no embedder here"));
+        assert!(!atlas_dir.join("atoms_ann.lance").exists());
+        assert!(
+            atlas_dir.join("atoms.lance").exists(),
+            "a deferred seed still writes the v2 store"
+        );
+        assert!(written.seed.describe().contains("deferred"));
+    }
+
+    /// ei-3-index bar 3 — fail-hard. Watched failing with the pre-change
+    /// behaviour (`tracing::warn!` and carry on), which is the mechanism that
+    /// let SEP accumulate 1,748 seedless atlases without one red build.
+    #[test]
+    fn a_seed_that_cannot_embed_fails_the_atlas_write() {
+        let dir = tempdir().unwrap();
+        let atlas_dir = dir.path().join("dead-embed-fixture").join("atlas");
+        let err = write_seeded(&atlas_dir, &AtlasSeeding::With(dead_embed()))
+            .expect_err("an atlas that cannot ground is a failed write, not a warning");
+
+        assert!(
+            atlas_dir.join("atoms.json").exists(),
+            "atoms.json lands before the seed, so `svrn atlas backfill-ann` can recover"
+        );
+        assert!(!atlas_dir.join("atoms_ann.lance").exists());
+        // The message must send the operator to the embed slot, not to the
+        // filter knobs. Before `EmbedRefusedAll` existed this read
+        // "no atom-bearing entries for dead-embed-fixture (0/0) -- nothing to
+        // index", which says the atlas is empty when the embedder is down.
+        let msg = err.to_string();
+        assert!(
+            msg.contains("refused every one of the 1 atom"),
+            "seed failure must name the refusal and its size: {msg}"
+        );
+        assert!(
+            msg.contains("NOT a filter problem"),
+            "seed failure must not be mistakable for an over-tight filter: {msg}"
+        );
+    }
+
+    /// ei-3-index bar 4 — `write_atlas` is the step-3a partial write and must
+    /// NOT seed. Watched failing with `write_atlas` inheriting a `With`
+    /// seeding: it wrote a table from entities-only, which then read as fresh
+    /// against the step-3b `atoms.json` it predated.
+    #[test]
+    fn the_step_3a_wrapper_defers_seeding() {
+        let dir = tempdir().unwrap();
+        let atlas_dir = dir.path().join("step3a-fixture").join("atlas");
+        let written = write_atlas(&atlas_dir, &[seedable_entity()], &[], &[]).unwrap();
+        assert!(matches!(written.seed, SeedOutcome::Deferred(_)));
+        assert!(!atlas_dir.join("atoms_ann.lance").exists());
     }
 }

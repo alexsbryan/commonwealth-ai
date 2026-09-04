@@ -20,8 +20,8 @@
 use std::path::{Path, PathBuf};
 
 use corpus_engine::enrichment::atlas::{
-    resolve_entities_and_events_with, resolve_step_3b_with, write_atlas, write_atlas_full,
-    ResolutionPolicy, ATLAS_DIRNAME,
+    ann_store::AtlasSeeding, resolve_entities_and_events_with, resolve_step_3b_with, write_atlas,
+    write_atlas_full, ResolutionPolicy, ATLAS_DIRNAME,
 };
 use corpus_engine::enrichment::pipeline::{
     ExtractedQuestion, Phase1Output, PipelinePhase, SectionExtraction,
@@ -31,8 +31,8 @@ use corpus_engine::types::EmbedFn;
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;
 use super::paths;
-use sovereign_core::tool_manifest::DeclaredTool;
-use sovereign_core::types::{StepOutput, ToolContext};
+use sovereign_contracts::tool_manifest::DeclaredTool;
+use sovereign_contracts::types::{StepOutput, ToolContext};
 use std::sync::Arc;
 
 /// Resolve a corpus's cached Phase 1 sketches into the live atlas dir.
@@ -315,6 +315,13 @@ pub async fn resolve_into_dir(
             &typed.new_oppositions,
             &edges,
             &step_3b.trajectories,
+            // The resolve step is where the atlas becomes real, and it is the
+            // only lifecycle point that holds BOTH the finished atom set and an
+            // embedder. So it writes the seed table here, in the same write as
+            // the v2 store (ei-3-index; EPISTEMIC_INDEX section 1, Ideas row).
+            // `embed` is the query-side closure the build was handed: the table
+            // and the queries that search it must share one vector space.
+            &AtlasSeeding::With(embed.clone()),
         );
         match result {
             Ok(w) => {
@@ -380,29 +387,49 @@ pub async fn resolve_into_dir(
 
     println!("  ✓ wrote {}", written.atoms_path.display());
     println!("  ✓ wrote {}", written.edges_path.display());
+    // The seed table's own line, in its own words -- a deferred or empty seed
+    // reads differently from a written one, and none of the three is a zero
+    // (ARCH 18.3).
+    println!("  ✓ {}", written.seed.describe());
 
     // Record what this atlas was extracted under, beside the atoms. The
     // atlas directory has to answer that on its own — corpus-engine cannot
     // read this config.json, and `_summary.json` is a derived cache that must
-    // be reproducible from the atlas dir alone. Only a declared ontology is
-    // written; a prose-only custom atlas leaves no file, and readers treat
-    // absence as "declares nothing".
-    if let Some(spec) = cfg.ontology.as_ref() {
-        if policies.has_declarations() {
+    // be reproducible from the atlas dir alone. EVERY pipeline writes it
+    // (EPISTEMIC_INDEX §1, Map row): a built-in genre writes its fixed
+    // vocabulary down through the same struct, a prose-only custom atlas
+    // writes its terms and the navigation defaults. The map is the
+    // pipeline's own (`declared_ontology`), not this config's — one decider.
+    match super::pipeline_resolve::resolve_pipeline(cfg) {
+        Some(pipeline) => {
+            let map = pipeline.declared_ontology();
+            let ontology_version = cfg
+                .ontology
+                .as_ref()
+                .map(|spec| spec.ontology_version)
+                .unwrap_or(
+                    corpus_engine::enrichment::atlas::AtlasOntologyFile::BUILTIN_ONTOLOGY_VERSION,
+                );
             match corpus_engine::enrichment::atlas::write_atlas_ontology(
                 atlas_dir,
-                spec.ontology_version,
-                &policies,
+                pipeline.id(),
+                ontology_version,
+                &map,
             ) {
                 Ok(path) => println!(
-                    "  ✓ wrote {} ({} declared type(s), ontology version {})",
+                    "  ✓ wrote {} ({} declared type(s), ontology version {}, pipeline {})",
                     path.display(),
-                    policies.shape.types.len(),
-                    spec.ontology_version
+                    map.shape.types.len(),
+                    ontology_version,
+                    pipeline.id()
                 ),
                 Err(e) => eprintln!("warning: writing ontology.json: {e}"),
             }
         }
+        None => eprintln!(
+            "warning: pipeline `{}` is not registered; ontology.json not written",
+            cfg.pipeline_id
+        ),
     }
     if want_3b {
         println!("  ✓ wrote {}", written.trajectories_path.display());
@@ -488,7 +515,7 @@ impl AtlasResolveTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("atlas_resolve", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("atlas_resolve", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })
@@ -499,8 +526,8 @@ impl AtlasResolveTool {
         &self,
         params: &serde_json::Value,
         _ctx: &ToolContext,
-    ) -> sovereign_core::error::Result<StepOutput> {
-        use sovereign_core::error::Error;
+    ) -> sovereign_contracts::error::Result<StepOutput> {
+        use sovereign_contracts::error::Error;
 
         let corpus = params
             .get("corpus")
@@ -592,7 +619,7 @@ pub fn parse_args(args: &[String]) -> Result<ParsedResolve, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::traits::Tool;
+    use sovereign_contracts::traits::Tool;
 
     #[test]
     fn parse_args_defaults_to_phase_3a() {

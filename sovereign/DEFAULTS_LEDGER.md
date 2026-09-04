@@ -30,6 +30,65 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### Reindexer warm LSP tier — OFF, `SOVEREIGN_SCIP_LSP_TIER` (2026-09-04)
+
+**What ships.** On each debounced save the reindexer asks the already-running
+rust-analyzer (through the lspmux shim, `scripts/install-lspmux.sh`) for the
+call edges rooted in the changed files and ADDS them to the graph. It closes a
+real gap: the tree-sitter overlay refreshes symbol defs in milliseconds but can
+never see a cross-file call, and the export that can costs a cold analysis of
+all 54 crates — 3m42s and 15.2 GB measured on RuggedFox 2026-09-04 — so it sits
+behind a 900 s cooldown. Between the two, a save that adds a call is invisible
+to `callers` until the next export.
+
+**Why not always-on — and this is now a measurement, not a caution.** The
+order pre-registered a stop condition: park if the warm server's per-file
+requests cost more than the overlay's debounce window (2000 ms,
+`default_scip_debounce_ms`). Measured against the shared analyzer on RuggedFox
+2026-09-04, warm, second pass:
+
+| file | defs | call sites derived | requests | warm cost |
+|---|---|---|---|---|
+| `sovereign-mesh/src/reindexer.rs` (2,116 lines) | 140 | 594 | 282 | **8,848 ms** |
+| `sovereign-mesh/src/lsp_tier.rs` (~600 lines) | 36 | 218 | 74 | **2,503 ms** |
+| `corpus-engine-scip/src/tool_path.rs` (~300 lines) | 25 | 145 | 52 | **1,857 ms** |
+
+**The stop condition is triggered**, and its shape is specific: the cost is
+`2N+1` round trips for a file with N definitions, at ~31 ms each. Nothing is
+slow; there are simply too many calls. A small file fits inside the window; a
+2,116-line one is 4.4x over it, and a batch save of ten files would be tens of
+seconds on the watcher's hot path.
+
+So the tier is correct, its edges are real (594 from one file), its safety is
+proven by test — and it is OFF because the shape it queries in is the wrong
+one, not because nobody looked.
+
+**Two further operating facts from the same session**, both against flipping
+as-is:
+
+- The shared analyzer dies after `instance_timeout` (300 s idle) and the next
+  client spawns a cold one. During that load every request answers `[]` or
+  `file not found` — observed twice while measuring. Additive-only writing is
+  what makes that window cost nothing instead of emptying a file's edges.
+- Through lspmux the server is configured by whichever client handshakes
+  FIRST, so a declared `hierarchicalDocumentSymbolSupport` can be ignored and
+  the flat `SymbolInformation` shape arrives instead. `collect_definitions`
+  handles both; that is measured behaviour, not defensive coding.
+
+**The condition that flips it:** get the per-save cost under the debounce
+window, which means querying the definitions that CHANGED rather than every
+definition in the file — the reindexer already re-parses each saved file with
+tree-sitter, so the previous parse's spans are the missing input, not a new
+analyzer capability. Then two 30-minute continuous-editing windows (tier off,
+tier on) with export count and peak rust-analyzer RSS recorded for each,
+against the 2026-08-16 reference of ~88-90% duty cycle and ~14 GB, plus a
+`callers` query showing an edge that a save added and the last export does not
+contain.
+
+**Review by 2026-10-05.** Owner: whoever next picks up order
+`scip-on-shared-analyzer`.
+
+
 ### Reified merges — ON for a DECLARED corpus, OFF everywhere else (2026-09-02)
 
 **What ships.** `svrn enrich reconcile` writes one `same_as` Claim per merge

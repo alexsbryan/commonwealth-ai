@@ -1,0 +1,203 @@
+# Flight rules — read raw. Verdicts come from measurement rows
+# (~/.sovereign/comaintainer/bar-measurements.jsonl), never from prose here.
+# Defer/descope = edit a bar's `status`; git history is the ledger.
+id        = "epistemic-index"
+objective = "A TOML recipe with a custom ontology, ingested, yields epistemically indexed retrieval from the person's own llama-server"
+spec      = "sovereign/docs/specs/EPISTEMIC_INDEX.md"
+declared  = "2026-09-04"
+status    = "active"
+
+[[bar]]
+id           = "EI1-thematic-lane"
+one_line     = "A thematic question set on the literary lane: themes named, tensions cited, >=1 evidence passage per claim — baseline first, then +1 cited theme over it"
+derives_from = "EPISTEMIC_INDEX.md §6 row 1"
+status       = "open"
+direction    = "higher_is_better"
+# RATIFIED 2026-09-04 by the operator ("Ratify the thresholds as proposed"),
+# from the ei-1-bar baseline: two synth runs on thematic-bk-book-1, 18/44 and
+# 19/44 cited-with-evidence (commit 16f121a46). Floor = run 1; the noise band
+# is RUNBOOK §6's synth band; target = four more cited facts (22/44), which
+# sits OUTSIDE the band so a met is not weather.
+floor        = 0.4091
+floor_basis  = "n=2 synth runs 2026-09-04, 0.4091 / 0.4318, sovereign/bench/literary/baselines/thematic-bk-book-1-synth-isolated/2026-09-04.json (commit 16f121a46)"
+noise_band   = 0.05
+target       = 0.50
+# The set landed 2026-09-04 (order ei-1-bar): sovereign/bench/literary/
+# thematic-bk-book-1.toml (6 questions / 44 facts, corpus installed here) and
+# thematic-dubliners-3.toml (6 questions / 39 facts, corpus NOT installed on
+# any box yet — NEVER RUN, and the file says so at the top).
+#
+# NO TARGET IS SET AND THAT IS DELIBERATE. §6 row 1's bar is "+1 cited theme
+# with evidence over baseline", which is a DELTA on a number nothing had
+# measured. This instrument is the floor_basis it will be read against. A
+# target minted in the same commit as the first measurement is a target fitted
+# to the data (§18.6); the operator ratifies one from these numbers.
+#
+# THE VALUE IS "CITED WITH EVIDENCE", one number for the bar's own unit:
+# expected facts the ANSWER named AND the RETRIEVED PASSAGES carried, over all
+# expected facts. Both halves come from one synth run — `fact_score` scores
+# the answer, `synth.chunks_fact_score` scores the same facts against the
+# passages (`eval_cmd/runner.rs:1824-1826`) — so "named" and "evidenced" are
+# never two runs that could disagree about the world. Naming a theme the
+# passages do not carry scores zero here and would score 1.0 on answer text
+# alone; that asymmetry is the point.
+#
+# Noise: this lane puts an LLM in the loop, so it is the synth band, ±0.04-0.06
+# (RUNBOOK §6), NOT the exact retrieval band. The companion retrieval-mode
+# baseline under baselines/thematic-bk-book-1/ is the deterministic evidence
+# number and moves exactly; read it when the question is "did retrieval
+# change", and this one when it is "did the answer change".
+#
+# Reads the newest COMMITTED dated baseline, so `commit` can never be a HEAD
+# that did not produce the number, and staleness shows as age rather than as a
+# silently fresh-looking value. Per-category rollup goes to stderr so the
+# render shows theme vs tension separately rather than one blended average.
+kill         = "if the cited-with-evidence rate can only be raised by loosening the fact list, the walk did not improve and the bank did — re-read §18.6 before touching either"
+instrument   = '''python3 - <<'PY'
+import glob, json, subprocess, sys
+BASE = "sovereign/bench/literary/baselines/thematic-bk-book-1-synth-isolated"
+best = None  # (commit_time, sha, path) -> newest COMMITTED dated snapshot
+for p in sorted(glob.glob(BASE + "/20*.json")):  # dated files; skips latest.json
+    out = subprocess.run(["git", "log", "-n1", "--format=%ct %H", "--", p],
+                         capture_output=True, text=True).stdout.split()
+    if len(out) != 2:
+        continue  # uncommitted artifact cannot attribute a ref — skipped
+    t = int(out[0])
+    if best is None or t > best[0]:
+        best = (t, out[1], p)
+if best is None:
+    sys.exit(3)  # no committed baseline — absent, named by exit code
+_, sha, path = best
+rows = json.load(open(path)).get("results") or []
+den = named = evid = cited = 0
+by = {}
+for r in rows:
+    if r.get("error"):
+        continue  # a failed turn is not a zero; it is excluded and counted
+    syn = r.get("synth") or {}
+    ans = set(r["fact_score"]["matched"])
+    chk = set((syn.get("chunks_fact_score") or {}).get("matched") or [])
+    # Denominator EXCLUDES unscorable facts, which is what
+    # `FactScore::ratio` does (eval_cmd/score.rs:148-174: a fact with no
+    # >=3-char token is unmatchable by construction, so counting it would
+    # cap the lane below 1.0 for a bank bug). One ratio, one definition.
+    tot = r["fact_score"]["total_expected"] - len(r["fact_score"].get("unscorable") or [])
+    den += tot; named += len(ans); evid += len(chk); cited += len(ans & chk)
+    a = by.setdefault(r["category"], [0, 0, 0, 0])
+    a[0] += tot; a[1] += len(ans); a[2] += len(chk); a[3] += len(ans & chk)
+errs = sum(1 for r in rows if r.get("error"))
+if den == 0:
+    sys.exit(3)  # every row errored, or the bank is empty — not a zero score
+for k, (t, n, e, c) in sorted(by.items()):
+    print(f"{k}: named {n}/{t} evidenced {e}/{t} cited-with-evidence {c}/{t}",
+          file=sys.stderr)
+print(f"rows {len(rows)} errored {errs} | named {named}/{den} evidenced {evid}/{den}",
+      file=sys.stderr)
+print(json.dumps({"value": round(cited / den, 4), "commit": sha, "artifact": path}))
+PY'''
+
+[[bar]]
+id           = "EI2-sep-unchanged"
+one_line     = "The SEP retrieval-prod lane stays within its noise band through every step (RUNBOOK §6)"
+derives_from = "EPISTEMIC_INDEX.md §6 row 2"
+status       = "open"
+direction    = "higher_is_better"
+# RATIFIED 2026-09-04 by the operator. The bar is "unchanged": floor = the
+# lane's committed floor (2026-08-10), the band is exact (retrieval recall),
+# target = floor — holding is met, dropping below is a regression owner's.
+floor        = 0.9557
+floor_basis  = "sovereign/bench/sep/baselines/questions-prod-isolated/2026-08-10.json (commit 09b0addb7); re-checked 2026-09-04 n=2 at 0.9684"
+noise_band   = 0.0
+target       = 0.9557
+# floor_basis recorded 2026-09-04 (order ei-1-bar) by running the lane twice
+# on RuggedFox against the committed baseline. NOTHING WAS WRITTEN TO SET THIS
+# FLOOR: sovereign/bench/sep/baselines/questions-prod-isolated/2026-08-10.json
+# has been in the repo since 2026-08-10 and already IS the floor. The two runs
+# were the check that it still holds on this box, not an attempt to mint a
+# replacement — re-minting a baseline requires adjudicating every per-question
+# diff first (RUNBOOK §6), which no step of this campaign has done.
+#
+# noise_band is 0.0 BY LANE KIND, not by choice. RUNBOOK §6: retrieval recall
+# on a HARD lane is exact — embeddings and ANN are stable, so any delta is
+# real. The ±0.04-0.06 band belongs to synth lanes and must not be borrowed
+# here to wave a regression through. The three committed snapshots span
+# 0.9182 (07-16, 146/159) -> 0.9308 (07-17, 148/159) -> 0.9557 (08-10,
+# 151/158); that spread is code changing, not the same code flapping.
+# Only the 08-10 snapshot carries the unscorable entry, which is why its
+# denominator is the odd one out.
+#
+# The value is fact recall (retrieval), which is what "unchanged" means for
+# this lane. Source recall is printed to stderr rather than blended in: the
+# two move for different reasons and averaging them hides which one broke.
+kill         = "if a step needs the synth band to render green on a retrieval lane, the step regressed retrieval — name an owner and a measurement (ARCH §18.5), do not widen the band"
+instrument   = '''python3 - <<'PY'
+import glob, json, subprocess, sys
+BASE = "sovereign/bench/sep/baselines/questions-prod-isolated"
+best = None
+for p in sorted(glob.glob(BASE + "/20*.json")):
+    out = subprocess.run(["git", "log", "-n1", "--format=%ct %H", "--", p],
+                         capture_output=True, text=True).stdout.split()
+    if len(out) != 2:
+        continue
+    t = int(out[0])
+    if best is None or t > best[0]:
+        best = (t, out[1], p)
+if best is None:
+    sys.exit(3)
+_, sha, path = best
+rows = [r for r in (json.load(open(path)).get("results") or []) if not r.get("error")]
+fm = sum(len(r["fact_score"]["matched"]) for r in rows)
+# EXCLUDE unscorable, as `FactScore::ratio` does. This bank has one such
+# entry ("li" — every token under 3 chars), so a denominator of
+# total_expected reads 151/159 = 0.9497 where the lane itself reports
+# 151/158 = 0.9557. Two numbers for one ratio is ARCH §10.6.
+un = sum(len(r["fact_score"].get("unscorable") or []) for r in rows)
+ft = sum(r["fact_score"]["total_expected"] for r in rows) - un
+sm = sum(len(r["source_score"]["matched"]) for r in rows)
+st = sum(r["source_score"]["total_expected"] for r in rows)
+if ft == 0:
+    sys.exit(3)
+print(f"n={len(rows)} fact {fm}/{ft} (unscorable {un} excluded) source {sm}/{st}"
+      + (f" ({sm / st:.4f})" if st else ""), file=sys.stderr)
+print(json.dumps({"value": round(fm / ft, 4), "commit": sha, "artifact": path}))
+PY'''
+
+[[bar]]
+id           = "EI3-recipe-to-answer"
+one_line     = "corpus-mcp/acceptance.sh runs recipe new -> ingest -> serve -> ask on the wessex fixture against a bare chat+embed endpoint; truth.json recall >= the daemon-built corpus"
+derives_from = "EPISTEMIC_INDEX.md §4, §6 row 3"
+status       = "open"
+
+[[bar]]
+id           = "EI4-self-describing-atlas"
+one_line     = "Every atlas dir written by any pipeline carries ontology.json, atoms.lance, edges.csr and atoms_ann.lance, and corpus_list reports coverage for each"
+derives_from = "EPISTEMIC_INDEX.md §1 Ideas + Map rows"
+status       = "open"
+
+[[bar]]
+id           = "EI5-one-walk"
+one_line     = "One grounding implementation in corpus-engine, driven by the corpus's navigation policy; sovereign-core and corpus-mcp both call it"
+derives_from = "EPISTEMIC_INDEX.md §1 Walk row, §2.2"
+status       = "open"
+
+[[bar]]
+id           = "EI6-no-inference-stack"
+one_line     = "The corpus binary's closure carries no llama.cpp / ort / iroh / mesh transport / runtime, ingest verb included"
+derives_from = "EPISTEMIC_INDEX.md §4, §4.1"
+status       = "open"
+target       = 1.0
+direction    = "higher_is_better"
+kill         = "if ingest cannot run without the stack, the build half of the criterion is false — say so, do not ship a daemon-backed ingest under the same verb"
+instrument   = '''python3 - <<'PY'
+import json, subprocess, sys
+out = subprocess.run(["cargo", "tree", "-p", "corpus-mcp", "-e", "normal", "--prefix", "none"],
+                     capture_output=True, text=True)
+if out.returncode != 0:
+    sys.exit(3)
+bad = {"llama-cpp-4", "llama-cpp-sys-4", "ort", "ort-sys", "iroh", "sovereign-inference",
+       "sovereign-gliner", "commonwealth-transport", "sovereign-core", "sovereign-tools"}
+names = {l.split()[0] for l in out.stdout.splitlines() if l.strip()}
+hit = sorted(bad & names)
+print("carries:", hit, file=sys.stderr)
+print(json.dumps({"value": 0.0 if hit else 1.0, "artifact": "corpus-mcp/Cargo.toml"}))
+PY'''

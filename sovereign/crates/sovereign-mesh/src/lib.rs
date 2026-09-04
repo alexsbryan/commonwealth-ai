@@ -55,6 +55,8 @@ pub mod knowledge_client;
 pub mod landscape_digest_client;
 pub mod landscape_digest_http;
 pub mod loopback_guard;
+#[cfg(feature = "treesitter")]
+pub mod lsp_tier;
 pub mod mcp_router;
 pub mod mesh_discovery;
 pub mod mesh_http;

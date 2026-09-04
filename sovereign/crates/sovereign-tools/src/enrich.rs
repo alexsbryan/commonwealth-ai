@@ -57,12 +57,13 @@ pub type EnrichProgressFn = Arc<dyn Fn(EnrichProgress) + Send + Sync + 'static>;
 /// about outstanding senders. Cheap to clone, cheap to check.
 pub type CancellationFlag = Arc<AtomicBool>;
 
-/// Exit code of a build stopped through a [`CancellationFlag`] — the shell's
-/// own code for an interrupted process, so a driver reading the code sees
-/// "interrupted", not "failed". Owned here, beside the flag, and read back by
-/// the in-process orchestrator (`sovereign_cli_llm::enrich_cmd::build`) and
-/// the driver alike (ARCH §10.6).
-pub const EXIT_CANCELLED: i32 = 130;
+/// Exit code of a build stopped through a [`CancellationFlag`] — re-exported
+/// at its historical path. The constant itself moved DOWN to
+/// `sovereign_contracts::launch` (order ei-5a-build-cut) so the enrichment
+/// orchestrator can return it without linking this crate's tool stack; the
+/// flag stays here, beside the driver that fires it. One constant, two names
+/// that resolve to it (ARCH §10.6).
+pub use sovereign_contracts::launch::EXIT_CANCELLED;
 
 /// Create a fresh cancellation flag in the non-cancelled state.
 /// Pair with `fire_cancellation` from a separate task (or Tauri

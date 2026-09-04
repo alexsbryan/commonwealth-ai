@@ -225,6 +225,10 @@ impl Pipeline for LiteraryAtlasPipeline {
         }
     }
 
+    fn declaration(&self) -> crate::enrichment::ontology::OntologyPolicies {
+        self.genre.declaration()
+    }
+
     // ── Phase system preambles ────────────────────────────────
     //
     // Only Phase 1 diverges from `literary`; the rest reuse the same

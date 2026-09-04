@@ -11,12 +11,25 @@ It speaks MCP over stdio and exposes four tools: `corpus_list`,
 `corpus_search` (cited chunks from the same LanceDB + Tantivy hybrid every
 sovereign surface uses), `atoms_lookup` (the atoms a corpus's enrichment
 produced, read from `atlas/atoms.json`) and `corpus_ontology` (what the corpus
-declared, from `atlas/ontology.json`). `--base-url` is the only required flag;
+declared, from `atlas/ontology.json` — read through the writer's own
+`read_atlas_ontology`, because the file is an `AtlasOntologyFile` envelope and
+parsing it as bare policies silently yields an empty declaration). `--base-url` is the only required flag;
 whether the host is an OICP daemon or a bare `llama-server` is detected from
 `GET /oicp/v1/capabilities`, and a 404 there is the normal case. Every
 degradation — a width mismatch between an index and the endpoint's embeddings,
 a corpus with no atlas — is printed to stderr and reported in the tool result,
 never defaulted.
+
+How the enrichment reaches a request here: it does not, unless the client
+asks. `corpus_search` is tier 1 alone — nothing from the atlas or the
+ontology touches its ranking or its results. The MCP client composes the
+tiers itself, by calling `atoms_lookup` / `corpus_ontology` after (or instead
+of) a search; the server's `instructions` string says so. For SEP
+specifically: the corpus declared no ontology (`corpus_ontology` refuses by
+path), its vocabulary is the fixed atom kinds its `philosophy_atlas` pipeline
+extracts, and the searchable `sep` index carries an empty atlas — the atoms
+live in the per-article `sep-<slug>` atlas dirs, which `atoms_lookup` reads by
+name.
 
 What it deliberately is not: the atom-grounded *ranking* that sovereign's chat
 surfaces run (`atom_enum`, `atlas_grounding` in `sovereign-core`) is not here.

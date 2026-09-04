@@ -20,6 +20,14 @@ pub use oicp_types as oicp;
 
 pub mod data_roots;
 pub mod engine_config;
+// The egress boundary — the ONE choke point for remote-model calls and
+// search-query egress (order deep-research-t2a, R10; moved down from
+// `sovereign-core` by ei-5a-build-cut so a crate can gate its egress without
+// linking the inference stack). The F26 census registers this exact file as
+// the `Boundary` class; a reqwest client construction anywhere else fails the
+// build gate. `sovereign_core::egress` re-exports it — one boundary, two
+// paths to it.
+pub mod egress;
 pub mod error;
 pub mod frame;
 pub mod health;

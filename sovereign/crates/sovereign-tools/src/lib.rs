@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pub mod atlas_context_loader;
 pub mod atlas_context_manager;
 pub mod atlas_peer_advice;
 pub mod atlas_phase;

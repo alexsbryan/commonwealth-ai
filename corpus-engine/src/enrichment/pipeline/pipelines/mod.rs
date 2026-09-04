@@ -6,6 +6,7 @@
 
 pub mod configurable_atlas;
 pub mod conversation_atlas;
+pub mod declaration;
 pub mod engineering_atlas;
 pub mod genre;
 pub mod literary;

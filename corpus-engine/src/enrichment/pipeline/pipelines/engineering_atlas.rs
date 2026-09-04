@@ -77,6 +77,12 @@ impl super::genre::AtlasGenre for EngineeringGenre {
     fn id(&self) -> &'static str {
         PIPELINE_ID
     }
+    /// Phase 1 emits only claims that anchor in code, with no `claim_kind`
+    /// subtype — so there is no type to declare. The map still records the
+    /// pipeline's terms and derivation flags.
+    fn declaration(&self) -> crate::enrichment::ontology::OntologyPolicies {
+        crate::enrichment::ontology::OntologyPolicies::default()
+    }
 
     fn name(&self) -> &'static str {
         "Engineering docs — claims with code anchors"

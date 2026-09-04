@@ -1,0 +1,1475 @@
+{
+  "bank_name": "literary-thematic-bk-v1",
+  "corpus": "brothers-karamazov-book-1",
+  "limit": 0,
+  "started_at_unix": 1788537447,
+  "results": [
+    {
+      "question_id": "bk_thematic_overview",
+      "category": "theme",
+      "question": "What is Book I of The Brothers Karamazov about? Name the themes it establishes and say what each is grounded in.",
+      "retrieved": [
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nBook I. The History Of A Family\n\nChapter I.\n\nFyodor Pavlovitch Karamazov\n\nAlexey Fyodorovitch Karamazov was the third son of Fyodor Pavlovitch\n\nKaramazov, a land owner well..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nwill be no\n\nmore rich nor poor, no exalted nor humbled, but all will be as the\n\nchildren of God, and the true Kingdom of Christ will come.” That was\n\nthe dream in..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nwhen he made the acquaintance of the young man,\n\nwho interested him extremely, and with whom he sometimes argued and not\n\nwithout an inner pang compared himself in..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\neven in his earliest youth. Coming at twenty\n\nto his father’s house, which was a very sink of filthy debauchery, he,\n\nchaste and pure as he was, simply withdrew in..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nHe explained that this was his strong\n\ndesire, and that he was solemnly asking his consent as his father. The\n\nold man knew that the elder Zossima, who was living in the..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nsorry to lose you, Alyosha;\n\nwould you believe it, I’ve really grown fond of you? Well, it’s a good\n\nopportunity. You’ll pray for us sinners; we have sinned too much..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nbrother Alexey I find it most difficult\n\nto speak in this introduction. Yet I must give some preliminary account\n\nof him, if only to explain one queer fact, which is that I..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nboyhood and youth, but will only mention a\n\nfew of the most important events. Of the elder, Ivan, I will only say\n\nthat he grew into a somewhat morose and reserved, though..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nexcept that fragment. That is how it was with\n\nhim. He remembered one still summer evening, an open window, the\n\nslanting rays of the setting sun (that he recalled most..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nthem, blessed them, and dismissed them. Of\n\nlate he had become so weak through attacks of illness that he was\n\nsometimes unable to leave his cell, and the pilgrims waited..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\neven atheists joined them in their applause.\n\nFinally some sagacious persons opined that the article was nothing but\n\nan impudent satirical burlesque. I mention this..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nsixpenny lessons and afterwards getting\n\nparagraphs on street incidents into the newspapers under the signature\n\nof “Eye-Witness.” These paragraphs, it was said, were..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\ndiversion. He was suddenly seized with the\n\ndesire to see the monastery and the holy man. As his lawsuit with the\n\nmonastery still dragged on, he made it the pretext for..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nhis children’s education. As for the slaps she\n\nhad given him, he drove all over the town telling the story.\n\nIt happened that the old lady died soon after this, but she..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nsomehow bloated and seemed more irresponsible, more\n\nuneven, had sunk into a sort of incoherence, used to begin one thing\n\nand go on with another, as though he were letting..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nvery successfully, though, no doubt, not\n\nover-scrupulously. Sofya Ivanovna was the daughter of an obscure\n\ndeacon, and was left from childhood an orphan without relations...."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\ncarrosse._’ How do you know\n\nthere are no hooks, darling? When you’ve lived with the monks you’ll\n\nsing a different tune. But go and get at the truth there, and then..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nthe value of money, not, of course, in a\n\nliteral sense. When he was given pocket-money, which he never asked\n\nfor, he was either terribly careless of it so that it was..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nold legend. But here is a recent instance.\n\nA monk was suddenly commanded by his elder to quit Athos, which he\n\nloved as a sacred place and a haven of refuge, and to go..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nbeat his wife but was beaten by her, for she\n\nwas a hot-tempered, bold, dark-browed, impatient woman, possessed of\n\nremarkable physical strength. Finally, she left the..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "father",
+          "neglect",
+          "monaster"
+        ],
+        "missing": [
+          "abandon",
+          "sensual",
+          "money",
+          "buffoon",
+          "senseless"
+        ],
+        "total_expected": 8,
+        "ratio": 0.375
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "brothers-karamazov-book-1"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on the provided passages from Book I of *The Brothers Karamazov*, here is an overview of its content, themes, and their grounding in the text.\n\n### Overview\nBook I, titled \"The History Of A Family,\" serves as a prologue that introduces the three brothers—Dmitri, Ivan, and Alexey (Alyosha)—and their father, Fyodor Pavlovitch Karamazov [Source: brothers-karamazov-book-1]. The narrator establishes the family’s tragic history, detailing Fyodor’s two marriages, his first wife Adelaïda’s departure with another man, and her subsequent death [Source: brothers-karamazov-book-1]. The book focuses heavily on Alyosha’s arrival at the monastery to become a novice under the Elder Zossima, and the concurrent return of his elder brothers Dmitri and Ivan to their father’s house in their hometown [Source: brothers-karamazov-book-1].\n\n### Key Themes and Their Grounding\n\n**1. The Contrast Between Spiritual Purity and Worldly Depravity**\nThis theme is grounded in the stark juxtaposition between Alyosha and Fyodor Pavlovitch. Fyodor is described as \"abject and vicious,\" living in a \"sink of filthy debauchery\" with drunken orgies [Source: brothers-karamazov-book-1]. In contrast, Alyosha is portrayed as \"chaste and pure,\" who simply withdraws from his father's behavior without condemnation or contempt [Source: brothers-karamazov-book-1]. Despite this purity, even Fyodor feels a deep, unusual affection for Alyosha, recognizing him as the only one who has not judged him [Source: brothers-karamazov-book-1].\n\n**2. Faith vs. Atheism (The Intellectual Conflict)**\nBook I establishes Ivan as an educated atheist whose intellectual superiority contrasts with Alyosha’s spiritual faith. Ivan is described as \"morose and reserved\" since childhood, realizing early on that he was living on charity and despising his father [Source: brothers-karamazov-book-1]. He published a notable article on ecclesiastical courts while still a student, showing his engagement with societal issues despite being an atheist [Source: brothers-karamazov-book-1]. Alyosha, conversely, believes in the Elder Zossima as a holy figure who carries the secret of renewal for all humanity [Source: brothers-karamazov-book-1]. The text notes that Alyosha knew Ivan was an atheist but felt no offense, instead waiting for him to come nearer [Source: brothers-karamazov-book-1].\n\n**3. Paternity and Neglect vs. Beneficence**\nThe theme of failed fatherhood is grounded in Fyodor Pavlovitch’s neglect of his sons’ upbringing. Because their mother died when they were young, Yefim Petrovitch Polenov became their guardian and benefactor, spending far more on their education than Fyodor ever did [Source: brothers-karamazov-book-1]. The narrator emphasizes that the boys were \"more indebted\" to this honest man than to their biological father [Source: brothers-karamazov-book-1]. This neglect shaped Ivan’s pride and distance from his father, while Alyosha’s visit home was initially motivated by a desire to find his mother's grave rather than reconnect with his father [Source: brothers-karamazov-book-1].\n\n**4. The Role of the Elder (Spiritual Guidance)**\nThe institution of the \"elder\" is introduced as a source of moral authority and comfort for the Russian people. Zossima is described as sixty-five years old, having served in the army before becoming a monk [Source: brothers-karamazov-book-1]. He holds unbounded authority over those who submit to him, such as the monk sent to Siberia against his will [Source: brothers-karamazov-book-1]. Alyosha’s devotion to Zossima drives his decision to become a novice; he believes Zossima possesses the truth that will eventually establish peace on earth where all are children of God [Source: brothers-karamazov-book-1].\n\n**5. Family Discord and Mediation**\nThe book establishes an open quarrel between Fyodor Pavlovitch and Dmitri, with Ivan acting as a mediator in their interests [Source: brothers-karamazov-book-1]. The three brothers meet for the first time in this setting, creating tension because they have not known each other before [Source: brothers-karamazov-book-1]. Alyosha is anxious about how his father and brother Dmitri (along with the cynical Pyotr Alexandrovitch Miüsov) will treat Elder Zossima during a planned visit to the monastery [Source: brothers-karamazov-book-1].\n\n### Thin Spots\nThe provided passages do not detail the specific nature of the \"important matter\" concerning Dmitri that brought Ivan home, nor do they fully explain the lawsuit between Fyodor Pavlovitch and the monastery mentioned briefly. Additionally, while themes are established through character descriptions, the actual philosophical debates or plot resolutions occur in later books not included here.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- morose and reserved\n- Alyosha’s visit home was initially motivated by a desire to find his mother's grave rather than reconnect with his father",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 86666,
+        "total_latency_ms": 82246,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "brothers-karamazov-book-1"
+        ],
+        "retrieved_chunk_count": 20,
+        "chunks_fact_score": {
+          "matched": [
+            "father",
+            "money",
+            "monaster"
+          ],
+          "missing": [
+            "neglect",
+            "abandon",
+            "sensual",
+            "buffoon",
+            "senseless"
+          ],
+          "total_expected": 8,
+          "ratio": 0.375
+        },
+        "judge_fact_score": {
+          "matched": [
+            "father",
+            "neglect",
+            "monaster"
+          ],
+          "missing": [
+            "abandon",
+            "sensual",
+            "money",
+            "buffoon",
+            "senseless"
+          ],
+          "total_expected": 8,
+          "ratio": 0.375
+        },
+        "judge_evidence": [
+          {
+            "fact": "father",
+            "present": true,
+            "evidence": "\"...and their father, Fyodor Pavlovitch Karamavov\""
+          },
+          {
+            "fact": "neglect",
+            "present": true,
+            "evidence": "\"The theme of failed fatherhood is grounded in Fyodor Pavlovitch's neglect of his sons' upbringing.\""
+          },
+          {
+            "fact": "abandon",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "sensual",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "money",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "monaster",
+            "present": true,
+            "evidence": "Alyosha's arrival at the monastery to become a novice under the Elder Zossima"
+          },
+          {
+            "fact": "buffoon",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "senseless",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "bk_fatherhood_theme",
+      "category": "theme",
+      "question": "What does Book I say about fatherhood, and which passages establish it?",
+      "retrieved": [
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nBook I. The History Of A Family\n\nChapter I.\n\nFyodor Pavlovitch Karamazov\n\nAlexey Fyodorovitch Karamazov was the third son of Fyodor Pavlovitch\n\nKaramazov, a land owner well..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nsometimes also to be found in the last, could have\n\nmarried such a worthless, puny weakling, as we all called him, I won’t\n\nattempt to explain. I knew a young lady of the..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nattach himself to a good family and obtain a\n\ndowry was an alluring prospect. As for mutual love it did not exist\n\napparently, either in the bride or in him, in spite of..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nbeat his wife but was beaten by her, for she\n\nwas a hot-tempered, bold, dark-browed, impatient woman, possessed of\n\nremarkable physical strength. Finally, she left the..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nboyhood and youth, but will only mention a\n\nfew of the most important events. Of the elder, Ivan, I will only say\n\nthat he grew into a somewhat morose and reserved, though..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nsixpenny lessons and afterwards getting\n\nparagraphs on street incidents into the newspapers under the signature\n\nof “Eye-Witness.” These paragraphs, it was said, were..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\neven atheists joined them in their applause.\n\nFinally some sagacious persons opined that the article was nothing but\n\nan impudent satirical burlesque. I mention this..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nwhen he made the acquaintance of the young man,\n\nwho interested him extremely, and with whom he sometimes argued and not\n\nwithout an inner pang compared himself in..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nbrother Alexey I find it most difficult\n\nto speak in this introduction. Yet I must give some preliminary account\n\nof him, if only to explain one queer fact, which is that I..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nexcept that fragment. That is how it was with\n\nhim. He remembered one still summer evening, an open window, the\n\nslanting rays of the setting sun (that he recalled most..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\neven in his earliest youth. Coming at twenty\n\nto his father’s house, which was a very sink of filthy debauchery, he,\n\nchaste and pure as he was, simply withdrew in..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nhe was bright and good-tempered. He never\n\ntried to show off among his schoolfellows. Perhaps because of this, he\n\nwas never afraid of any one, yet the boys immediately..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "abandon",
+          "Yefim"
+        ],
+        "missing": [
+          "forgot",
+          "Grigory",
+          "guardian",
+          "cottage",
+          "orphan"
+        ],
+        "total_expected": 7,
+        "ratio": 0.2857143
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "brothers-karamazov-book-1"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Book I of *The Brothers Karamazov* presents fatherhood as a fractured institution defined by Fyodor Pavlovitch's moral decay, which directly corrupts his sons and destroys the family unit. The text establishes that Fyodor Pavlovitch was [unverified excerpt: a land owner well known in our district... still remembered among us owing to his gloomy and tragic death,] yet he spent little time on his estate [Source: brothers-karamazov-book-1]. His character is described as \"abject and vicious\" but also \"senseless,\" capable of managing worldly affairs despite this vice; for instance, he accumulated \"hundred thousand roubles in hard cash\" while running at other men's tables like a toady [Source: brothers-karamazov-book-1].\n\nThe passage details how Fyodor Pavlovitch failed as a father through greed and cruelty. Immediately after eloping with Adelaïda Ivanovna Miüsovs, the marriage showed its true colors rapidly. The text notes that Fyodor Pavlovitch \"got hold of all her money up to twenty-five thousand roubles as soon as she received it,\" leaving his wife destitute [Source: brothers-karamazov-book-1]. This financial predation forced him to abandon their young son, Mitya (Alexey), who was only three years old at the time, leaving him in his husband's hands while the mother fled with a divinity student [Source: brothers-karamazov-book-1].\n\nThe failure of this fatherhood is further illustrated by Ivan Karamazov's early development. At ten years old, Ivan realized they were living on charity and that \"their father was a man of whom it was disgraceful to speak\" [Source: brothers-karamazov-book-1]. Due to Fyodor Pavlovitch's lack of provision for Yefim Petrovitch Polenov's legacy, which grew from one thousand to two thousand roubles, Ivan faced financial straits during university, forcing him to work as a tutor and newspaper writer while refusing assistance from his father out of pride or contempt [Source: brothers-karamazov-book-1].\n\nConversely, the text contrasts this with Alyosha Karamazov. Although he came at twenty to a household described as \"a very sink of filthy debauchery,\" he did not judge others but accepted them without condemnation, even embracing his drunken father with tears after only a fortnight [Source: brothers-karamazov-book-1]. The narrative suggests that Fyodor Pavlovitch's behavior was so egregious that it required Ivan's intervention; Ivan arrived partly at the request of Dmitri and acted as a mediator between his estranged father and brother, effectively becoming the moral anchor for a family where the biological father had failed [Source: brothers-karamazov-book-1].\n\nNot in your sources, but from general knowledge: Dostoevsky uses this depiction to argue that extreme vice begets extreme virtue or madness.\nWant me to read Book II in depth? It would take about 5 minutes.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- Mitya (Alexey) was three years old when Fyodor Pavlovitch abandoned him to his father while his mother fled with a divinity student.\n- got hold of all her money up to twenty-five thousand roubles as soon as she received it,",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 49352,
+        "total_latency_ms": 46990,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "brothers-karamazov-book-1"
+        ],
+        "retrieved_chunk_count": 12,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "forgot",
+            "Grigory",
+            "abandon",
+            "guardian",
+            "Yefim",
+            "cottage",
+            "orphan"
+          ],
+          "total_expected": 7,
+          "ratio": 0.0
+        },
+        "judge_fact_score": {
+          "matched": [
+            "abandon"
+          ],
+          "missing": [
+            "forgot",
+            "Grigory",
+            "guardian",
+            "Yefim",
+            "cottage",
+            "orphan"
+          ],
+          "total_expected": 7,
+          "ratio": 0.14285715
+        },
+        "judge_evidence": [
+          {
+            "fact": "forgot",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "Grigory",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "abandon",
+            "present": true,
+            "evidence": "\"This financial predation forced him to abandon their young son, Mitya (Alexey), who was only three years old at the time\""
+          },
+          {
+            "fact": "guardian",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "Yefim",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "cottage",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "orphan",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "bk_eldership_theme",
+      "category": "theme",
+      "question": "What is an elder, as Book I explains it, and why does the institution matter to this monastery?",
+      "retrieved": [
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nelder. I must digress to explain what\n\nan “elder” is in Russian monasteries, and I am sorry that I do not feel\n\nvery competent to do so. I will try, however, to give a..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nold legend. But here is a recent instance.\n\nA monk was suddenly commanded by his elder to quit Athos, which he\n\nloved as a sacred place and a haven of refuge, and to go..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nelder was one who took your soul, your will,\n\ninto his soul and his will. When you choose an elder, you renounce your\n\nown will and yield it to him in complete submission,..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nHe explained that this was his strong\n\ndesire, and that he was solemnly asking his consent as his father. The\n\nold man knew that the elder Zossima, who was living in the..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\ndiversion. He was suddenly seized with the\n\ndesire to see the monastery and the holy man. As his lawsuit with the\n\nmonastery still dragged on, he made it the pretext for..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nthem, blessed them, and dismissed them. Of\n\nlate he had become so weak through attacks of illness that he was\n\nsometimes unable to leave his cell, and the pilgrims waited..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nsacrifices, and that to sacrifice, for\n\ninstance, five or six years of their seething youth to hard and tedious\n\nstudy, if only to multiply tenfold their powers of serving..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nbrother Alexey I find it most difficult\n\nto speak in this introduction. Yet I must give some preliminary account\n\nof him, if only to explain one queer fact, which is that I..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nnot to humility and complete self-control\n\nbut to the most Satanic pride, that is, to bondage and not to freedom.\n\nThe elder Zossima was sixty-five. He came of a family of..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\ncarrosse._’ How do you know\n\nthere are no hooks, darling? When you’ve lived with the monks you’ll\n\nsing a different tune. But go and get at the truth there, and then..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nwith a peculiar earnestness. From him Alyosha\n\nlearnt all the details of the important affair which had of late formed\n\nsuch a close and remarkable bond between the two..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nsorry to lose you, Alyosha;\n\nwould you believe it, I’ve really grown fond of you? Well, it’s a good\n\nopportunity. You’ll pray for us sinners; we have sinned too much..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nwhen he made the acquaintance of the young man,\n\nwho interested him extremely, and with whom he sometimes argued and not\n\nwithout an inner pang compared himself in..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nBut this little episode was not without\n\nan influence upon Fyodor Pavlovitch—and a very original one. He\n\nsuddenly took a thousand roubles to our monastery to pay for..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\neven atheists joined them in their applause.\n\nFinally some sagacious persons opined that the article was nothing but\n\nan impudent satirical burlesque. I mention this..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nhis children’s education. As for the slaps she\n\nhad given him, he drove all over the town telling the story.\n\nIt happened that the old lady died soon after this, but she..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nsixpenny lessons and afterwards getting\n\nparagraphs on street incidents into the newspapers under the signature\n\nof “Eye-Witness.” These paragraphs, it was said, were..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nboyhood and youth, but will only mention a\n\nfew of the most important events. Of the elder, Ivan, I will only say\n\nthat he grew into a somewhat morose and reserved, though..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nBook I. The History Of A Family\n\nChapter I.\n\nFyodor Pavlovitch Karamazov\n\nAlexey Fyodorovitch Karamazov was the third son of Fyodor Pavlovitch\n\nKaramazov, a land owner well..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nthe value of money, not, of course, in a\n\nliteral sense. When he was given pocket-money, which he never asked\n\nfor, he was either terribly careless of it so that it was..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "elder",
+          "Zossima",
+          "submiss",
+          "obedien",
+          "renounc",
+          "freedom",
+          "confess",
+          "pilgrim"
+        ],
+        "missing": [],
+        "total_expected": 8,
+        "ratio": 1.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "brothers-karamazov-book-1"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on Book I of *The Brothers Karamazov*, here is the explanation of what an elder is and why the institution matters to this specific monastery.\n\n### What Is an Elder?\nAn elder (*starets*) is a spiritual guide who exercises authority over the souls and wills of those who submit to him [Source: brothers-karamazov-book-1]. The relationship is defined by complete self-abnegation: when a person chooses an elder, they renounce their own will and yield it in \"complete submission\" [Source: brothers-karamazov-book-1]. This voluntary novitiate is described as a \"terrible school of abnegation\" undertaken with the hope of achieving true freedom—freedom from oneself—and escaping the tragedy of living without finding one's true self [Source: brothers-karamazov-book-1].\n\nThe institution is not based on theory but on Eastern practice spanning over a thousand years, having been revived in Russia toward the end of the previous century by the ascetic Païssy Velitchkovsky [Source: brothers-karamazov-book-1]. The authority an elder holds can be unbounded; for example, even the cumenical Patriarch cannot release a monk from obedience to his elder if that elder has assigned him a specific duty [Source: brothers-karamazov-book-1]. This bond involves confession and an \"indissoluble\" connection between the guide and the guided [Source: brothers-karamazov-book-1].\n\n### Why It Matters to This Monastery\nThe institution is vital to this monastery because it is the sole source of its fame and spiritual significance. Before the eldership took hold, the monastery was undistinguished, lacking relics, wonder-working icons, glorious traditions, or historical exploits [Source: brothers-karamazov-book-1]. Its reputation throughout Russia rests entirely on its elders; pilgrims traveled thousands of miles specifically to see and hear them [Source: brothers-karamazov-book-1]. \n\nAt the time of the narrative's beginning, Elder Zossima—the last of three such elders—was dying of weakness and disease with no successor in sight [Source: brothers-karamazov-book-1]. The question of who would take his place is described as \"important\" because without an elder, the monastery risks losing the very reason for its existence and glory [Source: brothers-karamazov-book-1].",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 58016,
+        "total_latency_ms": 56988,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "brothers-karamazov-book-1"
+        ],
+        "retrieved_chunk_count": 20,
+        "chunks_fact_score": {
+          "matched": [
+            "elder",
+            "Zossima",
+            "submiss",
+            "renounc",
+            "freedom",
+            "pilgrim"
+          ],
+          "missing": [
+            "obedien",
+            "confess"
+          ],
+          "total_expected": 8,
+          "ratio": 0.75
+        },
+        "judge_fact_score": {
+          "matched": [
+            "elder",
+            "Zossima",
+            "submiss",
+            "obedien",
+            "renounc",
+            "freedom",
+            "confess",
+            "pilgrim"
+          ],
+          "missing": [],
+          "total_expected": 8,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "elder",
+            "present": true,
+            "evidence": "\"An elder (*starets*) is a spiritual guide...\" and \"Before the eldership took hold, the monastery was undistinguished...\""
+          },
+          {
+            "fact": "Zossima",
+            "present": true,
+            "evidence": "\"At the time of the narrative's beginning, Elder Zossima—the last of three such elders—was dying...\""
+          },
+          {
+            "fact": "submiss",
+            "present": true,
+            "evidence": "\"An elder (*starets*) is a spiritual guide who exercises authority over the souls and wills of those who submit to him\""
+          },
+          {
+            "fact": "obedien",
+            "present": true,
+            "evidence": "\"The authority an elder holds can be unbounded; for example, even the cumenical Patriarch cannot release a monk from obedience to his elder...\""
+          },
+          {
+            "fact": "renounc",
+            "present": true,
+            "evidence": "\"when a person chooses an elder, they renounce their own will\""
+          },
+          {
+            "fact": "freedom",
+            "present": true,
+            "evidence": "\"...undertaken with the hope of achieving true freedom—freedom from oneself—and escaping the tragedy..."
+          },
+          {
+            "fact": "confess",
+            "present": true,
+            "evidence": "\"This bond involves confession and an 'indissoluble' connection between the guide and the guided\""
+          },
+          {
+            "fact": "pilgrim",
+            "present": true,
+            "evidence": "\"pilgrims traveled thousands of miles specifically to see and hear them\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "bk_tension_submission_freedom",
+      "category": "tension",
+      "question": "Book I presents the elder's authority as a road to freedom. Where does the text itself complicate that claim?",
+      "retrieved": [
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nelder was one who took your soul, your will,\n\ninto his soul and his will. When you choose an elder, you renounce your\n\nown will and yield it to him in complete submission,..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nold legend. But here is a recent instance.\n\nA monk was suddenly commanded by his elder to quit Athos, which he\n\nloved as a sacred place and a haven of refuge, and to go..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nelder. I must digress to explain what\n\nan “elder” is in Russian monasteries, and I am sorry that I do not feel\n\nvery competent to do so. I will try, however, to give a..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\ndiversion. He was suddenly seized with the\n\ndesire to see the monastery and the holy man. As his lawsuit with the\n\nmonastery still dragged on, he made it the pretext for..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nwhen he made the acquaintance of the young man,\n\nwho interested him extremely, and with whom he sometimes argued and not\n\nwithout an inner pang compared himself in..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nnot to humility and complete self-control\n\nbut to the most Satanic pride, that is, to bondage and not to freedom.\n\nThe elder Zossima was sixty-five. He came of a family of..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nHe explained that this was his strong\n\ndesire, and that he was solemnly asking his consent as his father. The\n\nold man knew that the elder Zossima, who was living in the..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nthem, blessed them, and dismissed them. Of\n\nlate he had become so weak through attacks of illness that he was\n\nsometimes unable to leave his cell, and the pilgrims waited..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nsacrifices, and that to sacrifice, for\n\ninstance, five or six years of their seething youth to hard and tedious\n\nstudy, if only to multiply tenfold their powers of serving..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nhis children’s education. As for the slaps she\n\nhad given him, he drove all over the town telling the story.\n\nIt happened that the old lady died soon after this, but she..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nboyhood and youth, but will only mention a\n\nfew of the most important events. Of the elder, Ivan, I will only say\n\nthat he grew into a somewhat morose and reserved, though..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nsorry to lose you, Alyosha;\n\nwould you believe it, I’ve really grown fond of you? Well, it’s a good\n\nopportunity. You’ll pray for us sinners; we have sinned too much..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\ndispose realists to belief. The genuine realist, if\n\nhe is an unbeliever, will always find strength and ability to\n\ndisbelieve in the miraculous, and if he is confronted..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\neven atheists joined them in their applause.\n\nFinally some sagacious persons opined that the article was nothing but\n\nan impudent satirical burlesque. I mention this..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nBook I. The History Of A Family\n\nChapter I.\n\nFyodor Pavlovitch Karamazov\n\nAlexey Fyodorovitch Karamazov was the third son of Fyodor Pavlovitch\n\nKaramazov, a land owner well..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nsometimes also to be found in the last, could have\n\nmarried such a worthless, puny weakling, as we all called him, I won’t\n\nattempt to explain. I knew a young lady of the..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nthe value of money, not, of course, in a\n\nliteral sense. When he was given pocket-money, which he never asked\n\nfor, he was either terribly careless of it so that it was..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\neven in his earliest youth. Coming at twenty\n\nto his father’s house, which was a very sink of filthy debauchery, he,\n\nchaste and pure as he was, simply withdrew in..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nsnigger. In a man so depraved this\n\nmight, of course, mean no more than sensual attraction. As he had\n\nreceived no dowry with his wife, and had, so to speak, taken her..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nbeat his wife but was beaten by her, for she\n\nwas a hot-tempered, bold, dark-browed, impatient woman, possessed of\n\nremarkable physical strength. Finally, she left the..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "submiss",
+          "freedom",
+          "obedien",
+          "pride",
+          "bondage",
+          "two-edged"
+        ],
+        "missing": [],
+        "total_expected": 6,
+        "ratio": 1.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "brothers-karamazov-book-1"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on the provided text from Book I of *The Brothers Karamazov*, the claim that an elder’s authority is a road to freedom is complicated in three specific ways:\n\n**1. The Risk of Satanic Pride Instead of Humility**\nWhile the institution is theoretically designed for \"self-conquest\" and \"perfect freedom... from self,\" the narrator explicitly warns that it may be a \"two-edged weapon.\" Rather than leading to humility, the absolute submission required can lead some individuals to \"the most Satanic pride, that is, to bondage and not to freedom\" [Source: brothers-karamazov-book-1]. Thus, the path intended for liberation can result in spiritual enslavement through egoism disguised as obedience.\n\n**2. The Absence of Earthly Release Mechanisms**\nThe text illustrates that an elder’s authority is so absolute that no other power on earth—not even the cumenical Patriarch—can release a monk from his vow once laid upon him by the elder (as seen in the recent instance of the monk commanded to go to Siberia) [Source: brothers-karamazov-book-1]. This creates a scenario where \"bondage\" is structurally enforced; if one chooses wrongly or suffers under an elder, there is no earthly recourse, making the \"freedom\" sought through submission potentially permanent and inescapable.\n\n**3. The Distinction Between Alyosha and the General Rule**\nThe text complicates the general rule by highlighting that Alyosha’s experience was exceptional rather than typical. While most novices undergo a \"terrible school of abnegation,\" Alyosha was bound by \"no obligation\" and could go where he pleased [Source: brothers-karamazov-book-1]. His freedom from strict obedience suggests that the standard path to freedom via elders involves such severe constraints (\"complete self-abnegation\") that it is only for those willing to endure extreme spiritual discipline, whereas others may find themselves trapped in the very bondage they sought to escape.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- The narrator warns that absolute submission to an elder can lead to Satanic pride rather than humility.\n- No earthly power, including the Patriarch, can release a monk from vows once laid by an elder.\n- A recent instance involved a monk commanded by his elder to go to Siberia without recourse for release.\n- Alyosha was bound by no obligation and could go where he pleased unlike other novices undergoing abnegation.\n- two-edged weapon.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 60217,
+        "total_latency_ms": 58107,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "brothers-karamazov-book-1"
+        ],
+        "retrieved_chunk_count": 20,
+        "chunks_fact_score": {
+          "matched": [
+            "submiss",
+            "freedom",
+            "pride",
+            "bondage"
+          ],
+          "missing": [
+            "obedien",
+            "two-edged"
+          ],
+          "total_expected": 6,
+          "ratio": 0.6666667
+        },
+        "judge_fact_score": {
+          "matched": [
+            "submiss",
+            "freedom",
+            "obedien",
+            "pride",
+            "bondage",
+            "two-edged"
+          ],
+          "missing": [],
+          "total_expected": 6,
+          "ratio": 1.0
+        },
+        "judge_evidence": [
+          {
+            "fact": "submiss",
+            "present": true,
+            "evidence": "\"the absolute submission required can lead some individuals to 'the most Satanic pride'\""
+          },
+          {
+            "fact": "freedom",
+            "present": true,
+            "evidence": "\"the claim that an elder's authority is a road to freedom is complicated in three specific ways\""
+          },
+          {
+            "fact": "obedien",
+            "present": true,
+            "evidence": "\"the absolute submission required can lead some individuals to 'the most Satanic pride, that is, to bondage and not to freedom'\""
+          },
+          {
+            "fact": "pride",
+            "present": true,
+            "evidence": "\"the most Satanic pride, that is, to bondage and not to freedom\""
+          },
+          {
+            "fact": "bondage",
+            "present": true,
+            "evidence": "\"...to bondage and not to freedom\" ... \"bondage is structurally enforced\""
+          },
+          {
+            "fact": "two-edged",
+            "present": true,
+            "evidence": "\"the narrator explicitly warns that it may be a 'two-edged weapon.'\""
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "bk_tension_faith_unbelief",
+      "category": "tension",
+      "question": "How does Book I set faith against unbelief, and which characters carry each side?",
+      "retrieved": [
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\ndispose realists to belief. The genuine realist, if\n\nhe is an unbeliever, will always find strength and ability to\n\ndisbelieve in the miraculous, and if he is confronted..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nsixpenny lessons and afterwards getting\n\nparagraphs on street incidents into the newspapers under the signature\n\nof “Eye-Witness.” These paragraphs, it was said, were..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\ncarrosse._’ How do you know\n\nthere are no hooks, darling? When you’ve lived with the monks you’ll\n\nsing a different tune. But go and get at the truth there, and then..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nHe explained that this was his strong\n\ndesire, and that he was solemnly asking his consent as his father. The\n\nold man knew that the elder Zossima, who was living in the..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nsorry to lose you, Alyosha;\n\nwould you believe it, I’ve really grown fond of you? Well, it’s a good\n\nopportunity. You’ll pray for us sinners; we have sinned too much..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nthem, blessed them, and dismissed them. Of\n\nlate he had become so weak through attacks of illness that he was\n\nsometimes unable to leave his cell, and the pilgrims waited..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nelder was one who took your soul, your will,\n\ninto his soul and his will. When you choose an elder, you renounce your\n\nown will and yield it to him in complete submission,..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\neven atheists joined them in their applause.\n\nFinally some sagacious persons opined that the article was nothing but\n\nan impudent satirical burlesque. I mention this..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nwhen he made the acquaintance of the young man,\n\nwho interested him extremely, and with whom he sometimes argued and not\n\nwithout an inner pang compared himself in..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nBook I. The History Of A Family\n\nChapter I.\n\nFyodor Pavlovitch Karamazov\n\nAlexey Fyodorovitch Karamazov was the third son of Fyodor Pavlovitch\n\nKaramazov, a land owner well..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nsacrifices, and that to sacrifice, for\n\ninstance, five or six years of their seething youth to hard and tedious\n\nstudy, if only to multiply tenfold their powers of serving..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nbrother Alexey I find it most difficult\n\nto speak in this introduction. Yet I must give some preliminary account\n\nof him, if only to explain one queer fact, which is that I..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nof reckless drinking. And just at that\n\ntime his wife’s family received the news of her death in Petersburg.\n\nShe had died quite suddenly in a garret, according to one..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\neven in his earliest youth. Coming at twenty\n\nto his father’s house, which was a very sink of filthy debauchery, he,\n\nchaste and pure as he was, simply withdrew in..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nold legend. But here is a recent instance.\n\nA monk was suddenly commanded by his elder to quit Athos, which he\n\nloved as a sacred place and a haven of refuge, and to go..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nwith a peculiar earnestness. From him Alyosha\n\nlearnt all the details of the important affair which had of late formed\n\nsuch a close and remarkable bond between the two..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nsnigger. In a man so depraved this\n\nmight, of course, mean no more than sensual attraction. As he had\n\nreceived no dowry with his wife, and had, so to speak, taken her..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nexcept that fragment. That is how it was with\n\nhim. He remembered one still summer evening, an open window, the\n\nslanting rays of the setting sun (that he recalled most..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nlady who had brought up their mother.\n\nShe was still alive, and had not, all those eight years, forgotten the\n\ninsult done her. All that time she was obtaining exact..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nhis children’s education. As for the slaps she\n\nhad given him, he drove all over the town telling the story.\n\nIt happened that the old lady died soon after this, but she..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "Alyosha",
+          "Ivan",
+          "atheist",
+          "realist",
+          "miracle",
+          "immortal"
+        ],
+        "missing": [
+          "socialis",
+          "Babel"
+        ],
+        "total_expected": 8,
+        "ratio": 0.75
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "brothers-karamazov-book-1"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on the provided text from Book I of *The Brothers Karamazov*, faith and unbelief are set against each other not merely as theological positions, but as opposing responses to reality—specifically through the characters of **Alyosha** (faith) and **Ivan Fyodorovitch** (unbelief/skepticism).\n\n### Faith: Alyosha\nAlyosha carries the side of faith. The narrator describes him as a \"realist\" whose belief is rooted in an instinctive desire for truth rather than intellectual coercion.\n\n*   **Nature of his Belief:** Alyosha’s faith is described as immediate and absolute. Upon reflecting seriously, he was convinced of God's existence and immortality, stating internally, “I want to live for immortality, and I will accept no compromise.” His path to the monastery was chosen because it offered an escape from worldly wickedness into love [Source: brothers-karamazov-book-1].\n*   **Realism vs. Miracles:** The text argues that miracles do not create faith; rather, [unverified excerpt: faith does not... spring from the miracle but the miracle from faith.] A genuine realist like Alyosha believes first, which then allows him to admit the miraculous if confronted with it [Source: brothers-karamazov-book-1].\n*   **Role of Zossima:** Alyosha’s faith is anchored by his devotion to Elder Zossima. He views Zossima as a holy custodian of God's truth who carries the secret of renewal for all humanity. Alyosha dreams of a future where \"all men will be holy and love one another\" under Christ’s Kingdom [Source: brothers-karamazov-book-1].\n\n### Unbelief/Skepticism: Ivan Fyodorovitch\nIvan represents unbelief, or at least a profound skepticism that challenges religious certainty through intellect and satire.\n\n*   **Intellectual Superiority:** Ivan is portrayed as learned, proud, and intellectually superior to the masses. He published articles on complex subjects like ecclesiastical courts while still a student, attracting attention from both secularists and atheists alike [Source: brothers-karamazov-book-1].\n*   **Satire and Doubt:** His approach to faith is often satirical. The narrator notes that some considered his article on church matters an \"impudent satirical burlesque.\" This intellectual stance leads him into conflict with traditional belief systems, bewildering even those interested in theological questions [Source: brothers-karamazov-book-1].\n*   **Contrast with Alyosha:** Ivan is described as \"morose and reserved,\" contrasting sharply with Alyosha’s warmth. While Alyosha seeks immediate action and sacrifice for truth, Ivan engages through debate and literary circles [Source: brothers-karamazov-book-1].\n\n### Fyodor Pavlovitch: The Ambiguous Middle\nFyodor Pavlovitch, the father, occupies a chaotic middle ground that highlights the tension between faith and unbelief. He mocks religious concepts (such as the \"hooks\" of hell) while simultaneously expressing a desperate need for prayer and salvation. He tells Alyosha to go to the monastery because he feels unworthy (\"what a blackguard I am\") yet doubts the mechanics of damnation itself. This serves to underscore Alyosha’s genuine conviction against both his brother’s cold intellect and his father’s cynical despair [Source: brothers-karamazov-book-1].\n\n### Summary of Characters Carrying Each Side\n*   **Faith:** **Alyosha** is the primary carrier, supported by the spiritual authority of **Elder Zossima**.\n*   **Unbelief/Skepticism:** **Ivan Fyodorovitch** carries this side through intellectual rigor and satire.\n*   **Cynical Doubt:** **Fyodor Pavlovitch** represents a distorted, self-loathing skepticism that nonetheless craves the faith Alyosha embodies.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- He published articles on complex subjects like ecclesiastical courts while still a student",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 63190,
+        "total_latency_ms": 62085,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "brothers-karamazov-book-1"
+        ],
+        "retrieved_chunk_count": 20,
+        "chunks_fact_score": {
+          "matched": [
+            "Alyosha",
+            "atheist",
+            "realist"
+          ],
+          "missing": [
+            "Ivan",
+            "miracle",
+            "immortal",
+            "socialis",
+            "Babel"
+          ],
+          "total_expected": 8,
+          "ratio": 0.375
+        },
+        "judge_fact_score": {
+          "matched": [
+            "Alyosha",
+            "Ivan",
+            "atheist",
+            "realist",
+            "miracle",
+            "immortal"
+          ],
+          "missing": [
+            "socialis",
+            "Babel"
+          ],
+          "total_expected": 8,
+          "ratio": 0.75
+        },
+        "judge_evidence": [
+          {
+            "fact": "Alyosha",
+            "present": true,
+            "evidence": "**Alyosha** (faith) and **Ivan Fyodorovitch** (unbelief/skepticism)."
+          },
+          {
+            "fact": "Ivan",
+            "present": true,
+            "evidence": "**Ivan Fyodorovitch** (unbelief/skepticism)"
+          },
+          {
+            "fact": "atheist",
+            "present": true,
+            "evidence": "...attracting attention from both secularists and atheists alike [Source: brothers-karamazov-book-1]."
+          },
+          {
+            "fact": "realist",
+            "present": true,
+            "evidence": "\"Alyosha carries the side of faith. The narrator describes him as a 'realist' whose belief is rooted in an instinctive desire for truth...\""
+          },
+          {
+            "fact": "miracle",
+            "present": true,
+            "evidence": "\"Realism vs. Miracles: The text argues that miracles do not create faith; rather, [unverified excerpt: faith does not... spring from the miracle but the miracle from faith.]\""
+          },
+          {
+            "fact": "immortal",
+            "present": true,
+            "evidence": "\"...he was convinced of God's existence and immortality, stating internally, 'I want to live for immortality...'\""
+          },
+          {
+            "fact": "socialis",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "Babel",
+            "present": false,
+            "evidence": "(absent)"
+          }
+        ]
+      }
+    },
+    {
+      "question_id": "bk_tension_spiritual_secular_authority",
+      "category": "tension",
+      "question": "Where do spiritual authority and secular or legal authority come into conflict in Book I?",
+      "retrieved": [
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nold legend. But here is a recent instance.\n\nA monk was suddenly commanded by his elder to quit Athos, which he\n\nloved as a sacred place and a haven of refuge, and to go..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nsixpenny lessons and afterwards getting\n\nparagraphs on street incidents into the newspapers under the signature\n\nof “Eye-Witness.” These paragraphs, it was said, were..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nthem, blessed them, and dismissed them. Of\n\nlate he had become so weak through attacks of illness that he was\n\nsometimes unable to leave his cell, and the pilgrims waited..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nwhen he made the acquaintance of the young man,\n\nwho interested him extremely, and with whom he sometimes argued and not\n\nwithout an inner pang compared himself in..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nelder was one who took your soul, your will,\n\ninto his soul and his will. When you choose an elder, you renounce your\n\nown will and yield it to him in complete submission,..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\ndiversion. He was suddenly seized with the\n\ndesire to see the monastery and the holy man. As his lawsuit with the\n\nmonastery still dragged on, he made it the pretext for..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nsorry to lose you, Alyosha;\n\nwould you believe it, I’ve really grown fond of you? Well, it’s a good\n\nopportunity. You’ll pray for us sinners; we have sinned too much..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nBook I. The History Of A Family\n\nChapter I.\n\nFyodor Pavlovitch Karamazov\n\nAlexey Fyodorovitch Karamazov was the third son of Fyodor Pavlovitch\n\nKaramazov, a land owner well..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nHe explained that this was his strong\n\ndesire, and that he was solemnly asking his consent as his father. The\n\nold man knew that the elder Zossima, who was living in the..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\neven atheists joined them in their applause.\n\nFinally some sagacious persons opined that the article was nothing but\n\nan impudent satirical burlesque. I mention this..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nelder. I must digress to explain what\n\nan “elder” is in Russian monasteries, and I am sorry that I do not feel\n\nvery competent to do so. I will try, however, to give a..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nwill be no\n\nmore rich nor poor, no exalted nor humbled, but all will be as the\n\nchildren of God, and the true Kingdom of Christ will come.” That was\n\nthe dream in..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nnot to humility and complete self-control\n\nbut to the most Satanic pride, that is, to bondage and not to freedom.\n\nThe elder Zossima was sixty-five. He came of a family of..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\ndispose realists to belief. The genuine realist, if\n\nhe is an unbeliever, will always find strength and ability to\n\ndisbelieve in the miraculous, and if he is confronted..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nsacrifices, and that to sacrifice, for\n\ninstance, five or six years of their seething youth to hard and tedious\n\nstudy, if only to multiply tenfold their powers of serving..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\ncarrosse._’ How do you know\n\nthere are no hooks, darling? When you’ve lived with the monks you’ll\n\nsing a different tune. But go and get at the truth there, and then..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nsnigger. In a man so depraved this\n\nmight, of course, mean no more than sensual attraction. As he had\n\nreceived no dowry with his wife, and had, so to speak, taken her..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nvery successfully, though, no doubt, not\n\nover-scrupulously. Sofya Ivanovna was the daughter of an obscure\n\ndeacon, and was left from childhood an orphan without relations...."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nmaking an impression on his mind that\n\nhe remembered all the rest of his life. The Moscow lady died, and Mitya\n\npassed into the care of one of her married daughters. I..."
+        },
+        {
+          "corpus_id": "brothers-karamazov-book-1",
+          "title": "brothers-karamazov-book-1",
+          "url": null,
+          "score": 0.0,
+          "snippet": "brothers-karamazov-book-1\n\nbeat his wife but was beaten by her, for she\n\nwas a hot-tempered, bold, dark-browed, impatient woman, possessed of\n\nremarkable physical strength. Finally, she left the..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [],
+        "total_expected": 0,
+        "ratio": null
+      },
+      "fact_score": {
+        "matched": [
+          "monaster",
+          "Ivan",
+          "ecclesiastical",
+          "court",
+          "elder"
+        ],
+        "missing": [
+          "lawsuit",
+          "clerical"
+        ],
+        "total_expected": 7,
+        "ratio": 0.71428573
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "brothers-karamazov-book-1"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on the provided text from Book I of *The Brothers Karamazov*, spiritual authority and secular or legal authority come into conflict in two primary ways: through the absolute, internal jurisdiction of monastic elders over individual wills (which supersedes civil or ecclesiastical hierarchy), and through Ivan Fyodorovich’s public challenge to the state’s control over religious matters.\n\n**1. The Supremacy of Spiritual Obedience Over Civil/Ecclesiastial Law**\nThe most direct conflict is illustrated by the institution of the \"elder\" (*starets*). The narrator explains that an elder possesses \"unbounded and inexplicable authority\" because a disciple who chooses an elder must renounce their own will completely [Source: brothers-karamazov-book-1]. This spiritual bond creates a jurisdictional conflict with broader church or secular power structures:\n\n*   **Conflict with Hierarchical Authority:** The text recounts a recent instance where a monk was commanded by his elder to leave Athos (a sacred place) for Siberia. When the monk sought release from this command, he went to the cumenical Patriarch at Constantinople—the highest ecclesiastical authority in Orthodoxy. The Patriarch replied that no earthly power could release him; only the specific elder who laid the duty upon him had that authority [Source: brothers-karamazov-book-1]. Here, personal spiritual obedience overrides institutional hierarchy.\n*   **Theological Supremacy Over Secular/Social Norms:** An older legend is cited regarding a novice in Syria who left his monastery against his elder’s will and later became a martyr in Egypt. Despite his holy death, his coffin was cast out of the church three times during burial until it was discovered he had broken his vow of obedience to his elder. He required the elder’s absolution before being forgiven by God/the Church [Source: brothers-karamazov-book-1]. This establishes that spiritual law (obedience to one's chosen guide) trumps secular achievements or even traditional sacramental forgiveness if the spiritual bond is violated.\n*   **Conflict with Secular Perception:** The text notes that opponents of elders argued that this institution degraded the \"sacrament of confession\" because people were opening their hearts to elders outside the formal liturgical framework. However, the institution persisted and became highly esteemed among both ignorant masses and men of distinction, effectively creating a parallel system of moral authority that operated independently of standard church regulations or secular understanding [Source: brothers-karamazov-book-1].\n\n**2. Ivan Fyodorovich’s Article on Ecclesiastical Courts**\nA second conflict arises from Ivan Fyodorovich’s intellectual engagement with the legal status of the Church:\n\n*   **Challenge to State Control:** Before arriving in the town, Ivan published an article in a major journal debating \"the position of the ecclesiastical courts\" [Source: brothers-karamazov-book-1]. This was a subject being debated everywhere at the time, implying a tension between state law and religious jurisdiction.\n*   **Unexpected Consensus:** The tone and conclusion of his article were so striking that it attracted applause not only from the \"Church party\" but also from secularists and even atheists. Some suspected it was a satirical burlesque because its arguments seemed to bridge or resolve conflicts between church and state in a way that surprised everyone [Source: brothers-karamazov-book-1].\n*   **Impact on Monastic Authority:** The article penetrated the local monastery, where inmates (interested in ecclesiastical courts) were \"completely bewildered by it.\" This intellectual conflict eventually drew Ivan into contact with Elder Zossima, linking his legal/theological critiques directly to the spiritual authority of the elder [Source: brothers-karamazov-book-1].\n\n**3. Implicit Conflict: Family Law vs. Spiritual Calling**\nWhile not a formal legal battle, there is an underlying tension between Fyodor Pavlovitch’s secular/patrimonial authority and Alyosha’s spiritual path:\n\n*   Fyodor Pavlovitch treats Alyosha’s entry into monastic life as a financial transaction ([unverified excerpt: That’s your dowry... I’ll pay what’s wanted for you there]) and mocks the institution by referencing \"monks' wives\" outside the town [Source: brothers-karamazov-book-1]. He asserts his right to consent or withhold it based on his status as father and landowner, yet he ultimately yields because he recognizes Alyosha’s genuine spiritual need. This highlights the clash between patriarchal/secular control over family members and individual spiritual autonomy.\n\nIn summary, Book I presents spiritual authority (via elders) as operating in a sphere that can override ecclesiastical hierarchy, secular law, and even traditional sacramental structures when personal obedience is involved. Simultaneously, intellectual challenges from figures like Ivan Fyodorovich expose ongoing tensions regarding the legal standing of religious institutions within the state framework.\n\n---\n*Verification note: these statements could not be confirmed against your sources — treat them as unverified:*\n- An older legend describes a novice in Syria who left his monastery against his elder’s will and became a martyr in Egypt.\n- This novice's coffin was cast out of the church three times during burial until it was discovered he had broken his vow of obedience.\n- The Patriarch replied that no earthly power could release him; only the specific elder who laid the duty upon him had that authority\n- An older legend is cited regarding a novice in Syria who left his monastery against his elder’s will and later became a martyr in Egypt. Despite his holy death,…",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 82371,
+        "total_latency_ms": 79945,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "brothers-karamazov-book-1"
+        ],
+        "retrieved_chunk_count": 20,
+        "chunks_fact_score": {
+          "matched": [
+            "monaster",
+            "lawsuit",
+            "Ivan",
+            "elder"
+          ],
+          "missing": [
+            "ecclesiastical",
+            "court",
+            "clerical"
+          ],
+          "total_expected": 7,
+          "ratio": 0.5714286
+        },
+        "judge_fact_score": {
+          "matched": [
+            "monaster",
+            "Ivan",
+            "ecclesiastical",
+            "court",
+            "elder"
+          ],
+          "missing": [
+            "lawsuit",
+            "clerical"
+          ],
+          "total_expected": 7,
+          "ratio": 0.71428573
+        },
+        "judge_evidence": [
+          {
+            "fact": "monaster",
+            "present": true,
+            "evidence": "\"The text recounts a recent instance where a monk was commanded by his elder to leave Athos (a sacred place) for Siberia.\""
+          },
+          {
+            "fact": "lawsuit",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "Ivan",
+            "present": true,
+            "evidence": "\"Ivan Fyodorovich's public challenge to the state's control over religious matters.\""
+          },
+          {
+            "fact": "ecclesiastical",
+            "present": true,
+            "evidence": "\"...supersedes civil or ecclesiastical hierarchy...\""
+          },
+          {
+            "fact": "court",
+            "present": true,
+            "evidence": "\"Ivan Fyodorovich's Article on Ecclesiastical Courts... debating 'the position of the ecclesiastical courts'\""
+          },
+          {
+            "fact": "clerical",
+            "present": false,
+            "evidence": "(absent)"
+          },
+          {
+            "fact": "elder",
+            "present": true,
+            "evidence": "\"The most direct conflict is illustrated by the institution of the 'elder' (*starets*).\""
+          }
+        ]
+      }
+    }
+  ]
+}

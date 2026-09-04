@@ -475,7 +475,45 @@ fn ontology_schema() -> Value {
                     "arguments":      { "type": "boolean" }
                 }
             },
-            "patterns": { "type": "array", "items": pattern_schema() }
+            "patterns": { "type": "array", "items": pattern_schema() },
+            // `[enrichment.ontology.navigation]` — one walk row per question
+            // kind (ei-2-map). Every row defaults to the spec table, so the
+            // tool offers the keys and requires none; nothing reads it yet.
+            "navigation": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "thematic":    navigation_row_schema(),
+                    "trajectory":  navigation_row_schema(),
+                    "tension":     navigation_row_schema(),
+                    "enumeration": navigation_row_schema(),
+                    "lookup":      navigation_row_schema()
+                }
+            }
+        }
+    })
+}
+
+/// One `NavigationPolicy` row (`WalkPolicy`): seed kinds, edge kinds, hops,
+/// budget. Kinds and edges are the on-disk `atom_type` / `edge_type` tags;
+/// the engine refuses an unknown spelling at load, naming the valid ones.
+fn navigation_row_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+            "seed": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                    "kinds":        { "type": "array", "items": { "type": "string" } },
+                    "entity_types": { "type": "array", "items": { "type": "string" } },
+                    "declared":     { "type": "boolean" }
+                }
+            },
+            "walk":   { "type": "array", "items": { "type": "string" } },
+            "hops":   { "type": "integer" },
+            "budget": { "type": "integer" }
         }
     })
 }

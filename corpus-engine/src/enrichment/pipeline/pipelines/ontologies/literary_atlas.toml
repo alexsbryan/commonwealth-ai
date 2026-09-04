@@ -1,0 +1,40 @@
+# The literary atlas's map, written down (EPISTEMIC_INDEX.md §2.1): the body of
+# a `[enrichment.ontology]` block under version 1, parsed by the same language a
+# recipe author's block goes through. `name` is the `entity_type` the atoms
+# actually carry; `label` is the genre's own noun for it. Vocabulary terms and
+# the configuration flag are NOT written here — the pipeline fills them from
+# its one decider each (`vocabulary()`, `runs_configuration_phase()`).
+
+[[types]]
+name = "concept"
+kind = "entity"
+label = "theme"
+description = "A named theme, motif, condition or load-bearing literary term the work is about. Phase 1 lifts these generously as concept entities; there is no finer subtype."
+
+[[types]]
+name = "person"
+kind = "entity"
+label = "character"
+description = "A character — any named person in the work, single-mention included. The narrator and the author are never entities."
+
+[[types]]
+name = "work"
+kind = "entity"
+description = "A cited work — a book, poem or play the text names."
+
+[[types]]
+name = "place"
+kind = "entity"
+description = "A named setting."
+
+[[types]]
+name = "institution"
+kind = "entity"
+description = "A named organisation, order or household."
+
+[voices]
+not_entities = ["the narrator", "the author"]
+
+[derive]
+# Phase 1's section-extraction schema carries `argument_reconstructions`.
+arguments = true

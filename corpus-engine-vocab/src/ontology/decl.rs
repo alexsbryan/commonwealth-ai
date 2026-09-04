@@ -19,8 +19,8 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AssertionPolicy, ChangePolicy, DerivationPolicy, IdentityPolicy, OntologyPolicies, ProsePolicy,
-    ShapePolicy,
+    AssertionPolicy, ChangePolicy, DerivationPolicy, IdentityPolicy, NavigationPolicy,
+    OntologyPolicies, ProsePolicy, ShapePolicy,
 };
 
 fn default_true() -> bool {
@@ -244,6 +244,11 @@ pub struct OntologyV1 {
     /// shapes as `[[enrichment.patterns]]` (`PatternDecl`).
     #[serde(default)]
     pub patterns: Vec<PatternDecl>,
+    /// `[enrichment.ontology.navigation]` — how a reader walks the atlas per
+    /// question kind (`NavigationPolicy`). Omit it, or any row, to take the
+    /// spec's pre-registered defaults; the policy struct IS the TOML shape.
+    #[serde(default)]
+    pub navigation: NavigationPolicy,
 }
 
 impl OntologyV1 {
@@ -308,6 +313,7 @@ impl OntologyV1 {
                 guidance: self.guidance,
                 terms,
             },
+            navigation: self.navigation,
         }
     }
 }

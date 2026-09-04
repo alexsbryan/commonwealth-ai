@@ -105,12 +105,12 @@ asserts = 8
 requirement = "ST-6"
 test = "sovereign-cli-llm::corpus_cmd::status::tests::a_stopped_ingest_that_never_built_indexes_is_not_ready"
 file = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/status.rs"
-line = 560
+line = 580
 asserts = 1
 
 [[claim]]
 requirement = "ST-7"
 test = "sovereign-cli-llm::corpus_cmd::status::tests::readiness_labels_are_stable_api"
 file = "sovereign/crates/sovereign-cli-llm/src/corpus_cmd/status.rs"
-line = 540
+line = 560
 asserts = 4

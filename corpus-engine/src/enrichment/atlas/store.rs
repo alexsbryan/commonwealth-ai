@@ -593,8 +593,11 @@ pub fn write_store_blocking(
 /// avoids both the "runtime within a runtime" panic and `block_in_place`'s
 /// flavor constraints. Used by the v2-store write bridges and
 /// the [`LancePreload::open_blocking`] reader bridge (the daemon's sync
-/// `AtlasGraph::load_from_disk` opening the v2 store off the hot query path).
-fn run_blocking<T, F>(fut: F) -> Result<T, String>
+/// `AtlasGraph::load_from_disk` opening the v2 store off the hot query path),
+/// and — since the seed table joined the mandatory artifacts — the atlas
+/// writer's seed and the summary's row count. ONE such bridge for the whole
+/// atlas module (ARCH §10.6); do not spawn a second runtime elsewhere.
+pub(super) fn run_blocking<T, F>(fut: F) -> Result<T, String>
 where
     T: Send,
     F: std::future::Future<Output = Result<T, String>> + Send,

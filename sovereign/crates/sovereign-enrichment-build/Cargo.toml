@@ -41,24 +41,25 @@ description = "The atlas enrichment build orchestrator and its phase drivers, be
 corpus-engine = { workspace = true, features = ["treesitter"] }
 # The atlas vocabulary leaf — `OntologyPolicies` as recorded in atlas/ontology.json.
 corpus-engine-vocab = { workspace = true }
-# `atlas_context_manager::backfill_ann` (the ONE ANN-seed writer, which the
-# Backfill step drives) and `enrich::EXIT_CANCELLED`. Same layer.
-sovereign-tools = { workspace = true, features = ["treesitter"] }
 # The enrichment store's layout + `config.json` schema. Re-exported from
 # `lib.rs` as `config` / `paths` so the moved modules' `super::config` and
 # `super::paths` paths resolve unchanged — the same re-export
 # `enrich_cmd/mod.rs` already carried. Same layer.
 sovereign-enrichment-catalog = { workspace = true }
-# `traits::InferenceProvider` — the Backfill step's embedder, supplied by the
-# caller. Runtime layer — down.
-sovereign-core = { workspace = true }
-# `providers` resolves a `StructuredOutputMode` per provider. Runtime — down.
-sovereign-inference = { workspace = true }
-# `setup_config::client_daemon_base()` for the daemon base URL. Contract — down.
+# `setup_config::client_daemon_base()` for the daemon base URL, the workflow
+# envelope types (`StepOutput`, `ToolContext`, `DeclaredTool`), `launch::
+# EXIT_CANCELLED`, and the egress boundary this crate's remote calls ride
+# through. Contract — down, and a leaf: no inference stack behind it.
 sovereign-contracts = { workspace = true }
+# Wall-clock millis. The Tier-0 leaf that exists precisely for sovereign-side
+# crates off `sovereign-core` — its own doc names this case.
+sovereign-time = { workspace = true }
 # The provider vocabulary `providers` speaks. Contract layer — down.
 oicp-types = { workspace = true }
-# For `shed_retry_after` — the one decider for a 503 shed (ARCH §10.6).
+# `shed_retry_after` — the one decider for a 503 shed (ARCH §10.6) — and
+# `fetch_manifest`, the OICP capabilities probe `providers` reads a host's
+# structured-output support from. `sovereign_inference::remote` was never more
+# than `pub use oicp_client::*`; this crate now names the leaf directly.
 oicp-client = { workspace = true }
 chrono = { workspace = true }
 # `DaemonInferenceClient` talks to the daemon over HTTP on the CLI path.

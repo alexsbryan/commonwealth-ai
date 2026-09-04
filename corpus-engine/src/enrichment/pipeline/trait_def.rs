@@ -464,6 +464,31 @@ pub trait Pipeline: Send + Sync + 'static {
     /// How many exemplars to inject per call. Default 5 across all
     /// phases. Override per phase when a domain learns that some
     /// phases need more steering than others.
+    // ── The map (EPISTEMIC_INDEX §2) ─────────────────────────────
+
+    /// What this pipeline declares — its kinds, voices and derivation
+    /// passes as a version-1 block (`pipelines/ontologies/<id>.toml` for a
+    /// built-in genre, the recipe's own policies for the custom path). The
+    /// override point. Terms and the configuration flag are NOT this
+    /// method's to say: [`Self::declared_ontology`] fills them from their
+    /// one decider each, and `builtin_maps_use_the_pipelines_own_deciders`
+    /// pins that. Default: nothing declared.
+    fn declaration(&self) -> crate::enrichment::ontology::OntologyPolicies {
+        crate::enrichment::ontology::OntologyPolicies::default()
+    }
+
+    /// The complete map this pipeline writes to `atlas/ontology.json`:
+    /// [`Self::declaration`] with the EFFECTIVE vocabulary terms
+    /// ([`Self::vocabulary`]) and the configuration flag
+    /// ([`Self::runs_configuration_phase`]) filled in. Not an override
+    /// point — override [`Self::declaration`].
+    fn declared_ontology(&self) -> crate::enrichment::ontology::OntologyPolicies {
+        let mut map = self.declaration();
+        map.prose.terms = crate::enrichment::ontology::OntologyVocabulary::from(self.vocabulary());
+        map.derivation.configurations = self.runs_configuration_phase();
+        map
+    }
+
     fn top_k_exemplars(&self, _phase: PipelinePhase) -> usize {
         5
     }

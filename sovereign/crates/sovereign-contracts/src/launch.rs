@@ -810,3 +810,16 @@ mod daemon_host_tests {
         );
     }
 }
+
+/// Exit code of an enrichment build stopped through a cancellation flag — the
+/// shell's own code for an interrupted process, so a driver reading the code
+/// sees "interrupted", not "failed".
+///
+/// It lived beside the flag in `sovereign-tools`, which meant the orchestrator
+/// that RETURNS this code had to link the whole tool stack to name it. The
+/// flag stays where the driver that fires it lives; the CODE is a contract
+/// between the orchestrator and every driver that reads it back, which is what
+/// this crate is for (order ei-5a-build-cut). `sovereign_tools::enrich`
+/// re-exports it, so both historical paths still resolve to ONE constant
+/// (ARCH §10.6).
+pub const EXIT_CANCELLED: i32 = 130;

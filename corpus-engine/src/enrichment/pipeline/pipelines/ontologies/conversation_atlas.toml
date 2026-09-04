@@ -1,0 +1,38 @@
+# The conversation atlas's map (EPISTEMIC_INDEX.md §2.1) — see literary_atlas.toml
+# for the conventions. Chat transcripts: the user is the voice, the assistant
+# is a generation surface; neither is ever a Person atom.
+
+[[types]]
+name = "person"
+kind = "entity"
+description = "A person the user names. The user and the assistant are never entities."
+
+[[types]]
+name = "concept"
+kind = "entity"
+description = "An idea, topic or named thing the conversation turns on."
+
+[[types]]
+name = "institution"
+kind = "entity"
+description = "An organisation, team or company."
+
+[[types]]
+name = "work"
+kind = "entity"
+description = "A document, project or artefact named in the conversation."
+
+[[types]]
+name = "place"
+kind = "entity"
+description = "A named location."
+
+[voices]
+self = "the user"
+not_entities = ["the user", "the assistant"]
+attributed_to = ["user", "assistant"]
+
+[derive]
+# Phase 1 shares the literary section-extraction schema, which carries
+# `argument_reconstructions`.
+arguments = true

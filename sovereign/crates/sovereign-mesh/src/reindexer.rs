@@ -783,6 +783,13 @@ async fn run_worker(ctx: WorkerCtx) {
     // once per `FULL_REBUILD_COOLDOWN` of active editing — this is what removes
     // the per-save memory contention that had the watcher switched off.
     let mut changed_files: HashSet<PathBuf> = HashSet::new();
+    // Warm tier — the LSP session against the shared analyzer, held across
+    // saves. `None` means "not connected", which is both the initial state and
+    // where any failure puts us: the next save retries the handshake, and
+    // meanwhile the tree-sitter overlay carries on alone. Dropping the session
+    // kills the client process (`kill_on_drop`), so a wedged analyzer cannot
+    // outlive the worker.
+    let mut lsp_tier: Option<crate::lsp_tier::LspTier> = None;
     // When the full export last RELEASED the machine (not when it was
     // spawned — see `FULL_REBUILD_COOLDOWN`). Stamped by the detached
     // rebuild task's guard on every exit path, read here to gate the
@@ -938,6 +945,7 @@ async fn run_worker(ctx: WorkerCtx) {
                     //    added/moved/removed functions within milliseconds of a
                     //    save. Never contends with inference.
                     let files: Vec<PathBuf> = changed_files.drain().collect();
+
                     let (merged_files, merged_syms) = run_overlay_merge(
                         &rebuild_ctx.merged,
                         &rebuild_ctx.entry.corpus_id,
@@ -946,6 +954,32 @@ async fn run_worker(ctx: WorkerCtx) {
                         &files,
                     )
                     .await;
+
+                    // 1b) Warm tier — compiler-resolved CALL edges for the
+                    //     changed files, from an analyzer somebody else has
+                    //     already paid to load. Strictly additive: it can only
+                    //     insert edges the overlay could never see, and never
+                    //     removes one (see `add_call_edges_for`). That is why
+                    //     it runs as its own write rather than inside the
+                    //     overlay's replace — the overlay OWNS a file's symbol
+                    //     rows and may swap them; nothing owns a file's edges
+                    //     except the full export.
+                    //
+                    //     Default OFF (SOVEREIGN_SCIP_LSP_TIER): it spends a
+                    //     warm analyzer's time on the hot path and its
+                    //     duty-cycle effect over a 30-minute editing window is
+                    //     not measured yet. See sovereign/DEFAULTS_LEDGER.md.
+                    if crate::auto_resume::env_truthy("SOVEREIGN_SCIP_LSP_TIER") {
+                        let graph = rebuild_ctx.merged.load();
+                        crate::lsp_tier::run_edge_pass(
+                            &mut lsp_tier,
+                            &graph,
+                            &rebuild_ctx.entry.corpus_id,
+                            &entry.root,
+                            &files,
+                        )
+                        .await;
+                    }
                     if merged_files > 0 {
                         tracing::debug!(
                             corpus_id = %rebuild_ctx.entry.corpus_id,

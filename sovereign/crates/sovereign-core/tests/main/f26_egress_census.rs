@@ -20,7 +20,7 @@
 //! - The boundary guards egress to THIRD-PARTY endpoints: remote
 //!   model providers (RemotePayload) and search engines
 //!   (QueryEgress). Both classes are FORBIDDEN outside the ONE
-//!   boundary module (sovereign-core/src/egress.rs).
+//!   boundary module (sovereign-contracts/src/egress.rs).
 //! - Mesh / peer / pod traffic (Mesh) is the estate's own transport
 //!   — its own auth and custody class; daemon-local traffic
 //!   (LocalDaemon) never leaves the machine; inbound-only sites
@@ -67,7 +67,7 @@ use std::path::{Path, PathBuf};
 
 /// The ONE egress boundary module: every remote-model call and every
 /// search-query egress is constructed through it (bar dr-egress).
-const BOUNDARY_MODULE: &str = "sovereign/crates/sovereign-core/src/egress.rs";
+const BOUNDARY_MODULE: &str = "sovereign/crates/sovereign-contracts/src/egress.rs";
 
 /// The ONE run-scoped fail-closed budget decider (bar
 /// dr-budget-one-decider). Frontier-key spend is declared here and
@@ -134,7 +134,7 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // and search-query (QueryEgress) clients: search_client() (30s)
     // and model_client(timeout). Everything below is Local / Mesh /
     // InboundOnly / OperatorSurface / TestOnly.
-    ("sovereign/crates/sovereign-core/src/egress.rs", Class::Boundary, 2),
+    ("sovereign/crates/sovereign-contracts/src/egress.rs", Class::Boundary, 2),
     // deep_research/port.rs: the live `ResearchPort` — the rung-2/3
     // acquisition surface. Its web_search client is built by
     // BOUNDARY_MODULE (egress.rs `search_client`), and the query
@@ -168,7 +168,11 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // client to POST /v1/admin/reload. Inline `#[cfg(test)]` lives in a
     // src/ file, so the census counts it; the class is unchanged — this is
     // loopback admin traffic to our own daemon, never third-party egress.
-    ("sovereign/crates/sovereign-mesh/src/admin_http.rs", Class::Mesh, 7),
+    // 7 -> 8 (2026-09-04): a third reload-diff regression test
+    // (`reload_applies_an_extra_slot_without_a_restart`, commit eb215a8b4)
+    // builds the same loopback client to POST /v1/admin/reload. Same class,
+    // same reason.
+    ("sovereign/crates/sovereign-mesh/src/admin_http.rs", Class::Mesh, 8),
     ("sovereign/crates/sovereign-mesh/src/project_http.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-mesh/src/model_fetch.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-mesh/src/loopback_guard.rs", Class::Mesh, 3),

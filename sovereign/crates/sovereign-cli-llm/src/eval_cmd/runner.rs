@@ -593,8 +593,9 @@ pub async fn load_atlas_context(
     filter: &AtlasContextFilter,
 ) -> Result<AtlasContext, String> {
     let atlas_dir = paths::index_root(atlas_corpus_id).join(ATLAS_DIRNAME);
+    let embed = sovereign_core::embed_fn::inference_to_embed_query_fn(session.inference.clone());
     sovereign_tools::atlas_context_manager::load_atlas_context(
-        session.inference.as_ref(),
+        &embed,
         &atlas_dir,
         atlas_corpus_id,
         top_k,

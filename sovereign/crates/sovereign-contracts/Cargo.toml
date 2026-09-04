@@ -34,6 +34,9 @@ dirs = "5"
 # the `corpus-engine-sections` leaf on 2026-08-20 so the knowledge layer stops
 # naming a type owned by the layer above it; noun-convergence rung 2.)
 regex = { workspace = true }
+# `egress.rs` — the ONE egress boundary — constructs the reqwest clients every
+# remote call rides on. Pure HTTP: it carries no part of the inference stack.
+reqwest = { workspace = true }
 
 # `run_lock`: flock(2) for the single-writer claim on a data root. A leaf
 # third-party crate, so it adds no workspace layer edge — and unix-gated,

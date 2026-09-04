@@ -1,0 +1,41 @@
+[Unit]
+# One rust-analyzer per workspace, shared by every LSP client on this box —
+# instead of one 5-10 GB server per Claude Code session per editor window.
+# Installed by scripts/install-lspmux.sh, which substitutes the @…@ fields.
+Description=lspmux — one language server per workspace, shared by every LSP client
+Documentation=https://codeberg.org/p2502/lspmux
+
+# Deliberately NOT tied to sovereign.service or sovereign-toolbox.service.
+# This serves editors and agent sessions on the host; the daemon's own SCIP
+# export does not go through it (it is a batch invocation, which the shim
+# passes straight to the real binary).
+
+[Service]
+Type=simple
+ExecStart=@LSPMUX_BIN@ server
+Restart=on-failure
+RestartSec=5
+
+# PATH is pinned at install time to the PATH of the shell that ran the
+# installer, MINUS the shim directory (@SHIM_DIR@).
+#
+# Both halves matter.  Pinned, because rust-analyzer shells out to `cargo`,
+# and a systemd user manager's default PATH has no ~/.cargo/bin — the server
+# would come up and then answer every cross-crate query wrongly, which is
+# worse than not coming up.  Minus the shim, because `lspmux server` spawns
+# its language server with Command::new(server_path) and would otherwise be
+# able to find the shim and recurse.  (The shim always passes an ABSOLUTE
+# --server-path, so this is the second lock on the same door, not the first.)
+Environment=PATH=@SERVER_PATH@
+
+# Memory is the whole point of this unit, so make its own accounting visible
+# in `systemctl --user status lspmux`.  No limit: a limit here would OOM-kill
+# the analyzer mid-query, which looks to every client like a crash.
+MemoryAccounting=yes
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lspmux
+
+[Install]
+WantedBy=default.target

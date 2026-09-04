@@ -175,7 +175,12 @@ pub async fn run(args: &[String]) -> i32 {
     // `sovereign_tools::atlas_context_manager::backfill_ann` (ontology-v1 P0).
     for corpus_id in &corpora {
         let atlas_dir = paths::index_root(corpus_id).join(ATLAS_DIRNAME);
-        match backfill_ann(session.inference.as_ref(), &atlas_dir, corpus_id, &filter).await {
+        // The loader is corpus-engine's now and takes an `EmbedFn`; the
+        // QUERY-side adapter keeps this table in the same vector space
+        // `atlas_navigate_ann` queries it in (ei-5a-build-cut).
+        let embed =
+            sovereign_core::embed_fn::inference_to_embed_query_fn(session.inference.clone());
+        match backfill_ann(&embed, &atlas_dir, corpus_id, &filter).await {
             Ok(BackfillOutcome::Built(stats)) => {
                 println!(
                     "backfill-ann {corpus_id}: wrote {} — {}/{} bag entries resolved to atom-ids",

@@ -59,6 +59,13 @@ const REFS_INSERT_SQL: &str = "INSERT INTO refs (corpus_id, caller_symbol, calle
      caller_qualified, callee_qualified, file_path, line, start_col, end_line, end_col, ref_kind) \
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
+/// The insert-only call-edge merge, in its own file. A CHILD module rather
+/// than a sibling because it needs this module's private `conn`, and because
+/// this file is already thousands of lines past the point where ARCH §3.1 asks
+/// a file to justify itself — new surface goes beside it, not into it.
+#[path = "scip_graph_edges.rs"]
+mod edges;
+
 // ─── Types ───────────────────────────────────────────────────
 
 /// How a call was resolved by the SCIP exporter.

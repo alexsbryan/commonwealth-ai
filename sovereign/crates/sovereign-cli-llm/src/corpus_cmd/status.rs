@@ -58,10 +58,10 @@ pub(super) async fn cmd_corpus_status(args: &[String]) -> i32 {
         return 0;
     }
     println!(
-        "{:<32} {:>12} {:>14} {:>10} {:>10} {:>10} {:>12}",
-        "corpus", "state", "chunks", "atlas", "tier-2", "embed-cache", "tier-2 toks"
+        "{:<32} {:>12} {:>14} {:>10} {:>10} {:>8} {:>10} {:>12}",
+        "corpus", "state", "chunks", "atlas", "tier-2", "seeded", "embed-cache", "tier-2 toks"
     );
-    println!("{}", "─".repeat(105));
+    println!("{}", "─".repeat(114));
     for r in rows {
         let chunks = r
             .chunk_count
@@ -75,6 +75,14 @@ pub(super) async fn cmd_corpus_status(args: &[String]) -> i32 {
             .atlas_extracted_entities
             .map(|n| format_count(n as u64))
             .unwrap_or_else(|| "—".into());
+        // Seed-table coverage, read against the `atlas` column beside it. `—`
+        // is NOT zero: it means there is no `atoms_ann.lance` at all and this
+        // corpus answers from chunks alone (EPISTEMIC_INDEX section 1, Ideas
+        // row -- the artifact is mandatory and its absence is reported).
+        let seeded = r
+            .atlas_embedded_atoms
+            .map(format_count)
+            .unwrap_or_else(|| "—".into());
         let cache: String = if r.atlas_embeddings_cached {
             "✓".into()
         } else {
@@ -85,12 +93,13 @@ pub(super) async fn cmd_corpus_status(args: &[String]) -> i32 {
             .map(format_count)
             .unwrap_or_else(|| "—".into());
         println!(
-            "{:<32} {:>12} {:>14} {:>10} {:>10} {:>10} {:>12}",
+            "{:<32} {:>12} {:>14} {:>10} {:>10} {:>8} {:>10} {:>12}",
             r.corpus_id,
             r.state.label(),
             chunks,
             atlas,
             tier2,
+            seeded,
             cache,
             tokens
         );
@@ -272,6 +281,10 @@ struct CorpusStatusRow {
     chunk_count: Option<usize>,
     atlas_entities: Option<usize>,
     atlas_extracted_entities: Option<usize>,
+    /// Rows in `atlas/atoms_ann.lance` -- the atoms the walk can seed on.
+    /// `None` means no seed table, which is a different fact from a table
+    /// covering zero atoms and is never rendered as `0`.
+    atlas_embedded_atoms: Option<u64>,
     atlas_embeddings_cached: bool,
     /// Cumulative tokens spent in the corpus's `<corpus>-tier2`
     /// workspace's most recent extract run (Phase D2). `None` when
@@ -301,9 +314,15 @@ fn read_corpus_status_row(corpus_id: &str, dir: &std::path::Path) -> CorpusStatu
     let summary = corpus_engine::enrichment::atlas::read_or_compute_atlas_summary(&atlas_dir)
         .ok()
         .flatten();
-    let (atlas_entities, atlas_extracted_entities) = match summary {
-        Some(s) => (Some(s.atom_count as usize), Some(s.tier2_count as usize)),
-        None => (None, None),
+    let (atlas_entities, atlas_extracted_entities, atlas_embedded_atoms) = match summary {
+        Some(s) => (
+            Some(s.atom_count as usize),
+            Some(s.tier2_count as usize),
+            // Through the summary, which is where the seed-table row count is
+            // derived once (ARCH 10.6) -- not by opening the Lance table here.
+            s.ann.as_ref().map(|a| a.embedded_atoms),
+        ),
+        None => (None, None, None),
     };
     let atlas_embeddings_cached = atlas_dir.join("atoms.embeddings.bin").exists();
 
@@ -333,6 +352,7 @@ fn read_corpus_status_row(corpus_id: &str, dir: &std::path::Path) -> CorpusStatu
         chunk_count,
         atlas_entities,
         atlas_extracted_entities,
+        atlas_embedded_atoms,
         atlas_embeddings_cached,
         tier2_total_tokens,
     }

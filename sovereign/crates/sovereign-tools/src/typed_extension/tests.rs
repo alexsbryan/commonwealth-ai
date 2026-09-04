@@ -79,10 +79,19 @@ impl InferenceProvider for CannedInferenceProvider {
         ))
     }
 
-    async fn embed(&self, _text: &str) -> SovResult<Vec<f32>> {
-        Err(Error::NotImplemented(
-            "CannedInferenceProvider has no embed surface".into(),
-        ))
+    /// A deterministic 4-d embedding, not a refusal.
+    ///
+    /// The stub HAD to grow one when ei-3-index made `atoms_ann.lance` part of
+    /// the atlas write: a provider that cannot embed now fails the write, which
+    /// is the point. Giving it a real (if trivial) embed surface means these
+    /// four tests exercise the whole daemon path -- atoms.json, the v2 store
+    /// AND the seed table -- instead of the two-thirds of it that used to run.
+    /// `embed_query` defaults to this, and the query-side closure is what the
+    /// loader is handed (`inference_to_embed_query_fn`), so the table and the
+    /// queries stay in one vector space.
+    async fn embed(&self, text: &str) -> SovResult<Vec<f32>> {
+        let n = text.len() as f32;
+        Ok(vec![n, 1.0, 0.0, 0.0])
     }
 
     fn capabilities(&self) -> ProviderCapabilities {
@@ -235,6 +244,18 @@ async fn end_to_end_writes_atoms_and_manifest() {
         4,
         "exactly four LLM calls total"
     );
+
+    // ei-3-index: the daemon's own atlas write leaves all FOUR artifacts. The
+    // seed table used to be a best-effort hook after the write that logged a
+    // warning when it failed; nothing in this test saw it, and nothing in
+    // production saw it either -- which is how atlases that load, enumerate
+    // and cannot ground became the normal case.
+    for artifact in ["atoms.json", "atoms.lance", "edges.csr", "atoms_ann.lance"] {
+        assert!(
+            atlas_dir.join(artifact).exists(),
+            "{artifact} missing from the daemon's typed-extension atlas write"
+        );
+    }
 
     // Pass A populates mechanism / named_position / evidence; Pass B
     // contributes oppositions + concessions (carries the leaf-level

@@ -3,33 +3,40 @@
 //! embedded [`AtlasContext`] bag — the input `build_persistent_ann_seed_table`
 //! turns into the per-corpus ANN seed table (`atlas/atoms_ann.lance`).
 //!
-//! Moved here from `sovereign-cli-llm::eval_cmd::runner` (ontology-v1 P0.2)
-//! so the daemon can seed a freshly written atlas in-process. The CLI
-//! (`svrn atlas backfill-ann`, `migrate-all`, the eval harness) keeps a thin
-//! wrapper that supplies `session.inference` and the atlas dir; the body is
-//! byte-for-byte the runner's. It sits beside — not inside —
-//! `atlas_context_manager.rs` because that file is at ~900 lines and the
-//! loader is ~350 (ARCH §3.1); the manager re-exports it so
-//! `atlas_context_manager::load_atlas_context` is the one name.
+//! It reached `sovereign-cli-llm::eval_cmd::runner` first, then
+//! `sovereign-tools` (ontology-v1 P0.2) so the daemon could seed a freshly
+//! written atlas in-process. It lands HERE (order ei-5a-build-cut) because
+//! every type it touches was already corpus-engine's: the atoms, the edges,
+//! the ontology, and — since noun-convergence rung 6 —
+//! [`build_persistent_ann_seed_table`] and the [`AtlasContext`] bag itself.
+//! The one thing keeping it in the inference stack was its embedder
+//! parameter, and the file's own test said what that parameter really is:
+//! "the writer's only inference need is `embed_query`". So it takes an
+//! [`EmbedFn`] — corpus-engine's own embed closure — and the atlas write
+//! stops dragging llama.cpp behind it. `sovereign_tools::
+//! atlas_context_manager` re-exports every name here, so
+//! `atlas_context_manager::{load_atlas_context, backfill_ann,
+//! AtlasContextFilter, BackfillOutcome, LoadAtlasError}` still resolves for
+//! every existing caller (ARCH §10.6, one decider — a re-export, never a
+//! twin).
 //!
-//! Filter semantics live on [`AtlasContextFilter`] (the manager owns it —
-//! ARCH §10.6, one decider). Diagnostics are `tracing` events, not stderr:
-//! the same function now runs inside the daemon.
+//! Diagnostics are `tracing` events, not stderr: the same function runs
+//! inside the daemon.
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use corpus_engine::enrichment::atlas::ann_store::ANN_TABLE_DIRNAME;
-use corpus_engine::enrichment::atlas::{
-    read_atlas_atoms, read_atlas_edges, read_atlas_ontology, AtomEnvelope, EdgeType,
-};
-use sovereign_core::atlas_context::{
+use crate::enrichment::atlas::ann_store::ANN_TABLE_DIRNAME;
+use crate::enrichment::atlas::context::{
     atom_attributes_suffix, build_persistent_ann_seed_table, AnnBuildStats, AtlasContext,
     AtlasEntry,
 };
-use sovereign_core::traits::InferenceProvider;
+use crate::enrichment::atlas::{
+    read_atlas_atoms, read_atlas_edges, read_atlas_ontology, AtomEnvelope, EdgeType,
+};
+use crate::types::EmbedFn;
 
-use crate::atlas_context_manager::AtlasContextFilter;
+pub use super::context_filter::AtlasContextFilter;
 
 /// Why [`load_atlas_context`] produced no bag. Typed so a caller can tell
 /// "this corpus has nothing seedable" (a legitimate outcome for an atlas that
@@ -50,6 +57,20 @@ pub enum LoadAtlasError {
     },
     /// `atoms.json` unreadable or unparseable.
     Read(String),
+    /// The filter admitted atoms and the embedder refused every one of them.
+    ///
+    /// Distinct from [`Self::FilterExcludedAll`] because the two send an
+    /// operator to opposite places: that one means the knobs are too tight,
+    /// this one means the embed slot is down or the model is not loaded. They
+    /// were the same outcome until ei-3-index made the seed a hard failure,
+    /// and the message an operator then saw was "no atom-bearing entries
+    /// (0/0) -- nothing to index", which reads as "this atlas has nothing to
+    /// index" and is a substitution ARCH 18.3 forbids.
+    EmbedRefusedAll {
+        corpus_id: String,
+        attempted: usize,
+        last_error: String,
+    },
 }
 
 impl std::fmt::Display for LoadAtlasError {
@@ -73,6 +94,17 @@ impl std::fmt::Display for LoadAtlasError {
                  Lower --atlas-min-description-chars (currently {min_description_chars}) \
                  or check --atlas-depth, or pass --atlas-include claim,tension if the \
                  atlas only carries non-Entity surfaces."
+            ),
+            Self::EmbedRefusedAll {
+                corpus_id,
+                attempted,
+                last_error,
+            } => write!(
+                f,
+                "atlas-context: the embedder refused every one of the {attempted} atom(s) \
+                 admitted for `{corpus_id}` (last: {last_error}). The embed slot is down or \
+                 its model is not loaded -- load it and re-run \
+                 `svrn atlas backfill-ann {corpus_id}`. This is NOT a filter problem."
             ),
             Self::Read(e) => write!(f, "read atlas atoms.json: {e}"),
         }
@@ -107,13 +139,12 @@ pub enum BackfillOutcome {
 /// write failed) and carries the underlying message; callers name the
 /// recovery command (`svrn atlas backfill-ann <id>`) at their own surface.
 pub async fn backfill_ann(
-    inference: &dyn InferenceProvider,
+    embed: &EmbedFn,
     atlas_dir: &Path,
     corpus_id: &str,
     filter: &AtlasContextFilter,
 ) -> Result<BackfillOutcome, String> {
-    let ctx = match load_atlas_context(inference, atlas_dir, corpus_id, filter.top_k, filter).await
-    {
+    let ctx = match load_atlas_context(embed, atlas_dir, corpus_id, filter.top_k, filter).await {
         Ok(ctx) => ctx,
         Err(LoadAtlasError::FilterExcludedAll {
             min_description_chars,
@@ -140,6 +171,40 @@ pub async fn backfill_ann(
         "backfill-ann: wrote ANN seed table"
     );
     Ok(BackfillOutcome::Built(stats))
+}
+
+/// Sync bridge for [`backfill_ann`] — the atlas writer
+/// (`writer::write_atlas_full`) is sync at every lifecycle point that writes
+/// the v2 store, and the seed table is written in that same write. Runs the
+/// async backfill on a dedicated-thread runtime through the atlas module's ONE
+/// such bridge (`store::run_blocking`, the same one `write_store_blocking`
+/// uses), so it is safe whether or not an ambient tokio runtime exists.
+///
+/// One writer, one bridge: this is a thin wrapper over [`backfill_ann`], never
+/// a second implementation of it (ARCH §10.6).
+pub fn backfill_ann_blocking(
+    embed: &EmbedFn,
+    atlas_dir: &Path,
+    corpus_id: &str,
+    filter: &AtlasContextFilter,
+) -> Result<BackfillOutcome, String> {
+    let fut = backfill_ann(embed, atlas_dir, corpus_id, filter);
+    match tokio::runtime::Handle::try_current() {
+        Ok(h) if h.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread => {
+            // Drive the backfill on the AMBIENT runtime, not a fresh one. The
+            // embedder is a closure the caller built on that runtime -- an HTTP
+            // client whose connection pool is bound to its reactor, or a
+            // channel to a resident slot task -- and driving it from a foreign
+            // reactor hangs or reports a dead IO driver. `block_in_place` hands
+            // the worker back to the scheduler for the duration, so the caller
+            // (the daemon, mid-ingest) keeps serving.
+            tokio::task::block_in_place(|| h.block_on(fut))
+        }
+        // No ambient runtime (a plain sync caller), or a current-thread one
+        // where `block_in_place` panics: the atlas module's own bridge, a
+        // dedicated thread with its own reactor.
+        _ => super::store::run_blocking(fut),
+    }
 }
 
 /// Truncate atlas-entity text for embedding. Embed models cap context
@@ -198,7 +263,7 @@ fn endpoint_text(atom: Option<&AtomEnvelope>, atom_id: &str) -> String {
 /// persistent `atoms_ann.lance` seed table is now the durable cross-run
 /// artifact.
 pub async fn load_atlas_context(
-    inference: &dyn InferenceProvider,
+    embed: &EmbedFn,
     atlas_dir: &Path,
     atlas_corpus_id: &str,
     top_k: usize,
@@ -544,10 +609,12 @@ pub async fn load_atlas_context(
         });
     }
 
-    let mut entries: Vec<AtlasEntry> = Vec::with_capacity(payloads.len());
+    let attempted = payloads.len();
+    let mut entries: Vec<AtlasEntry> = Vec::with_capacity(attempted);
+    let mut last_embed_error: Option<String> = None;
     let t0 = Instant::now();
     for (atom_id, name, text) in payloads {
-        match inference.embed_query(&text).await {
+        match embed(&text).await {
             Ok(v) => entries.push(AtlasEntry {
                 atom_id,
                 canonical_name: name,
@@ -561,8 +628,21 @@ pub async fn load_atlas_context(
                     error = %e,
                     "atlas-context: embed failed; entry skipped"
                 );
+                last_embed_error = Some(e.to_string());
             }
         }
+    }
+    // Every admitted atom refused. A per-entry warn is the right shape for a
+    // few drops in a large atlas; a TOTAL refusal is a different fact and the
+    // caller must be able to tell it from "the filter admitted nothing"
+    // (ARCH 18.3 -- absence is reported, never defaulted into a neighbouring
+    // outcome).
+    if entries.is_empty() {
+        return Err(LoadAtlasError::EmbedRefusedAll {
+            corpus_id: atlas_corpus_id.to_string(),
+            attempted,
+            last_error: last_embed_error.unwrap_or_else(|| "no error recorded".into()),
+        });
     }
     tracing::info!(
         corpus = atlas_corpus_id,
@@ -581,44 +661,19 @@ pub async fn load_atlas_context(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::enrichment::atlas::ann_store::{ann_table_is_fresh, ann_table_present};
-    use sovereign_core::types::{
-        CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed,
-    };
-    use std::pin::Pin;
+    use crate::enrichment::atlas::ann_store::{ann_table_is_fresh, ann_table_present};
+    use std::sync::Arc;
 
-    /// Embeds deterministically and never completes: the writer's only
-    /// inference need is `embed_query`, so a `complete()` call is a wiring
-    /// bug and panics.
-    struct UnitEmbed;
-
-    #[async_trait::async_trait]
-    impl InferenceProvider for UnitEmbed {
-        async fn complete(
-            &self,
-            _: &CompletionRequest,
-        ) -> sovereign_core::Result<CompletionResponse> {
-            unreachable!("backfill must not call complete()")
-        }
-        async fn complete_stream(
-            &self,
-            _: &CompletionRequest,
-        ) -> sovereign_core::Result<
-            Pin<Box<dyn futures::Stream<Item = sovereign_core::Result<String>> + Send>>,
-        > {
-            unreachable!("backfill must not stream")
-        }
-        async fn embed(&self, text: &str) -> sovereign_core::Result<Vec<f32>> {
-            Ok(vec![text.len() as f32, 1.0, 0.0, 0.0])
-        }
-        fn capabilities(&self) -> ProviderCapabilities {
-            ProviderCapabilities {
-                max_context_tokens: 8192,
-                supports_structured_output: false,
-                relative_speed: Speed::Fast,
-                relative_reasoning: Depth::Shallow,
-            }
-        }
+    /// Embeds deterministically. The `InferenceProvider` impl this replaced
+    /// carried three methods the loader never called — `complete` and
+    /// `complete_stream` were `unreachable!()` and `capabilities` was filler —
+    /// which is precisely the evidence that the parameter was only ever an
+    /// embedder (ARCH §5.1: the trait was eight times wider than the use).
+    fn unit_embed() -> EmbedFn {
+        Arc::new(|text: &str| {
+            let n = text.len() as f32;
+            Box::pin(async move { Ok(vec![n, 1.0, 0.0, 0.0]) })
+        })
     }
 
     /// The production grounding filter, spelled out so the test does not
@@ -651,7 +706,7 @@ mod tests {
         std::fs::create_dir_all(&atlas).unwrap();
         std::fs::write(atlas.join("atoms.json"), atoms_json("extracted")).unwrap();
 
-        let out = backfill_ann(&UnitEmbed, &atlas, "t", &grounding_filter())
+        let out = backfill_ann(&unit_embed(), &atlas, "t", &grounding_filter())
             .await
             .expect("backfill succeeds");
         assert_eq!(
@@ -678,7 +733,7 @@ mod tests {
         std::fs::create_dir_all(&atlas).unwrap();
         std::fs::write(atlas.join("atoms.json"), atoms_json("structural")).unwrap();
 
-        let out = backfill_ann(&UnitEmbed, &atlas, "t", &grounding_filter())
+        let out = backfill_ann(&unit_embed(), &atlas, "t", &grounding_filter())
             .await
             .expect("an admitted-nothing filter is an outcome, not an error");
         assert_eq!(
@@ -694,7 +749,7 @@ mod tests {
     async fn load_atlas_context_missing_atlas_is_a_typed_error() {
         let tmp = tempfile::tempdir().unwrap();
         let atlas = tmp.path().join("nope").join("atlas");
-        let err = load_atlas_context(&UnitEmbed, &atlas, "t", 3, &grounding_filter())
+        let err = load_atlas_context(&unit_embed(), &atlas, "t", 3, &grounding_filter())
             .await
             .err()
             .expect("missing atlas dir must be an error");

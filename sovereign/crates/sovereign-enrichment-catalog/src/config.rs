@@ -152,7 +152,7 @@ pub struct TocMarkers {
 /// drove the OPERATOR's daemon instead of its own (2026-07-29, found by the
 /// `enrich-atlas` journey in a netns where nothing answers on 9741).
 fn default_base_url() -> String {
-    sovereign_core::setup_config::client_daemon_base()
+    sovereign_contracts::setup_config::client_daemon_base()
 }
 
 /// Default section-body floor. Chosen to comfortably clear

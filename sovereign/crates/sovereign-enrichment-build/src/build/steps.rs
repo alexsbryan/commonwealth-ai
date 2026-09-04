@@ -13,12 +13,14 @@ use crate::{
     atlas_tensions_classify, config::EnrichConfig, extract, paths, schema_review, seed_cmd,
 };
 use corpus_engine::enrichment::atlas::ann_store::{ann_table_is_fresh, ANN_TABLE_DIRNAME};
+use corpus_engine::enrichment::atlas::context_loader::{
+    backfill_ann, AtlasContextFilter, BackfillOutcome,
+};
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 use corpus_engine::enrichment::pipeline::{
     progress::wire, BuildStep, EnrichProgress, EnrichProgressFn, PipelineRegistry, SeedStrategy,
 };
-use sovereign_core::traits::InferenceProvider;
-use sovereign_tools::atlas_context_manager::{backfill_ann, AtlasContextFilter, BackfillOutcome};
+use corpus_engine::EmbedFn;
 use std::sync::Arc;
 
 /// Canonical on-disk artefact each step produces. The orchestrator
@@ -197,7 +199,7 @@ impl StepFailure {
 pub(super) async fn run_step(
     step: Step,
     parsed: &ParsedBuild,
-    embedder: Option<&Arc<dyn InferenceProvider>>,
+    embedder: Option<&EmbedFn>,
 ) -> Result<StepOutcome, StepFailure> {
     let corpus = parsed.corpus_id.as_str();
 
@@ -435,10 +437,8 @@ pub(super) async fn run_step(
 
 /// One `embed_query("probe")` against a caller-supplied provider — the
 /// in-process (daemon) half of the fail-fast rule above.
-pub(super) async fn probe_embedder(
-    embedder: Arc<dyn InferenceProvider>,
-) -> Result<Arc<dyn InferenceProvider>, String> {
-    embedder.embed_query("probe").await.map_err(|e| {
+pub(super) async fn probe_embedder(embedder: EmbedFn) -> Result<EmbedFn, String> {
+    embedder("probe").await.map_err(|e| {
         format!(
             "backfill: the embed slot did not answer ({e}); load an embed model, or \
              pass `--skip backfill` to build without grounding"
@@ -448,7 +448,9 @@ pub(super) async fn probe_embedder(
 }
 
 /// The Backfill step: `atlas/atoms.json` → `atlas/atoms_ann.lance` through
-/// the ONE writer, `sovereign_tools::atlas_context_manager::backfill_ann`,
+/// the ONE writer, `corpus_engine::enrichment::atlas::context_loader::
+/// backfill_ann` (re-exported at its historical `sovereign_tools::
+/// atlas_context_manager::backfill_ann` path),
 /// under the production grounding filter (`AtlasContextFilter::default()` —
 /// the universe the daemon seeds `atlas_navigate_ann` from; `backfill_ann.rs`
 /// says why no other filter may be used here, and `migrate_all`'s relaxed-
@@ -461,7 +463,7 @@ pub(super) async fn probe_embedder(
 /// defaulted.
 async fn run_backfill_step(
     corpus: &str,
-    embedder: Option<&Arc<dyn InferenceProvider>>,
+    embedder: Option<&EmbedFn>,
 ) -> Result<StepOutcome, StepFailure> {
     let Some(embedder) = embedder else {
         return Err(StepFailure::new(
@@ -473,8 +475,22 @@ async fn run_backfill_step(
         ));
     };
     let atlas_dir = paths::index_root(corpus).join(ATLAS_DIRNAME);
+    // Since ei-3-index the Resolve step writes the seed table in the same write
+    // as the v2 store, so on a plan where nothing after Resolve rewrote
+    // `atoms.json` the table is already current and re-embedding every atom
+    // would double the build's embed cost for an identical result. The
+    // freshness test is `ann_store::ann_table_is_fresh` -- the same one the
+    // daemon's post-write path used (ARCH 10.6, one decider) -- and it is
+    // false the moment Configure or Tensions restamps `atoms.json`, which is
+    // exactly when this step must run.
+    if ann_table_is_fresh(&atlas_dir) {
+        println!("  · atlas/{ANN_TABLE_DIRNAME} is current for atoms.json; nothing to re-embed");
+        return Ok(StepOutcome::did(format!(
+            "skipped -- atlas/{ANN_TABLE_DIRNAME} already current for atoms.json"
+        )));
+    }
     let filter = AtlasContextFilter::default();
-    match backfill_ann(embedder.as_ref(), &atlas_dir, corpus, &filter).await {
+    match backfill_ann(embedder, &atlas_dir, corpus, &filter).await {
         Ok(BackfillOutcome::Built(stats)) => {
             println!(
                 "  · wrote {} — {}/{} entries resolved to atom-ids",

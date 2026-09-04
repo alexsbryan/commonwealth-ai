@@ -231,7 +231,7 @@ fn print_cli_event(evt: &EnrichProgress) {
 /// It does NOT probe. The one `embed_query("probe")` lives in
 /// [`probe_embedder`], on the path both callers share, so the CLI and the
 /// daemon spend exactly one probe each and neither spends two.
-async fn backfill_session_embedder() -> Result<Arc<dyn InferenceProvider>, String> {
+async fn backfill_session_embedder() -> Result<corpus_engine::EmbedFn, String> {
     let (globals, _) = parse_globals(&[])?;
     let session = build_session(&globals).await.map_err(|e| {
         format!(
@@ -239,7 +239,12 @@ async fn backfill_session_embedder() -> Result<Arc<dyn InferenceProvider>, Strin
              `--skip backfill` to build without grounding"
         )
     })?;
-    Ok(session.inference)
+    // The orchestrator takes an `EmbedFn` since ei-5a-build-cut — resolving the
+    // session is still the CLI's job, adapting it is one call. QUERY-side: the
+    // seed table must land in the space `atlas_navigate_ann` queries it in.
+    Ok(sovereign_core::embed_fn::inference_to_embed_query_fn(
+        session.inference,
+    ))
 }
 
 #[cfg(test)]
