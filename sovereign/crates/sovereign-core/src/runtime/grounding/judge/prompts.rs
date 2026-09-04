@@ -1,15 +1,14 @@
 //! Extracted from judge.rs (2026-09-03, ARCH §3.1) — see the judge façade.
-use std::sync::Arc;
+use super::*;
 use crate::oicp::ShardingPrivacy;
-use crate::slot_policy::Workload;
-use crate::traits::InferenceProvider;
-use crate::types::{CompletionRequest, Speed};
 use crate::runtime::grounding::call_census::gate_call;
 use crate::runtime::grounding::config::dbg;
 use crate::runtime::grounding::search::SealedEvidenceSearch;
+use crate::slot_policy::Workload;
+use crate::traits::InferenceProvider;
+use crate::types::{CompletionRequest, Speed};
 use sovereign_contracts::types::GateCallMechanism;
-use super::*;
-
+use std::sync::Arc;
 
 /// System turn for claim extraction — step 1 of the two-step gate.
 pub const CLAIM_EXTRACTION_SYSTEM: &str =

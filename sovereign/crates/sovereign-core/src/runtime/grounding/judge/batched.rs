@@ -1,14 +1,14 @@
 //! Extracted from judge.rs (2026-09-03, ARCH §3.1) — see the judge façade.
-use std::sync::Arc;
+use super::*;
 use crate::oicp::ShardingPrivacy;
-use crate::slot_policy::Workload;
-use crate::traits::InferenceProvider;
-use crate::types::{CompletionRequest, Speed};
 use crate::runtime::grounding::call_census::gate_call;
 use crate::runtime::grounding::config::dbg;
 use crate::runtime::grounding::search::SealedEvidenceSearch;
+use crate::slot_policy::Workload;
+use crate::traits::InferenceProvider;
+use crate::types::{CompletionRequest, Speed};
 use sovereign_contracts::types::GateCallMechanism;
-use super::*;
+use std::sync::Arc;
 
 /// Leading literal of every claim-check prompt. Split out so the stable-prefix
 /// byte math below and the prompt construction cannot drift apart.

@@ -1,14 +1,14 @@
 //! Extracted from judge.rs (2026-09-03, ARCH §3.1) — see the judge façade.
-use std::sync::Arc;
+use super::*;
 use crate::oicp::ShardingPrivacy;
-use crate::slot_policy::Workload;
-use crate::traits::InferenceProvider;
-use crate::types::{CompletionRequest, Speed};
 use crate::runtime::grounding::call_census::gate_call;
 use crate::runtime::grounding::config::dbg;
 use crate::runtime::grounding::search::SealedEvidenceSearch;
+use crate::slot_policy::Workload;
+use crate::traits::InferenceProvider;
+use crate::types::{CompletionRequest, Speed};
 use sovereign_contracts::types::GateCallMechanism;
-use super::*;
+use std::sync::Arc;
 
 /// real fabrications, not prune legitimately-grounded content. Returns the
 /// offending specifics verbatim (answer wording), or an empty vec when every
@@ -307,7 +307,8 @@ fn meta_subject_strict(t: &str) -> bool {
 /// subject and fails arm 2's subject test.
 pub(super) fn decline_rider_exempt(answer: &str, claim: &str) -> bool {
     is_self_referential_decline(claim)
-        || (crate::runtime::grounding::answer_declines(answer) && meta_subject_strict(&normalize_meta(claim)))
+        || (crate::runtime::grounding::answer_declines(answer)
+            && meta_subject_strict(&normalize_meta(claim)))
 }
 
 /// Anchor one specifics-scan line to the ANSWER, or reject it.

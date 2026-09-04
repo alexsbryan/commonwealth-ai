@@ -921,19 +921,19 @@ pub fn render_split_plan(
     }
     for c in r.clusters.iter().filter(|c| c.members.len() > 1) {
         let dest = format!("{module_dir}{}.rs", c.name);
-        let mut spans: Vec<(usize, usize)> =
-            c.members.iter().map(|m| (m.line_start as usize, m.line_end as usize)).collect();
+        let mut spans: Vec<(usize, usize)> = c
+            .members
+            .iter()
+            .map(|m| (m.line_start as usize, m.line_end as usize))
+            .collect();
         spans.sort();
-        let merged: Vec<(usize, usize)> = spans.into_iter().fold(
-            Vec::new(),
-            |mut acc, (s, e)| {
-                match acc.last_mut() {
-                    Some(last) if s <= last.1 + 2 => last.1 = last.1.max(e),
-                    _ => acc.push((s, e)),
-                }
-                acc
-            },
-        );
+        let merged: Vec<(usize, usize)> = spans.into_iter().fold(Vec::new(), |mut acc, (s, e)| {
+            match acc.last_mut() {
+                Some(last) if s <= last.1 + 2 => last.1 = last.1.max(e),
+                _ => acc.push((s, e)),
+            }
+            acc
+        });
         for (s, e) in merged {
             steps.push((s, e, dest.clone(), c.name.clone()));
         }
@@ -987,11 +987,7 @@ mod plan_tests {
     fn a_tests_module_not_at_the_tail_is_declined() {
         let dir = tempfile_dir("span2");
         let p: PathBuf = dir.join("f.rs");
-        std::fs::write(
-            &p,
-            "#[cfg(test)]\nmod tests {\n}\n\npub fn after() {}\n",
-        )
-        .unwrap();
+        std::fs::write(&p, "#[cfg(test)]\nmod tests {\n}\n\npub fn after() {}\n").unwrap();
         assert!(find_tail_tests_span(&p).is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1011,23 +1007,20 @@ mod plan_tests {
         eprintln!("=== RENDERED ===\n{plan}===");
         let v: serde_json::Value = toml::from_str(&plan).expect("valid TOML");
         eprintln!("=== PARSED moves === {:?}", v.get("move"));
-        assert_eq!(
-            v["plan"]["subject"].as_str(),
-            Some("crates/app/src/cmd.rs")
-        );
+        assert_eq!(v["plan"]["subject"].as_str(), Some("crates/app/src/cmd.rs"));
         let moves = v["move"].as_array().expect("moves array");
         // fixture cluster `ingest` has two members at 10-90 and 92-120
         // (merged into one span) + the tests move from the fixture file.
-        let starts: Vec<u64> = moves
-            .iter()
-            .map(|m| m["start"].as_u64().unwrap())
-            .collect();
+        let starts: Vec<u64> = moves.iter().map(|m| m["start"].as_u64().unwrap()).collect();
         let mut sorted = starts.clone();
         sorted.sort_unstable_by(|a, b| b.cmp(a));
         assert_eq!(starts, sorted, "moves must run bottom-up");
         // [[patch]] is an array-of-tables even with a single entry.
         assert_eq!(
-            v["patch"][0]["body"].as_str().unwrap().contains("mod tests;"),
+            v["patch"][0]["body"]
+                .as_str()
+                .unwrap()
+                .contains("mod tests;"),
             true
         );
         let _ = std::fs::remove_dir_all(&dir);

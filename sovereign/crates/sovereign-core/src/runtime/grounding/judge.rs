@@ -680,6 +680,5 @@ pub(super) fn absent_identifier_attribution(claim: &str, hay_lower: &str) -> Opt
     None
 }
 
-
 #[cfg(test)]
 mod tests;
