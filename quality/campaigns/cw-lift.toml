@@ -48,7 +48,16 @@ status    = "active"
 #   1d  re-derived: the last knowledge edge      84e6fd1c0  DONE        0
 #   1e  RingVerifier seam (Membership DROPPED)  34d308b85  DONE     +104
 #   ── open ──
-#   1f  the acceptance ledger (canon x rail)
+#   1f  DESCOPED 2026-09-04 — canon x rail was a way to EXERCISE the work, not
+#       a product. Operator: "there's no current genuine product interest in
+#       canon + the rail (it was just an idea of how to exercise the work)."
+#       The physical lift the same day exercised it better and for ~0 lines:
+#       the package built standalone in 8.4s with zero source edits, 490 tests
+#       passed in isolation, both feature configurations built, and a
+#       twenty-line third-party program signed an act, read it back verified,
+#       detected a tampered line on disk and converged a second peer. Composing
+#       canon would have measured API ERGONOMICS, not correctness.
+#       REPLACED BY 1f' — the convergence-ceiling test, below.
 #   2   route mesh work through the rail (measurement-gated)
 #   3   triage the application layer (unscoped until 2 settles)
 #   T   the twin census + an instrument that can see a twin   <- OFF-PLAN
@@ -107,9 +116,15 @@ status       = "open"
 #           through six files. Against a remaining allowance of +351.
 #   -------
 #   -4,525  LANDED THROUGH 1e. One rung still open, at its budget CEILING:
-#     +550  1f
+#     +550  1f  <- DESCOPED, see the ladder. Was the largest single line in
+#           the plan and it is no longer spent.
 #   -------
-#   -3,975  vs the floor of -3,800 -> CLEARS BY 175
+#   -3,975  vs the floor of -3,800 -> CLEARED BY 175 as projected WITH 1f.
+#   -4,525  the position WITHOUT it -> clears by 725.
+#
+# Dropping 1f is not how this bar was won — Phase 1 cleared the floor on its
+# own actuals before the descope, and the descope was a signal decision rather
+# than a budget one. Recorded so nobody later reads the margin as bought.
 #
 # ── THE K4-vs-1g DECISION IS RESOLVED BY NOT NEEDING TO BE MADE. ──
 #
@@ -550,7 +565,21 @@ kill         = "converging a pair forces commonwealth-core to grow a dependency.
 id           = "cw-ledger-closes-itself"
 one_line     = "CLAIM: the acceptance ledger is USED, not just built — and closure fires without a human"
 derives_from = "P4; the feedback_creation_closure_loop failure mode, named verbatim"
-status       = "open"
+status       = "descoped"
+# DESCOPED 2026-09-04 with 1f, and the reason is worth keeping because the bar
+# itself was a good one. It tested whether a created thing gets CLOSED without
+# a human — this repo has four *_LEDGER.md files that rot while reading as
+# authoritative. That failure mode is real and this bar was the right shape
+# for it. What went away is its SUBJECT: canon x rail existed to exercise the
+# substrate, the physical lift exercised it better the same day, and the
+# operator confirmed there is no product pulling the ledger.
+#
+# THE DEBT DID NOT GO AWAY WITH THE BAR. SYSTEM_OVERVIEW §10.1c-k is ~417 lines
+# of hand-written acceptance prose with no query surface, and THIS CAMPAIGN
+# ADDED TO IT TODAY — four commits raised ceilings (ff63884f3, b94d399eb,
+# 34d308b85, c1116b31e), roughly eight acceptance acts in one day, each with an
+# actor, a reason and an implied review-by that nothing will resurface. If that
+# is ever built it lands as a product on its own merits, with its own bar.
 # Within one week of 1f landing the ledger holds at least the six entries this
 # campaign generates (four conformance retirements from 0b, two size-gate
 # --accept rows per new crate), and AT LEAST ONE HAS BEEN AUTO-WITHDRAWN by a
