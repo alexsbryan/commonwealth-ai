@@ -186,14 +186,32 @@ impl MeshStore {
     /// prefer [`MeshStore::gc_app`] when you mean to bound one
     /// namespace.
     pub fn gc(&self, ttl_seconds: u64) -> Result<usize> {
-        let cutoff = now_secs().saturating_sub(ttl_seconds);
+        self.gc_before(now_secs().saturating_sub(ttl_seconds))
+    }
+
+    /// `gc` with the cutoff supplied rather than read from the clock.
+    ///
+    /// The TTL forms above read `now_secs()` INSIDE the call, so a caller that
+    /// planted a row relative to its own earlier `now_secs()` is racing the
+    /// wall clock: one tick between the two reads moves the cutoff a second
+    /// later and takes a row the caller placed exactly on the boundary. That
+    /// is not hypothetical — it is the flake this seam exists to remove, and
+    /// it was found by a package lift rather than by the suite (2026-09-04).
+    /// Anything asserting where the boundary IS must use this form, so the
+    /// cutoff is one value both sides agree on (§10.6).
+    pub fn gc_before(&self, cutoff: u64) -> Result<usize> {
         self.backend.delete_older_than(cutoff)
     }
 
     /// Delete entries older than `ttl_seconds` within a single
     /// `app_id`. Returns count deleted.
     pub fn gc_app(&self, app_id: &str, ttl_seconds: u64) -> Result<usize> {
-        let cutoff = now_secs().saturating_sub(ttl_seconds);
+        self.gc_app_before(app_id, now_secs().saturating_sub(ttl_seconds))
+    }
+
+    /// `gc_app` with the cutoff supplied rather than read from the clock.
+    /// See [`MeshStore::gc_before`] for why a boundary assertion needs it.
+    pub fn gc_app_before(&self, app_id: &str, cutoff: u64) -> Result<usize> {
         self.backend.delete_older_than_in_app(app_id, cutoff)
     }
 }
@@ -267,7 +285,11 @@ mod tests {
         // silent change in how much history a TTL keeps.
         plant("chat", "at-cutoff", TTL);
 
-        let deleted = store.gc_app("chat", TTL).unwrap();
+        // ONE cutoff, derived from the same `now` the rows were planted
+        // against. The TTL forms re-read the clock, so a tick between plant
+        // and sweep silently moves the boundary this test exists to pin.
+        let cutoff = now - TTL;
+        let deleted = store.gc_app_before("chat", cutoff).unwrap();
         assert_eq!(deleted, 1, "only `chat`'s stale entry is old enough");
         assert!(store.get("chat", "old").unwrap().is_none());
         assert!(store.get("chat", "fresh").unwrap().is_some());
@@ -281,7 +303,7 @@ mod tests {
         );
 
         // The unscoped sweep spans every app, and reports what it took.
-        let deleted = store.gc(TTL).unwrap();
+        let deleted = store.gc_before(cutoff).unwrap();
         assert_eq!(deleted, 1, "the remaining stale entry, in the other app");
         assert!(store.get("presence", "old").unwrap().is_none());
         assert!(store.get("chat", "fresh").unwrap().is_some());
@@ -289,7 +311,7 @@ mod tests {
         // A sweep with nothing to take reports zero rather than erroring —
         // the caller is a periodic task and a spurious Err would be logged
         // forever.
-        assert_eq!(store.gc(TTL).unwrap(), 0);
+        assert_eq!(store.gc_before(cutoff).unwrap(), 0);
     }
 
     #[test]
