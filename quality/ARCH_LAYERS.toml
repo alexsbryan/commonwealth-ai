@@ -395,6 +395,20 @@ from = "commonwealth-rail*"
 to = "commonwealth-knowledge"
 reason = "these two crates are what came out of commonwealth-knowledge; a dep back would restore the cycle the split exists to break, and layer ordering cannot see it because both sit in mesh-foundation"
 
+# THESE THREE BLOCKS WERE NOT THE ENFORCEMENT THEY READ AS, and that is worth
+# leaving written down. The cw-lift bar they serve names five families the rail
+# must not reach; the blocks cover four. `commonwealth-rail* ->
+# commonwealth-inference` and `-> commonwealth-api` are SIDEWAYS edges inside
+# `mesh-foundation`, which layer-gate permits and no forbid rule above reaches —
+# so a convenience taking either would have gone green. Found at 1c
+# (b94d399eb), by counting the blocks against the claim rather than reading
+# them. The `[[package]] commonwealth` membership added at 4c98dfb59 is what
+# actually closes it: neither crate is a package member or a shared leaf, so
+# boundary-gate refuses both. Membership now SUBSUMES these three blocks and
+# exceeds them; they are kept because they say WHY, and because a package can
+# be dissolved while a forbid rule survives. ARCH §18.1 — the gap was invisible
+# precisely because everything was green.
+
 [[forbid]]
 from = "commonwealth-core"
 to = "sovereign-*"

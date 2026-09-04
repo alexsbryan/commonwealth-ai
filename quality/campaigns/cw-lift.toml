@@ -44,9 +44,10 @@ status    = "active"
 #   4b  model_aliases + glob -> oicp     2a5b63325  DONE      +63
 #   G   gate integrity (3 commits)       4759e7b04  DONE
 #   ── open ──
-#   1c  repoint 8 consumers, drop the facade
-#   1d  RE-DERIVE BEFORE RUNNING — 1b already severed corpus-engine
-#   1e  RingVerifier + Membership seams
+#   1c  consumers name the rail, facade gone  b94d399eb  DONE      -10
+#   1d  re-derived: the last knowledge edge      84e6fd1c0  DONE        0
+#   ── open ──
+#   1e  RingVerifier + Membership — MEMBERSHIP MUST BE RE-DERIVED, see below
 #   1f  the acceptance ledger (canon x rail)
 #   2   route mesh work through the rail (measurement-gated)
 #   3   triage the application layer (unscoped until 2 settles)
@@ -97,13 +98,33 @@ status       = "open"
 #       +8  1b ACTUAL (ff63884f3) — two module headers, the facade use, one
 #           pub mod line. The split PAID BACK 804 lines of arch-gate band by
 #           splitting tests.rs rather than trimming it to parity.
-#     +341  1c-1e (the +349 budget less 1b's +8)
-#     +550  1f, carried as its own line and not absorbed into slack
+#      -10  1c ACTUAL (b94d399eb) — NET-DELETING. api -2, knowledge -7,
+#           rail +9, cli-llm -10, mesh 0.
+#        0  1d ACTUAL (84e6fd1c0) — one rustdoc link and a manifest line.
+#   -------
+#   -4,629  LANDED. Then the two rungs still open, at their budget CEILINGS:
+#     +351  1e (the +349 for 1b-1e, less the -2 those three actually spent)
+#     +550  1f
 #   -------
 #   -3,728  vs the floor of -3,800 -> MISSES BY ~72
 #
-# RE-DERIVED 2026-09-04 from wave-1 actuals. The miss GREW from ~39 to ~72 and
-# the whole of that is 4b's overrun; 1b came in at a tenth of its share.
+# READ THAT PROJECTION CORRECTLY, because it is a CEILING and not a forecast.
+# Three of the four Phase-1 rungs are landed and together they spent -2 against
+# a +349 allowance. The ~72 miss assumes 1e now spends its entire remaining
+# +351 and 1f its entire +550. On the evidence of 1b (+8 against a share of
+# +349), 1c (-10) and 1d (0), that is the pessimistic bound, not the expected
+# case: 1e at +100 would land -3,979 and CLEAR the floor with room.
+#
+# CONSEQUENCE FOR THE K4-vs-1g DECISION the line above says to make before 1f:
+# it may not need making. Neither out should be spent until 1e's ACTUAL is
+# known — K4 would undo 1b's two-crate split on a projection that three
+# consecutive rungs have beaten, and 1g is forbidden from counting anyway.
+# DECIDE AFTER 1e, ON ITS NUMBER, not before it on this one.
+#
+# A THIRD OUT NOBODY HAS COUNTED, surfaced by order 2's measurement: Phase 2
+# deletes the unsigned 10s full-snapshot push, and on the (a) reading it also
+# deletes the heartbeat namespaces as replicated state. That is real deletion
+# on the critical path and no line in this bar carries it.
 #
 # The floor already moved once, from -4,000 to -3,800, to pay for 1f visibly.
 # Moving it a second time to absorb an overrun would be exactly the accounting
@@ -184,17 +205,26 @@ kill         = "a NEW [[exception]] row is needed in ARCH_LAYERS.toml. The edge 
 id           = "cw-rail-closure"
 one_line     = "CLAIM: the rail is a genuine primitive, not an artifact of this codebase"
 derives_from = "RE-DERIVED 2026-09-04 before 1b from 1a's measurement; MEASURED at 1b (ff63884f3)"
+# ── FLAT AT 42 / 43 ACROSS 1b, 1c AND 1d. Flat IS the pass: this bar's kill
+# condition is a RISE, and there was none at any of the three. Re-run by the
+# seat with cargo tree at each commit, not taken on report. ──
 # ── MEASURED AT 1b: rail-core closure = 42, commonwealth-rail = 43. ──
 # Under the 45-50 the signature stack predicted, above oplog's 28 floor.
 # THE MEMBERSHIP HALF — the real claim — ALREADY HOLDS, at 1b rather than 1d:
 # zero corpus-engine*, zero sovereign-*, zero commonwealth-{knowledge,
 # inference,api} in either closure. Verified twice, by the worker and by the
 # seat re-running cargo tree independently.
-# CONSEQUENCE: 1d's headline ("SEVER rail -> corpus-engine") is already spent.
-# The rail's coupling was seven references to Op/OpId/SkippedLine and they now
-# come from `oplog` directly. What is left for 1d is the CONSUMER side
-# (commonwealth-knowledge still needs corpus-engine for shard_manager) and the
-# closure comparison. Re-derive 1d's claim before running it.
+# 1d WAS RE-DERIVED AND LANDED AS SOMETHING ELSE (84e6fd1c0). Its headline
+# ("SEVER rail -> corpus-engine") was already spent at 1b, and its "5 remaining
+# oplog sites" was ONE site, in a CONSUMER rather than the rail — it moved in
+# 1c. What 1d turned out to be: after 1c, sovereign-cli-llm's whole
+# commonwealth-knowledge dependency was held by a single rustdoc link in
+# ring_cmd's module header. No type, no use, no call. De-linked, dep dropped,
+# and NO SOVEREIGN CRATE NAMES THE KNOWLEDGE LAYER IN A MANIFEST ANY MORE.
+# NOT done, deliberately: commonwealth-knowledge -> corpus-engine. shard_manager
+# names CorpusEngine/Corpus/IndexInfo/ShardInfo/ChunkRange across nine sites.
+# That is the knowledge layer being itself, not a misplaced boundary; it needs a
+# shard seam, which is a phase and not half a chunk.
 # STILL OPEN, found at 1b and not decidable there: the rail CANNOT join the
 # `commonwealth` package. commonwealth-rail-core names `oplog`, `oplog` is not
 # a [[package_leaf]], and adding it needs a new grandfathered row — a declared
