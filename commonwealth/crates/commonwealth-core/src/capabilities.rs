@@ -9,6 +9,24 @@ use crate::oicp::{BenchmarkResult, EmbedModelInfo};
 pub struct NodeCapabilities {
     pub hardware: HardwareProfile,
     pub available: AvailableResources,
+    /// VESTIGIAL — always `[]`, and scheduled for removal.
+    ///
+    /// Every one of its ~25 construction sites writes an empty vec (production
+    /// included: `sovereign-mesh/src/capabilities.rs:180`, commented
+    /// "sovereign-mesh doesn't spawn"), and nothing reads it. Its only
+    /// remaining job was to keep `ProcessInfo`/`ProcessKind` alive; the code
+    /// that populated it — `commonwealth-inference/src/orchestrator/` — was
+    /// deleted 2026-09-03.
+    ///
+    /// It is NOT removed in that commit, because this struct is GOSSIPED. A
+    /// peer on an older build declares `Vec<ProcessInfo>` with no serde
+    /// default, so a payload omitting the field fails to deserialize there and
+    /// the whole capability report is dropped — the node reads as having no
+    /// capabilities at all. `#[serde(default)]` is the safe half of that
+    /// migration and lands first, exactly as `inference_capable` below did:
+    /// once every peer carries a build with this line, the field, `ProcessInfo`
+    /// and `ProcessKind` can go in one commit that touches no wire behaviour.
+    #[serde(default)]
     pub active_processes: Vec<ProcessInfo>,
     pub hosted_corpora: Vec<CorpusShardInfo>,
     pub reported_at: u64,
@@ -271,6 +289,22 @@ mod tests {
                 "reported_at": 1000{availability_field}{capable_field}
             }}"#
         )
+    }
+
+    /// The safe half of the `active_processes` removal, pinned. Without the
+    /// `#[serde(default)]` this test is the failing input: serde reports
+    /// "missing field `active_processes`" and the whole capability report is
+    /// rejected — which is what a peer on an older build does TODAY if this
+    /// node stops sending the field. Watched red before the attribute landed.
+    #[test]
+    fn capabilities_deserialize_without_active_processes() {
+        let json = minimal_capabilities_json(None, None).replace("\"active_processes\": [],", "");
+        let caps: NodeCapabilities = serde_json::from_str(&json)
+            .expect("a payload omitting the vestigial active_processes must still parse");
+        assert!(
+            caps.active_processes.is_empty(),
+            "the default is an empty vec, which is what every writer sends anyway"
+        );
     }
 
     #[test]
