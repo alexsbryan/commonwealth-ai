@@ -817,12 +817,25 @@ identical schema for a full index or a shard.
 │   ├── chunks.lance/{...}
 │   └── atlas/
 │       ├── articles.lance/              # row per in-scope article. v2 (2026-09-04) adds
-│       │                                # `atom_id` (AtomId::entity_content_hash over
-│       │                                # title+corpus — ONE derivation, shared with the
-│       │                                # fetched/newsworthy layers) and `chunk_id` (the
-│       │                                # article's lowest chunk = its evidence anchor).
-│       │                                # Without them the store serves the neighbor API
-│       │                                # but REFUSES the grounding walk, by name.
+│       │                                # `atom_id` (AtomId::exact_entity_content_hash
+│       │                                # over title+corpus — ONE derivation, in
+│       │                                # corpus-engine-vocab where every id is minted)
+│       │                                # and `chunk_id` (the article's lowest chunk =
+│       │                                # its evidence anchor). Without them the store
+│       │                                # serves the neighbor API but REFUSES the
+│       │                                # grounding walk, by name.
+│       │                                # EXACT, not the folded entity_content_hash the
+│       │                                # rest of the atlas uses: that one keys on
+│       │                                # canonical::lookup_key, and a MediaWiki title
+│       │                                # IS the identifier — `Jigsaw puzzle` and
+│       │                                # `Jigsaw Puzzle` are two pages. Folding merged
+│       │                                # 40,869 of the corpus's 1,562,311 titles
+│       │                                # (2.62%); the first full rebuild was refused by
+│       │                                # the build's own guard on that exact pair.
+│       │                                # The fetched/newsworthy layers still mint their
+│       │                                # OWN atoms folded — those paths also serve
+│       │                                # non-wiki corpora — so a child layer wanting
+│       │                                # its parent's id routes through wiki_atom_id.
 │       └── edges.lance/                 # row per (source, section, target) wikilink, with
 │                                        # `link_text` + `source_section_path` — the two
 │                                        # per-edge STRINGS `neighbors_for_axis` filters on
