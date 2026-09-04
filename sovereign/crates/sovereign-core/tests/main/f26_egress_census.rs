@@ -168,7 +168,11 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // client to POST /v1/admin/reload. Inline `#[cfg(test)]` lives in a
     // src/ file, so the census counts it; the class is unchanged — this is
     // loopback admin traffic to our own daemon, never third-party egress.
-    ("sovereign/crates/sovereign-mesh/src/admin_http.rs", Class::Mesh, 7),
+    // 7 -> 8 (2026-09-04): a third reload-diff regression test
+    // (`reload_applies_an_extra_slot_without_a_restart`, commit eb215a8b4)
+    // builds the same loopback client to POST /v1/admin/reload. Same class,
+    // same reason.
+    ("sovereign/crates/sovereign-mesh/src/admin_http.rs", Class::Mesh, 8),
     ("sovereign/crates/sovereign-mesh/src/project_http.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-mesh/src/model_fetch.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-mesh/src/loopback_guard.rs", Class::Mesh, 3),
