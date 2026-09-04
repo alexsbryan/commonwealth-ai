@@ -24,7 +24,7 @@
 4175	corpus-engine/src/engine/mod.rs
 1438	corpus-engine/src/enrichment/atlas/analysis/sec_facts/mod.rs
 1461	corpus-engine/src/enrichment/atlas/analysis/tensions.rs
-1914	corpus-engine/src/enrichment/atlas/atoms.rs
+1914	corpus-engine-vocab/src/atoms.rs
 2211	corpus-engine/src/enrichment/atlas/context.rs
 5473	corpus-engine/src/enrichment/atlas/resolution.rs
 1488	corpus-engine/src/enrichment/atlas/schema_validation.rs

@@ -442,6 +442,15 @@ name = "corpus-engine-sections"
 allow = []
 
 [[package_leaf]]
+name = "corpus-engine-vocab"
+# The atlas vocabulary — atoms, edges, kind taxonomy, canonical fold. Admitted
+# 2026-09-03 (enrichment-as-plugin Step 2) so a thin host can name an atom
+# without linking corpus-engine. `kernel-types` is its ONE internal dep, for
+# `ContentHash::of_str` in `AtomId::from_essence`, and kernel-types is itself
+# an empty leaf — so the closure is two crates and stays that way.
+allow = ["kernel-types"]
+
+[[package_leaf]]
 name = "sovereign-time"
 # The wall clock. Admitted 2026-09-01, when clock-gate started routing every
 # non-core sovereign crate at `sovereign_time::` and `sovereign-recipe-author`

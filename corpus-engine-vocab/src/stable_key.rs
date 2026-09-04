@@ -3,7 +3,7 @@
 //!
 //! ## Why this exists
 //!
-//! [`AtomId`](super::atoms::AtomId)'s sequential shape (`entity-0001`,
+//! [`AtomId`](crate::atoms::AtomId)'s sequential shape (`entity-0001`,
 //! `claim-0042`…) is assigned by Phase 3a/3b resolution. Re-running
 //! extraction with even slightly different ordering renumbers every atom.
 //! Anything that wants to refer to an atom *across re-extractions* — the
@@ -57,13 +57,13 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::atoms::{AtomEnvelope, ChunkRef};
+use crate::atoms::{AtomEnvelope, ChunkRef};
 
 /// Content-derived stable identifier for an atom. Hex-encoded blake3.
 ///
 /// Use this as the persistence key for anything that wants to outlive a
 /// re-extraction (curation overlay, UI bookmarks, eval pin lists).
-/// [`AtomId`](super::atoms::AtomId) is fine for in-session references where
+/// [`AtomId`](crate::atoms::AtomId) is fine for in-session references where
 /// re-extraction hasn't happened.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct StableAtomKey(String);
@@ -164,11 +164,11 @@ fn first_chunk_id(refs: &[ChunkRef]) -> &str {
 #[cfg(test)]
 mod tests {
 
-    use crate::enrichment::atlas::atoms::{
+    use crate::atoms::{
         AtomEnvelope, AtomId, ChunkRef, Claim, Entity, Event, Question, Relation, ResolutionStatus,
         SectionPosition, SectionRange, State,
     };
-    use crate::enrichment::pipeline::atlas::{
+    use crate::taxonomy::{
         ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus, EventType,
         QuestionType, RelationType, StateType,
     };

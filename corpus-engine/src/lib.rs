@@ -18,7 +18,9 @@ pub mod asset_store;
 // corpus-engine-archaeology (step 4 of the decomposition plan,
 // 2026-05-23). corpus-engine has no internal users of these
 // modules — they only ever served the CLI + tool layer.
-pub mod atlas_canonical;
+// `lookup_key` lives in the `corpus-engine-vocab` leaf since 2026-09-03;
+// the historical module path is kept.
+pub use corpus_engine_vocab::canonical as atlas_canonical;
 pub mod atlas_traversal;
 pub mod canonical_sync;
 pub mod chunkers;

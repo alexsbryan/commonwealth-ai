@@ -291,6 +291,7 @@ mod tests {
         assert!(budget("kernel-types").is_empty());
         assert!(budget("corpus-engine-sections").is_empty());
         assert!(budget("sovereign-time").is_empty());
+        assert_eq!(budget("corpus-engine-vocab"), ["kernel-types"]);
         assert_eq!(
             budget("sovereign-contracts"),
             ["oicp-types", "kernel-types"]

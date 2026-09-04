@@ -10,6 +10,7 @@
 //! Split out of `evidence_loop.rs` (2026-07-13) for legibility and the
 //! ARCH §3.1 file-size ceiling — a pure move, no behaviour change.
 
+use corpus_engine_vocab::atoms::{AtomEnvelope, AtomsFile};
 use std::collections::HashSet;
 
 use super::dbg;
@@ -28,10 +29,16 @@ use super::dbg;
 /// a re-enriched corpus (newer mtime) reparses on its next turn. Returns `None`
 /// (→ empty gazetteer, the existing best-effort contract) when the file is
 /// missing or unparseable.
-fn cached_atoms_json(corpus_id: &str) -> Option<std::sync::Arc<serde_json::Value>> {
+///
+/// Parsed as the ONE `atoms.json` shape, [`AtomsFile`], since 2026-09-03 —
+/// until then this was an untyped `serde_json::Value` walk that re-derived
+/// the schema by key name (§10.6), tolerated a pre-v2 flat shape no writer
+/// has produced since, and looked for a `statement` key no atom kind has
+/// (`Claim` carries `content`), so it silently matched nothing there.
+fn cached_atoms(corpus_id: &str) -> Option<std::sync::Arc<AtomsFile>> {
     use std::sync::{Arc, OnceLock, RwLock};
     use std::time::SystemTime;
-    type Cache = RwLock<std::collections::HashMap<String, (SystemTime, Arc<serde_json::Value>)>>;
+    type Cache = RwLock<std::collections::HashMap<String, (SystemTime, Arc<AtomsFile>)>>;
     static CACHE: OnceLock<Cache> = OnceLock::new();
     let cache = CACHE.get_or_init(|| RwLock::new(std::collections::HashMap::new()));
 
@@ -52,7 +59,7 @@ fn cached_atoms_json(corpus_id: &str) -> Option<std::sync::Arc<serde_json::Value
     }
     // Slow path: (re)parse and cache under the current mtime.
     let text = std::fs::read_to_string(&path).ok()?;
-    let value = Arc::new(serde_json::from_str::<serde_json::Value>(&text).ok()?);
+    let value = Arc::new(serde_json::from_str::<AtomsFile>(&text).ok()?);
     if let Ok(mut map) = cache.write() {
         map.insert(corpus_id.to_string(), (mtime, Arc::clone(&value)));
     }
@@ -61,32 +68,24 @@ fn cached_atoms_json(corpus_id: &str) -> Option<std::sync::Arc<serde_json::Value
 
 /// Canonical entity names from a corpus's atlas atoms file
 /// (`<data>/indexes/<corpus>/atlas/atoms.json`, via the mtime-keyed
-/// [`cached_atoms_json`] cache). Best-effort: missing/garbled atlas → empty vec.
+/// [`cached_atoms`] cache). Best-effort: missing/garbled atlas → empty vec.
 /// Used only as the gazetteer fallback when the embedded-context provider has no
 /// entry for the corpus (see call site).
 pub(crate) fn atlas_entity_names(corpus_id: &str) -> Vec<String> {
-    let Some(v) = cached_atoms_json(corpus_id) else {
+    let Some(file) = cached_atoms(corpus_id) else {
         return Vec::new();
     };
-    // Borrow the shared cached Value in place — no array clone (the pre-cache
-    // version cloned the whole atoms array on every call).
-    let atoms: &[serde_json::Value] = v
-        .get("atoms")
-        .and_then(|a| a.as_array())
-        .or_else(|| v.as_array())
-        .map(Vec::as_slice)
-        .unwrap_or(&[]);
-    atoms
+    // Borrow the shared cached file in place — no array clone (the pre-cache
+    // version cloned the whole atoms array on every call). `canonical_name`
+    // is an Entity (and Position) field; the untyped walk read it off any
+    // atom's `data`, which for every other kind was absent.
+    file.atoms
         .iter()
-        .filter_map(|a| {
-            // v2 schema: {"atom_type": "Entity", "data": {"canonical_name": …}};
-            // older flat shapes carry canonical_name at the top level.
-            a.get("data")
-                .and_then(|d| d.get("canonical_name"))
-                .or_else(|| a.get("canonical_name"))
-                .and_then(|n| n.as_str())
+        .filter_map(|a| match a {
+            AtomEnvelope::Entity(e) => Some(e.canonical_name.clone()),
+            AtomEnvelope::Position(p) => Some(p.canonical_name.clone()),
+            _ => None,
         })
-        .map(str::to_string)
         .collect()
 }
 
@@ -390,35 +389,31 @@ fn stem(word: &str) -> &str {
 /// atlas file — the raw material for both the lexical and the
 /// semantic matchers below.
 fn atlas_atom_records(corpus_id: &str) -> Vec<(String, Vec<String>)> {
-    let Some(v) = cached_atoms_json(corpus_id) else {
+    let Some(file) = cached_atoms(corpus_id) else {
         return Vec::new();
     };
-    let atoms: &[serde_json::Value] = v
-        .get("atoms")
-        .and_then(|a| a.as_array())
-        .map(Vec::as_slice)
-        .unwrap_or(&[]);
-    atoms
+    // The kinds that carry a prose `description`: Entity, Event,
+    // Configuration. (The untyped walk also asked for `statement`; no kind
+    // has one — see `cached_atoms`.) Previews come from the envelope's own
+    // evidence accessor; an Entity has no evidence list, so its previews are
+    // empty exactly as before.
+    file.atoms
         .iter()
         .filter_map(|a| {
-            let d = a.get("data")?;
-            let desc = d
-                .get("description")
-                .or_else(|| d.get("statement"))
-                .and_then(|s| s.as_str())?;
+            let desc = match a {
+                AtomEnvelope::Entity(e) => e.description.as_str(),
+                AtomEnvelope::Event(e) => e.description.as_str(),
+                AtomEnvelope::Configuration(c) => c.description.as_str(),
+                _ => return None,
+            };
             if desc.is_empty() {
                 return None;
             }
-            let previews: Vec<String> = d
-                .get("evidence")
-                .and_then(|e| e.as_array())
-                .map(|evs| {
-                    evs.iter()
-                        .filter_map(|e| e.get("passage_preview").and_then(|p| p.as_str()))
-                        .map(str::to_string)
-                        .collect()
-                })
-                .unwrap_or_default();
+            let previews: Vec<String> = a
+                .evidence()
+                .into_iter()
+                .filter_map(|c| c.passage_preview.clone())
+                .collect();
             Some((desc.to_string(), previews))
         })
         .collect()

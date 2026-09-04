@@ -96,6 +96,8 @@ commonwealth-knowledge = { path = "../../../commonwealth/crates/commonwealth-kno
 commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport" }
 bytes = { workspace = true }
 corpus-engine = { workspace = true, features = ["treesitter"] }
+# The atlas vocabulary leaf — the ONE `atoms.json` shape (§10.6).
+corpus-engine-vocab = { workspace = true }
 corpus-engine-notes = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }

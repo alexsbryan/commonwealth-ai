@@ -12,7 +12,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::enrichment::pipeline::atlas::{
+use crate::taxonomy::{
     ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus, EventType,
     QuestionType, RelationType, StateType,
 };
@@ -99,10 +99,10 @@ impl AtomId {
     /// the originating document is deleted or shifts.
     pub fn entity_content_hash(
         canonical_name: &str,
-        entity_type: &crate::enrichment::pipeline::atlas::EntityType,
+        entity_type: &crate::taxonomy::EntityType,
         corpus_id: &str,
     ) -> Self {
-        let key = crate::atlas_canonical::lookup_key(canonical_name);
+        let key = crate::canonical::lookup_key(canonical_name);
         let input = format!("entity|{key}|{}|{corpus_id}", entity_type.as_str_repr());
         Self(format!("entity-{}", short_hash(&input)))
     }
@@ -113,7 +113,7 @@ impl AtomId {
     /// scope within one corpus.
     pub fn event_content_hash(
         description: &str,
-        event_type: &crate::enrichment::pipeline::atlas::EventType,
+        event_type: &crate::taxonomy::EventType,
         first_section_id: &str,
         corpus_id: &str,
     ) -> Self {
@@ -128,7 +128,7 @@ impl AtomId {
     /// State id: hash(entity_id | state_type | label | corpus_id).
     pub fn state_content_hash(
         entity_id: &AtomId,
-        state_type: &crate::enrichment::pipeline::atlas::StateType,
+        state_type: &crate::taxonomy::StateType,
         label: &str,
         corpus_id: &str,
     ) -> Self {
@@ -146,7 +146,7 @@ impl AtomId {
     /// is the same as B↔A), so sort before hashing.
     pub fn relation_content_hash(
         participants: &[AtomId],
-        relation_type: &crate::enrichment::pipeline::atlas::RelationType,
+        relation_type: &crate::taxonomy::RelationType,
         label: &str,
         corpus_id: &str,
     ) -> Self {
@@ -164,8 +164,8 @@ impl AtomId {
     /// Claim id: hash(content | discourse_act | epistemic_status | corpus_id).
     pub fn claim_content_hash(
         content: &str,
-        discourse_act: &crate::enrichment::pipeline::atlas::DiscourseAct,
-        epistemic_status: &crate::enrichment::pipeline::atlas::EpistemicStatus,
+        discourse_act: &crate::taxonomy::DiscourseAct,
+        epistemic_status: &crate::taxonomy::EpistemicStatus,
         corpus_id: &str,
     ) -> Self {
         let input = format!(
@@ -180,7 +180,7 @@ impl AtomId {
     /// Question id: hash(content | question_type | corpus_id).
     pub fn question_content_hash(
         content: &str,
-        question_type: &crate::enrichment::pipeline::atlas::QuestionType,
+        question_type: &crate::taxonomy::QuestionType,
         corpus_id: &str,
     ) -> Self {
         let input = format!(
@@ -207,14 +207,14 @@ impl AtomId {
 
     /// Position id: hash(canonical_name | stance | corpus_id).
     pub fn position_content_hash(canonical_name: &str, stance: &str, corpus_id: &str) -> Self {
-        let key = crate::atlas_canonical::lookup_key(canonical_name);
+        let key = crate::canonical::lookup_key(canonical_name);
         let input = format!("position|{key}|{}|{corpus_id}", stance.trim());
         Self(format!("position-{}", short_hash(&input)))
     }
 
     /// Opposition id: hash(canonical_label | corpus_id).
     pub fn opposition_content_hash(canonical_label: &str, corpus_id: &str) -> Self {
-        let key = crate::atlas_canonical::lookup_key(canonical_label);
+        let key = crate::canonical::lookup_key(canonical_label);
         let input = format!("opposition|{key}|{corpus_id}");
         Self(format!("opposition-{}", short_hash(&input)))
     }
@@ -892,7 +892,7 @@ pub struct Opposition {
 /// the atom graph by content-hash. AD-2 of the architecture-over-Enron
 /// push: the atom graph **stays prose-shaped** (no Table/Record/Series
 /// variants); the Asset variant is a thin pointer at the
-/// [`crate::asset_store::AssetStore`] entry, plus an optional link to
+/// `AssetStore` (corpus-engine `asset_store`) entry, plus an optional link to
 /// the [`Entity`] / [`Claim`] / future Document atom that holds the
 /// **described** prose for the asset.
 ///
@@ -902,7 +902,7 @@ pub struct Opposition {
 /// downstream atlas pass attaches a Document/Entity atom whose text is
 /// the description.
 ///
-/// Asset atoms are emitted by [`crate::extractors::described_asset`]
+/// Asset atoms are emitted by `extractors::described_asset` (corpus-engine)
 /// **at extraction time**, before atlas enrichment runs, and live in a
 /// pre-merged sidecar (`atlas/asset_atoms.jsonl`). They are unioned
 /// into `atoms.json` during the next atlas write. This crosses the
@@ -912,7 +912,7 @@ pub struct Opposition {
 pub struct Asset {
     pub id: AtomId,
     /// SHA-256 hex of the raw bytes; the same value
-    /// [`crate::asset_store::AssetStore::raw_path`] takes as input.
+    /// `AssetStore::raw_path` (corpus-engine) takes as input.
     pub sha256: String,
     /// Best-effort MIME type. `application/octet-stream` for the
     /// opaque-fallback case.
@@ -1485,13 +1485,13 @@ mod tests {
         let p2 = AtomId::entity_content_hash("Bob", &EntityType::Person, "c");
         let a = AtomId::relation_content_hash(
             &[p1.clone(), p2.clone()],
-            &crate::enrichment::pipeline::atlas::RelationType::Interpersonal,
+            &crate::taxonomy::RelationType::Interpersonal,
             "married_to",
             "c",
         );
         let b = AtomId::relation_content_hash(
             &[p2, p1],
-            &crate::enrichment::pipeline::atlas::RelationType::Interpersonal,
+            &crate::taxonomy::RelationType::Interpersonal,
             "married_to",
             "c",
         );
@@ -1513,7 +1513,7 @@ mod tests {
     #[test]
     fn all_atom_variants_have_content_hash_constructors() {
         // Smoke that every variant compiles + emits a content-hash-shaped id.
-        use crate::enrichment::pipeline::atlas::*;
+        use crate::taxonomy::*;
         let parent = AtomId::entity_content_hash("e", &EntityType::Person, "c");
         let ids = vec![
             AtomId::entity_content_hash("e", &EntityType::Person, "c"),
@@ -1623,7 +1623,7 @@ mod tests {
 
     #[test]
     fn state_atom_roundtrips_with_entity_id_and_section_range() {
-        use crate::enrichment::pipeline::atlas::StateType;
+        use crate::taxonomy::StateType;
         let state = State {
             id: AtomId::state(17),
             entity_id: AtomId::entity(1),
@@ -1653,7 +1653,7 @@ mod tests {
 
     #[test]
     fn relation_atom_carries_participants_in_order() {
-        use crate::enrichment::pipeline::atlas::RelationType;
+        use crate::taxonomy::RelationType;
         let relation = Relation {
             attributes: Default::default(),
             id: AtomId::relation(3),
@@ -1681,7 +1681,7 @@ mod tests {
 
     #[test]
     fn claim_atom_carries_discourse_act_and_epistemic_status() {
-        use crate::enrichment::pipeline::atlas::{ClaimScope, DiscourseAct, EpistemicStatus};
+        use crate::taxonomy::{ClaimScope, DiscourseAct, EpistemicStatus};
         let claim = Claim {
             attributes: Default::default(),
             subject: None,
@@ -1728,7 +1728,7 @@ mod tests {
         // refactor (e.g. switching the serde representation, dropping
         // the field "because it's optional") fails loudly here
         // rather than silently re-introducing the bug.
-        use crate::enrichment::pipeline::atlas::{ClaimScope, DiscourseAct, EpistemicStatus};
+        use crate::taxonomy::{ClaimScope, DiscourseAct, EpistemicStatus};
         let claim = Claim {
             attributes: Default::default(),
             subject: None,
@@ -1809,7 +1809,7 @@ mod tests {
 
     #[test]
     fn question_atom_resolution_status_variants_roundtrip() {
-        use crate::enrichment::pipeline::atlas::QuestionType;
+        use crate::taxonomy::QuestionType;
         for status in [
             ResolutionStatus::Resolved {
                 claim_id: AtomId::claim(1),

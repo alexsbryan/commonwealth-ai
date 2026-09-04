@@ -1,0 +1,33 @@
+[package]
+name = "corpus-engine-vocab"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "The atlas vocabulary — atoms, edges, the kind taxonomy, canonical-name folding and the content-derived stable key. A behaviour-free leaf: serde + kernel-types + blake3 and nothing else."
+
+# Home of `AtomsFile` / `AtomEnvelope` / the eleven atom structs, `Edge` /
+# `EdgesFile`, `EnrichmentDepth` + the eight `string_enum_with_other!` kind
+# enums, and `lookup_key`. Carved out of `corpus-engine` on 2026-09-03 (Step 2
+# of the enrichment-as-plugin plan) so that a thin host can READ what an
+# enrichment produced — `atlas/atoms.json` — without linking the 162k lines
+# that produce it. corpus-engine re-exports every item at its historical path
+# (`enrichment::atlas::{atoms,edges}`, `enrichment::pipeline::atlas::*`,
+# `atlas_canonical`), so nothing inside the monorepo had to change an import.
+#
+# Zero behaviour by measurement: none of the four sources did file IO, took a
+# feature gate, or reached a store. `kernel-types` is here for ONE call —
+# `ContentHash::of_str` in `AtomId::from_essence` — and is itself an empty
+# leaf, so the closure stays provably tiny. Declared as a `[[package_leaf]]` in
+# `quality/ARCH_LAYERS.toml`; boundary-gate keeps this comment honest.
+
+[dependencies]
+kernel-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# `StableAtomKey` is hex blake3 over the atom's essence; the keys are
+# persisted (curation overlays, pin lists), so the hash is part of the format.
+blake3 = "1"
+
+[lints]
+workspace = true

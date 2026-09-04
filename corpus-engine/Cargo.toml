@@ -22,6 +22,9 @@ kernel-types = { workspace = true }
 # layer name four types owned by the layer above it (noun-convergence rung 2,
 # 2026-08-20).
 corpus-engine-sections = { workspace = true }
+# The atlas vocabulary (atoms/edges/taxonomy/canonical) — a behaviour-free
+# leaf re-exported at its historical paths. See corpus-engine-vocab/Cargo.toml.
+corpus-engine-vocab = { workspace = true }
 
 # What is LEFT of the sovereign edge after that move, and why it is left.
 # Census 2026-08-20 — three modules, no types, seven call sites:

@@ -2328,6 +2328,7 @@ dependencies = [
  "corpus-engine-notes",
  "corpus-engine-scip",
  "corpus-engine-sections",
+ "corpus-engine-vocab",
  "corpus-engine-yield",
  "csv",
  "flate2",
@@ -2462,6 +2463,16 @@ version = "0.6.0"
 dependencies = [
  "regex",
  "tracing",
+]
+
+[[package]]
+name = "corpus-engine-vocab"
+version = "0.6.0"
+dependencies = [
+ "blake3",
+ "kernel-types",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -12214,6 +12225,7 @@ dependencies = [
  "corpus-engine",
  "corpus-engine-atos",
  "corpus-engine-notes",
+ "corpus-engine-vocab",
  "dirs 5.0.1",
  "ed25519-dalek 2.2.0",
  "futures",
@@ -12335,6 +12347,7 @@ dependencies = [
  "corpus-engine",
  "corpus-engine-notes",
  "corpus-engine-scip",
+ "corpus-engine-vocab",
  "dashmap",
  "dirs 5.0.1",
  "futures",

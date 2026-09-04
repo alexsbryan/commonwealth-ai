@@ -41,6 +41,11 @@ members = [
     # ONE implementation by reaching DOWN instead of corpus-engine reaching up
     # into sovereign-contracts (noun-convergence rung 2).
     "corpus-engine-sections",
+    # The atlas vocabulary (AtomsFile/AtomEnvelope, Edge, the kind taxonomy,
+    # lookup_key) — a serde + kernel-types leaf carved out 2026-09-03 so a thin
+    # host can READ atlas/atoms.json without linking corpus-engine (Step 2 of
+    # the enrichment-as-plugin plan).
+    "corpus-engine-vocab",
 
     # Sovereign — local agent runtime + CLI + desktop + server.
     "sovereign/crates/sovereign-contracts",
@@ -213,6 +218,7 @@ corpus-engine-archaeology = { path = "corpus-engine-archaeology" }
 corpus-engine-yield = { path = "corpus-engine-yield" }
 corpus-engine-watchers = { path = "corpus-engine-watchers" }
 corpus-engine-sections = { path = "corpus-engine-sections" }
+corpus-engine-vocab = { path = "corpus-engine-vocab" }
 arch-layers = { path = "quality/arch-layers" }
 sovereign-contracts = { path = "sovereign/crates/sovereign-contracts" }
 sovereign-core = { path = "sovereign/crates/sovereign-core" }

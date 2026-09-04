@@ -5,7 +5,7 @@
 //! Move 4 originally shipped a full cross-corpus
 //! `CanonicalRegistry` here with a per-corpus integer priority dial.
 //! Move 5 replaced that with the derived per-atom articulation +
-//! per-corpus stability taxonomy under [`crate::meta_atlas`] and
+//! per-corpus stability taxonomy under corpus-engine's `meta_atlas` and
 //! removed the priority dial wholesale. What survives in this
 //! module is the [`lookup_key`] normaliser — the canonical-form
 //! function the meta-atlas builder uses to cluster Entity atoms

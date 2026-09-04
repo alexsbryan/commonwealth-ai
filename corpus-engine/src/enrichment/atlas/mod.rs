@@ -26,14 +26,16 @@
 
 pub mod analysis;
 pub mod ann_store;
-pub mod atoms;
+// `atoms` and `edges` live in the `corpus-engine-vocab` leaf since
+// 2026-09-03; re-exported here so the historical paths keep resolving.
+pub use corpus_engine_vocab::atoms;
 pub mod atoms_delta;
 pub mod axis_catalog;
 pub mod citation;
 pub mod context;
 pub mod cross_corpus;
 pub mod doc_to_atoms;
-pub mod edges;
+pub use corpus_engine_vocab::edges;
 pub mod embeddings;
 pub mod evidence_site;
 pub mod ingestion;
@@ -46,7 +48,7 @@ pub mod resolution_identity;
 pub mod resolution_ontology;
 pub mod schema_validation;
 pub mod section_cache;
-pub mod stable_key;
+pub use corpus_engine_vocab::stable_key;
 pub mod store;
 pub mod strategies;
 pub mod summary;

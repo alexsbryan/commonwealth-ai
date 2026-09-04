@@ -126,21 +126,21 @@ asserts = 9
 requirement = "ST-5"
 test = "corpus-engine::engine::tests::installed_indexes_dedupes_corpus_id_collisions_preferring_canonical"
 file = "corpus-engine/src/engine/mod.rs"
-line = 3559
+line = 3564
 asserts = 2
 
 [[claim]]
 requirement = "ST-8"
 test = "corpus-engine::engine::tests::open_index_allows_model_mismatch_with_warning"
 file = "corpus-engine/src/engine/mod.rs"
-line = 3146
+line = 3151
 asserts = 1
 
 [[claim]]
 requirement = "ST-8"
 test = "corpus-engine::engine::tests::open_index_fails_closed_on_a_geometry_mismatch"
 file = "corpus-engine/src/engine/mod.rs"
-line = 3180
+line = 3185
 asserts = 4
 
 [[claim]]

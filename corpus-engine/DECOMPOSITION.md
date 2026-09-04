@@ -126,7 +126,7 @@ decoupled first," because those compound day after day.
 | 4    | **archaeology**            |        | Two consumers, small surface. Tidy-up |
 | 5    | **wikipedia**              |        | First "domain-specific corpus" carve-out. Sets the pattern for future domain-specific carve-outs (SEP, etc.) |
 | 6    | **types**                  |        | After the above, the remaining shared types are clearer. Moves them to a leaf crate so siblings depend on them without depending on each other |
-| 7    | **enrich**                 |        | Hardest carve-out. Save for last — after 1–6, the seam between "what corpus-engine ingests" and "what enrichment does to it" is much clearer |
+| 7    | **enrich**                 | PARTIAL | Hardest carve-out. Save for last — after 1–6, the seam between "what corpus-engine ingests" and "what enrichment does to it" is much clearer. **2026-09-03: the vocabulary half landed as `corpus-engine-vocab`** (atoms, edges, taxonomy, canonical, stable_key — ~3.1k lines, behaviour-free, re-exported at the historical paths) after the drive was collapsed first (§10.7): `[enrichment] type` now resolves through one `EnrichmentPassRegistry`. The behaviour half (pipelines, domains, tiered) stays |
 | 8    | **extract + index**        |        | Only if step 7 demands it. Bottom-of-graph cleanup |
 
 Steps 1–4 are tractable as ~1–2-day refactor sessions. Step 5 needs a

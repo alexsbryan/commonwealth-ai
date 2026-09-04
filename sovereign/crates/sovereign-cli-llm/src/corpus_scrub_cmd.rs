@@ -28,6 +28,8 @@
 
 use std::path::{Path, PathBuf};
 
+use corpus_engine_vocab::atoms::{AtomEnvelope, AtomsFile};
+
 use corpus_engine::pii::{scrub_pii, EntityMap};
 use serde::{Deserialize, Serialize};
 
@@ -82,20 +84,6 @@ pub struct EntityCandidate {
     pub kind_hint: String,
     pub salience: f32,
     pub description: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct AtomsFile {
-    #[serde(default)]
-    atoms: Vec<RawAtom>,
-}
-
-#[derive(Debug, Deserialize)]
-struct RawAtom {
-    #[serde(default)]
-    atom_type: String,
-    #[serde(default)]
-    data: serde_json::Value,
 }
 
 pub async fn run_scrub(args: &[String]) -> i32 {
@@ -236,7 +224,7 @@ pub async fn run_scrub(args: &[String]) -> i32 {
 /// insensitive — atlas resolver should have done this but we belt-
 /// and-brace), sort descending by salience.
 fn extract_candidates(
-    atoms: &[RawAtom],
+    atoms: &[AtomEnvelope],
     min_salience: f32,
     include_concepts: bool,
 ) -> Vec<EntityCandidate> {
@@ -244,12 +232,10 @@ fn extract_candidates(
     let mut best_by_canonical: BTreeMap<String, EntityCandidate> = BTreeMap::new();
 
     for atom in atoms {
-        if atom.atom_type != "Entity" {
+        let AtomEnvelope::Entity(e) = atom else {
             continue;
-        }
-        let d = &atom.data;
-        let entity_type = d.get("entity_type").and_then(|v| v.as_str()).unwrap_or("");
-        let kind_hint = match entity_type {
+        };
+        let kind_hint = match e.entity_type.as_str_repr() {
             "person" | "people" => "person",
             // The conversational + personal domains emit `institution`
             // (companies, agencies, formal bodies) and `initiative`
@@ -268,24 +254,15 @@ fn extract_candidates(
             "concept" if include_concepts => "concept",
             _ => continue,
         };
-        let name = d
-            .get("canonical_name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .trim();
+        let name = e.canonical_name.trim();
         if name.is_empty() {
             continue;
         }
-        let salience = d.get("salience").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+        let salience = e.salience;
         if salience < min_salience {
             continue;
         }
-        let description = d
-            .get("description")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .trim()
-            .to_string();
+        let description = e.description.trim().to_string();
 
         let key = name.to_lowercase();
         let cand = EntityCandidate {
@@ -354,16 +331,37 @@ fn run_apply(bank_path: &Path, map_path: &Path) -> i32 {
 mod tests {
     use super::*;
 
-    fn mk(atom_type: &str, name: &str, etype: &str, sal: f64) -> RawAtom {
-        RawAtom {
-            atom_type: atom_type.to_string(),
-            data: serde_json::json!({
-                "canonical_name": name,
-                "entity_type": etype,
-                "salience": sal,
-                "description": format!("desc for {name}"),
-            }),
-        }
+    /// Build a real `AtomEnvelope` through serde — the same parse the command
+    /// runs on `atoms.json` — so the test exercises the on-disk shape rather
+    /// than a private lookalike. Non-Entity kinds get the minimal `Claim`.
+    fn mk(atom_type: &str, name: &str, etype: &str, sal: f64) -> AtomEnvelope {
+        let v = if atom_type == "Entity" {
+            serde_json::json!({
+                "atom_type": "Entity",
+                "data": {
+                    "id": format!("entity-{name}"),
+                    "canonical_name": name,
+                    "entity_type": etype,
+                    "first_appearance": { "chunk_id": "c1" },
+                    "description": format!("desc for {name}"),
+                    "salience": sal,
+                    "enrichment_depth": "extracted",
+                }
+            })
+        } else {
+            serde_json::json!({
+                "atom_type": atom_type,
+                "data": {
+                    "id": format!("claim-{name}"),
+                    "content": name,
+                    "discourse_act": "assertion",
+                    "epistemic_status": "asserted",
+                    "scope": "universal",
+                    "enrichment_depth": "extracted",
+                }
+            })
+        };
+        serde_json::from_value(v).expect("test atom is a valid envelope")
     }
 
     #[test]

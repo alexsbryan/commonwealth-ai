@@ -15,11 +15,11 @@
 use std::fs;
 use std::path::PathBuf;
 
-use corpus_engine::enrichment::atlas::atoms::{
-    AtomEnvelope, Entity, Event, Opposition, Position, Question,
-};
 use corpus_engine::enrichment::atlas::axis_catalog::{all_axes, AxisAtomShape, TypedAxis};
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
+use corpus_engine_vocab::atoms::{
+    AtomEnvelope, AtomsFile, Entity, Event, Opposition, Position, Question,
+};
 
 use crate::enrich_cmd::paths::index_root;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
@@ -94,7 +94,7 @@ pub async fn cmd_scaffold(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let parsed_atoms: AtomsFileLite = match serde_json::from_str(&bytes) {
+    let parsed_atoms: AtomsFile = match serde_json::from_str(&bytes) {
         Ok(a) => a,
         Err(e) => {
             eprintln!("error: parse {}: {e}", atoms_path.display());
@@ -123,16 +123,6 @@ pub async fn cmd_scaffold(args: &[String]) -> i32 {
             0
         }
     }
-}
-
-// ── Lite atoms.json shape ────────────────────────────────────────
-//
-// Sidesteps importing the full AtomsFile (which carries
-// SCHEMA_VERSION + manifest fields the scaffolder doesn't need).
-
-#[derive(Debug, serde::Deserialize)]
-struct AtomsFileLite {
-    atoms: Vec<AtomEnvelope>,
 }
 
 // ── Draft structure ──────────────────────────────────────────────

@@ -886,7 +886,7 @@ today      = "2026-08-24: the noun DOES NOT EXIST and this row said it held. `so
 
 [[concept]]
 name       = "Atom"
-canonical  = "corpus_engine::enrichment::atlas::atoms::AtomEnvelope"
+canonical  = "corpus_engine_vocab::atoms::AtomEnvelope"
 disposition = "converge"
 totality   = "The closed set of atlas atom kinds (Entity, Event, State, Relation, Claim, Question, Configuration, ArgumentReconstruction, Position), tagged, with deliberately no #[serde(other)] — an unknown atom refuses, never skips."
 gloss      = '''the enrichment ontology's unit (`AtomEnvelope`).'''

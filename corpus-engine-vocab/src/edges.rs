@@ -80,7 +80,7 @@ pub enum EdgeType {
     /// Claim atom carries an asset payload — typically an email body
     /// atom linking to an attachment's Asset atom, but generally any
     /// "atom A bundles atom-described-binary B" relation. source = the
-    /// carrier atom; target = the [`crate::enrichment::atlas::atoms::Asset`]
+    /// carrier atom; target = the [`crate::atoms::Asset`]
     /// atom. Emitted at extraction time alongside the Asset atom; the
     /// edge stays prose-shaped (the graph never grows a Table /
     /// Spreadsheet variant — the parsed-form path on the Asset is
