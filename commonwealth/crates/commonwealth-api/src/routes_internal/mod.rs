@@ -85,9 +85,7 @@ pub use mesh_admin::{
     SetStorageBudgetRequest, StorageBudgetState, UnloadModelRequest, UnloadModelResponse,
     WarmupResponse,
 };
-pub use model_files::{
-    list_model_files, serve_model_file, ModelFileInfo, ModelFileListing,
-};
+pub use model_files::{list_model_files, serve_model_file, ModelFileInfo, ModelFileListing};
 pub use newsworthy_status::{
     newsworthy_status, newsworthy_tick, NewsworthyStatusResponse, NewsworthyTickResponse,
 };

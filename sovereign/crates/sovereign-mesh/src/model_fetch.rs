@@ -83,10 +83,7 @@ pub async fn fetch_model_to_dir(
     let final_path = dest_dir.join(&info.name);
     let partial_path = dest_dir.join(format!(".{}.{}.partial", info.name, std::process::id()));
 
-    let url = commonwealth_core::model::model_file_url(
-        peer_base,
-        &urlencoding::encode(&info.name),
-    );
+    let url = commonwealth_core::model::model_file_url(peer_base, &urlencoding::encode(&info.name));
     let resp = http.get(&url).send().await?;
     if !resp.status().is_success() {
         return Err(FetchError::HttpStatus(resp.status()));

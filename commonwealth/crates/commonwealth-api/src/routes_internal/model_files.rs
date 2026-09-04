@@ -461,8 +461,14 @@ mod tests {
 
     fn router(state: AppState) -> Router {
         Router::new()
-            .route(commonwealth_core::model::MODELS_LIST_PATH, get(list_model_files))
-            .route(commonwealth_core::model::MODEL_FILE_ROUTE, get(serve_model_file))
+            .route(
+                commonwealth_core::model::MODELS_LIST_PATH,
+                get(list_model_files),
+            )
+            .route(
+                commonwealth_core::model::MODEL_FILE_ROUTE,
+                get(serve_model_file),
+            )
             .with_state(state)
     }
 

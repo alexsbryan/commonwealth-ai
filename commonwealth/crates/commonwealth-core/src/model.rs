@@ -142,7 +142,10 @@ pub fn models_list_url(base: &str) -> String {
 /// package boundary is the point), and a builder that silently did not encode
 /// would be worse than one that says so.
 pub fn model_file_url(base: &str, name: &str) -> String {
-    format!("{}/internal/v1/models/file/{name}", base.trim_end_matches('/'))
+    format!(
+        "{}/internal/v1/models/file/{name}",
+        base.trim_end_matches('/')
+    )
 }
 
 #[cfg(test)]
