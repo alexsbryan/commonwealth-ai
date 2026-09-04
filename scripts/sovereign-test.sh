@@ -132,7 +132,11 @@
 #                           only thing that would execute one — CI passes it
 #                           (.github/workflows/ci.yml). When it is off the
 #                           banner and the JSONL summary say so explicitly.
-#   --no-doctests           Explicit form of the default.
+#   --no-doctests           Explicit form of the default. NEXTEST PATH ONLY:
+#                           plain `cargo test` collects doctests in its own
+#                           default target selection, so under --engine cargo
+#                           they run regardless and this flag says so rather
+#                           than pretending.
 #   -h, --help              This message.
 #
 # Outputs Tier 2 JSONL events on stdout (one per line):
@@ -208,6 +212,9 @@ EXTRA_FEATURES=""
 # A gate that quietly verifies less than you think is the exact failure class
 # this script's empty-run guard exists to prevent.
 DOCTESTS=0
+# Set when the caller passed --no-doctests by hand, so the cargo path can say
+# the flag did not reach it instead of ignoring it in silence (§18.3).
+DOCTESTS_EXPLICIT_OFF=0
 
 print_help() {
     sed -n '2,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'
@@ -250,7 +257,7 @@ while [[ $# -gt 0 ]]; do
         --keep-logs) KEEP_LOGS=1; shift ;;
         --allow-empty) ALLOW_EMPTY=1; shift ;;
         --doctests) DOCTESTS=1; shift ;;
-        --no-doctests) DOCTESTS=0; shift ;;
+        --no-doctests) DOCTESTS=0; DOCTESTS_EXPLICIT_OFF=1; shift ;;
         -h|--help) print_help; exit 0 ;;
         *)
             echo "sovereign-test: unknown arg '$1' (use --help)" >&2
@@ -454,6 +461,34 @@ elif [[ "$ENGINE" == "nextest" ]] && ! command -v cargo-nextest >/dev/null 2>&1;
     echo "sovereign-test:   Or:      ${REPO_ROOT}/scripts/bootstrap.sh" >&2
     echo "sovereign-test:   Or run with --engine cargo." >&2
     exit 2
+fi
+
+# What the run will ACTUALLY cover, which is not the same as what DOCTESTS
+# asks for. `DOCTESTS` is and always was a NEXTEST-path knob: nextest cannot
+# run doctests, so the gate appends a `cargo test --doc` pass and that pass is
+# what the flag gates. Plain `cargo test` collects doctests as part of its own
+# default target selection, so the cargo engine runs them whatever the flag
+# says.
+#
+# That went unnoticed until 2026-09-04, when three doc comments in
+# sovereign-cli-llm stopped compiling: cargo exited 101 while the summary
+# recorded `fail: 0` and `"doctests":false`. A run that covers MORE than it
+# reports loses the failure in the gap, which is the same fail-open class as
+# the empty-run guard above, pointed the other way (§18.2, four verdicts).
+#
+# REPORTED, not silently changed. Excluding doctests from the cargo path means
+# naming the target set by hand (`--lib --bins --tests --examples`) — that
+# changes what a workspace run compiles, and a gate change is proven at the
+# scope it guards or not at all. So this records the truth and leaves the
+# coverage decision to someone holding a full workspace run.
+DOCTESTS_RAN=$DOCTESTS
+if [[ "$ENGINE" == "cargo" ]]; then
+    DOCTESTS_RAN=1
+    if [[ $DOCTESTS_EXPLICIT_OFF -eq 1 ]]; then
+        echo "sovereign-test: --no-doctests has NO EFFECT under --engine cargo." >&2
+        echo "sovereign-test:   plain \`cargo test\` collects doctests in its default target" >&2
+        echo "sovereign-test:   selection. They WILL run; the banner and the summary say so." >&2
+    fi
 fi
 
 # Scope flags are engine-independent: `--workspace` covers every member, `-p`
@@ -872,7 +907,8 @@ empty_json=false
 # consumer never sees the --human banner and must still be able to tell what
 # this run actually covered.
 doctests_json=false
-[[ $DOCTESTS -eq 1 ]] && doctests_json=true
+# What RAN, not what was asked for — see DOCTESTS_RAN at engine resolution.
+[[ $DOCTESTS_RAN -eq 1 ]] && doctests_json=true
 final_summary="{\"t\":\"summary\",\"pass\":${total_pass},\"fail\":${total_fail},\"warn\":${total_warn},\"ms\":${elapsed_ms},\"empty\":${empty_json},\"doctests\":${doctests_json}}"
 
 if [[ $HUMAN -eq 1 ]]; then
@@ -895,6 +931,12 @@ if [[ $HUMAN -eq 1 ]]; then
             fi
         else
             printf " %-12s  %s\n" "engine:" "cargo"
+            # Not a knob on this path: cargo's default target selection
+            # includes doctests, so a cargo-engine run always covers them.
+            # Named for the same reason the nextest branch names their
+            # absence — a reader must never have to guess what a green
+            # banner did and did not verify.
+            printf " %-12s  %s\n" "doctests:" "INCLUDED (cargo default; --no-doctests cannot turn them off here)"
         fi
         # Name the concurrency and WHY. A run that is slower than the
         # reader remembers is otherwise indistinguishable from a run that
@@ -998,8 +1040,44 @@ if [[ $HUMAN -eq 1 ]]; then
                 done <<< "$failed_names"
             fi
             if [[ "$exit_val" != "0" ]] && [[ "$total_fail" == "0" ]]; then
-                echo " ✘ Cargo exited $exit_val with no test failures parsed —"
-                echo "    likely a build error. See raw log:"
+                # DO NOT GUESS. This branch said "likely a build error" for as
+                # long as that was the only way to reach it; on 2026-09-04 it
+                # was three doc comments in sovereign-cli-llm whose examples
+                # were 4-space indented, which rustdoc compiles as Rust. The
+                # reader was sent to hunt a build error that did not exist.
+                #
+                # A target that fails to COMPILE emits no `test <name> ...
+                # FAILED` line, and the adapter counts per-test lines on
+                # purpose (a `test result:` line per binary once truncated a
+                # 1900-test workspace to 9 — see the adapter's own comment).
+                # So `fail: 0` here is a structural consequence, not a
+                # measurement. cargo and libtest both said more than the
+                # counter could carry; quote them.
+                echo " ✘ Cargo exited $exit_val with no test failures parsed."
+                echo "    fail: 0 above is not a verdict — a target that failed to compile"
+                echo "    produces no per-test lines for the counter to see."
+                cargo_targets="$(grep -E '^error: ([0-9]+ targets? failed|doctest failed)' "$raw_log" 2>/dev/null | tail -3)"
+                named_targets="$(grep -E '^[[:space:]]+`-p .+`$' "$raw_log" 2>/dev/null | tail -6)"
+                uncounted="$(grep -E '^test result: FAILED\.' "$raw_log" 2>/dev/null | tail -5)"
+                if [[ -n "$cargo_targets" || -n "$named_targets" ]]; then
+                    echo
+                    echo "    cargo names what failed:"
+                    [[ -n "$cargo_targets" ]] && printf '%s\n' "$cargo_targets" | sed 's/^/      /'
+                    [[ -n "$named_targets" ]] && printf '%s\n' "$named_targets" | sed 's/^/      /'
+                fi
+                if [[ -n "$uncounted" ]]; then
+                    echo
+                    echo "    libtest counted failures the adapter could not name:"
+                    printf '%s\n' "$uncounted" | sed 's/^/      /'
+                    echo '    A --doc target here is a doc comment, not a build break. A'
+                    echo '    4-space-indented block in a doc comment is compiled as RUST;'
+                    echo '    fence shell and tables explicitly (```sh / ```text). Find it:'
+                    echo "      grep -B20 'Couldn' ${LOG_DIR}/latest/cargo.raw.log"
+                fi
+                if [[ -z "$cargo_targets" && -z "$named_targets" && -z "$uncounted" ]]; then
+                    echo "    Nothing named in the log — this one really is a build error."
+                fi
+                echo "    Raw log:"
                 echo "      ${LOG_DIR}/latest/cargo.raw.log"
             fi
             echo
