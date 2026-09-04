@@ -179,7 +179,7 @@ plane's lease machinery never sits in the decode hot path.
 | Risk | Severity | Verdict | Answer |
 |---|---|---|---|
 | Judge heterogeneity | High — silent pilot killer | **must design now** | `requirements` pins an exact mesh model identity, not a logical name; placement forms a homogeneous cohort or refuses; per-unit record stamps judge identity. §18.3 — mixing judges is substitution, refuse or name it |
-| Coordinator SPOF overnight | High — loud pilot killer | **must design now** | The submitter's `JobRecord` is authoritative; the coordinator's queue is a cache of it, reconstructable on restart. The queue today is in-memory coordinator-side (`work_queue.rs`) — tolerable for minutes-long ingest, not for overnight sweeps |
+| Coordinator SPOF overnight | High — loud pilot killer | **resolved** (§Resolved 1) | Append-only JobRecord journal on the submitting node; the queue is a projection (replay + re-register on crash). Donor abort-on-coordinator-loss is already on the wire (`corpus_queue.rs` heartbeat NotFound arm) |
 | ACE via any executable payload | High beyond cohort 1 | stated + mechanical floor | OCI rootless + digest-pinned + host-proxy egress; grants name principals, never groups; `isolation` claim in the executor descriptor day one |
 | Environment bootstrap / PyPI / wheels | Medium | answered by OCI | Image IS the environment; SIF warm cache keyed by digest |
 | Private-repo / local-file staging | Medium | inherited mechanism | Small payloads by-value (the JobSpec `uploads` shape); large via grant-scoped fetch — PLAN.md Track M2's design, two customers one mechanism |
@@ -221,20 +221,63 @@ found.
   cover the consent model; anything more is a decision to reverse the spine, argued as
   one.
 
-## Open questions
+## Resolved (2026-09-04 — cheap resolutions, each reusing machinery that exists)
 
-1. **JobRecord mechanics** — submitter-authoritative record vs sqlite-backed coordinator
-   queue; the structural choice with real alternatives left. Decide with the first
-   overnight-run failure mode in front of us.
-2. Lease duration vs checkpoint: do long-lease `model-serve` jobs heartbeat like ingest
-   units, or does health-check machinery subsume the reaper?
-3. Where the placement scorer plugin lives (oicp-types trait vs sovereign-mesh enum) —
-   decided with the first second kind that needs one.
-4. Image distribution economics: SIF-by-grant-fetch over the mesh vs pulling from
-   registries on the donor; a LAN cohort makes the first right, a WAN cohort may not.
-5. Does the `WorkOffer` schedule need a preemption signal from the host (user resumes
-   the laptop → yield immediately) beyond lease-boundary yield? Cheap to add later;
-   named so it is not forgotten.
+**1. JobRecord — an append-only journal on the submitting node; the queue is its
+projection.** The dichotomy (submitter-authoritative vs sqlite coordinator) was false: in
+the pull model the queue already lives on the job's owner — coordinator == submitter,
+exactly as ingest handoffs run today (the corpus owner runs the queue). So the only real
+question is persistence, and it is not a new store: the JobRecord is an append-only
+journal (units, outcomes, provenance) on the submitting node; the in-memory queue is a
+projection; crash recovery is replay → re-register → re-offer unfinished units,
+`prior_attempts` preserved. Donor-side recovery already exists on the wire: heartbeat
+against a vanished queue returns 404 with a `Reclaimed` body and the peer aborts its unit
+via the existing cancellation path (`corpus_queue.rs` heartbeat `NotFound` arm). Delivery
+semantics stated plainly: **at-least-once, results idempotent per unit** — same seeds give
+the same result; completion is a fold keyed by `unit_id`; the journal records double
+deliveries rather than hiding them. Consequence now stated rather than implied: the
+submitting node must be reachable for the job's duration — a closed laptop is out of
+scope at H1; durable delegation is PLAN.md's front-door failover question (its open
+question 1), not a new mechanism invented here.
+
+**2. Lease machinery — one mechanism: heartbeats ARE the health checks.** No fork of the
+decider (§10.6). The supervised child's health is the *source* of heartbeats — healthy
+child → executor heartbeats → lease renews; dead child → heartbeats stop → the existing
+reaper reclaims and re-offers. "Long lease" is not new machinery; it is the same lease
+with a kind-declared interval (the descriptor carries it, beside the unit-cost hint).
+Restart policy is the queue's re-offer behavior. `model-serve` "checkpoint" is the warm
+handoff file that already exists (`compute-distribution/`). `oci` jobs: no checkpoint at
+v0 — unit-boundary sizing absorbs the preemption cost.
+
+**3. Placement scorer — data crosses the wire; the scorer stays planner-side.**
+Requirements are data in `oicp-types` (with JobSpec); scorers are a kind-keyed registry
+beside the placement decider — the same descriptor-registry shape as `JobExecutor`. An
+enum would be §2's wrong turn (kinds are an open set); a trait in the contract layer puts
+behavior where the layer map wants nouns. Invariant carried forward from the
+MeasurementKey lesson: **the planner is the one scorer owner — a second construction of a
+score (CLI preview vs daemon, the `mesh bench`/`mesh plan` trap) is a §10.6 violation,
+not a convenience.** Serialized placement plans ride in the job payload.
+
+**4. Image fetch — by digest, from any source; the digest is the contract.** Not an
+either/or. The existing `UploadSource` shape already resolved this for files (owner
+stream vs URL fetch, sha-validated — "trusted transport, not trusted source",
+`worker_controller.rs:127`); images inherit it: a digest-pinned image with an ordered
+source list — grant-fetch from the submitter first when LAN (the RPC warm-cache pattern),
+registry pull as fallback (works when the submitter is unreachable mid-download), warm
+cache keyed by digest regardless of source.
+
+**5. Preemption — two tiers, both from existing signals.** Tier 1, stop-offering: a
+WorkOffer schedule retraction; the pull model makes this free — a donor that stops
+pulling takes nothing new. Tier 2, cancel in-flight: the WorkOffer's yield trigger
+subscribes to the activity-level signal the daemon already publishes to the mesh (the
+hot/idle transitions the activity mesh emits); on hot, the executor fires the queue's
+existing revocation path locally (the 410/cancellation mechanism). Checkpointing stays
+out of scope at v0; kinds declare unit-cost hints so smarter behavior later needs no seam
+change.
+
+**Remaining open at this layer: nothing.** The durability question that survives is
+PLAN.md's own open question 1 (front-door failover), which §Resolved 1 now depends on for
+the delegated case.
 
 ---
 
