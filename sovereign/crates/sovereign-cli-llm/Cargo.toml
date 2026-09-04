@@ -91,11 +91,13 @@ commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 # `svrn ring` reads and writes the ring roster, and needs the node key the
 # ledger signs with. DIRECT deps on the crates that own `Roster`/`Person`
 # and `load_or_generate_node_key`, so this crate and the daemon cannot end
-# up on two versions of one logical type (ARCH §8.3). Since cw-lift 1c the
-# roster half is `commonwealth-rail` and not `commonwealth-knowledge`'s
-# re-export of it; `commonwealth-knowledge` stays only for `Scope`, which
-# `mesh_guest` mints and this module's docs link.
-commonwealth-knowledge = { path = "../../../commonwealth/crates/commonwealth-knowledge" }
+# up on two versions of one logical type (ARCH §8.3).
+#
+# `commonwealth-knowledge` is ABSENT since cw-lift 1d, and its absence is the
+# claim: `svrn ring` is a ring-app client, and a ring-app client composes on
+# the rail without the knowledge layer. The last thing holding that dep was a
+# rustdoc link from `ring_cmd`'s module header to `Scope::Rails` — no code, no
+# type, one link — and `ring dev` mints its grant over HTTP.
 commonwealth-rail = { workspace = true }
 commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport" }
 bytes = { workspace = true }

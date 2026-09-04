@@ -12284,7 +12284,6 @@ dependencies = [
  "chrono",
  "clap",
  "commonwealth-core",
- "commonwealth-knowledge",
  "commonwealth-rail",
  "commonwealth-state",
  "commonwealth-transport",

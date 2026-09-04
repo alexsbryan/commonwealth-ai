@@ -22,10 +22,12 @@
 //!
 //! # Where the authority lives
 //!
-//! `ring dev` mints a [`Scope::Rails`] grant against the local daemon and holds
-//! the token itself, so the browser tab never sees a credential and the app
-//! reaches exactly one namespace's journal and nothing else on the daemon.
-//! The grant is minted per run and dies with it.
+//! `ring dev` mints a rail-scoped grant against the local daemon — `Scope::Rails`,
+//! which `commonwealth-knowledge` owns beside the rest of the guest grants — and
+//! holds the token itself, so the browser tab never sees a credential and the
+//! app reaches exactly one namespace's journal and nothing else on the daemon.
+//! The grant is minted per run and dies with it. It is minted over HTTP, so
+//! this crate names the scope and does not link the crate that declares it.
 //!
 //! # Why there is no `svrn ring balances`
 //!
@@ -42,8 +44,6 @@
 //! all.** There is no roster route, so a deployed app cannot add a key to the
 //! ring — including its own. That is a property of the route set rather than a
 //! check, which is the same move the rail itself makes (ARCH §7.1).
-//!
-//! [`Scope::Rails`]: commonwealth_knowledge::Scope::Rails
 
 use std::collections::BTreeMap;
 
