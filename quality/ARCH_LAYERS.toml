@@ -554,25 +554,32 @@ doc = "corpus-mcp/README.md"
 # with llama.cpp gone. Listing it here is what stops it coming back: the gate
 # refuses a `sovereign-core` / `sovereign-tools` edge on this package, and the
 # third-party half is pinned by the same `cargo tree` test as the host.
+# `sovereign-enrichment-catalog` joined in the same commit, and on the same
+# evidence: it is the enrichment store's layout + `config.json` schema, the
+# orchestrator's one way to find an atlas on disk, and its LAST non-leaf edge
+# (`sovereign_core::setup_config::client_daemon_base()`, one line) was the
+# eighth site this order cut. What it depends on now is `corpus-engine` and
+# `sovereign-contracts` — the same two the rest of this package stands on.
 crates = [
     "corpus-mcp",
     "sovereign-enrichment-build",
+    "sovereign-enrichment-catalog",
 ]
 
 # ── Grandfathered violations (the burn-down list) ────────────────────────────
 
 [[exception]]
 package = "corpus-mcp"
-from = "sovereign-enrichment-build"
+from = "sovereign-enrichment-catalog"
 to = "corpus-engine"
-reason = "the same unliftable `corpus-engine` named in the row below, reached by the other member of this package. The orchestrator IS an atlas writer — atoms, edges, the pipeline registry and the ANN seed table are all corpus-engine's — so this edge is the crate's purpose, not an accident, and it clears when the row below does."
+reason = "the same unliftable `corpus-engine` named in the row below, reached by the third member of this package. The catalog reads the enrichment store's `config.json` and resolves index paths, which are corpus-engine's own; it clears when the row below does."
 tracking = "enrichment-as-plugin follow-up (index-read leaf)"
 
 [[exception]]
 package = "corpus-mcp"
 from = "sovereign-enrichment-build"
-to = "corpus-engine-vocab"
-reason = "`OntologyPolicies` as recorded in atlas/ontology.json — the vocabulary leaf corpus-mcp itself already depends on (a serde + kernel-types + blake3 leaf, no inference stack). Listed because the package gate enumerates edges, not because the edge is in doubt."
+to = "corpus-engine"
+reason = "the same unliftable `corpus-engine` named in the row below, reached by the other member of this package. The orchestrator IS an atlas writer — atoms, edges, the pipeline registry and the ANN seed table are all corpus-engine's — so this edge is the crate's purpose, not an accident, and it clears when the row below does."
 tracking = "enrichment-as-plugin follow-up (index-read leaf)"
 
 [[exception]]
