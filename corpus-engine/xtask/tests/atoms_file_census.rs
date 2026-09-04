@@ -10,14 +10,39 @@
 //! `serde_json::Value` walk in `sovereign-core`'s `anchoring.rs` that
 //! re-derived the schema by key name (and asked for a `statement` key no
 //! atom kind has). Now there is one, here, and every reader names it.
+//!
+//! # Why `xtask` and not `corpus-engine-vocab`
+//!
+//! It lived beside the type it counts, which reads as the obvious home and is
+//! the wrong one: `corpus-engine-vocab` is a `[[package_leaf]]`
+//! (`quality/ARCH_LAYERS.toml`), so `corpus-mcp` — and through the global leaf
+//! set, every declared package — must build STANDALONE WITH ITS TESTS. This
+//! census resolves the repo root from `CARGO_MANIFEST_DIR` and then
+//! `read_dir`s `sovereign/crates`, so in a lift it panics on the first
+//! `unwrap()` with an `ENOENT` on a path the lifter never asked for. Same
+//! defect, same week, as the two generators that left `kernel-types` in
+//! c1116b31e — and `boundary-gate` could not see either, because it greps for
+//! `build.rs` and `include_str!` and this is a RUNTIME reach-out. It can see
+//! them now: rule 3c, added with this move.
+//!
+//! It was NOT repaired by teaching the census to skip when the workspace is
+//! absent. A check that passes because it could not find its subject is a gate
+//! that cannot fail (ARCH §18.1) — which is what the `files.len() > 100`
+//! assertion below already says about a wrong root.
+//!
+//! `xtask` is where the workspace-wide scanners live: back-of-house, in NO
+//! package so no lift carries it, and already resolving the repo root once for
+//! every one of them (`tests/shared/repo_root.rs`). std-only, so it adds
+//! nothing to `cargo build -p xtask`.
 
 use std::path::{Path, PathBuf};
 
+#[path = "shared/repo_root.rs"]
+mod repo_root;
+use repo_root::repo_root;
+
 fn roots() -> Vec<PathBuf> {
-    let ws = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .to_path_buf();
+    let ws = repo_root();
     let mut roots = vec![
         ws.join("corpus-engine/src"),
         ws.join("corpus-engine-vocab/src"),

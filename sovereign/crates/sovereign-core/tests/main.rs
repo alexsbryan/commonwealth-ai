@@ -64,6 +64,8 @@ mod lane_reach_through_census;
 mod locator_axis_live;
 #[path = "main/memory_compaction_smoke.rs"]
 mod memory_compaction_smoke;
+#[path = "main/mode_declarations.rs"]
+mod mode_declarations;
 #[path = "main/oneshot_rag.rs"]
 mod oneshot_rag;
 #[path = "main/retrieval_ledger.rs"]

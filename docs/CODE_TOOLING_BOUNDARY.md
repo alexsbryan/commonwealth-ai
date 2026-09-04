@@ -115,7 +115,15 @@ a dependency on the runtime hub — see §6.
    embed is a source-tree reach-in no boundary survives. The package's one baked
    asset — the intent-forced enrichment prompt
    (`prompts/symbol_enrichment_system.md`) — lives inside `code-enrich` and is
-   loaded through the existing on-disk-overridable path.
+   loaded through the existing on-disk-overridable path. **The same rule has a
+   runtime half** (3c, 2026-09-04): a path derived from `CARGO_MANIFEST_DIR`
+   that climbs out of the crate with `.parent()` or a `..` segment, or a `git`
+   subprocess with no `current_dir(…)`. It covers `tests/`, `benches/` and
+   `examples/` as well as `src/`, because a lifter carries the tests and that
+   is where every instance has been found. It deliberately does NOT flag the
+   seven `git` calls in `corpus-engine-archaeology` and `corpus-engine-scip`:
+   each takes the repo path from its caller as a `&Path`, which is those
+   crates' job and lifts fine.
 4. **The read model does not depend on the write model's parser.** Reading a
    call graph is SQL over `scip_graph.db` and needs zero grammars; only the
    indexing path that *writes* the db links tree-sitter. This rule was learned

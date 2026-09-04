@@ -15,8 +15,17 @@
 //!
 //! Overlap with layer-gate is deliberate and partial: layer-gate governs
 //! DIRECTION for the whole workspace; this gate pins an exact allowlist per
-//! declared package, and adds the two rules a dependency edge cannot express —
-//! no `build.rs`, no crate-escaping `include_str!`.
+//! declared package, and adds the three rules a dependency edge cannot express
+//! — no `build.rs`, no crate-escaping `include_str!`, and no RUNTIME reach-out
+//! past the crate root.
+//!
+//! The third one is younger than the other two and exists because they were
+//! not enough. Both are COMPILE-TIME rules, and a test that resolves the repo
+//! root from `CARGO_MANIFEST_DIR` at runtime — or shells `git` wherever the
+//! harness happens to stand — is neither a build script nor an `include_str!`.
+//! The commonwealth lift of 2026-09-04 priced the gap: `kernel-types` came
+//! back 490 passed / 2 failed, both failures leaf-side, both invisible here,
+//! and a green gate the whole time. See [`scan_runtime_escapes`].
 //!
 //! WHAT THIS GATE CANNOT SEE. Its unit is the CRATE. Where package-shaped code
 //! shares a crate with everything else — `sovereign-core`, `sovereign-tools`,
@@ -29,7 +38,7 @@
 //! the crate either way.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::common;
 use crate::manifests;
@@ -69,9 +78,11 @@ pub fn run() -> i32 {
 
     // Rules 1/2 — the dependency closure. Evaluated by the shared parser so
     // this gate and arch-report cannot drift on what a package MEANS.
-    for v in arch_layers::evaluate_packages(&map, &edges) {
-        fails.push(v.describe());
-    }
+    let dep_fails: Vec<String> = arch_layers::evaluate_packages(&map, &edges)
+        .iter()
+        .map(|v| v.describe())
+        .collect();
+    fails.extend(dep_fails.iter().cloned());
 
     // Rules 3a/3b — the filesystem half, which no manifest can express.
     let mut checked = 0usize;
@@ -93,6 +104,7 @@ pub fn run() -> i32 {
             ));
         }
         include_escapes(&dir, name, scope, &mut fails);
+        runtime_root_escapes(&dir, name, scope, &mut fails);
     }
 
     // Declared-but-absent crates. Reported rather than skipped in silence:
@@ -104,7 +116,8 @@ pub fn run() -> i32 {
     // ── Report ────────────────────────────────────────────────────────────────
     eprintln!(
         "boundary-gate: {} package(s) + {} shared leaves, {checked} crate(s) checked \
-         (dep closure incl. dev+build edges, build.rs, include_str escapes)",
+         (dep closure incl. dev+build edges, build.rs, include_str escapes, \
+         runtime root escapes)",
         map.packages.len(),
         map.package_leaves.len()
     );
@@ -138,10 +151,13 @@ pub fn run() -> i32 {
     // The closure, once per offending package. A newly declared package can
     // print a hundred-plus edges, and repeating this on every line buries
     // them; naming it zero times leaves the reader diffing the TOML by hand.
-    if !fails.is_empty() {
+    // Keyed on the DEPENDENCY fails alone: rules 3a-3c are filesystem rules,
+    // and printing a package's dependency closure under "this file shells git"
+    // sends the reader to diff a TOML that has nothing to do with it.
+    if !dep_fails.is_empty() {
         let leaves: Vec<&str> = map.package_leaves.iter().map(|l| l.name.as_str()).collect();
         for pkg in &map.packages {
-            if fails
+            if dep_fails
                 .iter()
                 .any(|f| f.starts_with(&format!("[{}]", pkg.name)))
             {
@@ -229,6 +245,177 @@ fn include_escapes(dir: &Path, crate_name: &str, scope: &str, fails: &mut Vec<St
         }
     }
     walk(&dir.join("src"), crate_name, scope, fails);
+}
+
+/// Rule 3c — RUNTIME reach-outs past the crate root, in `src/`, `tests/`,
+/// `benches/` and `examples/`.
+///
+/// It cannot stop at `src/` the way rule 3b does: `quality/ARCH_LAYERS.toml`
+/// says "a third party who lifts the package carries its tests", and every
+/// instance of this defect found so far has been in test code.
+fn runtime_root_escapes(dir: &Path, crate_name: &str, scope: &str, fails: &mut Vec<String>) {
+    for sub in ["src", "tests", "benches", "examples"] {
+        let mut files = Vec::new();
+        rs_files(&dir.join(sub), &mut files);
+        files.sort();
+        for path in files {
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            let name = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            for e in scan_runtime_escapes(&text) {
+                fails.push(format!(
+                    "[{scope}] {crate_name}: {sub}/{name}:{} {}",
+                    e.line,
+                    e.describe()
+                ));
+            }
+        }
+    }
+}
+
+/// Every `.rs` file under `dir`, recursively. A missing directory is empty,
+/// not an error — most crates have no `benches/`.
+fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in rd.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            rs_files(&path, out);
+        } else if path.extension().map(|e| e == "rs").unwrap_or(false) {
+            out.push(path);
+        }
+    }
+}
+
+/// One runtime escape, with the line that proves it.
+struct RuntimeEscape {
+    line: usize,
+    kind: EscapeKind,
+    evidence: String,
+}
+
+enum EscapeKind {
+    /// A path derived from `CARGO_MANIFEST_DIR` that then climbs OUT of the
+    /// crate.
+    ManifestClimb,
+    /// A `git` subprocess with no `current_dir(…)`, so it runs wherever the
+    /// harness happens to stand.
+    AmbientGit,
+}
+
+impl RuntimeEscape {
+    /// The fix goes in the message, same as rule 3a's: a violation a reader
+    /// has to go look up is a violation that gets grandfathered.
+    fn describe(&self) -> String {
+        match self.kind {
+            EscapeKind::ManifestClimb => format!(
+                "derives a path from CARGO_MANIFEST_DIR and climbs out of the crate root at \
+                 RUNTIME (`{}`) — a third party who lifts this package carries its tests and \
+                 has none of that tree. Move the check to a crate in NO package (`xtask`, or \
+                 whichever crate owns the data it reads); do not teach it to skip when the \
+                 files are absent, which is a gate that cannot fail (ARCH §18.1)",
+                self.evidence
+            ),
+            EscapeKind::AmbientGit => format!(
+                "shells `git` with no `current_dir(…)` (`{}`) — it runs wherever the harness \
+                 stands, and a third party who unpacks a source tarball has no `.git` at all. \
+                 Take the repo path from the CALLER (as corpus-engine-archaeology does), or \
+                 move the check to a crate in NO package",
+                self.evidence
+            ),
+        }
+    }
+}
+
+/// Scan one file's text for the two runtime-escape shapes. Grep-level and
+/// windowed, like rule 3b — with the window doing the work `include_str!`'s
+/// per-line test does, because neither shape fits on one line.
+///
+/// **a. `CARGO_MANIFEST_DIR` + a climb.** The read and the `.parent()` /
+/// `join("..")` are separate lines in every instance found so far, so the
+/// window runs [-2, +8] around the read.
+///
+/// **b. a `git` subprocess with no `current_dir(…)` within 15 lines.** What
+/// this deliberately does NOT flag is git run at a path the CALLER supplied:
+/// `corpus-engine-archaeology` and `corpus-engine-scip` shell git at a
+/// `&Path` argument seven times between them, which is those crates' job and
+/// lifts fine. The defect is deriving the path from where the crate happens to
+/// sit — not touching git.
+///
+/// Compile-time embeds belong to rule 3b, carve-out and all, so a
+/// `CARGO_MANIFEST_DIR` inside an `include_str!` / `include_bytes!` is skipped
+/// here. Otherwise both rules fire on `sovereign-contracts`'s recipe embeds
+/// and only one of them knows about `sovereign-recipes/`.
+fn scan_runtime_escapes(text: &str) -> Vec<RuntimeEscape> {
+    /// How far a `CARGO_MANIFEST_DIR` read's statement may run.
+    const BACK: usize = 2;
+    const FWD: usize = 8;
+    /// How far a `Command::new("git")` builder chain may run before this rule
+    /// gives up looking for the `current_dir(…)` that makes it caller-directed.
+    const GIT_FWD: usize = 15;
+
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out = Vec::new();
+    // One report per STATEMENT, not per matching line. The name shows up twice
+    // in the commonest shape — `env::var("CARGO_MANIFEST_DIR")` and the
+    // `.expect("CARGO_MANIFEST_DIR should be set…")` under it — and two
+    // findings for one defect is how a burn-down list stops being a count.
+    let mut climb_reported_through: Option<usize> = None;
+
+    for (i, line) in lines.iter().enumerate() {
+        if line.contains("CARGO_MANIFEST_DIR")
+            && climb_reported_through.is_none_or(|through| i > through)
+        {
+            let lo = i.saturating_sub(BACK);
+            let hi = (i + FWD + 1).min(lines.len());
+            let window = &lines[lo..hi];
+            let compile_time_embed = window
+                .iter()
+                .any(|l| l.contains("include_str!") || l.contains("include_bytes!"));
+            if !compile_time_embed {
+                if let Some(hop) = window.iter().find(|l| climbs_out_of_crate(l)) {
+                    out.push(RuntimeEscape {
+                        line: i + 1,
+                        kind: EscapeKind::ManifestClimb,
+                        evidence: hop.trim().to_string(),
+                    });
+                    climb_reported_through = Some(i + FWD);
+                }
+            }
+        }
+
+        if line.contains(r#"Command::new("git")"#) {
+            let hi = (i + GIT_FWD + 1).min(lines.len());
+            if !lines[i..hi].iter().any(|l| l.contains("current_dir(")) {
+                out.push(RuntimeEscape {
+                    line: i + 1,
+                    kind: EscapeKind::AmbientGit,
+                    evidence: line.trim().to_string(),
+                });
+            }
+        }
+    }
+    out
+}
+
+/// A line that walks a path OUT of the directory it started in. Deliberately
+/// narrow: `..` also appears in ranges (`0..3`) and struct-update syntax
+/// (`..Default::default()`), neither of which is a path.
+fn climbs_out_of_crate(line: &str) -> bool {
+    // `.parent()`, `join("..")`, `join("../x")`, and a `..` segment inside any
+    // path literal — `"/.."`, `"../"`, or a bare `".."`.
+    line.contains(".parent()")
+        || line.contains("join(\"..")
+        || line.contains("\"/..")
+        || line.contains("\"../")
+        || line.contains("\"..\"")
 }
 
 #[cfg(test)]
@@ -355,5 +542,156 @@ crates = ["pkg-a", "pkg-b"]
             optional: false,
         };
         assert!(arch_layers::evaluate_packages(&map, &[outside]).is_empty());
+    }
+
+    /// Rule 3c's positive controls — the three shapes that actually shipped,
+    /// each taken verbatim from the file it broke. A rule whose failing input
+    /// nobody can name is not a rule (ARCH §18.1).
+    #[test]
+    fn runtime_scan_flags_the_shapes_the_lift_priced() {
+        // corpus-engine-vocab/tests/atoms_file_census.rs — the read and the
+        // climb are on different lines, which is why this is windowed.
+        let vocab = r#"
+fn roots() -> Vec<PathBuf> {
+    let ws = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    vec![ws.join("corpus-engine/src")]
+}
+"#;
+        let hits = scan_runtime_escapes(vocab);
+        assert_eq!(hits.len(), 1, "expected the manifest climb");
+        assert!(matches!(hits[0].kind, EscapeKind::ManifestClimb));
+        assert!(hits[0].describe().contains("carries its tests"));
+
+        // sovereign-contracts/src/skills.rs — three lines between the read and
+        // the first `..`.
+        let skills = r#"
+    fn surviving_modes() {
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+            .expect("CARGO_MANIFEST_DIR should be set for tests");
+        let modes_dir = std::path::Path::new(&manifest_dir)
+            .join("..")
+            .join("..")
+            .join("modes");
+    }
+"#;
+        assert_eq!(scan_runtime_escapes(skills).len(), 1);
+
+        // kernel-types/tests/conformance_tags.rs — `git` at a derived root.
+        // Caught by the CLIMB, not by the git clause: the subprocess is fine,
+        // the path it was handed is the defect.
+        let tags = r#"
+fn tracked_rs_files() -> Vec<PathBuf> {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    let out = std::process::Command::new("git")
+        .args(["ls-files", "-z", "*.rs"])
+        .current_dir(root)
+        .output()
+        .expect("git ls-files");
+}
+"#;
+        let hits = scan_runtime_escapes(tags);
+        assert_eq!(
+            hits.len(),
+            1,
+            "the climb, once — not the caller-directed git"
+        );
+        assert!(matches!(hits[0].kind, EscapeKind::ManifestClimb));
+    }
+
+    /// The ambient-`git` clause: no `current_dir(…)` means the harness's CWD,
+    /// and a lifted source tarball has no `.git`.
+    #[test]
+    fn runtime_scan_flags_git_that_never_says_where() {
+        let ambient = r#"
+fn head() -> String {
+    let out = std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .expect("git rev-parse");
+    String::from_utf8_lossy(&out.stdout).to_string()
+}
+"#;
+        let hits = scan_runtime_escapes(ambient);
+        assert_eq!(hits.len(), 1);
+        assert!(matches!(hits[0].kind, EscapeKind::AmbientGit));
+        assert!(hits[0].describe().contains("no `.git` at all"));
+    }
+
+    /// Rule 3c's negative controls — every shape that is in a governed crate
+    /// today and lifts fine. This is the half that keeps the rule at zero
+    /// `[[exception]]` rows; without it the gate would demand four.
+    #[test]
+    fn runtime_scan_leaves_what_actually_lifts() {
+        // sovereign-contracts/src/recipe/registry.rs — a COMPILE-TIME embed.
+        // It climbs, and it is rule 3b's, carve-out included.
+        let embed = r#"
+pub const RECIPE_REGISTRY_TOML: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../sovereign-recipes/registry.toml"
+));
+"#;
+        assert!(scan_runtime_escapes(embed).is_empty());
+
+        // corpus-mcp/tests/no_inference_stack.rs — the manifest dir with no
+        // climb. The crate's own root is not an escape.
+        let own_root = r#"
+    let out = Command::new(env!("CARGO"))
+        .args(["tree", "-p", package, "-e", "normal", "--prefix", "none"])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .expect("cargo tree runs");
+"#;
+        assert!(scan_runtime_escapes(own_root).is_empty());
+
+        // studio/crates/sovereign-workflow/tests/substrate.rs — into a
+        // subdirectory, not out of the crate.
+        let subdir = r#"
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
+"#;
+        assert!(scan_runtime_escapes(subdir).is_empty());
+
+        // corpus-engine-archaeology/src/git_archaeology.rs — git at a path the
+        // CALLER supplied. Seven of these exist in the code-intel package and
+        // every one of them lifts.
+        let caller_directed = r#"
+pub fn discover_repo_root(source_path: &Path) -> Result<PathBuf, GitArchaeologyError> {
+    let out = Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .current_dir(source_path)
+        .output()
+        .map_err(GitArchaeologyError::GitNotInstalled)?;
+}
+"#;
+        assert!(scan_runtime_escapes(caller_directed).is_empty());
+
+        // …including the one whose `.args([…])` block runs nine lines before
+        // the `current_dir`, which is what sets GIT_FWD.
+        let long_chain = r#"
+    let out = Command::new("git")
+        .args([
+            "log",
+            "--name-only",
+            "--format=%x1e%H%x1f%ct%x1f%ae%x1f%s",
+            "--reverse",
+            "--all",
+        ])
+        .current_dir(repo_root)
+        .output()
+"#;
+        assert!(scan_runtime_escapes(long_chain).is_empty());
+
+        // `..` that is not a path: a range and struct-update syntax.
+        let not_a_path = r#"
+    let manifest = env!("CARGO_MANIFEST_DIR");
+    for i in 0..3 {}
+    let c = Config { root: manifest.into(), ..Default::default() };
+"#;
+        assert!(scan_runtime_escapes(not_a_path).is_empty());
     }
 }

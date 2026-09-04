@@ -1352,82 +1352,13 @@ register = "relational"
         assert_eq!(reg.primary_skill_register(), SkillRegister::Relational);
     }
 
-    /// `inner-work` is now the sole surviving relational mode.
-    /// (`personal-assistant` was retired in the skills-menu cleanup.)
-    /// Pin that the file parses and the register hasn't drifted —
-    /// the relational voice contract at the ~14 register-keyed
-    /// runtime sites depends on this declaration.
-    #[test]
-    fn inner_work_mode_parses_with_relational_register() {
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-            .expect("CARGO_MANIFEST_DIR should be set for tests");
-        let modes_dir = std::path::Path::new(&manifest_dir)
-            .join("..")
-            .join("..")
-            .join("modes");
-
-        let path = modes_dir.join("inner-work").join("skill.toml");
-        let content = std::fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-        let skill =
-            parse_skill_toml(&content).unwrap_or_else(|| panic!("parse {}", path.display()));
-        assert_eq!(skill.id, "inner-work");
-        assert_eq!(
-            skill.inference.register,
-            SkillRegister::Relational,
-            "inner-work must declare register=\"relational\""
-        );
-    }
-
-    // ─── Surviving-modes declarations ──────────────────────────
-
-    /// After the skill-retirement work, only two TOMLs live under
-    /// `sovereign/modes/`. This test pins their shape so a future
-    /// edit doesn't accidentally widen inner-work's tool surface or
-    /// rename recipe-author's required tools without updating the
-    /// `intent_policy::policy_for` mode arms. Each assertion comes
-    /// from the principled design, not from an audited count.
-    #[test]
-    fn surviving_modes_declare_expected_tool_shape() {
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-            .expect("CARGO_MANIFEST_DIR should be set for tests");
-        let modes_dir = std::path::Path::new(&manifest_dir)
-            .join("..")
-            .join("..")
-            .join("modes");
-
-        let inner_work_toml = std::fs::read_to_string(modes_dir.join("inner-work/skill.toml"))
-            .expect("read modes/inner-work/skill.toml");
-        let inner_work =
-            parse_skill_toml(&inner_work_toml).expect("parse modes/inner-work/skill.toml");
-        assert_eq!(inner_work.id, "inner-work");
-        assert_eq!(inner_work.inference.register, SkillRegister::Relational);
-        assert!(
-            inner_work.tool_config.required.is_empty()
-                && inner_work.tool_config.optional.is_empty(),
-            "inner-work declares no tools by design — reflective work \
-             is not tool-mediated"
-        );
-
-        let recipe_author_toml =
-            std::fs::read_to_string(modes_dir.join("recipe-author/skill.toml"))
-                .expect("read modes/recipe-author/skill.toml");
-        let recipe_author =
-            parse_skill_toml(&recipe_author_toml).expect("parse modes/recipe-author/skill.toml");
-        assert_eq!(recipe_author.id, "recipe-author");
-        // Spot-check the must-have recipe tools (matches the
-        // intent_policy::recipe_author_tools() table).
-        let required: std::collections::HashSet<&str> = recipe_author
-            .tool_config
-            .required
-            .iter()
-            .map(String::as_str)
-            .collect();
-        for needed in ["recipe_validate", "recipe_test", "decision_log"] {
-            assert!(
-                required.contains(needed),
-                "recipe-author must require '{needed}' (intent_policy table depends on it)"
-            );
-        }
-    }
+    // The two tests that read `../../modes/*/skill.toml` at RUNTIME moved to
+    // `sovereign-core/tests/main/mode_declarations.rs` on 2026-09-04. This
+    // crate is a `[[package_leaf]]`, so every declared package carries it and
+    // each must build standalone WITH ITS TESTS — and `sovereign/modes/` is
+    // not part of the crate, so in a lift both panicked on the read.
+    // `sovereign-core` is in no package and already read the same files from
+    // the same place. The assertions are unchanged; nothing was taught to
+    // skip when `modes/` is absent (ARCH §18.1). The parser itself is pinned
+    // above against inline TOML, which is what belongs in the leaf.
 }

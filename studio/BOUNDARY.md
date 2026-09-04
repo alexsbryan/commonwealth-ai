@@ -54,6 +54,16 @@ rather than by convention.
    package boundary survives (it was killing the recipe-schema `syn` walk that
    B:P0 removed).
 
+   **And no RUNTIME reach-out past the crate root** (rule 3c, 2026-09-04). A
+   path derived from `CARGO_MANIFEST_DIR` that then climbs out with `.parent()`
+   or a `..` segment, or a `git` subprocess that never says which directory it
+   means. It is the same escape with no compile-time literal to grep, so the
+   two rules above were structurally blind to it: the commonwealth lift of
+   2026-09-04 priced the blindness at 490 passed / 2 failed in a leaf's own
+   tests, under a gate that stayed green throughout. Git run at a path the
+   CALLER supplies is not flagged — the defect is deriving the path from where
+   the crate happens to sit, not touching git.
+
 The rules count **dev- and build-dependencies too**: a crate a third party lifts
 carries its tests and its build scripts, so those must respect the same budget.
 

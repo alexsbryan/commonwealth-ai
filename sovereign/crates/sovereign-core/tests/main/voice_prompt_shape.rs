@@ -381,11 +381,7 @@ fn bundled_inner_work_mode_resolves_to_relational_register_via_registry() {
     // this test fails — and the relational voice silently
     // disappears from the production session that enters the
     // inner-work surface.
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-    let path = std::path::Path::new(&manifest_dir)
-        .join("..")
-        .join("..")
-        .join("modes")
+    let path = crate::mode_declarations::modes_dir()
         .join("inner-work")
         .join("skill.toml");
     let content = std::fs::read_to_string(&path).unwrap();
