@@ -28,7 +28,15 @@ use arrow_array::{Array, BooleanArray, Int64Array, RecordBatch, StringArray};
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
 
-use crate::enrichment::atlas::wiki_store::{ARTICLES_TABLE, EDGES_TABLE};
+use crate::enrichment::atlas::ann_store::AnnSeedTable;
+use crate::enrichment::atlas::atoms::{AtomType, ChunkRef};
+use crate::enrichment::atlas::context::{AtomView, EdgeView, EvidenceRef};
+use crate::enrichment::atlas::edges::{EdgeProvenance, EdgeType};
+use crate::enrichment::atlas::evidence_site::EvidenceSite;
+use crate::enrichment::atlas::projection::AtomRecord;
+use crate::enrichment::atlas::provider::AtlasProvider;
+use crate::enrichment::atlas::wiki_store::{WikiArticleRow, ARTICLES_TABLE, EDGES_TABLE};
+use crate::enrichment::ontology::OntologyPolicies;
 
 // ─── The wiki link-graph query surface ───────────────────────────────────────
 //
@@ -183,6 +191,100 @@ impl ColumnarWikipediaGraph {
     /// The grounding-walk provider requires them; the neighbor API does not.
     pub fn has_v2_columns(&self) -> bool {
         self.has_v2_columns
+    }
+
+    /// Every article row, for a consumer that needs the whole table resident
+    /// (the walk provider). A full columnar scan — lifecycle-time only, never
+    /// the query path.
+    pub async fn article_rows(&self) -> Result<Vec<WikiArticleRow>, String> {
+        let stream = self
+            .articles
+            .query()
+            .execute()
+            .await
+            .map_err(|e| format!("scan articles.lance: {e}"))?;
+        let batches: Vec<RecordBatch> = stream
+            .try_collect()
+            .await
+            .map_err(|e| format!("collect articles.lance: {e}"))?;
+        let mut out = Vec::new();
+        for b in &batches {
+            let s = |n: &str| {
+                b.column_by_name(n)
+                    .and_then(|c| c.as_any().downcast_ref::<StringArray>().cloned())
+                    .ok_or_else(|| format!("articles.lance: missing string column {n}"))
+            };
+            let i = |n: &str| {
+                b.column_by_name(n)
+                    .and_then(|c| c.as_any().downcast_ref::<Int64Array>().cloned())
+                    .ok_or_else(|| format!("articles.lance: missing i64 column {n}"))
+            };
+            let bo = |n: &str| {
+                b.column_by_name(n)
+                    .and_then(|c| c.as_any().downcast_ref::<BooleanArray>().cloned())
+                    .ok_or_else(|| format!("articles.lance: missing bool column {n}"))
+            };
+            let (aid, title, qid, cid) = (
+                s("atom_id")?,
+                s("title")?,
+                s("wikidata_qid")?,
+                s("chunk_id")?,
+            );
+            let (rev, pov, cit) = (i("revision_id")?, i("pov_total")?, i("citation_total")?);
+            let (insc, cont) = (bo("in_scope")?, bo("is_contested")?);
+            for k in 0..b.num_rows() {
+                out.push(WikiArticleRow {
+                    atom_id: aid.value(k).to_string(),
+                    title: title.value(k).to_string(),
+                    wikidata_qid: qid.value(k).to_string(),
+                    revision_id: rev.value(k),
+                    in_scope: insc.value(k),
+                    pov_total: pov.value(k),
+                    citation_total: cit.value(k),
+                    is_contested: cont.value(k),
+                    chunk_id: cid.value(k).to_string(),
+                });
+            }
+        }
+        Ok(out)
+    }
+
+    /// Call `f(source_title, target_title)` once per edge row.
+    ///
+    /// A callback rather than a `Vec<(String, String)>` on purpose: the full
+    /// wiki graph is ~7.3M rows, and materialising two owned `String`s per row
+    /// costs several hundred MB of transient allocation for data the caller
+    /// interns to a `u32` immediately. This hands out `&str` off the Arrow
+    /// batch and lets the caller keep only what it needs.
+    pub async fn for_each_edge_pair(&self, mut f: impl FnMut(&str, &str)) -> Result<usize, String> {
+        let stream = self
+            .edges
+            .query()
+            .select(lancedb::query::Select::Columns(vec![
+                "source_title".into(),
+                "target_title".into(),
+            ]))
+            .execute()
+            .await
+            .map_err(|e| format!("scan edges.lance: {e}"))?;
+        let batches: Vec<RecordBatch> = stream
+            .try_collect()
+            .await
+            .map_err(|e| format!("collect edges.lance: {e}"))?;
+        let mut n = 0usize;
+        for b in &batches {
+            let col = |name: &str| {
+                b.column_by_name(name)
+                    .and_then(|c| c.as_any().downcast_ref::<StringArray>().cloned())
+                    .ok_or_else(|| format!("edges.lance: missing string column {name}"))
+            };
+            let (src, tgt) = (col("source_title")?, col("target_title")?);
+            for k in 0..b.num_rows() {
+                f(src.value(k), tgt.value(k));
+                n += 1;
+            }
+        }
+        Ok(n)
     }
 
     /// Edge rows matching a Lance `only_if` filter. Errors degrade to an empty
@@ -575,11 +677,249 @@ pub async fn open_wikipedia_graph(
     None
 }
 
+// ─── The grounding walk's face on the same two tables ────────────────────────
+
+/// [`AtlasProvider`] over the wiki columnar store — the second implementor of
+/// the walk's trait, beside `AtlasGraph`'s `atoms.lance` + `edges.csr`.
+///
+/// **Why a second backend rather than a migration.** Wikipedia's link graph is
+/// predicate-shaped: `neighbors_for_axis` filters on the per-edge strings
+/// `link_text` and `source_section_path`, which have nowhere to live in the
+/// 10-byte CSR record (`store::LocalEdge`). Folding wikipedia into the atom
+/// store would delete that capability to gain a layout. The walk does not need
+/// the layout; it needs answers to eight questions. So both faces read ONE
+/// store: this type answers the walk, [`ColumnarWikipediaGraph`] answers the
+/// neighbor API, and neither has to become the other.
+///
+/// **Resident, because the trait borrows.** `AtomView<'_>` is a view over a
+/// resident `AtomRecord`, so a provider cannot serve it from an async Lance
+/// query. The articles are projected into records at open and the link graph
+/// into a sorted adjacency; both are built once, at lifecycle time, never on
+/// the query path. See `WIKIPEDIA_ATLAS_V2.md` "the reader" for why resident is
+/// affordable here and was not for the atom model: there is no payload. The
+/// `payload` blob is left EMPTY, so `AtomView::atom_envelope` returns `None` —
+/// a wiki atom has no deep fields to re-parse.
+pub struct WikiAtlasProvider {
+    atlas_corpus_id: String,
+    site: EvidenceSite,
+    atoms: Vec<AtomRecord>,
+    by_id: HashMap<String, usize>,
+    /// Out-adjacency and in-adjacency as `(from, to)` index pairs, each sorted
+    /// by its key so a lookup is a binary search over a contiguous range. Edges
+    /// are deduplicated to one per (source, target): the per-section
+    /// multiplicity that `occurrence_count` carries is prominence, and lives on
+    /// the neighbor face.
+    out: Vec<(u32, u32)>,
+    inn: Vec<(u32, u32)>,
+    ann: Option<Arc<AnnSeedTable>>,
+    ontology: Option<OntologyPolicies>,
+}
+
+impl WikiAtlasProvider {
+    /// Open the wiki columnar store as a walk provider.
+    ///
+    /// REFUSES a v1 store by name. Without `atom_id` and `chunk_id` every atom
+    /// would have no identity and no evidence, and the walk would report 1.6M
+    /// atoms that can never become a citation — a defect wearing the shape of a
+    /// result (ARCH §18.3). Rebuild with `svrn atlas wikipedia build-graph`.
+    pub async fn open(atlas_dir: &Path, atlas_corpus_id: &str) -> Result<Self, String> {
+        let graph = ColumnarWikipediaGraph::open(atlas_dir).await?;
+        if !graph.has_v2_columns() {
+            return Err(format!(
+                "wiki store at {} is format v1 (no atom_id/chunk_id): it can serve the neighbor \
+                 API but not the grounding walk — rebuild with `svrn atlas wikipedia build-graph`",
+                atlas_dir.display()
+            ));
+        }
+
+        // 1. Articles → resident atom records, in title order so the local ids
+        //    are a function of the store's content and not of scan order.
+        let mut rows = graph.article_rows().await?;
+        rows.sort_by(|a, b| a.title.cmp(&b.title));
+        let mut atoms = Vec::with_capacity(rows.len());
+        let mut by_id = HashMap::with_capacity(rows.len());
+        let mut by_title: HashMap<String, u32> = HashMap::with_capacity(rows.len());
+        for (i, r) in rows.iter().enumerate() {
+            by_title.insert(r.title.clone(), i as u32);
+            by_id.insert(r.atom_id.clone(), i);
+            atoms.push(AtomRecord {
+                id: r.atom_id.clone(),
+                kind: AtomType::Entity,
+                name: r.title.clone(),
+                label: String::new(),
+                content: String::new(),
+                subtype: "article".to_string(),
+                // Wikipedia's structural atoms have no description — 214 of 221
+                // sampled were already empty (bench/wikipedia/seed_migration),
+                // and the build has no source for one. Empty is the truth here,
+                // not a gap.
+                description: String::new(),
+                excerpt: String::new(),
+                confidence: 0.0,
+                // Flat, as `atoms.json` already carries it. A structural
+                // prominence score (degree, POV totals) would be a new scorer
+                // with no measurement behind it (§18.6); the signals stay in
+                // the store's columns until something asks for them.
+                salience: 0.5,
+                aliases: Vec::new(),
+                participants: Vec::new(),
+                evidence: vec![ChunkRef {
+                    chunk_id: r.chunk_id.clone(),
+                    passage_preview: None,
+                    source_doc_id: None,
+                }],
+                payload: Vec::new(),
+            });
+        }
+
+        // 2. Edges → a sorted index-pair adjacency. Only edges whose BOTH
+        //    endpoints are in-scope articles survive, because an `EdgeView`
+        //    names its endpoints by atom id and a dangling target has none.
+        //    The same rule `write_edges_csr` applies, for the same reason. The
+        //    dropped edges are not lost: `ColumnarWikipediaGraph::neighbors`
+        //    still serves them with `in_scope: false`.
+        let mut out: Vec<(u32, u32)> = Vec::new();
+        let mut dangling = 0usize;
+        let scanned = graph
+            .for_each_edge_pair(|src, tgt| match (by_title.get(src), by_title.get(tgt)) {
+                (Some(&s), Some(&t)) => out.push((s, t)),
+                _ => dangling += 1,
+            })
+            .await?;
+        out.sort_unstable();
+        out.dedup();
+        let mut inn: Vec<(u32, u32)> = out.iter().map(|&(s, t)| (t, s)).collect();
+        inn.sort_unstable();
+
+        let ontology =
+            crate::enrichment::atlas::writer::read_atlas_ontology(atlas_dir).map(|f| f.policies);
+        tracing::info!(
+            corpus = atlas_corpus_id,
+            atoms = atoms.len(),
+            edge_rows_scanned = scanned,
+            edges = out.len(),
+            dangling_edges_dropped = dangling,
+            declared_ontology = ontology.is_some(),
+            "wiki atlas provider: resident store built"
+        );
+
+        Ok(Self {
+            atlas_corpus_id: atlas_corpus_id.to_string(),
+            site: EvidenceSite::derive(atlas_corpus_id),
+            atoms,
+            by_id,
+            out,
+            inn,
+            ann: None,
+            ontology,
+        })
+    }
+
+    /// Attach the migrated seed table. Separate from `open` because the table
+    /// is built by its own lifecycle step and a provider without one is a
+    /// legitimate state the walk names (`has_ann_seed_table`).
+    pub fn with_ann_seed_table(mut self, ann: Arc<AnnSeedTable>) -> Self {
+        self.ann = Some(ann);
+        self
+    }
+
+    pub fn atom_count(&self) -> usize {
+        self.atoms.len()
+    }
+
+    pub fn edge_count(&self) -> usize {
+        self.out.len()
+    }
+
+    /// The contiguous run of `adj` keyed by `k`.
+    fn range(adj: &[(u32, u32)], k: u32) -> &[(u32, u32)] {
+        let lo = adj.partition_point(|&(a, _)| a < k);
+        let hi = adj.partition_point(|&(a, _)| a <= k);
+        &adj[lo..hi]
+    }
+
+    fn views<'a>(&'a self, adj: &'a [(u32, u32)], k: u32, forward: bool) -> Vec<EdgeView<'a>> {
+        Self::range(adj, k)
+            .iter()
+            .map(|&(a, b)| {
+                let (s, t) = if forward { (a, b) } else { (b, a) };
+                EdgeView {
+                    source: self.atoms[s as usize].id.as_str(),
+                    target: self.atoms[t as usize].id.as_str(),
+                    // A wikilink is an `Involves` and nothing else. The six
+                    // relationship labels (topical / causal / contested /
+                    // defines / action / see-also) are OPEN text and ride as
+                    // data on `edges.lance`, read by the neighbor face; they
+                    // are not arms on the closed `EdgeType` (ARCH principle 9,
+                    // EPISTEMIC_INDEX spec §3 "no private kinds").
+                    edge_type: EdgeType::Involves,
+                    // A wikilink carries no confidence — it either exists or it
+                    // does not. `occurrence_count` is PROMINENCE, not
+                    // confidence, and putting it in this slot would label it
+                    // something it is not; it stays on the neighbor face.
+                    confidence: 1.0,
+                    provenance: EdgeProvenance::WikilinkStructural,
+                }
+            })
+            .collect()
+    }
+}
+
+impl AtlasProvider for WikiAtlasProvider {
+    fn atlas_corpus_id(&self) -> &str {
+        &self.atlas_corpus_id
+    }
+
+    fn site(&self) -> &EvidenceSite {
+        &self.site
+    }
+
+    fn atom(&self, atom_id: &str) -> Option<AtomView<'_>> {
+        self.by_id
+            .get(atom_id)
+            .map(|&i| AtomView::new(&self.atoms[i]))
+    }
+
+    fn atom_evidence(&self, atom_id: &str) -> Vec<EvidenceRef<'_>> {
+        match self.by_id.get(atom_id) {
+            Some(&i) => self.atoms[i]
+                .evidence
+                .iter()
+                .map(EvidenceRef::new)
+                .collect(),
+            None => Vec::new(),
+        }
+    }
+
+    fn edges_from(&self, atom_id: &str) -> Vec<EdgeView<'_>> {
+        match self.by_id.get(atom_id) {
+            Some(&i) => self.views(&self.out, i as u32, true),
+            None => Vec::new(),
+        }
+    }
+
+    fn edges_to(&self, atom_id: &str) -> Vec<EdgeView<'_>> {
+        match self.by_id.get(atom_id) {
+            Some(&i) => self.views(&self.inn, i as u32, false),
+            None => Vec::new(),
+        }
+    }
+
+    fn ann_seed_table(&self) -> Option<&Arc<AnnSeedTable>> {
+        self.ann.as_ref()
+    }
+
+    fn ontology(&self) -> Option<&OntologyPolicies> {
+        self.ontology.as_ref()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::enrichment::atlas::wiki_store::{
         wiki_atom_id, write_wikipedia_columnar_store, WikiArticleRow, WikiEdgeRow,
+        ARTICLES_LANCE_DIRNAME,
     };
 
     fn art(title: &str, contested: bool) -> WikiArticleRow {
@@ -733,5 +1073,208 @@ mod tests {
         let n = g.neighbors("A", 10).await;
         assert_eq!(n.len(), 1);
         assert_eq!(n[0].title, "B");
+    }
+
+    // ── the walk's face on the same store ────────────────────────────────────
+
+    /// Fixture chunks -> the direct build -> the provider, asserted against
+    /// VALUES. Every question the walk asks, answered from `articles.lance` +
+    /// `edges.lance` with no atom store anywhere.
+    #[tokio::test]
+    async fn provider_answers_the_walk_from_the_wiki_store() {
+        use crate::enrichment::atlas::wiki_store::{
+            build_wikipedia_columnar_store_from_chunks, wiki_atom_id,
+        };
+        use crate::extractors::wikipedia_types::WikiLink;
+        use crate::index::StoredChunkWithMetadata;
+
+        fn meta(section: &str, kind: &str, links: Vec<(&str, &str)>) -> String {
+            let m = crate::extractors::wikipedia_types::WikipediaChunkMetadata {
+                section_name: section.into(),
+                section_path: vec![section.into()],
+                section_depth: 0,
+                section_type: kind.into(),
+                citation_needed_count: None,
+                pov_count: None,
+                clarification_needed_count: None,
+                update_count: None,
+                is_flagged_stable: None,
+                outgoing_links: links
+                    .into_iter()
+                    .map(|(t, l)| WikiLink {
+                        target_title: t.into(),
+                        link_text: l.into(),
+                    })
+                    .collect(),
+                revision_id: Some(1),
+                wikidata_qid: None,
+                page_id: None,
+            };
+            serde_json::to_string(&m).unwrap()
+        }
+        fn ch(id: u64, title: &str, m: String) -> StoredChunkWithMetadata {
+            StoredChunkWithMetadata {
+                id,
+                title: Some(title.into()),
+                url: None,
+                metadata_raw: Some(m),
+            }
+        }
+
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        // A -> B (in scope, both ways) and A -> Dangling (target never a source).
+        build_wikipedia_columnar_store_from_chunks(
+            dir,
+            "wikipedia",
+            vec![
+                ch(
+                    5,
+                    "Alpha",
+                    meta("Lead", "lead", vec![("Beta", "beta"), ("Dangling", "d")]),
+                ),
+                ch(2, "Beta", meta("Lead", "lead", vec![("Alpha", "alpha")])),
+            ],
+        )
+        .await
+        .unwrap();
+
+        let p = WikiAtlasProvider::open(dir, "wikipedia").await.unwrap();
+        let alpha = wiki_atom_id("Alpha", "wikipedia");
+        let beta = wiki_atom_id("Beta", "wikipedia");
+
+        assert_eq!(p.atlas_corpus_id(), "wikipedia");
+        // Self-hosted: the atlas and its chunks share one index, so no title
+        // filter applies and the slug is the corpus.
+        assert_eq!(p.site().chunk_corpus().as_str(), "wikipedia");
+        assert_eq!(p.site().article(), None);
+        assert_eq!(p.article_slug(), "wikipedia");
+
+        // atom(): identity, name, kind, subtype.
+        let a = p.atom(&alpha).expect("Alpha is an atom");
+        assert_eq!(a.id(), alpha);
+        assert_eq!(a.name(), "Alpha");
+        assert_eq!(a.kind(), AtomType::Entity);
+        assert_eq!(a.subtype(), "article");
+        // No payload, so no deep read to re-parse — that is the wiki shape.
+        assert!(a.atom_envelope().is_none());
+        // The dangling target is NOT an atom: it owns no chunk, so it could
+        // never become a citation.
+        assert!(p.atom(&wiki_atom_id("Dangling", "wikipedia")).is_none());
+        assert!(p.atom("entity-deadbeefdeadbeef").is_none());
+        assert_eq!(p.atom_count(), 2);
+
+        // atom_evidence(): the article's lowest chunk id, as a citation anchor.
+        let ev = p.atom_evidence(&alpha);
+        assert_eq!(ev.len(), 1);
+        assert_eq!(ev[0].chunk_id(), "5");
+        assert_eq!(p.atom_evidence(&beta)[0].chunk_id(), "2");
+        assert!(p.atom_evidence("entity-deadbeefdeadbeef").is_empty());
+
+        // edges_from/to(): endpoints are ATOM IDS, kind is the closed
+        // `Involves`, and the edge to the dangling target is absent because it
+        // has no atom id to name.
+        let out = p.edges_from(&alpha);
+        assert_eq!(out.len(), 1, "only the in-scope target survives");
+        assert_eq!(out[0].source, alpha);
+        assert_eq!(out[0].target, beta);
+        assert_eq!(out[0].edge_type, EdgeType::Involves);
+        assert_eq!(out[0].provenance, EdgeProvenance::WikilinkStructural);
+        let back = p.edges_to(&alpha);
+        assert_eq!(back.len(), 1);
+        assert_eq!(back[0].source, beta);
+        assert_eq!(back[0].target, alpha);
+        assert_eq!(p.edge_count(), 2);
+
+        // The same store still answers the neighbor face, dangling target and
+        // relationship label included — that is the point of one store, two
+        // faces.
+        let g = ColumnarWikipediaGraph::open(dir).await.unwrap();
+        let ns = g.neighbors("Alpha", 10).await;
+        assert_eq!(ns.len(), 2);
+        assert!(ns.iter().any(|n| n.title == "Dangling" && !n.in_scope));
+        assert!(ns.iter().all(|n| n.relationship_type == "topical"));
+
+        // No seed table until one is migrated; the walk names that rather than
+        // reading it as an empty result.
+        assert!(!p.has_ann_seed_table());
+        assert!(p.ann_seed_table().is_none());
+        // Nothing declared, so every declared-type path stays inert.
+        assert!(p.ontology().is_none());
+        assert!(!p.is_subtype_of("article", "anything"));
+    }
+
+    /// A v1 store is REFUSED by name rather than serving atoms with no identity
+    /// and no evidence. The failing input is every `articles.lance` written
+    /// before 2026-09-04, the installed wikipedia index included.
+    #[tokio::test]
+    async fn provider_refuses_a_v1_store_by_name() {
+        use crate::enrichment::atlas::wiki_store::{
+            write_wikipedia_columnar_store, WikiArticleRow, WikiEdgeRow,
+        };
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        // Write a current store, then strip the v2 columns by rewriting
+        // articles.lance through the v1 schema.
+        write_wikipedia_columnar_store(
+            dir,
+            &[WikiArticleRow {
+                atom_id: "entity-0000000000000000".into(),
+                title: "Alpha".into(),
+                wikidata_qid: String::new(),
+                revision_id: -1,
+                in_scope: true,
+                pov_total: 0,
+                citation_total: 0,
+                is_contested: false,
+                chunk_id: "1".into(),
+            }],
+            &[WikiEdgeRow {
+                source_title: "Alpha".into(),
+                target_title: "Beta".into(),
+                relationship_type: "topical".into(),
+                link_text: "beta".into(),
+                occurrence_count: 1,
+                source_section_path: "Lead".into(),
+                target_in_scope: false,
+            }],
+        )
+        .await
+        .unwrap();
+        // v2 opens.
+        assert!(WikiAtlasProvider::open(dir, "wikipedia").await.is_ok());
+
+        // Now the v1 shape.
+        std::fs::remove_dir_all(dir.join(ARTICLES_LANCE_DIRNAME)).unwrap();
+        let v1 = Arc::new(arrow::datatypes::Schema::new(vec![
+            arrow::datatypes::Field::new("title", arrow::datatypes::DataType::Utf8, false),
+        ]));
+        let batch = RecordBatch::try_new(
+            v1.clone(),
+            vec![Arc::new(StringArray::from(vec!["Alpha"])) as arrow_array::ArrayRef],
+        )
+        .unwrap();
+        let db = lancedb::connect(dir.to_str().unwrap())
+            .execute()
+            .await
+            .unwrap();
+        let t = db
+            .create_empty_table(ARTICLES_TABLE, v1)
+            .execute()
+            .await
+            .unwrap();
+        t.add(vec![batch]).execute().await.unwrap();
+
+        let Err(err) = WikiAtlasProvider::open(dir, "wikipedia").await else {
+            panic!("a v1 store must be refused, not served");
+        };
+        assert!(
+            err.contains("format v1"),
+            "error must name the cause: {err}"
+        );
+        assert!(
+            err.contains("build-graph"),
+            "error must name the repair: {err}"
+        );
     }
 }

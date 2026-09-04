@@ -202,7 +202,7 @@ pub use types::{
 #[cfg(feature = "stores")]
 pub use wikipedia_columnar::{
     open_wikipedia_graph, wikipedia_graph_present, ArticleRecord as WikipediaArticleRecord,
-    ColumnarWikipediaGraph, Neighbor as WikipediaNeighbor, WikipediaGraphApi,
+    ColumnarWikipediaGraph, Neighbor as WikipediaNeighbor, WikiAtlasProvider, WikipediaGraphApi,
 };
 
 // The watcher_coordinator, lint/test result stores, and the

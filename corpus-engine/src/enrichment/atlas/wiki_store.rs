@@ -43,6 +43,8 @@ use std::sync::Arc;
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow_array::{BooleanArray, Int64Array, RecordBatch, StringArray};
 
+use crate::enrichment::atlas::atoms::AtomId;
+use crate::enrichment::pipeline::atlas::EntityType;
 use crate::extractors::wikipedia_types::{wiki_title_from_url, WikipediaChunkMetadata};
 use crate::index::StoredChunkWithMetadata;
 
@@ -307,44 +309,43 @@ pub async fn write_wikipedia_columnar_store(
 /// [`WIKI_STORE_FORMAT_VERSION`] if it ever moves.
 pub const SECTION_PATH_DELIMITER: char = '\u{203a}';
 
-/// The atom id for a wiki article — `entity-<16 hex of sha256(title|corpus_id)>`.
+/// The entity type every wiki article atom carries — the value the live
+/// `atoms.json` has always written, and part of the id's essence.
+pub const WIKI_ENTITY_TYPE: &str = "article";
+
+/// The atom id for a wiki article.
 ///
-/// Identity from ESSENCE, not from a counter (ARCH §7.5). Wikipedia's atoms
-/// carried `entity-0001`, `entity-0002`, … assigned in sorted-title order, so
-/// inserting a single article shifted the id of every article after it: the ids
-/// were stable only for a corpus that never changed, which is not a property
-/// anything could safely cite. The hash is stable under insertion, deletion and
-/// rebuild, and depends on nothing but the article and the corpus it is in.
+/// ONE DERIVATION (ARCH §10.6). This delegates to
+/// [`AtomId::entity_content_hash`], the function `newsworthy_events`,
+/// `code_walk`, `tabular_atoms` and `atoms_delta` already use — including the
+/// `wikipedia-fetched` layer, whose 413 atoms are all `entity-<16 hex>` today.
+/// A wiki article's identity in `wikipedia` and in its fetched/newsworthy twin
+/// must come off the same function or the two derivations drift; the ids stay
+/// DISTINCT because `corpus_id` is part of the essence, which is by design.
+/// (An earlier draft hashed its own `(title, corpus_id)` framing here — a
+/// second hasher for one essence, which is exactly the smell §10.6 names.)
 ///
-/// The tuple is `(title, corpus_id)` — the convention `ATLAS_STORAGE_V2.md`
-/// describes for content-hash ids, where `corpus_id` is what makes ids from two
-/// corpora unequal even for the same article title.
+/// Identity from ESSENCE, not from a counter (ARCH §7.5). Wikipedia's atom ids
+/// were `entity-0001`, `entity-0002`, … assigned in sorted-title order, so
+/// inserting one article shifted the id of every article after it: stable only
+/// for a corpus that never changed, which is not a property anything can safely
+/// cite. The hash is stable under insertion, deletion and rebuild — which is
+/// what makes it CORRECT for the progressive path: a re-fetched or re-watched
+/// title keeps its id instead of being renumbered by its neighbours.
 ///
-/// The fields are LENGTH-PREFIXED, not joined by a separator. A `"{title}|{corpus}"`
-/// join is ambiguous the moment a title contains the separator — `("a|b", "c")`
-/// and `("a", "b|c")` hash identically, which is a silent atom merge — and
-/// wikipedia titles are arbitrary user text. The test
-/// `wiki_atom_id_depends_on_the_article_and_the_corpus_and_nothing_else`
-/// pins that case; it failed on the separator version, which is why this is
-/// framed rather than joined.
-///
-/// 16 hex is 64 bits: at wikipedia's 1.67M atoms the birthday probability of
-/// any collision is about 8e-8, and [`wiki_rows_from_chunks`] REFUSES the build
-/// on one rather than letting two articles silently become one atom (§18.3).
+/// The name is normalised by `lookup_key` before hashing, so the `|` field
+/// separator inside `entity_content_hash` cannot appear in it and the framing
+/// is unambiguous by construction. Normalisation does mean two titles differing
+/// only in punctuation or case share an id; [`wiki_rows_from_chunks`] REFUSES
+/// the build on that rather than silently merging two articles (§18.3).
 pub fn wiki_atom_id(title: &str, corpus_id: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let mut h = Sha256::new();
-    h.update((title.len() as u64).to_le_bytes());
-    h.update(title.as_bytes());
-    h.update((corpus_id.len() as u64).to_le_bytes());
-    h.update(corpus_id.as_bytes());
-    let d = h.finalize();
-    let mut out = String::with_capacity(7 + 16);
-    out.push_str("entity-");
-    for b in &d[..8] {
-        out.push_str(&format!("{b:02x}"));
-    }
-    out
+    AtomId::entity_content_hash(
+        title,
+        &EntityType::from_str_repr(WIKI_ENTITY_TYPE),
+        corpus_id,
+    )
+    .as_str()
+    .to_string()
 }
 
 /// Counters from a direct chunks → columnar build — what the CLI prints as a
@@ -1191,17 +1192,86 @@ mod tests {
         assert_ne!(a, wiki_atom_id("Roman Empire", "wikipedia-newsworthy"));
         // Different title, same corpus → different atom.
         assert_ne!(a, wiki_atom_id("Roman Republic", "wikipedia"));
-        // The framing must be unambiguous. A `"{title}|{corpus}"` join makes
-        // these two the SAME atom, which is a silent merge of two articles;
-        // this assertion failed on that version and is why the fields are
-        // length-prefixed.
-        assert_ne!(
-            wiki_atom_id("a|b", "c"),
-            wiki_atom_id("a", "b|c"),
-            "the (title, corpus) tuple must not be ambiguous under the framing"
+        // ONE DERIVATION: this must BE `entity_content_hash`, not merely agree
+        // with it today. A second hasher for one essence is the §10.6 smell,
+        // and it is what an earlier draft of this function was.
+        assert_eq!(
+            a,
+            AtomId::entity_content_hash(
+                "Roman Empire",
+                &EntityType::from_str_repr(WIKI_ENTITY_TYPE),
+                "wikipedia"
+            )
+            .as_str()
         );
-        // And the length prefix must not itself collide across a shift.
-        assert_ne!(wiki_atom_id("ab", "c"), wiki_atom_id("a", "bc"));
+        // The `|` separator inside that hash cannot be smuggled in through a
+        // title, because the name is `lookup_key`-normalised first. These two
+        // would collide under a naive `"{title}|{corpus}"` join.
+        assert_ne!(wiki_atom_id("a|b", "c"), wiki_atom_id("a", "b|c"));
+        // Normalisation is real and deliberate: punctuation and case fold away,
+        // which is why `wiki_rows_from_chunks` refuses a collision rather than
+        // trusting the id to be injective over raw titles.
+        assert_eq!(
+            wiki_atom_id("Roman Empire", "w"),
+            wiki_atom_id("roman  empire!", "w")
+        );
+    }
+
+    /// The progressive path keeps working across the re-key.
+    ///
+    /// `wikipedia-fetched` and `wikipedia-newsworthy` write their OWN
+    /// atom-class atlases (413 and 14 atoms on this host, all content-hash
+    /// ids already) and reach their `wikipedia` twin by atom id — a
+    /// `CrossCorpusEdge` carries `peer.corpus_id` + `peer.atom_id`. So the id a
+    /// layer mints for "Roman Empire in wikipedia", using the shared
+    /// `entity_content_hash` and knowing nothing about this module, must be the
+    /// id the rebuilt wiki store holds. That is what makes the edge resolve,
+    /// and it is why `wiki_atom_id` delegates rather than agreeing.
+    ///
+    /// The failing input is the previous scheme: a counter id assigned in
+    /// sorted-title order can never be computed by a peer, so no cross-corpus
+    /// edge into wikipedia could have resolved by construction.
+    #[tokio::test]
+    async fn an_id_minted_by_a_peer_layer_resolves_in_the_rebuilt_wiki_store() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        build_wikipedia_columnar_store_from_chunks(
+            dir,
+            "wikipedia",
+            vec![chunk(
+                3,
+                "Roman Empire",
+                meta_with(vec!["Lead"], "lead", None, vec![("Augustus", "Augustus")]),
+            )],
+        )
+        .await
+        .unwrap();
+
+        // What a peer layer computes for the SAME article in the parent
+        // corpus, through the shared function, with no reference to this file.
+        let peer_minted = AtomId::entity_content_hash(
+            "Roman Empire",
+            &EntityType::from_str_repr("article"),
+            "wikipedia",
+        );
+
+        use crate::enrichment::atlas::provider::AtlasProvider;
+        let p = crate::wikipedia_columnar::WikiAtlasProvider::open(dir, "wikipedia")
+            .await
+            .unwrap();
+        let hit = p
+            .atom(peer_minted.as_str())
+            .expect("a peer-minted id must resolve in the wiki store");
+        assert_eq!(hit.name(), "Roman Empire");
+        assert_eq!(p.atom_evidence(peer_minted.as_str())[0].chunk_id(), "3");
+
+        // And the layer's own corpus gives a DIFFERENT id for the same title,
+        // which is the point of corpus-qualifying: the twin is a distinct atom
+        // in a distinct corpus, reached by an edge rather than confused with it.
+        assert_ne!(
+            peer_minted.as_str(),
+            wiki_atom_id("Roman Empire", "wikipedia-fetched")
+        );
     }
 
     /// The evidence anchor is the LOWEST chunk id of the article, so a rebuild
@@ -1236,7 +1306,6 @@ mod tests {
     /// installed wikipedia index at the time of the change.
     #[tokio::test]
     async fn a_v1_store_serves_neighbors_and_reports_that_it_cannot_serve_the_walk() {
-        use arrow_array::Array;
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
 
