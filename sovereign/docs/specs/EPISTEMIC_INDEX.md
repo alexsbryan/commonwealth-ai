@@ -13,7 +13,10 @@ The criterion, in the operator's words: the ontologies act as an epistemic
 index that provides a map for retrieval, so RAG does not operate only on
 cosine distance of terms but can map similarity of ideas and concepts and use
 that for rich, connected answers. It must be able to talk about the themes in
-a freshly ingested novel.
+a freshly ingested novel. **The real end to end is that someone operates
+purely from a TOML recipe, defines their custom ontology, ingests the corpus,
+and then gets the epistemically indexed retrieval from their own
+llama-server.** Nothing of ours runs as a daemon anywhere in that sentence.
 
 ## 0. The claim
 
@@ -38,6 +41,8 @@ tiers as separate tools the client must compose.
 
 | Layer | What it is | Invariant | Today | Target |
 |---|---|---|---|---|
+| **Recipe** | one TOML: acquire, extract, chunk, index, `[enrichment]`, `[enrichment.ontology]` (`sovereign-recipes/SCHEMA.md`; templates under `_templates/ontology-v1/`) | the recipe is the whole declaration; nothing is configured anywhere else | as built (`svrn recipe new --ontology numismatics`, `recipe validate`) | unchanged in shape; the navigation section (§2) is added to the ontology block |
+| **Build** (ingest + enrich) | acquire → extract → chunk → embed → index → enrichment phases → resolve → v2 store + seed table + `ontology.json` | runs against ANY OpenAI-compatible chat + embeddings endpoint, in a binary that carries no inference stack | the orchestrator (`sovereign-enrichment-build`) talks plain HTTP (`DaemonInferenceClient`: `/v1/chat/completions` with `response_format: json_schema`, `/v1/embeddings`) but its closure carries llama.cpp via `sovereign-inference`, plus `sovereign-core` and `sovereign-tools`, through seven import sites (§4.1); `corpus install` embeds through the daemon | the seven sites move to leaves; build joins the `corpus-mcp` package as `corpus ingest <recipe>` |
 | **Evidence** | chunks: LanceDB vectors + Tantivy FTS, `CorpusIndex::search` | every answer cites a chunk | universal | unchanged |
 | **Ideas** (the index) | atoms of the closed kinds (`AtomEnvelope`, `corpus-engine-vocab`), each with embed text, evidence anchors; typed edges; ANN seed table | `atoms.lance` + `edges.csr` + `atoms_ann.lance` are **mandatory** ingest artifacts, coverage reported | seed table optional (SEP: 22 of 1,770 atlases); wikipedia on `edges.lance` + SQLite; `atoms.rkyv` leftovers | one v2 store everywhere; `atoms.json` is export only |
 | **Map** (the ontology) | `atlas/ontology.json`, one per atlas, from **every** pipeline | an atlas that cannot describe itself is not an atlas | custom pipelines only; SEP/literary vocabulary lives in prompt `.md` files | three sections: schema, navigation policy, vocabulary + prose (§2) |
@@ -92,7 +97,7 @@ kinds, not the keyword matcher in `atlas_traversal/classifier.rs`.
 |---|---|---|
 | **SEP** (`philosophy_atlas`) | per-article `sep-<slug>` atlases; `sep` chunk index has an empty atlas; ANN on 22 | emit `ontology.json`; ANN mandatory + backfilled; chunk→atlas id derivation moves to corpus-engine |
 | **Literary** (`literary_atlas`) | themes as concept entities (phase 1), claims/questions (phase 3), Configuration (phase 8); full book ready in ~4 min on the turbo path | emit `ontology.json` naming `theme`; ANN at ingest; the thematic walk in §2 |
-| **Custom** (ontology-v1) | declared shape/assertion/identity/change/derivation | add the navigation section; nothing else |
+| **Custom** (ontology-v1) | declared shape/assertion/identity/change/derivation; built through the daemon (wessex-hoard: 20 chapters, phase 1 with `schema=true`) | add the navigation section; the build runs against a bare endpoint (§4) |
 | **RAPTOR** | `raptor_summaries.lance` + `raptor_grounding.rs`, injected as virtual chunks | summaries become `Summary` nodes with `EvidenceFor` edges to chunks and `Composes` edges to children; the walk reaches them; the separate injector retires |
 | **Field model v1** (`field_skeleton.json`, 549 SEP questions) | spliced as a 250-token digest by `turn_prepass` | canonical questions → `Question` atoms, concerns → concept entities; the digest is rendered from the atlas; the v1 writer retires |
 | **Tiered conversation** | atlas type already; per-conv entity graph for PPR | emit `ontology.json`; no store change |
@@ -101,35 +106,66 @@ kinds, not the keyword matcher in `atlas_traversal/classifier.rs`.
 Kinds stay a closed enum; what a pipeline *produces* is what its map lists.
 No pipeline gets a private node kind.
 
-## 4. The "just works" path
+## 4. The real end to end
 
-The client is a person who has installed an MCP-capable chat app and can
-paste one JSON block. The whole experience must be:
+The person is barely technical. They have an MCP-capable chat app, a folder
+of documents, and a machine that can run llama-server or Ollama. The whole
+experience, from nothing to an epistemically indexed answer, is one recipe
+and three commands:
 
 ```sh
-ollama pull qwen3-embedding:0.6b          # or any OpenAI-compatible embedder
-corpus-mcp --corpus sep                   # pulls the prebuilt if absent, detects the endpoint
+corpus recipe new --ontology numismatics --id my-coins   # writes my-coins.toml; they fill path + guidance + types
+corpus ingest my-coins.toml                              # acquire → chunk → embed → enrich → index, against their endpoint
+corpus serve --corpus my-coins                           # the MCP host; one JSON block in the chat app
 ```
 
-and one block in the client's MCP config. Then they ask a question and the
-model calls **one** tool:
+`corpus` is the binary `corpus-mcp` is today, grown two verbs. It is the
+one package in `quality/ARCH_LAYERS.toml` whose closure the boundary-gate
+already holds to the leaves: no llama.cpp, ort, iroh, mesh transport, or
+agent runtime. `ingest` needs two model endpoints, chat and embeddings.
+Ollama serves both from one URL, which is the default; llama-server serves
+one model per process, so `--chat-url` and `--embed-url` are the explicit
+form. Each is probed and named at start; `GET /oicp/v1/capabilities` 404 is
+the normal case. Structured output is `response_format: json_schema`, which
+llama-server and Ollama both honour; a phase whose schema the endpoint
+rejects is reported as could-not-run, not skipped.
+
+Then they ask a question and the model calls **one** tool:
 
 - `ask(question, corpus?)` — the default. Embeds once, runs tier 1, applies
   the walk from the corpus's own map, resolves evidence, returns cited
   passages **and a map section**: the idea nodes traversed, their kinds,
-  and the edges followed, so the answer can be connected and so the ledger
-  is visible (principle 1). Degradations are in the result text: no seed
+  and the edges followed, so the answer can be connected and the ledger is
+  visible (principle 1). Degradations are in the result text: no seed
   table, no ontology, width mismatch, budget exhausted.
 - `corpus_search`, `atoms_lookup`, `corpus_ontology`, `corpus_list` stay as
   the advanced surface for a client that wants the layers apart.
-- `export(corpus, format=parquet)` for the technical peer.
+- `export(corpus, format=parquet)` for the technical peer who asked about
+  Neo4j.
 
-What the host must do so that this holds: find an endpoint (`--base-url`
-default `http://localhost:11434/v1`, then `:8080/v1`, then the OICP daemon;
-each probed and named), pull the corpus from the HF dataset when it is not
-under the data root, verify the index width against the endpoint, and load
-the map. Every one of those can fail, and each failure is a sentence in
-`corpus_list` and in stderr, never a default.
+Every failure along the path is a sentence in stderr and in `corpus_list`,
+never a default: endpoint not found, width mismatch, a phase that could not
+run, a corpus with no seed table.
+
+### 4.1 What binds the build to the stack today
+
+The enrichment orchestrator's model client is already plain HTTP. What
+pulls the inference stack into its closure is seven import sites, none of
+them inference:
+
+| Import | From | Where it belongs |
+|---|---|---|
+| `InferenceProvider` (the backfill embedder) | `sovereign-core` | replaced by the same `EmbedFn` corpus-mcp already builds over `/v1/embeddings` |
+| `StepOutput`, `ToolContext`, `DeclaredTool` | `sovereign-core` | `kernel-types` / `sovereign-contracts` (workflow envelope types) |
+| `backfill_ann`, `AtlasContextFilter`, `BackfillOutcome` | `sovereign-tools` | `corpus-engine` (it is an atlas write) |
+| `EXIT_CANCELLED` | `sovereign-tools` | `sovereign-contracts` |
+| `fetch_manifest` | `sovereign-inference` | behind a trait the host implements, or the OICP capabilities probe corpus-mcp already has |
+| egress `model_client`, `verify`, `ConsentGrant` | `sovereign-core` | `sovereign-contracts` (the F26 census already treats these as a leaf concern) |
+
+That is a dependency cut, checked by the boundary-gate the moment
+`sovereign-enrichment-build` is listed in the package, not a rewrite of the
+phases. GLiNER is optional at the engine (`with_chunk_entity_extractor`);
+without it the entity pass is the LLM's, slower and reported as such.
 
 ## 5. Non-goals
 
@@ -150,7 +186,7 @@ The bar exists before the data (§18). Lanes, in `sovereign/bench/`:
 |---|---|---|---|
 | `literary` (bk-book-1, dubliners-3) — add a **thematic** question set | HARD | themes named, tensions cited, ≥1 evidence passage per claim | ≥ today's score on every existing question; thematic set: recorded as baseline, then +1 theme cited with evidence over baseline |
 | `sep` retrieval-prod | HARD | sources / essay / dialectical breadth | unchanged within the noise band (RUNBOOK §6) |
-| `corpus-mcp/acceptance.sh` — add an `ask` step on a fresh literary corpus | HARD | `ask` returns ≥3 themes each with a cited passage, map section non-empty, no default-shaped degradation | passes on this host against `llama-server` and against Ollama |
+| `corpus-mcp/acceptance.sh` — becomes the end to end of §4 | HARD | scaffold from the numismatics template with the in-repo fixture (`sovereign-recipes/wessex-hoard/wessex-hoard.md` + `truth.json`), `corpus ingest` against a bare chat + embed endpoint, `corpus serve`, `ask` | `ask` returns attribution claims with cited passages, the map section names `coin` / `attribution` nodes and a `Tension` or `Grounds` edge, `truth.json` recall ≥ the daemon-built wessex-hoard's; then the same on a fresh literary corpus: ≥3 themes each with a cited passage. Passes against `llama-server` and against Ollama |
 | `atlas_retrieval` | TRACKED | walk yield / drop ledger | reported per question kind |
 
 Two runs per lane before a delta is read (principle 7). The first thing built
@@ -168,9 +204,12 @@ lane names an owner and a scheduled measurement before it is accepted.
    the atlas summary; backfill SEP.
 4. Walk: `ground()` and the chunk→atlas derivation move into corpus-engine;
    sovereign-core calls it; then corpus-mcp calls it — `ask` lands.
-5. Distribution: pull-if-absent and endpoint discovery in corpus-mcp;
-   acceptance against Ollama.
-6. Ports, one per commit, each measured on its lane: RAPTOR, field model,
+5. Build: the seven-site cut (§4.1); `sovereign-enrichment-build` joins the
+   package; `corpus ingest <recipe>` lands and the acceptance runs the whole
+   of §4 on the wessex fixture against a bare endpoint.
+6. Distribution: pull-if-absent and endpoint discovery; acceptance against
+   Ollama; `corpus serve` and `corpus recipe new`.
+7. Ports, one per commit, each measured on its lane: RAPTOR, field model,
    wikipedia store.
 
 Each step is its own commit with the lane numbers in the body, and each
