@@ -1508,7 +1508,7 @@ async fn run_atos_pipeline(
     state: &AppState,
     headers: &HeaderMap,
     request: &mut ChatCompletionRequest,
-    pipeline: &commonwealth_core::pipeline_aliases::PipelineResolution,
+    pipeline: &serving_policy::pipeline_aliases::PipelineResolution,
 ) -> Result<Option<PostPathGuard>, Response> {
     let Some(session_store) = state.inner.session_store.clone() else {
         debug!("atos pipeline resolved but no session store configured; skipping middleware");

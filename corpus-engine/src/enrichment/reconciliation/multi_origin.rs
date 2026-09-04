@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! The multi-origin merge primitive.
 //!
-//! Given a `Vec<Entity>` whose atoms carry [`Provenance`] (AD-4),
+//! Given a `Vec<Entity>` whose atoms carry [`SignalProvenance`] (AD-4),
 //! produce [`ReconciledEntity`]s — same canonical id across multiple
 //! surface-form mentions, with the merge signals that fired recorded
 //! on each one.
@@ -19,10 +19,12 @@ use super::oplog::ReconciliationAct;
 use super::signals::{
     collect_emails, fold_name, strip_org_suffixes, MergeSignal, MergeSignalCheck,
 };
-use crate::enrichment::atlas::atoms::{AtomId, ChunkRef, Entity, Provenance};
+use crate::enrichment::atlas::atoms::{AtomId, ChunkRef, Entity, SignalProvenance};
 use crate::enrichment::ontology::IdentityPolicy;
 use crate::enrichment::pipeline::atlas::EntityType;
 use crate::oplog::Op;
+
+use super::oplog::ReconciliationOp;
 
 /// Policy knobs for the merger. Mirrors the
 /// `[enrichment.reconciliation]` TOML schema.
@@ -103,7 +105,7 @@ pub struct ReconciledEntity {
     /// `canonical_id`. Surface forms intentionally hold the verbatim
     /// canonical_name from the input atom — the recipe-author can
     /// inspect them for atypical surface variants.
-    pub surface_forms: Vec<(String, Provenance)>,
+    pub surface_forms: Vec<(String, SignalProvenance)>,
     pub signals_fired: Vec<MergeSignal>,
     /// The atom ids the merger collapsed; the oplog already carries
     /// these but we surface them here so a runtime read of the
@@ -262,7 +264,7 @@ pub fn reconcile_with_signals(
         let canonical_idx = pick_canonical(&entities, &members);
         let canonical_id = entities[canonical_idx].id.clone();
         let canonical_name = entities[canonical_idx].canonical_name.clone();
-        let mut surface_forms: Vec<(String, Provenance)> = Vec::with_capacity(members.len());
+        let mut surface_forms: Vec<(String, SignalProvenance)> = Vec::with_capacity(members.len());
         let mut signals_fired: Vec<MergeSignal> = Vec::new();
         let mut source_atom_ids: Vec<AtomId> = Vec::with_capacity(members.len());
         for &m in &members {
@@ -528,7 +530,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-            provenance: Provenance::new("ext", doc, sk),
+            provenance: SignalProvenance::new("ext", doc, sk),
             attributes: serde_json::Map::new(),
             concept_kind: None,
         }

@@ -1,9 +1,0 @@
-On July 19, 2024, a faulty CrowdStrike Falcon Sensor content update caused a global IT outage because it triggered an out-of-bounds memory read in the sensor's C++ code [Source: ev-1]. Specifically, an untrusted pointer dereference was activated by a 21-byte input that bypassed flawed validation logic due to missing input checks and memory-safety defects [Source: ev-1]. This incident affected approximately 8.5 million Windows devices worldwide according to Microsoft’s estimate [Source: ev-1].
-
-The consequences of this single point of failure were severe across multiple sectors:
-*   **Aviation:** Delta Air Lines cancelled roughly 7,000 flights and incurred about $500M in costs, leading them to sue CrowdStrike and hire David Boies [Source: ev-1].
-*   **Critical Services:** Banks, hospitals, broadcasters, and 911 services experienced significant disruptions [Source: ev-1].
-*   **Financial Impact:** CrowdStrike shares fell by about 11% on Monday, July 22, 2024 [Source: ev-1].
-*   **Regulatory & Corporate Response:** CEO George Kurtz testified before Congress on September 24, 2024; the company apologized and promised deployment-process changes [Source: ev-1].
-
-The root cause was identified as monoculture concentration, where one security agent deployed at enterprise scale with fast-cadence updates became a global single point of failure [Source: ev-1]. In response, CrowdStrike moved to staged rollouts with canary testing and added sensor-level validation, while the episode drove industry-wide discussions on chaos-engineering and blast-radius limits for endpoint agents in 2024 [Source: ev-1].

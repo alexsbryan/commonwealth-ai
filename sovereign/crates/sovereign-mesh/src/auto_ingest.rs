@@ -4,9 +4,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use commonwealth_api::state::AppState;
+use commonwealth_core::clock::unix_now_millis as now_ms;
 use commonwealth_core::ids::{HandoffId, NodeId};
 use commonwealth_core::knowledge::{
-    CompleteOutcome, HandoffPhase, IngestionHandoff, UnitId, WorkUnit,
+    CompleteOutcome, HandoffPhase, IngestionHandoff, LeasedUnit, UnitId, WorkUnit,
 };
 use commonwealth_core::mesh::NodeStatus;
 use corpus_engine::CancellationFlag;
@@ -666,9 +667,11 @@ async fn spawn_local_ingest(state: AppState, corpus_id: String) {
 // drains, running `ingest_with_overrides` on each leased unit and
 // heartbeating while work is in flight.
 
-/// Heartbeat cadence: one third of LEASE_MS. Matches what's documented
-/// in commonwealth_core::knowledge::LEASE_MS (5 minutes → 100s heartbeat).
-const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(100);
+/// Heartbeat cadence: one third of the lease. DERIVED from `LEASE_MS` rather
+/// than hand-copied — it was `from_secs(100)` beside a comment saying it
+/// matched, which is two deciders agreeing by luck (ARCH §10.6).
+const HEARTBEAT_INTERVAL: Duration =
+    Duration::from_millis(commonwealth_core::knowledge::LEASE_MS / 3);
 
 /// How many consecutive `next_unit` failures we tolerate before giving up
 /// on a handoff. Counts both 5xx responses (coordinator alive but broken)
@@ -929,17 +932,13 @@ async fn pull_loop(
         }
         consecutive_failures = 0;
 
-        // Parse the leased payload. We use a minimal inline struct here
-        // rather than importing the handler's response enum — deserialize
-        // from untagged variants can be flaky when field sets overlap.
-        #[derive(serde::Deserialize)]
-        struct LeasedPayload {
-            unit_id: UnitId,
-            unit: WorkUnit,
-            #[allow(dead_code)]
-            lease_expires_at_ms: u64,
-        }
-        let payload: LeasedPayload = match resp.json().await {
+        // The coordinator's own type. The inline mirror this replaced was
+        // justified by "deserialize from untagged variants can be flaky" —
+        // true of `NextUnitResponse`, but the fix is to read the ONE payload
+        // struct, not to re-declare it. The status code is the discriminant
+        // here (204 drained / 404 deregistered / 5xx retry, handled above);
+        // by this line the body is a lease and nothing else.
+        let payload: LeasedUnit = match resp.json().await {
             Ok(p) => p,
             Err(e) => {
                 tracing::warn!(
@@ -951,6 +950,23 @@ async fn pull_loop(
                 continue;
             }
         };
+        // THE GUARD THE DEAD FIELD WAS FOR. Our only other signal that the
+        // lease is gone is a 410 on heartbeat — and a partition is exactly the
+        // case where no 410 can reach us, while the coordinator's reaper
+        // requeues and another peer takes the unit. Merge dedupes by unit_id
+        // (`corpus-engine/src/sharding.rs:780`), so working a stale lease
+        // corrupts nothing; it burns one full ingest and its disk. Cheap to
+        // refuse, so refuse.
+        if !payload.is_live_at(now_ms()) {
+            tracing::warn!(
+                handoff = %handoff_id,
+                unit = payload.unit_id,
+                expired_at_ms = payload.lease_expires_at_ms,
+                "pull_loop: lease already expired on arrival — dropping it \
+                 rather than ingesting a unit the coordinator may have re-leased"
+            );
+            continue;
+        }
         let unit_id = payload.unit_id;
         let unit = payload.unit;
 

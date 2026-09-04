@@ -26,7 +26,7 @@ use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
 use crate::llama::{LlamaContextExt, LlamaModelExt};
 
-use commonwealth_core::fair_sched::EtaEwma;
+use serving_policy::fair_sched::EtaEwma;
 use sovereign_core::error::Error;
 use sovereign_core::model_family::{
     EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl,
@@ -1115,7 +1115,7 @@ pub(crate) struct SlotQueue {
     /// is invisible: the only evidence a request waited is client wall clock.
     queued: std::sync::atomic::AtomicU32,
     /// Observed turn duration, shared implementation with the chat
-    /// scheduler's ETA (`commonwealth_core::fair_sched::EtaEwma`).
+    /// scheduler's ETA (`serving_policy::fair_sched::EtaEwma`).
     eta: std::sync::Mutex<EtaEwma>,
     /// Shed past this predicted wait. `0` = never shed.
     max_wait_ms: u64,

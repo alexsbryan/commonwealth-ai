@@ -1,0 +1,33 @@
+[package]
+name = "oplog"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Op and Oplog — one append-only JSONL journal with content-addressed identity, shared by every tenant that records acts. A Tier-0 leaf whose only in-repo dependency is the kernel, because op ids are gossiped and there may be exactly one derivation of them."
+
+# DELIBERATE: `kernel-types` is the only in-repo dependency, and that is the
+# contract rather than a coincidence. `OpId` is the truncated BLAKE3 of
+# `<prefix>|<ts>|<actor>|<body-json>` and those ids travel the mesh wire — a
+# second derivation is a wire break with nothing red anywhere (ARCH §10.6),
+# so the hash implementation must come from the crate that owns exactly one
+# of them and never be re-derived here.
+#
+# This crate was `corpus-engine/src/oplog.rs` until 2026-09-04. It moved
+# because `commonwealth-knowledge`'s ring rail names five of its types and
+# inherited a 578-crate closure to reach a 547-line journal. A journal is not
+# knowledge-layer machinery; it is a primitive, and the closure was the proof.
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+# The ONE content-hash implementation — see the DELIBERATE note above.
+kernel-types = { workspace = true }
+thiserror = { workspace = true }
+# Append and skip decisions are traced at debug; a journal whose writes are
+# invisible fails ARCH §9.1.
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

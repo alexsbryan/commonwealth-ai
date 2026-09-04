@@ -428,7 +428,7 @@ fn recipe_schema_descriptor_is_fresh() {
         "block":              descriptor::struct_fields(&recipe_ont_file, "OntologyBlock"),
         "change":             descriptor::struct_fields(&ontology_file, "ChangeDecl"),
         "claim_scope":        descriptor::variant_keys(&ontology_file, "ClaimScopeDecl"),
-        "clock":              descriptor::variant_keys(&ontology_file, "Clock"),
+        "clock":              descriptor::variant_keys(&ontology_file, "SupersessionClock"),
         "deontic":            descriptor::variant_keys(&ontology_file, "Deontic"),
         "derive":             descriptor::struct_fields(&ontology_file, "DeriveDecl"),
         "force":              descriptor::variant_keys(&ontology_file, "Force"),

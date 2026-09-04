@@ -26,7 +26,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use sovereign_core::traits::InferenceProvider;
-use sovereign_eval::chaos_monkey::{score, AgentAction, CalibrationReport, QuestionType};
+use sovereign_eval::chaos_monkey::{score, AgentAction, CalibrationReport, PressureKind};
 use sovereign_eval::entity_resolution_bench::PeekBudget;
 use sovereign_eval::flywheel::generators::corpus::{AbsentSource, CorpusGenerator};
 use sovereign_eval::flywheel::{DeterministicVerifier, Generator as _, Observation, Probe};
@@ -456,7 +456,7 @@ async fn run_and_verify(
         }
     };
     let caveat_present =
-        if probe.qtype == QuestionType::AbsentOutOfDomain && action == AgentAction::Answered {
+        if probe.qtype == PressureKind::AbsentOutOfDomain && action == AgentAction::Answered {
             Some(caveat_credit(
                 classify_caveat(judge, judge_model, &visible).await,
             ))
@@ -534,7 +534,7 @@ fn git_commit_hash() -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_eval::chaos_monkey::QuestionType;
+    use sovereign_eval::chaos_monkey::PressureKind;
     use sovereign_eval::flywheel::{AbsentKind, Oracle, ProbeSource};
 
     fn probe(id: &str, answerable: bool) -> Probe {
@@ -542,9 +542,9 @@ mod tests {
             id: id.into(),
             query: "q".into(),
             qtype: if answerable {
-                QuestionType::Present
+                PressureKind::Present
             } else {
-                QuestionType::AbsentAdjacent
+                PressureKind::AbsentAdjacent
             },
             oracle: if answerable {
                 Oracle::Witness {

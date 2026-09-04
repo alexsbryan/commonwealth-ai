@@ -21,20 +21,48 @@ STAGED="${CO_PRECOMMIT_STAGED:-$(git diff --cached --name-only 2>/dev/null)}"
 # Self = the starred row in mesh status; work-atlas ids are node-<hex16>.
 SELF="${CO_PRECOMMIT_SELF:-$(sovereign mesh status 2>/dev/null \
     | awk '$NF=="*"{print substr($1,1,16)}')}"
-# Via env, NOT a pipe: `… | python3 - <<heredoc` hands stdin to the
-# heredoc and silently discards the pipe — a hook that can never fire
-# (watched failing exactly that way before this line existed, §18.1).
-ATLAS="$(sovereign tools call work_in_flight --scope= --match_mode=file \
-    --format json 2>/dev/null)"
-export STAGED SELF ATLAS
+# Via a TEMP FILE, and neither via a pipe nor via the environment.
+#
+# Both of the obvious ways to hand a payload to the heredoc below are broken,
+# and each broke this hook silently — which is the whole reason this comment is
+# four times the length of the code it guards.
+#
+#   `… | python3 - <<PY` hands stdin to the HEREDOC and discards the pipe. A
+#   hook that can never fire (watched failing exactly that way, §18.1).
+#
+#   `export ATLAS="$(…)"` fixed that and built a worse one a layer out. The
+#   environment block is copied into every child process, and `execve(2)`
+#   rejects it past ARG_MAX. `work_in_flight --scope=` is the documented
+#   "everything" form: measured on this host 2026-09-04 the atlas was
+#   4,716,818 bytes against an ARG_MAX of 1,048,576, so EVERY child — python3,
+#   grep, rustfmt, even getconf — died `Argument list too long` before running
+#   a line. The hook is advisory by the 2026-08-06 directive, so all of it
+#   exited 0 and the commit sailed through. Both checks below had been dead on
+#   this host for as long as the atlas had been that size.
+#
+# A path is bounded. The payload is read by the one process that needs it, and
+# no size of atlas can push a child over the exec limit again. `mktemp -d`
+# rather than one file so the staged list rides the same bound: it is small
+# today and is a list of file paths, i.e. exactly the kind of thing that grows
+# without anyone deciding it should.
+HOOK_TMP="$(mktemp -d -t precommit-atlas.XXXXXX)" || exit 0
+trap 'rm -rf "$HOOK_TMP"' EXIT
+ATLAS_FILE="$HOOK_TMP/atlas.json"
+STAGED_FILE="$HOOK_TMP/staged.txt"
+sovereign tools call work_in_flight --scope= --match_mode=file \
+    --format json >"$ATLAS_FILE" 2>/dev/null
+printf '%s\n' "$STAGED" >"$STAGED_FILE"
+export SELF ATLAS_FILE STAGED_FILE
 
 python3 - <<'PY'
 import json, os, sys
 try:
-    atlas = json.loads(os.environ.get("ATLAS") or "{}")
+    with open(os.environ["ATLAS_FILE"], encoding="utf-8") as fh:
+        atlas = json.loads(fh.read() or "{}")
 except Exception:
     sys.exit(0)  # daemon down or malformed — advisory hook stays silent
-staged = set(os.environ["STAGED"].split())
+with open(os.environ["STAGED_FILE"], encoding="utf-8") as fh:
+    staged = set(fh.read().split())
 self_hex = os.environ.get("SELF", "")
 def node_str(node): return (node or "")  # null node_id = legacy pre-fix-1 claim
 def is_self(entry):
@@ -74,6 +102,20 @@ if warns:
     print("  detail: work_in_flight(scope, match_mode=\"file\") · this "
           "never blocks (warn-only by operator directive 2026-08-06)")
 PY
+atlas_rc=$?
+
+# FOUR VERDICTS, NOT TWO (§18.2). Everything above exits 0 on every path it
+# understands, INCLUDING "the daemon is down" — so any non-zero here means the
+# check did not run at all, and that is a third verdict, not a pass. It is what
+# the ARG_MAX bug looked like from outside for weeks: exit 126, a line of noise
+# on stderr, and a commit that recorded fine. Advisory still (the directive
+# holds; nothing here blocks), but never again silent.
+if [ "$atlas_rc" -ne 0 ]; then
+    printf 'work-atlas COULD-NOT-RUN (advisory, commit proceeds): the collision\n'
+    printf '  check exited %s without rendering a verdict — this is NOT "no peers".\n' "$atlas_rc"
+    printf '  126/127 means the child could not be exec-ed at all (ARG_MAX, or no\n'
+    printf '  python3); anything else is a crash. Reproduce: ./scripts/pre-commit.sh\n'
+fi
 
 # ── Formatting notice (separable from the atlas check above) ───────────────
 #

@@ -8,7 +8,7 @@
 //!   * (via [`build_atoms`], invoked from the ingest flow where the
 //!     atlas dir is known) one atlas [`Entity`] atom whose declared
 //!     numeric and string columns are recorded in [`Entity::attributes`]
-//!     under a [`Provenance`] of `extractor_id = "tabular_atoms"`.
+//!     under a [`SignalProvenance`] of `extractor_id = "tabular_atoms"`.
 //!
 //! No inference runs here — parsing and typing are pure and
 //! deterministic. The figures downstream analytics sum are read from
@@ -25,7 +25,7 @@ use serde_json::{Map, Value};
 
 use super::json_api::collect_json_files;
 use super::{ExtractedDoc, Extractor};
-use crate::enrichment::atlas::atoms::{AtomId, ChunkRef, Entity, Provenance, SignalKind};
+use crate::enrichment::atlas::atoms::{AtomId, ChunkRef, Entity, SignalKind, SignalProvenance};
 use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
 use crate::error::{Error, Result};
 
@@ -181,8 +181,12 @@ pub fn build_atoms(
             affiliation: None,
             role: None,
             participants: Vec::new(),
-            provenance: Provenance::new("tabular_atoms", id_str.clone(), SignalKind::ColumnHeader)
-                .with_chunk(id_str),
+            provenance: SignalProvenance::new(
+                "tabular_atoms",
+                id_str.clone(),
+                SignalKind::ColumnHeader,
+            )
+            .with_chunk(id_str),
             attributes,
             concept_kind: None,
         });

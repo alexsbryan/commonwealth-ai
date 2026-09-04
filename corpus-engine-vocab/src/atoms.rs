@@ -312,7 +312,7 @@ impl SectionPosition {
     }
 }
 
-// ── Provenance (AD-4) ────────────────────────────────────────
+// ── SignalProvenance (AD-4) ──────────────────────────────────
 
 /// What signal produced this atom. The architecture-over-Enron push
 /// (Phase 4 reconciliation) co-locates this on the atom rather than a
@@ -361,7 +361,7 @@ pub enum SignalKind {
 /// the span came from (or `None` for document-level atoms like
 /// `EmailHeader`-typed Entity).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct Provenance {
+pub struct SignalProvenance {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub extractor_id: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -372,7 +372,7 @@ pub struct Provenance {
     pub signal_kind: SignalKind,
 }
 
-impl Provenance {
+impl SignalProvenance {
     pub fn new(
         extractor_id: impl Into<String>,
         source_doc_id: impl Into<String>,
@@ -442,9 +442,9 @@ pub struct Entity {
     pub participants: Vec<AtomId>,
     /// Atom origin record (AD-4 — architecture-over-Enron Phase 4).
     /// Captures which signal produced this atom. Defaults to an empty
-    /// [`Provenance`] for back-compat with pre-2.2 atoms.json files.
+    /// [`SignalProvenance`] for back-compat with pre-2.2 atoms.json files.
     #[serde(default)]
-    pub provenance: Provenance,
+    pub provenance: SignalProvenance,
     /// Free-form typed attributes for atoms produced by deterministic
     /// tabular extraction (the `tabular_atoms` extractor): the source
     /// row's numeric and string columns keyed by column name
@@ -1340,7 +1340,7 @@ impl AtomsFile {
     ///   the deliberate "no `#[serde(other)]`" choice on AtomEnvelope.
     /// - `2.2` — added `Entity::provenance` field (AD-4;
     ///   architecture-over-Enron Phase 4). Old atoms.json deserialise
-    ///   with a default empty `Provenance`.
+    ///   with a default empty `SignalProvenance`.
     /// - `2.3` — added `Entity::attributes` (free-form typed column
     ///   values) for the deterministic `tabular_atoms` extractor. Old
     ///   atoms.json deserialise with a default empty map.

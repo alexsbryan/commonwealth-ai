@@ -1,0 +1,20 @@
+# Move citation.rs's tail tests module to citation/tests.rs.
+# Steps extracted from `svrn code suggest-seams --plan` output (the
+# generated 26-step plan also proposes cluster extractions, which need
+# mod declarations + re-exports — author territory; tests move is not).
+[plan]
+subject = "sovereign/crates/sovereign-core/src/runtime/grounding/citation.rs"
+verify_cmd = "cargo test -p sovereign-core --lib"
+
+[[move]]
+# tests body
+start = 988
+end = 1693
+dest = "sovereign/crates/sovereign-core/src/runtime/grounding/citation/tests.rs"
+
+[[patch]]
+# the tests opener + closing brace become a declaration
+start = 986
+end = 1694
+body = """#[cfg(test)]
+mod tests;"""

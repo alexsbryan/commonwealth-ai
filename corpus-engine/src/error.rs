@@ -174,6 +174,24 @@ fn hf_repo_page(url: &str) -> Option<String> {
     Some(format!("{HOST}{repo_path}"))
 }
 
+/// Bridge `oplog::OplogError` into our wider Error.
+///
+/// The mapping is chosen to be OBSERVATIONALLY EMPTY: before the journal moved
+/// out of this crate (2026-09-04) its call sites raised `Error::Io` and
+/// `Error::Extraction("{label}: serialise: {e}")` directly, and they still do,
+/// with byte-identical `Display` text. That is the whole point of the facade —
+/// a consumer cannot tell the extraction happened, so none of the ~20 of them
+/// had to change (ARCH §18.3: a substitution you cannot name is one you must
+/// not make).
+impl From<oplog::OplogError> for Error {
+    fn from(e: oplog::OplogError) -> Self {
+        match e {
+            oplog::OplogError::Io(io) => Error::Io(io),
+            other @ oplog::OplogError::Serialise { .. } => Error::Extraction(other.to_string()),
+        }
+    }
+}
+
 /// Bridge the narrow `corpus-engine-scip::Error` into our wider Error.
 /// Scip only constructs `Io` and `Database` variants, so the mapping
 /// is total. Required for `?`-bubbling from scip-returning helpers

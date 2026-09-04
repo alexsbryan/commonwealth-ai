@@ -142,13 +142,27 @@ landed = '''commonwealth-state::store::tests::gc_is_bounded_by_both_the_cutoff_a
 [[spec]]
 id = "FE-139"
 family = "FE"
-status = "landed"
+status = "subject-deleted"
 clause = '''Managed subordinate processes MUST have an explicit lifecycle state machine (starting / running / unhealthy / failed / stopped), graceful termination with a timeout before forced termination, periodic health polling with a sampled latency window and an unresponsive threshold, a **graceful departure** countdown state machine (announced → rebalancing → draining → complete), and a fault detector collapsing health changes into events.'''
 target = '''sovereign/crates/sovereign-compute/src/supervisor.rs:199::SupervisorState'''
 asserts = '''a subordinate's observed SupervisorState sequence is Starting -> Healthy -> Unhealthy -> Failed on repeated crashes, AND separately a departure sequence announced -> rebalancing -> draining -> complete.'''
 catches = '''DUE DILIGENCE 2026-09-02 — ALL THREE PARTS EXIST AS CODE AND NONE IS WIRED. SupervisorState (sovereign-compute/src/supervisor.rs:199), GracefulDeparture Announced->Rebalancing->Draining->Complete (commonwealth-inference/src/orchestrator/departure.rs:11-83) and FaultDetector (orchestrator/fault.rs:34-213) are each self-contained and unit-tested, but neither departure nor fault is ever constructed or called from orchestrator.rs, process.rs or any handler. Orchestrator::stop_all (orchestrator.rs:161), itself commented 'graceful departure', SIGTERMs every process directly and bypasses both. This is dead orchestration code that reads as compliance. The requirement is UNMET: wire it, then test it. A test written against the modules alone would pass while the product still kills processes abruptly.'''
-destination = '''commonwealth/crates/commonwealth-test-harness/tests/integration.rs'''
+destination = '''sovereign/crates/sovereign-compute/src/supervisor.rs'''
 kind = '''rust-integration; but WIRING COMES FIRST — see catches'''
+# 2026-09-03: `commonwealth-inference/src/orchestrator/` (1,904 lines) was
+# deleted. `Orchestrator::new` was called from NOTHING but the two tests below,
+# so the `catches` field above was right and stayed right: a test written
+# against those modules passed while the product killed processes abruptly.
+# The two tests that claimed this requirement went with them.
+#
+# WHAT IS ACTUALLY LOST, stated rather than absorbed. The declared target
+# `sovereign-compute::supervisor` has the lifecycle state machine, graceful
+# SIGTERM-before-SIGKILL (`graceful_kill`, :880) and health polling. It has NO
+# departure countdown (announced -> rebalancing -> draining -> complete) and NO
+# fault detector — grepped 2026-09-03, zero hits. Those two clause parts now
+# have no implementation anywhere. That is a truthful UNMET, replacing a
+# `landed` that rested on unreachable code.
+retired = '''subject deleted (orchestrator/, test-only construction) — departure countdown and fault detector are unimplemented; the requirement returns to write-work at its declared target'''
 landed = '''commonwealth-test-harness::integration::a_departing_orchestrator_announces_rebalances_and_drains_before_it_stops_anything (+ a_node_that_has_announced_its_departure_refuses_new_shard_plans)'''
 
 [[spec]]
@@ -409,9 +423,9 @@ id = "FE-102"
 family = "FE"
 status = "landed"
 clause = '''The client-fairness share rule MUST take **no weight argument**, so weight-ordering unfairness is *unexpressible* rather than merely avoided. A single caller alone on the host MUST be untouched.'''
-target = '''commonwealth/crates/commonwealth-core/src/fair_sched.rs:163::fair_share_cap'''
-existing = '''commonwealth/crates/commonwealth-core/src/fair_sched.rs:835::fair_share_cap_is_uncapped_for_a_lone_principal'''
-landed = '''commonwealth-core::fair_sched::tests::fair_share_cap_is_uncapped_for_a_lone_principal'''
+target = '''serving-policy/src/fair_sched.rs:163::fair_share_cap'''
+existing = '''serving-policy/src/fair_sched.rs:835::fair_share_cap_is_uncapped_for_a_lone_principal'''
+landed = '''serving-policy::fair_sched::tests::fair_share_cap_is_uncapped_for_a_lone_principal'''
 
 [[spec]]
 id = "FE-106"
@@ -506,16 +520,33 @@ id = "FE-19"
 family = "FE"
 status = "exists-untagged"
 clause = '''Shared state MUST converge by epidemic replication: a periodic round to a small random peer sample, three-phase digest/delta/response, last- writer-wins on timestamp.'''
-target = '''commonwealth/crates/commonwealth-discovery/src/gossip.rs:127::process_digest'''
-existing = '''commonwealth/crates/commonwealth-discovery/src/gossip.rs:422::gossip_convergence_five_nodes'''
+# RE-POINTED 2026-09-03, not retired. `commonwealth-discovery/src/gossip.rs`
+# was deleted: 484 lines whose only consumers were two tests. It was a BETTER
+# DESIGNED anti-entropy than the one production runs, and production never ran
+# it. The rail's `sync.rs` does the same digest reconciliation on the path that
+# is live, so the clause moves to the real subject rather than losing its
+# claim — the intent survives the code (plan §"Keep the intent, drop the code").
+target = '''commonwealth/crates/commonwealth-knowledge/src/rail/sync.rs:53::digest'''
+existing = '''commonwealth/crates/commonwealth-knowledge/src/rail/sync.rs:121::a_hole_lowers_the_mark_so_the_peer_re_sends_across_it'''
 
 [[spec]]
 id = "FE-21"
 family = "FE"
-status = "exists-untagged"
+status = "subject-deleted"
 clause = '''Round-trip latency between members MUST be measured periodically and shared, as a smoothed estimate.'''
-target = '''commonwealth/crates/commonwealth-discovery/src/latency_probe.rs:124::update_record'''
-existing = '''commonwealth/crates/commonwealth-discovery/src/latency_probe.rs:254::latency_prober_ewma_smoothing'''
+# 2026-09-03. `commonwealth-discovery/src/latency_probe.rs` was deleted: 296
+# lines with ZERO callers anywhere in the workspace. So this clause never had a
+# production implementation — it had an unreachable one, and a test that
+# exercised the unreachable one. The requirement is NOT retired; the false
+# claim that it was covered is. This reads as queue work of kind `write` again,
+# which is the honest state (ARCH §18.3 — absence is reported, never
+# defaulted). Do not restore the file to close it: measure the RTT on the path
+# peers actually use.
+retired = '''subject deleted (latency_probe.rs, 0 callers) — the clause is now an open gap, not a covered one'''
+# Not a claim about where the fix goes — a grouping key, so the item renders in
+# the queue instead of clustering under an empty path. RTT belongs wherever the
+# peer wire already is; picking the site is part of the write.
+target = '''commonwealth/crates/commonwealth-transport/src/'''
 
 [[spec]]
 id = "FE-23"

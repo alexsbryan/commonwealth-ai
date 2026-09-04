@@ -24,7 +24,7 @@ use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
 
-use crate::chaos_monkey::{ChaosBank, QuestionType};
+use crate::chaos_monkey::{ChaosBank, PressureKind};
 use crate::flywheel::mining::{mine_claims, MinedClaim};
 use crate::flywheel::probe::{chaos_to_probe, AbsentKind, Oracle, Probe, ProbeSource};
 use crate::flywheel::Generator;
@@ -98,7 +98,7 @@ impl CorpusGenerator {
                 Some(Probe {
                     id: format!("i1:{}", c.id),
                     query: claim_query(&c.content),
-                    qtype: QuestionType::Present,
+                    qtype: PressureKind::Present,
                     oracle: Oracle::Witness {
                         gold_keywords: kws,
                         supporting_quote: Some(c.excerpt.clone()),
@@ -141,7 +141,7 @@ impl CorpusGenerator {
                     .map(|c: &MinedClaim| Probe {
                         id: format!("i1-absent:{}", c.id),
                         query: claim_query(&c.content),
-                        qtype: QuestionType::AbsentAdjacent,
+                        qtype: PressureKind::AbsentAdjacent,
                         oracle: Oracle::Absent {
                             held_out_witness: Some(salient_terms(&c.content, 3)),
                             kind: AbsentKind::Adjacent,
@@ -255,7 +255,7 @@ mod tests {
         assert_eq!(a, b, "(n, seed) is reproducible bit-for-bit");
         assert_eq!(a.len(), 2, "two mined claims, present-only");
         for p in &a {
-            assert_eq!(p.qtype, QuestionType::Present);
+            assert_eq!(p.qtype, PressureKind::Present);
             assert_eq!(p.source, ProbeSource::I1Corpus);
             // Fair by construction: every Present probe carries a witness.
             crate::flywheel::case::validate_fairness(p).unwrap();

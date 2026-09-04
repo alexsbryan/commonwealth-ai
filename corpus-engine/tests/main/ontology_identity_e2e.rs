@@ -12,7 +12,9 @@
 //! here rather than in `multi_origin.rs`, which ARCH §3.1 would otherwise
 //! push into the approach band.
 
-use corpus_engine::enrichment::atlas::atoms::{AtomId, ChunkRef, Entity, Provenance, SignalKind};
+use corpus_engine::enrichment::atlas::atoms::{
+    AtomId, ChunkRef, Entity, SignalKind, SignalProvenance,
+};
 use corpus_engine::enrichment::atlas::edges::EdgeType;
 use corpus_engine::enrichment::ontology::IdentityPolicy;
 use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
@@ -34,7 +36,7 @@ fn ent(name: &str, id: &str, sk: SignalKind, doc: &str) -> Entity {
         affiliation: None,
         role: None,
         participants: Vec::new(),
-        provenance: Provenance::new("ext", doc, sk),
+        provenance: SignalProvenance::new("ext", doc, sk),
         attributes: serde_json::Map::new(),
         concept_kind: None,
     }

@@ -140,7 +140,7 @@ Configures the optional enrichment pipeline. The new field model enrichment uses
 | `entity_types` | `Vec<EntityTypeDecl>` | no | type default | Entity types the investigation pipeline should extract from each chunk. Listed in the LLM extraction prompt so the model canonicalizes mentions to one of these typed shapes (e.g. `company`, `fund`, `person`). Empty when `enrichment_type != "investigation"`. |
 | `relationship_types` | `Vec<RelationshipTypeDecl>` | no | type default | Relationship types the investigation pipeline should extract (e.g. `revenue`, `investment`, `cloud_commitment`, `board_seat`). Each relationship has typed attributes the LLM is asked to populate (`amount_usd`, `date`, etc.). |
 | `patterns` | `Vec<PatternDecl>` | no | type default | Graph-level patterns to detect once the relationship graph is built. Built-in detectors cover cycle / role-overlap / threshold patterns; the recipe author chooses which to run. |
-| `reconciliation` | `Option<ReconciliationToml>` | no | type default | Architecture-over-Enron Phase 4: multi-origin reconciliation policy. `None` (the default) skips reconciliation entirely; pipelines that don't carry [`crate::enrichment::atlas::atoms::Provenance`] on their entity atoms produce nothing to reconcile across anyway. Recipes that enable described-asset + email extractors set this block to tune the merger. |
+| `reconciliation` | `Option<ReconciliationToml>` | no | type default | Architecture-over-Enron Phase 4: multi-origin reconciliation policy. `None` (the default) skips reconciliation entirely; pipelines that don't carry [`crate::enrichment::atlas::atoms::SignalProvenance`] on their entity atoms produce nothing to reconcile across anyway. Recipes that enable described-asset + email extractors set this block to tune the merger. |
 | `normalization` | `Option<NormalizationConfig>` | no | type default | Corpus-specific entity-name coalescing rules for the investigation pipeline. The engine supplies the *mechanism* (alias map, prefix / suffix / qualifier stripping, identity-by-attribute); this block supplies the *vocabulary*, so domain knowledge (US states, Air Force base aliases, disposition categories) lives in the recipe as data rather than hardcoded in the abstraction layer. `None` → names fold by case/punctuation only (the engine default). Consumed by [`crate::enrichment::investigation::normalize::Normalizer`]. |
 
 ## `NormalizationConfig`
@@ -929,7 +929,7 @@ Allowed values:
 - `permit`
 - `request`
 
-## `Clock`
+## `SupersessionClock`
 
 Which clock orders supersession. Derived as `document_date` when the corpus carries document dates; declared only for narrative time.
 
@@ -975,7 +975,7 @@ A structural source for a declared type: a file already holding it as a table, i
 
 | TOML key | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `clock` | `Option<Clock>` | no | type default | The clock supersession folds on. Omit to derive `document_date`. |
+| `clock` | `Option<SupersessionClock>` | no | type default | The clock supersession folds on. Omit to derive `document_date`. |
 | `supersedes` | `BTreeMap<String, String>` | no | type default | Claim type → the clock it supersedes on: `"document_date"` or a time-family attribute of that type (`{ rule = "valid" }`). A later instance retires the earlier one for the same subject. |
 
 ## `TensionDecl`

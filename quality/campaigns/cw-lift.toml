@@ -1,0 +1,418 @@
+# Flight rules — read raw. Verdicts come from measurement rows, never prose here.
+# Defer/descope = edit a bar's `status`; git history is the ledger.
+#
+# ORDERS ARE GITIGNORED (`.sovereign/features/` is per-host). This file is the
+# committed artifact and the LADDER carries the rung list, so the plan survives
+# without them.
+id        = "cw-lift"
+objective = "Commonwealth becomes a liftable substrate package in-repo, so a sovereign daemon runs local-only and mesh is additive"
+spec      = "the approved plan, 2026-09-03; commonwealth/BOUNDARY.md is its committed half"
+register  = "quality/ARCH_LAYERS.toml"
+declared  = "2026-09-04"
+status    = "open"
+
+# ── THE CLAIM ───────────────────────────────────────────────────────────────
+#
+# Mesh is not a layer above local; it is the substrate. `daemon_cmd/mod.rs:
+# 1174-1186` fabricates a Mesh named "{hostname}'s Mesh" and returns 1 if that
+# fails. Notes are gossip events, work-atlas claims are MeshStore rows. That is
+# the "mesh of one" and it is the right RUNTIME idea. What it also does, which
+# is not required by it, is make the local case unable to link, boot or persist
+# without the whole mesh.
+#
+# THE SUBSTRATE HAS ONE HOME: commonwealth proper (core/transport/state/
+# discovery) + the rail. `sovereign-mesh` is an APPLICATION on it, never a
+# second substrate — its substrate-shaped names have ~15 of ~234 crossing refs,
+# so extracting them would fork the deciders this package owns: two replication
+# paths, two orderings, two admission rules. §10.6 at crate scale.
+#
+# PROVEN BY TWO LIFTS, not by a gate:
+#   1. a local-only daemon compiles with zero commonwealth-* and no iroh
+#   2. a SECOND application (canon x rail) composes on the substrate with zero
+#      sovereign and zero corpus-engine
+
+# ── LADDER ──────────────────────────────────────────────────────────────────
+#
+#   -1  instrument the boundary        b704b845d  DONE
+#   0a  delete 12 dead modules         5cc9076fc  DONE   -1,892
+#   0b  delete orchestrator + gossip   e9f20feec  DONE   -3,155
+#   0c  ProcessKind + what it strands  cfa70611f  DONE      +34
+#   4a  fair_sched -> serving-policy   e26414742  DONE     +107
+#   1a  oplog -> tier-0 leaf           33b003a2e  DONE     +216
+#   ── the precondition is paid; everything below is open ──
+#   1b  git mv the rail into two crates
+#   1c  repoint 8 consumers, drop the facade
+#   1d  SEVER rail -> corpus-engine   <- the commit that earns the claim
+#   1e  RingVerifier + Membership seams
+#   4b  model_aliases + glob -> oicp-types
+#   1f  the acceptance ledger (canon x rail)
+#   2   route mesh work through the rail (measurement-gated)
+#   3   triage the application layer (unscoped until 2 settles)
+#   T   the twin census + an instrument that can see a twin   <- OFF-PLAN
+#   R   the ratchets + the push decision                      <- OFF-PLAN
+#   G   gate integrity: two gates that pass without running   <- OFF-PLAN
+#
+# G's first finding was RE-DIAGNOSED 2026-09-04 after it reproduced on a
+# one-file commit. `scripts/pre-commit.sh` is not diff-size sensitive: it
+# `export`s the whole work atlas (`work_in_flight --scope=` matches
+# everything), which measured 4,716,818 bytes against an ARG_MAX of 1,048,576.
+# Every child `python3`/`grep` has been dying with E2BIG, and the hook is
+# advisory so the commit proceeds. Both its checks have been silently off on
+# this host for as long as the atlas has been that big. Fix is ~2 lines: export
+# the PATH to a temp file, not the payload.
+#
+# 1b-1d SEVERING THE RAIL is the critical path. Phase 2 is the hard
+# precondition for ALL sovereign-mesh work; nothing may touch that crate's
+# substrate-shaped code before it lands.
+
+[[bar]]
+id           = "cw-net-deletion"
+one_line     = "CLAIM: extracting a boundary can be net-DELETING, not just net-moving"
+derives_from = "quality/DELETION.md — the workspace runs +622k/-179k over 90 days, 29 lines deleted per 100 added"
+status       = "at-risk"
+# THE ARITHMETIC HAS DRIFTED AND IT IS RECORDED HERE RATHER THAN DISCOVERED AT
+# 1f. Landed, source lines from the diffs:
+#
+#   0a -1,892 · 0b -3,155 · 0c +34 · 4a +107        =  -4,906
+#   1a +216                                          =  -4,690
+#
+# Phase 0 alone landed -5,013 against its own >= -4,900 floor: CLEARED.
+# But 4a cost +107 against a Phase-4 budget of +50 FOR THE WHOLE PHASE, and 4b
+# has not run. Projecting the plan's remaining budgets:
+#
+#   -4,690  landed
+#     +349  1b-1e (the +565 budget less 1a's +216)
+#     +550  1f, carried as its own line and not absorbed into slack
+#      +30  4b (a pure move plus one manifest)
+#   -------
+#   -3,761  vs the floor of -3,800 -> MISSES BY ~39
+#
+# The floor already moved once, from -4,000 to -3,800, to pay for 1f visibly.
+# Moving it a second time to absorb an overrun would be exactly the accounting
+# the deletion ratchet was written to catch. Two honest outs, both pre-named in
+# the plan:
+#   - K4: collapse the two-crate rail split to one if 1b-1e overruns +900.
+#   - 1g: collapse SYSTEM_OVERVIEW §10.1c-k to pointers, ~-417. DELIBERATELY
+#     NOT COUNTED — it lands on its own evidence after the ledger has been read
+#     in anger. Counting an unearned deletion is the same sin as absorbing
+#     growth.
+# Decide which BEFORE 1f, not after.
+floor        = -4690.0
+target       = -3800.0
+direction    = "lower_is_better"
+instrument   = "scripts/deletion-manifest.py --verify"
+kill         = "K4 — Phase 1a-1e Added overruns +900, or 1f's overruns +800. The extraction is costing more than the boundary is worth."
+
+[[bar]]
+id           = "cw-sovereign-commonwealth-edge"
+one_line     = "CLAIM: the ungoverned sovereign -> commonwealth edge narrows as vocabulary is rehomed"
+derives_from = "measured 2026-09-04 on a fresh SCIP index at 83c0caebf"
+status       = "open"
+# 101 types / 616 refs at campaign start -> 95 / 595 now. 4a bought 6 types /
+# 21 refs.
+#
+# P1 AS WRITTEN PREDICTED 13 types / ~144 refs for 4a+4b together (101/616 ->
+# 88/~472). 4a delivered 6/21 and 4b is a SMALLER subject, so the remaining
+# 7/~123 is not credible. RE-DERIVE AT 4b from what actually moved — before
+# claiming it. Target below is the ORIGINAL prediction, deliberately left
+# standing so the miss is visible rather than tidied away.
+#
+# The governed direction is nearly paid off and moving the WRONG WAY by one:
+# commonwealth -> sovereign was 11 types / 38 refs (2026-08-20), now 12 / 39,
+# all from commonwealth-api, all R6-tracked. Worth one look, not an order.
+floor        = 95.0
+target       = 88.0
+direction    = "lower_is_better"
+instrument   = "python3 scripts/nc-boundary.py  (read the banner — it names the commit the INDEX describes, not your tree)"
+kill         = "a NEW [[exception]] row is needed in ARCH_LAYERS.toml. The edge is being relocated, not deleted."
+
+[[bar]]
+id           = "cw-rail-closure"
+one_line     = "CLAIM: the rail is a genuine primitive, not an artifact of this codebase"
+derives_from = "RE-DERIVED 2026-09-04, before 1b, from 1a's own measurement"
+status       = "re-derived"
+# ── P3 (<= 20 CRATES) WAS FALSIFIED BEFORE THE WORK IT GATES EVEN STARTED ──
+#
+# `commonwealth-rail-core` must contain `oplog`. `oplog`'s full closure,
+# measured at 1a (33b003a2e), is 28 crates — blake3 + serde + serde_json +
+# thiserror + tracing + kernel-types and their transitive set. So rail-core's
+# FLOOR is 28 before it names anything of its own, and P3's <= 20 is
+# arithmetically unreachable.
+#
+# It gets worse honestly: the rail signs. `ed25519-dalek` brings curve25519-
+# dalek, digest, block-buffer, generic-array, typenum, const-oid, crypto-
+# common, subtle, zeroize, ed25519, pkcs8, der, pem-rfc7468, base64ct, sha2,
+# signature, rand_core, cpufeatures — roughly twenty more. Expect 45-50.
+#
+# P3 WAS DERIVED WITHOUT PRICING THE SIGNATURE STACK, which is not optional for
+# a rail whose entire thesis is signed authorship. This is the third time in
+# this workspace that a headline bar measured something adjacent to its thesis
+# (nc-redundant, hpr-cheaper v1, this). Recorded rather than quietly patched: a
+# floor corrected in silence teaches nobody.
+#
+# WHAT THE BAR SHOULD HAVE ASKED, and now does: the rail must not carry the
+# KNOWLEDGE LAYER. A crate count conflates "third-party crypto" with
+# "corpus-engine's 578-crate world"; the second is the defect and the first is
+# the price of signing. So the real bar is a MEMBERSHIP test, not a count:
+# zero corpus-engine*, zero sovereign-*, zero commonwealth-{knowledge,
+# inference,api} in the closure. That is what 1d earns and what the three
+# [[forbid]] blocks minted at 1a already enforce for oplog.
+#
+# The count is kept as a TRACKED number so a rise is visible; it is no longer
+# a pass/fail.
+floor        = 28.0
+target       = 50.0
+direction    = "tracked"
+instrument   = "cargo tree -p commonwealth-rail-core -e normal --prefix none | awk '{print $1}' | sort -u | wc -l"
+kill         = "K1 — the canon composition forces either side to grow a dependency or a shim. The boundary is not where we think it is."
+
+[[bar]]
+id           = "cw-local-only-daemon"
+one_line     = "CLAIM: a sovereign daemon can compile and boot with zero commonwealth-* and no iroh"
+derives_from = "P2, measured 2026-09-04 — and the plan named only half the blockers"
+status       = "open"
+# THREE BLOCKERS, MEASURED. The plan recorded the first line of the second.
+#   1. sovereign-cli-daemon takes FOUR direct commonwealth deps —
+#      commonwealth-state:56, -core:57, -api:62, -tdd:63.
+#   2. iroh is forced UNCONDITIONALLY IN TWO PLACES, not one:
+#      sovereign-server/Cargo.toml:87 AND sovereign-mesh/Cargo.toml:21 both put
+#      `features = ["iroh"]` on the dep line, outside any feature gate.
+#      commonwealth-transport gates it correctly; both consumers override it.
+#   3. daemon_cmd/mod.rs:1174-1186 MINTS a Mesh to boot and returns 1 if it
+#      cannot. Manifests can be clean while this stands.
+#
+# A GREEN GATE CANNOT PROVE THIS. boundary-gate checks membership; the package
+# boundary cannot see a feature another crate enables. The claim is proven by
+# BUILDING THE DAEMON, which is why this bar's instrument is a build and not a
+# gate. Same caveat commonwealth/BOUNDARY.md already carries.
+floor        = 3.0
+target       = 0.0
+direction    = "lower_is_better"
+instrument   = "count of (direct commonwealth-* deps in sovereign-cli-daemon) + (unconditional iroh feature forcings) + (mesh-mint-to-boot sites)"
+kill         = "K2 — AppState (commonwealth-api/src/state.rs:585, 2,659 lines, 44 crossing refs) cannot be cut without a shim over ~300 lines. Then local and mesh state are genuinely fused and the honest deliverable is a RUNTIME PROFILE, not a package. Say that rather than shipping a shim and calling it a boundary."
+
+[[bar]]
+id           = "cw-twin-visibility"
+one_line     = "CLAIM: we can SEE a dead twin, not just a coupling"
+derives_from = "OFF-PLAN. Added 2026-09-04 after auditing what the campaign's instruments can actually detect."
+status       = "answered — first pass NEGATIVE and WRONG; corrected same day"
+# THE CAMPAIGN'S HEADLINE IS TWIN REMOVAL AND NOTHING MEASURES A TWIN.
+#
+# scripts/nc-boundary.py measures REFERENCE WIDTH ACROSS AN EDGE. A perfect
+# twin has ZERO crossing references — that is what makes it a twin rather than
+# a dependency. The sharper the duplication, the more invisible it is to the
+# one instrument we built.
+#
+# Meanwhile sovereign-mesh is 63,323 lines, this campaign has deleted zero of
+# them, and BOUNDARY.md rule 2 ("substrate found elsewhere is rehomed HERE or
+# deleted, never mirrored") has no census, no ratchet and nothing that goes red.
+# The plan's own note stands: NEVER RUN — the sovereign-mesh dead census; claim
+# no mesh deletion numbers until it does.
+#
+# POSITIVE CONTROL IS MANDATORY BEFORE ANY NUMBER IS REPORTED. The known twins
+# are all in history and already deleted: the scheduler.rs fork class
+# (commonwealth-inference/src/lib.rs:3-13 records the same cleanup for model,
+# model_aliases, oicp_registry — "core's 13 tests covered a copy nobody ran and
+# the copy everyone ran had one"), the discovery gossip.rs twin, tier_router.rs.
+# An instrument that cannot find those cannot find the live ones. noun-
+# convergence was parked for exactly this failure.
+#
+# ── RAN 2026-09-04. NEGATIVE RESULT, AND IT RESHAPES THE CAMPAIGN. ──
+#
+# §19: nothing was minted. `svrn code dry-report` already does this and nc-22b
+# already ran it repo-wide.
+#
+# INSTRUMENT 1 — dry-report. VALIDATED BOTH WAYS.
+#   negative control PASSED: zero symbols from any of Phase 0's deleted files
+#   (gossip/peering/scheduler/tier_router/orchestrator). The index describes
+#   a9b77335c, exactly HEAD — which is the freshness nc-redundant lacked.
+#   positive control PASSED by eye on both tiers (`is_live` byte-identical
+#   across guest_grant/ingest_grant; `revoke_fails_closed_immediately` at 0.959
+#   genuinely near-identical).
+#   CENSUS: 401 groups / 826 members repo-wide. Groups spanning sovereign-mesh
+#   x commonwealth: TWO, ~20 lines (`from` 13L, `next_u64` 7L). For contrast,
+#   corpus-engine x sovereign is 21 groups.
+#   => THERE IS NO COPY-PASTE TWIN PROBLEM BETWEEN THE TWO. The campaign
+#      assumed one.
+#
+# INSTRUMENT 2 — SCIP zero-caller census. FAILED ITS CONTROL; NUMBER VOID.
+#   First answer 3,960 lines / 46 symbols. The canary is `drop` (impl Drop,
+#   never explicitly called). Top four hand-verified as trait impls dispatched
+#   through traits declared in corpus-engine / commonwealth-api (is_leader 301,
+#   is_owner_of 296, on_chunks_committed_with_docs 159, warm_shard 109).
+#   Filtering names declared in ANY workspace trait block (1,255 of them):
+#   3,960 dropped, ZERO survive.
+#   => THERE IS NO ZERO-CALLER DEAD CODE IN sovereign-mesh AT >= 25 LINES.
+#
+# WHAT THE CAMPAIGN IS ACTUALLY CHASING IS A CONCEPTUAL FORK — the same
+# decision implemented twice from scratch, sharing no bytes and no embedding
+# neighbourhood:
+#     what orders events?      rail total order   vs  LWW, unordered
+#     who may write?           roster admission   vs  nothing
+#     how do peers converge?   digest a-e, 60s    vs  full snapshot, 10s
+# NEITHER INSTRUMENT CAN SEE THAT AND NEITHER EVER COULD. BOUNDARY.md rule 2
+# named it correctly as §10.6 at crate scale; it is not a clone.
+#
+# CONSEQUENCE FOR SEQUENCING: the cut that removes it is deleting the unsigned
+# 10s full-snapshot push (sovereign-mesh/src/gossip.rs:783+) = Phase 2, which
+# needs the rail to be a crate = 1b-1d, which is ADDITIVE. "Cuts before
+# additive work" is not available on this branch of the work. Said plainly
+# rather than by manufacturing a cut to satisfy it.
+#
+# ── CORRECTION, SAME DAY. THE SENTENCE ABOVE ("neither instrument can see that
+# and neither ever could") IS WRONG, AND THE INSTRUMENT ALREADY EXISTED. ──
+#
+# There are FOUR discovery feeds and I ran one before concluding none served:
+#   converge census  NAME · converge roles ROLE · converge shape SHAPE
+#   converge verb    JOB  · dry-report          BEHAVIOUR
+# `converge shape` matches (field name, field type) sets, IDF-weighted, and
+# NEVER compares a type name — the renamed-fork detector I said did not exist.
+# It found the whole thing in ~8 seconds. The §19 miss is mine: I surveyed for
+# a tool, found dry-report, and stopped surveying.
+#
+# CONVERGE SHAPE, commonwealth/crates + sovereign-mesh, graph 18f6e0fbc:
+# 543 typed shapes, 1,917 cross-crate candidates, 18 pairs past both gates in
+# 8 groups. SIX cross the family line, and the DERIVES are the finding:
+#   JoinRequest      == JoinRequestWire   Deserialize-only <-> Serialize-only
+#   RingSyncResponse == SyncReply         Serialize-only   <-> Deserialize-only
+#   LeasedUnit       == LeasedPayload     NO SERDE         <-> Deserialize
+#   GossipRequest/Resp == Gossip*Wire     both             <-> Deserialize
+#   MeshWire == core::Mesh == MeshWire == PersistedMesh    FOUR COPIES
+#   ModelFileInfo    == ModelFileInfo     both <-> both, SAME NAME, no excuse
+# Plus inside commonwealth: CorpusHostingView == CorpusHosting, and
+# GossipStoreEntry == AllRow == StoreEntry (the MeshStore row, typed 3x).
+# 191 lines across the twelve declarations; the cut is about half.
+#
+# THIS IS nc-22a's DISEASE VERBATIM — "a closed type with no extension point
+# leaves a consumer no move except to fork it". Five of six forks exist because
+# the owner derived only ONE half of serde, or none. LeasedPayload is declared
+# INSIDE A FUNCTION BODY and already carries #[allow(dead_code)] on a field it
+# does not use: drift starting, in the shape that ended as five dead UI
+# branches in a shipped build.
+#
+# CONVERGE VERB IS CLEAN CROSS-FAMILY: 29 job clusters repo-wide, exactly one
+# with a home in both families (hex-formatting a NodeId, 3 lines). The
+# duplication is entirely in the SHAPE tier.
+#
+# SEQUENCING: these six forks ARE the cut the operator asked for. They are
+# CONVERGENCE, not extraction, and none needs the rail to be a crate — so they
+# are available NOW, ahead of 1b. Small in lines (~95), large in class: a
+# forked wire type drifts silently and no gate here sees it. `converge shape`
+# is the gate that would, and today it is a mirror with no exit code.
+floor        = 0.0
+target       = 1.0
+direction    = "higher_is_better"
+status_note  = "kill bar FIRED as written — dry-report is a similarity report and is shipped as one; it answers who copy-pasted, never who re-derived"
+instrument   = "svrn code dry-report (textual, validated) — NOT sufficient for conceptual forks; the decider census is the open successor"
+kill         = "the instrument cannot distinguish 'same shape, both live and both needed' from 'same shape, one dead'. Then it is a similarity report, ship it as one — a ranked list of lookalikes read as a deletion worklist is worse than no list."
+
+[[bar]]
+id           = "cw-wire-contract-halves"
+one_line     = "CLAIM: a peer-to-peer message is ONE type both ends import, not two halves of a serde contract"
+derives_from = "three read-only investigations, 2026-09-04, over the six cross-family shape forks"
+status       = "open"
+# THE PATTERN. commonwealth-api is the schema owner for three peer-to-peer
+# protocols whose other end is in sovereign-mesh, and it declares every message
+# with only the SERVER's half of serde. sovereign-mesh needed the mirror half
+# three times and forked three times. The request side is worse: NextUnitRequest,
+# RingSyncRequest and the corpus handoff bodies are answered by hand-built
+# serde_json::json! literals (auto_ingest.rs:850/1050/1148, ring_sync.rs:196/215)
+# — a typo in a key name compiles.
+#
+# TWO PREMISES OF MINE WERE FALSE AND ARE CORRECTED HERE:
+#   - "routes_internal submodules are private so the types are unimportable" —
+#     mod.rs is a PUBLIC FACADE (:69, :74 pub use). Resolves since ddbf789a7
+#     (2026-04-30). sovereign-mesh already names commonwealth_api:: 72x/12 files.
+#   - "GossipRequest derives both halves" — it derives Deserialize only
+#     (gossip.rs:150).
+# Both fork pairs were minted WITHIN 30 SECONDS of each other on 2026-04-14
+# (1f5694e8f 15:11:05 / 8f3f00c17 15:11:33; 16838feca 19:02:23 / 50a7a03a3
+# 19:02:37). Adjacent commits, one sitting. There was never a visibility
+# decision; the three in-tree comments asserting one are rationalisations.
+#
+# THE ABSTRACTION IS DISCLOSURE-VS-STORAGE, NOT DOMAIN-VS-WIRE. All nine Mesh
+# fields cross the wire in every mirror. The real split is that mesh_secret
+# crosses or not per peer/direction, expressed as post-hoc mutation of a pub
+# field at three sites — one correct by ABSENCE of a line. Design:
+# MeshSnapshot::for_peer(&Mesh, SecretDisclosure) with a no-Default enum, so
+# every site names its choice (§7/§10 structural-not-remembered).
+# PersistedMesh is NOT converged: self_node_id, key `mesh_id` with no serde
+# alias, inverted secret polarity. Disk and wire are different compatibility
+# clocks; flattening strands every mesh.json in the fleet.
+#
+# THREE LIVE DEFECTS FOUND, not just duplication:
+#   1. the puller ignores its own lease expiry (#[allow(dead_code)] on
+#      lease_expires_at_ms) — the one guard a partition leaves it, since its
+#      only other signal is a 410 that cannot arrive. Bounded: merge dedupes by
+#      unit_id (sharding.rs:780-783), so wasted work, not corruption.
+#   2. the mesh_secret redaction rule was already forgotten once — the
+#      credential rode the wire every 10s between two upgraded nodes because
+#      "the request half of P4b stopped sending it and the reply half did not"
+#      (routes_internal/gossip.rs:110-120).
+#   3. the model-file endpoint grew HTTP Range/206 in 637448086 (2026-06-05)
+#      and its client half never learned; a THIRD fork (rpc_warm_http.rs:564/
+#      585/826) hand-builds range URLs. The file URL is spelled five times.
+# Plus: Mesh::gossip_authorized DOES NOT EXIST — six intra-doc links across four
+# crates cite it, including two of the mirrors' own justifications.
+#
+# THE TESTS DO NOT TEST THIS: sovereign-mesh/src/ring_sync.rs has ZERO tests in
+# 251 lines; rail_e2e.rs:471-496 drives both sides with serde_json::Value (a
+# third untyped copy) under a doc comment claiming it mirrors the mesh loop
+# (§7.2, prose not test); model_fetch.rs's spawn_test_server is a hand-rolled
+# replica of the CLIENT's own types citing a circular dep that does not exist.
+#
+# ── PROGRESS 2026-09-04. THREE OF SIX CONVERGED, AND THE INSTRUMENT LIED ──
+# 6e35ef8c9 ModelFileInfo + ListResponse -> commonwealth_core::model, plus the
+#   path itself (spelled 5x) as MODELS_LIST_PATH / model_file_url. The structs
+#   never drifted; the CONTRACT did — 637448086 taught the server HTTP Range in
+#   2026-06 and the client half never learned, while rpc_warm_http hand-built
+#   its own range URLs.
+# 1268bf587 LeasedUnit -> commonwealth_core::knowledge with is_live_at(), and
+#   THE PULLER NOW READS ITS LEASE. The #[allow(dead_code)] field was the only
+#   guard a partition leaves it (a 410 heartbeat cannot arrive during one).
+#   HEARTBEAT_INTERVAL stops being from_secs(100)-beside-a-comment and becomes
+#   LEASE_MS / 3. Same commit: RingSyncRequest/Response gain their missing
+#   serde halves; SyncReply and two serde_json::json! request bodies deleted.
+#
+# THE AFTER-NUMBER I FIRST READ WAS WRONG, and the reason is now note
+# b2639704: the SCIP index does NOT evict symbols of kind='unknown' even when
+# last_indexed_head == HEAD exactly. It kept reporting LeasedPayload and
+# SyncReply as live forks after both were deleted. Measured: of 13,632 real
+# sovereign-mesh symbols only those 2 are stale, both declared unusually (one
+# inside a function body, one a private struct). File-level eviction is fine.
+# TRUE state: 8 groups -> 5; cross-family forks 6 -> 3.
+# Caught only by checking the tree against the tool. `git grep` the type before
+# believing any report that says a fork still exists.
+#
+# REMAINING: the Mesh family (MeshWire x3 + core::Mesh, the largest), the
+# Gossip pair, and CorpusHostingView/GossipStoreEntry inside commonwealth.
+floor        = 11.0
+target       = 5.0
+direction    = "lower_is_better"
+instrument   = "svrn code converge shape --include commonwealth/crates --include sovereign/crates/sovereign-mesh — count cross-family groups before/after"
+kill         = "converging a pair forces commonwealth-core to grow a dependency. Then the type is not core vocabulary and belongs elsewhere, or stays forked with the reason written down."
+
+[[bar]]
+id           = "cw-ledger-closes-itself"
+one_line     = "CLAIM: the acceptance ledger is USED, not just built — and closure fires without a human"
+derives_from = "P4; the feedback_creation_closure_loop failure mode, named verbatim"
+status       = "open"
+# Within one week of 1f landing the ledger holds at least the six entries this
+# campaign generates (four conformance retirements from 0b, two size-gate
+# --accept rows per new crate), and AT LEAST ONE HAS BEEN AUTO-WITHDRAWN by a
+# Monday --tighten with no human touching it.
+#
+# The closure loop costs nothing: when a ratchet tightens below an accepted
+# ceiling, the acceptance is provably discharged. baseline-tighten.yml already
+# runs that tighten every Monday 06:00 UTC. Creation is `size-gate --accept`
+# emitting an act; closure is a cron that already exists.
+#
+# IF CLOSURE NEVER FIRES ON ITS OWN, the loop was decorative and 1g does not
+# land. That is the whole point of the bar — four *_LEDGER.md files in this
+# repo already rot while reading as authoritative, and none has a closure
+# trigger.
+floor        = 0.0
+target       = 6.0
+direction    = "higher_is_better"
+instrument   = "the ledger's own as-of reader, counting live grants"
+kill         = "K5 — the ledger cannot express §10.1j, a finding about an INSTRUMENT's blindness rather than a debt with a payer. Then it covers the easy half of §10, the prose stays, and 1g is not declared."

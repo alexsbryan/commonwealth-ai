@@ -26,7 +26,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "gr-4-the_bound_is_a_wait_bound_not_a_ban_on_s"
 requirement = "GR-4"
-target = "commonwealth/crates/commonwealth-core/src/fair_sched.rs"
+target = "serving-policy/src/fair_sched.rs"
 find = "    pub fn predict_wait_ms(&self, position: u32, slots: usize, in_flight_elapsed_ms: u64) -> u64 {\n        let slots = (slots.max(1)) as u64;\n        ((position as u64).div_ceil(slots) * self.avg_turn_ms).saturating_sub(in_flight_elapsed_ms)\n    }"
 replace = "    pub fn predict_wait_ms(&self, position: u32, slots: usize, in_flight_elapsed_ms: u64) -> u64 {\n        // Violation of GR-4: Using a constant bound instead of deriving from retrieved set\n        const BOUND: u64 = 30_000;\n        if in_flight_elapsed_ms < BOUND {\n            return 1; \n        }\n        let slots = (slots.max(1)) as u64;\n        ((position as u64).div_ceil(slots) * self.avg_turn_ms).saturating_sub(in_flight_elapsed_ms)\n    }"
 mustFail = ["the_bound_is_a_wait_bound_not_a_ban_on_slow_turns"]

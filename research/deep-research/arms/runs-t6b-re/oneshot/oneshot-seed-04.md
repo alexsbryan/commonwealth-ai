@@ -1,7 +1,0 @@
-OpenAI released o3 and o4-mini on April 16, 2025 [Source: ev-1]. The primary reason for this launch was to defend the reasoning-model frontier against competitive pressures from DeepSeek’s R1 cost shock and Anthropic’s agentic-coding push while GPT-5 had not yet shipped [Source: ev-1].
-
-The launch signaled a specific direction for frontier reasoning models by reframing frontier capability as "tool-using reasoning at commodity prices" [Source: ev-1]. This strategic shift is evidenced by several key features of the new models:
-*   **Native Integration:** Vision and native tool use (such as web search and code interpreter) were built directly into the model rather than being bolted on, marking them as OpenAI's first reasoning models with these capabilities integrated natively [Source: ev-1].
-*   **Dynamic Compute:** The models utilized "budget forcing," a technique involving a fixed maximum thought budget that allows for task-adaptive dynamic compute, meaning harder questions trigger longer thinking times [Source: ev-1].
-*   **Privacy Policy:** It introduced OpenAI’s first private chain-of-thought policy, where reasoning tokens are not exposed to API callers [Source: ev-1].
-*   **Performance vs. Cost:** o3 achieved about 87.5% on the ARC-AGI-1 benchmark at high compute (meeting or exceeding the ~85% human baseline), while being priced significantly lower than previous frontier standards—o3 at $10 per million input tokens and $40 per million output tokens, and o4-mini at $1.10 per million input tokens and $.4.40 per million output tokens [Source: ev-1].

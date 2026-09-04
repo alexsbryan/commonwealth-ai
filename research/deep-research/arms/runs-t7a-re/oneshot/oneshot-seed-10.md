@@ -1,8 +1,0 @@
-OpenAI released GPT-5 on August 7, 2025 [Source: ev-1] to consolidate its strategy around a single unified model and shift the competitive focus from benchmark demonstrations to "default agency"—models that act rather than just answer [Source: ev-1]. This release marked a deliberate strategic pivot in how OpenAI sells its models by adopting "give-away-the-frontier" pricing, making the advanced system available immediately to free users [Source: ev-1].
-
-Key changes to the sales and product structure include:
-*   **Pricing Collapse:** The company eliminated high-cost reasoning tiers, offering GPT-5 for free on the basic tier. Paid plans are structured as Plus at $20/month (with unlimited access) and Pro at $200/month [Source: ev-1]. API costs were set significantly lower than previous o-series products, with GPT-5 priced at $1.25 per million input tokens and $10 per million output tokens, while GPT-5 mini is priced at $0.25 per million input and $2 per million output [Source: ev-1].
-*   **Product Consolidation:** OpenAI retired separate "o-series" reasoning models (including o3, o4-mini, o3-mini, and o3-pro), folding them into internal "reasoning modes" within GPT-5 to remove the need for a model picker [Source: ev-1].
-*   **Feature Integration:** The release integrated capabilities that previously required separate tools or products, including native image generation, deep research, file upload, web search, and a 5-million-token context window directly into the single model interface [Source: ev-1].
-
-This approach allowed GPT-5 to achieve performance comparable to previous specialized models—scoring approximately 78.6% on SWE-bench Verified—at a fraction of their former prices [Source: ev-1].

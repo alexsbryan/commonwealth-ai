@@ -8,8 +8,9 @@
 
 use corpus_engine::enrichment::atlas::atoms::AtomType;
 use corpus_engine::enrichment::ontology::{
-    validate_block, AttrFamily, Clock, Deontic, Force, OntologyLanguageRegistry, OntologyPolicies,
-    OntologyTypeDecl, TypeKind, MAX_ATTRS_PER_TYPE, MAX_ENUM_VALUES, MAX_TYPES_PER_KIND,
+    validate_block, AttrFamily, Deontic, Force, OntologyLanguageRegistry, OntologyPolicies,
+    OntologyTypeDecl, SupersessionClock, TypeKind, MAX_ATTRS_PER_TYPE, MAX_ENUM_VALUES,
+    MAX_TYPES_PER_KIND,
 };
 use corpus_engine::enrichment::pipeline::atlas::EntityType;
 use corpus_engine::recipe::{EntityTypeDecl, RelationshipTypeDecl};
@@ -126,7 +127,7 @@ fn v1_parse_numismatics_example() {
         p.derivation.tension.between,
         vec!["attribution".to_string()]
     );
-    assert_eq!(p.change.clock, Clock::DocumentDate);
+    assert_eq!(p.change.clock, SupersessionClock::DocumentDate);
 }
 
 #[test]

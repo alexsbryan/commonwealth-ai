@@ -219,6 +219,9 @@ mod thin_pool_tests {
         });
         assert_eq!(trial.config.candidates_per_round, 2);
         assert_eq!(trial.config.emit_max_tokens, 1000);
-        assert_eq!(trial.config.rounds_per_trial, TrialConfig::default().rounds_per_trial);
+        assert_eq!(
+            trial.config.rounds_per_trial,
+            TrialConfig::default().rounds_per_trial
+        );
     }
 }

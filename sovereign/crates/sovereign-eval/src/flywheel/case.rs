@@ -131,14 +131,14 @@ impl RegressionBank {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chaos_monkey::QuestionType;
+    use crate::chaos_monkey::PressureKind;
     use crate::flywheel::probe::{AbsentKind, Oracle, Probe, ProbeSource};
 
     fn present_probe(gold: Vec<String>) -> Probe {
         Probe {
             id: "p1".into(),
             query: "who runs the shop?".into(),
-            qtype: QuestionType::Present,
+            qtype: PressureKind::Present,
             oracle: Oracle::Witness {
                 gold_keywords: gold,
                 supporting_quote: None,
@@ -153,7 +153,7 @@ mod tests {
         Probe {
             id: "a1".into(),
             query: "capital of Australia?".into(),
-            qtype: QuestionType::AbsentAdjacent,
+            qtype: PressureKind::AbsentAdjacent,
             oracle: Oracle::Absent {
                 held_out_witness: None,
                 kind: AbsentKind::Adjacent,

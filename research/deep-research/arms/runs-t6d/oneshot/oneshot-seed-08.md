@@ -1,8 +1,0 @@
-A US court found Google’s search business to be a monopoly because it violated Section 2 of the Sherman Act through exclusionary conduct involving default-distribution deals [Source: ev-1]. Specifically, Judge Amit Mehta ruled on August 5, 2024, that Google was a monopolist in general search services and general search text advertising by paying companies like Apple, Samsung, and Mozilla billions of dollars to remain their default search engine [Source: ev-1]. Evidence indicated that Google paid approximately $26.3 billion for distribution in 2021 and gave Apple roughly 36% of Safari search-ad revenue [Source: ev-1]. The court determined this created a self-reinforcing loop where defaults generated scale, which produced data, improved quality, and protected the default position against rivals [Source: ev-1].
-
-The remedies ordered on August 5, 25 were structural and behavioral:
-*   **Divestiture:** Google must sell its Chrome browser, marking the first forced divestiture of a major tech company since the Microsoft case in 2000 [Source: ev-1].
-*   **Prohibition on Payments:** Google may no longer pay for default search placement or engage in revenue-sharing agreements with device manufacturers [Source: ev-1].
-*   **Acquisition Limits:** The ruling includes limits on future acquisitions and AI-related investments [Source: ev-1].
-
-Google has appealed this decision to the DC Circuit Court of Appeals, arguing that the trial court punished procompetitive innovation, but the final outcome remained pending through 2025 [Source: ev-1].

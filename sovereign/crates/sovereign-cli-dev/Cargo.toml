@@ -47,6 +47,7 @@ required-features = ["workbench"]
 # `corpus-engine` drags the tree-sitter grammars. Linking those into a
 # dispatcher to move a metric is the failure this split refuses.
 [dependencies]
+serving-policy = { workspace = true }
 # ── Always-on: the thin, linkable surface ──
 # `converge_cmd`'s entire dependency surface. Read-only SQLite over the SCIP
 # graph; no grammars, no model, no daemon.

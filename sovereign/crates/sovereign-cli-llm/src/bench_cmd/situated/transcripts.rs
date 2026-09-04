@@ -15,7 +15,7 @@
 use std::path::Path;
 
 use serde::Deserialize;
-use sovereign_eval::chaos_monkey::QuestionType;
+use sovereign_eval::chaos_monkey::PressureKind;
 
 /// One probe's turn, as the chaos runner banked it. Deliberately a SUBSET of
 /// the row's fields — the lane reads the response and the probe's identity
@@ -23,7 +23,7 @@ use sovereign_eval::chaos_monkey::QuestionType;
 #[derive(Debug, Clone, Deserialize)]
 pub struct Transcript {
     pub id: String,
-    pub qtype: QuestionType,
+    pub qtype: PressureKind,
     #[serde(default)]
     pub question: String,
     /// The visible response the reader got — post-gate, the real artifact.
@@ -157,7 +157,7 @@ mod tests {
     fn absent_locator_count_is_unknown_not_a_miss() {
         let row = |located: Option<u64>| Transcript {
             id: "p".into(),
-            qtype: QuestionType::Present,
+            qtype: PressureKind::Present,
             question: "q".into(),
             answer: "a".into(),
             gate_action: None,
@@ -217,7 +217,7 @@ mod tests {
         let (rows, skipped) = load(&p).unwrap();
         assert_eq!(skipped, 0);
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].qtype, QuestionType::Present);
+        assert_eq!(rows[0].qtype, PressureKind::Present);
         assert_eq!(rows[0].gate_action.as_deref(), Some("abstained_specifics"));
         assert!(rows[0].is_judgeable());
     }

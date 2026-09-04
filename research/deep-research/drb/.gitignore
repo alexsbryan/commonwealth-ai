@@ -1,2 +1,6 @@
 __pycache__/
 *.pyc
+
+# Same rule as arms/.gitignore: run trees stay local. The scored deliverable
+# and judge output live in overall-derivation/flights-*, which stays tracked.
+runs/

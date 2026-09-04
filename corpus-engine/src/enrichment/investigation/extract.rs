@@ -368,7 +368,7 @@ fn preview(s: &str, n: usize) -> String {
 }
 
 /// Coalesce extracted entity mentions + relationship endpoints into
-/// canonical [`Entity`] records, keyed by a type-scoped, fold-normalized name
+/// canonical [`InvestigationEntity`] records, keyed by a type-scoped, fold-normalized name
 /// produced by the [`Normalizer`] (whose vocabulary comes from the recipe).
 /// Surface-form variants of one entity (e.g. `"Wright-Patterson AFB"` /
 /// `"Wright-Patterson Air Force Base"` / `"Wright-Patterson"`, when the recipe
@@ -383,8 +383,8 @@ pub fn group_extracted_entities(
     normalizer: &Normalizer,
     entities: &[(String /* chunk_id */, ExtractedEntity)],
     relationships: &[(String /* chunk_id */, ExtractedRelationship)],
-) -> BTreeMap<String, super::graph::Entity> {
-    let mut by_key: BTreeMap<String, super::graph::Entity> = BTreeMap::new();
+) -> BTreeMap<String, super::graph::InvestigationEntity> {
+    let mut by_key: BTreeMap<String, super::graph::InvestigationEntity> = BTreeMap::new();
 
     for (_chunk_id, ent) in entities {
         upsert_entity(
@@ -414,19 +414,21 @@ pub fn group_extracted_entities(
 /// never overwrites a present value with a later one).
 fn upsert_entity(
     normalizer: &Normalizer,
-    by_key: &mut BTreeMap<String, super::graph::Entity>,
+    by_key: &mut BTreeMap<String, super::graph::InvestigationEntity>,
     entity_type: &str,
     name: &str,
     attributes: Option<&serde_json::Map<String, serde_json::Value>>,
 ) {
     let key = normalizer.coalesce_key(entity_type, name);
-    let entry = by_key.entry(key).or_insert_with(|| super::graph::Entity {
-        id: normalizer.entity_id(entity_type, name),
-        canonical_name: name.to_string(),
-        entity_type: entity_type.to_string(),
-        attributes: Default::default(),
-        aliases: Vec::new(),
-    });
+    let entry = by_key
+        .entry(key)
+        .or_insert_with(|| super::graph::InvestigationEntity {
+            id: normalizer.entity_id(entity_type, name),
+            canonical_name: name.to_string(),
+            entity_type: entity_type.to_string(),
+            attributes: Default::default(),
+            aliases: Vec::new(),
+        });
     if name != entry.canonical_name {
         if name.len() > entry.canonical_name.len() {
             // Longer surface form is the better canonical; demote the old.

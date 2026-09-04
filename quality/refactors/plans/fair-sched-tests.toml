@@ -1,0 +1,22 @@
+# Move fair_sched.rs's tests module to a sibling file.
+#
+# 987 lines, 427 of them the `#[cfg(test)] mod tests` block — the file crossed
+# into ARCH §3.1's 800-1200 approach band when `fair_sched` moved out of
+# commonwealth-core into this crate. Same recipe as citation-tests.toml:
+# move the body, patch the opener into a declaration.
+[plan]
+subject = "serving-policy/src/fair_sched.rs"
+verify_cmd = "cargo test -p serving-policy --lib"
+
+[[move]]
+# tests body: everything between `mod tests {` and its closing brace
+start = 563
+end = 986
+dest = "serving-policy/src/fair_sched/tests.rs"
+
+[[patch]]
+# the `#[cfg(test)] mod tests {` opener + closing brace become a declaration
+start = 561
+end = 987
+body = """#[cfg(test)]
+mod tests;"""

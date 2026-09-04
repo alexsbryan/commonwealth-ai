@@ -177,14 +177,14 @@ impl ChatBackend for ReqwestChatBackend {
             let head = resp.text().await.unwrap_or_default();
             let wait = serde_json::from_str::<serde_json::Value>(&head)
                 .ok()
-                .and_then(|v| {
-                    v.pointer("/retry_after_secs")
-                        .and_then(|x| x.as_u64())
-                })
+                .and_then(|v| v.pointer("/retry_after_secs").and_then(|x| x.as_u64()))
                 .unwrap_or(30)
                 .clamp(1, 60);
-            tracing::info!(wait_secs = wait, attempt = shed_retries + 1,
-                "backend shed by the slot queue (503 local_queue_full) — backing off");
+            tracing::info!(
+                wait_secs = wait,
+                attempt = shed_retries + 1,
+                "backend shed by the slot queue (503 local_queue_full) — backing off"
+            );
             tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
             shed_retries += 1;
             match send_once().await {

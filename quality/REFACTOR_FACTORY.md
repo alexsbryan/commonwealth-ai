@@ -239,6 +239,75 @@ is resolved, and resolving it breaks the 117 sites already using `NodeId`.
 - **Never a model:** classifying compiler errors, writing the fix, deciding
   whether an item is worth converging.
 
+## The split loop — the applied process (2026-09-03, grounding)
+
+The six stages above converge a REPRESENTATION. The factory's second
+pipeline splits a STRUCTURE — the ARCH §3.1 god file — and it is the half
+that has been run end to end, on the grounding module: `mod.rs` 6,042 →
+1,177, `judge.rs` 3,011 → 679, `citation.rs` 1,694 → 987,
+`citation_attribution.rs` 1,403 → 848. The grounding module holds no §3.1
+violation. The process, as proven (not as designed):
+
+```
+svrn code suggest-seams <file>            # SCIP: clusters, shared helpers, dead code
+svrn code suggest-seams <file> --plan     # the same facts as executor TOML
+#   author: trim steps, add mod-declaration/re-export patches, set verify_cmd
+cargo xtask refactor-apply quality/refactors/plans/<plan>.toml --land
+#   + the SYSTEM_OVERVIEW §1.1 touch (human — wording needs judgment)
+```
+
+**Division of labor — the load-bearing decision.** The model does not
+mutate. Four supervised solve attempts against `judge.rs` produced ZERO
+promoted edits: the model re-emits code it was asked to move, and a
+1,166-line tests module is ~40k output tokens against a 4,000-token
+budget — every candidate died before emitting. The fix was not a better
+prompt; it was removing the model from the mutation loop entirely:
+`EditAction::MoveLines` (model emits the DECISION — a span and a
+destination — the tool moves the bytes), and now `refactor-apply`, which
+needs no model at all. The model's remaining role is semantic judgment:
+is this seam right, does this concern cohere — O(1) per split, not
+O(lines).
+
+**The author's duties in a plan** (what the executor refuses to guess):
+mod declarations and re-exports for extracted clusters, the verify
+command, and which steps to keep — the generated plan is advisory
+material (citation.rs's carried 26 steps; the tests-move two were the
+batch that shipped).
+
+**Preconditions and etiquette**, each earned:
+- *Workdir at the crate level* for solve jobs — the fitness ladder is a
+  generated `tests/max_file_size.rs`, which a virtual-manifest root never
+  compiles.
+- *Warm the primary before submitting* (one 5-token completion): a cold
+  slot sheds every concurrent candidate (503 `local_queue_full`) — and
+  the solver's backend now honors the shed's `retry_after` and
+  serializes on loopback providers.
+- *Quiet window*: the shared daemon can be stopped by a peer's e2e
+  harness (the `:9741` port invariant); solve jobs are in-memory and die
+  with it. No destructive tree operations (`git stash -u`) on the
+  shared checkout — scoped commits only.
+- *Simplex*: the deterministic executor prefers a file module converted
+  to a directory module (`judge.rs` → `judge/*.rs`), relative
+  `include_str!` paths must be re-based by hand, and the mod-tests
+  recipe is move-body + patch-opener.
+
+**The failure catalogue** — six distinct defects, each fixed at its
+layer, each found by a supervised attempt:
+language-for-parsing derived from the shallowest source file (monorepo
+roots always misfire — now read off the verify command); diagnostics
+collapsed into one static string (the runner's own report now rides the
+`NoBaseline` reason); a daemon serving stale code after an in-place
+rebuild (submit now refuses with the repair); Rust trial timeouts below
+one cold build (900s floor); the emission-compliance ceiling
+(`move_lines`); concurrent candidates shedding each other on a single
+slot (loopback seat + `retry_after` backoff).
+
+**Residue-per-item**, per the bar above: grounding split one needed the
+executor built; split two (citation_attribution) was one checked-in plan;
+split three (citation) was plan → trim → apply. The trajectory is the
+right direction; the number to keep honest is minutes-per-file as the
+oversized list (137 names at freeze) burns.
+
 ## What gets built, in order
 
 **The build order lives in [`REFACTOR_LEDGER.md`](./REFACTOR_LEDGER.md), not

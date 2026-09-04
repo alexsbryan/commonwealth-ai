@@ -40,6 +40,7 @@
 
 use std::time::{Duration, Instant};
 
+use commonwealth_api::routes_internal::{RingSyncRequest, RingSyncResponse};
 use commonwealth_api::state::AppState;
 use commonwealth_core::mesh::NodeStatus;
 use commonwealth_transport::{peer_contact, TrafficClass};
@@ -195,10 +196,14 @@ async fn exchange(
 ) -> Result<(usize, usize), String> {
     // Call 1 — learn what they have, take what we lack.
     let mine = journal.digest().map_err(|e| e.to_string())?;
-    let first: SyncReply = post(
+    let first = post(
         http,
         url,
-        &serde_json::json!({ "namespace": namespace, "digest": mine, "ops": [] }),
+        &RingSyncRequest {
+            namespace: namespace.to_string(),
+            digest: mine,
+            ops: Vec::new(),
+        },
     )
     .await?;
     let pulled = journal.ingest_all(&first.ops).map_err(|e| e.to_string())?;
@@ -211,31 +216,24 @@ async fn exchange(
         return Ok((pulled, 0));
     }
     let refreshed = journal.digest().map_err(|e| e.to_string())?;
-    let second: SyncReply = post(
+    let second = post(
         http,
         url,
-        &serde_json::json!({ "namespace": namespace, "digest": refreshed, "ops": for_peer }),
+        &RingSyncRequest {
+            namespace: namespace.to_string(),
+            digest: refreshed,
+            ops: for_peer,
+        },
     )
     .await?;
     Ok((pulled, second.ingested))
 }
 
-/// The half of the peer's response this loop reads. A struct rather than
-/// index-into-`Value` so a wire change breaks here rather than silently
-/// yielding zero ops (ARCH §18.3).
-#[derive(serde::Deserialize)]
-struct SyncReply {
-    digest: commonwealth_knowledge::rail::Digest,
-    ops: Vec<corpus_engine::oplog::Op<commonwealth_knowledge::rail::SignedOp>>,
-    #[serde(default)]
-    ingested: usize,
-}
-
 async fn post(
     http: &reqwest::Client,
     url: &str,
-    body: &serde_json::Value,
-) -> Result<SyncReply, String> {
+    body: &RingSyncRequest,
+) -> Result<RingSyncResponse, String> {
     let resp = http
         .post(url)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
@@ -247,5 +245,7 @@ async fn post(
     if !status.is_success() {
         return Err(format!("HTTP {status}"));
     }
-    resp.json::<SyncReply>().await.map_err(|e| e.to_string())
+    resp.json::<RingSyncResponse>()
+        .await
+        .map_err(|e| e.to_string())
 }

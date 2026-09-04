@@ -20,7 +20,9 @@
 use std::sync::Arc;
 
 use corpus_engine::asset_store::{AssetStore, FilesystemAssetStore};
-use corpus_engine::enrichment::atlas::atoms::{AtomId, ChunkRef, Entity, Provenance, SignalKind};
+use corpus_engine::enrichment::atlas::atoms::{
+    AtomId, ChunkRef, Entity, SignalKind, SignalProvenance,
+};
 use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
 use corpus_engine::enrichment::reconciliation::{reconcile, ReconciliationPolicy};
 
@@ -45,7 +47,7 @@ fn ent(
         affiliation: None,
         role: None,
         participants: Vec::new(),
-        provenance: Provenance::new(extractor, doc, signal),
+        provenance: SignalProvenance::new(extractor, doc, signal),
         attributes: serde_json::Map::new(),
         concept_kind: None,
     }

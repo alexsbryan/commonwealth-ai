@@ -499,13 +499,9 @@ impl Default for WorkQueueManager {
     }
 }
 
-/// Payload returned by `next_unit` on success.
-#[derive(Debug, Clone, PartialEq)]
-pub struct LeasedUnit {
-    pub unit_id: UnitId,
-    pub unit: WorkUnit,
-    pub lease_expires_at_ms: u64,
-}
+// `LeasedUnit` is `commonwealth_core::knowledge`'s — the puller needs it too,
+// and a lease deadline only means something if both ends read the same one.
+pub use commonwealth_core::knowledge::LeasedUnit;
 
 use commonwealth_core::clock::unix_now_millis as now_ms;
 

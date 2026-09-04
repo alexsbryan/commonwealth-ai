@@ -421,6 +421,13 @@ fi
 # the old ~70s was cargo, not gates. Measured 2026-08-28 on this host:
 #   concept 15.1s · arch 6.3s · env 4.2s · layout 3.9s · boundary/layer/lock <0.1s
 #   = 29.6s for all seven, plus one build.
+# clock-gate joined 2026-09-03 at 2.5s warm. It had run in NO automatic gate —
+# only `cargo xtask quality` — while being path-keyed: it fails on a NEW
+# hand-read clock, and moving a baselined file mints a new key. So any refactor
+# that relocates one of the 97 baselined files went red only when a human
+# happened to type `cargo xtask quality`. That is the "gate nobody ran" shape
+# (§18.1), and it is about to matter: the commonwealth package work moves
+# `rail/mod.rs`, which is `quality/baselines/clock_reads.txt:15`.
 # If that ever creeps, concept-gate is 51% of it and REFACTOR_LEDGER.md
 # already specifies its content-hash cache.
 #
@@ -428,7 +435,7 @@ fi
 # nightly plus `cargo install cargo-public-api` (a CI concern, and it burns
 # 15.7s failing to find the binary); lint-gate consumes a clippy JSON stream
 # and belongs to the lint script that produces one. Neither is a push gate.
-XTASK_GATES=(docs-gate arch-gate boundary-gate layer-gate lock-gate layout-gate env-gate concept-gate)
+XTASK_GATES=(docs-gate arch-gate boundary-gate layer-gate lock-gate layout-gate env-gate clock-gate concept-gate)
 
 xtask_gates() {
     local g rc=0 code out xtask
@@ -480,7 +487,7 @@ xtask_gates() {
     return $rc
 }
 
-run_gate "xtask gates (docs/arch/boundary/layer/lock/layout/env/concept)" xtask_gates
+run_gate "xtask gates (docs/arch/boundary/layer/lock/layout/env/clock/concept)" xtask_gates
 
 # ── The size term. ADVISORY on purpose, for now. ──────────────────────────
 #

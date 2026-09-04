@@ -213,11 +213,11 @@ jobs:
       # checkout its only possible answers are COULD-NOT-JUDGE (3) and
       # NEVER-RAN (4). A gate that can never say "pass" here is decoration,
       # so it stays local-only where the graph is real.
-      - name: docs / arch / boundary / layer / lock / layout / env
+      - name: docs / arch / boundary / layer / lock / layout / env / clock
         run: |
           set -uo pipefail
           rc=0
-          for g in docs-gate arch-gate boundary-gate layer-gate lock-gate layout-gate env-gate; do
+          for g in docs-gate arch-gate boundary-gate layer-gate lock-gate layout-gate env-gate clock-gate; do
             printf '\n──── %s\n' "$g"
             ./target/debug/xtask "$g" || rc=1
           done

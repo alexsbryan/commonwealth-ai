@@ -32,6 +32,7 @@ mod lint_gate;
 mod lock_gate;
 mod manifests;
 mod quality_cmd;
+mod refactor_apply;
 mod refactor_land;
 mod size_gate;
 mod target_arch;
@@ -44,6 +45,7 @@ fn main() {
         "quality" => quality_cmd::run(),
         "arch-gate" => arch_gate::run(&args[1..]),
         "refactor-land" => refactor_land::run(&args[1..]),
+        "refactor-apply" => refactor_apply::run(&args[1..]),
         "docs-gate" => docs_gate::run(),
         "boundary-gate" => boundary_gate::run(),
         "clock-gate" => clock_gate::run(&args[1..]),
@@ -83,6 +85,9 @@ fn print_usage() {
     );
     eprintln!(
         "  refactor-land                             Post-split landing chain: conformance-tag regen when stale + arch-gate --tighten"
+    );
+    eprintln!(
+        "  refactor-apply <plan.toml> [--land]       Execute a named move-recipe (deterministic split steps) + verify per step"
     );
     eprintln!(
         "  docs-gate                      Resolve every repo path cited by the narrative docs"

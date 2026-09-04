@@ -431,6 +431,38 @@ pub const MAX_UNIT_ATTEMPTS: u32 = 3;
 /// the lease every `LEASE_MS / 3` on the peer side.
 pub const LEASE_MS: u64 = 300_000;
 
+/// What `next_unit` hands a peer: the unit, and the deadline the grant
+/// expires at.
+///
+/// It lives here, with `LEASE_MS`, because BOTH ends need it and the deadline
+/// is the whole point. Until 2026-09-04 the coordinator's copy
+/// (`commonwealth-knowledge::work_queue`) derived no serde at all, so the
+/// puller could not import it and declared a private `LeasedPayload` inside a
+/// function body — with `#[allow(dead_code)]` on `lease_expires_at_ms`.
+///
+/// That dead field is the guard a partition leaves you. The puller's only
+/// other signal that its lease is gone is a `410` on heartbeat, and a
+/// partition is exactly the case where no `410` can arrive: the reaper
+/// requeues, another peer leases the same `unit_id`, and the original ingests
+/// to completion having never looked at the deadline it was handed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LeasedUnit {
+    pub unit_id: UnitId,
+    pub unit: WorkUnit,
+    /// Unix ms. Past this the coordinator considers the grant void and may
+    /// have re-leased the unit to someone else.
+    pub lease_expires_at_ms: u64,
+}
+
+impl LeasedUnit {
+    /// Whether this grant is still live at `now_ms`. The one place the
+    /// comparison is written, so the two ends cannot disagree about whether
+    /// the boundary is inclusive.
+    pub fn is_live_at(&self, now_ms: u64) -> bool {
+        now_ms < self.lease_expires_at_ms
+    }
+}
+
 use crate::clock::unix_now_millis as now_ms;
 
 #[cfg(test)]

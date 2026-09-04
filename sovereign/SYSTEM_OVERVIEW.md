@@ -102,6 +102,18 @@ Two shared protocols cross the Sovereign/cmnwlth boundary:
   closures from any caller; each project supplies its own
   implementation.
 
+One crate sits BELOW that boundary rather than crossing it:
+`serving-policy` (minted 2026-09-03) holds `fair_sched` — fair-share caps,
+`EtaEwma`, reciprocity weighting, the `SchedCore` policy the REST scheduler
+and the mesh peer-admission gate share — and `pipeline_aliases`. Both were in
+`commonwealth-core`, and `fair_sched` was the ONLY reason `sovereign-inference`
+and `sovereign-server` depended on the mesh foundation: their entire reference
+was `EtaEwma` at `embedded/model_slot.rs:29` and `scheduler.rs:32` +
+`reciprocity.rs:27`. Moving it DELETED both direct edges rather than relocating
+them, and asked for no `[[exception]]`. Its in-repo dependency list is empty and
+`quality/ARCH_LAYERS.toml` forbids a dep on `sovereign-*` OR `commonwealth-*`
+in either direction — a dep either way puts those edges straight back.
+
 ---
 
 ## 2. Workspace map
@@ -143,12 +155,30 @@ doc records absorbing "~40 copy-pasted" helpers, and a census on 2026-08-31
 found 35 live again under fifteen names, plus 150 direct `SystemTime::now()`
 reads. The closure loop is `cargo xtask clock-gate` (baseline
 `quality/baselines/clock_reads.txt`, shrink-only): a new hand-read clock fails
-the gate and is told which island decider to ask. Sites needing sub-second
+the gate and is told which island decider to ask. It joined `pre-push.sh` and
+`ci.yml` on 2026-09-03 (2.5s warm); before that it ran in NO automatic gate,
+only `cargo xtask quality` — and because the baseline is path-keyed, any
+refactor RELOCATING one of the 97 baselined files minted a new key and went red
+only when a human happened to type that command. Sites needing sub-second
 precision ride the baseline — no decider offers nanos.
-- `oplog.rs` — **`Op<K>` + `Oplog<K>`**, one append-only JSONL journal with
+- `oplog` — **`Op<K>` + `Oplog<K>`**, one append-only JSONL journal with
   four tenants declaring `Journaled`: `enrichment::governance`,
   `enrichment::reconciliation`, `meta_atlas::bridge` and — since 2026-08-30 —
-  `commonwealth-knowledge::rail` (the ring rail). Until 2026-08-20
+  `commonwealth-knowledge::rail` (the ring rail). **It became its own tier-0
+  crate on 2026-09-04** and is re-exported as `corpus_engine::oplog`, so no
+  call site moved. The reason is the fourth tenant: the ring rail's entire
+  coupling to the knowledge layer was seven references to `Op`/`OpId`/
+  `SkippedLine`, and reaching them cost it a dependency on `corpus-engine` —
+  a 578-crate closure for a 547-line file. A journal is a primitive, not
+  knowledge-layer machinery. The crate mints its own `OplogError`, which
+  `corpus_engine::error::Error` absorbs with byte-identical `Display` text, and
+  `Op::now` was DELETED in the move: it was the journal's only reason to know
+  what a clock was, its two callers both lived in `corpus-engine`, and keeping
+  it would have dragged `corpus-engine-yield` — a knowledge-layer crate — into
+  a tier-0 leaf. Tenants now hang their own act constructors off extension
+  traits (`GovernanceLog`, `BridgeOp`, `ReconciliationOp`), which the orphan
+  rules force and which is the right shape anyway: the envelope does not get to
+  know what a merge is. Until 2026-08-20
   each carried its own copy of the envelope and the file IO (7 types); the two
   younger logs had no op id, no actor and no version gate, which is why
   reconciliation's documented reversible `Split` — "walk backwards finding the
@@ -220,6 +250,8 @@ crates/
 ├── sovereign-cli            # User-facing dispatcher — execs into sibling binaries
 ├── sovereign-cli-shared     # Tiny shared lib (dirs, repo, help, prompts, tracing init)
 ├── sovereign-time           # Wall-clock helpers (Unix-epoch secs/millis) — a zero-dep leaf for crates that don't depend on sovereign-core
+├── serving-policy           # Fair-share scheduling (SchedCore/EtaEwma/reciprocity) + pipeline alias resolution — tier-0, empty in-repo dep list, forbidden from naming either family
+├── oplog                    # Op/OpId/Oplog/Journaled/SkippedLine — the append-only JSONL journal; tier-0, kernel-types its only in-repo dep, forbidden from naming corpus-engine* OR either family
 ├── sovereign-cli-daemon     # Long-running host + lifecycle (~241 MB binary; bin+lib — the desktop's --daemon-child re-enters via daemon_child_main)
 ├── sovereign-cli-dev        # Workbench: ATOS + project lifecycle + code intel + tools
 ├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/bench/eval/atlas/…)
@@ -268,8 +300,19 @@ governs since 2026-09-03: the crate sets and the shared-leaf budgets
 are declared as `[[package]]` / `[[package_leaf]]` blocks in
 `quality/ARCH_LAYERS.toml` (schema v3), beside the layer map and behind
 the same parser, so layer-gate, boundary-gate and `arch_report` cannot
-drift on what a boundary means. `code-intel` is the second
-(`docs/CODE_TOOLING_BOUNDARY.md`).
+drift on what a boundary means. Four are declared: `studio`, `code-intel`
+(`docs/CODE_TOOLING_BOUNDARY.md`), `corpus-mcp` (`corpus-mcp/README.md`)
+and — since 2026-09-03 — `commonwealth` (`commonwealth/BOUNDARY.md`), the
+mesh substrate: `commonwealth-{core,transport,state,discovery}`, 17,194
+lines, zero `[[exception]]` rows on the day it was declared. It was
+declared BEFORE the work that moves code across it, because layer-gate
+cannot see liftability — its "no sovereign" property is seven
+hand-enumerated `[[forbid]]` blocks, and a crate added to the
+`mesh-foundation` layer list gets no forbid rule and prints green
+(§18.1). `commonwealth-{knowledge,inference,api}` are NOT in it; nor is
+`sovereign-mesh`, which holds substrate-shaped code with ~15 of ~234
+external refs and would fork the deciders the package owns if extracted
+as a peer (§10.6 at crate scale).
 
 ```
 crates/
@@ -1108,7 +1151,7 @@ Grounded in the source:
   CHAPTER IX — "Twice a year the trust's auditor comes out from Saltern Cross…"
 ```
 
-`locate_quote_in_chunks` (`grounding/citation.rs`) returns WHERE a quote
+`locate_quote_in_chunks` (`grounding/citation/quote_match.rs`) returns WHERE a quote
 verified — `Exact { chunk, verbatim }`, `Partial { chunk }` or `AcrossChunks`
 — instead of a bare bool, so `verify_pair` can attribute it. The grounding
 decision is unchanged: the `Partial`/`AcrossChunks` passes ARE the pre-locator
@@ -2366,9 +2409,12 @@ test module, whose `use super::*` resolves to the same grounding module it
 resolved to inline). Two source-text guards in `tests.rs` re-pointed from
 `include_str!("mod.rs")` to the module family — their subject was the gate's
 production surface, not one file. Remaining grounding tail, sequenced in
-§10 of this file: `judge.rs` (1,846 — its 1,166-line tests module moved to
-`judge/tests.rs` on 2026-09-03; prompts, verify and scan extraction remain),
-`citation.rs` (1,694), `citation_attribution.rs` (1,403).
+§10 of this file: `judge.rs` (1,846 — its 1,166-line tests module moved out on
+2026-09-03 and split again the same day into `tests/prefix_family.rs` +
+`tests/claim_scan.rs`; prompts, verify and scan extraction remain),
+`citation.rs` (1,694). `citation_attribution.rs` left the list the same day
+(1,403 → 848 — tests moved to `citation_attribution/tests.rs` by
+`cargo xtask refactor-apply`, the deterministic plan executor).
 **The long-form repair ladder is TOMBSTONED as of 2026-08-14** (Phase 4 of
 `NATIVE_GROUNDING_ECONOMY.md`, order `gate-tombstone-ladder`). On the default
 configuration a long-form draft whose audit found failures is **released with
@@ -3286,7 +3332,7 @@ stay mesh-side.
 | Frontend            | Purpose                                                                              |
 |---------------------|--------------------------------------------------------------------------------------|
 | `sovereign-cli` (+ siblings) | User-facing dispatcher. `sovereign <verb>` execs into one of three siblings — `sovereign-cli-daemon`, `sovereign-cli-dev`, `sovereign-cli-llm` — based on the verb. Since 2026-08-21 one verb is the exception: `code converge` is served in-process from `sovereign-cli-dev`'s `[lib]` target (linked, `default-features = false`) — see `InProcessCodeVerb` below. Same UX as one binary; faster builds. Discovery: each sibling at `current_exe()`'s parent dir; override via `SOVEREIGN_CLI_{DAEMON,DEV,LLM}_BIN`. Unix execs into the sibling (same PID); other platforms spawn-and-wait. |
-| `sovereign-server`  | Axum REST + WebSocket on configurable port; multi-tenant via `tenant.rs` with per-tenant isolation on corpora and uploaded documents (`ConversationContext.corpus_ceiling` scopes retrieval incl. the round-0 engine search; `DocumentAsset.owner` gates document list/get/delete/ask — the SaaS-hub hardening, 2026-07); server-side `ApprovalChannel` w/ `/v1/tasks/{id}/approve`. **Mobile-facing surface** (`docs/specs/MOBILE.md`): WS `/v1/conversations/{id}/stream` streams `TurnFrame::Token`→`Complete` token-by-token down the requesting socket (not the shared broadcast — avoids cross-tenant leak, and since 2026-08-25 the two channels no longer share a TYPE, so that leak does not compile: per-turn frames are `sovereign_contracts::types::TurnFrame`, the executor's fan-out is the server-local `ExecutorEvent`); `sovereign_contracts::types::projection` surfaces typed `provenance` + `citations` on REST message responses — it moved out of this binary with the protocol so a daemon can project the same metadata; `GET /v1/corpora` lists `CORPUS_REF`s (Knowledge-only, with `scope`/`mesh_shared` privacy posture derived from `IndexInfo.mesh_sharing`); a `scheduler.rs` `FairScheduler` bounds concurrent turns — a weighted-fair queue + per-origin cap with live `TurnFrame::QueuePosition` over WS and `503 + Retry-After` shed (`busy.rs`) on REST, sharing its `commonwealth_core::fair_sched::SchedCore` policy core with the mesh peer-admission gate (so both are fair by identical rules); reciprocity weights from the contribution ledger rank a contributor's turns up. Secure by default: binds `127.0.0.1:8080`, and a non-loopback bind with `[auth]` disabled is refused at startup (`config::validate_exposure`; explicit `allow_unauthenticated_remote` opt-out) — permissive CORS is applied only when auth is on (`[server] cors = "auto"`). **Note the gap that guard does NOT close:** auth engages only when `mode == "api_key"` **and** `keys` is non-empty, so `mode = "api_key"` with an empty map serves every `/v1/*` route unauthenticated as tenant `"default"` — silently, and with a loopback bind the exposure guard never fires. **Two cargo features, both default ON, drop the surfaces whose safety rests on "one operator owns this box" (`sovereign/deploy/onprem/`).** `dev-routes` gates *privilege*: `/v1/solve` + `/v1/cycle/bdd` (client-supplied `test_command` reaches `sh -c` **inside** the authed router), `/v1/documents/upload` + `/v1/corpora/upload` (ingest an absolute server-side path), the `/mcp*` routes (registered *after* the auth layer, guarded only by `ip.is_loopback()` — which a same-host reverse proxy satisfies for every remote caller), and `ShellTool`. `net-tools` gates *egress*: the `search` tool's web fallback (DuckDuckGo → Google → DuckDuckGo Lite, fired whenever the top **local** retrieval score is thin), `web_fetch` (any URL the model emits; scheme-only validation), and `wikipedia_fetch`. Those three were registered unconditionally and fired on ordinary chat turns; `Permission::Network` does not gate them, because it is consulted at exactly one call site (the plan executor) and the chat path calls `tool.execute()` directly. Under `--no-default-features` `search` survives, built local-only via `SearchTool::new`. |
+| `sovereign-server`  | Axum REST + WebSocket on configurable port; multi-tenant via `tenant.rs` with per-tenant isolation on corpora and uploaded documents (`ConversationContext.corpus_ceiling` scopes retrieval incl. the round-0 engine search; `DocumentAsset.owner` gates document list/get/delete/ask — the SaaS-hub hardening, 2026-07); server-side `ApprovalChannel` w/ `/v1/tasks/{id}/approve`. **Mobile-facing surface** (`docs/specs/MOBILE.md`): WS `/v1/conversations/{id}/stream` streams `TurnFrame::Token`→`Complete` token-by-token down the requesting socket (not the shared broadcast — avoids cross-tenant leak, and since 2026-08-25 the two channels no longer share a TYPE, so that leak does not compile: per-turn frames are `sovereign_contracts::types::TurnFrame`, the executor's fan-out is the server-local `ExecutorEvent`); `sovereign_contracts::types::projection` surfaces typed `provenance` + `citations` on REST message responses — it moved out of this binary with the protocol so a daemon can project the same metadata; `GET /v1/corpora` lists `CORPUS_REF`s (Knowledge-only, with `scope`/`mesh_shared` privacy posture derived from `IndexInfo.mesh_sharing`); a `scheduler.rs` `FairScheduler` bounds concurrent turns — a weighted-fair queue + per-origin cap with live `TurnFrame::QueuePosition` over WS and `503 + Retry-After` shed (`busy.rs`) on REST, sharing its `serving_policy::fair_sched::SchedCore` policy core with the mesh peer-admission gate (so both are fair by identical rules); reciprocity weights from the contribution ledger rank a contributor's turns up. Secure by default: binds `127.0.0.1:8080`, and a non-loopback bind with `[auth]` disabled is refused at startup (`config::validate_exposure`; explicit `allow_unauthenticated_remote` opt-out) — permissive CORS is applied only when auth is on (`[server] cors = "auto"`). **Note the gap that guard does NOT close:** auth engages only when `mode == "api_key"` **and** `keys` is non-empty, so `mode = "api_key"` with an empty map serves every `/v1/*` route unauthenticated as tenant `"default"` — silently, and with a loopback bind the exposure guard never fires. **Two cargo features, both default ON, drop the surfaces whose safety rests on "one operator owns this box" (`sovereign/deploy/onprem/`).** `dev-routes` gates *privilege*: `/v1/solve` + `/v1/cycle/bdd` (client-supplied `test_command` reaches `sh -c` **inside** the authed router), `/v1/documents/upload` + `/v1/corpora/upload` (ingest an absolute server-side path), the `/mcp*` routes (registered *after* the auth layer, guarded only by `ip.is_loopback()` — which a same-host reverse proxy satisfies for every remote caller), and `ShellTool`. `net-tools` gates *egress*: the `search` tool's web fallback (DuckDuckGo → Google → DuckDuckGo Lite, fired whenever the top **local** retrieval score is thin), `web_fetch` (any URL the model emits; scheme-only validation), and `wikipedia_fetch`. Those three were registered unconditionally and fired on ordinary chat turns; `Permission::Network` does not gate them, because it is consulted at exactly one call site (the plan executor) and the chat path calls `tool.execute()` directly. Under `--no-default-features` `search` survives, built local-only via `SearchTool::new`. |
 | `sovereign-desktop` | Tauri 2 + Svelte 5. The **UX-refactor (P0–P4) reshaped the app around user intent** — rail `Ask · Library · Reflect · Workshop · ⚙`. **Ask** (the branded chat w/ streaming + provenance) is the landing. **Library** (`library/{LibraryView,AddSheet,NotebookDetail}` off the `notebook_list` command) is the knowledge home — a notebook shelf with per-notebook Ask + Explore; the catalog `KnowledgeStatus` + folder/vault/import ingest fold into Library→Add; the Atlas rail is gone (the atlas surface lives inside a notebook's Explore via `AtlasSurface startingCorpusId` + as a reading deep-link target). **Workshop** (`workshop/WorkshopView`) holds the maker facets Build · Run · Test · Connect tools (MCP) · Open to apps (OpenAI endpoint), with a notebook→Workshop "use→make" bridge. **Settings** shrank to General + Operator (Mesh · Sharing · Mobile) clusters. A follow-on **elegance pass** layered craft on top: a plain-language scope bar in Ask (`AskScopeBar` — "Asking ‹notebook›", gating `CorpusFilterStrip`), per-notebook **conversation memory** (the `notebook_conversations` command → `SqliteStateStore::list_conversations_for_corpus`, a `json_each` filter on `enabled_corpora`; a notebook's Ask resumes its last thread, switched via a **Conversations ▾** dropdown), a card→detail **shared-element morph** (`lib/motion.ts` `crossfade`), and an **Ask↔Explore** Map→Ask bridge ("Ask about this" on an atom → the notebook's Ask, seeded). The per-notebook detail consolidates its chrome into **one header bar** — segmented `Ask | Explore` + a `⋯` overflow for Sources/Settings — with the scope stated by the header (the in-notebook scope bar suppressed via `ChatView hideScope`); the **Home hub was dropped** so the branded Ask flow is the first-run landing. **Layout is token-driven, not per-component.** `app.css` owns a layout scale (`--gutter` / `--gutter-top` / `--gutter-bottom` / `--measure` / `--measure-prose`) plus three global primitives — **`.page-body`** (the scroll container + gutter every surface body needs), **`.page-measure`** (the centred content column), **`.page-header`** (a header band on the same gutter). These are global rather than Svelte-scoped on purpose: the app's surface hosts (`.library-surface`, `.settings-surface`, `.nb-body`, `.app-chrome-content`) are all `height:100%; overflow:hidden` clipping boxes, so **a body that fails to establish its own scroller is clipped with no way to reach the content past the fold**. A July 2026 audit found exactly that — `ConflictsPanel` hid 2,442px of governance decisions behind an `overflow-y:auto` that could never fire (it sat on an auto-height box), and `AddSheet`'s body rendered flush to both window edges because a `padding:0` "embedded" opt-out outlived the host that used to compensate for it. `tests/e2e/specs/library-layout-audit.spec.ts` is the regression gate: it drives every Library route, measures composited geometry, and fails on unreachable content or a body inside the gutter. Do **not** re-declare padding/overflow on an element carrying `.page-body` — Svelte scoping gives the local rule higher specificity and it wins silently. Plus skill manager, `sovereign://` deep-link handler, system tray; reuses the shared `@sovereign/chat-ui` package (`packages/chat-ui`). |
 | `sovereign-mobile` (`/sovereign-mobile`) | Thin Tauri 2 client (iOS + Android) — **no local inference/Runtime/corpus**. Reaches a host's `sovereign-server` over the tailnet, authenticates as a tenant (token in keychain), renders streamed chat. Rust core owns transport (HTTP + WS), SQLite cache of the spec's cached projections, and a fail-closed connectivity monitor; re-emits the SAME `message-chunk`/`message-complete` events the shared chat FSM consumes. Conversations are cached for display and referenced as a conversation `CORPUS_REF` once host-indexed (`indexed_in_corpus`); long-context is host-side (phone sends only the new turn + conversation id, never re-uploads history or embeds); local-only sources are privacy-badged (`scope`/`mesh_shared`). Detached from the Cargo workspace (own `[workspace]`); Rust core + Svelte UI are written but never compiled — pending the Tauri-mobile-toolchain pass on a Mac (`/sovereign-mobile/HANDOFF.md`). See `docs/specs/MOBILE.md`. |
 
@@ -4315,17 +4361,20 @@ routing, draft-on-spoke/verify-on-hub speculation, hub queue
 discipline — each reality-checked against this codebase) is
 [`docs/specs/MESH_INFERENCE.md`](./docs/specs/MESH_INFERENCE.md).
 
-`commonwealth-inference/orchestrator/` (multi-process supervision for
-the standalone-daemon topology — flagged for its own liveness
-investigation in OICP_RATIONALIZATION.md):
+`commonwealth-inference/orchestrator/` was DELETED 2026-09-03 — 1,904 lines
+over six files whose `Orchestrator::new` was called from nothing but two
+integration tests. The liveness investigation it was "flagged for" in
+OICP_RATIONALIZATION.md returned the answer: not live. It held `ManagedProcess`
+(lifecycle states + SIGTERM-then-SIGKILL), `HealthTracker` (5s poll, 20-sample
+latency window, `Unresponsive` after 3 failures), a `FaultDetector` and a
+`GracefulDeparture` countdown, and none of it ran.
 
-- `ManagedProcess` tracks lifecycle states (`Starting | Running |
-  Unhealthy | Failed | Stopped`); SIGTERM, then `SpawnConfig::stop_timeout`
-  (default 10s), then SIGKILL. Both halves of that were untrue until
-  2026-09-02: `stop()` reached straight for tokio's `start_kill` (SIGKILL on
-  unix) and waited out a hard-coded 5s that no signal had been sent to earn.
-- `HealthTracker` polls every 5s; 20-sample latency window;
-  `Unresponsive` after 3 consecutive failures.
+Multi-process supervision on the path that IS live is
+`sovereign-compute/src/supervisor.rs` — `SupervisorState`, `graceful_kill`
+(SIGTERM, grace, SIGKILL) and health polling. It has NO departure countdown and
+NO fault detector, so those two parts of FE-139 are unimplemented rather than
+implemented-elsewhere; `quality/conformance-specs.toml` FE-139 carries the
+statement and the requirement is write-work again.
 - `GracefulDeparture` — countdown state machine
   (`Announced → Rebalancing → Draining → Complete`), driven by
   `Orchestrator::depart_gracefully` / `announce_departure` +
@@ -4899,7 +4948,7 @@ work pins the GPU while the user is chatting. Components:
   `/v1/knowledge/search`. Local requests admit unconditionally;
   peer requests are rejected with 503 + `Retry-After` when paused,
   yielding to a recent local foreground request, or refused by the
-  fair scheduler. The flat ceiling became a **`commonwealth_core::fair_sched::SchedCore<NodeId>`**
+  fair scheduler. The flat ceiling became a **`serving_policy::fair_sched::SchedCore<NodeId>`**
   (`AppStateInner.peer_sched`): a runtime-mutable global ceiling
   (`set_slots`, `0` = reject all) **plus a per-node concurrency cap**
   so one peer can't hog the pool, **reciprocity-scaled** — a
@@ -4931,7 +4980,7 @@ work pins the GPU while the user is chatting. Components:
   `Anonymous`. It is deliberately NOT `sovereign-contracts`'
   `PrincipalResolver` (`traits.rs:106`), which keys on a conversation
   id that stateless `/v1/chat/completions` does not carry. The share
-  rule is `commonwealth_core::fair_sched::fair_share_cap(budget,
+  rule is `serving_policy::fair_sched::fair_share_cap(budget,
   active)` — `u32::MAX` when one principal is alone on the host (so
   single-caller load is untouched), else `max(1, budget / active)`.
   It takes no weight argument, so the weight-ordering condemned by
@@ -5521,6 +5570,7 @@ Default ports:
 | **Judge architecture health at a glance (evidence, not verdicts)** | **`svrn code fieldglass [corpus] --open`** (dev-tools) → `sovereign-cli-dev/src/code_fieldglass/` — one deterministic self-contained HTML (`~/.sovereign/arch/<corpus>/fieldglass.{html,json}`): ONE-CANVAS design (P4) — the order-stable treemap of every git-source `.rs` file is the page; layer violations (`arch_layers::evaluate`) paint on it as arrows and ▦ marks flag trait-defining files, with layer flow + seriated caller×method trait matrices (ISP; keyed on the SCIP descriptor grammar — the DB's `kind`/`ref_kind` columns are junk; matrix cell click scopes the field to its call sites) as drill-downs; default paints only the strongest evidence (top clone families, strongest ghosts, any violation), git co-change communities + bridge files (SRP), `dry_report` duplication arcs, temporal ghost edges, agent read/write heat from session transcripts (`cache-audit --by-file` shelled — comprehension-tax ranking: read-hot, edit-cold), 90d churn tollbooths, a since-last-render delta vs the JSON sidecar, and an honesty footer stating what the picture cannot see (incl. SCIP/embedding input ages with a STALE INPUTS badge, and a per-panel ledger naming each panel's time window). INCREMENT MODE `--window <dur>` (48h/7d) recomputes the ACTIVITY measurements (churn tollbooths + glow, agent read/write heat, comprehension tax) from the window while STRUCTURE stays full-history on the same stable layout; extracted from one git harvest and one `cache-audit --by-file` scan (which emits per-UTC-day slices) rather than re-harvesting, and written to its own `fieldglass.<dur>.{html,json}` so the default delta baseline is never touched. Renders evidence only — no scores, no gates. How to read each panel: `docs/FIELDGLASS.md` |
 | Run the *capability* half of the journey harness | Journeys declare `needs = ["operator-home" \| "indexed-repo"]` for state a throwaway sandbox cannot have. `cli-journey-sandbox.sh` passes `--lacks` for both and `cli-journey-nightly.sh` then runs exactly that remainder READ-ONLY against the operator's own daemon, so nothing is dropped by both lanes. Replaced a hardcoded `SANDBOX_EXCLUDES` array of journey ids that was invisible from the manifest |
 | Price a refactor before anything is applied (factory stages 1-2 + entry gate) | `svrn code refactor plan <spec.toml>` / `svrn code refactor gate` → `sovereign-cli-dev/src/refactor_cmd/` (specs are DATA: `quality/refactors/*.toml`, one shape for all five kinds). `plan`: per-item entry gate (representation · wire+RUN fixture · trait surface · fallibility) → seed edit → `cargo check --message-format=json` under the lint gate's feature contract → deterministic `(code, expected, found, context)` classes, RULED vs RESIDUE, four per-crate verdicts (errors/clean/never-ran/outside-workspace). `gate`: adjudicates all five work-table kinds and prints the ranked schedule; refusals appear AS refusals. Read-only — a restore guard enrolls every file BEFORE writing it, so a mid-seed crash restores what landed and no-ops the tail |
+| **Split a god file through the factory's deterministic loop** (proven on the grounding module: 4 files, no §3.1 violation left) | `svrn code suggest-seams <file> --plan` (SCIP clusters → executor TOML; `--goal` renders the model-driven variant) → `cargo xtask refactor-apply <plan.toml> --land` (mechanical moves + per-step verify + conformance/baseline landing) → the SYSTEM_OVERVIEW §1.1 touch. Process, division of labor (the model never mutates), failure catalogue and preconditions: [`quality/REFACTOR_FACTORY.md`](../quality/REFACTOR_FACTORY.md) §"The split loop". Oversized ledger: `quality/baselines/oversized.txt` (arch-gate ratchet) |
 | Hand a worker one refactor record and prove what came back (the ledger) | `svrn code refactor status \| label \| next \| close` → `sovereign-cli-dev/src/refactor_cmd/{detector,labels,ledger,order}.rs` (spec: `quality/REFACTOR_LEDGER.md`). TWO SOURCES OF TRUTH, both in git: destinations from `quality/CONCEPTS.toml` + `quality/refactors/*.toml`, judgements append-only in `quality/refactors/labels/<detector>.jsonl` (last line wins). NO DATABASE and NO STORED PROGRESS — a holding is open iff its detector still fires on it, so `close` re-runs the instrument and NOTHING can mark work done by hand; a dead worker session is a no-op needing no reconciliation. Every run carries a NEGATIVE CONTROL: a detector whose control site went silent is could-not-judge and closes zero (it caught a mis-specified control on its first live run). Scoping is a POST-FILTER on `Site.file`, never a narrowed input — `converge::census` and `shape_census` compute population-relative predicates, so narrowing their input makes them wrong, not cheap. Keys carry no coordinates, so a judgement survives its site moving; a file or symbol rename is the one lossy case and surfaces as a named orphan. Locking is `O_EXCL` per file with rollback (the work atlas is visibility, not a lock manager) |
 | Prove a refactor cannot silently rewrite the wire (factory stage 6) | `svrn code wire-check <spec.toml>` → `sovereign-cli-dev/src/refactor_wire.rs` (fixture registry + surface judging, one `Judgement` per surface; exit 0 only when every declared surface is PROVEN and no known surface is undeclared); byte decider `kernel-types/src/wire.rs`; negative control `quality/refactors/node-id.toml`, kept failing on purpose |
 | Understand index storage on disk                 | `corpus-engine/src/index/mod.rs`                                    |
@@ -6485,6 +6535,111 @@ document to be usable) and `11d3b23f1` (the harness installer). §10.1i's
 verdict stands verbatim and is now two merges old: this is the one row whose
 cost is paid per session rather than per reader, "distill and point" is the
 repair, and it needs the operator because the compass's content is theirs.
+
+### 10.1l Approach band RE-PINNED on main — 2026-09-03 (the band was stale by a whole split before this session opened)
+
+The band baseline read 169 files / 164,698 lines. `origin/main` (`6a1014a85`)
+actually measures **170 / 165,894** — stale by +1 file / +1,196 lines, none of
+it this session's. Measured twice by independent instruments before anything
+was written: a shell replication of the walk, validated against arch-gate's
+own output on the same tree, and an `xtask` built inside a worktree checked
+out at `origin/main` (§18.4 — validate the instrument, then the result).
+
+The drift has one owner. `f5c872e2c` split `judge.rs` 3,011 → 1,846 and parked
+the 1,162-line test module it moved out in the band without re-pinning. That is
+§10.1k's own row arriving again — "the band charges for the split it asked
+for" — one release later.
+
+**Paid, not banked.** This session split the entrant rather than accept it:
+
+| File | On `origin/main` | Now | Δ band |
+|------|------------------|-----|---|
+| judge's test module | 1,162 (one file) | → `tests/prefix_family.rs` 655 + `tests/claim_scan.rs` 521 + `tests/mod.rs` 5 | **−1,162** (off the band) |
+| `grounding/citation_attribution.rs` | 1,403 (oversized) | 848 | **+848** (enters the band) |
+
+`citation_attribution.rs` is `23df4f85c`, landed by a concurrent session while
+this one was measuring; a file crossing 1200 downward leaves the oversized
+list and joins the band, which is the accounting the band exists to make
+visible. Net against `origin/main`: files unchanged at 170, lines 165,894 →
+**165,580 (−314)**. The pin lands BELOW public main, so nothing of this
+session's is absorbed.
+
+The split is on the concern seam the module already had — `prefix_family`
+asserts the bytes on the wire, `claim_scan` asserts what a judge reply may
+become — and both `include_str!` guards were re-pathed one level deeper, which
+the compiler enforces and `one_renderer_owns_the_family` cannot pass vacuously
+(it asserts an exact render count of 1, so an empty or wrong `SRC` fails).
+
+**Two things were deliberately NOT banked.**
+
+`suggest_seams.rs` 824 → 1,033 (+209) was uncommitted in a concurrent
+session's working tree when the pin was taken. `--tighten` measured 165,789
+including it; the pin is **165,580**. Banking another session's in-flight
+growth into a shared ratchet is the silent-absorb this section exists to
+prevent, so that +209 still has to be defended when it lands.
+
+`--update-baseline` was not used at all. It rewrites `oversized.txt` and
+`instruction_surface.txt` from the working tree as well, and four oversized
+files currently sit above their entries inside the 50-line slack —
+`atlas/context.rs` +36, `trial.rs` +4, `daemon_cmd/mod.rs` +6,
+`eval_cmd/runner.rs` +2. Only `approach_band.txt` was copied back from the
+`origin/main` worktree. `--tighten` banked the one real cut this session made:
+`judge.rs` 1,846 → 1,845, a duplicated `#[cfg(test)]` attribute removed.
+
+### 10.1m Both blocking gates were red ON MAIN, and both were paid rather than re-pinned — 2026-09-04
+
+`scripts/pre-push.sh` blocked on two gates. Neither failure was this branch's,
+and neither was re-pinned.
+
+**Approach band.** Baseline 170 files / 165,823 lines; `origin/main` measures
+**171 / 167,048** — stale by +1 file / +1,225 lines before this branch's first
+commit. HEAD measured 172 / 167,932. Instrument validated before the result
+(§18.4): a shell replication of arch-gate's walk agreed with arch-gate's own
+output to the line on the same tree (172 / 167,932), and was then run against
+`origin/main`'s tree.
+
+Paid, not banked — the three files this branch put in the band were split back
+out of it:
+
+| File | Before | After | Δ band |
+|------|--------|-------|---|
+| `serving-policy/src/fair_sched.rs` | 987 | 562 + `fair_sched/tests.rs` 424 | **−987** |
+| `grounding/citation.rs` | 987 | 757 + `citation/quote_match.rs` 250 | **−987** |
+| `grounding/citation_attribution.rs` | 848 | 704 + `citation_attribution/text.rs` 162 | **−848** |
+
+Band: **169 files / 165,110 lines** — one file and 713 lines BELOW the
+baseline, so nothing of this branch's is absorbed and main's own drift is paid
+off with it. `fair_sched` used the deterministic executor
+(`quality/refactors/plans/fair-sched-tests.toml`); the other two are concern
+seams the modules already had — `quote_match` owns "where does this text sit
+in the passages", `text` owns the title predicates — and each moved item is
+`pub(super)`, so neither split widened a surface.
+
+**Concept ratchet.** 39 duplicated names against a baseline of 35 (§10.1j
+pinned that 35 on `9d6969852`). All four crossers are `corpus-engine-vocab`'s,
+they exist verbatim on `origin/main`, and this branch never touched that crate
+— `9722bf821` (the vocab carve-out) is not an ancestor of the commit that
+pinned 35, which is the whole mechanism §10.1j warned about: a bare-count
+baseline cannot name what crossed, so a merge moves it silently.
+
+Dispositioned by renaming the side with the weaker claim to the name, per the
+convention `corpus-engine/src/index/provenance.rs` already states for this
+family (qualify, do not add a fifth bare noun):
+
+| Noun | Renamed | To | Why that side |
+|------|---------|----|---|
+| `Provenance` | `corpus_engine_vocab::atoms` | `SignalProvenance` | it records WHICH SIGNAL produced a surface form; `sovereign-contracts` owns the evidence-basis enum. `AtomProvenance` was taken by `corpus-engine-archaeology` |
+| `Clock` | `corpus_engine_vocab::ontology::decl` | `SupersessionClock` | an enum naming which clock ORDERS SUPERSESSION; `commonwealth_core::Clock` is the time-source trait |
+| `Entity` | `corpus_engine::…::investigation::graph` | `InvestigationEntity` | the atlas atom is the older, wider `Entity`; this is the investigation pipeline's own record (`String` id, recipe-declared type) |
+| `QuestionType` | `sovereign_eval::chaos_monkey` | `PressureKind` | its own doc says "the pressures the chaos monkey applies"; the atlas taxonomy's kind-of-inquiry has the claim to `QuestionType` |
+
+All four are wire-safe: every one is `#[serde(rename_all)]`-keyed or
+string-valued, so the VARIANT strings and field names are unchanged and no
+persisted file is rewritten. `PressureKind` is deliberately the same length as
+`QuestionType`: at `ChaosQuestionType` the rustfmt reflow alone added 104
+lines to `chaos_monkey/score.rs` (1,731 → 1,835) and broke the oversized
+ratchet's 50-line slack. The field stays `qtype` — it is the serde key in
+every chaos bank on disk.
 
 ### 10.2 cmnwlth deferrals
 

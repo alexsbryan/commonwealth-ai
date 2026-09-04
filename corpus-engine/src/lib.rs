@@ -47,7 +47,10 @@ pub mod meta_atlas;
 /// The one append-only journal — `Op` + `Oplog`, three tenants (governance,
 /// enrichment reconciliation, meta-atlas bridge) that each used to carry their
 /// own copy of the same envelope and the same file IO.
-pub mod oplog;
+// The journal is its own Tier-0 leaf as of 2026-09-04 (op ids are gossiped,
+// so the one content-hash derivation must sit below everyone who writes a
+// log). Re-exported under its old path so the ~20 call sites did not move.
+pub use ::oplog;
 pub mod pii;
 pub mod progress;
 pub mod recipe;

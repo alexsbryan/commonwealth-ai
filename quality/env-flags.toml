@@ -382,7 +382,7 @@ name = "SOVEREIGN_CLIENT_FAIR_CONCURRENCY"
 cluster = "inference"
 default = "16"
 status = "shipped"
-purpose = "Concurrency budget divided equally among ACTIVE client principals to give each one its cap (fair_share_cap in commonwealth-core/src/fair_sched.rs). Derived from the slot queue's own shed bound: SOVEREIGN_MAX_QUEUE_WAIT_SECS=30 at a ~1.9s turn against one decode permit, i.e. the depth at which the host is fully committed but not yet refusing. Sized there on purpose so the cap only changes WHOSE turns fill the host, never whether it sheds. A lone principal is never capped at all regardless of this value. Zero or malformed is reported and falls back to the default."
+purpose = "Concurrency budget divided equally among ACTIVE client principals to give each one its cap (fair_share_cap in serving-policy/src/fair_sched.rs). Derived from the slot queue's own shed bound: SOVEREIGN_MAX_QUEUE_WAIT_SECS=30 at a ~1.9s turn against one decode permit, i.e. the depth at which the host is fully committed but not yet refusing. Sized there on purpose so the cap only changes WHOSE turns fill the host, never whether it sheds. A lone principal is never capped at all regardless of this value. Zero or malformed is reported and falls back to the default."
 
 [[flag]]
 name = "SOVEREIGN_PREFIX_STATE"

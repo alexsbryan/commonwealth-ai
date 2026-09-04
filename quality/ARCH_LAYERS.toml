@@ -106,6 +106,20 @@ crates = [
     "sovereign-turn-client",
     "arch-layers",
     "sovereign-time",
+    # Serving policy — fair-share scheduling + pipeline alias resolution.
+    # Tier-0 for the same reason sovereign-time is: its consumers span the
+    # family line (commonwealth-api, sovereign-server, sovereign-inference,
+    # sovereign-cli-dev), so anywhere ABOVE layer 0 puts a cross-family edge
+    # back. See the two [[forbid]] blocks below — the layer entry alone would
+    # be a green gate enforcing nothing (§5.1).
+    "serving-policy",
+    # The append-only journal. Tier-0 for a sharper reason than the others:
+    # `OpId` is content-addressed AND GOSSIPED, so a second derivation is a
+    # wire break with nothing red anywhere (§10.6, §7.5). Every crate that
+    # writes a log must reach the SAME one, which means it sits below all of
+    # them. Its in-repo dep list is `kernel-types` alone — see the three
+    # [[forbid]] blocks below, without which this entry enforces nothing.
+    "oplog",
 ]
 
 # The knowledge layer: corpus-engine + its carve-outs. "Self-contained by
@@ -303,6 +317,44 @@ from = "oicp-client"
 to = "sovereign-*"
 except = ["sovereign-contracts"]
 reason = "the OICP client meets the runtime at the contracts seam only; the inference vocabulary it borrows is oicp's own and moves down in its own rung"
+
+# serving-policy was minted 2026-09-03 by moving `fair_sched` out of
+# commonwealth-core, and `fair_sched` was the ONLY reason sovereign-inference
+# and sovereign-server depended on the mesh foundation at all. A dep in EITHER
+# direction here restores exactly the edges the move deleted, so both are
+# forbidden with no `except`. Its `[dependencies]` is serde + toml and nothing
+# in-repo; that is the contract, stated in its lib.rs and pinned here.
+[[forbid]]
+from = "serving-policy"
+to = "sovereign-*"
+reason = "a serving-policy that names the runtime is not tier-0, and the two cross-family edges this crate was minted to delete come straight back"
+
+[[forbid]]
+from = "serving-policy"
+to = "commonwealth-*"
+reason = "same rule pointing the other way — the module came OUT of commonwealth-core precisely so its runtime-tier consumers would stop reaching into the mesh foundation for it"
+
+# oplog was minted 2026-09-04 by moving `corpus-engine/src/oplog.rs` out. The
+# rail in commonwealth-knowledge named five of its types and took a dep on
+# corpus-engine — a 578-crate closure — to reach seven references. The journal
+# is a primitive, so it sits below BOTH families and may name neither; the
+# `corpus-engine` rule is the load-bearing one, because that is the edge the
+# move exists to sever and the one a future convenience would restore first
+# (`Op::now` was exactly that convenience, and it went with the move).
+[[forbid]]
+from = "oplog"
+to = "corpus-engine*"
+reason = "the journal left the knowledge layer precisely so the ring rail could stop inheriting a 578-crate closure for a 547-line file; a dep back is that closure returning"
+
+[[forbid]]
+from = "oplog"
+to = "sovereign-*"
+reason = "a journal that names the runtime cannot be lifted with the mesh substrate, and op ids are gossiped — the derivation must be readable by a peer that has no sovereign build"
+
+[[forbid]]
+from = "oplog"
+to = "commonwealth-*"
+reason = "same rule pointing the other way — corpus-engine's three tenants write this journal too, so a mesh dependency would make the knowledge layer link the mesh to append a line"
 
 [[forbid]]
 from = "commonwealth-core"
@@ -564,6 +616,35 @@ crates = [
     "corpus-mcp",
     "sovereign-enrichment-build",
     "sovereign-enrichment-catalog",
+]
+
+[[package]]
+name = "commonwealth"
+doc = "commonwealth/BOUNDARY.md"
+# The mesh substrate — declared 2026-09-03, BEFORE the work that moves code
+# into and out of it, because no gate in this repo can tell "the files moved"
+# from "the boundary holds". layer-gate's "no sovereign" property is seven
+# hand-enumerated [[forbid]] blocks above (:305-341); a crate added to the
+# mesh-foundation layer list gets no forbid rule and prints green. ARCH §18.1.
+#
+# Green on the day it is declared, with zero [[exception]] rows: the four
+# crates' entire internal dependency surface is commonwealth-core plus the
+# kernel-types / oicp-types leaves. That is a property to hold, not one to
+# reach — a new row here is a regression, not bookkeeping.
+#
+# WHAT IS NOT IN IT. commonwealth-{knowledge,inference,api} are applications on
+# this substrate (577-690-crate closures, all three name corpus-engine), and so
+# is sovereign-mesh. sovereign-mesh holds substrate-SHAPED code — a MeshStore
+# replication path, a founder/joiner handshake — whose external consumers are
+# ~15 of ~234 crossing refs. Extracting it as a peer of these four would fork
+# the deciders this package owns: two replication paths, two orderings, two
+# admission rules. §10.6 at crate scale. Substrate found elsewhere is rehomed
+# HERE or deleted, never mirrored.
+crates = [
+    "commonwealth-core",
+    "commonwealth-transport",
+    "commonwealth-state",
+    "commonwealth-discovery",
 ]
 
 # ── Grandfathered violations (the burn-down list) ────────────────────────────

@@ -299,8 +299,18 @@ impl Journaled for BridgeAct {
     const LABEL: &'static str = "bridge_oplog";
 }
 
-impl Op<BridgeAct> {
-    pub fn add(edge: &BridgeEdge) -> Self {
+/// The bridge's two acts, hung on the envelope that carries them.
+///
+/// Extension trait, not an inherent `impl`: [`Op`] is foreign as of 2026-09-04
+/// (see `oplog`'s crate docs). What an AddEdge *means* belongs here, with the
+/// edges; the envelope only knows it has an id, a time and an actor.
+pub trait BridgeOp: Sized {
+    fn add(edge: &BridgeEdge) -> Self;
+    fn remove(edge: &BridgeEdge, rationale: impl Into<String>) -> Self;
+}
+
+impl BridgeOp for Op<BridgeAct> {
+    fn add(edge: &BridgeEdge) -> Self {
         Op::new(
             BridgeAct {
                 op: BridgeOpKind::AddEdge,
@@ -316,7 +326,7 @@ impl Op<BridgeAct> {
         )
     }
 
-    pub fn remove(edge: &BridgeEdge, rationale: impl Into<String>) -> Self {
+    fn remove(edge: &BridgeEdge, rationale: impl Into<String>) -> Self {
         Op::new(
             BridgeAct {
                 op: BridgeOpKind::RemoveEdge,

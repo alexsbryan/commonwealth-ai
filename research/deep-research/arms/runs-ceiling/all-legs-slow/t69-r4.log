@@ -1,9 +1,0 @@
-svrnmesh: bridged 5 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
-deep-research: web backend tavily (duckduckgo always available)
-deep-research: no consent grant — the web leg is default-deny for non-public-web payloads (--consent <public-web|peer|personal> to release)
-deep-research: run dr-1787741874 — Please provide a detailed explanation of the differences and connections between Google's recently released A2A protocol and the MCP protocol. Furthermore, elaborate on the innovative aspects of the A2A protocol and the specific problems it is designed to address.
-deep-research: run dir research/deep-research/arms/runs-ceiling/all-legs-slow/t69-r4/dr-1787741874
-deep-research: web backend tavily
-deep-research: search source corpus
-deep-research: corpus source over: dr-estate-dr-1787620475
-deep-research: daemon http://localhost:9741/v1 (draft Qwen3.8-27B-UD-Q6_K_XL, embed Qwen3-Embedding-0.6B-Q8_0)

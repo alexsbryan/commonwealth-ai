@@ -16,6 +16,14 @@ It is the governance-specific companion to
 daemon) and [INTEGRATION_SURFACES.md](./INTEGRATION_SURFACES.md) (which
 surfaces are contracts). Read this one to pick a tier.
 
+Where this is headed, and why the interfaces have the shape they do, is
+[LIVING_GOVERNANCE.md](./LIVING_GOVERNANCE.md) — a design note for work not
+yet built. It is worked through end to end at a scale where the statistics
+hold in [CASE_STUDY_FERNWOOD.md](./CASE_STUDY_FERNWOOD.md), and over a
+codebase where most of the actors are agents in
+[CASE_STUDY_ENGINEERING.md](./CASE_STUDY_ENGINEERING.md). Both use the
+commitment model that [CANON_CLI.md](./CANON_CLI.md) specifies.
+
 ## The seam that makes the spectrum possible
 
 The design splits along one line, and everything below follows from it.

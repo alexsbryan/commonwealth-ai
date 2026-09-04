@@ -27,7 +27,7 @@ use petgraph::Graph;
 
 use crate::recipe::{Comparison, PatternDecl};
 
-use super::graph::{Entity, PatternFinding, PatternKind, Relationship};
+use super::graph::{InvestigationEntity, PatternFinding, PatternKind, Relationship};
 
 /// Run every declared pattern detector against the graph.
 /// Returns the flattened list of findings; ordering follows the
@@ -35,7 +35,7 @@ use super::graph::{Entity, PatternFinding, PatternKind, Relationship};
 /// findings in the recipe-author-chosen sequence.
 pub fn detect_all(
     patterns: &[PatternDecl],
-    entities: &[Entity],
+    entities: &[InvestigationEntity],
     relationships: &[Relationship],
 ) -> Vec<PatternFinding> {
     let mut out = Vec::new();
@@ -122,7 +122,7 @@ pub fn detect_circular_flow(
     name: &str,
     min_entities: u32,
     edge_types: &[String],
-    entities: &[Entity],
+    entities: &[InvestigationEntity],
     relationships: &[Relationship],
 ) -> Vec<PatternFinding> {
     let allowed: BTreeSet<&str> = edge_types.iter().map(String::as_str).collect();
@@ -415,7 +415,7 @@ pub fn detect_threshold(
     attribute: &str,
     threshold: f64,
     comparison: Comparison,
-    entities: &[Entity],
+    entities: &[InvestigationEntity],
     relationships: &[Relationship],
 ) -> Vec<PatternFinding> {
     let mut findings = Vec::new();
@@ -521,8 +521,8 @@ mod tests {
     use super::*;
     use crate::enrichment::investigation::graph::ExtractionExcerpt;
 
-    fn ent(id: &str, ty: &str, name: &str) -> Entity {
-        Entity {
+    fn ent(id: &str, ty: &str, name: &str) -> InvestigationEntity {
+        InvestigationEntity {
             id: id.into(),
             canonical_name: name.into(),
             entity_type: ty.into(),
@@ -734,7 +734,7 @@ mod tests {
         // ENTITY (stamped by aggregate::stamp_edge_counts), not an edge.
         let mut attrs = serde_json::Map::new();
         attrs.insert("sighting_count".into(), serde_json::json!(4));
-        let installation = Entity {
+        let installation = InvestigationEntity {
             id: "e-installation-wpafb".into(),
             canonical_name: "Wright-Patterson AFB".into(),
             entity_type: "installation".into(),

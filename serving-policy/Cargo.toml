@@ -1,0 +1,22 @@
+[package]
+name = "serving-policy"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "How a host decides to SERVE a request: fair-share scheduling (SchedCore, EtaEwma, reciprocity) and pipeline alias resolution. A Tier-0 leaf with no in-repo dependencies — it is consumed across the commonwealth/sovereign family line, which is exactly why it may name neither side."
+
+# DELIBERATE: no in-repo dependencies, and that is the contract rather than a
+# coincidence. This crate exists because `fair_sched` sat in
+# `commonwealth-core` while its consumers were `sovereign-inference` and
+# `sovereign-server` — two runtime-tier crates whose ENTIRE reference to
+# commonwealth was this one module. A crate that may name either family puts
+# those edges straight back.
+[dependencies]
+serde = { workspace = true }
+# `PipelineAliasTable::from_toml` parses the operator's override file and the
+# embedded `default_pipelines.toml`. Third-party, so it costs the crate no
+# in-repo edge — which is the only budget this crate keeps.
+toml = { workspace = true }
+
+[lints]
+workspace = true

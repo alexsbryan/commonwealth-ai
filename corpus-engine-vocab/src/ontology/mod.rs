@@ -32,7 +32,8 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use decl::{
-    Clock, OntologyTypeDecl, OntologyVocabulary, PatternDecl, TensionDecl, TypeKind, VoicesDecl,
+    OntologyTypeDecl, OntologyVocabulary, PatternDecl, SupersessionClock, TensionDecl, TypeKind,
+    VoicesDecl,
 };
 pub use navigation::{NavigationPolicy, QuestionKind, SeedPolicy, WalkPolicy};
 
@@ -124,7 +125,7 @@ pub struct IdentityPolicy {
 pub struct ChangePolicy {
     /// The clock supersession folds on. Defaults to `document_date`.
     #[serde(default)]
-    pub clock: Clock,
+    pub clock: SupersessionClock,
     /// Claim type → `"document_date"` or the time attribute it supersedes on.
     #[serde(default)]
     pub supersedes: BTreeMap<String, String>,

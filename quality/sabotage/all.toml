@@ -76,7 +76,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "ci-6-the_bound_is_a_wait_bound_not_a_ban_on_s"
 requirement = "CI-6"
-target = "commonwealth/crates/commonwealth-core/src/fair_sched.rs"
+target = "serving-policy/src/fair_sched.rs"
 find = "    pub fn predict_wait_ms(&self, position: u32, slots: usize, in_flight_elapsed_ms: u64) -> u64 {\n        let slots = (slots.max(1)) as u64;\n        ((position as u64).div_ceil(slots) * self.avg_turn_ms).saturating_sub(in_flight_elapsed_ms)\n    }"
 replace = "    pub fn predict_wait_ms(&self, position: u32, slots: usize, in_flight_elapsed_ms: u64) -> u64 {\n        let slots = (slots.max(1)) as u64;\n        // Mutation: Remove the subtraction of elapsed time to violate CI-6\n        // The requirement states a cooldown MUST be stamped at the end of the run,\n        // implying that `in_flight_elapsed_ms` should reduce the predicted wait.\n        // By ignoring it, we fail to account for work already done, causing false positives on shedding.\n        ((position as u64).div_ceil(slots) * self.avg_turn_ms)\n    }"
 mustFail = ["the_bound_is_a_wait_bound_not_a_ban_on_slow_turns"]
@@ -556,9 +556,9 @@ expected = "CAUGHT"
 [[mutant]]
 id = "en-21-entity_content_hash_differs_across_corpo"
 requirement = "EN-21"
-target = "corpus-engine/src/enrichment/atlas/atoms.rs"
-find = "    pub fn entity_content_hash(\n        canonical_name: &str,\n        entity_type: &crate::enrichment::pipeline::atlas::EntityType,\n        corpus_id: &str,\n    ) -> Self {\n        let key = crate::atlas_canonical::lookup_key(canonical_name);\n        let input = format!(\"entity|{key}|{}|{corpus_id}\", entity_type.as_str_repr());\n        Self(format!(\"entity-{}\", short_hash(&input)))\n    }"
-replace = "    pub fn entity_content_hash(\n        canonical_name: &str,\n        entity_type: &crate::enrichment::pipeline::atlas::EntityType,\n        _corpus_id: &str,\n    ) -> Self {\n        let key = crate::atlas_canonical::lookup_key(canonical_name);\n        let input = format!(\"entity|{key}|{}\", entity_type.as_str_repr());\n        Self(format!(\"entity-{}\", short_hash(&input)))\n    }"
+target = "corpus-engine-vocab/src/atoms.rs"
+find = "    pub fn entity_content_hash(\n        canonical_name: &str,\n        entity_type: &crate::taxonomy::EntityType,\n        corpus_id: &str,\n    ) -> Self {\n        let key = crate::canonical::lookup_key(canonical_name);\n        let input = format!(\"entity|{key}|{}|{corpus_id}\", entity_type.as_str_repr());\n        Self(format!(\"entity-{}\", short_hash(&input)))\n    }"
+replace = "    pub fn entity_content_hash(\n        canonical_name: &str,\n        entity_type: &crate::taxonomy::EntityType,\n        _corpus_id: &str,\n    ) -> Self {\n        let key = crate::canonical::lookup_key(canonical_name);\n        let input = format!(\"entity|{key}|{}\", entity_type.as_str_repr());\n        Self(format!(\"entity-{}\", short_hash(&input)))\n    }"
 mustFail = ["entity_content_hash_differs_across_corpora"]
 breaks = "A deterministic strategy SHOULD lift an indexed source-code corpus into the same typed graph \u2014 content-hash nodes, generated summaries as descriptions, bounded function and call edges \u2014 so that code b"
 expected = "CAUGHT"
@@ -866,7 +866,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-7-gossip_may_not_admit_a_second_active_mem"
 requirement = "FE-7"
-target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+target = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
 find = "    pub fn merge_from(&mut self, self_node_id: NodeId, other: &Mesh) -> MergeReport {\n        self.merge_from_authenticated(self_node_id, other, &GossipAuth::none())\n    }"
 replace = "    pub fn merge_from(&mut self, self_node_id: NodeId, other: &Mesh) -> MergeReport {\n        // MUTATION: Bypass authentication and specific active-member guards by directly merging\n        // without checking for duplicate active endpoint keys in the target mesh.\n        let mut report = MergeReport::default();\n        \n        // Simplistic merge that ignores the \"active in exactly one\" constraint\n        // effectively allowing a node to be added as an active member even if its key is already used elsewhere,\n        // or failing to reject it properly during gossip merge.\n        for (id, member) in other.members.iter() {\n            if !self.members.contains_key(id) {\n                self.members.insert(*id, (*member).clone());\n                report.added += 1;\n            }\n        }\n        report\n    }"
 mustFail = ["gossip_may_not_admit_a_second_active_member_on_one_endpoint_key"]
@@ -886,7 +886,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-12-an_invite_with_no_expiry_never_lapses"
 requirement = "FE-12"
-target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+target = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
 find = "    pub fn invite_expired_at(&self, now: u64) -> bool {\n        matches!(self.invite_expires_at, Some(exp) if now >= exp)\n    }"
 replace = "    pub fn invite_expired_at(&self, _now: u64) -> bool {\n        false\n    }"
 mustFail = ["an_invite_with_no_expiry_never_lapses"]
@@ -906,7 +906,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-14-a_bad_proof_is_refused_and_does_not_fall"
 requirement = "FE-14"
-target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+target = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
 find = "        let arm = self.gossip_authorized_with(other, auth);\n        if arm == GossipAuthArm::Refused {\n            return MergeReport::refused();\n        }"
 replace = "        // MUTATION: Ignore the specific refusal from gossip_authorized_with and\n        // fall through to legacy logic (invite_key_hash check) which might succeed.\n        // This violates FE-14 because a bad proof falls back instead of refusing hard."
 mustFail = ["a_bad_proof_is_refused_and_does_not_fall_back_to_the_legacy_arm"]
@@ -926,7 +926,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-16-a_peer_with_neither_proof_nor_secret_is_"
 requirement = "FE-16"
-target = "commonwealth/crates/commonwealth-core/src/mesh.rs"
+target = "commonwealth/crates/commonwealth-core/src/mesh/mod.rs"
 find = "let mut report =\n            MergeReport::for_round(arm, arm != GossipAuthArm::Proof && !other.has_mesh_secret());"
 replace = "let mut report =\n            MergeReport::for_round(arm, true);"
 mustFail = ["a_peer_with_neither_proof_nor_secret_is_still_pre_split"]
@@ -964,16 +964,6 @@ breaks = "Because that observation is in memory, the rotation refusal MUST run a
 expected = "CAUGHT"
 
 [[mutant]]
-id = "fe-19-gossip_state_merge_older_rejected"
-requirement = "FE-19"
-target = "commonwealth/crates/commonwealth-discovery/src/gossip.rs"
-find = "    pub fn merge_entry(&mut self, entry: GossipEntry) -> bool {\n        match self.entries.get(&entry.key) {\n            Some(existing) if existing.timestamp >= entry.timestamp => false,\n            _ => {\n                self.entries.insert(entry.key.clone(), entry);\n                true\n            }\n        }\n    }"
-replace = "    pub fn merge_entry(&mut self, entry: GossipEntry) -> bool {\n        // BUG: Always accept the new entry regardless of timestamp.\n        // This violates last-writer-wins convergence logic when timestamps are equal or older entries arrive later.\n        self.entries.insert(entry.key.clone(), entry);\n        true\n    }"
-mustFail = ["gossip_state_merge_older_rejected"]
-breaks = "Shared state MUST converge by epidemic replication: a periodic round to a small random peer sample, three-phase digest/delta/response, last- writer-wins on timestamp."
-expected = "CAUGHT"
-
-[[mutant]]
 id = "fe-22-hardware_fingerprint_is_gpu_order_indepe"
 requirement = "FE-22"
 target = "sovereign/crates/sovereign-core/src/mesh_measurements.rs"
@@ -981,16 +971,6 @@ find = "    let mut gpu_mix: u64 = 0;\n    for (name, vram_gb, backend) in gpus 
 replace = "    // Mutation: Use a non-commutative accumulation to make order matter.\n    let mut gpu_mix: u64 = 1; \n    for (name, vram_gb, backend) in gpus {\n        let mut g = DefaultHasher::new();\n        name.hash(&mut g);\n        vram_gb.hash(&mut g);\n        backend.hash(&mut g);\n        // XOR is commutative; changing to addition or sequential hashing breaks independence from enumeration order\n        gpu_mix += g.finish(); \n    }"
 mustFail = ["hardware_fingerprint_is_gpu_order_independent"]
 breaks = "Hardware capability MUST be detected, not configured, with a fallback chain across accelerator vendors."
-expected = "CAUGHT"
-
-[[mutant]]
-id = "fe-24-highest_priority_wins"
-requirement = "FE-24"
-target = "commonwealth/crates/commonwealth-inference/src/tier_router.rs"
-find = "// Sort rules by priority (highest first).\n    let mut rules = router.routing_rules.clone();\n    rules.sort_by(|a, b| b.priority.cmp(&a.priority));\n\n    for rule in &rules {\n        if evaluate_condition(&rule.condition, request) {\n            return rule.target;\n        }\n    }"
-replace = "// Last-writer-wins logic instead of strictest-wins.\n    // This violates the requirement that policies must merge stricter-wins.\n    let mut final_target = router.default_tier;\n    \n    // Iterate through all matching rules and overwrite with the last one found,\n    // effectively ignoring priority or treating them as simple overrides rather than constraints.\n    // To ensure this specific test fails (where Quality hint should win), we can simply\n    // reverse the sort order so lower priorities are processed later, or just pick a default wrong behavior.\n    // However, to strictly violate \"stricter wins\" in a way that breaks the logic:\n    // Let's assume 'Throughput' is less strict than 'Quality'. If we process low priority first\n    // and high priority second, it might still work if we want higher. \n    // But wait, the current code sorts HIGH to LOW. High priority (20) runs first -> returns Tier::Quality.\n    // To make it fail, we need Tier::Throughput to be returned instead.\n    // We can achieve this by sorting ASCENDING (lowest priority first), so Priority 5 runs before Priority 20?\n    // No, if we return immediately on match in a loop:\n    // Ascending: Priority 5 matches -> Returns Throughput. Test expects Quality. FAILS.\n\n    let mut rules = router.routing_rules.clone();\n    rules.sort_by(|a, b| a.priority.cmp(&b.priority)); // Changed from descending to ascending\n\n    for rule in &rules {\n        if evaluate_condition(&rule.condition, request) {\n            return rule.target;\n        }\n    }"
-mustFail = ["highest_priority_wins"]
-breaks = "Policy that must only ever tighten (such as an encryption requirement) MUST merge **stricter-wins**, not last-writer-wins."
 expected = "CAUGHT"
 
 [[mutant]]

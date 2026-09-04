@@ -15,7 +15,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::{AttrFamily, Clock, Force, OntologyLanguageRegistry, OntologyPolicies, TypeKind};
+use super::{
+    AttrFamily, Force, OntologyLanguageRegistry, OntologyPolicies, SupersessionClock, TypeKind,
+};
 use crate::enrichment::atlas::analysis::TensionStrategy;
 use crate::enrichment::pipeline::atlas::EntityType;
 use crate::recipe::OntologyBlock;
@@ -350,13 +352,13 @@ fn resolve_identity<'a>(
 
 fn derived_facets(p: &OntologyPolicies, notes: &mut Vec<String>) {
     notes.push(match p.change.clock {
-        Clock::DocumentDate => "clock: document_date — supersession folds on document \
+        SupersessionClock::DocumentDate => "clock: document_date — supersession folds on document \
              dates (the default; set `change.clock = \"narrative\"` for order within a work)"
             .to_string(),
-        Clock::Narrative => {
+        SupersessionClock::Narrative => {
             "clock: narrative — supersession folds on order within the work".to_string()
         }
-        Clock::None => "clock: none — nothing supersedes".to_string(),
+        SupersessionClock::None => "clock: none — nothing supersedes".to_string(),
     });
 
     if !p.derivation.tension.between.is_empty() {

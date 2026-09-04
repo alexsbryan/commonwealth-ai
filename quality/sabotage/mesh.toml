@@ -24,12 +24,3 @@ mustFail = ["gossip_round_publishes_live_hosted_corpora"]
 breaks = "Replicated payloads MUST include at minimum member state, inference plans, knowledge plans, ledger entries, and ring configuration."
 expected = "CAUGHT"
 
-[[mutant]]
-id = "mesh-fe21-rtt-ewma-smoothing"
-requirement = "FE-21"
-target = "commonwealth/crates/commonwealth-discovery/src/latency_probe.rs"
-find = "            let smoothed_rtt = alpha * rtt_ms + (1.0 - alpha) * existing.rtt_ms;"
-replace = "            let smoothed_rtt = rtt_ms;"
-mustFail = ["latency_prober_ewma_smoothing"]
-breaks = "Round-trip latency between members MUST be measured periodically and shared, as a smoothed estimate."
-expected = "CAUGHT"

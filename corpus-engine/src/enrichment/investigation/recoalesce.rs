@@ -29,7 +29,7 @@ use std::collections::BTreeMap;
 use serde_json::Value;
 
 use super::aggregate;
-use super::graph::{Entity, PatternFinding, Relationship};
+use super::graph::{InvestigationEntity, PatternFinding, Relationship};
 use super::normalize::Normalizer;
 use super::patterns;
 use crate::recipe::PatternDecl;
@@ -37,7 +37,7 @@ use crate::recipe::PatternDecl;
 /// Outcome of a re-fold, with before/after counts for glassbox reporting.
 #[derive(Debug, Clone)]
 pub struct RecoalesceResult {
-    pub entities: Vec<Entity>,
+    pub entities: Vec<InvestigationEntity>,
     pub relationships: Vec<Relationship>,
     pub findings: Vec<PatternFinding>,
     pub entities_before: usize,
@@ -51,7 +51,7 @@ pub struct RecoalesceResult {
 /// `category`, collapsing date-/synthetic-id-named nodes that share it);
 /// everything else re-derives from its canonical name via the shared fold so
 /// it agrees with relationship endpoints built by [`Normalizer::entity_id`].
-fn merged_id(normalizer: &Normalizer, e: &Entity) -> String {
+fn merged_id(normalizer: &Normalizer, e: &InvestigationEntity) -> String {
     if let Some(attr) = normalizer.identity_attribute(&e.entity_type) {
         if let Some(v) = e.attributes.get(attr).and_then(Value::as_str) {
             if !v.trim().is_empty() {
@@ -65,7 +65,7 @@ fn merged_id(normalizer: &Normalizer, e: &Entity) -> String {
 /// Re-fold a finished graph. See module docs.
 pub fn recoalesce_graph(
     normalizer: &Normalizer,
-    entities: Vec<Entity>,
+    entities: Vec<InvestigationEntity>,
     relationships: Vec<Relationship>,
     patterns_decl: &[PatternDecl],
 ) -> RecoalesceResult {
@@ -77,7 +77,7 @@ pub fn recoalesce_graph(
     // it can choose across ALL merged surface forms (incl. the seed's own
     // prior aliases), not just incrementally.
     let mut remap: BTreeMap<String, String> = BTreeMap::new(); // old id → new id
-    let mut merged: BTreeMap<String, Entity> = BTreeMap::new();
+    let mut merged: BTreeMap<String, InvestigationEntity> = BTreeMap::new();
     for e in entities {
         let new_id = merged_id(normalizer, &e);
         remap.insert(e.id.clone(), new_id.clone());
@@ -137,7 +137,7 @@ pub fn recoalesce_graph(
         }
     }
 
-    let mut entities: Vec<Entity> = merged.into_values().collect();
+    let mut entities: Vec<InvestigationEntity> = merged.into_values().collect();
     entities.sort_by(|a, b| a.id.cmp(&b.id));
 
     // ── 3. Rewrite + dedupe relationships. ──
@@ -213,12 +213,12 @@ mod tests {
     use super::*;
     use crate::enrichment::investigation::graph::ExtractionExcerpt;
 
-    fn inst(id: &str, name: &str, sighting_count: Option<u64>) -> Entity {
+    fn inst(id: &str, name: &str, sighting_count: Option<u64>) -> InvestigationEntity {
         let mut attributes = serde_json::Map::new();
         if let Some(c) = sighting_count {
             attributes.insert("sighting_count".into(), serde_json::json!(c));
         }
-        Entity {
+        InvestigationEntity {
             id: id.into(),
             canonical_name: name.into(),
             entity_type: "installation".into(),
@@ -227,8 +227,8 @@ mod tests {
         }
     }
 
-    fn sighting(id: &str) -> Entity {
-        Entity {
+    fn sighting(id: &str) -> InvestigationEntity {
+        InvestigationEntity {
             id: id.into(),
             canonical_name: id.into(),
             entity_type: "sighting".into(),
@@ -320,7 +320,7 @@ mod tests {
         let out = recoalesce_graph(&norm(), entities, rels, &threshold());
 
         // The two WP nodes merged into one (plus the 3 sightings = 4 total).
-        let installs: Vec<&Entity> = out
+        let installs: Vec<&InvestigationEntity> = out
             .entities
             .iter()
             .filter(|e| e.entity_type == "installation")
@@ -346,7 +346,7 @@ mod tests {
         let mk = |id: &str, name: &str, cat: &str| {
             let mut attributes = serde_json::Map::new();
             attributes.insert("category".into(), serde_json::json!(cat));
-            Entity {
+            InvestigationEntity {
                 id: id.into(),
                 canonical_name: name.into(),
                 entity_type: "adjudication".into(),
@@ -368,7 +368,7 @@ mod tests {
             mk("e-adjudication-other", "7 JUNE 1955", "Aircraft"),
         ];
         let out = recoalesce_graph(&norm(), entities, vec![], &[]);
-        let adj: Vec<&Entity> = out
+        let adj: Vec<&InvestigationEntity> = out
             .entities
             .iter()
             .filter(|e| e.entity_type == "adjudication")
