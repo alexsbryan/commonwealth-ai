@@ -38,7 +38,7 @@ use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::sync::mpsc;
 
 use sovereign_contracts::types::projection::{
-    project_epistemic_state, project_message_metadata, project_task,
+    project_epistemic_state, project_message_metadata, project_task, project_turn_metadata,
 };
 use sovereign_contracts::types::{Intent, TurnFrame, TurnMode, TurnNarration};
 
@@ -309,6 +309,7 @@ pub async fn serve_turn(
                 citations: Vec::new(),
                 epistemic_state: None,
                 task: None,
+                metadata: None,
             });
             return;
         }
@@ -372,12 +373,14 @@ pub async fn serve_turn(
     let (provenance, citations) = project_message_metadata(&metadata);
     let epistemic_state = project_epistemic_state(&metadata);
     let task = project_task(&metadata);
+    let served = project_turn_metadata(&metadata);
     sink.emit(TurnFrame::Complete {
         message_id,
         provenance,
         citations,
         epistemic_state,
         task,
+        metadata: served,
     });
 }
 
@@ -441,12 +444,14 @@ async fn serve_non_streaming_turn(
     let (provenance, citations) = project_message_metadata(&metadata);
     let epistemic_state = project_epistemic_state(&metadata);
     let task = project_task(&metadata);
+    let served = project_turn_metadata(&metadata);
     sink.emit(TurnFrame::Complete {
         message_id,
         provenance,
         citations,
         epistemic_state,
         task,
+        metadata: served,
     });
 }
 
@@ -469,6 +474,8 @@ pub struct CollectedTurn {
     pub epistemic_state: Option<sovereign_contracts::types::EpistemicState>,
     /// The background task the turn spawned, on the agentic path.
     pub task: Option<sovereign_contracts::types::projection::TaskSummary>,
+    /// How the turn was served — routed intent, gate outcome, stage ledger.
+    pub metadata: Option<sovereign_contracts::types::projection::TurnMetadata>,
 }
 
 /// A [`TurnSink`] that keeps the frames instead of forwarding them.
@@ -492,12 +499,14 @@ impl TurnSink for Collector {
                 citations,
                 epistemic_state,
                 task,
+                metadata,
             } => {
                 out.message_id = message_id;
                 out.provenance = provenance;
                 out.citations = citations;
                 out.epistemic_state = epistemic_state;
                 out.task = task;
+                out.metadata = metadata;
             }
             TurnFrame::StreamError { message, .. } => {
                 *self.failure.lock().unwrap_or_else(|e| e.into_inner()) = Some(message);

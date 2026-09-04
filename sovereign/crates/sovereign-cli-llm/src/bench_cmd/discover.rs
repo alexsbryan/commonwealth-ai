@@ -23,7 +23,6 @@ use std::path::{Path, PathBuf};
 
 use corpus_engine::enrichment::atlas::axis_catalog::{all_axes, TypedAxis};
 
-
 /// Which scoring surface a discovered bench belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BenchSurface {

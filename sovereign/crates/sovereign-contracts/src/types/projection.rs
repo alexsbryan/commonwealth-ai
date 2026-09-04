@@ -154,6 +154,98 @@ pub struct TaskSummary {
     pub steps_completed: usize,
 }
 
+/// What the turn's persisted metadata says about HOW it was served —
+/// the three facts the phase-6 typed projection dropped on the floor.
+///
+/// # Why it is three fields and not the blob
+///
+/// `svrn chat ask --format json` used to be a host: it ran the turn in
+/// process, then went back to the store and read the row it had just
+/// written. Phase 6 made it a surface and the answer now ARRIVES, which is
+/// the right shape — but the projection it arrives through carries
+/// `provenance`, `citations`, `epistemic_state` and `task`, and the blob
+/// also holds three things nothing else on the wire can answer:
+///
+/// - `routed_intent` — WHICH route the turn took, by variant name. The
+///   sibling `intent` key in the blob is a hardcoded path label and the
+///   knowledge handler serves both `KnowledgeQuery` and `ComparisonQuery`,
+///   so reading a route off answer prose was the alternative.
+/// - `grounding_gate` — what the hold→verify→retry→abstain ladder did:
+///   `action`, and on the citation exit `mode`, `quotes`, `located`,
+///   `openable`.
+/// - `stage_attribution` — the per-turn stack ledger ([`TurnStageLedger`]),
+///   which stage spent the turn's time.
+///
+/// Shipping the WHOLE blob instead would have put `retrieved_chunks` (20
+/// chunks on a normal turn) on every terminal frame, and duplicated
+/// `provenance` and `epistemic_state`, which are already projected beside
+/// this. Three named fields, and every one of them `Option` with
+/// `skip_serializing_if`: **absent stays absent**. A turn that opened no
+/// ledger has no `stage_attribution` key — not `null`, not `{}` — which is
+/// the same rule [`TurnStageLedger`]'s own doc states, so "not measured" and
+/// "measured, nothing to report" stay distinguishable (ARCH §18.3).
+///
+/// `grounding_gate` is a `Value` and that is DECLARED DEBT, not an
+/// oversight: the gate has sixteen exits and each writes a different key
+/// set (`runtime/grounding/inner.rs`), so a struct here would silently drop
+/// whatever the exit of the day added. Typing it is its own piece of work.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct TurnMetadata {
+    /// The route this turn actually took, by variant name (`DeepQuery`,
+    /// `KnowledgeQuery`, …).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routed_intent: Option<String>,
+    /// The grounding gate's own glassbox block. Absent when the gate was
+    /// off or out of scope.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grounding_gate: Option<Value>,
+    /// The per-turn stage attribution. Absent on any surface that did not
+    /// open a ledger — never an empty ledger.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage_attribution: Option<crate::types::TurnStageLedger>,
+}
+
+impl TurnMetadata {
+    /// True when this carries nothing. The projection returns `None` rather
+    /// than an empty `TurnMetadata`, so a client cannot tell "the host does
+    /// not send this" from "the turn had nothing to report" by mistake.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.routed_intent.is_none()
+            && self.grounding_gate.is_none()
+            && self.stage_attribution.is_none()
+    }
+}
+
+/// Project the three how-it-was-served facts out of the persisted blob.
+///
+/// `None` when the blob has none of them — see [`TurnMetadata::is_empty`].
+/// A malformed `stage_attribution` degrades to absent rather than failing
+/// the whole projection, the same bargain [`project_epistemic_state`]
+/// makes: one bad key must not cost the caller the other two.
+pub fn project_turn_metadata(meta: &Option<Value>) -> Option<TurnMetadata> {
+    let meta = meta.as_ref()?;
+    let non_null = |k: &str| -> Option<&Value> {
+        match meta.get(k) {
+            Some(v) if !v.is_null() => Some(v),
+            _ => None,
+        }
+    };
+    let out = TurnMetadata {
+        routed_intent: non_null("routed_intent")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        grounding_gate: non_null("grounding_gate").cloned(),
+        stage_attribution: non_null("stage_attribution")
+            .and_then(|v| serde_json::from_value(v.clone()).ok()),
+    };
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
+}
+
 /// Project the persisted task block, when the turn spawned one.
 pub fn project_task(meta: &Option<Value>) -> Option<TaskSummary> {
     let t = meta.as_ref()?.get("task")?;

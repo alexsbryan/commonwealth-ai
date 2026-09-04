@@ -67,6 +67,11 @@ pub struct TurnOutcome {
     pub epistemic_state: Option<EpistemicState>,
     /// The background task the turn spawned, on the agentic path.
     pub task: Option<sovereign_contracts::types::projection::TaskSummary>,
+    /// How the turn was SERVED — routed intent, grounding-gate outcome and
+    /// the stage ledger, projected from the persisted message metadata.
+    /// `None` when the turn reported none of the three; a caller must not
+    /// read that as "the ledger was empty" (ARCH §18.3).
+    pub metadata: Option<sovereign_contracts::types::projection::TurnMetadata>,
 }
 
 /// What a caller wants to watch while a turn runs.
@@ -430,12 +435,14 @@ impl TurnStream {
                     citations,
                     epistemic_state,
                     task,
+                    metadata,
                 } => {
                     outcome.message_id = message_id;
                     outcome.provenance = provenance;
                     outcome.citations = citations;
                     outcome.epistemic_state = epistemic_state;
                     outcome.task = task;
+                    outcome.metadata = metadata;
                     return Ok(outcome);
                 }
                 TurnFrame::StreamError {

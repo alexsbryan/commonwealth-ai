@@ -43,7 +43,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::epistemic::EpistemicState;
 use crate::types::narration::NarrationPhase;
-use crate::types::projection::{Citation, Provenance, TaskSummary};
+use crate::types::projection::{Citation, Provenance, TaskSummary, TurnMetadata};
 
 /// Host → client, for ONE turn, down the ONE connection that asked for it.
 ///
@@ -93,6 +93,15 @@ pub enum TurnFrame {
         /// plain chat turn's frame is byte-identical to before.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         task: Option<TaskSummary>,
+        /// How the turn was SERVED — routed intent, grounding-gate outcome,
+        /// stage ledger. Added 2026-09-04: `svrn chat ask --format json` is
+        /// a surface now (phase 6) and these three facts had no way across
+        /// the process boundary, so the only reader left was SQL. Absent
+        /// when the turn reported none of them; never `null`, never `{}`
+        /// (ARCH §18.3). A plain chat turn's frame is byte-identical to
+        /// before.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        metadata: Option<TurnMetadata>,
     },
     /// A streaming turn failed, or the host was busy. `retry_after_secs`
     /// is set on the busy case so the client mirrors REST `503` behaviour

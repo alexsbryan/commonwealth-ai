@@ -78,9 +78,7 @@ impl std::fmt::Display for LineError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LineError::NoOutput => f.write_str("the lane printed nothing on stdout"),
-            LineError::NotJson => {
-                f.write_str("the lane's last stdout line is not a JSON object")
-            }
+            LineError::NotJson => f.write_str("the lane's last stdout line is not a JSON object"),
             LineError::MissingField(k) => {
                 write!(f, "the lane's verdict line has no `{k}` string")
             }
@@ -113,8 +111,7 @@ pub fn parse_line(line: &str) -> Result<Judgement, LineError> {
     let reason_raw = str_field("reason")?;
     let verdict =
         Verdict::parse_wire(&verdict_raw).ok_or(LineError::UnknownVerdict(verdict_raw))?;
-    let reason =
-        Reason::new(reason_raw.clone()).ok_or(LineError::PlaceholderReason(reason_raw))?;
+    let reason = Reason::new(reason_raw.clone()).ok_or(LineError::PlaceholderReason(reason_raw))?;
     let j = match verdict {
         Verdict::Passed => Judgement::passed(subject, reason),
         Verdict::Failed => Judgement::failed(subject, reason),
@@ -172,7 +169,10 @@ mod tests {
         let back = parse_line(&emit(&j)).expect("round trip");
         assert_eq!(back.subject(), "chat-ask");
         assert_eq!(back.verdict(), Verdict::Failed);
-        assert_eq!(back.reason().as_str(), "both halves answered: located 0 quotes");
+        assert_eq!(
+            back.reason().as_str(),
+            "both halves answered: located 0 quotes"
+        );
         assert_eq!(back.dated_at(), Some(when));
     }
 
@@ -189,9 +189,7 @@ mod tests {
             let j = match v {
                 Verdict::Passed => Judgement::passed("l", Reason::literal("ran")),
                 Verdict::Failed => Judgement::failed("l", Reason::literal("ran")),
-                Verdict::CouldNotJudge => {
-                    Judgement::could_not_judge("l", Reason::literal("ran"))
-                }
+                Verdict::CouldNotJudge => Judgement::could_not_judge("l", Reason::literal("ran")),
                 Verdict::NeverRan => Judgement::never_ran("l", Reason::literal("ran")),
             };
             assert_eq!(parse_line(&emit(&j)).unwrap().verdict(), v);
@@ -203,7 +201,8 @@ mod tests {
     /// crashed lane comes to read as green.
     #[test]
     fn an_earlier_json_line_is_never_adopted_as_the_verdict() {
-        let stdout = "{\"subject\":\"chat-ask\",\"verdict\":\"passed\",\"reason\":\"all rows green\"}\n\
+        let stdout =
+            "{\"subject\":\"chat-ask\",\"verdict\":\"passed\",\"reason\":\"all rows green\"}\n\
                       thread 'main' panicked at lane.rs:12\n";
         assert_eq!(from_stdout(stdout), Err(LineError::NotJson));
     }

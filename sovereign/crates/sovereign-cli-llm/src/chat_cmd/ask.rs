@@ -375,9 +375,23 @@ fn render_text_typed(outcome: &TurnOutcome, show_reasoning: bool) {
 /// which is what a consumer on the other side of a socket can actually rely
 /// on. `epistemic_state` rides along for the first time here: it was always
 /// in the blob and this renderer never surfaced it.
+///
+/// `metadata` came BACK on 2026-09-04, as the typed
+/// [`projection::TurnMetadata`] rather than the blob: routed intent, the
+/// grounding gate's outcome, and the per-turn stage ledger. Phase 6 dropped
+/// all three, and with the daemon serving no
+/// `/v1/conversations/{id}/messages` route, the only reader left was SQL
+/// against `~/.svrnmesh/sovereign.db` — which is not a surface.
+///
+/// **The key is ABSENT when the turn reported none of the three.** Not
+/// `null`, not `{}`. A consumer that has to tell "this turn opened no
+/// ledger" from "this build does not send ledgers" can do it with
+/// `"metadata" in payload`, and `serde_json`'s `skip_serializing_if` on
+/// each field does the same one level down (ARCH §18.3, and the rule
+/// `TurnStageLedger`'s own doc states).
 fn render_json_typed(conversation_id: &str, outcome: &TurnOutcome) {
     let (reasoning, visible) = render::split_reasoning(&outcome.text);
-    let payload = json!({
+    let mut payload = json!({
         "message_id": outcome.message_id,
         "conversation_id": conversation_id,
         "raw": outcome.text,
@@ -387,6 +401,11 @@ fn render_json_typed(conversation_id: &str, outcome: &TurnOutcome) {
         "citations": outcome.citations.iter().map(citation_json).collect::<Vec<_>>(),
         "epistemic_state": outcome.epistemic_state,
     });
+    if let Some(meta) = outcome.metadata.as_ref() {
+        if let (Some(obj), Ok(v)) = (payload.as_object_mut(), serde_json::to_value(meta)) {
+            obj.insert("metadata".to_string(), v);
+        }
+    }
     // JSON on stdout so it is pipe-friendly; the conversational chrome stays
     // on stderr.
     println!(

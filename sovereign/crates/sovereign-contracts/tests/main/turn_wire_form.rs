@@ -60,6 +60,7 @@ fn complete_frame_wire_form() {
             citations: vec![],
             epistemic_state: None,
             task: None,
+            metadata: None,
         },
         r#"{"type":"complete","data":{"message_id":"m2"}}"#,
     );
@@ -99,6 +100,7 @@ fn complete_frame_carries_provenance_and_citations() {
             }],
             epistemic_state: None,
             task: None,
+            metadata: None,
         },
         concat!(
             r#"{"type":"complete","data":{"message_id":"m3","#,
@@ -234,4 +236,86 @@ fn turn_request_wire_form() {
             "inbound frame is not symmetric"
         );
     }
+}
+
+/// **The absent key is the contract** (scope item 5 of order
+/// quality-check-lean; ARCH §18.3).
+///
+/// `svrn chat ask --format json` was a host that read the message row it had
+/// just written; phase 6 made it a surface and the three how-it-was-served
+/// facts stopped crossing the boundary, leaving SQL as the only reader. They
+/// ride `Complete` now — and a turn that opened NO ledger must produce no
+/// `stage_attribution` key at all. `null` and `{}` are both readings a
+/// consumer would have to guess at: `{}` says "measured, nothing to report"
+/// about a turn that was never measured, which is the flattering direction
+/// and the one `TurnStageLedger`'s own doc forbids.
+#[test]
+fn a_turn_that_opened_no_ledger_has_no_stage_attribution_key() {
+    use sovereign_contracts::types::projection::{project_turn_metadata, TurnMetadata};
+    use sovereign_contracts::types::{ServedBy, StackOwner, StageId, StageRow, TurnStageLedger};
+
+    // 1. No ledger at all — the projection reports absence, not an empty one.
+    let no_ledger = serde_json::json!({"routed_intent": "DeepQuery"});
+    let projected = project_turn_metadata(&Some(no_ledger)).expect("routed_intent is a fact");
+    assert!(projected.stage_attribution.is_none());
+    let wire = serde_json::to_value(&projected).unwrap();
+    assert!(
+        wire.get("stage_attribution").is_none(),
+        "an unmeasured turn must carry no stage_attribution key, got {wire}"
+    );
+    assert_eq!(
+        wire.get("routed_intent").and_then(|v| v.as_str()),
+        Some("DeepQuery")
+    );
+
+    // 2. An explicit `null` in the blob is the same absence, not a value.
+    let nulled = serde_json::json!({
+        "routed_intent": "DeepQuery",
+        "stage_attribution": serde_json::Value::Null,
+        "grounding_gate": serde_json::Value::Null,
+    });
+    let projected = project_turn_metadata(&Some(nulled)).unwrap();
+    assert!(projected.stage_attribution.is_none());
+    assert!(projected.grounding_gate.is_none());
+
+    // 3. A turn that DID open one round-trips it.
+    let ledger = TurnStageLedger::seal(
+        26_605,
+        vec![StageRow {
+            stage: StageId::Retrieval,
+            owner: StackOwner::Shared,
+            ms: 410,
+            mechanism: None,
+            cause: None,
+            calls: Some(1),
+        }],
+    );
+    let blob = serde_json::json!({
+        "routed_intent": "DeepQuery",
+        "grounding_gate": {"action": "citation_grounded", "mode": "citation", "located": 0},
+        "stage_attribution": serde_json::to_value(&ledger).unwrap(),
+    });
+    let projected = project_turn_metadata(&Some(blob)).unwrap();
+    let back = projected
+        .stage_attribution
+        .as_ref()
+        .expect("the ledger crossed");
+    assert_eq!(back.total_ms, 26_605);
+    assert_eq!(back.rows[0].stage, StageId::Retrieval);
+    assert_ne!(back.served_by, ServedBy::NativeOnly);
+    assert_eq!(
+        projected
+            .grounding_gate
+            .as_ref()
+            .and_then(|g| g.get("action"))
+            .and_then(|v| v.as_str()),
+        Some("citation_grounded")
+    );
+
+    // 4. Nothing at all in the blob is `None`, never an empty TurnMetadata —
+    //    so "the host does not send this" stays tellable from "the turn had
+    //    nothing to report".
+    assert!(project_turn_metadata(&Some(serde_json::json!({"streamed": true}))).is_none());
+    assert!(project_turn_metadata(&None).is_none());
+    assert!(TurnMetadata::default().is_empty());
 }

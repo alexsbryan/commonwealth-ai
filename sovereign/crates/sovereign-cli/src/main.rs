@@ -73,10 +73,10 @@ mod path_cmd;
 mod plan_cmd;
 #[cfg(feature = "dev-tools")]
 mod posture_cmd;
-#[cfg(feature = "dev-tools")]
-mod quality_check_cmd;
 #[cfg(feature = "code-intel")]
 mod project_init;
+#[cfg(feature = "dev-tools")]
+mod quality_check_cmd;
 // NOT feature-gated, deliberately: the daemon-facing project registry adds
 // zero dependencies and is the one thing a `curl | sh` user needs to reach
 // the code-intelligence pipeline the daemon already runs.
@@ -576,9 +576,7 @@ async fn run_quality(args: &[String]) -> i32 {
         // (ARCH §18.3): running a 30-minute suite because someone typo'd is
         // not a courtesy.
         Some(other) if other != "--help" && other != "-h" => {
-            eprintln!(
-                "svrn quality: unknown subcommand `{other}`. Try: svrn quality check"
-            );
+            eprintln!("svrn quality: unknown subcommand `{other}`. Try: svrn quality check");
             2
         }
         _ => {

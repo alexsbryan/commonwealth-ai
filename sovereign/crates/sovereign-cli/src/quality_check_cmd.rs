@@ -353,7 +353,8 @@ async fn resolve_slot_stems(base: &str) -> (String, String) {
         body.get("data")
             .and_then(|d| d.as_array())
             .and_then(|rows| {
-                rows.iter().find(|r| r.get("id").and_then(|v| v.as_str()) == Some(alias))
+                rows.iter()
+                    .find(|r| r.get("id").and_then(|v| v.as_str()) == Some(alias))
             })
             .and_then(|r| r.get("owned_by").and_then(|v| v.as_str()))
             // `alias→<stem>`; a non-alias row owns itself.
@@ -383,8 +384,7 @@ fn smoke_subset_ids(repo: &Path) -> Result<Vec<String>, String> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(e) => return Err(format!("{}: {e}", path.display())),
     };
-    let doc: toml::Value =
-        toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    let doc: toml::Value = toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut ids: Vec<String> = doc
         .get("subset")
         .and_then(|v| v.as_array())
@@ -481,9 +481,7 @@ async fn check_precondition(p: &Precondition, base: &str) -> bool {
         .is_ok(),
         Precondition::SlotDecodes(slot) => slot_decodes(base, slot).await,
         Precondition::CorpusInstalled(id) => {
-            use sovereign_enrichment_catalog::corpus_state::{
-                inspect_corpus_state, CorpusState,
-            };
+            use sovereign_enrichment_catalog::corpus_state::{inspect_corpus_state, CorpusState};
             inspect_corpus_state(id) != CorpusState::Unindexed
         }
         Precondition::Binary(name) => locate_binary(name).is_some(),
@@ -743,9 +741,9 @@ fn comparable_baselines(repo: &Path, lanes: &[LaneSpec], fp: &Fingerprint) -> us
     lanes
         .iter()
         .filter(|l| {
-            l.baseline_dir.as_ref().is_some_and(|d| {
-                repo.join(d).join(&fp.hex).join("latest.json").exists()
-            })
+            l.baseline_dir
+                .as_ref()
+                .is_some_and(|d| repo.join(d).join(&fp.hex).join("latest.json").exists())
         })
         .count()
 }
@@ -763,9 +761,7 @@ pub async fn run(args: &[String]) -> i32 {
         }
     };
     let Some(repo) = crate::posture_cmd::find_repo_root() else {
-        eprintln!(
-            "error: `svrn quality check` reads {LANE_TABLE} — run it from a source checkout"
-        );
+        eprintln!("error: `svrn quality check` reads {LANE_TABLE} — run it from a source checkout");
         return 2;
     };
     let table_path = parsed
@@ -855,7 +851,11 @@ pub async fn run(args: &[String]) -> i32 {
                 ))
                 .expect("never a placeholder"),
             );
-            println!("── SKIP(budget)  [{}] {}", lane.enforcement.as_str(), lane.id);
+            println!(
+                "── SKIP(budget)  [{}] {}",
+                lane.enforcement.as_str(),
+                lane.id
+            );
             rows.push(j);
             secs_by_lane.push((lane.id.clone(), 0, None));
             continue;
@@ -893,15 +893,7 @@ pub async fn run(args: &[String]) -> i32 {
             lane.id,
             lane.est_secs
         );
-        let run = run_lane(
-            lane,
-            &repo,
-            &out_dir,
-            &fingerprint,
-            parsed.mint,
-            remaining,
-        )
-        .await;
+        let run = run_lane(lane, &repo, &out_dir, &fingerprint, parsed.mint, remaining).await;
         ran_any = true;
         println!(
             "── {}  [{}] {}   ({}s)",
@@ -952,10 +944,9 @@ pub async fn run(args: &[String]) -> i32 {
         eprintln!("nothing ran — every lane was skipped. Verified nothing.");
         return 4;
     }
-    let hard_red = lanes
-        .iter()
-        .zip(rows.iter())
-        .any(|(l, j)| l.enforcement == Enforcement::Hard && j.verdict() != kernel_types::Verdict::Passed);
+    let hard_red = lanes.iter().zip(rows.iter()).any(|(l, j)| {
+        l.enforcement == Enforcement::Hard && j.verdict() != kernel_types::Verdict::Passed
+    });
     i32::from(hard_red)
 }
 
@@ -1090,7 +1081,10 @@ bank = "sovereign/bench/quality-check/chat-ask.toml"
         ] {
             assert!(parse_lane_table(bad).is_err(), "{bad}");
         }
-        assert!(parse_lane_table("").is_err(), "an empty table verifies nothing");
+        assert!(
+            parse_lane_table("").is_err(),
+            "an empty table verifies nothing"
+        );
     }
 
     /// Two lanes of one id means one of them silently loses its row.
@@ -1115,7 +1109,13 @@ bank = "sovereign/bench/quality-check/chat-ask.toml"
             Precondition::parse("binary:sovereign-cli-llm"),
             Ok(Precondition::Binary("sovereign-cli-llm".into()))
         );
-        for junk in ["", "port-listening", "port-listening:", "port-listening:no", "sudo:rm"] {
+        for junk in [
+            "",
+            "port-listening",
+            "port-listening:",
+            "port-listening:no",
+            "sudo:rm",
+        ] {
             assert!(Precondition::parse(junk).is_err(), "{junk}");
         }
     }
@@ -1153,7 +1153,10 @@ bank = "sovereign/bench/quality-check/chat-ask.toml"
             "[[subset]]\nsubset_id = \"z1\"\n[[subset]]\nsubset_id = \"a1\"\n",
         )
         .unwrap();
-        assert_eq!(smoke_subset_ids(tmp.path()), Ok(vec!["a1".into(), "z1".into()]));
+        assert_eq!(
+            smoke_subset_ids(tmp.path()),
+            Ok(vec!["a1".into(), "z1".into()])
+        );
     }
 
     #[test]
