@@ -395,19 +395,36 @@ from = "commonwealth-rail*"
 to = "commonwealth-knowledge"
 reason = "these two crates are what came out of commonwealth-knowledge; a dep back would restore the cycle the split exists to break, and layer ordering cannot see it because both sit in mesh-foundation"
 
-# THESE THREE BLOCKS WERE NOT THE ENFORCEMENT THEY READ AS, and that is worth
-# leaving written down. The cw-lift bar they serve names five families the rail
-# must not reach; the blocks cover four. `commonwealth-rail* ->
-# commonwealth-inference` and `-> commonwealth-api` are SIDEWAYS edges inside
-# `mesh-foundation`, which layer-gate permits and no forbid rule above reaches —
-# so a convenience taking either would have gone green. Found at 1c
-# (b94d399eb), by counting the blocks against the claim rather than reading
-# them. The `[[package]] commonwealth` membership added at 4c98dfb59 is what
-# actually closes it: neither crate is a package member or a shared leaf, so
-# boundary-gate refuses both. Membership now SUBSUMES these three blocks and
-# exceeds them; they are kept because they say WHY, and because a package can
-# be dissolved while a forbid rule survives. ARCH §18.1 — the gap was invisible
-# precisely because everything was green.
+# THE THREE BLOCKS ABOVE WERE NOT THE ENFORCEMENT THEY READ AS, and the hole
+# was WIDER than the first correction to this comment said. Both findings kept,
+# because the second one is a case of a fix that looked complete and was not.
+#
+# FOUND AT 1c (b94d399eb): the cw-lift bar these serve names five families the
+# rail must not reach and the blocks cover four. `commonwealth-rail* ->
+# commonwealth-inference` and `-> commonwealth-api` are sideways edges inside
+# `mesh-foundation`, which layer-gate permits and no block reaches.
+#
+# I THEN WROTE HERE THAT `[[package]] commonwealth` MEMBERSHIP (4c98dfb59)
+# CLOSED IT AND "SUBSUMES THESE THREE BLOCKS". THAT WAS WRONG for the family
+# that matters most. Membership refuses only what is NOT a member or a leaf, so
+# it catches inference and api — and PERMITS `commonwealth-rail ->
+# commonwealth-core` and `-> commonwealth-state`, because both are members.
+# Those two are exactly the edges the Phase-2 (a2) reading would take:
+# `StoreEntry.origin` is `commonwealth_core::ids::NodeId` (state/store.rs:28),
+# so absorbing MeshStore into the rail crate forces rail -> core. Both rail
+# manifests say `commonwealth-core` is "ABSENT and must stay absent" — in a
+# COMMENT, which is remembering an invariant rather than encoding it (§7).
+#
+# The `build.rs` objection I raised against (a2) does not fire either:
+# boundary_gate.rs:89 tests `dir.join("build.rs")` over in-repo package and leaf
+# directories only, so `libsqlite3-sys`'s third-party build script is invisible,
+# and `rusqlite` is already inside the package closure via `commonwealth-state`.
+# NOTHING IN THE REPO WENT RED ON (a2). The block below is what makes it red.
+[[forbid]]
+from = "commonwealth-rail*"
+to = "commonwealth-*"
+except = ["commonwealth-rail-core"]
+reason = "the rail's manifests declare commonwealth-core ABSENT in prose and nothing enforced it; membership cannot, because core and state are package members. Absorbing MeshStore into the rail crate (Phase 2's (a2) reading) takes rail -> core via StoreEntry.origin: NodeId and puts the closure at 78 against cw-rail-closure's floor of 50. The exception is the journal naming the fold, which is the split itself"
 
 [[forbid]]
 from = "commonwealth-core"
