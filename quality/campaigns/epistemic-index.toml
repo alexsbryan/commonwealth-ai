@@ -68,7 +68,11 @@ for r in rows:
     syn = r.get("synth") or {}
     ans = set(r["fact_score"]["matched"])
     chk = set((syn.get("chunks_fact_score") or {}).get("matched") or [])
-    tot = r["fact_score"]["total_expected"]
+    # Denominator EXCLUDES unscorable facts, which is what
+    # `FactScore::ratio` does (eval_cmd/score.rs:148-174: a fact with no
+    # >=3-char token is unmatchable by construction, so counting it would
+    # cap the lane below 1.0 for a bank bug). One ratio, one definition.
+    tot = r["fact_score"]["total_expected"] - len(r["fact_score"].get("unscorable") or [])
     den += tot; named += len(ans); evid += len(chk); cited += len(ans & chk)
     a = by.setdefault(r["category"], [0, 0, 0, 0])
     a[0] += tot; a[1] += len(ans); a[2] += len(chk); a[3] += len(ans & chk)
@@ -101,8 +105,10 @@ direction    = "higher_is_better"
 # on a HARD lane is exact — embeddings and ANN are stable, so any delta is
 # real. The ±0.04-0.06 band belongs to synth lanes and must not be borrowed
 # here to wave a regression through. The three committed snapshots span
-# 0.9182 (07-16) -> 0.9308 (07-17) -> 0.9497 (08-10); that spread is code
-# changing, not the same code flapping.
+# 0.9182 (07-16, 146/159) -> 0.9308 (07-17, 148/159) -> 0.9557 (08-10,
+# 151/158); that spread is code changing, not the same code flapping.
+# Only the 08-10 snapshot carries the unscorable entry, which is why its
+# denominator is the odd one out.
 #
 # The value is fact recall (retrieval), which is what "unchanged" means for
 # this lane. Source recall is printed to stderr rather than blended in: the
@@ -126,12 +132,17 @@ if best is None:
 _, sha, path = best
 rows = [r for r in (json.load(open(path)).get("results") or []) if not r.get("error")]
 fm = sum(len(r["fact_score"]["matched"]) for r in rows)
-ft = sum(r["fact_score"]["total_expected"] for r in rows)
+# EXCLUDE unscorable, as `FactScore::ratio` does. This bank has one such
+# entry ("li" — every token under 3 chars), so a denominator of
+# total_expected reads 151/159 = 0.9497 where the lane itself reports
+# 151/158 = 0.9557. Two numbers for one ratio is ARCH §10.6.
+un = sum(len(r["fact_score"].get("unscorable") or []) for r in rows)
+ft = sum(r["fact_score"]["total_expected"] for r in rows) - un
 sm = sum(len(r["source_score"]["matched"]) for r in rows)
 st = sum(r["source_score"]["total_expected"] for r in rows)
 if ft == 0:
     sys.exit(3)
-print(f"n={len(rows)} fact {fm}/{ft} source {sm}/{st}"
+print(f"n={len(rows)} fact {fm}/{ft} (unscorable {un} excluded) source {sm}/{st}"
       + (f" ({sm / st:.4f})" if st else ""), file=sys.stderr)
 print(json.dumps({"value": round(fm / ft, 4), "commit": sha, "artifact": path}))
 PY'''
