@@ -9,9 +9,11 @@
 //! `bench/philosophy/<name>.toml`. The same golden set lives next to
 //! the template, so a prompt-tuning iteration is a tight loop:
 //!
+//! ```sh
 //!     enrich init <id> --from-template free-will-debate --force
 //!     enrich build <id>
 //!     enrich eval <id> bench/philosophy/free-will-debate.toml
+//! ```
 //!
 //! Match semantics (TOML keys):
 //!

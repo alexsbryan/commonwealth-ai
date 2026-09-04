@@ -17,6 +17,7 @@
 //!
 //! Workflow:
 //!
+//! ```sh
 //!     export SOVEREIGN_OBSIDIAN_VAULT="/Users/user/Documents/Obsidian Vault"
 //!
 //!     # Two scoring surfaces produce a golden-compatible `atoms.json`:
@@ -44,6 +45,7 @@
 //!
 //!     # every prompt-tuning iteration
 //!     svrn bench obsidian --report /tmp/obsidian-bench.json
+//! ```
 //!
 //! See `sovereign/bench/obsidian/README.md` for the bench's scope
 //! (root essays only, COMMONWEALTH/ excluded), authoring posture,

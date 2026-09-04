@@ -22,11 +22,13 @@
 //!
 //! After N runs, per-phase F1 vectors are aggregated:
 //!
+//! ```text
 //!     phase             min     median    max     spread
 //!     person atoms      87.5%   100.0%   100.0%   12.5pp
 //!     concept atoms     50.0%    66.7%    66.7%   16.7pp
 //!     fault lines (P6)    —        —        —      —
 //!     ...
+//! ```
 //!
 //! Spread is `max − min` in percentage points. A wide spread on a
 //! phase that's the load-bearing signal for a prompt change is the
