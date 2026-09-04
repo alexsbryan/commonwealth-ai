@@ -186,9 +186,18 @@ impl RingJournal {
 
     /// The acts in the order every node applies them, and what could not be
     /// accounted for.
-    pub fn admit(&self, roster: &Roster) -> Result<Admission, RailError> {
+    ///
+    /// `verifier` is passed rather than held, so the journal on disk has no
+    /// opinion about which scheme judged the signatures on it — the caller
+    /// that reads an answer is the one that says what it trusted.
+    /// [`Ed25519Verifier`] is the shipped one.
+    pub fn admit(
+        &self,
+        roster: &Roster,
+        verifier: &dyn RingVerifier,
+    ) -> Result<Admission, RailError> {
         let (ops, skipped) = self.read()?;
-        Ok(admit(&ops, &skipped, roster, &self.namespace))
+        Ok(admit(&ops, &skipped, roster, &self.namespace, verifier))
     }
 
     /// Sign and append one act under this node's key.

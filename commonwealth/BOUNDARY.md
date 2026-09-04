@@ -44,10 +44,14 @@ the cheapest shape this list can take.
 | `commonwealth-transport` | 2,746 | 57 | The peer wire — the direct TCP path, and iroh behind an optional feature. |
 | `commonwealth-state` | 2,360 | 76 | `MeshStore` and the replicated state it holds. |
 | `commonwealth-discovery` | 3,228 | 101 | Founder/joiner, announce, the peer table. |
-| `commonwealth-rail-core` | 2,105 | 42 | The fold: vocabulary, Ed25519 authorship, admission into one total order, the per-actor sync digest. Zero I/O. |
-| `commonwealth-rail` | 657 | 43 | The journal: the append-only JSONL log under `<root>/rings/<ns>/`. |
+| `commonwealth-rail-core` | 2,258 | 42 | The fold: vocabulary, Ed25519 authorship, admission into one total order, the per-actor sync digest. Zero I/O. |
+| `commonwealth-rail` | 674 | 43 | The journal: the append-only JSONL log under `<root>/rings/<ns>/`. |
 
-Closures measured 2026-09-03 with `cargo tree -e normal`, third-party included.
+Closures measured 2026-09-03 with `cargo tree -e normal`, third-party included;
+the two rail crates re-measured at 1e (2026-09-04) and both are unchanged. Their
+line figures move with 1e's `RingVerifier` seam — `commonwealth-rail` read 659
+at that commit and not the 657 recorded here, a two-line drift corrected in
+passing.
 `commonwealth-discovery`'s 101 is the number to watch: four of its ten modules
 are scheduled for deletion, and the closure should come *down* when they go.
 

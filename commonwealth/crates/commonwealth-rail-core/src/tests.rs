@@ -265,7 +265,7 @@ fn a_line_from_a_newer_build_is_a_gap_not_an_invisible_omission() {
             error: "expected value".into(),
         },
     ];
-    let f = admit(&ops, &skipped, &ring(), NS);
+    let f = admit(&ops, &skipped, &ring(), NS, &Ed25519Verifier);
     assert_eq!(
         applied(&f),
         vec!["readable"],
@@ -524,4 +524,83 @@ fn every_gap_renders_as_a_sentence() {
         let json = serde_json::to_value(gap).unwrap();
         assert_eq!(&serde_json::from_value::<RailGap>(json).unwrap(), gap);
     }
+}
+
+// ── the verifier seam ────────────────────────────────────────
+
+/// A verifier whose answer is fixed, so what admission DOES with an answer can
+/// be pinned without a keypair standing in the way. One stub for both answers:
+/// two would be two spellings of the same nothing.
+struct Says(bool);
+
+impl RingVerifier for Says {
+    fn name(&self) -> &'static str {
+        "test-fixed-answer"
+    }
+    fn verify(&self, _: &str, _: &str, _: i64, _: u64, _: &str, _: &str) -> bool {
+        self.0
+    }
+}
+
+/// **The seam is real or it is decoration.** Ops the shipped verifier admits
+/// must become gaps under a verifier that refuses them — which is false if
+/// `admit` asks [`verify_ring_op`](crate::sig) directly and takes the
+/// parameter for show. The first assertion is the negative control: without it
+/// the second passes on a fixture that was never admissible.
+#[test]
+fn admission_asks_the_verifier_it_was_handed_and_not_a_hardcoded_one() {
+    let ops = [
+        signed(&key(1), 100, 0, record("a")),
+        signed(&key(2), 101, 0, record("b")),
+    ];
+    assert_eq!(
+        admitted(&ops).ops.len(),
+        2,
+        "control: both ops are admissible under the shipped verifier"
+    );
+
+    let f = admit(&ops, &[], &ring(), NS, &Says(false));
+    assert!(f.ops.is_empty(), "a refused signature is never an act");
+    assert!(
+        f.gaps
+            .iter()
+            .all(|g| matches!(g, RailGap::BadSignature { .. })),
+        "{:?}",
+        f.gaps
+    );
+}
+
+/// **A refusal is a refusal, never an absence (ARCH §18.3).** An op the rail
+/// cannot authenticate must be counted in `held`, reported as a gap, and make
+/// the answer say it covers a subset. Dropping it quietly is how an app states
+/// a wrong total with complete confidence.
+#[test]
+fn a_signature_the_verifier_refuses_is_a_gap_and_never_a_silent_drop() {
+    let f = admit(
+        &[signed(&key(1), 100, 0, record("a"))],
+        &[],
+        &ring(),
+        NS,
+        &Says(false),
+    );
+    assert!(!f.is_complete(), "an unverifiable op makes this a subset");
+    assert_eq!(f.held, 1, "the op is held and accounted for, not forgotten");
+    assert!(matches!(f.gaps.as_slice(), [RailGap::BadSignature { .. }]));
+}
+
+/// **A verifier is not a roster.** The seam decides whether a key signed these
+/// bytes; the roster decides whether the ring claims that key. Swapping in a
+/// verifier that accepts everything must still leave a stranger out, or the
+/// seam has handed membership to whoever installs a verifier.
+#[test]
+fn a_permissive_verifier_still_cannot_admit_a_stranger() {
+    let f = admit(
+        &[signed(&key(42), 100, 0, record("x"))],
+        &[],
+        &ring(),
+        NS,
+        &Says(true),
+    );
+    assert!(f.ops.is_empty());
+    assert!(matches!(f.gaps.as_slice(), [RailGap::UnknownSigner { .. }]));
 }

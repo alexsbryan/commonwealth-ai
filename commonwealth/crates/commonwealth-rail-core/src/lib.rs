@@ -88,7 +88,7 @@ use serde::{Deserialize, Serialize};
 
 pub use admit::{admit, body_json, Admission, AdmittedOp, RailGap};
 pub use payload::{Payload, PayloadError, MAX_PAYLOAD_BYTES};
-pub use sig::{actor_of, ring_op_message, sign_ring_op, verify_ring_op};
+pub use sig::{actor_of, ring_op_message, sign_ring_op};
 pub use sync::{digest, ops_missing_from, Digest};
 
 /// The journal envelope, re-exported so a consumer of the rail names ONE
@@ -322,6 +322,65 @@ impl RingSigner for SigningKey {
     }
     fn sign(&self, namespace: &str, ts_unix: i64, seq: u64, body_json: &str) -> String {
         sig::sign_ring_op(self, namespace, ts_unix, seq, body_json)
+    }
+}
+
+/// The other half of [`RingSigner`], and it was missing.
+///
+/// Signing was a trait and verifying was a call to a free function. Both
+/// halves worked, which is exactly why the asymmetry was invisible: they are
+/// one scheme, and only one of them could be replaced. A node that installs a
+/// different `RingSigner` writes ops that admission — wired to ed25519 and
+/// nothing else — reports as `BadSignature` forever, and nothing in the type
+/// system says so. One question, one seam (ARCH §10.6).
+///
+/// **Refusal is the only safe answer.** An implementation that cannot judge a
+/// signature returns `false`; [`admit`] turns that into a
+/// [`RailGap::BadSignature`] and never into an admitted op. There is no
+/// "cannot tell" that means yes (ARCH §18.3).
+///
+/// **A verifier is not a roster.** It answers "did this key sign these bytes",
+/// and nothing else. Membership stays [`Roster`]'s, so installing a permissive
+/// verifier still cannot put a stranger's act into the ring.
+pub trait RingVerifier: Send + Sync {
+    /// Which scheme this is, named in the admission trace. A verifier that
+    /// admits everything is a catastrophe no log can show unless the log says
+    /// which verifier ran (ARCH §9.1).
+    fn name(&self) -> &'static str;
+    /// Whether `sig_hex` is `actor`'s signature over [`sig::ring_op_message`]
+    /// of these fields. `false` on anything it cannot judge.
+    fn verify(
+        &self,
+        actor: &str,
+        namespace: &str,
+        ts_unix: i64,
+        seq: u64,
+        body_json: &str,
+        sig_hex: &str,
+    ) -> bool;
+}
+
+/// The shipped verifier: Ed25519 over the exact bytes [`RingSigner`]'s own
+/// implementation signs. The one production answer, and the reason
+/// [`sig::verify_ring_op`] is no longer reachable from outside this crate —
+/// leaving it public would leave the hardcode next to the seam, which is how
+/// the asymmetry comes back (ARCH §7).
+pub struct Ed25519Verifier;
+
+impl RingVerifier for Ed25519Verifier {
+    fn name(&self) -> &'static str {
+        "ed25519"
+    }
+    fn verify(
+        &self,
+        actor: &str,
+        namespace: &str,
+        ts_unix: i64,
+        seq: u64,
+        body_json: &str,
+        sig_hex: &str,
+    ) -> bool {
+        sig::verify_ring_op(actor, namespace, ts_unix, seq, body_json, sig_hex)
     }
 }
 

@@ -199,7 +199,13 @@ pub async fn log(
         Ok(pair) => pair,
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
-    let admission = commonwealth_rail::admit(&ops, &skipped, &roster, journal.namespace());
+    let admission = commonwealth_rail::admit(
+        &ops,
+        &skipped,
+        &roster,
+        journal.namespace(),
+        &commonwealth_rail::Ed25519Verifier,
+    );
     // Each gap ships its own sentence. The renderer is `RailGap`'s `Display`
     // and it lives in the rail — carrying the rendered string means the
     // terminal, a ring app's page and the append door's 422 all say the same

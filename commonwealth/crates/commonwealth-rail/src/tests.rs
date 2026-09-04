@@ -53,7 +53,7 @@ fn appending_assigns_contiguous_sequence_numbers_per_actor() {
     let op = journal.append(record("y"), &key(2), &r).unwrap();
     assert_eq!(op.kind.seq, 0);
 
-    let f = journal.admit(&r).unwrap();
+    let f = journal.admit(&r, &Ed25519Verifier).unwrap();
     assert!(f.is_complete(), "{:?}", f.gaps);
     assert_eq!(f.ops.len(), 4);
 }
@@ -138,7 +138,7 @@ fn a_payload_with_no_canonical_form_is_a_malformed_line() {
     raw.push('\n');
     std::fs::write(&path, raw).unwrap();
 
-    let f = journal.admit(&r).unwrap();
+    let f = journal.admit(&r, &Ed25519Verifier).unwrap();
     assert_eq!(applied(&f), vec!["whole"]);
     assert!(
         f.gaps
@@ -163,7 +163,10 @@ fn ingesting_a_peers_op_preserves_it_and_is_idempotent() {
     );
     let (back, _) = journal.read().unwrap();
     assert_eq!(back, vec![peer]);
-    assert_eq!(journal.admit(&ring()).unwrap().ops.len(), 1);
+    assert_eq!(
+        journal.admit(&ring(), &Ed25519Verifier).unwrap().ops.len(),
+        1
+    );
 }
 
 #[test]
@@ -191,8 +194,8 @@ fn two_partitioned_nodes_converge_on_an_identical_admission() {
     a.append(record("groceries"), &key(1), &r).unwrap();
     b.append(record("beer"), &key(2), &r).unwrap();
     assert_ne!(
-        a.admit(&r).unwrap(),
-        b.admit(&r).unwrap(),
+        a.admit(&r, &Ed25519Verifier).unwrap(),
+        b.admit(&r, &Ed25519Verifier).unwrap(),
         "the fixture must actually be partitioned"
     );
 
@@ -202,7 +205,10 @@ fn two_partitioned_nodes_converge_on_an_identical_admission() {
     assert_eq!(a.ingest_all(&for_a).unwrap(), 1);
     assert_eq!(b.ingest_all(&for_b).unwrap(), 1);
 
-    let (fa, fb) = (a.admit(&r).unwrap(), b.admit(&r).unwrap());
+    let (fa, fb) = (
+        a.admit(&r, &Ed25519Verifier).unwrap(),
+        b.admit(&r, &Ed25519Verifier).unwrap(),
+    );
     assert_eq!(fa, fb, "two nodes, one answer");
     assert!(fa.is_complete(), "{:?}", fa.gaps);
     // Both acts survive, and the ORDER is content-derived rather than the
@@ -218,7 +224,7 @@ fn two_partitioned_nodes_converge_on_an_identical_admission() {
     let again = b.ops_missing_from(&a.digest().unwrap()).unwrap();
     assert!(again.is_empty());
     assert_eq!(a.ingest_all(&for_a).unwrap(), 0);
-    assert_eq!(a.admit(&r).unwrap(), fa);
+    assert_eq!(a.admit(&r, &Ed25519Verifier).unwrap(), fa);
 }
 
 /// **A peer that dies mid-sync leaves a hole, and the hole is named.**
@@ -238,7 +244,7 @@ fn a_half_delivered_peer_is_a_named_hole_not_a_clean_answer() {
     let second = all.iter().find(|o| o.kind.seq == 1).unwrap().clone();
     a.ingest_all(&[second]).unwrap();
 
-    let fa = a.admit(&r).unwrap();
+    let fa = a.admit(&r, &Ed25519Verifier).unwrap();
     assert!(!fa.is_complete(), "A must not claim a complete answer");
     assert_eq!(
         fa.gaps,
@@ -260,9 +266,9 @@ fn a_half_delivered_peer_is_a_named_hole_not_a_clean_answer() {
         "the hole and everything above it come back"
     );
     a.ingest_all(&repair).unwrap();
-    let healed = a.admit(&r).unwrap();
+    let healed = a.admit(&r, &Ed25519Verifier).unwrap();
     assert!(healed.is_complete(), "{:?}", healed.gaps);
-    assert_eq!(healed, b.admit(&r).unwrap());
+    assert_eq!(healed, b.admit(&r, &Ed25519Verifier).unwrap());
 }
 
 /// A torn last line — the daemon died between the write and the sync — is a
@@ -278,7 +284,7 @@ fn a_torn_last_line_is_reported_rather_than_quietly_dropped() {
     raw.push_str("{\"id\":\"ring-abc\",\"v\":1,\"ts_un");
     std::fs::write(&path, raw).unwrap();
 
-    let f = journal.admit(&r).unwrap();
+    let f = journal.admit(&r, &Ed25519Verifier).unwrap();
     assert_eq!(applied(&f), vec!["whole"], "the whole line still counts");
     assert!(
         f.gaps

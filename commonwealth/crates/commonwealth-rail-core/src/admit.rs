@@ -62,8 +62,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use oplog::{Op, OpId};
 
 use crate::payload::Payload;
-use crate::sig::verify_ring_op;
-use crate::{Person, RailAct, Roster, SignedOp};
+use crate::{Person, RailAct, RingVerifier, Roster, SignedOp};
 
 /// Something the rail could not account for. Never fatal, always reported.
 ///
@@ -263,17 +262,25 @@ struct Candidate<'a> {
 
 /// Turn a bag of journal lines into the order every node applies them in.
 ///
-/// `roster` and `namespace` are *parameters*, never folded state. The
-/// namespace is bound into every signature, so it decides admission; the
-/// roster decides which keys are members. Neither is ever handed to the app's
-/// reducer as anything but the `person` on an already-admitted op — which is
-/// what keeps an app's arithmetic a function of the op set even as people
-/// join and leave (pinned by a test in the reference app).
+/// `roster`, `namespace` and `verifier` are *parameters*, never folded state.
+/// The namespace is bound into every signature, so it decides admission; the
+/// verifier says whether a signature is real; the roster says which keys are
+/// members. None of the three is ever handed to the app's reducer as anything
+/// but the `person` on an already-admitted op — which is what keeps an app's
+/// arithmetic a function of the op set even as people join and leave (pinned
+/// by a test in the reference app).
+///
+/// The verifier is named rather than defaulted: which scheme judged these
+/// signatures is a fact about the answer, and one that has to be greppable at
+/// every call site instead of inherited from whatever the fold happened to be
+/// compiled with. [`Ed25519Verifier`](crate::Ed25519Verifier) is the shipped
+/// one.
 pub fn admit(
     ops: &[Op<SignedOp>],
     skipped: &[oplog::SkippedLine],
     roster: &Roster,
     namespace: &str,
+    verifier: &dyn RingVerifier,
 ) -> Admission {
     use oplog::SkippedLine;
 
@@ -301,7 +308,10 @@ pub fn admit(
             });
         }
         let body = body_json(&op.kind.act);
-        if !verify_ring_op(
+        // Whatever the verifier cannot vouch for is a gap, never an act. A
+        // `false` here is a refusal and is reported as one — there is no
+        // answer that means "could not tell, carry on" (ARCH §18.3).
+        if !verifier.verify(
             &op.actor,
             namespace,
             op.ts_unix,
@@ -426,6 +436,7 @@ pub fn admit(
     let applied = out.iter().filter(|o| o.applies()).count();
     tracing::debug!(
         namespace,
+        verifier = verifier.name(),
         held = ops.len(),
         admitted = out.len(),
         applied,

@@ -30,7 +30,7 @@ use commonwealth_api::state::AppState;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_knowledge::Scope;
-use commonwealth_rail::{Payload, Person, RailAct, RingRail, RingSigner, Roster};
+use commonwealth_rail::{Ed25519Verifier, Payload, Person, RailAct, RingRail, RingSigner, Roster};
 use ed25519_dalek::SigningKey;
 use tower::ServiceExt;
 
@@ -544,8 +544,8 @@ async fn two_nodes_converge_through_the_sync_route() {
         )
         .unwrap();
     assert_ne!(
-        led_a.admit(&roster).unwrap(),
-        led_b.admit(&roster).unwrap(),
+        led_a.admit(&roster, &Ed25519Verifier).unwrap(),
+        led_b.admit(&roster, &Ed25519Verifier).unwrap(),
         "the fixture must actually be partitioned"
     );
 
@@ -570,7 +570,10 @@ async fn two_nodes_converge_through_the_sync_route() {
     // One answer, on both nodes, with nothing missing. The answer is the ACT
     // ORDER — which is everything the rail promises, and everything an app's
     // reducer needs in order to agree with its housemates.
-    let (fa, fb) = (led_a.admit(&roster).unwrap(), led_b.admit(&roster).unwrap());
+    let (fa, fb) = (
+        led_a.admit(&roster, &Ed25519Verifier).unwrap(),
+        led_b.admit(&roster, &Ed25519Verifier).unwrap(),
+    );
     assert_eq!(fa, fb, "two nodes, one answer");
     assert!(fa.is_complete(), "{:?}", fa.gaps);
     assert_eq!(fa.ops.len(), 2);
@@ -593,7 +596,7 @@ async fn two_nodes_converge_through_the_sync_route() {
     .await;
     assert_eq!(again["ops"].as_array().unwrap().len(), 0);
     assert_eq!(again["ingested"], 0);
-    assert_eq!(led_a.admit(&roster).unwrap(), fa);
+    assert_eq!(led_a.admit(&roster, &Ed25519Verifier).unwrap(), fa);
 
     // And the ring app on A now sees B's expense through the rail it can
     // reach — which is the whole point of replicating at all.

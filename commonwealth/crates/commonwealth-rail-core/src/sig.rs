@@ -103,6 +103,10 @@ pub fn sign_ring_op(
 
 /// Verify one ring op under the public key its `actor` names.
 ///
+/// Crate-private since the [`RingVerifier`](crate::RingVerifier) seam landed:
+/// [`Ed25519Verifier`](crate::Ed25519Verifier) is its one caller, and a
+/// hardcode left reachable beside a seam is the asymmetry coming back.
+///
 /// `false` on ANY malformed input — bad hex, wrong length, a public key that
 /// is not on the curve. The caller turns that into a gap, never into a silent
 /// admit (ARCH §4.3: unknown-id handling is explicit and loud).
@@ -112,7 +116,7 @@ pub fn sign_ring_op(
 /// [`Roster`](crate::Roster) that makes it mean something, by saying which
 /// keys belong to people in this ring. Both checks are required and admission
 /// runs both.
-pub fn verify_ring_op(
+pub(crate) fn verify_ring_op(
     actor: &str,
     namespace: &str,
     ts_unix: i64,

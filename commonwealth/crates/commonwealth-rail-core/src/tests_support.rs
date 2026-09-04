@@ -64,7 +64,7 @@ pub fn signed_in(ns: &str, k: &SigningKey, ts: i64, seq: u64, act: RailAct) -> O
 }
 
 pub fn admitted(ops: &[Op<SignedOp>]) -> Admission {
-    admit(ops, &[], &ring(), NS)
+    admit(ops, &[], &ring(), NS, &Ed25519Verifier)
 }
 
 /// The `what` of every act an app's reducer would see, in order — the shape

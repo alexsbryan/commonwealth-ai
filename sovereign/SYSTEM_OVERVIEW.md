@@ -4463,7 +4463,15 @@ because it is the only field on the line the writer cannot forge for someone
 else (§18.1); a `Roster` binds keys to display names, and one person with two
 laptops is two keys in one row. The daemon signs through a closure-shaped
 `RingSigner`, the same seam `self_dial_signer` uses, so `AppState` holds no
-key material.
+key material. **Verification is the matching seam, and until 1e it was not
+one** — `RingSigner` was a trait and verifying was a call to a free function,
+so one half of one scheme could be replaced and the other could not, and both
+halves working is exactly what made that invisible. `RingVerifier` is now the
+question's only door: `Ed25519Verifier` is the shipped implementation, named at
+every call site rather than defaulted so which scheme judged an answer is
+greppable, `sig::verify_ring_op` is crate-private behind it, and the admission
+trace carries `verifier=`. A verifier is not a roster — one that accepts
+everything still cannot admit a stranger, which is pinned.
 
 **`Payload` is a type and not a `serde_json::Value`, and the reason is a bug
 that would not have surfaced for months.** A signature covers bytes; a `Value`
@@ -4481,7 +4489,8 @@ reason one level down: `1e2`, `100.0` and `100` are one value with three
 spellings and the choice is the library's, so a payload carries whole numbers
 and the refusal names the fix (use cents, grams, milliseconds).
 
-`admit(ops, skipped, roster, namespace) -> (acts in ONE order, gaps)` is **a
+`admit(ops, skipped, roster, namespace, verifier) -> (acts in ONE order, gaps)`
+is **a
 function of the op SET, not of arrival order** — nineteen laptops gossip in
 nineteen orders, and admission that depended on order would have two housemates
 reading different answers off the same journal. That is pinned exhaustively
