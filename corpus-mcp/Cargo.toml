@@ -1,0 +1,45 @@
+[package]
+name = "corpus-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "A corpus-engine MCP host that needs nothing but an OpenAI-compatible endpoint — cited chunk search and atlas atom lookup over stdio, with no local inference stack linked."
+
+# The proof that enrichment is a PLUGIN of the recipe pipeline and not fused to
+# it (enrichment-as-plugin Step 5): this binary links `corpus-engine` +
+# `corpus-engine-vocab` + an HTTP `EmbedFn`, and NOTHING that carries
+# llama.cpp, ort or iroh. `tests/no_inference_stack.rs` asserts that against
+# `cargo tree`; `quality/ARCH_LAYERS.toml` declares the closure as a
+# `[[package]]` so boundary-gate keeps it honest.
+#
+# Shape borrowed from `docs/CODE_TOOLING_BOUNDARY.md` §5: `--base-url` is the
+# only mandatory flag, host capability is DETECTED via `GET
+# /oicp/v1/capabilities` and never configured, a 404 gets the baseline path,
+# and every degradation is printed rather than silent.
+
+[[bin]]
+name = "corpus-mcp"
+path = "src/main.rs"
+
+[dependencies]
+corpus-engine = { workspace = true }
+corpus-engine-vocab = { workspace = true }
+# The JSON-RPC envelope every MCP message rides on — a leaf.
+oicp-types = { workspace = true }
+# `sovereign_contracts::rebrand::data_dir()` is the ONE derivation of the data
+# root (quality/env-flags.toml: SOVEREIGN_DATA_DIR); already in corpus-engine's
+# closure, and a declared package leaf.
+sovereign-contracts = { workspace = true }
+
+anyhow = { workspace = true }
+clap = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[lints]
+workspace = true

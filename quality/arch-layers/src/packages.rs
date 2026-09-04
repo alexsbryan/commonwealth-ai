@@ -323,6 +323,45 @@ crates = ["pkg-a", "pkg-b"]
         assert!(err.contains("both a [[package_leaf]]"), "{err}");
     }
 
+    /// A package-scoped exception answers to THIS pass and to no other. The
+    /// layer pass must neither be suppressed by it nor report it stale —
+    /// until 2026-09-03 `evaluate` read every entry, so the first package
+    /// exception ever declared (layer-legal, so no layer violation could use
+    /// it) was flagged "no longer matches any edge" by layer-gate while
+    /// boundary-gate was relying on it.
+    #[test]
+    fn a_package_scoped_exception_is_invisible_to_the_layer_pass() {
+        let text = format!(
+            "{MAP}\n[[exception]]\npackage = \"demo\"\nfrom = \"pkg-a\"\nto = \"outside\"\n\
+             reason = \"grandfathered for the test\"\ntracking = \"t\"\n"
+        );
+        let map = parse(&text).unwrap();
+        let crates: std::collections::BTreeSet<String> = ["pkg-a", "pkg-b", "outside"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+
+        // Layer pass, no edges at all: a layer exception would be stale here;
+        // a package-scoped one is not the layer pass's to judge.
+        let v = crate::evaluate(&map, &crates, &[]);
+        assert!(
+            !v.iter()
+                .any(|x| matches!(x, Violation::StaleException { .. })),
+            "layer pass reported a package-scoped exception as stale: {v:?}"
+        );
+
+        // Package pass: the same entry does its work (edge grandfathered) …
+        let v = evaluate_packages(&map, &[edge("pkg-a", "outside")]);
+        assert!(v.is_empty(), "{v:?}");
+        // … and is the package pass's own stale row when the edge is gone.
+        let v = evaluate_packages(&map, &[]);
+        assert!(
+            v.iter()
+                .any(|x| matches!(x, Violation::StalePackageException { .. })),
+            "{v:?}"
+        );
+    }
+
     /// An exception scoped to a package nobody declared protects nothing, and
     /// reads in review as though it does.
     #[test]

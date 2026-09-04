@@ -28,6 +28,7 @@ pub mod chunkers;
 /// the one decider of corpus-engine's on-disk layout (see the module docs for
 /// the 156 hand-joins it replaces).
 pub mod corpus;
+pub mod embed_http;
 pub mod engine;
 pub mod enrichment;
 pub mod error;

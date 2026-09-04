@@ -223,6 +223,7 @@ crates = [
     "sovereign-agent-bench",
     "sovereign-studio",
     "oicp-conformance",
+    "corpus-mcp",
     "xtask",
 ]
 
@@ -525,7 +526,35 @@ crates = [
     "corpus-engine-archaeology",
 ]
 
+[[package]]
+name = "corpus-mcp"
+doc = "corpus-mcp/README.md"
+# The thin knowledge host (enrichment-as-plugin Step 5, 2026-09-03): the proof
+# that a third party can search a corpus-engine index — and read what its
+# enrichment produced — against a plain `llama-server`, with nothing that
+# carries llama.cpp, ort or iroh. ONE crate, deliberately: the engine it reads
+# with is not liftable yet (a `build.rs` that vendors recipes, tree-sitter
+# queries `include_str!`'d from outside the crate root, and an optional edge to
+# `corpus-engine-scip`), so putting `corpus-engine` inside the package would
+# fail three filesystem rules the package cannot grandfather. Instead the edge
+# corpus-mcp → corpus-engine is the single grandfathered row below, and the
+# gate enforces what the binary itself may reach: the shared leaves and nothing
+# else. A `sovereign-core` or `sovereign-tools` dep added to this host fails
+# here on day one; the third-party half (llama.cpp / ort / iroh) is pinned by
+# `corpus-mcp/tests/no_inference_stack.rs` against `cargo tree`.
+crates = [
+    "corpus-mcp",
+]
+
 # ── Grandfathered violations (the burn-down list) ────────────────────────────
+
+[[exception]]
+package = "corpus-mcp"
+from = "corpus-mcp"
+to = "corpus-engine"
+reason = "the host reads indexes through corpus-engine (`CorpusIndex::search`, `open_index_for_corpus`), and corpus-engine cannot join a liftable package yet: it carries a `build.rs` (recipe vendoring), `include_str!`s tree-sitter queries from `queries/` outside its crate root, and an optional edge to `corpus-engine-scip`. Burn-down, in order: (1) the read-only index surface the host needs — open + hybrid search over LanceDB/Tantivy, `index/search.rs` has zero enrichment references across 1,245 lines — carved into a leaf the host and the engine both reach DOWN to; (2) the tree-sitter queries moved inside the crate or behind the code-intel seam; (3) the recipe vendoring build.rs replaced by the checked-in artifact. When (1) lands this row moves to the new leaf and the host's closure is clean."
+tracking = "enrichment-as-plugin follow-up (index-read leaf)"
+
 # Populated by the first layer-gate census, 2026-07-11. Removing an entry —
 # with its edge — is the win condition; see the remediation roadmap (R6).
 

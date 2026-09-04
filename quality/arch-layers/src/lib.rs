@@ -265,9 +265,16 @@ pub fn evaluate(map: &LayerMap, crates: &BTreeSet<String>, edges: &[DepEdge]) ->
     }
 
     // Edge checks. Dev edges are never enforced (see DepKind::Dev).
+    //
+    // Exceptions carrying `package = "…"` belong to `evaluate_packages`: they
+    // neither suppress a layer violation nor count as stale here. Until
+    // 2026-09-03 this loop read every entry, so the first package-scoped
+    // exception ever declared (corpus-mcp → corpus-engine, layer-legal) was
+    // reported "no longer matches any edge" by layer-gate while boundary-gate
+    // was using it — two gates, opposite verdicts, one row.
     let mut used_exceptions: BTreeSet<(String, String)> = BTreeSet::new();
     let mut excepted = |from: &str, to: &str| -> bool {
-        for e in &map.exceptions {
+        for e in map.exceptions.iter().filter(|e| e.package.is_none()) {
             if e.from == from && e.to == to {
                 used_exceptions.insert((e.from.clone(), e.to.clone()));
                 return true;
@@ -332,7 +339,8 @@ pub fn evaluate(map: &LayerMap, crates: &BTreeSet<String>, edges: &[DepEdge]) ->
     }
 
     // Exceptions that suppressed nothing are debt already paid — flag them.
-    for e in &map.exceptions {
+    // Package-scoped ones answer to `evaluate_packages` (StalePackageException).
+    for e in map.exceptions.iter().filter(|e| e.package.is_none()) {
         if !used_exceptions.contains(&(e.from.clone(), e.to.clone())) {
             violations.push(Violation::StaleException {
                 from: e.from.clone(),

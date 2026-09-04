@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use commonwealth_core::oicp::{EmbedModelInfo, NormalizationStrategy, PoolingStrategy};
-use corpus_engine::EmbedFn;
-use std::sync::Arc;
 
 /// Query a running llama-server (or compatible) to discover its active
 /// embedding model's identity and output shape.
@@ -85,33 +83,9 @@ pub async fn embed_model_info(embeddings_url: &str) -> Option<EmbedModelInfo> {
 }
 
 /// Create an EmbedFn that calls an OpenAI-compatible embeddings API.
-pub fn http_embed_fn(embeddings_url: String) -> EmbedFn {
-    Arc::new(move |text: &str| {
-        let url = embeddings_url.clone();
-        let text = text.to_string();
-        Box::pin(async move {
-            let client = reqwest::Client::new();
-            let resp = client
-                .post(&url)
-                .json(&serde_json::json!({
-                    "input": text,
-                    "model": "qwen3-embedding-0.6b"
-                }))
-                .send()
-                .await
-                .map_err(|e| corpus_engine::Error::Embed(e.to_string()))?
-                .json::<serde_json::Value>()
-                .await
-                .map_err(|e| corpus_engine::Error::Embed(e.to_string()))?;
-
-            let embedding = resp["data"][0]["embedding"]
-                .as_array()
-                .ok_or_else(|| corpus_engine::Error::Embed("bad embedding response format".into()))?
-                .iter()
-                .map(|v| v.as_f64().unwrap_or(0.0) as f32)
-                .collect();
-
-            Ok(embedding)
-        })
-    })
-}
+/// `POST /v1/embeddings` as an `EmbedFn`. Moved DOWN to
+/// `corpus_engine::embed_http` on 2026-09-03 (it builds a corpus-engine type
+/// from corpus-engine's own `reqwest`) and gained a `model` parameter — the
+/// id was hardcoded to `qwen3-embedding-0.6b` here, which no other frontend
+/// serves. Re-exported so this path keeps resolving.
+pub use corpus_engine::embed_http::http_embed_fn;
