@@ -862,11 +862,19 @@ identical schema for a full index or a shard.
         │                                # (re-exported at `sovereign_tools::atlas_context_manager`),
         │                                # from the resolve step, the daemon's typed-extension
         │                                # write, `enrich build`'s last step (`backfill`, skipped
-        │                                # while `ann_table_is_fresh` — table mtime ≥ atoms.json)
-        │                                # or `svrn atlas backfill-ann <id>`. A caller with no
+        │                                # while `ann_table_is_fresh`) or `svrn atlas
+        │                                # backfill-ann <id>`. A caller with no
         │                                # embedder passes `AtlasSeeding::Deferred(<reason>)`,
         │                                # which is traced and rides back in `AtlasWritten.seed`;
-        │                                # a `With` seed that fails FAILS the atlas write
+        │                                # a `With` seed that fails FAILS the atlas write.
+        │                                # WHICH atoms it holds is the navigation map's, not the
+        │                                # retrieval filter's, since ei-3c (2026-09-04) — see below
+        ├── atoms_ann.population         # what the seed table beside it was built UNDER:
+        │                                # derivation version, kinds, policy source. Written by
+        │                                # `backfill_ann` right after the table; read by
+        │                                # `ann_table_is_fresh` BEFORE the atoms.json mtime test,
+        │                                # so a table seeded under an older population reads as
+        │                                # stale rather than as fresh-and-wrong (ei-3c)
         ├── asset_atoms.jsonl            # AD-2 Asset envelopes (sidecar union'd
         │                                # into atoms.json on next atlas write)
         ├── asset_edges.jsonl            # EdgeType::Attaches edges
@@ -1453,8 +1461,9 @@ means one thing.
   the generic kind it descends from instead of guessing from the chunk preview.
   Two levers ship DARK with `DEFAULTS_LEDGER.md` rows and no measurement:
   `SOVEREIGN_ATLAS_EMBED_ATTRIBUTES` (attributes appended to embed text, in
-  `atom_attributes_suffix` — called by BOTH renderers, since the daemon's bag
-  loader forks `render_atom_entry`) and `SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS`
+  `atom_attributes_suffix` — reached through `render_atom_entry`, the ONE
+  renderer, since ei-3c collapsed the daemon bag loader's byte-identical fork
+  of it) and `SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS`
   (`AtlasContextFilter.include_declared_claim_types`, keyed into `signature()`).
   Resolution reads the same policies
   through `ResolutionPolicy` (`atlas/resolution_ontology.rs`), which is what
@@ -1504,7 +1513,44 @@ means one thing.
   so the atlas dir records what it was extracted under (see §3 above for the
   built-in maps and the navigation section), and `_summary.json`
   (SCHEMA_VERSION 5) carries an `OntologySummary` read back from it and an
-  `AnnSummary` with the seed table's row count (ei-3-index). Design:
+  `AnnSummary` with the seed table's row count (ei-3-index).
+  **WHICH atoms that seed table holds is the navigation map's decision, not
+  the retrieval filter's, since ei-3c (2026-09-04)** (`EPISTEMIC_INDEX.md` §1
+  Ideas row, §2.2). It used to seed through `AtlasContextFilter::default()` —
+  the READER's filter, whose kind admission is Entity-only in production — so
+  every seed table on the box was Entity-only and the map's `tension` row
+  (Claim + Position) seeded NOTHING on any corpus: measured on wessex-hoard,
+  49 Claim atoms, 48 candidates, 48 dropped, 0 seeds. One decider now
+  (§10.6): `enrichment::atlas::seed_population::seed_population(atlas_dir)`
+  returns the union of every navigation row's `SeedPolicy::kinds`, plus the
+  atom kinds of the declared types an `enumeration` row points at, plus the
+  always-seeded `{Entity, ArgumentReconstruction}`. It is a pure function of
+  the atlas dir, applied INSIDE `backfill_ann`, so all four author sites (the
+  atlas writer, `svrn atlas backfill-ann`, `enrich build`'s Backfill step,
+  `atlas migrate-all`) get it with no signature change and `AtlasSeeding`
+  gains no arm. Two properties are deliberate. The map is a FLOOR, never a
+  ceiling — `AtlasContextFilter::admits_atom` UNIONS the population with what
+  the filter itself admits, so nothing loses a seed it had; not theoretical,
+  since SEP's `ArgumentReconstruction` atoms appear in no pre-registered row
+  and a narrowing derivation would have deleted the 8th atom type from 1,770
+  tables. And an undeclared corpus gets the PRE-REGISTERED table, not the old
+  Entity-only population, because that is what the walk's own decider
+  (`ground::navigation_policy_for`) gives it — falling back to the reader's
+  filter would re-open the writer/walk disagreement this closes. `PolicySource`
+  is reused from the walk, and the source is reported either way.
+  Freshness learned the second question with it: `ann_table_is_fresh` compared
+  mtimes against `atoms.json` — "was it embedded from these atoms", never
+  "from these KINDS" — so every table on disk was fresh by mtime and wrong by
+  population. A table now records what it was built under in the
+  `atlas/atoms_ann.population` sidecar and reads as stale when that marker is
+  absent, versioned apart, or older than a re-declared `ontology.json`, ahead
+  of the atoms.json test. One small read and two mtimes, no `ontology.json`
+  parse, because `AtlasContextManager::init()` runs it once per installed
+  atlas at boot (1,770 of them for SEP). Measured on the two fixtures:
+  wessex-hoard-ei3 53 → 123 rows (Claim 0 → 50, State 0 → 20),
+  brothers-karamazov-book-1 16 → 51 (Claim 0 → 13, State 0 → 19,
+  Configuration 0 → 3), and `ask`'s `tension` row on wessex-hoard-ei3 returns
+  12 seeds against ei-4's measured 0. Design:
   `sovereign/docs/specs/ONTOLOGY_PRIMITIVES.md`, `ONTOLOGY_MIGRATION.md`.
   State at `~/.svrnmesh/indexes/<corpus>/atlas/`. Deep-dive:
   [`ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md). Beyond the LLM
