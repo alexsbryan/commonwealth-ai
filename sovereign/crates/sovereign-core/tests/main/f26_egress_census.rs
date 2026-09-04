@@ -530,7 +530,17 @@ const REGISTRY: &[(&str, Class, usize)] = &[
 
     // ---- commonwealth (the estate's own web app + shards; Mesh / LocalDaemon) ----
     ("commonwealth/crates/commonwealth-knowledge/src/shard_manager.rs", Class::Mesh, 3),
-    ("commonwealth/crates/commonwealth-knowledge/src/embed_http.rs", Class::LocalDaemon, 2),
+    // `http_embed_fn` moved DOWN to corpus-engine 2026-09-03 (enrichment-as-
+    // plugin Step 5); what stays here is the `/v1/models` reconstruction probe.
+    ("commonwealth/crates/commonwealth-knowledge/src/embed_http.rs", Class::LocalDaemon, 1),
+    // The `POST /v1/embeddings` EmbedFn constructor. The URL is the CALLER's:
+    // the daemon's own endpoint from commonwealth-knowledge, or the operator's
+    // `--base-url` from corpus-mcp — an operator-owned target, so it carries
+    // the operator's class, never RemotePayload's exemption.
+    ("corpus-engine/src/embed_http.rs", Class::OperatorSurface, 1),
+    // corpus-mcp's host probe: `GET /oicp/v1/capabilities`, `GET /v1/models`,
+    // one `POST /v1/embeddings` — all against the operator's `--base-url`.
+    ("corpus-mcp/src/host.rs", Class::OperatorSurface, 1),
     ("commonwealth/crates/commonwealth-api/src/routes_internal/corpus_collaborate.rs", Class::Mesh, 2),
     ("commonwealth/crates/commonwealth-api/src/routes_knowledge.rs", Class::Mesh, 1),
     ("commonwealth/crates/commonwealth-api/src/routes_internal/pipeline_pause.rs", Class::LocalDaemon, 1),
