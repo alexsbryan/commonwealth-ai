@@ -44,6 +44,7 @@ pub mod ingestion;
 pub mod migrate_ids;
 pub mod ontology_coverage;
 pub mod projection;
+pub mod provider;
 pub mod registry;
 pub mod resolution;
 pub mod resolution_identity;
@@ -71,6 +72,7 @@ pub use cross_corpus::{
     DetectorSummary, MatchTrace, PeerAtomRef, RejectionBucket, RejectionSample,
 };
 pub use edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
+pub use provider::AtlasProvider;
 pub use embeddings::atoms_content_hash;
 pub use ingestion::{AtlasData, AtlasIngestion, AtlasIngestionConfig};
 pub use registry::AtlasIngestionRegistry;
