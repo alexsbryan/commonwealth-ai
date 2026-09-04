@@ -1,0 +1,91 @@
+#!/bin/sh
+# rust-analyzer — lspmux shim.  Copied onto PATH *ahead* of ~/.cargo/bin by
+# scripts/install-lspmux.sh.  Deliberately named `rust-analyzer`: every LSP
+# client in this fleet (the Claude Code rust-analyzer-lsp plugin, VS Code,
+# an editor) finds its language server by that name on PATH, and none of them
+# offers a "server path" knob we could set once for all of them.
+#
+# ONE rule, and it is the whole point of the file:
+#
+#   no arguments  -> LSP stdio mode  -> hand the client to `lspmux client`,
+#                                       which shares ONE rust-analyzer server
+#                                       per workspace across every client.
+#   any arguments -> a batch/CLI use -> exec the REAL rust-analyzer with the
+#                                       arguments untouched.
+#
+# The second arm is load-bearing, not a courtesy.  The daemon's SCIP exporter
+# spawns `rust-analyzer scip . --config-path … --output …` through the same
+# PATH lookup (corpus-engine-scip/src/scip_export.rs, `command: "rust-analyzer"`,
+# resolved by tool_path::resolve).  A shim that swallowed those arguments would
+# produce an empty export, and an empty export WIPES the code-intel graph to
+# zero symbols (observed 2026-07-13).  scripts/tests/lspmux-shim.sh pins both
+# arms against stub binaries so the rule cannot rot.
+#
+# Recursion, and why there is none: `lspmux server` spawns its language server
+# with Command::new(server_path) (instance.rs:426).  We always pass an ABSOLUTE
+# --server-path, so that spawn never consults PATH and therefore never finds
+# this shim.  Passing a bare name here instead would loop: server -> shim ->
+# client -> server.  Do not "simplify" the --server-path away.
+#
+# No `set -e`: this file's job is to reach one of two binaries.  Exiting early
+# on a failed probe would look to an editor exactly like rust-analyzer crashing.
+
+REAL_NAME=rust-analyzer
+
+# --- Where am I? -----------------------------------------------------------
+# Needed so the PATH scan below can skip this shim's own directory; without it
+# the shim finds itself and execs itself forever.
+self=$0
+case $self in
+    */*) selfdir=$(CDPATH= cd -- "${self%/*}" 2>/dev/null && pwd -P) ;;
+    *)   selfdir=$(CDPATH= cd -- "$(dirname -- "$(command -v -- "$self")")" 2>/dev/null && pwd -P) ;;
+esac
+
+# --- Find the real rust-analyzer -------------------------------------------
+# First entry on PATH that is not this shim.  Directories are normalised with
+# `pwd -P` before comparison so a symlinked or relative duplicate of the shim
+# directory is still recognised as this shim.
+real=
+old_ifs=$IFS
+IFS=:
+for dir in $PATH; do
+    if [ -z "$dir" ]; then dir=.; fi
+    if [ ! -x "$dir/$REAL_NAME" ]; then continue; fi
+    ndir=$(CDPATH= cd -- "$dir" 2>/dev/null && pwd -P)
+    if [ -z "$ndir" ]; then continue; fi
+    if [ "$ndir" = "$selfdir" ]; then continue; fi
+    real="$ndir/$REAL_NAME"
+    break
+done
+IFS=$old_ifs
+
+# The rustup proxy, for the case where PATH is a service's minimal one.  This
+# mirrors corpus_engine_scip::tool_path::well_known_tool_dirs, which probes
+# ~/.cargo/bin for exactly the same reason.
+if [ -z "$real" ] && [ -x "${HOME:-}/.cargo/bin/$REAL_NAME" ]; then
+    real="$HOME/.cargo/bin/$REAL_NAME"
+fi
+
+if [ -z "$real" ]; then
+    echo "rust-analyzer (lspmux shim): no real rust-analyzer on PATH." >&2
+    echo "  install it with: rustup component add rust-analyzer" >&2
+    exit 127
+fi
+
+# --- Arm 2: any arguments go straight through, untouched --------------------
+if [ "$#" -gt 0 ]; then
+    exec "$real" "$@"
+fi
+
+# --- Arm 1: no arguments = LSP stdio mode = multiplex -----------------------
+lspmux_bin=$(command -v lspmux 2>/dev/null)
+if [ -n "$lspmux_bin" ]; then
+    exec "$lspmux_bin" client --server-path "$real"
+fi
+
+# lspmux absent.  Degrade to a private server rather than leaving the editor
+# with no language server at all — but SAY SO (ARCH §18.3: never silently
+# substitute).  stderr is not the LSP channel, so this is safe to print.
+echo "rust-analyzer (lspmux shim): lspmux not found on PATH — starting a PRIVATE" >&2
+echo "  rust-analyzer instead of sharing one. Install it with scripts/install-lspmux.sh." >&2
+exec "$real"
