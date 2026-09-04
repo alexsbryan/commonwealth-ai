@@ -9,7 +9,7 @@ license.workspace = true
 # The neutral kernel (layer 0). `NodeId` and the `define_id!` macro live there
 # since noun-convergence rung nc-1-kernel — see src/ids.rs for why.
 kernel-types = { workspace = true }
-oicp-types = { path = "../../../oicp-types" }
+oicp-types = { workspace = true }
 # Keyed BLAKE3 for `Mesh::mesh_proof` — proof-of-possession of `mesh_secret`
 # so the raw credential stops riding every gossip round. Same crate and same
 # version as `commonwealth-discovery`, which derives the secret itself.

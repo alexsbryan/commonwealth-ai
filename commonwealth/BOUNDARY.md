@@ -41,7 +41,7 @@ the cheapest shape this list can take.
 | Crate | Lines | Closure | Role |
 |---|---:|---:|---|
 | `commonwealth-core` | 8,860 | 55 | Identity, roster, capabilities, the mesh clock, the shared vocabulary. |
-| `commonwealth-transport` | 2,746 | 57 | The peer wire — the direct TCP path, and iroh behind an optional feature. |
+| `commonwealth-transport` | 2,746 | 57 / 265 | The peer wire — the direct TCP path, and iroh behind an optional feature. TWO closures because it ships in two configurations: 57 default, 265 with `iroh`. Three in-repo consumers force the feature on, and under resolver-2 unification any `--workspace` gate run builds the 265 — so the DEFAULT is the configuration this repo's own gates never compile. The 2026-09-04 lift is the first thing that did; it builds, and carries 23 tests where the iroh path carries 39. |
 | `commonwealth-state` | 2,360 | 76 | `MeshStore` and the replicated state it holds. |
 | `commonwealth-discovery` | 3,228 | 101 | Founder/joiner, announce, the peer table. |
 | `commonwealth-rail-core` | 2,258 | 42 | The fold: vocabulary, Ed25519 authorship, admission into one total order, the per-actor sync digest. Zero I/O. |

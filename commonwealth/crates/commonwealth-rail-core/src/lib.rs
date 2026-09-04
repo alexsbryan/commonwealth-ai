@@ -83,7 +83,8 @@ mod sync;
 
 use std::collections::BTreeMap;
 
-use ed25519_dalek::SigningKey;
+/// The signing key the shipped [`RingSigner`] implementation is written for.
+pub use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
 
 pub use admit::{admit, body_json, Admission, AdmittedOp, RailGap};
@@ -97,6 +98,17 @@ pub use sync::{digest, ops_missing_from, Digest};
 /// `sovereign-mesh/src/ring_sync.rs`), and a caller that had to name `oplog`
 /// separately would be free to reach a different version of it.
 pub use oplog::{Journaled, Op, OpId, SkippedLine};
+
+// A consumer cannot use this crate without both of these, and until 2026-09-04
+// neither was exported — so the only shipped `RingSigner` impl was for a type
+// the crate refused to hand you, and the only `Payload` constructor took a type
+// it never named. Both forced the caller to add the dependency themselves and
+// match our version by hand; a mismatch makes `impl RingSigner for SigningKey`
+// silently not apply to their key, which is a trait-resolution error a long way
+// from its cause. Found by physically lifting the package (cw-lift), not by a
+// gate — nothing in the repo can see an export that is missing.
+/// The JSON value [`Payload::new`] takes.
+pub use serde_json::Value;
 
 // ── People ───────────────────────────────────────────────────
 
