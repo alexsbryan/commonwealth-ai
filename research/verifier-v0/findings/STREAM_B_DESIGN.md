@@ -15,8 +15,8 @@ file:line-cited so the M2 session can start building without re-discovery.
   (Gutenberg #974; chunking paragraph/2048/overlap 256, enrichment off, per
   `sovereign-recipes/chaos-secret-agent/recipe.toml:32`). Not in-repo.
 - Entity-typed extractions ALREADY EXIST for entity-swap corruptions:
-  `out/chaos-secret-agent.questions.json` (typed `section_extraction`) and
-  `out/chaos-secret-agent.named-clusters.json`.
+  `research/verifier-v0/out/chaos-secret-agent.questions.json` (typed `section_extraction`) and
+  `research/verifier-v0/out/chaos-secret-agent.named-clusters.json`.
 - Real (question, answer, evidence, label) tuples for calibration:
   `sovereign/bench/gap_check/bank.toml` (harvested from a live chaos run) and
   frozen run transcripts in `sovereign/bench/chaos_monkey/results/*.jsonl`.

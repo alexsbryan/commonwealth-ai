@@ -13,3 +13,4 @@ it is load-bearing and stays where the citation points.
 |---|---|---|
 | `DESKTOP_LAUNCH_PERF.md` | 2026-07-13, branch `perf/desktop-launch-readiness` | `scripts/desktop-soak.py` is the canonical desktop perf run |
 | `LAUNCH_CHECKLIST.md` | last walked 2026-08-07 against `2e56dc2b` | nothing yet — re-walk it before a launch rather than reading this copy |
+| `PROGRAM.md` | ontology-v1, landed | the chain it tracks is proven; `quality/initiative-bars.toml` holds the banked verdicts |

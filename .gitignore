@@ -227,3 +227,8 @@ research/deep-research/demo/p5/runs-t1c/
 /drift_report.md.json
 /drift_report.*.md
 
+# Scorer output belongs beside the arms that produced it —
+# research/deep-research/arms/score-report-*.json is what quality/initiative-bars.toml
+# cites. Four had landed at the repo root instead, where nothing cites them.
+/score-report-*.json
+

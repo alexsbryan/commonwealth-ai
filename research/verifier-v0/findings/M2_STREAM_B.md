@@ -90,7 +90,7 @@ resident; generate first, then train). Recipe:
 1. `svrn bench verifier harvest --corpus chaos-secret-agent --out …/claims.json`
    (~250 chunks → ~125 windows). Saltgrass likewise (already proven above).
 2. Entity swaps need the side table: convert
-   `out/chaos-secret-agent.named-clusters.json` → `EntityCluster[]`
+   `research/verifier-v0/out/chaos-secret-agent.named-clusters.json` → `EntityCluster[]`
    (`{etype, surfaces}`) and pass `--entities`. Distractor absorption needs
    `--distractors` (`DistractorDoc[]`): the meridian postmortem
    (`sovereign/bench/attached_doc/meridian_postmortem.toml`) is the intended
