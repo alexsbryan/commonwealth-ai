@@ -4,11 +4,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use commonwealth_api::state::AppState;
+use commonwealth_core::clock::unix_now_millis as now_ms;
 use commonwealth_core::ids::{HandoffId, NodeId};
 use commonwealth_core::knowledge::{
     CompleteOutcome, HandoffPhase, IngestionHandoff, LeasedUnit, UnitId, WorkUnit,
 };
-use commonwealth_core::clock::unix_now_millis as now_ms;
 use commonwealth_core::mesh::NodeStatus;
 use corpus_engine::CancellationFlag;
 
