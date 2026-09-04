@@ -14,21 +14,21 @@
 requirement = "FE-25"
 test = "commonwealth-transport::routed::tests::routed_class_lists_primary_then_default_fallback"
 file = "commonwealth/crates/commonwealth-transport/src/routed.rs"
-line = 246
+line = 247
 asserts = 2
 
 [[claim]]
 requirement = "FE-26"
 test = "commonwealth-transport::routed::tests::required_class_with_no_iroh_path_returns_empty_not_plaintext"
 file = "commonwealth/crates/commonwealth-transport/src/routed.rs"
-line = 285
+line = 286
 asserts = 1
 
 [[claim]]
 requirement = "FE-27"
 test = "commonwealth-transport::routed::tests::note_success_routes_to_the_transport_that_produced_the_endpoint"
 file = "commonwealth/crates/commonwealth-transport/src/routed.rs"
-line = 333
+line = 334
 asserts = 2
 
 [[claim]]
