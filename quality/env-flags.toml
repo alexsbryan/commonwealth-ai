@@ -1058,6 +1058,13 @@ status = "guard"
 shadows = "iroh.relay_urls"
 purpose = "Force the iroh transport onto relay-only paths (what iroh.relay_urls/discovery express declaratively)."
 
+[[flag]]
+name = "SOVEREIGN_SCIP_LSP_TIER"
+cluster = "mesh"
+default = "off"
+status = "experiment"
+purpose = "Reindexer warm tier: on each debounced save, ask the ALREADY-RUNNING rust-analyzer (via the lspmux shim, scripts/install-lspmux.sh) for the call edges rooted in the changed files, and ADD them to the code-intel graph. Closes the gap between the two existing tiers — the tree-sitter overlay refreshes symbol defs in milliseconds but can never see a cross-file call, and the full `rust-analyzer scip` export that can costs a cold analysis of all 54 crates (3m42s / 15.2 GB measured 2026-09-04) so it is gated behind a 900s cooldown. Strictly additive: the write is ScipGraph::add_call_edges_for, which executes no DELETE, so a still-loading analyzer answering `[]` costs nothing rather than emptying the edited file's edges. OFF by default because it spends a warm analyzer's time on the hot save path and the duty-cycle effect over a 30-minute editing window is not measured yet; flip-to-default condition and review-by in sovereign/DEFAULTS_LEDGER.md."
+
 # ── inference: fit-check + model-selection shadows ──────────────────
 
 [[flag]]

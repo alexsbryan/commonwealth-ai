@@ -221,7 +221,11 @@ pub fn spawn_resume_in_progress_ingests(state: AppState) {
     });
 }
 
-fn env_truthy(key: &str) -> bool {
+/// ONE truthiness rule for this crate's operator switches (ARCH §10.6).
+/// `pub(crate)` since 2026-09-04 so the reindexer's warm-LSP-tier gate reads
+/// "on" the same way every other mesh switch does, rather than growing a
+/// second spelling of `matches!(v, "1" | "true" | ...)`.
+pub(crate) fn env_truthy(key: &str) -> bool {
     match std::env::var(key) {
         Ok(v) => {
             let v = v.trim().to_ascii_lowercase();
