@@ -68,6 +68,8 @@ mod parquet_ingest_e2e;
 mod pipeline_ontology;
 #[path = "main/probe_index_residency.rs"]
 mod probe_index_residency;
+#[path = "main/provider_conformance.rs"]
+mod provider_conformance;
 #[path = "main/query_sharing_cache_invalidation.rs"]
 mod query_sharing_cache_invalidation;
 #[path = "main/recipe_back_compat.rs"]
