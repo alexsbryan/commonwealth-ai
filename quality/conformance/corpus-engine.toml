@@ -14,14 +14,14 @@
 requirement = "EN-16"
 test = "corpus-engine::enrichment::reconciliation::oplog::tests::a_merge_is_reversed_from_the_log_with_no_operator_supplied_output_list"
 file = "corpus-engine/src/enrichment/reconciliation/oplog.rs"
-line = 287
+line = 307
 asserts = 7
 
 [[claim]]
 requirement = "EN-16"
 test = "corpus-engine::enrichment::reconciliation::oplog::tests::a_reversal_the_log_cannot_support_is_refused_not_guessed"
 file = "corpus-engine/src/enrichment/reconciliation/oplog.rs"
-line = 357
+line = 377
 asserts = 4
 
 [[claim]]

@@ -161,10 +161,24 @@ only `cargo xtask quality` — and because the baseline is path-keyed, any
 refactor RELOCATING one of the 97 baselined files minted a new key and went red
 only when a human happened to type that command. Sites needing sub-second
 precision ride the baseline — no decider offers nanos.
-- `oplog.rs` — **`Op<K>` + `Oplog<K>`**, one append-only JSONL journal with
+- `oplog` — **`Op<K>` + `Oplog<K>`**, one append-only JSONL journal with
   four tenants declaring `Journaled`: `enrichment::governance`,
   `enrichment::reconciliation`, `meta_atlas::bridge` and — since 2026-08-30 —
-  `commonwealth-knowledge::rail` (the ring rail). Until 2026-08-20
+  `commonwealth-knowledge::rail` (the ring rail). **It became its own tier-0
+  crate on 2026-09-04** and is re-exported as `corpus_engine::oplog`, so no
+  call site moved. The reason is the fourth tenant: the ring rail's entire
+  coupling to the knowledge layer was seven references to `Op`/`OpId`/
+  `SkippedLine`, and reaching them cost it a dependency on `corpus-engine` —
+  a 578-crate closure for a 547-line file. A journal is a primitive, not
+  knowledge-layer machinery. The crate mints its own `OplogError`, which
+  `corpus_engine::error::Error` absorbs with byte-identical `Display` text, and
+  `Op::now` was DELETED in the move: it was the journal's only reason to know
+  what a clock was, its two callers both lived in `corpus-engine`, and keeping
+  it would have dragged `corpus-engine-yield` — a knowledge-layer crate — into
+  a tier-0 leaf. Tenants now hang their own act constructors off extension
+  traits (`GovernanceLog`, `BridgeOp`, `ReconciliationOp`), which the orphan
+  rules force and which is the right shape anyway: the envelope does not get to
+  know what a merge is. Until 2026-08-20
   each carried its own copy of the envelope and the file IO (7 types); the two
   younger logs had no op id, no actor and no version gate, which is why
   reconciliation's documented reversible `Split` — "walk backwards finding the
@@ -237,6 +251,7 @@ crates/
 ├── sovereign-cli-shared     # Tiny shared lib (dirs, repo, help, prompts, tracing init)
 ├── sovereign-time           # Wall-clock helpers (Unix-epoch secs/millis) — a zero-dep leaf for crates that don't depend on sovereign-core
 ├── serving-policy           # Fair-share scheduling (SchedCore/EtaEwma/reciprocity) + pipeline alias resolution — tier-0, empty in-repo dep list, forbidden from naming either family
+├── oplog                    # Op/OpId/Oplog/Journaled/SkippedLine — the append-only JSONL journal; tier-0, kernel-types its only in-repo dep, forbidden from naming corpus-engine* OR either family
 ├── sovereign-cli-daemon     # Long-running host + lifecycle (~241 MB binary; bin+lib — the desktop's --daemon-child re-enters via daemon_child_main)
 ├── sovereign-cli-dev        # Workbench: ATOS + project lifecycle + code intel + tools
 ├── sovereign-cli-llm        # Model interaction + heavy retrieval (chat/bench/eval/atlas/…)

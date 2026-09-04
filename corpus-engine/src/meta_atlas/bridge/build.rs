@@ -329,7 +329,7 @@ pub async fn build_bridge(
             (out_path.as_ref(), oplog.as_ref(), progress_path.as_ref())
         {
             for e in &topic_edges {
-                if let Err(err) = log.append(&crate::oplog::Op::add(e)) {
+                if let Err(err) = log.append(&super::edges::BridgeOp::add(e)) {
                     tracing::warn!(error = %err, "bridge: oplog append failed");
                 }
             }

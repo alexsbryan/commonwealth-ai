@@ -13,6 +13,9 @@ description = "Shared corpus ingestion and index management for Sovereign and Co
 # with a comment naming the others. They all reach one decider now
 # (ARCH §10.6, noun-convergence rung nc-1-kernel).
 kernel-types = { workspace = true }
+# The append-only journal, re-exported as `corpus_engine::oplog` so this
+# crate's consumers did not change when it left (2026-09-04).
+oplog = { workspace = true }
 
 # The pure section detectors (SectionDetector / DetectedSection /
 # ChapterRegexDetector / TocAnchoredDetector) — this crate's own segmentation

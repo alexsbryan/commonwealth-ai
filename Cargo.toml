@@ -16,6 +16,12 @@ members = [
     # DELETES two cross-family edges instead of relocating them. Tier-0, and
     # the empty in-repo dep list is the contract (see its lib.rs).
     "serving-policy",
+    # The append-only journal — Op/OpId/Oplog/Journaled/SkippedLine. Minted
+    # 2026-09-04: it was `corpus-engine/src/oplog.rs`, and the commonwealth
+    # ring rail took a dep on corpus-engine — a 578-crate closure — to reach
+    # seven references into it. Tier-0 because op ids are GOSSIPED, so the one
+    # content-hash derivation must sit below everyone who writes a log.
+    "oplog",
 
     # Knowledge layer (LanceDB + Tantivy + extractors + chunkers).
     "corpus-engine",
@@ -222,6 +228,7 @@ oicp-client = { path = "oicp-client" }
 oicp-types = { path = "oicp-types" }
 kernel-types = { path = "kernel-types" }
 serving-policy = { path = "serving-policy" }
+oplog = { path = "oplog" }
 corpus-engine = { path = "corpus-engine" }
 corpus-engine-scip = { path = "corpus-engine-scip" }
 corpus-engine-atos = { path = "corpus-engine-atos" }

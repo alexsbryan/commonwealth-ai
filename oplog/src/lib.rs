@@ -55,6 +55,25 @@
 //! `governance.rs`; the other two logs had no ids at all. It is now the one
 //! decider (ARCH §10.6) and every tenant reaches it.
 //!
+//! # Why this is a crate and not a module
+//!
+//! It was `corpus-engine/src/oplog.rs` until 2026-09-04. `commonwealth-knowledge`'s
+//! ring rail names five of these types and, to reach a 547-line journal, took a
+//! dependency on `corpus-engine` and inherited its **578-crate closure**. The
+//! rail's entire coupling to the knowledge layer was seven references to
+//! [`Op`], [`OpId`] and [`SkippedLine`] — a journal is not knowledge-layer
+//! machinery, and the closure was the proof.
+//!
+//! So this is a Tier-0 leaf whose only in-repo dependency is `kernel-types`.
+//! That budget is the contract, not an accident: [`OpId`] is content-addressed
+//! **and gossiped**, so a second derivation of it is a wire break with nothing
+//! red anywhere (ARCH §10.6). The hash comes from the crate that owns exactly
+//! one implementation of it, and [`the pinned wire test`](tests) fails if the
+//! derivation ever moves.
+//!
+//! `corpus-engine` re-exports this crate as `corpus_engine::oplog`, so its
+//! twenty-odd consumers did not change when it moved.
+//!
 //! # Naming — why `Op` and not `Record`
 //!
 //! Work order `nc-5-corpus` proposed minting `Record` ("an immutable fact with
@@ -75,7 +94,27 @@ use std::path::{Path, PathBuf};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::error::{Error, Result};
+/// What can go wrong writing or reading a journal.
+///
+/// Minted with the crate. It carries exactly the two failures the journal
+/// actually produces, and `corpus-engine`'s `From` bridge maps them back onto
+/// the `Error::Io` / `Error::Extraction` variants — with the same `Display`
+/// text — that these call sites raised before the move, so no consumer can
+/// observe the extraction (ARCH §18.3: the substitution would have to be
+/// named, so there isn't one).
+#[derive(Debug, thiserror::Error)]
+pub enum OplogError {
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+    /// Serialising an op to its JSONL line failed. `log` is [`Journaled::LABEL`].
+    #[error("{log}: serialise: {source}")]
+    Serialise {
+        log: &'static str,
+        source: serde_json::Error,
+    },
+}
+
+pub type Result<T> = std::result::Result<T, OplogError>;
 
 /// What a tenant must declare to get a journal: where its lines live, which
 /// line format the current writer emits, and the prefix its ids wear.
@@ -172,11 +211,6 @@ impl<K: Journaled> Op<K> {
             kind,
         }
     }
-
-    /// Build an op stamped with the current wall clock.
-    pub fn now(kind: K, actor: impl Into<String>) -> Self {
-        Self::new(kind, corpus_engine_yield::time::unix_now(), actor)
-    }
 }
 
 // ── The journal ──────────────────────────────────────────────
@@ -212,24 +246,27 @@ impl<K: Journaled> Oplog<K> {
     /// Append one op. Creates the parent directory on first write.
     pub fn append(&self, op: &Op<K>) -> Result<()> {
         if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent).map_err(Error::Io)?;
+            fs::create_dir_all(parent).map_err(OplogError::Io)?;
         }
         let mut line = serde_json::to_string(op)
-            .map_err(|e| Error::Extraction(format!("{}: serialise: {e}", K::LABEL)))?;
+            .map_err(|e| OplogError::Serialise {
+                log: K::LABEL,
+                source: e,
+            })?;
         line.push('\n');
         let mut f = OpenOptions::new()
             .create(true)
             .append(true)
             .open(&self.path)
-            .map_err(Error::Io)?;
+            .map_err(OplogError::Io)?;
         // ONE write for the whole logical line, so `O_APPEND`'s atomicity
         // covers it. Two calls (the body, then the newline) left a window in
         // which a second writer could interleave and split a line in half.
-        f.write_all(line.as_bytes()).map_err(Error::Io)?;
+        f.write_all(line.as_bytes()).map_err(OplogError::Io)?;
         // Durability is the point of a journal. Without this a lid-slam or a
         // power cut loses the last ops that the caller was already told
         // succeeded — silently, which is the §18.3 shape.
-        f.sync_data().map_err(Error::Io)?;
+        f.sync_data().map_err(OplogError::Io)?;
         tracing::debug!(
             log = K::LABEL,
             id = %op.id,
@@ -247,23 +284,26 @@ impl<K: Journaled> Oplog<K> {
             return Ok(());
         }
         if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent).map_err(Error::Io)?;
+            fs::create_dir_all(parent).map_err(OplogError::Io)?;
         }
         let mut f = OpenOptions::new()
             .create(true)
             .append(true)
             .open(&self.path)
-            .map_err(Error::Io)?;
+            .map_err(OplogError::Io)?;
         let mut buf = String::new();
         for op in ops {
             let line = serde_json::to_string(op)
-                .map_err(|e| Error::Extraction(format!("{}: serialise: {e}", K::LABEL)))?;
+                .map_err(|e| OplogError::Serialise {
+                log: K::LABEL,
+                source: e,
+            })?;
             buf.push_str(&line);
             buf.push('\n');
         }
         // Same single-write, then-fsync rule as `append`.
-        f.write_all(buf.as_bytes()).map_err(Error::Io)?;
-        f.sync_data().map_err(Error::Io)?;
+        f.write_all(buf.as_bytes()).map_err(OplogError::Io)?;
+        f.sync_data().map_err(OplogError::Io)?;
         tracing::debug!(
             log = K::LABEL,
             ops = ops.len(),
@@ -302,12 +342,12 @@ impl<K: Journaled> Oplog<K> {
         if !self.path.exists() {
             return Ok((Vec::new(), Vec::new()));
         }
-        let file = fs::File::open(&self.path).map_err(Error::Io)?;
+        let file = fs::File::open(&self.path).map_err(OplogError::Io)?;
         let reader = BufReader::new(file);
         let mut out = Vec::new();
         let mut skipped = Vec::new();
         for (lineno, line) in reader.lines().enumerate() {
-            let line = line.map_err(Error::Io)?;
+            let line = line.map_err(OplogError::Io)?;
             if line.trim().is_empty() {
                 continue;
             }
@@ -387,6 +427,27 @@ mod tests {
         assert_eq!(a.id, b.id, "same act, same second, same actor => same id");
         assert_ne!(a.id, c.id, "a different act must not reuse the id");
         assert!(a.id.as_str().starts_with("probe-"));
+    }
+
+    /// THE WIRE TEST. `OpId` is content-addressed and **gossiped** — a peer
+    /// reads ids minted by a build it does not have, and a `Revert` targets one
+    /// by value. So the derivation is a wire format, and this pins it to a
+    /// literal rather than to a re-computation, which would agree with any
+    /// change it was asked to check.
+    ///
+    /// If this fails, you changed the id derivation. That is a mesh-wide
+    /// breaking change and it needs a `Journaled::VERSION` bump and a fleet
+    /// rollout, not a new expected value here.
+    #[test]
+    fn the_id_derivation_is_pinned_to_the_wire() {
+        let op = Op::new(touch("x"), 100, "human:alex");
+        assert_eq!(
+            op.id.as_str(),
+            "probe-97c56dfd0781629d",
+            "the id derivation is <prefix>|<ts>|<actor>|<body-json> hashed with \
+             kernel_types::ContentHash and truncated by .short() — see the note \
+             on this test before touching any of those five"
+        );
     }
 
     #[test]

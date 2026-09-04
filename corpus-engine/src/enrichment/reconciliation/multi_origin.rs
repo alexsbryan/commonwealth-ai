@@ -24,6 +24,8 @@ use crate::enrichment::ontology::IdentityPolicy;
 use crate::enrichment::pipeline::atlas::EntityType;
 use crate::oplog::Op;
 
+use super::oplog::ReconciliationOp;
+
 /// Policy knobs for the merger. Mirrors the
 /// `[enrichment.reconciliation]` TOML schema.
 #[derive(Debug, Clone, Serialize, Deserialize)]

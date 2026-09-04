@@ -29,6 +29,8 @@ use serde::{Deserialize, Serialize};
 use super::signals::MergeSignal;
 use crate::enrichment::atlas::atoms::AtomId;
 use crate::error::{Error, Result};
+use corpus_engine_yield::time::unix_now;
+
 use crate::oplog::{Journaled, Op, OpId};
 
 /// Kind of op the entry records. `Split` is included from day one
@@ -112,15 +114,31 @@ impl Journaled for ReconciliationAct {
     const LABEL: &'static str = "reconciliation_oplog";
 }
 
-impl Op<ReconciliationAct> {
-    pub fn merge(
+/// The reconciler's two acts, hung on the envelope that carries them.
+///
+/// Extension trait, not an inherent `impl`: [`Op`] is foreign as of 2026-09-04
+/// (see `oplog`'s crate docs). A merge is a statement about atoms, which the
+/// journal has never heard of.
+pub trait ReconciliationOp: Sized {
+    fn merge(
+        inputs: Vec<AtomId>,
+        output: AtomId,
+        signals: Vec<MergeSignal>,
+        judge: Option<JudgeTrace>,
+        rationale: impl Into<String>,
+    ) -> Self;
+    fn split(input: AtomId, outputs: Vec<AtomId>, rationale: impl Into<String>) -> Self;
+}
+
+impl ReconciliationOp for Op<ReconciliationAct> {
+    fn merge(
         inputs: Vec<AtomId>,
         output: AtomId,
         signals: Vec<MergeSignal>,
         judge: Option<JudgeTrace>,
         rationale: impl Into<String>,
     ) -> Self {
-        Op::now(
+        Op::new(
             ReconciliationAct {
                 op: OpKind::Merge,
                 inputs,
@@ -131,12 +149,13 @@ impl Op<ReconciliationAct> {
                 rationale: rationale.into(),
                 reverts: None,
             },
+            unix_now(),
             RECONCILER,
         )
     }
 
-    pub fn split(input: AtomId, outputs: Vec<AtomId>, rationale: impl Into<String>) -> Self {
-        Op::now(
+    fn split(input: AtomId, outputs: Vec<AtomId>, rationale: impl Into<String>) -> Self {
+        Op::new(
             ReconciliationAct {
                 op: OpKind::Split,
                 inputs: vec![input],
@@ -147,6 +166,7 @@ impl Op<ReconciliationAct> {
                 rationale: rationale.into(),
                 reverts: None,
             },
+            unix_now(),
             // A split is operator-driven; the signal set already says so.
             "human:operator",
         )

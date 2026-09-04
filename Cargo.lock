@@ -2345,6 +2345,7 @@ dependencies = [
  "mailparse",
  "memmap2",
  "notify",
+ "oplog",
  "parquet",
  "petgraph 0.6.5",
  "pulldown-cmark",
@@ -9114,6 +9115,18 @@ dependencies = [
  "libc",
  "pkg-config",
  "vcpkg",
+]
+
+[[package]]
+name = "oplog"
+version = "0.6.0"
+dependencies = [
+ "kernel-types",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tracing",
 ]
 
 [[package]]

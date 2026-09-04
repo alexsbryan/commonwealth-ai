@@ -372,11 +372,11 @@ pub fn derive_active(ops: &[Op<GovernanceOpKind>]) -> ActiveSet {
 // reconciliation/oplog.rs conventions"). What is left is the one thing only
 // governance can do with its log: fold it.
 
-impl Oplog<GovernanceOpKind> {
-    /// Read + fold in one step: the current active set for this corpus.
-    pub fn derive(&self) -> Result<ActiveSet> {
-        Ok(derive_active(&self.read_all()?))
-    }
+/// Read + fold in one step: the current active set for this corpus. A free
+/// function, not an inherent `impl`: the journal moved to the `oplog` leaf on
+/// 2026-09-04, which makes [`Oplog`] foreign here.
+pub fn derive(log: &Oplog<GovernanceOpKind>) -> Result<ActiveSet> {
+    Ok(derive_active(&log.read_all()?))
 }
 
 pub use corpus_engine_yield::time::unix_now as now_secs;
@@ -870,7 +870,7 @@ mod tests {
         let read_back = log.read_all().unwrap();
         assert_eq!(read_back, written, "ops must survive a disk round-trip");
         assert_eq!(
-            log.derive().unwrap(),
+            derive(&log).unwrap(),
             derive_active(&written),
             "fold over disk == fold over memory"
         );
@@ -908,7 +908,7 @@ mod tests {
     #[test]
     fn missing_log_folds_to_empty() {
         let dir = tempfile::tempdir().unwrap();
-        let set = Oplog::<GovernanceOpKind>::new(dir.path()).derive().unwrap();
+        let set = derive(&Oplog::<GovernanceOpKind>::new(dir.path())).unwrap();
         assert!(set.rules.is_empty());
         assert!(set.tensions.is_empty());
     }

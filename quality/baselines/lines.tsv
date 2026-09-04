@@ -23,7 +23,7 @@
 1130	commonwealth/crates/commonwealth-transport::tests
 942	commonwealth/crates/oicp-conformance
 221	commonwealth/crates/oicp-conformance::tests
-73452	corpus-engine
+72206	corpus-engine
 1297	corpus-engine-archaeology
 582	corpus-engine-archaeology::tests
 1396	corpus-engine-atos
@@ -40,13 +40,15 @@
 60	corpus-engine-yield::tests
 3793	corpus-engine/xtask
 955	corpus-engine/xtask::tests
-52610	corpus-engine::tests
+51885	corpus-engine::tests
 1069	kernel-types
 2227	kernel-types::tests
 744	oicp-client
 927	oicp-client::tests
 1484	oicp-types
 1267	oicp-types::tests
+192	oplog
+173	oplog::tests
 255	quality/arch-layers
 313	quality/arch-layers::tests
 356	serving-policy
