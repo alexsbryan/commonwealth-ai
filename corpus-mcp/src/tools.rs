@@ -401,30 +401,25 @@ impl Server {
             &fetcher,
         )
         .await;
-        // Anything tier 1 already returned is not new evidence — the walk's
-        // contribution is what it added, and double-listing a passage would
-        // make the map look like it did more than it did.
-        let seen: std::collections::HashSet<(Option<u64>, String)> = tier1
-            .iter()
-            .map(|c| (c.chunk_id, c.corpus_id.clone()))
-            .collect();
-        let grounded: Vec<_> = grounded
-            .into_iter()
-            .filter(|r| !seen.contains(&(r.chunk.chunk_id, r.chunk.corpus_id.clone())))
-            .collect();
+        // A passage the search ranked AND the walk cited is ONE passage
+        // carrying BOTH facts — merged, never deduplicated away. Dropping
+        // the walk's copy loses its attribution, which is the half that
+        // matters here: `merge_passages` says why.
+        let merged = crate::ask::merge_passages(tier1, grounded);
+        let walked = merged.iter().filter(|p| p.from_walk).count();
         eprintln!(
-            "corpus-mcp: ask -> row {}; tier1 {} + walk {} (of {} requests, {} dropped)",
+            "corpus-mcp: ask -> row {}; {} passages, {} of them cited by the walk \
+             (of {} requests, {} dropped)",
             selection.describe(),
-            tier1.len(),
-            grounded.len(),
+            merged.len(),
+            walked,
             resolve.considered,
             resolve.considered.saturating_sub(resolve.added),
         );
 
         Ok(crate::ask::render(
             question,
-            &tier1,
-            &grounded,
+            &merged,
             &grounding,
             !graphs.is_empty(),
         ))

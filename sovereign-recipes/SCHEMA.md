@@ -1030,6 +1030,7 @@ One row of the navigation table: how to walk for one question kind.
 | `walk` | `Vec<EdgeType>` | no | type default | Edge kinds to follow, in order of preference — the `edge_type` tag as written on disk (`Involves`, `Tension`, `Grounds`, `Transition`, …). Empty means no walk: seeds are the answer (the enumeration row). |
 | `hops` | `u8` | no | type default | How many edge hops from a seed. `0` enumerates the seeds only. |
 | `budget` | `u32` | no | type default | How many atoms the walk keeps as evidence requests. |
+| `exemplars` | `Vec<String>` | no | type default | What a question of this kind SOUNDS like — the exemplar phrases the walker embeds into one centroid per kind to classify open text onto the closed set (ARCH §2.4, principle 9). They live HERE, in the map, and not in the walker's `.rs`, because a corpus whose readers phrase a kind differently ("what does this catalogue cover" for a numismatic atlas) retunes its classifier by editing its own declaration — the same way it retunes seeds and edges. The defaults below are the spec's own glosses of the five kinds (`EPISTEMIC_INDEX.md` §2.2, column 1), so the pre-registered table and the pre-registered exemplars are one artifact. An EMPTY list is load-bearing: that kind gets no centroid and can never be classified, which is how a corpus switches a row off without deleting it. Every row empty means the classifier cannot be built at all, and the walker says so rather than guessing a kind. |
 
 ## `NavigationPolicy`
 

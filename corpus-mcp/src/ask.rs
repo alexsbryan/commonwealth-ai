@@ -104,6 +104,88 @@ impl EvidenceFetcher for IndexEvidenceFetcher<'_> {
     }
 }
 
+/// One passage in an `ask` answer, and what it is evidence FOR.
+///
+/// A passage can arrive twice — ranked by the search AND cited by the walk —
+/// and the two facts are not alternatives. Keeping only the first copy is
+/// what the first draft did, and it silently DISCARDED the walk's
+/// attribution: on the wessex fixture the walk reached three themes and the
+/// answer credited one, because two of the three cited passages the search
+/// had already returned. The passage is not the interesting part there; the
+/// link from the idea to the passage is.
+#[derive(Debug, Clone)]
+pub struct AskPassage {
+    pub chunk: ScoredChunk,
+    /// Atom ids whose evidence anchors point at this passage. Empty for a
+    /// passage the search found and the walk never reached.
+    pub motivating_atoms: Vec<String>,
+    /// Did the search rank it, the walk cite it, or both?
+    pub from_search: bool,
+    pub from_walk: bool,
+}
+
+impl AskPassage {
+    pub fn origin(&self) -> &'static str {
+        match (self.from_search, self.from_walk) {
+            (true, true) => "search+walk",
+            (true, false) => "search",
+            _ => "walk",
+        }
+    }
+
+    /// The identity two copies of a passage are one by: its corpus and its
+    /// row. `None` row ids cannot be compared, so a chunk with no row id is
+    /// never merged — an absent key is not a matching key (§7.5).
+    fn key(&self) -> Option<(String, u64)> {
+        self.chunk
+            .chunk_id
+            .map(|id| (self.chunk.corpus_id.clone(), id))
+    }
+}
+
+/// Fold the walk's cited chunks into the search's ranked ones, merging rather
+/// than dropping where both found the same passage.
+///
+/// Search order is preserved and walk-only passages follow, so the ranking a
+/// reader sees is still the search's; what changes is that a passage the walk
+/// also cited now carries the ideas it is evidence for.
+pub fn merge_passages(tier1: Vec<ScoredChunk>, grounded: Vec<ResolvedChunk>) -> Vec<AskPassage> {
+    let mut out: Vec<AskPassage> = tier1
+        .into_iter()
+        .map(|chunk| AskPassage {
+            chunk,
+            motivating_atoms: Vec::new(),
+            from_search: true,
+            from_walk: false,
+        })
+        .collect();
+    let index: std::collections::HashMap<(String, u64), usize> = out
+        .iter()
+        .enumerate()
+        .filter_map(|(i, p)| p.key().map(|k| (k, i)))
+        .collect();
+    for r in grounded {
+        let candidate = AskPassage {
+            chunk: r.chunk,
+            motivating_atoms: r.motivating_atoms,
+            from_search: false,
+            from_walk: true,
+        };
+        match candidate.key().and_then(|k| index.get(&k)).copied() {
+            Some(i) => {
+                out[i].from_walk = true;
+                for a in candidate.motivating_atoms {
+                    if !out[i].motivating_atoms.contains(&a) {
+                        out[i].motivating_atoms.push(a);
+                    }
+                }
+            }
+            None => out.push(candidate),
+        }
+    }
+    out
+}
+
 /// One row of the map section, as the client sees it.
 fn map_row(n: &MapNode) -> Value {
     json!({
@@ -126,34 +208,20 @@ fn map_row(n: &MapNode) -> Value {
 /// this crate is written (`ontology_outcome`).
 pub fn render(
     question: &str,
-    tier1: &[ScoredChunk],
-    grounded: &[ResolvedChunk],
+    merged: &[AskPassage],
     grounding: &Grounding,
     atlas_present: bool,
 ) -> ToolOutcome {
     let mut text = String::new();
     let mut passages = Vec::new();
 
-    // ── Cited passages: tier 1 first, then what the walk added ──────────
+    // ── Cited passages ──────────────────────────────────────────────────
     //
-    // The walk's own chunks are marked, because "the graph brought this back"
-    // is the claim this whole architecture makes and a reader must be able to
+    // Each says where it came from, because "the graph brought this back" is
+    // the claim this whole architecture makes and a reader must be able to
     // check it against the map below.
-    let mut rank = 0usize;
-    for h in tier1 {
-        rank += 1;
-        push_passage(&mut text, &mut passages, rank, h, &[], "search");
-    }
-    for r in grounded {
-        rank += 1;
-        push_passage(
-            &mut text,
-            &mut passages,
-            rank,
-            &r.chunk,
-            &r.motivating_atoms,
-            "walk",
-        );
+    for (i, p) in merged.iter().enumerate() {
+        push_passage(&mut text, &mut passages, i + 1, p);
     }
     if passages.is_empty() {
         text.push_str(&format!("No passages matched `{question}`.\n"));
@@ -263,14 +331,9 @@ pub fn render(
     }
 }
 
-fn push_passage(
-    text: &mut String,
-    rows: &mut Vec<Value>,
-    rank: usize,
-    c: &ScoredChunk,
-    motivating: &[String],
-    origin: &str,
-) {
+fn push_passage(text: &mut String, rows: &mut Vec<Value>, rank: usize, p: &AskPassage) {
+    let c = &p.chunk;
+    let (motivating, origin) = (p.motivating_atoms.as_slice(), p.origin());
     let title = c.title.as_deref().unwrap_or("(untitled)");
     let url = c.url.as_deref().unwrap_or("-");
     text.push_str(&format!(
@@ -310,7 +373,7 @@ mod tests {
     use corpus_engine_vocab::atoms::AtomType;
     use corpus_engine_vocab::ontology::{NavigationPolicy, QuestionKind};
 
-    fn chunk(title: &str, body: &str) -> ScoredChunk {
+    fn chunk(id: u64, title: &str, body: &str) -> ScoredChunk {
         ScoredChunk {
             content: body.into(),
             title: Some(title.into()),
@@ -318,7 +381,7 @@ mod tests {
             corpus_id: "bk".into(),
             score: 0.5,
             metadata: Default::default(),
-            chunk_id: Some(7),
+            chunk_id: Some(id),
             source_doc_id: None,
             vector_distance: None,
             provenance: corpus_engine::index::ChunkProvenance::acquired_from_estate("bk"),
@@ -364,14 +427,19 @@ mod tests {
     /// map block from `render`.
     #[test]
     fn a_walked_answer_carries_passages_and_a_map() {
-        let tier1 = vec![chunk("Book I", "the elder Zossima received pilgrims")];
+        let tier1 = vec![chunk(1, "Book I", "the elder Zossima received pilgrims")];
         let walked = vec![ResolvedChunk {
-            chunk: chunk("Book I", "an ill-natured buffoon and nothing more"),
+            chunk: chunk(2, "Book I", "an ill-natured buffoon and nothing more"),
             motivating_atoms: vec!["atom-buffoonery".into()],
             walk_score: 1.4,
         }];
         let g = grounding(vec![node("eldership", 0), node("buffoonery", 1)], vec![]);
-        let out = render("what is this about", &tier1, &walked, &g, true);
+        let out = render(
+            "what is this about",
+            &merge_passages(tier1, walked),
+            &g,
+            true,
+        );
         assert!(!out.is_error);
         assert!(out.text.contains("--- map (thematic) ---"), "{}", out.text);
         assert!(
@@ -393,15 +461,82 @@ mod tests {
         assert_eq!(s["map"]["question_kind"], "thematic");
     }
 
+    /// THE ATTRIBUTION MERGE: when the search and the walk return the SAME
+    /// passage, it appears once and carries both facts.
+    ///
+    /// The first draft kept the search's copy and dropped the walk's, which
+    /// on the wessex-hoard fixture turned three themes the walk had reached
+    /// into ONE the answer could name — measured, not hypothetical. The
+    /// passages were all present; only the links from idea to passage were
+    /// gone, and the links are the half this architecture exists for.
+    ///
+    /// Failing input: filter the walk's chunk out by chunk_id instead of
+    /// merging it — the line this test was written against.
+    #[test]
+    fn a_passage_found_twice_keeps_both_facts() {
+        let shared = chunk(42, "Book I", "the elder took your soul into his soul");
+        let tier1 = vec![shared.clone(), chunk(7, "Book I", "a distinct passage")];
+        let walked = vec![
+            ResolvedChunk {
+                chunk: shared,
+                motivating_atoms: vec!["theme-eldership".into()],
+                walk_score: 2.0,
+            },
+            ResolvedChunk {
+                chunk: chunk(99, "Book I", "only the walk found this"),
+                motivating_atoms: vec!["theme-money".into()],
+                walk_score: 1.0,
+            },
+        ];
+        let merged = merge_passages(tier1, walked);
+        assert_eq!(merged.len(), 3, "the shared passage is not duplicated");
+        assert_eq!(merged[0].origin(), "search+walk");
+        assert_eq!(merged[0].motivating_atoms, vec!["theme-eldership"]);
+        assert_eq!(merged[1].origin(), "search");
+        assert_eq!(merged[2].origin(), "walk");
+        // Both themes are reachable from the passages — the count the
+        // acceptance bar reads.
+        let cited: std::collections::BTreeSet<&str> = merged
+            .iter()
+            .filter(|p| !p.chunk.content.is_empty())
+            .flat_map(|p| p.motivating_atoms.iter().map(String::as_str))
+            .collect();
+        assert_eq!(cited.len(), 2, "{cited:?}");
+    }
+
+    /// A chunk with NO row id is never merged: an absent key is not a
+    /// matching key (§7.5). Failing input: default `None` to 0 in `key`.
+    #[test]
+    fn passages_without_a_row_id_are_never_merged() {
+        let mut a = chunk(1, "T", "same text");
+        a.chunk_id = None;
+        let mut b = a.clone();
+        b.chunk_id = None;
+        let merged = merge_passages(
+            vec![a],
+            vec![ResolvedChunk {
+                chunk: b,
+                motivating_atoms: vec!["x".into()],
+                walk_score: 1.0,
+            }],
+        );
+        assert_eq!(merged.len(), 2);
+    }
+
     /// A corpus with no atlas says so, in the body and in the structured
     /// half — it does not return an empty map that reads like a walk that
     /// found nothing (§18.3). Failing input: render an empty map section
     /// when `atlas_present` is false.
     #[test]
     fn no_atlas_is_reported_not_rendered_as_an_empty_walk() {
-        let tier1 = vec![chunk("Book I", "some passage")];
+        let tier1 = vec![chunk(1, "Book I", "some passage")];
         let g = grounding(vec![], vec![]);
-        let out = render("what is this about", &tier1, &[], &g, false);
+        let out = render(
+            "what is this about",
+            &merge_passages(tier1, Vec::new()),
+            &g,
+            false,
+        );
         assert!(out.text.contains("no atlas on disk"), "{}", out.text);
         let s = out.structured.unwrap();
         let degs = s["degradations"].as_array().unwrap();
@@ -423,7 +558,7 @@ mod tests {
                 Degradation::SeedKindsUnseen(vec![AtomType::Configuration]),
             ],
         );
-        let out = render("q", &[], &[], &g, true);
+        let out = render("q", &[], &g, true);
         assert!(out.text.contains("--- degraded ---"), "{}", out.text);
         assert!(out.text.contains("backfill-ann"), "{}", out.text);
         assert!(out.text.contains("configuration"), "{}", out.text);
@@ -441,7 +576,7 @@ mod tests {
     #[test]
     fn an_empty_result_still_says_so() {
         let g = grounding(vec![], vec![]);
-        let out = render("nothing matches this", &[], &[], &g, true);
+        let out = render("nothing matches this", &[], &g, true);
         assert!(out.text.contains("No passages matched"), "{}", out.text);
         assert!(!out.is_error, "an empty answer is not an error");
         assert_eq!(

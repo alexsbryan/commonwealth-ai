@@ -46,8 +46,8 @@ tiers as separate tools the client must compose.
 | **Evidence** | chunks: LanceDB vectors + Tantivy FTS, `CorpusIndex::search` | every answer cites a chunk | universal | unchanged |
 | **Ideas** (the index) | atoms of the closed kinds (`AtomEnvelope`, `corpus-engine-vocab`), each with embed text, evidence anchors; typed edges; ANN seed table | `atoms.lance` + `edges.csr` + `atoms_ann.lance` are **mandatory** ingest artifacts, coverage reported | seed table mandatory at ingest (ei-3-index, 2026-09-04): `writer::write_atlas_full` takes an `AtlasSeeding` with no default, seeds through the one `backfill_ann` writer in the same write as the v2 store, and a `With` seed that fails fails the atlas write; coverage (`AnnSummary::embedded_atoms`) rides in `_summary.json` v5 and prints in `corpus_list` and `svrn corpus status`. SEP backfilled from 22 of 1,770. Wikipedia still on `edges.lance` + SQLite; `atoms.rkyv` leftovers | one store PROVIDER everywhere (operator 2026-09-04): the walk consumes one trait — atom by id, atoms of a kind, evidence anchors, edges from/to with a closed `EdgeType`, the seed table, the ontology — and a backend fulfils it; atom-class backends are `atoms.lance` + `edges.csr` + `atoms_ann.lance`, wiki-class is `articles.lance` + `edges.lance` + a seed table; `atoms.json` is export only |
 | **Map** (the ontology) | `atlas/ontology.json`, one per atlas, from **every** pipeline | an atlas that cannot describe itself is not an atlas | every pipeline writes it (ei-2-map, 2026-09-04): built-in vocabularies as version-1 TOML under `pipelines/ontologies/`, the envelope names its `pipeline_id`, `navigation` carries the §2.2 table as defaults; existing atlases get it on their next build — nothing reads `navigation` yet | three sections: schema, navigation policy, vocabulary + prose (§2); the walker reads `navigation` (step 4) |
-| **Walk** | `ground(question, embedding, atlases, policy) → evidence requests`, then resolve to chunks | ONE implementation, in corpus-engine, driven by the map | glue in sovereign-core (`apply_atlas_grounding`: 2 hops, budget 6, ×0.05, seeds ≥12; chunk→atlas id as a format string) | corpus-engine owns the walk and the id derivation; sovereign-core and corpus-mcp both call it |
-| **Surface** | MCP tools | the default tool composes the layers; the client never has to | four tools, client composes | `ask` (§4) plus the four as advanced |
+| **Walk** | `ground(question, embedding, atlases, graphs, selection, max_seeds) → evidence requests`, then resolve to chunks | ONE implementation, in corpus-engine, driven by the map | **done (ei-4-walk, 2026-09-04)**: `corpus-engine/src/enrichment/atlas/{ground,resolve}.rs` over `&[&dyn AtlasProvider]`, reading seed kinds / edge kinds / hops / budget from the corpus's `navigation` section; the question's kind is a centroid over the map's own exemplars, and an abstain runs `WalkPolicy::unfiltered` (the pre-policy behaviour, as data) and says so. `apply_atlas_grounding` and `corpus-mcp`'s `ask` are the two callers; `atlas_navigate_ann` is a thin caller under the unfiltered row. The chunk→atlas id derivation is `ground::candidate_atlas_ids`. The evidence budget round-robins across the ideas the walk reached — the loop it replaced spent all of it on the first | unchanged |
+| **Surface** | MCP tools | the default tool composes the layers; the client never has to | **done (ei-4-walk, 2026-09-04)**: `ask` composes embed → tier 1 → walk → resolve and returns cited passages plus the map section, with every degradation as a sentence; the four earlier tools stay as the advanced surface | unchanged |
 | **Distribution** | prebuilt snapshot (HF datasets, `ingest_prebuilt.rs`) | the snapshot carries all layers; absence is reported, never defaulted | snapshot carries chunks + atlas; host does not pull | `corpus-mcp --corpus sep` pulls if absent; width mismatch degrades and says so |
 
 Principle 8 runs through the table: one store, one map format, one walk, one
@@ -71,8 +71,26 @@ names the inferred edges. What is missing is the third role.
    which is how a technical peer gets the graph into Neo4j or DuckDB in one
    command.
 2. **Navigation policy** — a small table of *question kinds* and, for each,
-   the seed kinds, the edge kinds to walk, hops and budget. Pre-registered
-   defaults, to be tuned on the lanes in §6:
+   the seed kinds, the edge kinds to walk, hops, budget, and the exemplar
+   phrases that classify a question ONTO that kind. Pre-registered defaults,
+   to be tuned on the lanes in §6.
+
+   **Every row's budget is 12, not 6.** This document said "budget 6" in §1's
+   Walk row and ei-2 minted `DEFAULT_BUDGET` from that sentence; the sentence
+   was wrong about the code. Atlas grounding has kept
+   `ceil(KQ_PER_CORPUS_LIMIT * 0.6)` with `KQ_PER_CORPUS_LIMIT = 20`
+   (`sovereign-core/src/runtime/prompts.rs`) since the SEP calibration, i.e.
+   12. Adopting 6 the moment the walk started reading this table would have
+   halved atlas evidence on every corpus — a regression handed to the SEP lane
+   by a typo. Corrected 2026-09-04 (ei-4-walk); the two are now pinned
+   together by `the_default_budget_is_the_live_fetch_budget`.
+
+   The **exemplars live in the map** (`WalkPolicy::exemplars`), not in the
+   walker: a corpus whose readers phrase a kind their own way retunes its
+   classifier by editing its own declaration, and the built-in defaults are
+   this table's own glosses. An empty list switches a row off; every row empty
+   means the map declares no classifier, which is reported rather than
+   defaulted.
 
    | Question kind | Seed on | Walk | Hops |
    |---|---|---|---|
@@ -204,6 +222,15 @@ lane names an owner and a scheduled measurement before it is accepted.
    the atlas summary; backfill SEP.
 4. Walk: `ground()` and the chunk→atlas derivation move into corpus-engine;
    sovereign-core calls it; then corpus-mcp calls it — `ask` lands.
+   **DONE 2026-09-04 (ei-4-walk).** One caveat the step surfaced and did not
+   own: `writer::seed_atlas` seeds the ANN table through
+   `AtlasContextFilter::default()`, whose `include_configurations` and
+   `include_tensions` are `false`, so every seed table is Entity-only. Of the
+   five rows above, `lookup` and `enumeration` seed fully, `thematic` seeds
+   only its concept-Entity half, and `tension` (Claim + Position) seeds
+   nothing on any corpus built to date. That is a contract gap between this
+   §2.2 table (which kinds a row seeds on) and step 3's table (which kinds are
+   populated), and it belongs to the seed population, not to the walk.
 5. Build: the seven-site cut (§4.1); `sovereign-enrichment-build` joins the
    package; `corpus ingest <recipe>` lands and the acceptance runs the whole
    of §4 on the wessex fixture against a bare endpoint.
