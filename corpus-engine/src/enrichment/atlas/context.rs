@@ -1339,7 +1339,10 @@ pub async fn open_and_attach_ann_seed_table(
 /// ([`build_atlas_context_from_ann`], over the resident store). `canonical_name`
 /// is the Entity's name (so rigid source-matching credits it) or the
 /// `article_slug` for the article-scoped kinds (Claim / Configuration /
-/// ArgumentReconstruction). `None` for atom kinds that never enter the bag. Both
+/// ArgumentReconstruction / Position / State). `None` for atom kinds that never
+/// enter the bag — and a `None` here is what makes a kind UNSEEDABLE however a
+/// corpus's navigation map names it, so a kind added to a seed row belongs in
+/// this fan-out too (see `seed_population`). Both
 /// paths sharing this guarantees the embedding written to the ANN table
 /// corresponds to the bag's re-rendered `embed_text`. `pub` so the eval / backfill
 /// loaders reuse it rather than forking the rendering.
@@ -1378,6 +1381,42 @@ pub fn render_atom_entry(atom: &AtomEnvelope, article_slug: &str) -> Option<(Str
         }
         AtomEnvelope::Configuration(cfg) => {
             let mut text = format!("[Configuration: {}] {}", cfg.label, cfg.description);
+            if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
+                text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
+            }
+            Some((article_slug.to_string(), text))
+        }
+        // Position and State render because the pre-registered navigation
+        // table SEEDS on them — `tension` on Claim + Position, `trajectory` on
+        // Entity + State (`ontology::navigation`). A kind a map can name as a
+        // seed and this function cannot render is a population the writer
+        // derives and then silently drops, which is the substitution ARCH
+        // §18.3 forbids; the two arms are what make
+        // `seed_population::seed_population` honourable. Article-scoped, like
+        // Claim and Configuration: neither carries a name retrieval matches
+        // sources on.
+        AtomEnvelope::Position(p) => {
+            let mut text = format!(
+                "[Position: {stance}] {name} — {content}",
+                stance = p.stance,
+                name = p.canonical_name,
+                content = p.content
+            );
+            if !p.anchors.is_empty() {
+                text.push(' ');
+                text.push_str(&p.anchors.join("; "));
+            }
+            if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
+                text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
+            }
+            Some((article_slug.to_string(), text))
+        }
+        AtomEnvelope::State(st) => {
+            let state_type = serde_json::to_string(&st.state_type)
+                .unwrap_or_default()
+                .trim_matches('"')
+                .to_string();
+            let mut text = format!("[State: {state_type}] {}", st.label);
             if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
                 text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
             }
