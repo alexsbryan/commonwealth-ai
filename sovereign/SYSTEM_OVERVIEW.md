@@ -4606,6 +4606,27 @@ ops also arrive from disk. Watched: two-node partition drills at both levels
 (pure journals, and through the route), plus a half-delivered peer whose gap is
 named rather than silently totalled.
 
+**Convergence has a CEILING, crossing it is SILENT, and it binds in one
+direction only** (measured 2026-09-04, cw-lift rung 2a; four tests in
+`commonwealth-api/tests/rail_e2e.rs` §"the convergence ceiling"). The push
+sends everything a peer lacks in ONE body and the receiver caps a request at
+`MAX_REQUEST_BODY_BYTES` = 8 MiB (`server.rs:40`), so the ceiling is in BYTES
+and every figure names its fixture: **9,599 ops** at 873.9 B/op (order 2's
+594-byte ledger body), 13,731 at 609 B/op, 15,164 at a work-atlas
+observation's 552 B/op. Past it `DefaultBodyLimit` answers **413 before the
+handler runs**, so `RING_PAYLOAD_WARN_BYTES` cannot fire — and that gauge is
+computed on the RESPONSE (`ring_sync.rs:113-136`), the direction nothing
+bounds, so the rail's one instrument watches the half that works. The sender
+maps the status to `Err("HTTP 413")` and files it at **debug** as
+`peers_unreachable` (`sovereign-mesh/src/ring_sync.rs:171-183`) — a reachable
+peer refusing an oversized body counted as an unreachable one. The peer that
+was refused then reports zero ops, zero gaps and `is_complete() == true`
+(§18.3). The asymmetry is where the cheap fix is: the same journal comes back
+in a RESPONSE over 8 MiB and a fresh peer ingesting it converges — but a node
+that has never seen this ring holds no `rings/<ns>` directory, so
+`run_one_round` finds no namespaces and returns early (`:117`, `:124`) and
+never dials. **The only direction that can bootstrap it is the bounded one.**
+
 **`svrn ring` is the verb** (`sovereign-cli-llm/src/ring_cmd/`, ring-deploy
 S4): `ring new` scaffolds an app (page, reducer, and the reducer's tests),
 `ring roster add <person> --self` binds a name to the node key it signs with,

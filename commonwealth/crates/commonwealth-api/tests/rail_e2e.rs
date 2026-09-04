@@ -17,6 +17,11 @@
 //! injected — the same harness shape as `client_auth.rs`, for the same reason:
 //! the loopback-vs-remote split must not depend on the CI box having a
 //! routable NIC.
+//!
+//! The replication drills go through `internal_router`, which is where the
+//! receiver's `DefaultBodyLimit` lives — see §"the convergence ceiling", the
+//! only place in the tree that says what happens when one exchange outgrows
+//! it.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -25,12 +30,16 @@ use std::sync::Arc;
 use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
+use commonwealth_api::routes_internal::{RingSyncRequest, RingSyncResponse};
 use commonwealth_api::server::client_router;
 use commonwealth_api::state::AppState;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_knowledge::Scope;
-use commonwealth_rail::{Ed25519Verifier, Payload, Person, RailAct, RingRail, RingSigner, Roster};
+use commonwealth_rail::{
+    Digest, Ed25519Verifier, Op, Payload, Person, RailAct, RingJournal, RingRail, RingSigner,
+    Roster, SignedOp,
+};
 use ed25519_dalek::SigningKey;
 use tower::ServiceExt;
 
@@ -468,31 +477,58 @@ async fn a_namespace_that_is_a_path_is_refused() {
 
 // ── replication, through the real route ──────────────────────
 
-/// One `/internal/ring/sync` exchange: `caller` hands `responder` its digest
-/// plus `ops`, and gets back the responder's digest plus what the caller
-/// lacks. Mirrors exactly what `sovereign-mesh`'s loop does per address.
-async fn sync_once(
+/// One `/internal/ring/sync` exchange, in the wire types the mesh loop
+/// itself uses — `RingSyncRequest` in, `RingSyncResponse` out.
+///
+/// It said "mirrors exactly what `sovereign-mesh`'s loop does" while driving
+/// the route through `serde_json::Value`, which made this a THIRD spelling of
+/// a shape that already has exactly one (ARCH §10.6): the handler declares
+/// it, `sovereign_mesh::ring_sync` imports that declaration, and a field
+/// renamed on the struct would have left this harness green while the mesh
+/// loop stopped converging. Typed, the compiler is the mirror.
+///
+/// Returns the raw status alongside the body because the ceiling drill below
+/// needs the exchange that is REFUSED, and a helper that asserts 200 can only
+/// ever see the half that works.
+async fn sync_raw(
     responder: AppState,
-    namespace: &str,
-    digest: serde_json::Value,
-    ops: serde_json::Value,
-) -> serde_json::Value {
-    let body = serde_json::json!({ "namespace": namespace, "digest": digest, "ops": ops });
-    let req = Request::builder()
+    req: &RingSyncRequest,
+) -> (StatusCode, Option<RingSyncResponse>) {
+    let http = Request::builder()
         .method("POST")
         .uri("/internal/ring/sync")
         .header(axum::http::header::CONTENT_TYPE, "application/json")
-        .body(Body::from(serde_json::to_vec(&body).unwrap()))
+        .body(Body::from(serde_json::to_vec(req).unwrap()))
         .unwrap();
     let resp = commonwealth_api::server::internal_router(responder)
-        .oneshot(req)
+        .oneshot(http)
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::OK);
+    let status = resp.status();
     let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
         .await
         .unwrap();
-    serde_json::from_slice(&bytes).unwrap()
+    (status, serde_json::from_slice(&bytes).ok())
+}
+
+/// [`sync_raw`] for the exchanges that are supposed to succeed.
+async fn sync_once(
+    responder: AppState,
+    namespace: &str,
+    digest: Digest,
+    ops: Vec<Op<SignedOp>>,
+) -> RingSyncResponse {
+    let (status, body) = sync_raw(
+        responder,
+        &RingSyncRequest {
+            namespace: namespace.to_string(),
+            digest,
+            ops,
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    body.expect("a 200 must carry a RingSyncResponse")
 }
 
 /// **The partition drill, over HTTP.** Two nodes, two journals, two keys.
@@ -550,22 +586,13 @@ async fn two_nodes_converge_through_the_sync_route() {
     );
 
     // A dials B. Call 1 pulls; call 2 pushes what B's digest says it lacks.
-    let mine = serde_json::to_value(led_a.digest().unwrap()).unwrap();
-    let first = sync_once(state_b.clone(), NS, mine, serde_json::json!([])).await;
-    let pulled: Vec<_> = serde_json::from_value(first["ops"].clone()).unwrap();
-    assert_eq!(led_a.ingest_all(&pulled).unwrap(), 1);
+    let first = sync_once(state_b.clone(), NS, led_a.digest().unwrap(), Vec::new()).await;
+    assert_eq!(led_a.ingest_all(&first.ops).unwrap(), 1);
 
-    let theirs = serde_json::from_value(first["digest"].clone()).unwrap();
-    let for_b = led_a.ops_missing_from(&theirs).unwrap();
+    let for_b = led_a.ops_missing_from(&first.digest).unwrap();
     assert_eq!(for_b.len(), 1);
-    let second = sync_once(
-        state_b.clone(),
-        NS,
-        serde_json::to_value(led_a.digest().unwrap()).unwrap(),
-        serde_json::to_value(&for_b).unwrap(),
-    )
-    .await;
-    assert_eq!(second["ingested"], 1);
+    let second = sync_once(state_b.clone(), NS, led_a.digest().unwrap(), for_b).await;
+    assert_eq!(second.ingested, 1);
 
     // One answer, on both nodes, with nothing missing. The answer is the ACT
     // ORDER — which is everything the rail promises, and everything an app's
@@ -587,15 +614,9 @@ async fn two_nodes_converge_through_the_sync_route() {
     assert_eq!(who, vec!["alex", "bo"], "both acts, both attributed");
 
     // Steady state: another exchange moves nothing and changes nothing.
-    let again = sync_once(
-        state_b,
-        NS,
-        serde_json::to_value(led_a.digest().unwrap()).unwrap(),
-        serde_json::json!([]),
-    )
-    .await;
-    assert_eq!(again["ops"].as_array().unwrap().len(), 0);
-    assert_eq!(again["ingested"], 0);
+    let again = sync_once(state_b, NS, led_a.digest().unwrap(), Vec::new()).await;
+    assert!(again.ops.is_empty());
+    assert_eq!(again.ingested, 0);
     assert_eq!(led_a.admit(&roster, &Ed25519Verifier).unwrap(), fa);
 
     // And the ring app on A now sees B's expense through the rail it can
@@ -629,6 +650,281 @@ async fn a_node_without_ring_storage_refuses_the_exchange() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+// ── the convergence ceiling ──────────────────────────────────
+//
+// `ops_missing_from` returns everything a peer lacks in ONE body, and the
+// receiver caps a request body at `MAX_REQUEST_BODY_BYTES`. Nothing in the
+// tree asserted what happens when those two meet. These four do.
+//
+// THE CEILING IS IN BYTES, NOT OPS, so every figure below names its fixture.
+// Measured on this host with the production types (railread, release, and
+// reproduced by `the_measured_wire_cost_of_one_op` below):
+//
+//   fixture body   B/op on the wire   ops in 8 MiB
+//   594 B (order 2 §2's ledger)   873   9,608
+//   ~332 B (an expense row)       609  13,774
+//   ~274 B (a work-atlas obs.)    552  15,196
+//
+// The 594-byte fixture is the one carried here because it is the one order 2
+// priced, and it puts the ceiling nearest the round number the order named.
+
+/// A `Payload` whose serialised `RailAct::Record` body is at least `target`
+/// bytes. Constructed rather than guessed: the envelope overhead is measured
+/// by `body_json` on each pass instead of being hard-coded, so a change to
+/// the act's wire shape moves the fixture with it.
+fn body_of_size(target: usize) -> Payload {
+    let mut filler = target.saturating_sub(40);
+    loop {
+        let payload = Payload::new(serde_json::json!({ "b": "x".repeat(filler) })).unwrap();
+        let got = commonwealth_rail::body_json(&RailAct::Record {
+            payload: payload.clone(),
+        })
+        .len();
+        if got >= target {
+            return payload;
+        }
+        filler += target - got;
+    }
+}
+
+/// The fixture order 2 §2's ceiling table is quoted against.
+const CEILING_FIXTURE_BODY_BYTES: usize = 594;
+
+/// `n` real signed ops on disk, one `append_all`. Every op is signed for its
+/// own `seq` and `ts`, so each carries a distinct content-derived `OpId` and
+/// a signature that actually verifies — a fixture of clones would make the
+/// convergence assertion below meaningless.
+fn seed(journal: &RingJournal, key: &SigningKey, n: usize) -> usize {
+    let payload = body_of_size(CEILING_FIXTURE_BODY_BYTES);
+    let actor = key.actor();
+    let mut ops = Vec::with_capacity(n);
+    for seq in 0..n as u64 {
+        let ts = 1_700_000_000i64 + seq as i64;
+        let act = RailAct::Record {
+            payload: payload.clone(),
+        };
+        let sig = commonwealth_rail::sign_ring_op(
+            key,
+            journal.namespace(),
+            ts,
+            seq,
+            &commonwealth_rail::body_json(&act),
+        );
+        ops.push(Op::new(SignedOp { seq, sig, act }, ts, actor.clone()));
+    }
+    journal.ingest_all(&ops).unwrap()
+}
+
+fn solo_roster(key: &SigningKey) -> Roster {
+    let mut m = std::collections::BTreeMap::new();
+    m.insert(Person::from("alex"), vec![key.actor()]);
+    Roster::new(m)
+}
+
+/// A daemon holding a ring under `dir`, signing as `key`. `n = 0` leaves it a
+/// node that has never seen this ring at all — no `rings/<ns>` directory,
+/// which is the state that matters below.
+fn node(
+    dir: &std::path::Path,
+    key: &SigningKey,
+    n: usize,
+) -> (AppState, std::sync::Arc<RingJournal>) {
+    let state = bare_state();
+    let rail = Arc::new(RingRail::new(dir, Arc::new(key.clone())));
+    let journal = rail.journal(NS).unwrap();
+    if n > 0 {
+        journal.set_roster(&solo_roster(key)).unwrap();
+        assert_eq!(seed(&journal, key, n), n, "the fixture must land in full");
+    }
+    state.install_ring_rail(rail);
+    (state, journal)
+}
+
+/// **The ceiling is a measurement, not arithmetic.** Pins the per-op wire
+/// cost of the fixture the other three tests use, so a change to the op
+/// envelope moves this number here — where it is one assertion — rather than
+/// silently moving the ceiling three tests below assume.
+#[tokio::test]
+async fn the_measured_wire_cost_of_one_op_puts_the_ceiling_under_ten_thousand() {
+    let dir = tempfile::tempdir().unwrap();
+    let key = SigningKey::from_bytes(&[1u8; 32]);
+    const N: usize = 500;
+    let (_state, journal) = node(dir.path(), &key, N);
+
+    let body = RingSyncRequest {
+        namespace: NS.to_string(),
+        digest: journal.digest().unwrap(),
+        ops: journal.ops_missing_from(&Digest::new()).unwrap(),
+    };
+    assert_eq!(body.ops.len(), N, "an empty digest asks for everything");
+    let per_op = serde_json::to_vec(&body).unwrap().len() / N;
+    let ceiling = commonwealth_api::server::MAX_REQUEST_BODY_BYTES / per_op;
+
+    assert!(
+        (860..=890).contains(&per_op),
+        "the {CEILING_FIXTURE_BODY_BYTES}-byte fixture costs {per_op} B/op on \
+         the wire, not the ~873 the ceiling table assumes"
+    );
+    assert!(
+        ceiling < 10_000,
+        "the ceiling moved to {ceiling} ops — retention, chunking or a bigger \
+         body limit landed, and the three tests below must move with it"
+    );
+}
+
+/// **The named failing input, and the whole finding.** One exchange carrying
+/// a 10,000-op journal is REFUSED by the receiver's body limit.
+///
+/// The 9,000-op arm is the negative control: the same code path, the same
+/// fixture, one exchange under the ceiling, and it is served. Without it a
+/// 413 would be evidence of nothing — a route that refuses everything would
+/// pass just as well.
+#[tokio::test]
+async fn one_exchange_past_the_ceiling_is_refused_by_the_receivers_body_limit() {
+    let key = SigningKey::from_bytes(&[1u8; 32]);
+    let receiver = tempfile::tempdir().unwrap();
+
+    for (n, want) in [
+        (9_000usize, StatusCode::OK),
+        (10_000, StatusCode::PAYLOAD_TOO_LARGE),
+    ] {
+        let sender_dir = tempfile::tempdir().unwrap();
+        let (_sender, journal) = node(sender_dir.path(), &key, n);
+        // A node that has never seen this ring: it holds nothing, so
+        // `ops_missing_from(&empty)` is the sender's whole journal.
+        let (peer, _) = node(receiver.path(), &SigningKey::from_bytes(&[2u8; 32]), 0);
+
+        let push = RingSyncRequest {
+            namespace: NS.to_string(),
+            digest: journal.digest().unwrap(),
+            ops: journal.ops_missing_from(&Digest::new()).unwrap(),
+        };
+        let bytes = serde_json::to_vec(&push).unwrap().len();
+        let (status, _) = sync_raw(peer, &push).await;
+        assert_eq!(
+            status,
+            want,
+            "{n} ops = {bytes} B against a {} B limit",
+            commonwealth_api::server::MAX_REQUEST_BODY_BYTES
+        );
+    }
+}
+
+/// **What the refusal costs, and it is a silent wrong answer.**
+///
+/// The peer that could not be pushed to does not report a failure. It reports
+/// a ring: zero ops, zero gaps, `is_complete()` TRUE. "I hold the whole
+/// journal and there is nothing in it" and "the push that would have given me
+/// the journal was refused" are different facts, and this collapses them into
+/// the plausible one (ARCH §18.3).
+///
+/// Nothing on either side says otherwise:
+///
+/// - The receiver never runs the handler, so `RING_PAYLOAD_WARN_BYTES`
+///   (`ring_sync.rs:43`) cannot fire — the body limit rejects at the
+///   extractor. That warning is computed on the RESPONSE (`:113-136`), which
+///   is the direction with no limit at all, so the one instrument the rail
+///   has watches the half that works.
+/// - The sender maps the status to `Err("HTTP 413")`
+///   (`sovereign-mesh/src/ring_sync.rs:246`), and `run_one_round` logs it at
+///   **debug** and counts the peer as `peers_unreachable` (`:171-183`). A
+///   reachable peer refusing an oversized body is filed as an unreachable
+///   one.
+#[tokio::test]
+async fn a_refused_push_leaves_the_peer_reporting_a_complete_and_empty_ring() {
+    let key = SigningKey::from_bytes(&[1u8; 32]);
+    let sender_dir = tempfile::tempdir().unwrap();
+    let peer_dir = tempfile::tempdir().unwrap();
+    let (_sender, journal) = node(sender_dir.path(), &key, 10_000);
+    let (peer_state, peer_journal) = node(peer_dir.path(), &SigningKey::from_bytes(&[2u8; 32]), 0);
+    peer_journal.set_roster(&solo_roster(&key)).unwrap();
+
+    let (status, body) = sync_raw(
+        peer_state,
+        &RingSyncRequest {
+            namespace: NS.to_string(),
+            digest: journal.digest().unwrap(),
+            ops: journal.ops_missing_from(&Digest::new()).unwrap(),
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    assert!(
+        body.is_none(),
+        "the refusal carries no RingSyncResponse — the handler never ran"
+    );
+
+    let after = peer_journal
+        .admit(&solo_roster(&key), &Ed25519Verifier)
+        .unwrap();
+    assert!(after.ops.is_empty(), "nothing arrived");
+    assert!(
+        after.is_complete(),
+        "THIS is the defect: a peer that was refused the journal reports no \
+         gaps. Gaps: {:?}",
+        after.gaps
+    );
+}
+
+/// **The ceiling is one-directional, and that is where the cheap fix is.**
+///
+/// `DefaultBodyLimit` bounds the REQUEST. The same journal comes back in a
+/// RESPONSE with no cap at all — so a peer that PULLS converges at a size
+/// where the identical peer being PUSHED to is refused.
+///
+/// It does not rescue a fresh peer today, and the reason is four lines in the
+/// mesh loop: `run_one_round` iterates `rail.namespaces()`, read from disk,
+/// and returns early when it is empty (`sovereign-mesh/src/ring_sync.rs:117`,
+/// `:124`). A node that has never seen this ring has no `rings/<ns>`
+/// directory, so it never dials anybody about it. **The only direction that
+/// can bootstrap it is the bounded one.**
+#[tokio::test]
+async fn the_pull_direction_carries_what_the_push_direction_is_refused() {
+    let key = SigningKey::from_bytes(&[1u8; 32]);
+    let holder_dir = tempfile::tempdir().unwrap();
+    let (holder, journal) = node(holder_dir.path(), &key, 10_000);
+
+    // The same 10,000 ops the push arm above was refused, pulled instead: a
+    // fresh peer's empty digest, no ops offered.
+    let pull = RingSyncRequest {
+        namespace: NS.to_string(),
+        digest: Digest::new(),
+        ops: Vec::new(),
+    };
+    let (status, body) = sync_raw(holder, &pull).await;
+    assert_eq!(status, StatusCode::OK, "the pull is served");
+    let body = body.expect("a 200 carries a response");
+    assert_eq!(body.ops.len(), 10_000, "the whole journal, in one response");
+
+    let bytes = serde_json::to_vec(&body).unwrap().len();
+    assert!(
+        bytes > commonwealth_api::server::MAX_REQUEST_BODY_BYTES,
+        "the control is void unless the response really is over the limit: \
+         {bytes} B"
+    );
+
+    // And the ops that came back are the real thing, not a truncated body:
+    // a fresh peer ingesting them lands a complete ring.
+    let fresh_dir = tempfile::tempdir().unwrap();
+    let (_fresh, fresh_journal) = node(fresh_dir.path(), &SigningKey::from_bytes(&[2u8; 32]), 0);
+    fresh_journal.set_roster(&solo_roster(&key)).unwrap();
+    assert_eq!(fresh_journal.ingest_all(&body.ops).unwrap(), 10_000);
+    let admitted = fresh_journal
+        .admit(&solo_roster(&key), &Ed25519Verifier)
+        .unwrap();
+    assert_eq!(admitted.ops.len(), 10_000);
+    assert!(admitted.is_complete(), "gaps: {:?}", admitted.gaps);
+    assert_eq!(
+        admitted.ops.len(),
+        journal
+            .admit(&solo_roster(&key), &Ed25519Verifier)
+            .unwrap()
+            .ops
+            .len(),
+        "two nodes, one answer"
+    );
 }
 
 // ── the rail listener, where the grant is the only way in ────
