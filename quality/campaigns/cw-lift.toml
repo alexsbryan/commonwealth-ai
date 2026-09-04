@@ -195,7 +195,7 @@ kill         = "K2 — AppState (commonwealth-api/src/state.rs:585, 2,659 lines,
 id           = "cw-twin-visibility"
 one_line     = "CLAIM: we can SEE a dead twin, not just a coupling"
 derives_from = "OFF-PLAN. Added 2026-09-04 after auditing what the campaign's instruments can actually detect."
-status       = "open"
+status       = "answered-negative"
 # THE CAMPAIGN'S HEADLINE IS TWIN REMOVAL AND NOTHING MEASURES A TWIN.
 #
 # scripts/nc-boundary.py measures REFERENCE WIDTH ACROSS AN EDGE. A perfect
@@ -216,10 +216,58 @@ status       = "open"
 # the copy everyone ran had one"), the discovery gossip.rs twin, tier_router.rs.
 # An instrument that cannot find those cannot find the live ones. noun-
 # convergence was parked for exactly this failure.
+#
+# ── RAN 2026-09-04. NEGATIVE RESULT, AND IT RESHAPES THE CAMPAIGN. ──
+#
+# §19: nothing was minted. `svrn code dry-report` already does this and nc-22b
+# already ran it repo-wide.
+#
+# INSTRUMENT 1 — dry-report. VALIDATED BOTH WAYS.
+#   negative control PASSED: zero symbols from any of Phase 0's deleted files
+#   (gossip/peering/scheduler/tier_router/orchestrator). The index describes
+#   a9b77335c, exactly HEAD — which is the freshness nc-redundant lacked.
+#   positive control PASSED by eye on both tiers (`is_live` byte-identical
+#   across guest_grant/ingest_grant; `revoke_fails_closed_immediately` at 0.959
+#   genuinely near-identical).
+#   CENSUS: 401 groups / 826 members repo-wide. Groups spanning sovereign-mesh
+#   x commonwealth: TWO, ~20 lines (`from` 13L, `next_u64` 7L). For contrast,
+#   corpus-engine x sovereign is 21 groups.
+#   => THERE IS NO COPY-PASTE TWIN PROBLEM BETWEEN THE TWO. The campaign
+#      assumed one.
+#
+# INSTRUMENT 2 — SCIP zero-caller census. FAILED ITS CONTROL; NUMBER VOID.
+#   First answer 3,960 lines / 46 symbols. The canary is `drop` (impl Drop,
+#   never explicitly called). Top four hand-verified as trait impls dispatched
+#   through traits declared in corpus-engine / commonwealth-api (is_leader 301,
+#   is_owner_of 296, on_chunks_committed_with_docs 159, warm_shard 109).
+#   Filtering names declared in ANY workspace trait block (1,255 of them):
+#   3,960 dropped, ZERO survive.
+#   => THERE IS NO ZERO-CALLER DEAD CODE IN sovereign-mesh AT >= 25 LINES.
+#
+# WHAT THE CAMPAIGN IS ACTUALLY CHASING IS A CONCEPTUAL FORK — the same
+# decision implemented twice from scratch, sharing no bytes and no embedding
+# neighbourhood:
+#     what orders events?      rail total order   vs  LWW, unordered
+#     who may write?           roster admission   vs  nothing
+#     how do peers converge?   digest a-e, 60s    vs  full snapshot, 10s
+# NEITHER INSTRUMENT CAN SEE THAT AND NEITHER EVER COULD. BOUNDARY.md rule 2
+# named it correctly as §10.6 at crate scale; it is not a clone.
+#
+# CONSEQUENCE FOR SEQUENCING: the cut that removes it is deleting the unsigned
+# 10s full-snapshot push (sovereign-mesh/src/gossip.rs:783+) = Phase 2, which
+# needs the rail to be a crate = 1b-1d, which is ADDITIVE. "Cuts before
+# additive work" is not available on this branch of the work. Said plainly
+# rather than by manufacturing a cut to satisfy it.
+#
+# THE SUCCESSOR INSTRUMENT IS NOT A PROGRAM. A DECIDER CENSUS: enumerate the
+# substrate's six-to-eight questions (order, admission, dedup, convergence,
+# identity, membership) and list every implementation of each. Three rows of it
+# were filled in by hand in an afternoon, above.
 floor        = 0.0
 target       = 1.0
 direction    = "higher_is_better"
-instrument   = "(none yet — building it IS the bar). Passes only after a positive AND a negative control."
+status_note  = "kill bar FIRED as written — dry-report is a similarity report and is shipped as one; it answers who copy-pasted, never who re-derived"
+instrument   = "svrn code dry-report (textual, validated) — NOT sufficient for conceptual forks; the decider census is the open successor"
 kill         = "the instrument cannot distinguish 'same shape, both live and both needed' from 'same shape, one dead'. Then it is a similarity report, ship it as one — a ranked list of lookalikes read as a deletion worklist is worse than no list."
 
 [[bar]]
