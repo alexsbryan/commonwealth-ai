@@ -28,8 +28,12 @@ commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" 
 # The ring rail's storage type, installed onto `AppState` at startup. A
 # DIRECT dep on the crate that OWNS `RingRail`, not on a re-export shim, so
 # this crate and commonwealth-api cannot end up on two versions of one
-# logical type (ARCH §8.3).
-commonwealth-knowledge = { path = "../../../commonwealth/crates/commonwealth-knowledge" }
+# logical type (ARCH §8.3). Until cw-lift 1c that comment was aspirational:
+# the dep was on `commonwealth-knowledge` and `RingRail` arrived through its
+# `rail` re-export. `commonwealth-knowledge` is GONE from this crate — the two
+# rail sites were its only references — so the mesh no longer links the
+# knowledge layer to install a journal.
+commonwealth-rail = { workspace = true }
 commonwealth-app = { path = "../../../commonwealth/crates/commonwealth-app" }
 # DST harness (FaultTransport / FaultProxy / SimulatedMesh) for the
 # deterministic-simulation tests in `dst.rs` + `tests/dst_scenarios.rs`.

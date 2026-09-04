@@ -192,7 +192,7 @@ async fn exchange(
     http: &reqwest::Client,
     url: &str,
     namespace: &str,
-    journal: &commonwealth_knowledge::RingJournal,
+    journal: &commonwealth_rail::RingJournal,
 ) -> Result<(usize, usize), String> {
     // Call 1 — learn what they have, take what we lack.
     let mine = journal.digest().map_err(|e| e.to_string())?;

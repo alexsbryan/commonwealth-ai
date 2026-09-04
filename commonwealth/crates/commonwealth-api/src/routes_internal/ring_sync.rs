@@ -18,7 +18,7 @@
 //! either — the difference is that here it does not matter. An op carries its
 //! author in an Ed25519 signature over a message that binds the namespace, so
 //! a forged or replayed op does not become a balance: it becomes a
-//! [`RailGap`](commonwealth_knowledge::RailGap) the next time anybody
+//! [`RailGap`](commonwealth_rail::RailGap) the next time anybody
 //! folds. Checking here instead would put a second answer beside the fold's
 //! (ARCH §10.6), and the fold's is the one that has to be right anyway,
 //! because ops also arrive from disk.
@@ -31,8 +31,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use commonwealth_knowledge::rail::{Digest, SignedOp};
-use corpus_engine::oplog::Op;
+use commonwealth_rail::{Digest, Op, SignedOp};
 use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;

@@ -8,11 +8,6 @@ license.workspace = true
 commonwealth-core = { path = "../commonwealth-core" }
 commonwealth-state = { path = "../commonwealth-state" }
 corpus-engine = { workspace = true }
-# The ring rail left this crate on 2026-09-04 (cw-lift 1b); `src/lib.rs`
-# re-exports it so no consumer moved. Order 1c drops both the facade and this
-# line.
-commonwealth-rail = { workspace = true }
-
 serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }

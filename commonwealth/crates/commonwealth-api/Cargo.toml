@@ -13,6 +13,12 @@ commonwealth-transport = { workspace = true }
 commonwealth-discovery = { workspace = true }
 commonwealth-inference = { workspace = true }
 commonwealth-knowledge = { workspace = true }
+# The ring rail, named DIRECTLY since cw-lift 1c. It used to be reached
+# through `commonwealth_knowledge::rail`, which was 1b's re-export facade;
+# the whole point of the split is that a rail consumer does not link the
+# knowledge layer to get one. This crate still needs `commonwealth-knowledge`
+# for grants, the work queue and the shard manager — that is a separate edge.
+commonwealth-rail = { workspace = true }
 commonwealth-app = { workspace = true }
 commonwealth-state = { workspace = true }
 # `treesitter` is REQUIRED, not incidental: `next_edit_syntax` reads the

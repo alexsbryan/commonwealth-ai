@@ -24,8 +24,8 @@ use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use commonwealth_knowledge::rail::{RailAct, RailError, RingJournal, RingRail};
 use commonwealth_knowledge::GuestGrant;
+use commonwealth_rail::{RailAct, RailError, RingJournal, RingRail};
 use serde::Deserialize;
 
 use crate::client_auth::Guest;
@@ -125,7 +125,7 @@ fn journal_for(
 ///
 /// The act's payload is the app's, and this route does not read inside it.
 /// What it does check is that the payload has a canonical form — see
-/// [`Payload`](commonwealth_knowledge::Payload) — because a body whose bytes
+/// [`Payload`](commonwealth_rail::Payload) — because a body whose bytes
 /// two nodes would spell differently cannot be signed once and verified
 /// everywhere.
 pub async fn append(
@@ -199,8 +199,7 @@ pub async fn log(
         Ok(pair) => pair,
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
-    let admission =
-        commonwealth_knowledge::rail::admit(&ops, &skipped, &roster, journal.namespace());
+    let admission = commonwealth_rail::admit(&ops, &skipped, &roster, journal.namespace());
     // Each gap ships its own sentence. The renderer is `RailGap`'s `Display`
     // and it lives in the rail — carrying the rendered string means the
     // terminal, a ring app's page and the append door's 422 all say the same

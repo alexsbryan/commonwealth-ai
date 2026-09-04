@@ -29,8 +29,8 @@ use commonwealth_api::server::client_router;
 use commonwealth_api::state::AppState;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
-use commonwealth_knowledge::rail::{Payload, Person, RailAct, RingRail, RingSigner, Roster};
 use commonwealth_knowledge::Scope;
+use commonwealth_rail::{Payload, Person, RailAct, RingRail, RingSigner, Roster};
 use ed25519_dalek::SigningKey;
 use tower::ServiceExt;
 

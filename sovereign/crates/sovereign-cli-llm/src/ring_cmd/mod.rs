@@ -46,7 +46,6 @@
 //! [`Scope::Rails`]: commonwealth_knowledge::Scope::Rails
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 
 /// A dev grant lives as long as the dev server, and a housemate leaves one
 /// running all evening. Long enough not to expire mid-session, short enough
@@ -91,15 +90,21 @@ use scaffold::run_new;
 
 // ── shared plumbing ──────────────────────────────────────────
 
-/// Where the daemon keeps ring journals. The daemon installs its `RingRail`
-/// on its data dir, and `sovereign_root()` IS that dir — the same joining the
-/// daemon does for `indexes/`, `recipes/` and the rest. Named once, here, so
-/// the CLI writing a roster and the daemon reading it cannot drift onto two
-/// paths (ARCH §10.6).
-fn ring_dir(namespace: &str) -> PathBuf {
-    sovereign_cli_shared::dirs::sovereign_root()
-        .join("rings")
-        .join(namespace)
+/// This node's ring journal for one namespace.
+///
+/// Opening one is free — [`RingJournal::open`] touches no disk — and it is
+/// how the CLI and the daemon stay on ONE path and ONE roster serialisation.
+/// Until cw-lift 1c this module joined `rings/<ns>/roster.json` itself and
+/// wrote it with its own `to_string_pretty`, which was a second answer to a
+/// question a ring cannot afford two answers to (ARCH §10.6). `sovereign_root()`
+/// IS the daemon's data dir, which is what makes the two agree.
+///
+/// It also gains the namespace check for free: the daemon refuses to open a
+/// namespace that is not a plain directory name, so a roster written under
+/// one was a file nothing would ever read.
+fn ring_journal(namespace: &str) -> Result<commonwealth_rail::RingJournal, String> {
+    commonwealth_rail::RingJournal::open(&sovereign_cli_shared::dirs::sovereign_root(), namespace)
+        .map_err(|e| e.to_string())
 }
 
 /// Read the daemon's client port from config rather than hardcoding 9741 —
@@ -223,7 +228,7 @@ async fn run_roster(args: &[String]) -> i32 {
 fn self_actor() -> Result<String, String> {
     let data_dir = sovereign_cli_shared::dirs::sovereign_root();
     let key = commonwealth_transport::identity::load_or_generate_node_key(&data_dir);
-    Ok(commonwealth_knowledge::rail::actor_of(&key))
+    Ok(commonwealth_rail::actor_of(&key))
 }
 
 async fn roster_add(namespace: &str, args: &[String]) -> i32 {
@@ -257,21 +262,29 @@ async fn roster_add(namespace: &str, args: &[String]) -> i32 {
         return 2;
     }
 
-    let dir = ring_dir(namespace);
-    let path = dir.join("roster.json");
-    let mut roster: commonwealth_knowledge::Roster = match std::fs::read_to_string(&path) {
-        Ok(raw) => match serde_json::from_str(&raw) {
-            Ok(r) => r,
-            Err(e) => {
-                eprintln!("ring roster add: {} is not readable: {e}", path.display());
-                return 1;
-            }
-        },
-        Err(_) => commonwealth_knowledge::Roster::default(),
+    let journal = match ring_journal(namespace) {
+        Ok(j) => j,
+        Err(e) => {
+            eprintln!("ring roster add: {e}");
+            return 1;
+        }
+    };
+    let path = journal.roster_path();
+    // A MISSING roster is an empty ring; an UNREADABLE one is an error and
+    // says so. The hand-rolled read this replaced defaulted on any read
+    // failure at all, so a permission problem silently became "nobody is in
+    // this ring" and the next write dropped every key already in it
+    // (ARCH §18.3).
+    let mut roster = match journal.roster() {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("ring roster add: {} is not readable: {e}", path.display());
+            return 1;
+        }
     };
     let entry = roster
         .members
-        .entry(commonwealth_knowledge::Person::from(person))
+        .entry(commonwealth_rail::Person::from(person))
         .or_default();
     if entry.iter().any(|k| k == &key) {
         println!("{person} already signs with that key in `{namespace}`.");
@@ -279,18 +292,7 @@ async fn roster_add(namespace: &str, args: &[String]) -> i32 {
     }
     entry.push(key.clone());
 
-    if let Err(e) = std::fs::create_dir_all(&dir) {
-        eprintln!("ring roster add: {}: {e}", dir.display());
-        return 1;
-    }
-    let rendered = match serde_json::to_string_pretty(&roster) {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("ring roster add: {e}");
-            return 1;
-        }
-    };
-    if let Err(e) = std::fs::write(&path, rendered) {
+    if let Err(e) = journal.set_roster(&roster) {
         eprintln!("ring roster add: write {}: {e}", path.display());
         return 1;
     }

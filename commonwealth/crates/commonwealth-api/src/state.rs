@@ -727,7 +727,7 @@ pub struct AppStateInner {
     /// The signer is a closure-shaped seam for the same reason
     /// [`AppStateInner::self_dial_signer`] is: `AppState` never holds raw key
     /// material and this crate needs no crypto dependency.
-    pub ring_rail: std::sync::RwLock<Option<Arc<commonwealth_knowledge::rail::RingRail>>>,
+    pub ring_rail: std::sync::RwLock<Option<Arc<commonwealth_rail::RingRail>>>,
     /// Bearer token required of non-loopback callers on the client API
     /// (`:9741`). `None` (the default) means "no token configured" —
     /// the [`crate::client_auth`] layer then admits ONLY loopback
@@ -1404,7 +1404,7 @@ impl AppState {
     }
 
     /// The ring rail's storage, or `None` if the daemon never installed one.
-    pub fn ring_rail(&self) -> Option<Arc<commonwealth_knowledge::rail::RingRail>> {
+    pub fn ring_rail(&self) -> Option<Arc<commonwealth_rail::RingRail>> {
         self.inner
             .ring_rail
             .read()
@@ -1414,7 +1414,7 @@ impl AppState {
 
     /// Install the ring rail's storage. The daemon calls this at startup with
     /// its data directory and a signer built from the node `SigningKey`.
-    pub fn install_ring_rail(&self, rail: Arc<commonwealth_knowledge::rail::RingRail>) {
+    pub fn install_ring_rail(&self, rail: Arc<commonwealth_rail::RingRail>) {
         *self
             .inner
             .ring_rail

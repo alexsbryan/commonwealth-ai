@@ -2634,7 +2634,7 @@ impl EmbeddedDaemon {
             // (503) instead of answering an empty ledger, so leaving it out
             // on some paths would make "this daemon cannot keep a ledger"
             // and "your ring is empty" the same observation.
-            app_state.install_ring_rail(Arc::new(commonwealth_knowledge::rail::RingRail::new(
+            app_state.install_ring_rail(Arc::new(commonwealth_rail::RingRail::new(
                 &self.data_dir,
                 Arc::new(identity_key.clone()),
             )));

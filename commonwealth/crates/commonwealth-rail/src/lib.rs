@@ -41,6 +41,24 @@ fn valid_namespace(ns: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
 }
 
+/// Every ring this node holds, as a directory. The ONE place the literal
+/// `rings` is spelled — [`ring_dir`] and [`RingRail::namespaces`] are its two
+/// callers and there is no third spelling in the workspace (ARCH §10.6).
+fn rings_root(root: &Path) -> PathBuf {
+    root.join("rings")
+}
+
+/// Where one ring namespace keeps its journal and its roster:
+/// `<root>/rings/<namespace>/`.
+///
+/// A caller that holds a [`RingJournal`] reads [`RingJournal::dir`] or
+/// [`RingJournal::roster_path`] instead — those are the same join and they
+/// also carry the namespace check. This is for the caller that has a root and
+/// a name and nothing else.
+fn ring_dir(root: &Path, namespace: &str) -> PathBuf {
+    rings_root(root).join(namespace)
+}
+
 // ── The rail's storage ───────────────────────────────────────
 
 /// Every ring namespace this node holds, and the one key it signs with.
@@ -78,7 +96,7 @@ impl RingRail {
     /// A missing `rings/` directory is an empty list, not an error: a daemon
     /// that has never hosted a ring is a normal daemon.
     pub fn namespaces(&self) -> Result<Vec<String>, RailError> {
-        let dir = self.root.join("rings");
+        let dir = rings_root(&self.root);
         let entries = match std::fs::read_dir(&dir) {
             Ok(e) => e,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -129,7 +147,7 @@ impl RingJournal {
         if !valid_namespace(namespace) {
             return Err(RailError::BadNamespace(namespace.to_string()));
         }
-        let dir = root.join("rings").join(namespace);
+        let dir = ring_dir(root, namespace);
         Ok(Self {
             namespace: namespace.to_string(),
             log: Mutex::new(Oplog::new(dir.clone())),
@@ -143,6 +161,13 @@ impl RingJournal {
 
     pub fn dir(&self) -> &Path {
         &self.dir
+    }
+
+    /// This namespace's roster file. One spelling of `roster.json`, so the
+    /// reader, the writer and the error message that names it cannot drift
+    /// onto three files (ARCH §10.6).
+    pub fn roster_path(&self) -> PathBuf {
+        self.dir.join("roster.json")
     }
 
     fn log(&self) -> std::sync::MutexGuard<'_, Oplog<SignedOp>> {
@@ -324,7 +349,7 @@ impl RingJournal {
     /// and an empty ring admits nothing but gaps, which is the honest answer
     /// before anyone has been added.
     pub fn roster(&self) -> Result<Roster, RailError> {
-        let path = self.dir.join("roster.json");
+        let path = self.roster_path();
         match std::fs::read_to_string(&path) {
             Ok(raw) => serde_json::from_str(&raw)
                 .map_err(|e| RailError::Io(format!("{}: {e}", path.display()))),
@@ -336,7 +361,7 @@ impl RingJournal {
     pub fn set_roster(&self, roster: &Roster) -> Result<(), RailError> {
         std::fs::create_dir_all(&self.dir).map_err(|e| RailError::Io(e.to_string()))?;
         let raw = serde_json::to_string_pretty(roster).map_err(|e| RailError::Io(e.to_string()))?;
-        std::fs::write(self.dir.join("roster.json"), raw).map_err(|e| RailError::Io(e.to_string()))
+        std::fs::write(self.roster_path(), raw).map_err(|e| RailError::Io(e.to_string()))
     }
 }
 

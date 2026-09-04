@@ -91,8 +91,12 @@ commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 # `svrn ring` reads and writes the ring roster, and needs the node key the
 # ledger signs with. DIRECT deps on the crates that own `Roster`/`Person`
 # and `load_or_generate_node_key`, so this crate and the daemon cannot end
-# up on two versions of one logical type (ARCH §8.3).
+# up on two versions of one logical type (ARCH §8.3). Since cw-lift 1c the
+# roster half is `commonwealth-rail` and not `commonwealth-knowledge`'s
+# re-export of it; `commonwealth-knowledge` stays only for `Scope`, which
+# `mesh_guest` mints and this module's docs link.
 commonwealth-knowledge = { path = "../../../commonwealth/crates/commonwealth-knowledge" }
+commonwealth-rail = { workspace = true }
 commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport" }
 bytes = { workspace = true }
 corpus-engine = { workspace = true, features = ["treesitter"] }
