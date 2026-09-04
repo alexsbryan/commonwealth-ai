@@ -201,8 +201,17 @@ status       = "open"
 # refs from work outside cw-lift. The campaign is not losing ground; it is
 # being outrun, and a floor that moves under you is worth more visible than a
 # target that flatters.
-floor        = 104.0
-floor_basis  = "python3 scripts/nc-boundary.py against the SCIP index at 997148603, read 2026-09-04; the same script read 95/595 at 83c0caebf, so the +9/+23 gap is the tree moving and not the instrument"
+# RE-MEASURED on a FRESH index at f61d8eea4 (all of Phase 1 landed):
+#   sovereign -> commonwealth   618 refs / 103 types   (was 104 at 997148603)
+# One type came off, from 1c/1d dropping the knowledge-layer edge. The refs did
+# not move, which is consistent: 1d removed a MANIFEST dep held by a single
+# rustdoc link, not references.
+# 4b's OTHER prediction VALIDATED: it forecast commonwealth -> oicp would reach
+# 43 types after the move. Fresh index reads 43 (over 353 refs, where it
+# predicted ~392). Types exact, refs 10% high — recorded because a prediction
+# that lands is as much evidence about the instrument as one that misses.
+floor        = 103.0
+floor_basis  = "python3 scripts/nc-boundary.py against a fresh SCIP index at f61d8eea4, 2026-09-04, after all of Phase 1: 103 types / 618 refs. Was 104/618 at 997148603 and 95/595 at 83c0caebf — the campaign-external drift in that gap is recorded above"
 target       = 100.0
 direction    = "lower_is_better"
 instrument   = "python3 scripts/nc-boundary.py  (read the banner — it names the commit the INDEX describes, not your tree)"
