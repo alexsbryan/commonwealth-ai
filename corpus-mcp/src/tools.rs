@@ -10,7 +10,12 @@
 //!   That the artifact crosses the seam is the point; the atom-grounded
 //!   ranking does not, and this module does not pretend to.
 //! - `corpus_ontology` — what the corpus DECLARED, from `atlas/ontology.json`
-//!   via `corpus_engine_vocab::ontology::OntologyPolicies`.
+//!   through `read_atlas_ontology`, the writer's own reader. The file is an
+//!   `AtlasOntologyFile` envelope (`schema_version`, `ontology_version`,
+//!   `policies`), NOT bare policies: parsing it as `OntologyPolicies` succeeds
+//!   — every field defaults — and yields an empty declaration, which is how
+//!   this host reported wessex-hoard's five declared types as "none" until
+//!   2026-09-04. `ontology_reads_the_envelope_not_bare_policies` pins it.
 //!
 //! Absence is reported, never defaulted (§18.3): a corpus with no atlas says
 //! so by path; a corpus whose index width differs from the endpoint's is
@@ -20,9 +25,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Result};
+use corpus_engine::enrichment::atlas::summary::read_current_summary;
+use corpus_engine::enrichment::atlas::writer::{read_atlas_ontology, AtlasOntologyFile};
 use corpus_engine::{CorpusEngine, CorpusIndex, EmbedFn, ScoredChunk};
 use corpus_engine_vocab::atoms::{AtomEnvelope, AtomsFile};
-use corpus_engine_vocab::ontology::OntologyPolicies;
 use serde_json::{json, Value};
 
 use crate::host::HostProfile;
@@ -143,7 +149,7 @@ impl Server {
         json!([
             {
                 "name": "corpus_list",
-                "description": "List the corpora this host serves, with index width and whether vector search is live for each, and whether an atlas (atoms.json) is present.",
+                "description": "List the corpora this host serves: index width, whether vector search is live, whether an atlas (atoms.json) is present and how many atoms it holds, and whether the corpus declared an ontology.",
                 "inputSchema": { "type": "object", "properties": {} }
             },
             {
@@ -175,7 +181,7 @@ impl Server {
             },
             {
                 "name": "corpus_ontology",
-                "description": "What a corpus DECLARED for its enrichment: the ontology policies recorded in atlas/ontology.json (declared types per kind, vocabulary terms, guidance). Says so if none was recorded.",
+                "description": "What a corpus DECLARED for its enrichment: the ontology recorded in atlas/ontology.json (declared types per kind, vocabulary terms, guidance). Says so if none was recorded. Corpora enriched under a built-in pipeline (SEP's philosophy_atlas, Wikipedia) declare nothing here — their vocabulary is the fixed atom kinds.",
                 "inputSchema": {
                     "type": "object",
                     "properties": { "corpus": corpus_prop },
@@ -196,25 +202,29 @@ impl Server {
     }
 
     fn corpus_list(&self) -> ToolOutcome {
-        let rows: Vec<Value> = self
+        let facts: Vec<(&Served, AtlasFacts)> = self
             .served
             .iter()
-            .map(|s| {
-                let atlas = self.atlas_path(&s.id, "atoms.json").exists();
+            .map(|s| (s, atlas_facts(&self.atlas_dir(&s.id))))
+            .collect();
+        let rows: Vec<Value> = facts
+            .iter()
+            .map(|(s, a)| {
                 json!({
                     "corpus_id": s.id,
                     "embedding_dimensions": s.dims,
                     "vector_search": s.vector,
-                    "has_atlas": atlas,
+                    "has_atlas": a.present,
+                    "atom_count": a.atom_count,
+                    "ontology_declared": a.ontology_declared,
                 })
             })
             .collect();
-        let text = self
-            .served
+        let text = facts
             .iter()
-            .map(|s| {
+            .map(|(s, a)| {
                 format!(
-                    "{} — {}-d, {}{}",
+                    "{} — {}-d, {}, {}",
                     s.id,
                     s.dims,
                     if s.vector {
@@ -222,11 +232,7 @@ impl Server {
                     } else {
                         "full-text only (width mismatch)"
                     },
-                    if self.atlas_path(&s.id, "atoms.json").exists() {
-                        ", atlas present"
-                    } else {
-                        ", no atlas"
-                    }
+                    a.describe()
                 )
             })
             .collect::<Vec<_>>()
@@ -321,8 +327,12 @@ impl Server {
         })
     }
 
+    fn atlas_dir(&self, corpus: &str) -> PathBuf {
+        self.indexes_dir.join(corpus).join("atlas")
+    }
+
     fn atlas_path(&self, corpus: &str, file: &str) -> PathBuf {
-        self.indexes_dir.join(corpus).join("atlas").join(file)
+        self.atlas_dir(corpus).join(file)
     }
 
     fn atoms_lookup(&self, args: &Value) -> ToolOutcome {
@@ -396,64 +406,117 @@ impl Server {
         let Some(corpus) = args["corpus"].as_str() else {
             return refuse("corpus_ontology needs `corpus`");
         };
-        let path = self.atlas_path(corpus, "ontology.json");
-        let raw = match std::fs::read_to_string(&path) {
-            Ok(r) => r,
-            Err(e) => {
-                return refuse(&format!(
-                    "corpus `{corpus}` recorded no ontology at {} ({e}) — either its \
-                     enrichment predates ontology.json or it was never built/pulled here",
-                    path.display()
-                ))
-            }
-        };
-        let policies: OntologyPolicies = match serde_json::from_str(&raw) {
-            Ok(p) => p,
-            Err(e) => {
-                return refuse(&format!(
-                    "{}: not an OntologyPolicies document: {e}",
-                    path.display()
-                ))
-            }
-        };
-        let mut text = format!("Ontology declared by `{corpus}`:\n");
-        if policies.shape.types.is_empty() {
-            text.push_str("- declared types: none (prose-only / version-0 block)\n");
-        } else {
-            let mut by_kind: HashMap<String, Vec<&str>> = HashMap::new();
-            for t in &policies.shape.types {
-                by_kind
-                    .entry(format!("{:?}", t.kind).to_lowercase())
-                    .or_default()
-                    .push(t.name.as_str());
-            }
-            let mut kinds: Vec<_> = by_kind.into_iter().collect();
-            kinds.sort();
-            for (k, names) in kinds {
-                text.push_str(&format!("- {k} types: {}\n", names.join(", ")));
-            }
+        ontology_outcome(corpus, &self.atlas_dir(corpus))
+    }
+}
+
+/// What an atlas dir says about itself WITHOUT parsing `atoms.json` (hundreds
+/// of MB for wikipedia) and without writing anything: the cached
+/// `_summary.json` when it is current for the live atoms file, else presence
+/// alone. Absence of a count is reported as absence, not as zero.
+struct AtlasFacts {
+    present: bool,
+    atom_count: Option<u64>,
+    ontology_declared: bool,
+}
+
+impl AtlasFacts {
+    fn describe(&self) -> String {
+        if !self.present {
+            return "no atlas".to_string();
         }
-        let v = policies.vocabulary();
-        text.push_str(&format!(
-            "- vocabulary: concern=`{}` position=`{}` tension=`{}` absence=`{}` evidence=`{}`\n",
-            v.canonical_concern_term,
-            v.position_term,
-            v.tension_term,
-            v.absence_term,
-            v.evidence_term
+        let count = match self.atom_count {
+            Some(n) => format!("{n} atoms"),
+            None => "atom count not cached".to_string(),
+        };
+        format!(
+            "atlas present ({count}, {})",
+            if self.ontology_declared {
+                "ontology declared"
+            } else {
+                "no declared ontology"
+            }
+        )
+    }
+}
+
+fn atlas_facts(atlas_dir: &Path) -> AtlasFacts {
+    let present = atlas_dir.join("atoms.json").exists();
+    let summary = present.then(|| read_current_summary(atlas_dir)).flatten();
+    AtlasFacts {
+        present,
+        atom_count: summary.as_ref().map(|s| s.atom_count),
+        // The summary's projection is `None` for an undeclared corpus; a stale
+        // or missing summary falls back to the file itself so a fresh atlas
+        // is not reported as undeclared.
+        ontology_declared: match &summary {
+            Some(s) => s.ontology.is_some(),
+            None => read_atlas_ontology(atlas_dir).is_some_and(|f| f.policies.has_declarations()),
+        },
+    }
+}
+
+/// The `corpus_ontology` result for one atlas dir. Three outcomes, each
+/// distinguishable by the caller (§18.3): the file is absent (refused, by
+/// path); the file is present but not an [`AtlasOntologyFile`] (refused —
+/// `read_atlas_ontology` warns and returns `None`, and this host does not
+/// re-open the file to say more); the file parsed.
+fn ontology_outcome(corpus: &str, atlas_dir: &Path) -> ToolOutcome {
+    let path = atlas_dir.join(AtlasOntologyFile::FILE);
+    if !path.exists() {
+        return refuse(&format!(
+            "corpus `{corpus}` recorded no ontology at {} — either its enrichment \
+             predates ontology.json, it was enriched under a built-in pipeline that \
+             declares nothing, or it was never built/pulled here",
+            path.display()
         ));
-        if !policies.prose.guidance.trim().is_empty() {
-            text.push_str(&format!(
-                "- guidance: {}\n",
-                truncate(policies.prose.guidance.trim(), 400)
-            ));
+    }
+    let Some(file) = read_atlas_ontology(atlas_dir) else {
+        return refuse(&format!(
+            "{}: present but not an AtlasOntologyFile document (schema {}); see the host log",
+            path.display(),
+            AtlasOntologyFile::SCHEMA_VERSION
+        ));
+    };
+    let policies = &file.policies;
+    let mut text = format!(
+        "Ontology declared by `{corpus}` (ontology v{}, file schema {}):\n",
+        file.ontology_version, file.schema_version
+    );
+    if policies.shape.types.is_empty() {
+        text.push_str("- declared types: none (prose-only / version-0 block)\n");
+    } else {
+        let mut by_kind: HashMap<String, Vec<&str>> = HashMap::new();
+        for t in &policies.shape.types {
+            by_kind
+                .entry(format!("{:?}", t.kind).to_lowercase())
+                .or_default()
+                .push(t.name.as_str());
         }
-        let structured = serde_json::to_value(&policies).ok();
-        ToolOutcome {
-            text: text.trim_end().to_string(),
-            is_error: false,
-            structured,
+        let mut kinds: Vec<_> = by_kind.into_iter().collect();
+        kinds.sort();
+        for (k, names) in kinds {
+            text.push_str(&format!("- {k} types: {}\n", names.join(", ")));
         }
+    }
+    let v = policies.vocabulary();
+    text.push_str(&format!(
+        "- vocabulary: concern=`{}` position=`{}` tension=`{}` absence=`{}` evidence=`{}`\n",
+        v.canonical_concern_term, v.position_term, v.tension_term, v.absence_term, v.evidence_term
+    ));
+    if !policies.prose.guidance.trim().is_empty() {
+        text.push_str(&format!(
+            "- guidance: {}\n",
+            truncate(policies.prose.guidance.trim(), 400)
+        ));
+    }
+    // The on-disk envelope, verbatim: a caller that wants the policies takes
+    // `.policies`, and the versions travel with them.
+    let structured = serde_json::to_value(&file).ok();
+    ToolOutcome {
+        text: text.trim_end().to_string(),
+        is_error: false,
+        structured,
     }
 }
 
@@ -496,5 +559,105 @@ fn truncate(s: &str, max: usize) -> String {
         s.to_string()
     } else {
         format!("{}…", s.chars().take(max).collect::<String>().trim_end())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use corpus_engine::enrichment::atlas::writer::write_atlas_ontology;
+    use corpus_engine_vocab::ontology::decl::{OntologyTypeDecl, TypeKind};
+    use corpus_engine_vocab::ontology::OntologyPolicies;
+
+    fn declared(names: &[(&str, TypeKind)]) -> OntologyPolicies {
+        let mut p = OntologyPolicies::default();
+        for (name, kind) in names {
+            p.shape.types.push(OntologyTypeDecl {
+                name: name.to_string(),
+                kind: *kind,
+                ..Default::default()
+            });
+        }
+        p
+    }
+
+    /// The defect this pins: `ontology.json` is an `AtlasOntologyFile`
+    /// envelope. Deserialising it as bare `OntologyPolicies` SUCCEEDS (every
+    /// field defaults) with zero declared types, so a corpus that declared
+    /// five reported "none". The failing input is the writer's own output.
+    #[test]
+    fn ontology_reads_the_envelope_not_bare_policies() {
+        let dir = tempfile::tempdir().unwrap();
+        let atlas = dir.path().join("atlas");
+        write_atlas_ontology(
+            &atlas,
+            1,
+            &declared(&[("coin", TypeKind::Entity), ("mint", TypeKind::Entity)]),
+        )
+        .unwrap();
+
+        // Control: the old shape really does swallow it.
+        let raw = std::fs::read_to_string(atlas.join(AtlasOntologyFile::FILE)).unwrap();
+        let bare: OntologyPolicies = serde_json::from_str(&raw).unwrap();
+        assert!(
+            bare.shape.types.is_empty(),
+            "bare parse should silently drop the envelope"
+        );
+
+        let out = ontology_outcome("hoard", &atlas);
+        assert!(!out.is_error, "{}", out.text);
+        assert!(
+            out.text.contains("entity types: coin, mint"),
+            "{}",
+            out.text
+        );
+        assert!(out.text.contains("ontology v1"), "{}", out.text);
+        let types = &out.structured.as_ref().unwrap()["policies"]["shape"]["types"];
+        assert_eq!(types.as_array().map(Vec::len), Some(2));
+    }
+
+    #[test]
+    fn ontology_absent_is_refused_by_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = ontology_outcome("bare", &dir.path().join("atlas"));
+        assert!(out.is_error);
+        assert!(out.text.contains("recorded no ontology at"), "{}", out.text);
+        assert!(out.text.contains("ontology.json"), "{}", out.text);
+    }
+
+    #[test]
+    fn ontology_unreadable_is_refused_not_emptied() {
+        let dir = tempfile::tempdir().unwrap();
+        let atlas = dir.path().join("atlas");
+        std::fs::create_dir_all(&atlas).unwrap();
+        std::fs::write(atlas.join(AtlasOntologyFile::FILE), "{ not json").unwrap();
+        let out = ontology_outcome("broken", &atlas);
+        assert!(out.is_error);
+        assert!(
+            out.text.contains("not an AtlasOntologyFile"),
+            "{}",
+            out.text
+        );
+    }
+
+    #[test]
+    fn atlas_facts_report_absence_of_a_count_not_zero() {
+        let dir = tempfile::tempdir().unwrap();
+        let atlas = dir.path().join("atlas");
+        assert!(!atlas_facts(&atlas).present);
+        std::fs::create_dir_all(&atlas).unwrap();
+        std::fs::write(
+            atlas.join("atoms.json"),
+            r#"{"schema_version":"1.0","atoms":[]}"#,
+        )
+        .unwrap();
+        let f = atlas_facts(&atlas);
+        assert!(f.present);
+        assert_eq!(f.atom_count, None, "no _summary.json means no count, not 0");
+        assert!(!f.ontology_declared);
+        assert_eq!(
+            f.describe(),
+            "atlas present (atom count not cached, no declared ontology)"
+        );
     }
 }

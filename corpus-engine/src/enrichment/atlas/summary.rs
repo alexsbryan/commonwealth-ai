@@ -272,22 +272,8 @@ pub fn read_or_compute_summary(atlas_dir: &Path) -> io::Result<Option<AtlasSumma
     if !atoms_path.exists() {
         return Ok(None);
     }
-    let live_meta = fs::metadata(&atoms_path)?;
-    let live_size = live_meta.len();
-    let live_mtime_ms = live_meta
-        .modified()
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
-
-    if let Some(cached) = read_summary_file(atlas_dir) {
-        if cached.atoms_mtime_ms == live_mtime_ms
-            && cached.atoms_size_bytes == live_size
-            && cached.schema_version == SCHEMA_VERSION
-        {
-            return Ok(Some(cached));
-        }
+    if let Some(cached) = read_current_summary(atlas_dir) {
+        return Ok(Some(cached));
     }
 
     let fresh = compute_summary(atlas_dir)?;
@@ -301,6 +287,28 @@ pub fn read_or_compute_summary(atlas_dir: &Path) -> io::Result<Option<AtlasSumma
         );
     }
     Ok(Some(fresh))
+}
+
+/// Read `atlas/_summary.json` only when it is CURRENT for the live
+/// `atoms.json` — same mtime, size and schema. Never computes and never
+/// writes: the view for a host that promises not to write into an index
+/// (`corpus-mcp`). `None` when there is no `atoms.json`, no cache, or the
+/// cache is stale; [`read_or_compute_summary`] is the ONE other reader of the
+/// cache key and goes through here, so the key is decided once.
+pub fn read_current_summary(atlas_dir: &Path) -> Option<AtlasSummary> {
+    let live_meta = fs::metadata(atlas_dir.join("atoms.json")).ok()?;
+    let live_size = live_meta.len();
+    let live_mtime_ms = live_meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let cached = read_summary_file(atlas_dir)?;
+    (cached.atoms_mtime_ms == live_mtime_ms
+        && cached.atoms_size_bytes == live_size
+        && cached.schema_version == SCHEMA_VERSION)
+        .then_some(cached)
 }
 
 fn read_summary_file(atlas_dir: &Path) -> Option<AtlasSummary> {

@@ -14,7 +14,10 @@
 #
 # Env: EMBED_GGUF (default sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf),
 #      PORT (8089), CORPUS (sep), ATLAS_CORPUS (sep-freewill),
-#      CORPUS_MCP (target/debug/corpus-mcp), QUERY.
+#      ONTOLOGY_CORPUS (wessex-hoard — a corpus that DECLARED types; SEP
+#      declares none, so the ontology read is judged on this one and reported
+#      COULD-NOT-JUDGE when it is not installed), CORPUS_MCP
+#      (target/debug/corpus-mcp), QUERY.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
@@ -24,6 +27,8 @@ EMBED_GGUF="${EMBED_GGUF:-sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf}"
 PORT="${PORT:-8089}"
 CORPUS="${CORPUS:-sep}"
 ATLAS_CORPUS="${ATLAS_CORPUS:-sep-freewill}"
+ONTOLOGY_CORPUS="${ONTOLOGY_CORPUS:-wessex-hoard}"
+DATA_ROOT="${SOVEREIGN_DATA_DIR:-$HOME/.svrnmesh}"
 CORPUS_MCP="${CORPUS_MCP:-target/debug/corpus-mcp}"
 QUERY="${QUERY:-van Inwagen consequence argument}"
 work="$(mktemp -d)"
@@ -55,15 +60,19 @@ echo "acceptance: frontend up on :$PORT; /oicp/v1/capabilities -> $cap_code (404
   printf '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"corpus_search","arguments":{"query":"%s","corpus":"%s"}}}\n' "$QUERY" "$CORPUS"
   printf '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"atoms_lookup","arguments":{"corpus":"%s","kind":"claim","limit":5}}}\n' "$ATLAS_CORPUS"
   printf '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"corpus_ontology","arguments":{"corpus":"%s"}}}\n' "$ATLAS_CORPUS"
+  printf '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"corpus_ontology","arguments":{"corpus":"%s"}}}\n' "$ONTOLOGY_CORPUS"
+  echo '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"corpus_list","arguments":{}}}'
 } | "$CORPUS_MCP" --base-url "http://127.0.0.1:$PORT/v1" --corpus "$CORPUS" \
     >"$work/out.jsonl" 2>"$work/err.log" || { cat "$work/err.log" >&2; fail "corpus-mcp exited non-zero"; }
 
 echo "--- corpus-mcp stderr ---"; cat "$work/err.log"; echo "-------------------------"
 grep -q 'baseline OpenAI-compatible path' "$work/err.log" || fail "host was not detected as baseline — the test did not exercise the no-OICP path"
 
-python3 - "$work/out.jsonl" "$CORPUS" <<'PY'
+ontology_declared_on_disk=0
+[[ -f "$DATA_ROOT/indexes/$ONTOLOGY_CORPUS/atlas/ontology.json" ]] && ontology_declared_on_disk=1
+python3 - "$work/out.jsonl" "$CORPUS" "$ONTOLOGY_CORPUS" "$ontology_declared_on_disk" <<'PY'
 import json, sys
-out, corpus = sys.argv[1], sys.argv[2]
+out, corpus, ont_corpus, ont_on_disk = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "1"
 by_id = {}
 for line in open(out):
     line = line.strip()
@@ -89,7 +98,21 @@ arows = atoms["structuredContent"]["atoms"]
 assert arows and all(a["kind"] == "claim" for a in arows), arows[:2]
 print(f"acceptance: atoms_lookup -> {len(arows)} Claim atoms of {atoms['structuredContent']['total_atoms']} in {atoms['structuredContent']['corpus']}; first: {arows[0]['text'][:120]!r}")
 ont = result(5)
-print(f"acceptance: corpus_ontology -> {'declared' if not ont.get('isError') else 'absent, reported: ' + ont['content'][0]['text'][:120]}")
+print(f"acceptance: corpus_ontology({atoms['structuredContent']['corpus']}) -> {'declared' if not ont.get('isError') else 'absent, reported: ' + ont['content'][0]['text'][:120]}")
+# The ontology read is judged on a corpus that DECLARED types. Until 2026-09-04
+# the host parsed the AtlasOntologyFile envelope as bare policies and reported
+# every declared ontology as "none"; this is the assertion that would have caught it.
+ont2 = result(6)
+if ont_on_disk:
+    assert not ont2.get("isError"), ont2["content"][0]["text"][:400]
+    types = ont2["structuredContent"]["policies"]["shape"]["types"]
+    assert types, f"{ont_corpus} has ontology.json on disk but the host reports no declared types"
+    print(f"acceptance: corpus_ontology({ont_corpus}) -> {len(types)} declared types: {', '.join(t['name'] for t in types)}")
+else:
+    print(f"acceptance: corpus_ontology({ont_corpus}) -> COULD-NOT-JUDGE (no {ont_corpus}/atlas/ontology.json installed here; set ONTOLOGY_CORPUS)")
+listing = result(7)["structuredContent"]["corpora"]
+row = next(r for r in listing if r["corpus_id"] == corpus)
+print(f"acceptance: corpus_list -> {corpus}: {row['embedding_dimensions']}-d vector={row['vector_search']} atlas={row['has_atlas']} atoms={row['atom_count']} ontology_declared={row['ontology_declared']}")
 PY
 
 # ── 4. the closure ──────────────────────────────────────────────────────────
