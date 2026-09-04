@@ -557,7 +557,12 @@ mod coerce_tests {
         let raw = r#"{"action": "move_lines", "params": {"source_file": "src/judge.rs", "start_line": 1846, "end_line": 3010, "destination": "src/judge/tests.rs"}}"#;
         let p = parse_response(&format!("```json\n{raw}\n```")).expect("coerces");
         match p.action {
-            EditAction::MoveLines { src, start, end, dest } => {
+            EditAction::MoveLines {
+                src,
+                start,
+                end,
+                dest,
+            } => {
                 assert_eq!(src.as_deref(), Some("src/judge.rs"));
                 assert_eq!((start, end), (1846, 3010));
                 assert_eq!(dest, "src/judge/tests.rs");

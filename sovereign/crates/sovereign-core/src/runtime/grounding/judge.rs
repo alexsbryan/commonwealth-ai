@@ -1842,5 +1842,4 @@ fn parse_batched_verdicts(text: &str, n: usize) -> Vec<Option<bool>> {
 }
 
 #[cfg(test)]
-#[cfg(test)]
 mod tests;

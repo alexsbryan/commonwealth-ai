@@ -2332,8 +2332,9 @@ test module, whose `use super::*` resolves to the same grounding module it
 resolved to inline). Two source-text guards in `tests.rs` re-pointed from
 `include_str!("mod.rs")` to the module family — their subject was the gate's
 production surface, not one file. Remaining grounding tail, sequenced in
-§10 of this file: `judge.rs` (1,846 — its 1,166-line tests module moved to
-`judge/tests.rs` on 2026-09-03; prompts, verify and scan extraction remain),
+§10 of this file: `judge.rs` (1,846 — its 1,166-line tests module moved out on
+2026-09-03 and split again the same day into `tests/prefix_family.rs` +
+`tests/claim_scan.rs`; prompts, verify and scan extraction remain),
 `citation.rs` (1,694). `citation_attribution.rs` left the list the same day
 (1,403 → 848 — tests moved to `citation_attribution/tests.rs` by
 `cargo xtask refactor-apply`, the deterministic plan executor).
@@ -6395,6 +6396,56 @@ document to be usable) and `11d3b23f1` (the harness installer). §10.1i's
 verdict stands verbatim and is now two merges old: this is the one row whose
 cost is paid per session rather than per reader, "distill and point" is the
 repair, and it needs the operator because the compass's content is theirs.
+
+### 10.1l Approach band RE-PINNED on main — 2026-09-03 (the band was stale by a whole split before this session opened)
+
+The band baseline read 169 files / 164,698 lines. `origin/main` (`6a1014a85`)
+actually measures **170 / 165,894** — stale by +1 file / +1,196 lines, none of
+it this session's. Measured twice by independent instruments before anything
+was written: a shell replication of the walk, validated against arch-gate's
+own output on the same tree, and an `xtask` built inside a worktree checked
+out at `origin/main` (§18.4 — validate the instrument, then the result).
+
+The drift has one owner. `f5c872e2c` split `judge.rs` 3,011 → 1,846 and parked
+the 1,162-line test module it moved out in the band without re-pinning. That is
+§10.1k's own row arriving again — "the band charges for the split it asked
+for" — one release later.
+
+**Paid, not banked.** This session split the entrant rather than accept it:
+
+| File | On `origin/main` | Now | Δ band |
+|------|------------------|-----|---|
+| judge's test module | 1,162 (one file) | → `tests/prefix_family.rs` 655 + `tests/claim_scan.rs` 521 + `tests/mod.rs` 5 | **−1,162** (off the band) |
+| `grounding/citation_attribution.rs` | 1,403 (oversized) | 848 | **+848** (enters the band) |
+
+`citation_attribution.rs` is `23df4f85c`, landed by a concurrent session while
+this one was measuring; a file crossing 1200 downward leaves the oversized
+list and joins the band, which is the accounting the band exists to make
+visible. Net against `origin/main`: files unchanged at 170, lines 165,894 →
+**165,580 (−314)**. The pin lands BELOW public main, so nothing of this
+session's is absorbed.
+
+The split is on the concern seam the module already had — `prefix_family`
+asserts the bytes on the wire, `claim_scan` asserts what a judge reply may
+become — and both `include_str!` guards were re-pathed one level deeper, which
+the compiler enforces and `one_renderer_owns_the_family` cannot pass vacuously
+(it asserts an exact render count of 1, so an empty or wrong `SRC` fails).
+
+**Two things were deliberately NOT banked.**
+
+`suggest_seams.rs` 824 → 1,033 (+209) was uncommitted in a concurrent
+session's working tree when the pin was taken. `--tighten` measured 165,789
+including it; the pin is **165,580**. Banking another session's in-flight
+growth into a shared ratchet is the silent-absorb this section exists to
+prevent, so that +209 still has to be defended when it lands.
+
+`--update-baseline` was not used at all. It rewrites `oversized.txt` and
+`instruction_surface.txt` from the working tree as well, and four oversized
+files currently sit above their entries inside the 50-line slack —
+`atlas/context.rs` +36, `trial.rs` +4, `daemon_cmd/mod.rs` +6,
+`eval_cmd/runner.rs` +2. Only `approach_band.txt` was copied back from the
+`origin/main` worktree. `--tighten` banked the one real cut this session made:
+`judge.rs` 1,846 → 1,845, a duplicated `#[cfg(test)]` attribute removed.
 
 ### 10.2 cmnwlth deferrals
 
