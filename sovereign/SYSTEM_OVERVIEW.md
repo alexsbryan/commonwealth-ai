@@ -6775,6 +6775,40 @@ number and not an exit, at the cost of a second file. Accepted instead:
 |------|----------|--------------|
 | The walk, as one function | `corpus-engine/src/enrichment/atlas/ground.rs` (new, 1,165 — the +1 file / +1,350 lines named above) | `ground()`, the question-kind selection and the drop ledger are one decision path; `resolve.rs` (501) was already split out of it to keep it under the ceiling. The only seam that would take it under 800 is the ledger, and the ledger is what makes the walk glassbox (ARCH §9) — splitting it from the walk it records is the wrong cut. Due when a second walk shape needs the same ledger. |
 
+**ei-7c's numbers, as that row asked for them (2026-09-04, branch `ei-7c`).**
+Measured file-by-file out of git across `301cdc93c..HEAD`, `.rs` only,
+800-1200 inclusive — not from the gate, whose `repo_root()` is
+`env!("CARGO_MANIFEST_DIR")` and therefore measures the tree its binary was
+COMPILED in, not the one you point it at (a dead end worth one line: running
+it against a worktree at another sha silently re-measures your own).
+
+| | main `301cdc93c` | ei-7c | delta |
+|---|---|---|---|
+| files in the 800-1200 band | 181 | 182 | **+1** |
+| lines in the band | 176,702 | 177,633 | **+931** |
+| files over the 1200 ceiling | 172 | **170** | **−2** |
+
+The +1 is `corpus-engine/src/wikipedia_columnar.rs`, 1,293 → 931: it entered
+the band by leaving the over-ceiling set. `wiki_store.rs` went 1,378 → 687 and
+left both. A third file, `corpus-engine-vocab/src/atoms.rs`, tripped the gate
+separately — 1,914 → 2,033, growth past a 50-line slack, which was the
+`exact_entity_content_hash` constructor and its tests — and was carved the
+same way to 1,403 with `atoms/tests.rs` at 628; it is still over the ceiling
+and this row does not pretend otherwise, because the finding was the GROWTH,
+not the ceiling. Splitting the id constructors from the envelope types is
+banked under §3.1, as is `wikipedia_columnar.rs`'s own seam (its two
+documented faces, `ColumnarWikipediaGraph` and `WikiAtlasProvider`, want two
+files) — banked rather than done, on the seat's ruling, because a split is its
+own item and not the current order's work.
+
+Accepted, not re-pinned: no `--update-baseline` and no `--tighten` ran on
+this branch's working tree, at any point. The seat's bump at ei-4's landing
+(`e8ac36508`) froze `wiki_store.rs` at 1,378 and `wikipedia_columnar.rs` at
+1,293 — main's PRE-carve sizes — so both fall out of the oversized set at
+ei-7c's merge and `--tighten` banks the cut then. The band's +931 is the
+number this row accepts; the −2 over the ceiling is the number `--tighten`
+collects.
+
 ### 10.1j Concept ratchet RE-PINNED on main — 2026-09-03 (+2, and the gate cannot say which two)
 
 `concept-gate` reports **35 duplicated names against a baseline of 33**. The
