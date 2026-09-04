@@ -170,7 +170,7 @@ status       = "open"
 
 [[bar]]
 id           = "EI4-self-describing-atlas"
-one_line     = "Every atlas dir written by any pipeline carries ontology.json, atoms.lance, edges.csr and atoms_ann.lance, and corpus_list reports coverage for each"
+one_line     = "Every atlas dir written by any pipeline carries ontology.json plus the artifacts its store provider declares (atom-class: atoms.lance, edges.csr, atoms_ann.lance; wiki-class: articles.lance, edges.lance, a seed table), and corpus_list reports coverage for each"
 derives_from = "EPISTEMIC_INDEX.md §1 Ideas + Map rows"
 status       = "open"
 
