@@ -50,7 +50,7 @@ pub async fn resolve_default_models(base_url: &str) -> (Option<String>, Option<S
     // host that moved `client_port`.
     let url = format!(
         "{}/v1/models",
-        sovereign_core::setup_config::client_daemon_base()
+        sovereign_contracts::setup_config::client_daemon_base()
     );
     // If caller gave us a non-default base, use their URL.
     let url = if base_url.contains("://") && !base_url.ends_with("/v1/models") {

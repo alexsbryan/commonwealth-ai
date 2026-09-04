@@ -31,8 +31,8 @@ use corpus_engine::types::EmbedFn;
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;
 use super::paths;
-use sovereign_core::tool_manifest::DeclaredTool;
-use sovereign_core::types::{StepOutput, ToolContext};
+use sovereign_contracts::tool_manifest::DeclaredTool;
+use sovereign_contracts::types::{StepOutput, ToolContext};
 use std::sync::Arc;
 
 /// Resolve a corpus's cached Phase 1 sketches into the live atlas dir.
@@ -488,7 +488,7 @@ impl AtlasResolveTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("atlas_resolve", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("atlas_resolve", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })
@@ -499,8 +499,8 @@ impl AtlasResolveTool {
         &self,
         params: &serde_json::Value,
         _ctx: &ToolContext,
-    ) -> sovereign_core::error::Result<StepOutput> {
-        use sovereign_core::error::Error;
+    ) -> sovereign_contracts::error::Result<StepOutput> {
+        use sovereign_contracts::error::Error;
 
         let corpus = params
             .get("corpus")
@@ -592,7 +592,7 @@ pub fn parse_args(args: &[String]) -> Result<ParsedResolve, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::traits::Tool;
+    use sovereign_contracts::traits::Tool;
 
     #[test]
     fn parse_args_defaults_to_phase_3a() {

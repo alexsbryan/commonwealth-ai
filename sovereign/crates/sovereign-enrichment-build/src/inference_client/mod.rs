@@ -18,8 +18,8 @@ use corpus_engine::enrichment::pipeline::{
 use corpus_engine::error::{Error, Result};
 use corpus_engine::types::EmbedFn;
 
+use sovereign_contracts::egress::{model_client, verify, ConsentGrant, EgressPayload};
 use sovereign_contracts::types::{Custody, SearchPrivacy};
-use sovereign_core::egress::{model_client, verify, ConsentGrant, EgressPayload};
 
 use super::providers::{
     local_daemon_base, parse_model_spec, ProviderKind, ProviderRegistry, ResolvedProvider,

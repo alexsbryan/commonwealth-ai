@@ -26,12 +26,13 @@ pub mod archive_classifier;
 pub mod claim_class_classifier;
 pub mod current_info_classifier;
 pub mod deep_research;
-// The egress boundary — the ONE choke point for remote-model calls
-// and search-query egress (order deep-research-t2a, R10). The F26
-// census registers this exact file as the `Boundary` class; a
-// reqwest client construction anywhere else fails the build gate.
 pub mod effort_classifier;
-pub mod egress;
+// The egress boundary — the ONE choke point for remote-model calls and
+// search-query egress (order deep-research-t2a, R10). The module itself moved
+// DOWN to `sovereign-contracts` (ei-5a-build-cut); re-exported here so every
+// `sovereign_core::egress::*` importer is unaffected. The F26 census follows
+// the file to its new home and still reads ONE boundary.
+pub use sovereign_contracts::egress;
 pub mod lessons;
 pub mod pipeline;
 pub mod plan_grammar;

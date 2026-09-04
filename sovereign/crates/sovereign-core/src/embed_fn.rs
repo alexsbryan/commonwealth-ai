@@ -37,3 +37,39 @@ pub fn inference_to_embed_fn(inference: Arc<dyn InferenceProvider>) -> corpus_en
         })
     })
 }
+
+/// The QUERY-side sibling of [`inference_to_embed_fn`]: an `EmbedFn` over
+/// `InferenceProvider::embed_query`.
+///
+/// Not a twin of the function above (ARCH §10.6) — the two wrap **different
+/// trait methods with different semantics**. On an asymmetric,
+/// instruction-aware embed model (Qwen3-Embedding) `embed_query` applies a
+/// query-side instruction prefix that `embed` does not; the trait's own doc
+/// puts the gap at 1–5% retrieval. Two surfaces, two adapters, one home.
+///
+/// # Why this exists
+///
+/// The atlas ANN seed table
+/// (`corpus_engine::enrichment::atlas::context_loader::load_atlas_context`)
+/// has always embedded its entries with `embed_query`, and
+/// `atlas_navigate_ann` embeds the incoming question the same way — so the
+/// table and the queries run against it share ONE vector space. When the
+/// loader moved down to corpus-engine (order ei-5a-build-cut) its
+/// `&dyn InferenceProvider` became an `EmbedFn`, and reaching for the
+/// document-side [`inference_to_embed_fn`] there would have re-embedded every
+/// atlas on the document side while queries stayed on the query side: a
+/// silent space mismatch, exit 0, grounding quietly worse. That is the
+/// substitution §18.3 forbids, so the query side got its own adapter instead.
+pub fn inference_to_embed_query_fn(
+    inference: Arc<dyn InferenceProvider>,
+) -> corpus_engine::EmbedFn {
+    Arc::new(move |text: &str| {
+        let inf = Arc::clone(&inference);
+        let text = text.to_string();
+        Box::pin(async move {
+            inf.embed_query(&text)
+                .await
+                .map_err(|e| corpus_engine::Error::Embed(e.to_string()))
+        })
+    })
+}

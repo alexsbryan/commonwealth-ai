@@ -3,33 +3,182 @@
 //! embedded [`AtlasContext`] bag — the input `build_persistent_ann_seed_table`
 //! turns into the per-corpus ANN seed table (`atlas/atoms_ann.lance`).
 //!
-//! Moved here from `sovereign-cli-llm::eval_cmd::runner` (ontology-v1 P0.2)
-//! so the daemon can seed a freshly written atlas in-process. The CLI
-//! (`svrn atlas backfill-ann`, `migrate-all`, the eval harness) keeps a thin
-//! wrapper that supplies `session.inference` and the atlas dir; the body is
-//! byte-for-byte the runner's. It sits beside — not inside —
-//! `atlas_context_manager.rs` because that file is at ~900 lines and the
-//! loader is ~350 (ARCH §3.1); the manager re-exports it so
-//! `atlas_context_manager::load_atlas_context` is the one name.
+//! It reached `sovereign-cli-llm::eval_cmd::runner` first, then
+//! `sovereign-tools` (ontology-v1 P0.2) so the daemon could seed a freshly
+//! written atlas in-process. It lands HERE (order ei-5a-build-cut) because
+//! every type it touches was already corpus-engine's: the atoms, the edges,
+//! the ontology, and — since noun-convergence rung 6 —
+//! [`build_persistent_ann_seed_table`] and the [`AtlasContext`] bag itself.
+//! The one thing keeping it in the inference stack was its embedder
+//! parameter, and the file's own test said what that parameter really is:
+//! "the writer's only inference need is `embed_query`". So it takes an
+//! [`EmbedFn`] — corpus-engine's own embed closure — and the atlas write
+//! stops dragging llama.cpp behind it. `sovereign_tools::
+//! atlas_context_manager` re-exports every name here, so
+//! `atlas_context_manager::{load_atlas_context, backfill_ann,
+//! AtlasContextFilter, BackfillOutcome, LoadAtlasError}` still resolves for
+//! every existing caller (ARCH §10.6, one decider — a re-export, never a
+//! twin).
 //!
-//! Filter semantics live on [`AtlasContextFilter`] (the manager owns it —
-//! ARCH §10.6, one decider). Diagnostics are `tracing` events, not stderr:
-//! the same function now runs inside the daemon.
+//! Diagnostics are `tracing` events, not stderr: the same function runs
+//! inside the daemon.
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use corpus_engine::enrichment::atlas::ann_store::ANN_TABLE_DIRNAME;
-use corpus_engine::enrichment::atlas::{
-    read_atlas_atoms, read_atlas_edges, read_atlas_ontology, AtomEnvelope, EdgeType,
-};
-use sovereign_core::atlas_context::{
+use crate::enrichment::atlas::ann_store::ANN_TABLE_DIRNAME;
+use crate::enrichment::atlas::context::{
     atom_attributes_suffix, build_persistent_ann_seed_table, AnnBuildStats, AtlasContext,
     AtlasEntry,
 };
-use sovereign_core::traits::InferenceProvider;
+use crate::enrichment::atlas::{
+    read_atlas_atoms, read_atlas_edges, read_atlas_ontology, AtomEnvelope, EdgeType,
+};
+use crate::types::EmbedFn;
 
-use crate::atlas_context_manager::AtlasContextFilter;
+/// Filter applied during atlas-context loading. Mirrors the shape
+/// of the eval CLI's `AtlasLoadFilter` so the cache key derived
+/// here is comparable to what the CLI writes / reads.
+#[derive(Debug, Clone)]
+pub struct AtlasContextFilter {
+    pub min_description_chars: usize,
+    pub depth_allowlist: Vec<String>,
+    pub max_entries: Option<usize>,
+    pub top_k: usize,
+    /// Path 2 (Phase A) — when true, the loader also emits virtual
+    /// entries for `Claim` atoms in addition to `Entity` atoms. Each
+    /// claim becomes one `AtlasEntry` whose `canonical_name` is the
+    /// article slug (so retrieval-time `score_sources` matching by
+    /// title still credits the source) and whose `embed_text`
+    /// encodes the discourse_act + epistemic_status + content as
+    /// `[Claim: <act>] <content>`. Default `false` for backwards
+    /// compatibility with the entity-only cache. Cache key
+    /// invalidates automatically via `signature()`.
+    pub include_claims: bool,
+    /// Path 2 (Phase B) — when true, the loader also emits virtual
+    /// entries for `Tension` edges in `edges.json`. Each tension fuses
+    /// its `sub_question` with both endpoint atoms into one embed text;
+    /// `canonical_name` is the article slug. Default `false`. Cache
+    /// key invalidates automatically via `signature()`. This is the
+    /// only Path 2 surface that can move the `dialectical_breadth`
+    /// essay axis — the substance lives on the edge, not on either
+    /// endpoint atom by itself.
+    pub include_tensions: bool,
+    /// Path 2 (Phase C) — when true, the loader also emits virtual
+    /// entries for `Configuration` atoms (spec §2.7). Each
+    /// configuration becomes one `AtlasEntry` with `canonical_name`
+    /// set to the article slug and embed text
+    /// `[Configuration: <label>] <description>`. Default `false`.
+    /// Should lift `argument_depth` on essay-readiness — Configurations
+    /// articulate the interpretive shape the article enacts as a whole.
+    pub include_configurations: bool,
+    /// DARK (ontology-v1 P5, default **OFF**) —
+    /// `SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS`. Narrower than
+    /// [`Self::include_claims`]: it admits only Claim atoms whose `claim_kind`
+    /// names a type the corpus DECLARED, so an undeclared corpus admits
+    /// nothing new however it is set. The declared claim is where a
+    /// numismatics corpus keeps "who dated this coin to when, on what
+    /// evidence" — content the entity bag cannot carry.
+    ///
+    /// Baked into [`Self::signature`], so a cache built with it off is
+    /// correctly ignored when it flips on.
+    pub include_declared_claim_types: bool,
+}
+
+impl Default for AtlasContextFilter {
+    fn default() -> Self {
+        // Defaults are tuned for Wikipedia/SEP-scale corpora where
+        // Tier-2 extracted entities carry multi-sentence descriptions.
+        // Small-corpus atom schemas (the `conversational` domain
+        // produces ~0-150 char descriptions; arch-principles structural
+        // atoms similarly short) would be filtered to zero here. Three
+        // env knobs let the operator relax the filter at boot without
+        // rebuilding:
+        //   - SOVEREIGN_ATLAS_MIN_DESCRIPTION_CHARS=<N> overrides the
+        //     200-char floor. `0` admits every atom.
+        //   - SOVEREIGN_ATLAS_INCLUDE_DEPTHS=<csv> overrides the
+        //     `extracted`-only depth filter. `*` admits every depth.
+        //   - SOVEREIGN_ATLAS_INCLUDE_CLAIMS=1|true surfaces Claim
+        //     atoms as virtual chunks (default off).
+        // The cache signature (`signature()`) bakes all three, so a cache
+        // populated under one filter is correctly ignored under
+        // another — no risk of cross-contaminating loaded atoms.
+        // Floor on an atom's FULL embed signal (name + aliases + description),
+        // not description alone — names are first-class grounding signal, so a
+        // 10-char floor admits every real atom and drops only empty fragments.
+        // (Was 200, which silently nuked name-rich/short-description atoms —
+        // ~85% of SEP — and "filtered to zero" small-corpus schemas.)
+        let min_chars = std::env::var("SOVEREIGN_ATLAS_MIN_DESCRIPTION_CHARS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(10);
+        let depth_allowlist = match std::env::var("SOVEREIGN_ATLAS_INCLUDE_DEPTHS") {
+            Ok(v) if v.trim() == "*" => Vec::new(),
+            Ok(v) => v
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect(),
+            Err(_) => vec!["extracted".to_string()],
+        };
+        // Claim atoms as virtual chunks (Path 2 Phase A). Off by default:
+        // wiki/SEP-scale atlases lean on Entity grounding, and claims
+        // multiply the embed count. For a small narrative atlas (a single
+        // novel) the Claims ARE the substance — the entity descriptions are
+        // short and the discriminating content lives in the Claim atoms — so
+        // a literary grounding run sets this on. Baked into `signature()`,
+        // so a cache built with claims off is ignored when it flips on.
+        let include_claims = std::env::var("SOVEREIGN_ATLAS_INCLUDE_CLAIMS")
+            .ok()
+            .map(|v| {
+                let v = v.trim();
+                v == "1" || v.eq_ignore_ascii_case("true")
+            })
+            .unwrap_or(false);
+        // DARK: declared-type claims as virtual chunks (ontology-v1 P5).
+        // Off by default; see the `DEFAULTS_LEDGER.md` row for the flip
+        // conditions.
+        let include_declared_claim_types = std::env::var("SOVEREIGN_ATLAS_INCLUDE_DECLARED_CLAIMS")
+            .ok()
+            .map(|v| {
+                let v = v.trim();
+                v == "1" || v.eq_ignore_ascii_case("true")
+            })
+            .unwrap_or(false);
+        Self {
+            min_description_chars: min_chars,
+            depth_allowlist,
+            max_entries: None,
+            top_k: 3,
+            include_claims,
+            include_tensions: false,
+            include_configurations: false,
+            include_declared_claim_types,
+        }
+    }
+}
+
+impl AtlasContextFilter {
+    /// Stable signature used as the embeddings cache key. Must agree
+    /// with `sovereign-cli::eval_cmd::runner::filter_signature` so a
+    /// cache populated by either side is recognised by the other.
+    pub fn signature(&self) -> String {
+        let mut depths = self.depth_allowlist.clone();
+        depths.sort();
+        format!(
+            "min_chars={};depth=[{}];max={};claims={};tensions={};configs={};declared_claims={}",
+            self.min_description_chars,
+            depths.join(","),
+            self.max_entries
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| "none".to_string()),
+            self.include_claims,
+            self.include_tensions,
+            self.include_configurations,
+            self.include_declared_claim_types,
+        )
+    }
+}
 
 /// Why [`load_atlas_context`] produced no bag. Typed so a caller can tell
 /// "this corpus has nothing seedable" (a legitimate outcome for an atlas that
@@ -107,13 +256,12 @@ pub enum BackfillOutcome {
 /// write failed) and carries the underlying message; callers name the
 /// recovery command (`svrn atlas backfill-ann <id>`) at their own surface.
 pub async fn backfill_ann(
-    inference: &dyn InferenceProvider,
+    embed: &EmbedFn,
     atlas_dir: &Path,
     corpus_id: &str,
     filter: &AtlasContextFilter,
 ) -> Result<BackfillOutcome, String> {
-    let ctx = match load_atlas_context(inference, atlas_dir, corpus_id, filter.top_k, filter).await
-    {
+    let ctx = match load_atlas_context(embed, atlas_dir, corpus_id, filter.top_k, filter).await {
         Ok(ctx) => ctx,
         Err(LoadAtlasError::FilterExcludedAll {
             min_description_chars,
@@ -198,7 +346,7 @@ fn endpoint_text(atom: Option<&AtomEnvelope>, atom_id: &str) -> String {
 /// persistent `atoms_ann.lance` seed table is now the durable cross-run
 /// artifact.
 pub async fn load_atlas_context(
-    inference: &dyn InferenceProvider,
+    embed: &EmbedFn,
     atlas_dir: &Path,
     atlas_corpus_id: &str,
     top_k: usize,
@@ -547,7 +695,7 @@ pub async fn load_atlas_context(
     let mut entries: Vec<AtlasEntry> = Vec::with_capacity(payloads.len());
     let t0 = Instant::now();
     for (atom_id, name, text) in payloads {
-        match inference.embed_query(&text).await {
+        match embed(&text).await {
             Ok(v) => entries.push(AtlasEntry {
                 atom_id,
                 canonical_name: name,
@@ -581,44 +729,19 @@ pub async fn load_atlas_context(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::enrichment::atlas::ann_store::{ann_table_is_fresh, ann_table_present};
-    use sovereign_core::types::{
-        CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed,
-    };
-    use std::pin::Pin;
+    use crate::enrichment::atlas::ann_store::{ann_table_is_fresh, ann_table_present};
+    use std::sync::Arc;
 
-    /// Embeds deterministically and never completes: the writer's only
-    /// inference need is `embed_query`, so a `complete()` call is a wiring
-    /// bug and panics.
-    struct UnitEmbed;
-
-    #[async_trait::async_trait]
-    impl InferenceProvider for UnitEmbed {
-        async fn complete(
-            &self,
-            _: &CompletionRequest,
-        ) -> sovereign_core::Result<CompletionResponse> {
-            unreachable!("backfill must not call complete()")
-        }
-        async fn complete_stream(
-            &self,
-            _: &CompletionRequest,
-        ) -> sovereign_core::Result<
-            Pin<Box<dyn futures::Stream<Item = sovereign_core::Result<String>> + Send>>,
-        > {
-            unreachable!("backfill must not stream")
-        }
-        async fn embed(&self, text: &str) -> sovereign_core::Result<Vec<f32>> {
-            Ok(vec![text.len() as f32, 1.0, 0.0, 0.0])
-        }
-        fn capabilities(&self) -> ProviderCapabilities {
-            ProviderCapabilities {
-                max_context_tokens: 8192,
-                supports_structured_output: false,
-                relative_speed: Speed::Fast,
-                relative_reasoning: Depth::Shallow,
-            }
-        }
+    /// Embeds deterministically. The `InferenceProvider` impl this replaced
+    /// carried three methods the loader never called — `complete` and
+    /// `complete_stream` were `unreachable!()` and `capabilities` was filler —
+    /// which is precisely the evidence that the parameter was only ever an
+    /// embedder (ARCH §5.1: the trait was eight times wider than the use).
+    fn unit_embed() -> EmbedFn {
+        Arc::new(|text: &str| {
+            let n = text.len() as f32;
+            Box::pin(async move { Ok(vec![n, 1.0, 0.0, 0.0]) })
+        })
     }
 
     /// The production grounding filter, spelled out so the test does not
@@ -651,7 +774,7 @@ mod tests {
         std::fs::create_dir_all(&atlas).unwrap();
         std::fs::write(atlas.join("atoms.json"), atoms_json("extracted")).unwrap();
 
-        let out = backfill_ann(&UnitEmbed, &atlas, "t", &grounding_filter())
+        let out = backfill_ann(&unit_embed(), &atlas, "t", &grounding_filter())
             .await
             .expect("backfill succeeds");
         assert_eq!(
@@ -678,7 +801,7 @@ mod tests {
         std::fs::create_dir_all(&atlas).unwrap();
         std::fs::write(atlas.join("atoms.json"), atoms_json("structural")).unwrap();
 
-        let out = backfill_ann(&UnitEmbed, &atlas, "t", &grounding_filter())
+        let out = backfill_ann(&unit_embed(), &atlas, "t", &grounding_filter())
             .await
             .expect("an admitted-nothing filter is an outcome, not an error");
         assert_eq!(
@@ -694,7 +817,7 @@ mod tests {
     async fn load_atlas_context_missing_atlas_is_a_typed_error() {
         let tmp = tempfile::tempdir().unwrap();
         let atlas = tmp.path().join("nope").join("atlas");
-        let err = load_atlas_context(&UnitEmbed, &atlas, "t", 3, &grounding_filter())
+        let err = load_atlas_context(&unit_embed(), &atlas, "t", 3, &grounding_filter())
             .await
             .err()
             .expect("missing atlas dir must be an error");

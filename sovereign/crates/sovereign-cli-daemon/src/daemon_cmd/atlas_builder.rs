@@ -53,7 +53,13 @@ impl sovereign_tools::local_corpus::watched::enrich::AtlasBuildRunner for InProc
             sovereign_enrichment_build::build_with_progress_with_embedder(
                 &parsed,
                 Some(progress),
-                Some(provider),
+                // The orchestrator takes an `EmbedFn` since ei-5a-build-cut.
+                // The daemon still hands it ITS OWN provider — no HTTP session
+                // to itself — through the QUERY-side adapter, so the table it
+                // seeds shares one vector space with `atlas_navigate_ann`.
+                Some(sovereign_core::embed_fn::inference_to_embed_query_fn(
+                    provider,
+                )),
                 Some(cancel),
             )
             .await

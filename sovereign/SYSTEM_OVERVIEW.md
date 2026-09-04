@@ -6049,6 +6049,64 @@ the weight they mean to shed is actually dead before making it a bar. This one
 was assumed severable by the coordinator and by the worker, and the
 measurement said otherwise.
 
+### 10.1e-bis The orchestrator left the inference stack — order ei-5a-build-cut (2026-09-04)
+
+§10.1e above moved `sovereign-enrichment-build` out of a HOST crate. It did not
+change what the crate *reaches*: it still pulled `sovereign-core`,
+`sovereign-tools` and `sovereign-inference`, and with them llama.cpp. This
+order (epistemic-index EI6, spec `EPISTEMIC_INDEX.md` §4.1) cut all three, so
+the crate that WRITES an atlas is now subject to the same closure rule as
+`corpus-mcp`, the host that READS one.
+
+| `cargo tree -p sovereign-enrichment-build -e normal` | before | after |
+|---|---|---|
+| crates in closure | 695 | **590** |
+| `llama-cpp-4`, `llama-cpp-sys-4` | present | gone |
+| `sovereign-inference`, `sovereign-core`, `sovereign-tools` | present | gone |
+| `ort`, `iroh`, `commonwealth-transport`, `sovereign-gliner` | already absent | absent |
+
+**The finding, and it is the whole point of the row: none of the eight sites
+was inference.** The spec named seven; `cargo tree -i` found an eighth
+(`sovereign-enrichment-catalog` → `sovereign-core`, one line for
+`setup_config::client_daemon_base()`). What each turned out to be:
+
+| site | what it actually was | landed |
+|---|---|---|
+| `InferenceProvider` (Backfill embedder) | ONE `embed_query` call behind a twelve-method trait | `corpus_engine::EmbedFn` |
+| `StepOutput`, `ToolContext`, `DeclaredTool` | already defined in `sovereign-contracts`; `sovereign-core` only re-exported them | import-path swap, no move |
+| `backfill_ann`, `AtlasContextFilter`, `BackfillOutcome` | an atlas write whose every other type was already corpus-engine's | MOVED to `corpus_engine::enrichment::atlas::context_loader`, re-exported from `sovereign_tools::atlas_context_manager` |
+| `EXIT_CANCELLED` | a `const i32 = 130` | MOVED to `sovereign_contracts::launch`, re-exported |
+| `fetch_manifest` | `sovereign_inference::remote` is nothing but `pub use oicp_client::*`, and `oicp-client` was ALREADY a dependency | one-line path swap, no new code |
+| egress `model_client` / `verify` / `ConsentGrant` / `EgressPayload` | a 399-line pure-HTTP boundary whose only internal dep was `crate::types` | MOVED to `sovereign_contracts::egress`, re-exported from `sovereign_core::egress`; F26 census `BOUNDARY_MODULE` follows the file |
+| `unix_millis` ×2 | wall-clock | `sovereign-time`, the Tier-0 leaf whose own doc names this case |
+| catalog's `setup_config` (the eighth) | one line | `sovereign_contracts::setup_config` |
+
+Every move is a re-export, never a copy (ARCH §10.6): `sovereign_core::egress`,
+`sovereign_tools::enrich::EXIT_CANCELLED` and
+`sovereign_tools::atlas_context_manager::{backfill_ann, load_atlas_context,
+AtlasContextFilter, …}` all still resolve, to the one definition.
+
+**The one behaviour risk, and why it was refused.** `sovereign-core` already
+carried `inference_to_embed_fn` — an `InferenceProvider` → `EmbedFn` adapter —
+and reusing it for the moved loader was the obvious move. It would have been
+wrong. The adapter wraps `embed()`; the loader has always embedded with
+`embed_query()`, which on an asymmetric instruction-aware model (Qwen3-Embedding)
+applies a query-side prefix `embed()` does not — the trait's own doc puts the
+gap at 1–5% retrieval. `atlas_navigate_ann` embeds incoming questions the same
+way, so the seed table and its queries share ONE vector space; swapping the
+adapter would have re-embedded every atlas on the document side while queries
+stayed on the query side. Exit 0, no test red, grounding quietly worse — the
+substitution ARCH §18.3 forbids. A query-side sibling
+(`inference_to_embed_query_fn`) was added beside the original instead. The two
+are not twins: they wrap different trait methods with different semantics.
+
+**What holds the cut.** `sovereign-enrichment-build` is listed in the
+`corpus-mcp` `[[package]]` in `quality/ARCH_LAYERS.toml`, so `cargo xtask
+boundary-gate` refuses an in-repo edge back to `sovereign-core` /
+`sovereign-tools`; the third-party half is pinned by a second test in
+`corpus-mcp/tests/no_inference_stack.rs`, which now asserts both closures
+through one shared helper with a per-package positive control.
+
 ### 10.1f Size debt owed, measured on the P5 branch — ontology-v1 P5 (2026-09-02; ACCEPTED in §10.1h)
 
 P5 grew eight files and the arch-gate baselines are **not** re-pinned in the

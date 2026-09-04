@@ -10,9 +10,8 @@
 use corpus_engine::enrichment::pipeline::{
     progress::wire, BuildStep, EnrichProgress, EnrichProgressFn, PipelineRegistry, SeedStrategy,
 };
-use sovereign_core::traits::InferenceProvider;
-use sovereign_tools::enrich::EXIT_CANCELLED;
-use std::sync::Arc;
+use corpus_engine::EmbedFn;
+use sovereign_contracts::launch::EXIT_CANCELLED;
 
 mod extract_step;
 mod plan;
@@ -32,24 +31,33 @@ pub use plan::{parse_args, ParsedBuild, Selection, Step};
 use plan::{load_pipeline_capabilities, PipelineCapabilities, Plan};
 use steps::{probe_embedder, run_step, StepFailure, StepOutcome};
 
-/// [`build_with_progress`] with the Backfill step's embed provider supplied
-/// by the caller. The daemon passes its own `InferenceProvider` so an
-/// in-process build does not open an HTTP session to itself (and does not
-/// boot a second `Runtime` inside the daemon to get one). `None` is the CLI
-/// path: build and probe a daemon session. Either way the provider is
-/// probed with one `embed_query` before the first step runs.
+/// [`build_with_progress`] with the Backfill step's embedder supplied by the
+/// caller. The daemon passes its own, so an in-process build does not open an
+/// HTTP session to itself (and does not boot a second `Runtime` inside the
+/// daemon to get one). `None` is the CLI path: build and probe a daemon
+/// session. Either way the embedder is probed with one call before the first
+/// step runs.
+///
+/// The parameter is an [`EmbedFn`] — corpus-engine's embed closure — where it
+/// was `Arc<dyn InferenceProvider>` (order ei-5a-build-cut). The trait offered
+/// a dozen methods and this crate called exactly one of them, `embed_query`,
+/// while dragging llama.cpp through the orchestrator's whole closure to do it.
+/// Callers holding a provider adapt with
+/// `sovereign_core::embed_fn::inference_to_embed_query_fn` — the QUERY-side
+/// adapter, which keeps the seed table in the same vector space
+/// `atlas_navigate_ann` queries it in.
 ///
 /// `cancel` is the daemon driver's flag (`sovereign_tools::enrich::
 /// CancellationFlag`). It is polled BETWEEN steps: a step already running
 /// finishes (an extract can take thirty minutes), then the build emits
-/// `Cancelled { at_step }` and returns `sovereign_tools::enrich::EXIT_CANCELLED`
-/// (the driver that owns the flag also owns the code it reads back). Without
-/// this the UI's cancel button would fire a flag nothing read (§18.3).
+/// `Cancelled { at_step }` and returns [`EXIT_CANCELLED`] (the driver that
+/// owns the flag also owns the code it reads back). Without this the UI's
+/// cancel button would fire a flag nothing read (§18.3).
 pub async fn build_with_progress_with_embedder(
     parsed: &ParsedBuild,
     progress: Option<EnrichProgressFn>,
-    embedder: Option<Arc<dyn InferenceProvider>>,
-    cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
+    embedder: Option<EmbedFn>,
+    cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 ) -> i32 {
     let emit = |evt: EnrichProgress| {
         if let Some(cb) = progress.as_ref() {
@@ -78,30 +86,29 @@ pub async fn build_with_progress_with_embedder(
     // proving it answers costs one embed call here, and discovering it does
     // not after thirty minutes of extraction would waste the run. The same
     // session is the step's provider, so the daemon is resolved once.
-    let backfill_embedder: Option<Arc<dyn InferenceProvider>> =
-        if plan.enabled.contains(&Step::Backfill) {
-            let Some(e) = embedder else {
-                // Fail fast rather than thirty minutes later inside the step:
-                // no provider reached a build that plans Backfill is a wiring
-                // error, and it is reported, never defaulted (ARCH §18.3).
-                eprintln!(
-                    "error: backfill: no embed provider was wired for this build; run \
+    let backfill_embedder: Option<EmbedFn> = if plan.enabled.contains(&Step::Backfill) {
+        let Some(e) = embedder else {
+            // Fail fast rather than thirty minutes later inside the step:
+            // no provider reached a build that plans Backfill is a wiring
+            // error, and it is reported, never defaulted (ARCH §18.3).
+            eprintln!(
+                "error: backfill: no embed provider was wired for this build; run \
                      `svrn atlas backfill-ann {}`",
-                    parsed.corpus_id
-                );
-                return 1;
-            };
-            match probe_embedder(e).await {
-                Ok(e) => Some(e),
-                Err(msg) => {
-                    eprintln!("error: {msg}");
-                    return 1;
-                }
-            }
-        } else {
-            None
+                parsed.corpus_id
+            );
+            return 1;
         };
-    let embedder: Option<&Arc<dyn InferenceProvider>> = backfill_embedder.as_ref();
+        match probe_embedder(e).await {
+            Ok(e) => Some(e),
+            Err(msg) => {
+                eprintln!("error: {msg}");
+                return 1;
+            }
+        }
+    } else {
+        None
+    };
+    let embedder: Option<&EmbedFn> = backfill_embedder.as_ref();
 
     emit(EnrichProgress::BuildStart {
         corpus_id: parsed.corpus_id.clone(),

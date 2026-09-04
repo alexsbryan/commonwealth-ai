@@ -31,7 +31,6 @@ sovereign-contracts = { workspace = true }
 # `setup_config::client_daemon_base()` resolves `[daemon] client_port` for the
 # `base_url` default, so `enrich init` pins the operator's port rather than the
 # compiled one. Runtime layer — down.
-sovereign-core = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }

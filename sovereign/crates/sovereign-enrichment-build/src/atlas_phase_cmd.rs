@@ -19,8 +19,8 @@ use corpus_engine::enrichment::pipeline::{
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;
 use super::paths;
-use sovereign_core::tool_manifest::DeclaredTool;
-use sovereign_core::types::{StepOutput, ToolContext};
+use sovereign_contracts::tool_manifest::DeclaredTool;
+use sovereign_contracts::types::{StepOutput, ToolContext};
 
 // ── cluster-atlas ───────────────────────────────────────────
 
@@ -640,7 +640,7 @@ impl AtlasClusterTool {
     /// `tool-manifests/`. What is left here is the part that runs.
     pub fn declared(self) -> DeclaredTool {
         let state = Arc::new(self);
-        sovereign_core::tool_manifest::declared("atlas_cluster", move |params, ctx| {
+        sovereign_contracts::tool_manifest::declared("atlas_cluster", move |params, ctx| {
             let state = Arc::clone(&state);
             async move { state.run(&params, &ctx).await }
         })
@@ -651,8 +651,8 @@ impl AtlasClusterTool {
         &self,
         params: &serde_json::Value,
         _ctx: &ToolContext,
-    ) -> sovereign_core::error::Result<StepOutput> {
-        use sovereign_core::error::Error;
+    ) -> sovereign_contracts::error::Result<StepOutput> {
+        use sovereign_contracts::error::Error;
 
         let corpus = params
             .get("corpus")
@@ -682,7 +682,7 @@ impl AtlasClusterTool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::traits::Tool;
+    use sovereign_contracts::traits::Tool;
 
     /// The `atlas_cluster` leaf validates its `corpus` before any IO: missing or
     /// unknown corpus fails loudly. (The happy path needs the daemon + a resolved

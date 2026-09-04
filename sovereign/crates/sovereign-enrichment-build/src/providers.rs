@@ -369,23 +369,26 @@ impl ProviderRegistry {
             if prov.structured_output_configured || prov.kind != ProviderKind::OpenaiCompatible {
                 continue;
             }
-            let manifest = match sovereign_inference::remote::fetch_manifest(
-                &prov.base_url,
-                prov.auth_secret.clone(),
-            )
-            .await
-            {
-                Some(m) => m,
-                None => {
-                    tracing::debug!(
-                        provider = %prov.name,
-                        base = %prov.base_url,
-                        mode = ?prov.structured_output_mode,
-                        "OICP manifest unavailable — keeping default structured-output mode"
-                    );
-                    continue;
-                }
-            };
+            // `sovereign_inference::remote` is itself nothing but
+            // `pub use oicp_client::*` — the OICP client was extracted to that
+            // leaf crate long ago, and this call reached it through a crate
+            // carrying llama.cpp purely for the re-export hop. `oicp-client`
+            // was ALREADY a dependency here (`shed_retry_after`), so naming it
+            // directly costs nothing and drops the whole inference stack
+            // (ei-5a-build-cut).
+            let manifest =
+                match oicp_client::fetch_manifest(&prov.base_url, prov.auth_secret.clone()).await {
+                    Some(m) => m,
+                    None => {
+                        tracing::debug!(
+                            provider = %prov.name,
+                            base = %prov.base_url,
+                            mode = ?prov.structured_output_mode,
+                            "OICP manifest unavailable — keeping default structured-output mode"
+                        );
+                        continue;
+                    }
+                };
             match derive_structured_mode_from_features(&manifest.features) {
                 Some(mode) if mode != prov.structured_output_mode => {
                     tracing::info!(

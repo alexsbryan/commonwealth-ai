@@ -446,7 +446,7 @@ pub async fn run_typed_extension(
     // this whole pass runs detached after `Complete` — see
     // `conv_tiered_provider::post_finalize_corpus`).
     if status == ExtractionStatus::Wrote {
-        seed_ann_after_write(corpus_id, inference.as_ref(), atlas_dir).await;
+        seed_ann_after_write(corpus_id, Arc::clone(inference), atlas_dir).await;
     } else {
         tracing::debug!(
             corpus = corpus_id,
@@ -480,7 +480,7 @@ pub async fn run_typed_extension(
 /// least as new as `atoms.json`. Every branch traces its reason (§9).
 async fn seed_ann_after_write(
     corpus_id: &str,
-    inference: &dyn InferenceProvider,
+    inference: Arc<dyn InferenceProvider>,
     atlas_dir: &Path,
 ) {
     use crate::atlas_context_manager::{backfill_ann, AtlasContextFilter, BackfillOutcome};
@@ -493,7 +493,8 @@ async fn seed_ann_after_write(
         );
         return;
     }
-    match backfill_ann(inference, atlas_dir, corpus_id, &AtlasContextFilter::default()).await {
+    let embed = sovereign_core::embed_fn::inference_to_embed_query_fn(inference);
+    match backfill_ann(&embed, atlas_dir, corpus_id, &AtlasContextFilter::default()).await {
         Ok(BackfillOutcome::Built(stats)) => tracing::info!(
             corpus = corpus_id,
             resolved = stats.resolved,

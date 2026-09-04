@@ -157,7 +157,7 @@ fn read_corpus_chunks(
     source_corpus_id: &str,
     needed_ids: Option<&[u64]>,
 ) -> Result<Vec<corpus_engine::EnrichmentChunkRow>> {
-    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
         .map(|c| c.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let noop_embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(Vec::<f32>::new()) }));

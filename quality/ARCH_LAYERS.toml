@@ -542,11 +542,38 @@ doc = "corpus-mcp/README.md"
 # else. A `sovereign-core` or `sovereign-tools` dep added to this host fails
 # here on day one; the third-party half (llama.cpp / ort / iroh) is pinned by
 # `corpus-mcp/tests/no_inference_stack.rs` against `cargo tree`.
+#
+# `sovereign-enrichment-build` joined 2026-09-04 (order ei-5a-build-cut). It is
+# the atlas `enrich build` orchestrator — the crate that WRITES what this host
+# reads — and it sat on `sovereign-core`, `sovereign-tools` and
+# `sovereign-inference` for eight import sites, none of which turned out to be
+# inference: the embedder was one `embed_query` behind a twelve-method trait,
+# `fetch_manifest` was reached through a crate whose `remote` module is nothing
+# but `pub use oicp_client::*`, and the rest were types that already lived in
+# `sovereign-contracts` or `corpus-engine`. Its closure went 695 → 590 crates
+# with llama.cpp gone. Listing it here is what stops it coming back: the gate
+# refuses a `sovereign-core` / `sovereign-tools` edge on this package, and the
+# third-party half is pinned by the same `cargo tree` test as the host.
 crates = [
     "corpus-mcp",
+    "sovereign-enrichment-build",
 ]
 
 # ── Grandfathered violations (the burn-down list) ────────────────────────────
+
+[[exception]]
+package = "corpus-mcp"
+from = "sovereign-enrichment-build"
+to = "corpus-engine"
+reason = "the same unliftable `corpus-engine` named in the row below, reached by the other member of this package. The orchestrator IS an atlas writer — atoms, edges, the pipeline registry and the ANN seed table are all corpus-engine's — so this edge is the crate's purpose, not an accident, and it clears when the row below does."
+tracking = "enrichment-as-plugin follow-up (index-read leaf)"
+
+[[exception]]
+package = "corpus-mcp"
+from = "sovereign-enrichment-build"
+to = "corpus-engine-vocab"
+reason = "`OntologyPolicies` as recorded in atlas/ontology.json — the vocabulary leaf corpus-mcp itself already depends on (a serde + kernel-types + blake3 leaf, no inference stack). Listed because the package gate enumerates edges, not because the edge is in doubt."
+tracking = "enrichment-as-plugin follow-up (index-read leaf)"
 
 [[exception]]
 package = "corpus-mcp"
