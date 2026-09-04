@@ -437,7 +437,7 @@ async fn run_one(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
         );
     }
 
-    if !bench.corpus_state.is_ready_for(bench.surface) {
+    if !super::discover::is_ready_for(bench.corpus_state, bench.surface) {
         return BenchOutcome {
             id: bench.id.clone(),
             group: bench.group.clone(),

@@ -75,6 +75,14 @@ sovereign-cli-llm = { path = "../sovereign-cli-llm", optional = true }
 # first consumer, and the edge is easier to read where it is paid.
 sovereign-cli-dev = { path = "../sovereign-cli-dev", default-features = false, optional = true }
 corpus-engine = { workspace = true }
+# The enrichment store's on-disk layout — `corpus_state::inspect_corpus_state`
+# answers `svrn quality check`'s `CorpusInstalled` precondition. Optional and
+# pulled by `dev-tools` ONLY: the shipped end-user dispatcher has no `quality`
+# verb and must not pay for one. The alternative was a second
+# `data_dir().join("indexes")` at the precondition site — the re-derivation
+# that crate's own module doc records as having stranded the daemon's
+# watched-folder writes from the CLI's reads.
+sovereign-enrichment-catalog = { workspace = true, optional = true }
 corpus-engine-archaeology = { workspace = true, optional = true }
 corpus-engine-scip = { workspace = true, optional = true }
 # The pure-HTTP OICP client — `RemoteApiProvider` for `code index`'s embed
@@ -143,6 +151,7 @@ default = [
 dev-tools = [
     "dep:corpus-engine-archaeology",
     "dep:sovereign-agent-bench",
+    "dep:sovereign-enrichment-catalog",
     # The linked workbench surface — `InProcessCodeVerb`. Thin by construction
     # (`default-features = false`); see the dep comment above.
     "dep:sovereign-cli-dev",

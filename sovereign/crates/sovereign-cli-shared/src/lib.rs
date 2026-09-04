@@ -49,6 +49,7 @@ pub mod deprecation;
 pub mod dirs;
 pub mod flag_surface;
 pub mod help;
+pub mod lane_verdict;
 #[cfg(feature = "mcp-client")]
 pub mod mcp_client;
 pub mod models;

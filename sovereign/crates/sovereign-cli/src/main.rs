@@ -73,6 +73,8 @@ mod path_cmd;
 mod plan_cmd;
 #[cfg(feature = "dev-tools")]
 mod posture_cmd;
+#[cfg(feature = "dev-tools")]
+mod quality_check_cmd;
 #[cfg(feature = "code-intel")]
 mod project_init;
 // NOT feature-gated, deliberately: the daemon-facing project registry adds
@@ -395,6 +397,7 @@ const DEV_VERBS: &[&str] = &[
     "conformance",
     "contract",
     "posture",
+    "quality",
     // `seat watch` is the seat's notes-rail poller (order
     // commons-fluency fix 8): ungated daemon access since item 11 —
     // a code-intel-gated path shipped the runtime refusal in every
@@ -460,6 +463,7 @@ const ALL_VERBS: &[&str] = &[
     "posture",
     "project",
     "proxy",
+    "quality",
     "reading-diag",
     "recipe",
     "recipe-agent",
@@ -540,6 +544,10 @@ const DEV_SUBCOMMANDS: &[(&str, &str)] = &[
         "posture",
         "Artifact age + verdict per quality subsystem, one table",
     ),
+    (
+        "quality",
+        "check — the curated 30-minute breakage check, four verdicts, persisted",
+    ),
 ];
 
 fn print_usage() {
@@ -549,6 +557,41 @@ fn print_usage() {
     // (public) build omits them — the product is the assistant + mesh.
     #[cfg(feature = "dev-tools")]
     crate::util::help::print_subcommands_titled("Developer toolchain", DEV_SUBCOMMANDS);
+}
+
+/// `svrn quality <subcommand>` — the quality-control surface this repo runs
+/// on itself. One subcommand today (`check`); the verb exists rather than a
+/// bare `svrn quality-check` because the campaign it seeds retires five bash
+/// orchestrators into siblings of it.
+#[cfg(feature = "dev-tools")]
+async fn run_quality(args: &[String]) -> i32 {
+    match args.first().map(String::as_str) {
+        Some("check") => quality_check_cmd::run(&args[1..]).await,
+        // The LANES live in the LLM sibling — every one of them drives the
+        // inference stack, ingests a corpus or runs a judge. The runner
+        // above is deliberately the half that does none of those, which is
+        // why it can live in the dispatcher and be gated `dev-tools`.
+        Some("lane") => llm_bin::exec("quality-lane", &args[1..]),
+        // An unknown subcommand is REFUSED, never defaulted to `check`
+        // (ARCH §18.3): running a 30-minute suite because someone typo'd is
+        // not a courtesy.
+        Some(other) if other != "--help" && other != "-h" => {
+            eprintln!(
+                "svrn quality: unknown subcommand `{other}`. Try: svrn quality check"
+            );
+            2
+        }
+        _ => {
+            println!("Usage: svrn quality check [--lane <id>]... [--budget-secs 1800] [--mint]");
+            println!("       svrn quality lane <id>");
+            println!();
+            println!("  check   Run the curated breakage lanes and write the table to");
+            println!("          target/quality-check/<stamp>/summary.json");
+            println!("  lane    Run ONE lane directly, printing its own rows. The");
+            println!("          runner above drives the same command per lane.");
+            0
+        }
+    }
 }
 
 /// `svrn nudge dismiss <id>` — record a nudge id in
@@ -1111,6 +1154,17 @@ async fn async_main() {
                 // Read-only roll-up of every posture-bearing subsystem's
                 // artifact age (drift/arch/capability/nightly/watchers/…).
                 let code = posture_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            #[cfg(feature = "dev-tools")]
+            "quality" => {
+                // The curated breakage check. `posture` reads artifacts other
+                // commands wrote; this one RUNS the lanes and writes the
+                // table. Glassbox: every decision the runner makes — the
+                // fingerprint inputs, each precondition probe, each lane's
+                // cap and exit — is a debug event under `sovereign_cli`.
+                util::tracing_init::init_tracing("sovereign_cli=info");
+                let code = run_quality(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             #[cfg(feature = "dev-tools")]

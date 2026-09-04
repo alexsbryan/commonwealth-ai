@@ -23,7 +23,6 @@ use std::path::{Path, PathBuf};
 
 use corpus_engine::enrichment::atlas::axis_catalog::{all_axes, TypedAxis};
 
-use crate::enrich_cmd::paths::index_root;
 
 /// Which scoring surface a discovered bench belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,26 +57,24 @@ impl BenchSurface {
 
 /// Atlas / index state for a discovered bench's corpus. Drives the
 /// report's stale-vs-ready grading.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CorpusState {
-    /// Atlas dir present with at least atoms.json. Enrichment lane
-    /// can score; retrieval lane will score against the live daemon.
-    Ready,
-    /// Index dir exists but atlas is missing. Retrieval lane can
-    /// still attempt to score (bm25 / vector against the chunks).
-    /// Enrichment lane will mark this stale.
-    IndexedNoAtlas,
-    /// Corpus dir doesn't exist locally. Both surfaces mark stale.
-    Unindexed,
-}
+///
+/// The type and its probe moved DOWN to `sovereign-enrichment-catalog`
+/// (2026-09-04): `svrn quality check`'s `CorpusInstalled` precondition asks
+/// the same question from `sovereign-cli`, which cannot see this crate. Same
+/// answer, one implementation — see that module for why the alternative was
+/// a re-derived path.
+pub use sovereign_enrichment_catalog::corpus_state::{inspect_corpus_state, CorpusState};
 
-impl CorpusState {
-    pub fn is_ready_for(self, surface: BenchSurface) -> bool {
-        matches!(
-            (self, surface),
-            (CorpusState::Ready, _) | (CorpusState::IndexedNoAtlas, BenchSurface::RetrievalJudge)
-        )
-    }
+/// Can `state` be scored on `surface`?
+///
+/// A free function rather than an inherent method: [`CorpusState`] is a
+/// foreign type now, and [`BenchSurface`] is a bench concept that has no
+/// business travelling down with it.
+pub fn is_ready_for(state: CorpusState, surface: BenchSurface) -> bool {
+    matches!(
+        (state, surface),
+        (CorpusState::Ready, _) | (CorpusState::IndexedNoAtlas, BenchSurface::RetrievalJudge)
+    )
 }
 
 /// One bench the runner will attempt to score.
@@ -296,20 +293,6 @@ fn field_is_populated(table: &toml::map::Map<String, toml::Value>, field: &str) 
         .and_then(|v| v.as_array())
         .map(|a| !a.is_empty())
         .unwrap_or(false)
-}
-
-/// Resolve a corpus_id to its atlas / index state on disk.
-pub fn inspect_corpus_state(corpus_id: &str) -> CorpusState {
-    let idx = index_root(corpus_id);
-    if !idx.exists() {
-        return CorpusState::Unindexed;
-    }
-    let atoms = idx.join("atlas").join("atoms.json");
-    if atoms.exists() {
-        CorpusState::Ready
-    } else {
-        CorpusState::IndexedNoAtlas
-    }
 }
 
 #[cfg(test)]

@@ -241,6 +241,16 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 | `SOVEREIGN_RETRIEVAL_LOG_DIR` | under data root | shipped | E2 retrieval-log directory override (MEMORY_MODEL §5 E2; default <data root>/retrieval-log; the SVRNMESH_* spelling is mirrored by rebrand). inject-notes.py and co-boot-block.sh append one row per injection here; `sovereign notes retrieval-audit` scores it. Tests isolate on it so fixture rows never pollute the fleet baseline. |
 | `SOVEREIGN_SESSION_ID` | unset | shipped | Explicit session id for scripts/co-boot-block.sh (and friends) when run outside the hook envelope; the hook always passes it as the first argument instead. |
 
+## quality
+
+| flag | default | status | purpose |
+|---|---|---|---|
+| `SOVEREIGN_QUALITY_BASELINE_DIR` | unset | shipped | Absolute path to this lane's `baseline_dir` from quality/check-lanes.toml. Set by `svrn quality check`; unset or empty means the lane declared no baseline and must compare against nothing (could-not-judge on its baseline-derived rows, never a pass). |
+| `SOVEREIGN_QUALITY_BUDGET_SECS` | unset | shipped | Seconds this lane may take before `svrn quality check` kills it (the run's remaining budget). Set by the runner; a lane may use it to size its own sub-steps rather than being killed mid-question. The KILL is the runner's, not the lane's — a lane that ignores this is capped anyway and reports could-not-judge. |
+| `SOVEREIGN_QUALITY_FINGERPRINT` | unset | shipped | The stack fingerprint `svrn quality check` computed for this run (12 hex chars over primary/fast/embed model stems, the smoke.toml subset ids and every lane bank's hash). Set BY the runner ON each lane subprocess, never by a human. A lane reads it to pick its baseline directory (<baseline_dir>/<fingerprint>/latest.json); unset means the lane was run by hand outside the runner, and it must then compare against nothing rather than guessing a directory. Read in quality_check_cmd (writer) and the lane commands in sovereign-cli-llm (readers). |
+| `SOVEREIGN_QUALITY_MINT` | off | guard | =1 permits a `svrn quality check` lane to WRITE its baseline for the current fingerprint. Set only by `--mint`. Off by default and that is the invariant: a first run against a new stack is could-not-judge (first-run) on its baseline-derived rows and writes nothing, because a baseline minted from an unwatched run is a bar nobody set (ARCH §18.4). Any write without this is a defect. |
+| `SOVEREIGN_QUALITY_OUT_DIR` | unset | shipped | target/quality-check/<stamp> for the current `svrn quality check` run — where lane logs, per-lane artifacts and summary.json land. Set by the runner on each lane subprocess so a lane's own artifacts sit beside the table that cites them. Unset when a lane is run by hand; the lane then writes no run artifact. |
+
 ## retrieval
 
 | flag | default | status | purpose |

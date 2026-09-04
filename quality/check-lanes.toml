@@ -1,0 +1,86 @@
+# check-lanes.toml — the lane table `svrn quality check` runs.
+#
+# CONFIG AS DATA (ARCH §6). The runner
+# (sovereign/crates/sovereign-cli/src/quality_check_cmd.rs) holds the
+# four-verdict rule, the budget rule and the fingerprint; WHICH lanes exist,
+# what each costs and what each needs are declared here, beside
+# `env-flags.toml`, so adding a lane is an edit to a table rather than to a
+# runner.
+#
+# Fields, all required unless noted:
+#   id            stable lane id — the `--lane <id>` argument, the key in
+#                 summary.json, the `subject` the lane must name in its
+#                 verdict line. Identity from essence (ARCH §7.5): never a
+#                 position in this file.
+#   kind          `invariant` (a ceiling, a route, an absence — nothing a
+#                 model decided) or `judged` (a model produced part of the
+#                 verdict). Carried into summary.json so a reader can tell
+#                 which kind of claim a green is.
+#   enforcement   `hard` (not-passed fails the run), `soft` (recorded, never
+#                 gates), `tracked` (recorded, no band exists yet).
+#   est_secs      the estimate the budget line prints. Replaced in practice
+#                 by the measured `secs` in summary.json — an estimate that
+#                 disagrees with three runs of actuals is a bug in this file.
+#   command       argv. `svrn` / `sovereign` / `sovereign-cli` resolve to the
+#                 RUNNING dispatcher, never to PATH.
+#   preconditions optional; a CLOSED set (quality_check_cmd::Precondition):
+#                 `port-listening:<port>`, `slot-decodes:<slot>`,
+#                 `corpus-installed:<id>`, `binary:<name>`. An unmet one is
+#                 could-not-judge NAMING it, and the lane does not run.
+#   baseline_dir  optional; `<dir>/<fingerprint>/latest.json` is this lane's
+#                 baseline for the current stack. A lane with none compares
+#                 against nothing and says so.
+#   bank          optional; hashed into the run fingerprint. Change the
+#                 questions and last week's numbers stop being comparable —
+#                 which is the point, not an inconvenience.
+#
+# THE LANE PROTOCOL. The runner passes each lane:
+#   SOVEREIGN_QUALITY_FINGERPRINT   the stack fingerprint hex
+#   SOVEREIGN_QUALITY_OUT_DIR       target/quality-check/<stamp>
+#   SOVEREIGN_QUALITY_BUDGET_SECS   seconds this lane may take
+#   SOVEREIGN_QUALITY_BASELINE_DIR  absolute `baseline_dir`, when declared
+#   SOVEREIGN_QUALITY_MINT          "1" only under `--mint`
+# and reads back ONE thing: a `Judgement` on the lane's LAST stdout line
+# (sovereign_cli_shared::lane_verdict). A lane that prints no such line is
+# `never-ran` — never a pass.
+
+schema_version = 1
+
+# ── The focus lane ──────────────────────────────────────────────────
+# Issue #57's turn, run against a corpus the lane ingests from source each
+# time. The ingest IS the document-ingest lane the operator asked for: chunk
+# count, search hit and readiness are asserted before a question is asked.
+
+[[lane]]
+id = "chat-ask"
+kind = "judged"
+enforcement = "hard"
+est_secs = 300
+command = ["svrn", "quality", "lane", "chat-ask"]
+preconditions = [
+    "port-listening:9741",
+    "slot-decodes:primary",
+    "binary:sovereign-cli-llm",
+]
+baseline_dir = "sovereign/bench/quality-check/baselines/chat-ask"
+bank = "sovereign/bench/quality-check/chat-ask.toml"
+
+# ── The throughput lane ─────────────────────────────────────────────
+# Wraps `scripts/throughput_probe.py --json`, whose only caller today
+# compares it against a gitignored baseline dir that does not exist — so it
+# has never compared anything.
+
+[[lane]]
+id = "throughput"
+kind = "invariant"
+enforcement = "hard"
+est_secs = 150
+command = ["svrn", "quality", "lane", "throughput"]
+preconditions = [
+    "port-listening:9741",
+    "slot-decodes:primary",
+    "slot-decodes:fast",
+    "binary:python3",
+]
+baseline_dir = "sovereign/bench/quality-check/baselines/throughput"
+bank = "sovereign/bench/quality-check/throughput.toml"

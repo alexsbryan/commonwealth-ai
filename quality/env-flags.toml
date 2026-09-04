@@ -1492,3 +1492,40 @@ cluster = "daemon-lifecycle"
 default = "off"
 status = "guard"
 purpose = """Opts a live daemon OUT of the stale-binary refusal in `run_identity::exe_rebuilt_since_start`, the guard `solve_http.rs` consults before serving a solve. Default OFF means the guard is ARMED: `run_identity::build()` captures `exe_mtime` at daemon startup (the banner), so a newer mtime on the same path proves a build landed UNDER a running process — every verb it serves then executes code the tree no longer contains, while `doctor` and the working tree both read fresh. The failure this prices is not hypothetical: six solve attempts on 2026-09-02 were served by a pre-dawn daemon, and the symptom was a fix that "did not work" rather than anything pointing at the binary. The refusal names its own repair (`sovereign daemon restart`), which is why the guard is a refusal and not a warning — a warning on a detached daemon goes to a log nobody is reading. Set =1 (exact match; no true/on spelling) to serve anyway, for the one legitimate case: deliberate archaeology against a build you have on purpose, e.g. reproducing a report on the binary that produced it. No DEFAULTS_LEDGER row: this is an opt-OUT of an already-default-on guard, so there is no flip-to-default pending — the desired end state is the guard staying armed."""
+
+# ── quality check (the curated breakage lanes) ──────────────────────
+
+[[flag]]
+name = "SOVEREIGN_QUALITY_FINGERPRINT"
+cluster = "quality"
+default = "unset"
+status = "shipped"
+purpose = "The stack fingerprint `svrn quality check` computed for this run (12 hex chars over primary/fast/embed model stems, the smoke.toml subset ids and every lane bank's hash). Set BY the runner ON each lane subprocess, never by a human. A lane reads it to pick its baseline directory (<baseline_dir>/<fingerprint>/latest.json); unset means the lane was run by hand outside the runner, and it must then compare against nothing rather than guessing a directory. Read in quality_check_cmd (writer) and the lane commands in sovereign-cli-llm (readers)."
+
+[[flag]]
+name = "SOVEREIGN_QUALITY_OUT_DIR"
+cluster = "quality"
+default = "unset"
+status = "shipped"
+purpose = "target/quality-check/<stamp> for the current `svrn quality check` run — where lane logs, per-lane artifacts and summary.json land. Set by the runner on each lane subprocess so a lane's own artifacts sit beside the table that cites them. Unset when a lane is run by hand; the lane then writes no run artifact."
+
+[[flag]]
+name = "SOVEREIGN_QUALITY_BUDGET_SECS"
+cluster = "quality"
+default = "unset"
+status = "shipped"
+purpose = "Seconds this lane may take before `svrn quality check` kills it (the run's remaining budget). Set by the runner; a lane may use it to size its own sub-steps rather than being killed mid-question. The KILL is the runner's, not the lane's — a lane that ignores this is capped anyway and reports could-not-judge."
+
+[[flag]]
+name = "SOVEREIGN_QUALITY_BASELINE_DIR"
+cluster = "quality"
+default = "unset"
+status = "shipped"
+purpose = "Absolute path to this lane's `baseline_dir` from quality/check-lanes.toml. Set by `svrn quality check`; unset or empty means the lane declared no baseline and must compare against nothing (could-not-judge on its baseline-derived rows, never a pass)."
+
+[[flag]]
+name = "SOVEREIGN_QUALITY_MINT"
+cluster = "quality"
+default = "off"
+status = "guard"
+purpose = "=1 permits a `svrn quality check` lane to WRITE its baseline for the current fingerprint. Set only by `--mint`. Off by default and that is the invariant: a first run against a new stack is could-not-judge (first-run) on its baseline-derived rows and writes nothing, because a baseline minted from an unwatched run is a bar nobody set (ARCH §18.4). Any write without this is a defect."

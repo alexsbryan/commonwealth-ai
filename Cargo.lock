@@ -12165,6 +12165,7 @@ dependencies = [
  "sovereign-cli-shared",
  "sovereign-contracts",
  "sovereign-core",
+ "sovereign-enrichment-catalog",
  "sovereign-store",
  "tempfile",
  "tokio",
