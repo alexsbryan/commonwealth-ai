@@ -240,6 +240,9 @@ depends only on F1 and carries the first demo).*
   uncleared box.*
 
 **Phase 3 — generalize the work plane** *(the cloud move; design-gated after Phase 2 starts).*
+Design landed 2026-09-04: [`WORK_PLANE.md`](WORK_PLANE.md) — the seam is a `JobKind` envelope
+above `WorkUnit`, OCI images are the payload contract, and the inference plane presents as
+long-lease jobs (the mesh is its own first customer).
 `WorkUnit` grows a job-kind seam; the CI runner is the pilot payload — leased build/test jobs with
 streamed results, this repo as the customer. Rungs 4, 6, 7 follow the same seam; the foreground-
 yield policy (rung 7) gets stated and tested here. *Demo: this repository's own test suite green,
@@ -325,6 +328,8 @@ failover, no upgrade story) — right for design partners, said plainly, not GA.
    request field, designed when H2 starts.
 7. Phase 3's job-kind seam: extend `WorkUnit` in place or introduce a `JobKind` envelope above it?
    Design question opened by the CI pilot; decide with code in front of us, not here.
+   **Answered 2026-09-04 in [`WORK_PLANE.md`](WORK_PLANE.md): a `JobKind` envelope above
+   `WorkUnit`; the closed ingest enum becomes the `ingest` kind's payload, unchanged.**
 
 ---
 
