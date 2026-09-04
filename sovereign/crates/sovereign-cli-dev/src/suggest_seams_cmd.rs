@@ -14,6 +14,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     let mut corpus_id: Option<String> = None;
     let mut file_arg: Option<String> = None;
     let mut as_goal = false;
+    let mut as_plan = false;
     let mut max_lines: usize = 1200;
     let mut i = 0;
     while i < args.len() {
@@ -27,6 +28,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
                 }
             }
             "--goal" => as_goal = true,
+            "--plan" => as_plan = true,
             "--max-lines" => {
                 i += 1;
                 match args.get(i).and_then(|v| v.parse::<usize>().ok()) {
@@ -116,7 +118,18 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     .await
     {
         Ok(report) => {
-            if as_goal {
+            if as_plan {
+                // The tests span needs the file on disk (SCIP drops
+                // #[cfg(test)] symbols); when unreadable, the plan is
+                // emitted without a tests step rather than guessed.
+                let tests_span = sovereign_tools::code::suggest_seams::find_tail_tests_span(
+                    &std::path::PathBuf::from(&file_path),
+                );
+                let plan = sovereign_tools::code::suggest_seams::render_split_plan(
+                    &report, tests_span, max_lines,
+                );
+                println!("{plan}");
+            } else if as_goal {
                 let goal =
                     sovereign_tools::code::suggest_seams::render_split_goal(&report, max_lines);
                 // Paste-ready: the caller wraps it in quotes for the solve verb,

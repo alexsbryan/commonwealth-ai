@@ -114,7 +114,6 @@
 1247	sovereign/crates/sovereign-core/src/router_embed.rs
 1396	sovereign/crates/sovereign-core/src/runtime/epistemic.rs
 1653	sovereign/crates/sovereign-core/src/runtime/evidence.rs
-1694	sovereign/crates/sovereign-core/src/runtime/grounding/citation.rs
 1845	sovereign/crates/sovereign-core/src/runtime/grounding/judge.rs
 2243	sovereign/crates/sovereign-core/src/runtime/grounding/tests.rs
 1432	sovereign/crates/sovereign-core/src/runtime/handlers/attached_doc.rs
