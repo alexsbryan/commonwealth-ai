@@ -571,6 +571,36 @@ name = "oicp-client"
 # `impl InferenceProvider` sites.
 allow = ["sovereign-contracts", "oicp-types"]
 
+[[package_leaf]]
+name = "oplog"
+# The append-only signed journal. Admitted 2026-09-04 (cw-lift phase 1b/1d),
+# so `commonwealth-rail{,-core}` can join the `commonwealth` package below —
+# without this the rail is governed by the layer map ALONE, which this file
+# already records as insufficient: "a crate added to the mesh-foundation layer
+# list gets no forbid rule and prints green" (§18.1, the commonwealth block).
+#
+# THE OBJECTION TO ANY LEAF ADMISSION IS THAT THE LIST IS GLOBAL — widening one
+# widens studio, code-intel, corpus-mcp and commonwealth at once. Measured
+# before admitting rather than argued:
+#
+#     existing leaf union            158 crates
+#     oplog closure                   28 crates
+#     crates oplog adds that NO
+#     existing leaf already carries    1   <- oplog itself
+#
+# All 27 transitive deps (serde, serde_json, thiserror, tracing, blake3 via
+# kernel-types, itoa, memchr, once_cell, …) are already inside an admitted
+# leaf, so the real widening is the crate and nothing else. On size it is
+# mid-pack: kernel-types 16, oicp-types 20, corpus-engine-vocab 21, oplog 28,
+# sovereign-contracts 147. Both filesystem rules pass — no `build.rs`, no
+# `include_str!`/`include_bytes!` escaping the crate root.
+#
+# `kernel-types` is its ONE internal dep and that is the contract: oplog owns
+# ordering and dedup, not identity. Three crates name it today —
+# commonwealth-rail, commonwealth-rail-core, corpus-engine — which is what a
+# shared leaf is rather than a convenience.
+allow = ["kernel-types"]
+
 # ── The packages ─────────────────────────────────────────────────────────────
 
 [[package]]
@@ -684,6 +714,14 @@ crates = [
     "commonwealth-transport",
     "commonwealth-state",
     "commonwealth-discovery",
+    # The rail, admitted 2026-09-04 at cw-lift 1b/1d. The fold (rail-core:
+    # vocabulary, Ed25519 authorship, admission into one total order, the sync
+    # digest, zero I/O) and the journal (rail: the JSONL log under
+    # <root>/rings/<ns>/). Their whole internal surface is commonwealth-core
+    # plus the `oplog` and `kernel-types` leaves, so the zero-exception
+    # property above still holds — which is the ONLY reason they are in here.
+    "commonwealth-rail-core",
+    "commonwealth-rail",
 ]
 
 # ── Grandfathered violations (the burn-down list) ────────────────────────────

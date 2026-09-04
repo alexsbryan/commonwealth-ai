@@ -25,6 +25,15 @@ worth saying plainly: the four crates' entire internal dependency surface is
 already shared leaves. There are no grandfathered `[[exception]]` rows. That is
 the property the gate now holds, not one it is aspiring to.
 
+**It survived its first widening.** The rail joined on 2026-09-04 (cw-lift 1b),
+taking the package from four crates to six, and the zero-exception property
+held — `boundary-gate` reads `commonwealth 6/6 crates present` with no new row.
+That cost one leaf admission, `oplog`, and the admission was measured rather
+than argued: the global leaf union already carried 158 crates, oplog's closure
+is 28, and the crates oplog adds that no existing leaf already carries number
+exactly one — oplog itself. A widening that admits a crate and nothing else is
+the cheapest shape this list can take.
+
 ## The two tiers
 
 **Package crates** (`commonwealth/crates/`):
@@ -35,18 +44,21 @@ the property the gate now holds, not one it is aspiring to.
 | `commonwealth-transport` | 2,746 | 57 | The peer wire — the direct TCP path, and iroh behind an optional feature. |
 | `commonwealth-state` | 2,360 | 76 | `MeshStore` and the replicated state it holds. |
 | `commonwealth-discovery` | 3,228 | 101 | Founder/joiner, announce, the peer table. |
+| `commonwealth-rail-core` | 2,105 | 42 | The fold: vocabulary, Ed25519 authorship, admission into one total order, the per-actor sync digest. Zero I/O. |
+| `commonwealth-rail` | 657 | 43 | The journal: the append-only JSONL log under `<root>/rings/<ns>/`. |
 
 Closures measured 2026-09-03 with `cargo tree -e normal`, third-party included.
 `commonwealth-discovery`'s 101 is the number to watch: four of its ten modules
 are scheduled for deletion, and the closure should come *down* when they go.
 
 **Shared leaves** — the global `[[package_leaf]]` set. The commonwealth package
-takes exactly two of them, and neither is a concession:
+takes exactly three of them, and none is a concession:
 
 | Crate | Allowed internal deps | Why it may cross |
 |---|---|---|
 | `kernel-types` | *(none)* | Identity + provenance. `ContentHash` is wire-critical here — node and op ids are gossiped. |
 | `oicp-types` | *(none)* | The wire vocabulary. A protocol crate a peer already has to speak. |
+| `oplog` | `kernel-types` | The append-only journal the rail folds over. Admitted 2026-09-04 so the rail could join the package at all — see the measurement above. It owns ordering and dedup, never identity, which is why `kernel-types` is its one internal dep. |
 
 ## The rules
 
