@@ -4299,17 +4299,20 @@ routing, draft-on-spoke/verify-on-hub speculation, hub queue
 discipline — each reality-checked against this codebase) is
 [`docs/specs/MESH_INFERENCE.md`](./docs/specs/MESH_INFERENCE.md).
 
-`commonwealth-inference/orchestrator/` (multi-process supervision for
-the standalone-daemon topology — flagged for its own liveness
-investigation in OICP_RATIONALIZATION.md):
+`commonwealth-inference/orchestrator/` was DELETED 2026-09-03 — 1,904 lines
+over six files whose `Orchestrator::new` was called from nothing but two
+integration tests. The liveness investigation it was "flagged for" in
+OICP_RATIONALIZATION.md returned the answer: not live. It held `ManagedProcess`
+(lifecycle states + SIGTERM-then-SIGKILL), `HealthTracker` (5s poll, 20-sample
+latency window, `Unresponsive` after 3 failures), a `FaultDetector` and a
+`GracefulDeparture` countdown, and none of it ran.
 
-- `ManagedProcess` tracks lifecycle states (`Starting | Running |
-  Unhealthy | Failed | Stopped`); SIGTERM, then `SpawnConfig::stop_timeout`
-  (default 10s), then SIGKILL. Both halves of that were untrue until
-  2026-09-02: `stop()` reached straight for tokio's `start_kill` (SIGKILL on
-  unix) and waited out a hard-coded 5s that no signal had been sent to earn.
-- `HealthTracker` polls every 5s; 20-sample latency window;
-  `Unresponsive` after 3 consecutive failures.
+Multi-process supervision on the path that IS live is
+`sovereign-compute/src/supervisor.rs` — `SupervisorState`, `graceful_kill`
+(SIGTERM, grace, SIGKILL) and health polling. It has NO departure countdown and
+NO fault detector, so those two parts of FE-139 are unimplemented rather than
+implemented-elsewhere; `quality/conformance-specs.toml` FE-139 carries the
+statement and the requirement is write-work again.
 - `GracefulDeparture` — countdown state machine
   (`Announced → Rebalancing → Draining → Complete`), driven by
   `Orchestrator::depart_gracefully` / `announce_departure` +

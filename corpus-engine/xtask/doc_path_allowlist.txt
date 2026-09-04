@@ -78,3 +78,11 @@ raw/
 # after a parity test against its committed output. Same shape as
 # discovery/tls.rs above.
 scripts/sec_facts.py
+
+# §"multi-process supervision" names the directory it REPORTS AS DELETED —
+# `commonwealth-inference/orchestrator/`, 1,904 lines whose `Orchestrator::new`
+# was called from nothing but two integration tests (2026-09-03, phase 0b of
+# the commonwealth-as-liftable-package program). The passage exists to answer
+# the liveness question OICP_RATIONALIZATION.md flagged it for, and to say
+# where supervision actually lives now. Same shape as scripts/sec_facts.py.
+commonwealth-inference/orchestrator/

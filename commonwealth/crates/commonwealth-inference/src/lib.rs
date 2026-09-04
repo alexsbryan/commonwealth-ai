@@ -15,7 +15,6 @@ pub use commonwealth_core::{model, model_aliases, oicp};
 pub mod plan;
 pub mod store_adapter;
 
-pub mod orchestrator;
 pub mod scheduler;
 
 pub use commonwealth_core::{Error, Result};

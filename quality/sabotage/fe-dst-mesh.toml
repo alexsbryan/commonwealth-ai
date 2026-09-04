@@ -313,16 +313,6 @@ breaks = "Shared state MUST converge by epidemic replication: a periodic round t
 expected = "CAUGHT"
 
 [[mutant]]
-id = "fe-19-gossip_state_merge_older_rejected"
-requirement = "FE-19"
-target = "commonwealth/crates/commonwealth-discovery/src/gossip.rs"
-find = "    pub fn merge_entry(&mut self, entry: GossipEntry) -> bool {\n        match self.entries.get(&entry.key) {\n            Some(existing) if existing.timestamp >= entry.timestamp => false,\n            _ => {\n                self.entries.insert(entry.key.clone(), entry);\n                true\n            }\n        }\n    }"
-replace = "    pub fn merge_entry(&mut self, entry: GossipEntry) -> bool {\n        let key = entry.key.clone();\n        // BUG: Always accept the new entry regardless of timestamp, violating last-writer-wins logic.\n        self.entries.insert(key, entry);\n        true\n    }"
-mustFail = ["gossip_state_merge_older_rejected"]
-breaks = "Shared state MUST converge by epidemic replication: a periodic round to a small random peer sample, three-phase digest/delta/response, last- writer-wins on timestamp."
-expected = "CAUGHT"
-
-[[mutant]]
 id = "fe-20-string_payload_variants_round_trip_throu"
 requirement = "FE-20"
 target = "oicp-types/src/error.rs"

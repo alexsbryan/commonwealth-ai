@@ -2014,7 +2014,6 @@ dependencies = [
  "commonwealth-core",
  "commonwealth-state",
  "corpus-engine",
- "libc",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

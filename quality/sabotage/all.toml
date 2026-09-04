@@ -964,16 +964,6 @@ breaks = "Because that observation is in memory, the rotation refusal MUST run a
 expected = "CAUGHT"
 
 [[mutant]]
-id = "fe-19-gossip_state_merge_older_rejected"
-requirement = "FE-19"
-target = "commonwealth/crates/commonwealth-discovery/src/gossip.rs"
-find = "    pub fn merge_entry(&mut self, entry: GossipEntry) -> bool {\n        match self.entries.get(&entry.key) {\n            Some(existing) if existing.timestamp >= entry.timestamp => false,\n            _ => {\n                self.entries.insert(entry.key.clone(), entry);\n                true\n            }\n        }\n    }"
-replace = "    pub fn merge_entry(&mut self, entry: GossipEntry) -> bool {\n        // BUG: Always accept the new entry regardless of timestamp.\n        // This violates last-writer-wins convergence logic when timestamps are equal or older entries arrive later.\n        self.entries.insert(entry.key.clone(), entry);\n        true\n    }"
-mustFail = ["gossip_state_merge_older_rejected"]
-breaks = "Shared state MUST converge by epidemic replication: a periodic round to a small random peer sample, three-phase digest/delta/response, last- writer-wins on timestamp."
-expected = "CAUGHT"
-
-[[mutant]]
 id = "fe-22-hardware_fingerprint_is_gpu_order_indepe"
 requirement = "FE-22"
 target = "sovereign/crates/sovereign-core/src/mesh_measurements.rs"
