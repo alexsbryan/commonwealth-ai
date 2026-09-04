@@ -46,13 +46,16 @@ use std::sync::Arc;
 use rusqlite::{params, Connection};
 use tokio::sync::Mutex;
 
+use crate::enrichment::atlas::wiki_store::{classify_relationship, join_section_path};
 use crate::error::{Error, Result};
 use crate::extractors::wikipedia_types::{wiki_title_from_url, WikipediaChunkMetadata};
 use crate::index::StoredChunkWithMetadata;
 
-/// Section-path delimiter. U+203A (›) — never appears in Wikipedia
-/// titles, so split/join round-trips cleanly.
-pub const SECTION_PATH_DELIMITER: char = '\u{203a}';
+/// Section-path delimiter. Owned by
+/// [`crate::enrichment::atlas::wiki_store::SECTION_PATH_DELIMITER`] — the
+/// columnar store is what persists the joined path — and re-exported here for
+/// the SQLite schema doc above.
+pub use crate::enrichment::atlas::wiki_store::SECTION_PATH_DELIMITER;
 
 /// On-disk schema version. Bumped when the table layout changes in
 /// a way that prior data can no longer be read correctly. Cf.
@@ -1193,52 +1196,11 @@ struct AggregatedEdge {
     occurrence_count: i64,
 }
 
-fn join_section_path(parts: &[String]) -> String {
-    parts.join(&SECTION_PATH_DELIMITER.to_string())
-}
-
-/// Rule-based relationship-type classifier. Runs at insert time on
-/// every edge; spends zero LLM tokens. ~80% accuracy is the bar — the
-/// label is one of several signals the re-ranker mixes via RRF, not
-/// a load-bearing decision.
-///
-/// Order matters: section-path patterns dominate (causal section beats
-/// "is" link-text), then link-text verb prefixes, then default to
-/// `topical`.
-fn classify_relationship(section_path: &[String], link_text: &str) -> String {
-    let path_lower: Vec<String> = section_path.iter().map(|p| p.to_lowercase()).collect();
-    let last_path = path_lower.last().map(String::as_str).unwrap_or("");
-    let any_path_contains = |needles: &[&str]| -> bool {
-        path_lower
-            .iter()
-            .any(|p| needles.iter().any(|n| p.contains(n)))
-    };
-
-    if any_path_contains(&["criticism", "controversy", "debate", "dispute"]) {
-        return "contested".to_string();
-    }
-    if any_path_contains(&["causes", "origins", "background"]) {
-        return "causal".to_string();
-    }
-    if last_path.ends_with("see also") || last_path == "see also" {
-        return "see-also".to_string();
-    }
-
-    let lt = link_text.trim().to_lowercase();
-    let starts_with_any = |prefixes: &[&str]| -> bool {
-        prefixes
-            .iter()
-            .any(|p| lt.starts_with(&format!("{p} ")) || lt == *p)
-    };
-    if starts_with_any(&["led", "caused", "resulted", "prompted", "triggered"]) {
-        return "causal".to_string();
-    }
-    if starts_with_any(&["is", "are", "was", "were", "defined", "known"]) {
-        return "defines".to_string();
-    }
-
-    "topical".to_string()
-}
+// `join_section_path` + `classify_relationship` moved to
+// `enrichment::atlas::wiki_store` with the direct chunks→columnar build
+// (WIKIPEDIA_ATLAS_V2 W4). ONE decider for the wiki relationship axis and the
+// section-path join (ARCH §10.6) — this file calls them, it no longer owns
+// them, so the SQLite build and the columnar build cannot drift apart.
 
 // ─── WikipediaGraphApi: backend-agnostic neighbor surface (W3) ────────────────
 
@@ -1467,6 +1429,185 @@ mod tests {
             c.has_contested_section("Albert Einstein").await,
         );
         assert!(c.has_contested_section("Albert Einstein").await);
+    }
+
+    /// WIKIPEDIA_ATLAS_V2 W4 — **the gate that lets the SQLite go.** The direct
+    /// chunks → columnar build
+    /// (`wiki_store::build_wikipedia_columnar_store_from_chunks`) must answer
+    /// the ENTIRE `WikipediaGraphApi` surface identically to the two-step it
+    /// replaces (`ingest_from_chunks` → SQLite → `export_columnar`), on the
+    /// same chunks. Both sides are read through `ColumnarWikipediaGraph`, so a
+    /// difference can only come from the aggregation, which is the half being
+    /// replaced.
+    ///
+    /// `neighbors_for_axis` / `co_neighbors` are asserted explicitly: they
+    /// filter on `link_text` and `source_section_path`, the two per-edge
+    /// strings a CSR adjacency could not carry, and they are the reason the
+    /// wiki store is `edges.lance` and not `edges.csr`.
+    #[tokio::test]
+    async fn direct_build_matches_sqlite_two_step() {
+        use crate::enrichment::atlas::wiki_store::build_wikipedia_columnar_store_from_chunks;
+        use crate::wikipedia_columnar::ColumnarWikipediaGraph;
+
+        // Cross-linked, contested, multi-section, with a dangling target —
+        // every column the neighbor API reads is exercised.
+        let make_chunks = || {
+            vec![
+                chunk(
+                    1,
+                    "Albert Einstein",
+                    meta_with(
+                        vec!["Lead"],
+                        "lead",
+                        None,
+                        vec![
+                            ("Special relativity", "special relativity"),
+                            ("Photoelectric effect", "photoelectric effect"),
+                        ],
+                    ),
+                ),
+                chunk(
+                    2,
+                    "Albert Einstein",
+                    meta_with(
+                        vec!["Criticism"],
+                        "controversy",
+                        Some(2),
+                        vec![("Special relativity", "criticism of relativity")],
+                    ),
+                ),
+                chunk(
+                    3,
+                    "Special relativity",
+                    meta_with(
+                        vec!["Origins"],
+                        "history",
+                        None,
+                        vec![
+                            ("Albert Einstein", "Einstein"),
+                            ("Photoelectric effect", "photoelectric effect"),
+                        ],
+                    ),
+                ),
+                // Same section repeated by the chunker — the dedupe path.
+                chunk(
+                    4,
+                    "Special relativity",
+                    meta_with(
+                        vec!["Origins"],
+                        "history",
+                        None,
+                        vec![("Albert Einstein", "Einstein")],
+                    ),
+                ),
+            ]
+        };
+
+        let two_step_dir = tempfile::tempdir().unwrap();
+        let g = WikipediaGraph::open_in_memory("test").unwrap();
+        g.ingest_from_chunks(make_chunks()).await.unwrap();
+        g.export_columnar(two_step_dir.path()).await.unwrap();
+        let old = ColumnarWikipediaGraph::open(two_step_dir.path()).await.unwrap();
+
+        let direct_dir = tempfile::tempdir().unwrap();
+        let summary = build_wikipedia_columnar_store_from_chunks(direct_dir.path(), make_chunks())
+            .await
+            .unwrap();
+        let new = ColumnarWikipediaGraph::open(direct_dir.path()).await.unwrap();
+
+        let key = |ns: Vec<Neighbor>| {
+            let mut v: Vec<(String, String, i64, bool)> = ns
+                .into_iter()
+                .map(|n| (n.title, n.relationship_type, n.occurrence_count, n.in_scope))
+                .collect();
+            v.sort();
+            v
+        };
+
+        let titles = ["Albert Einstein", "Special relativity"];
+        for t in titles {
+            assert_eq!(
+                key(old.neighbors(t, 50).await),
+                key(new.neighbors(t, 50).await),
+                "neighbors parity for {t}",
+            );
+            assert_eq!(
+                key(old.reverse_neighbors(t, 50).await),
+                key(new.reverse_neighbors(t, 50).await),
+                "reverse_neighbors parity for {t}",
+            );
+            assert_eq!(
+                old.has_contested_section(t).await,
+                new.has_contested_section(t).await,
+                "has_contested_section parity for {t}",
+            );
+            let (ro, rn) = (old.record(t).await, new.record(t).await);
+            assert_eq!(ro.is_some(), rn.is_some(), "record presence parity for {t}");
+            let (ro, rn) = (ro.unwrap(), rn.unwrap());
+            assert_eq!(
+                (
+                    ro.title,
+                    ro.wikidata_qid,
+                    ro.revision_id,
+                    ro.in_scope,
+                    ro.pov_total,
+                    ro.citation_total
+                ),
+                (
+                    rn.title,
+                    rn.wikidata_qid,
+                    rn.revision_id,
+                    rn.in_scope,
+                    rn.pov_total,
+                    rn.citation_total
+                ),
+                "record parity for {t}",
+            );
+        }
+
+        // The axis filters — the capability `edges.csr` could not carry.
+        // "criticism" matches a section path; "einstein" matches a link_text;
+        // "photoelectric" matches a target_title. One per matched column.
+        for axis_term in ["criticism", "einstein", "photoelectric"] {
+            let axis = vec![axis_term.to_string()];
+            for t in titles {
+                assert_eq!(
+                    key(old.neighbors_for_axis(t, &axis, 50).await),
+                    key(new.neighbors_for_axis(t, &axis, 50).await),
+                    "neighbors_for_axis({axis_term}) parity for {t}",
+                );
+            }
+            let both: Vec<String> = titles.iter().map(|s| s.to_string()).collect();
+            assert_eq!(
+                key(old.co_neighbors(&both, &axis, 50).await),
+                key(new.co_neighbors(&both, &axis, 50).await),
+                "co_neighbors({axis_term}) parity",
+            );
+        }
+        // Unfiltered co_neighbors too (the empty-axis path).
+        let both: Vec<String> = titles.iter().map(|s| s.to_string()).collect();
+        assert_eq!(
+            key(old.co_neighbors(&both, &[], 50).await),
+            key(new.co_neighbors(&both, &[], 50).await),
+            "co_neighbors (no axis) parity",
+        );
+
+        assert_eq!(
+            old.article_count().await,
+            new.article_count().await,
+            "article_count parity",
+        );
+        assert_eq!(
+            old.edge_count().await,
+            new.edge_count().await,
+            "edge_count parity",
+        );
+
+        // The direct build's own counters, against the same reality: two
+        // in-scope sources, one dangling target (Photoelectric effect).
+        assert_eq!(summary.articles, 2);
+        assert_eq!(summary.dangling_targets, 1);
+        assert_eq!(summary.chunks_without_metadata, 0);
     }
 
     #[tokio::test]

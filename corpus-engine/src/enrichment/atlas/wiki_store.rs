@@ -21,14 +21,30 @@
 //!   (for axis filtering) + the denormalised `target_in_scope` (so the neighbor
 //!   query needs no per-row join back to `articles`).
 //!
-//! W1 is the writer + schema only (dormant). The source wiring (SQLite
-//! `WikipediaGraph` → these tables) is W1b; the reader is W2.
+//! **W4 (2026-09-04): this module is now the whole build.**
+//! [`wiki_rows_from_chunks`] aggregates a corpus's chunks into the two row
+//! sets directly, and [`build_wikipedia_columnar_store_from_chunks`] writes
+//! them — no SQLite in the middle. The SQLite `wikipedia_graph.db` was only
+//! ever a build aggregator that `export_columnar` dumped back out to these
+//! same tables; the aggregation is an in-memory pass, so the round-trip
+//! (2.4 GB of intermediate at full wiki scale) bought nothing.
+//!
+//! Wikipedia does NOT use the `atoms.lance` + `edges.csr` atom store the SEP-
+//! class corpora use, and this is deliberate: its consumer is the predicate-
+//! shaped neighbor API, and `neighbors_for_axis` filters on the per-edge
+//! strings `link_text` + `source_section_path`, which a CSR adjacency
+//! (`store.rs`'s `LocalEdge = (u32, u32, u8, f32, u8)`) has nowhere to put.
+//! See `docs/specs/WIKIPEDIA_ATLAS_V2.md` §"Status + correction".
 
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow_array::{BooleanArray, Int64Array, RecordBatch, StringArray};
+
+use crate::extractors::wikipedia_types::{wiki_title_from_url, WikipediaChunkMetadata};
+use crate::index::StoredChunkWithMetadata;
 
 /// Wiki columnar store schema version. Bump on any `articles.lance` /
 /// `edges.lance` column change (e.g. the Layer-1 cluster/bridge columns or a
@@ -252,6 +268,304 @@ pub async fn write_wikipedia_columnar_store(
     .await?;
 
     Ok(articles_path)
+}
+
+// ── chunks → columnar rows (WIKIPEDIA_ATLAS_V2 W4: the direct build) ─────────
+//
+// The aggregation that used to feed the SQLite `wikipedia_graph.db` before
+// `export_columnar` dumped it back out to Lance. The SQLite was never the
+// model — it was a build aggregator, and the aggregation is this in-memory
+// pass. Emitting the columnar rows straight from it drops the round-trip
+// (2.4 GB of intermediate on the full wiki) and leaves ONE writer for the
+// store this crate reads.
+
+/// Section-path delimiter. U+203A (›) — never appears in Wikipedia titles, so
+/// the joined `source_section_path` splits back cleanly. Changing it
+/// invalidates every stored `edges.lance` path, so bump
+/// [`WIKI_STORE_FORMAT_VERSION`] if it ever moves.
+pub const SECTION_PATH_DELIMITER: char = '\u{203a}';
+
+/// Counters from a direct chunks → columnar build — what the CLI prints as a
+/// sanity check, and what the build ledger records.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WikiIngestSummary {
+    /// In-scope articles (one `articles.lance` row each).
+    pub articles: usize,
+    /// Unique `(source, section, target)` links (one `edges.lance` row each).
+    pub edges: usize,
+    /// Distinct `(article, section)` pairs seen — the old `section_signals`
+    /// row count, kept as a build signal (the columnar store denormalises
+    /// section signals onto the article + the edge).
+    pub sections: usize,
+    /// Link targets that are not themselves in-scope articles. They get no
+    /// `articles.lance` row; `edges.target_in_scope = false` carries them.
+    pub dangling_targets: usize,
+    pub chunks_with_metadata: usize,
+    pub chunks_without_metadata: usize,
+    /// Highest `revision_id` seen — the freshness stamp.
+    pub revision_id_max: Option<i64>,
+}
+
+struct AggregatedArticle {
+    title: String,
+    wikidata_qid: Option<String>,
+    revision_id: Option<i64>,
+    pov_total: i64,
+    citation_total: i64,
+    sections: HashMap<String, AggregatedSection>,
+}
+
+impl AggregatedArticle {
+    fn new(title: String) -> Self {
+        Self {
+            title,
+            wikidata_qid: None,
+            revision_id: None,
+            pov_total: 0,
+            citation_total: 0,
+            sections: HashMap::new(),
+        }
+    }
+
+    /// The `articles.is_contested` signal: any section flagged POV, or a
+    /// section typed `controversy`. Denormalised onto the article so
+    /// `has_contested_section` is a single column read.
+    fn is_contested(&self) -> bool {
+        self.sections
+            .values()
+            .any(|s| s.pov_count > 0 || s.section_type == "controversy")
+    }
+}
+
+struct AggregatedSection {
+    section_type: String,
+    pov_count: i64,
+    counts_seen: bool,
+    outgoing: HashMap<String, AggregatedEdge>,
+}
+
+impl AggregatedSection {
+    fn new(section_type: String) -> Self {
+        Self {
+            section_type,
+            pov_count: 0,
+            counts_seen: false,
+            outgoing: HashMap::new(),
+        }
+    }
+}
+
+struct AggregatedEdge {
+    link_text: String,
+    relationship_type: String,
+    occurrence_count: i64,
+}
+
+/// Join a `section_path` array with [`SECTION_PATH_DELIMITER`].
+pub fn join_section_path(parts: &[String]) -> String {
+    parts.join(&SECTION_PATH_DELIMITER.to_string())
+}
+
+/// Rule-based relationship-type classifier. Runs at build time on every edge;
+/// spends zero LLM tokens. ~80% accuracy is the bar — the label is one of
+/// several signals the re-ranker mixes via RRF, not a load-bearing decision.
+///
+/// Order matters: section-path patterns dominate (a causal section beats an
+/// "is" link-text), then link-text verb prefixes, then default to `topical`.
+///
+/// **One decider (ARCH §10.6).** This is the only implementation of the wiki
+/// relationship axis; the `relationship_type` column of `edges.lance` is its
+/// only output.
+pub fn classify_relationship(section_path: &[String], link_text: &str) -> String {
+    let path_lower: Vec<String> = section_path.iter().map(|p| p.to_lowercase()).collect();
+    let last_path = path_lower.last().map(String::as_str).unwrap_or("");
+    let any_path_contains = |needles: &[&str]| -> bool {
+        path_lower
+            .iter()
+            .any(|p| needles.iter().any(|n| p.contains(n)))
+    };
+
+    if any_path_contains(&["criticism", "controversy", "debate", "dispute"]) {
+        return "contested".to_string();
+    }
+    if any_path_contains(&["causes", "origins", "background"]) {
+        return "causal".to_string();
+    }
+    if last_path.ends_with("see also") || last_path == "see also" {
+        return "see-also".to_string();
+    }
+
+    let lt = link_text.trim().to_lowercase();
+    let starts_with_any = |prefixes: &[&str]| -> bool {
+        prefixes
+            .iter()
+            .any(|p| lt.starts_with(&format!("{p} ")) || lt == *p)
+    };
+    if starts_with_any(&["led", "caused", "resulted", "prompted", "triggered"]) {
+        return "causal".to_string();
+    }
+    if starts_with_any(&["is", "are", "was", "were", "defined", "known"]) {
+        return "defines".to_string();
+    }
+
+    "topical".to_string()
+}
+
+/// Aggregate a corpus's chunks into the two columnar row sets.
+///
+/// The chunker emits N chunks per section and repeats each section's
+/// `outgoing_links` across all of them, so the structural truth — "this
+/// section links to X" — is one row per `(article, section, target)` with
+/// `occurrence_count = 1`; the neighbor query SUMs across sections. First-seen
+/// `link_text` wins, matching the old `INSERT OR IGNORE`.
+///
+/// Only in-scope articles (those that appear as a link SOURCE) get an
+/// `articles.lance` row — at full wiki that is ~52k of the 1.67M titles the
+/// link graph names. Dangling targets ride on `edges.target_in_scope = false`,
+/// which is why the neighbor query needs no join back to `articles`.
+pub fn wiki_rows_from_chunks(
+    chunks: Vec<StoredChunkWithMetadata>,
+) -> (Vec<WikiArticleRow>, Vec<WikiEdgeRow>, WikiIngestSummary) {
+    let mut articles: HashMap<String, AggregatedArticle> = HashMap::new();
+    let mut chunks_with_metadata = 0usize;
+    let mut chunks_without_metadata = 0usize;
+
+    for chunk in chunks {
+        let Some(metadata_raw) = chunk.metadata_raw.as_deref() else {
+            chunks_without_metadata += 1;
+            continue;
+        };
+        let meta: WikipediaChunkMetadata = match serde_json::from_str(metadata_raw) {
+            Ok(m) => m,
+            Err(_) => {
+                chunks_without_metadata += 1;
+                continue;
+            }
+        };
+        chunks_with_metadata += 1;
+
+        // Canonical article title — prefer the chunk title, fall back to the
+        // URL-derived one. Neither present means an extraction artifact.
+        let Some(article_title) = chunk
+            .title
+            .clone()
+            .or_else(|| chunk.url.as_deref().and_then(wiki_title_from_url))
+        else {
+            continue;
+        };
+
+        let entry = articles
+            .entry(article_title.clone())
+            .or_insert_with(|| AggregatedArticle::new(article_title));
+
+        // Per-article fields come from the first metadata that carries them —
+        // Wikipedia revisions identify the same article across its sections.
+        if entry.wikidata_qid.is_none() {
+            entry.wikidata_qid = meta.wikidata_qid.clone();
+        }
+        if entry.revision_id.is_none() {
+            entry.revision_id = meta.revision_id;
+        }
+
+        let section_path_joined = join_section_path(&meta.section_path);
+        let section = entry
+            .sections
+            .entry(section_path_joined)
+            .or_insert_with(|| AggregatedSection::new(meta.section_type.clone()));
+
+        if !section.counts_seen {
+            section.pov_count = meta.pov_count.unwrap_or(0);
+            section.section_type = meta.section_type.clone();
+            section.counts_seen = true;
+        }
+
+        for link in &meta.outgoing_links {
+            section
+                .outgoing
+                .entry(link.target_title.clone())
+                .or_insert_with(|| AggregatedEdge {
+                    link_text: link.link_text.clone(),
+                    relationship_type: classify_relationship(&meta.section_path, &link.link_text),
+                    occurrence_count: 1,
+                });
+        }
+
+        entry.pov_total += meta.pov_count.unwrap_or(0);
+        entry.citation_total += meta.citation_needed_count.unwrap_or(0);
+    }
+
+    let revision_id_max = articles.values().filter_map(|a| a.revision_id).max();
+    let mut sections = 0usize;
+    let mut dangling: HashSet<&str> = HashSet::new();
+
+    let mut edge_rows: Vec<WikiEdgeRow> = Vec::new();
+    for art in articles.values() {
+        sections += art.sections.len();
+        for (section_path, section) in &art.sections {
+            for (target_title, edge) in &section.outgoing {
+                let target_in_scope = articles.contains_key(target_title.as_str());
+                if !target_in_scope {
+                    dangling.insert(target_title.as_str());
+                }
+                edge_rows.push(WikiEdgeRow {
+                    source_title: art.title.clone(),
+                    target_title: target_title.clone(),
+                    relationship_type: edge.relationship_type.clone(),
+                    link_text: edge.link_text.clone(),
+                    occurrence_count: edge.occurrence_count,
+                    source_section_path: section_path.clone(),
+                    target_in_scope,
+                });
+            }
+        }
+    }
+    let dangling_targets = dangling.len();
+
+    let article_rows: Vec<WikiArticleRow> = articles
+        .values()
+        .map(|a| WikiArticleRow {
+            title: a.title.clone(),
+            wikidata_qid: a.wikidata_qid.clone().unwrap_or_default(),
+            revision_id: a.revision_id.unwrap_or(-1),
+            in_scope: true,
+            pov_total: a.pov_total,
+            citation_total: a.citation_total,
+            is_contested: a.is_contested(),
+        })
+        .collect();
+
+    let summary = WikiIngestSummary {
+        articles: article_rows.len(),
+        edges: edge_rows.len(),
+        sections,
+        dangling_targets,
+        chunks_with_metadata,
+        chunks_without_metadata,
+        revision_id_max,
+    };
+    tracing::info!(
+        articles = summary.articles,
+        edges = summary.edges,
+        sections = summary.sections,
+        dangling_targets = summary.dangling_targets,
+        chunks_with_metadata = summary.chunks_with_metadata,
+        chunks_without_metadata = summary.chunks_without_metadata,
+        revision_id_max = ?summary.revision_id_max,
+        "wiki columnar: aggregated chunks into store rows"
+    );
+    (article_rows, edge_rows, summary)
+}
+
+/// The whole direct build: chunks → rows → `articles.lance` + `edges.lance`.
+/// The single entry point the CLI drives; replaces
+/// `WikipediaGraph::ingest_from_chunks` + `export_columnar`.
+pub async fn build_wikipedia_columnar_store_from_chunks(
+    atlas_dir: &Path,
+    chunks: Vec<StoredChunkWithMetadata>,
+) -> Result<WikiIngestSummary, String> {
+    let (articles, edges, summary) = wiki_rows_from_chunks(chunks);
+    write_wikipedia_columnar_store(atlas_dir, &articles, &edges).await?;
+    Ok(summary)
 }
 
 #[cfg(test)]
