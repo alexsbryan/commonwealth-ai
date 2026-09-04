@@ -363,6 +363,14 @@ pub(crate) fn claim_search_shadow_enabled() -> bool {
 /// passages that widened the window), which is exactly the material a human
 /// needs to validate the instrument before trusting its result (ARCH §18.4).
 ///
+/// Since 2026-09-04 it ALSO covers the citation stage (`kind: "citation"` — the
+/// built passages and the model's raw reply; `kind: "citation_part"` — one
+/// record per part with `quote_present`, the match, and both support checks).
+/// It did not, and a citation-mode turn is exactly the one that composes "The
+/// passages do not answer: …", so the mode whose refusal reads as a statement
+/// about the corpus was the one mode leaving no record of what the model was
+/// shown. Same knob, same file, same default-off reason.
+///
 /// Default OFF and it must stay off: the records contain verbatim corpus text
 /// and the model's draft claims, which is user content that has no business on
 /// disk outside a deliberate diagnostic run.

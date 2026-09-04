@@ -200,6 +200,22 @@ pub async fn citation_grounded_answer(
             return CitationOutcome::Inconclusive;
         }
     };
+    // Glassbox for the citation stage (ARCH §9.1). `SOVEREIGN_GATE_AUDIT_FORENSICS`
+    // covered the LONG-FORM audit only, so a citation-mode turn — the mode that
+    // composes "The passages do not answer: …" — left no record of what the model
+    // was shown or what it replied. Same knob, same file, off by default.
+    if super::config::audit_forensics_path().is_some() {
+        super::gate::audit_forensics(&serde_json::json!({
+            "kind": "citation",
+            "ts": chrono::Utc::now().to_rfc3339(),
+            "question": &q,
+            "multiquote": multiquote,
+            "n_chunks": chunks.len(),
+            "passage_chars": passages.chars().count(),
+            "passages": &passages,
+            "reply": &resp,
+        }));
+    }
     // Multi-quote contract: one PART block per sub-question, each verified on its
     // own. A model that ignores the format and replies with a bare QUOTE/ANSWER
     // pair falls through to the single-pair parse below, so a format miss
@@ -232,7 +248,7 @@ pub async fn citation_grounded_answer(
     // the answer, chunks for the quote). Skips the NONE sentinels — an
     // abstention has nothing to complete.
     match verify_pair(None, &quote, &answer, chunks) {
-        Some((quote, answer, chunk)) => CitationOutcome::Grounded {
+        Ok((quote, answer, chunk)) => CitationOutcome::Grounded {
             answer,
             quotes: vec![GroundedQuote {
                 text: quote,
@@ -240,7 +256,7 @@ pub async fn citation_grounded_answer(
                 target: target_at(targets, chunk),
             }],
         },
-        None => CitationOutcome::Abstain,
+        Err(_) => CitationOutcome::Abstain,
     }
 }
 
@@ -273,8 +289,29 @@ fn target_at(targets: &[Option<CitationTarget>], chunk: Option<usize>) -> Option
     targets.get(chunk?)?.clone()
 }
 
+/// Why a `(quote, answer)` pair did not ground. The three are NOT
+/// interchangeable and the release text depends on telling them apart: two of
+/// them are evidence that the passages do not answer the part, and one is only
+/// evidence that WE could not confirm it (ARCH_PRINCIPLES §18.2 — four
+/// verdicts, not two; §18.3 — absence is reported, never defaulted, and never
+/// invented).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum PairRefusal {
+    /// The model answered `NONE` — it read the passages and reported an
+    /// absence. Naming that absence in the release is honest.
+    DeclaredNone,
+    /// The quote is nowhere in the passages. The model had no supporting text
+    /// to copy, which is itself evidence the passages do not carry the answer.
+    QuoteNotFound,
+    /// The quote IS verbatim in the passages and the model answered from it,
+    /// but `answer_supported_by_quote` could not confirm the answer against
+    /// it. This says nothing whatever about the corpus — see
+    /// `multiquote_outcome`.
+    Unsupported,
+}
+
 /// Repair and then verify ONE `(quote, answer)` pair against the passages.
-/// `Some` iff the quote is verbatim in the chunks AND the answer is supported by
+/// `Ok` iff the quote is verbatim in the chunks AND the answer is supported by
 /// that quote — i.e. this is *the* grounding decision, and both the
 /// single-sentence and the multi-quote contract call it, so a part of a compound
 /// answer is held to exactly the same bar as a whole one (ARCH_PRINCIPLES §10.6:
@@ -286,7 +323,7 @@ fn verify_pair(
     quote: &str,
     answer: &str,
     chunks: &[String],
-) -> Option<(String, String, Option<usize>)> {
+) -> Result<(String, String, Option<usize>), PairRefusal> {
     let label = part.map(|p| format!("[part {p}] ")).unwrap_or_default();
     let (quote, answer) = (quote.to_string(), answer.to_string());
     let sentinel = is_none(&quote) || is_none(&answer);
@@ -419,8 +456,34 @@ fn verify_pair(
             "abstain (fall through to legacy)"
         }
     ));
-    if none || !quote_present || !supported {
-        return None;
+    if super::config::audit_forensics_path().is_some() {
+        super::gate::audit_forensics(&serde_json::json!({
+            "kind": "citation_part",
+            "ts": chrono::Utc::now().to_rfc3339(),
+            "part": part,
+            "quote": &quote,
+            "answer": &answer,
+            "sentinel_none": none,
+            "quote_present": quote_present,
+            "match": match &found {
+                Some(QuoteMatch::Exact { chunk, .. }) => format!("exact(chunk {chunk})"),
+                Some(QuoteMatch::Partial { chunk }) => format!("partial-run(chunk {chunk})"),
+                Some(QuoteMatch::AcrossChunks) => "across-chunks".to_string(),
+                None => "none".to_string(),
+            },
+            "answer_in_quote": answer_in_quote,
+            "answer_in_matched_chunk": answer_in_matched_chunk,
+            "grounded": !none && quote_present && supported,
+        }));
+    }
+    if none {
+        return Err(PairRefusal::DeclaredNone);
+    }
+    if !quote_present {
+        return Err(PairRefusal::QuoteNotFound);
+    }
+    if !supported {
+        return Err(PairRefusal::Unsupported);
     }
     // ONE rule decides both what gets printed and whether it may be attributed,
     // because they are the same question (ARCH_PRINCIPLES §10.6): only a span we
@@ -455,7 +518,7 @@ fn verify_pair(
         }
         None => answer,
     };
-    Some((quote, answer, chunk))
+    Ok((quote, answer, chunk))
 }
 
 /// Split a multi-quote reply into `(part_label, quote, answer)` triples, one per
@@ -514,24 +577,77 @@ fn multiquote_outcome(
 ) -> CitationOutcome {
     let mut grounded: Vec<(String, String, String, Option<usize>)> = Vec::new();
     let mut unanswered: Vec<String> = Vec::new();
+    let mut unconfirmed: Vec<String> = Vec::new();
     for (label, quote, answer) in parts {
         match verify_pair(Some(label), quote, answer, chunks) {
-            Some((quote, answer, chunk)) => grounded.push((label.clone(), quote, answer, chunk)),
-            None => unanswered.push(label.clone()),
+            Ok((quote, answer, chunk)) => grounded.push((label.clone(), quote, answer, chunk)),
+            // The model read the passages and reported an absence, or found no
+            // sentence to copy at all. Both are evidence about the CORPUS, so
+            // both may be named as unanswered below.
+            Err(PairRefusal::DeclaredNone) | Err(PairRefusal::QuoteNotFound) => {
+                unanswered.push(label.clone())
+            }
+            // The quote is verbatim in the passages and the model answered from
+            // it; only our word-overlap check could not confirm the paraphrase.
+            Err(PairRefusal::Unsupported) => unconfirmed.push(label.clone()),
         }
     }
     dbg(&format!(
-        "citation: multiquote parts={} grounded={} unanswered={:?} → {}",
+        "citation: multiquote parts={} grounded={} unanswered={:?} unconfirmed={:?} → {}",
         parts.len(),
         grounded.len(),
         unanswered,
+        unconfirmed,
         if grounded.is_empty() {
             "abstain (fall through to legacy)"
+        } else if !unconfirmed.is_empty() {
+            "abstain (unconfirmed part — fall through to legacy)"
         } else {
             "GROUNDED"
         }
     ));
     if grounded.is_empty() {
+        return CitationOutcome::Abstain;
+    }
+    // A part we could not CONFIRM is not a part the passages do not answer, and
+    // the composed release has no way to say the difference: its only vocabulary
+    // for a missing part is "The passages do not answer: <part>", which is a
+    // claim about the corpus that `answer_supported_by_quote` never tested.
+    //
+    // MEASURED, 2026-09-04, arch-tour-fixture Q1 ("what is the runtime pipeline,
+    // and what role does the grounding gate play?"), 2 of 5 warm runs: the model
+    // returned a correct PART block for the gate's role, quoting the
+    // `02-journey.svg` alt text — `quote_present=true, match=exact(chunk 4)` —
+    // and answered from it accurately. `answer_supported_by_quote` is a
+    // conjunction over EVERY content word of the answer, and 6 of that answer's
+    // 27 were not literal in the quote: `claims` (source: "claim"), `from`,
+    // `synthesized` (source: "Synthesis"), `either`, `checking` (source:
+    // "re-check"), `additionally`. Connectives and morphological variants —
+    // which a multi-sentence explanatory answer is guaranteed to contain, so the
+    // check's pass probability decays with answer LENGTH. The part was dropped
+    // and the turn released "The passages do not answer: Role of the grounding
+    // gate" over a 1,584-char draft that answered it in full, with the evidence
+    // sitting at passage [2] of 20 in the very window the model was shown.
+    //
+    // So: fall through to the legacy ladder instead, which audits the DRAFT
+    // claim by claim — the same path a draft one line longer already takes (the
+    // citation contract only runs below `profile.longform_chars`, 1,800), and
+    // the path that produced the correct answer on the other 3 of those 5 runs.
+    // Nothing here weakens a check: `answer_supported_by_quote` is untouched and
+    // still refuses the pair, so the anti-confabulation guard the citation path
+    // was built on is exactly as strict as it was (ARCH_PRINCIPLES §18.2 — a
+    // could-not-judge is its own verdict, not a failure; §18.3 — absence is
+    // reported, never invented).
+    if !unconfirmed.is_empty() {
+        tracing::debug!(
+            parts = parts.len(),
+            grounded = grounded.len(),
+            unconfirmed = ?unconfirmed,
+            unanswered = ?unanswered,
+            "citation multiquote: a part's quote verified but its answer could not be \
+             confirmed against it — falling through to the legacy ladder rather than \
+             releasing \"the passages do not answer\" for a part the passages may answer"
+        );
         return CitationOutcome::Abstain;
     }
     let mut answer = String::new();

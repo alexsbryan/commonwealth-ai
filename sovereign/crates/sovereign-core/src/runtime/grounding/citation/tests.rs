@@ -361,6 +361,117 @@ fn grounds_the_answerable_part_and_names_the_rest() {
     }
 }
 
+/// **The issue-#57 refusal, replayed as a fixture.** Verbatim inputs from the
+/// captured turn (`SOVEREIGN_GATE_AUDIT_FORENSICS`, 2026-09-04,
+/// `arch-tour-fixture` Q1, reproduced 2/5 warm runs): the model returned a
+/// correct `PART` block for the gate's role, quoting the `02-journey.svg` alt
+/// text — which `locate_quote_in_chunks` matches EXACT — and answered from it
+/// accurately. `answer_supported_by_quote` still refuses that pair, because 6
+/// of the answer's 27 content words are not literal in the quote (`claims` vs
+/// "claim", `synthesized` vs "Synthesis", `checking` vs "re-check", plus
+/// `from`, `either`, `additionally`).
+///
+/// What must NOT happen is what happened: releasing "The passages do not
+/// answer: Role of the grounding gate" over evidence sitting at passage [2] of
+/// the model's own window. A part we could not CONFIRM is not a part the
+/// passages do not answer, so the contract falls through to the legacy ladder,
+/// which audits the draft — the same path a draft one line past
+/// `profile.longform_chars` already takes.
+#[test]
+fn an_unconfirmable_part_falls_through_instead_of_claiming_the_passages_are_silent() {
+    let chunk = "A message flows through Router (what kind of ask), Retrieval (search all \
+         your sources — local corpora, mesh peers, your docs), and Synthesis (draft an \
+         answer), then reaches the grounding gate, which extracts each claim and checks \
+         it against the sealed evidence. Three outcomes: released with citations, \
+         rewrite the unsupported bits and re-check, or honestly abstain. The model never \
+         originates a number."
+        .to_string();
+    let quote = chunk.clone();
+    let answer = "It extracts claims from the synthesized answer and checks them against \
+         sealed evidence to either release with citations, rewrite unsupported bits for \
+         re-checking, or honestly abstain; additionally, the model never originates a \
+         number."
+        .to_string();
+
+    // The premise the fixture rests on: the quote IS in the passages, and the
+    // support check still refuses the pair. If either flips, this test is
+    // measuring something else.
+    assert!(
+        locate_quote_in_chunks(&quote, std::slice::from_ref(&chunk)).is_some(),
+        "premise: the quote is verbatim in the evidence"
+    );
+    assert_eq!(
+        verify_pair(
+            Some("Role of the grounding gate"),
+            &quote,
+            &answer,
+            &[chunk.clone()]
+        ),
+        Err(PairRefusal::Unsupported),
+        "premise: the anti-confabulation bar is unchanged and still refuses this paraphrase"
+    );
+
+    let parts = vec![
+        (
+            "Runtime pipeline".to_string(),
+            "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc.".to_string(),
+            "the Doctor".to_string(),
+        ),
+        ("Role of the grounding gate".to_string(), quote, answer),
+    ];
+    let mut cs = chunks();
+    cs.push(chunk);
+    match multiquote_outcome(&parts, &cs, &[], &[]) {
+        CitationOutcome::Abstain => {}
+        CitationOutcome::Grounded { answer, .. } => {
+            panic!("an unconfirmable part must not be released as an absence: {answer}")
+        }
+        CitationOutcome::Inconclusive => {
+            panic!("expected fall-through to the legacy ladder, got Inconclusive")
+        }
+    }
+}
+
+/// The guard for the fix above: a part the model itself declared `NONE`, and a
+/// part whose quote is nowhere in the passages, are BOTH evidence about the
+/// corpus — they must still be named, and the grounded sibling must still ship.
+/// This is the measured multi-quote gain (`SOVEREIGN_CITATION_MULTIQUOTE`,
+/// 2026-08-05: citation releases 0 -> 3 on the saltgrass compound bank), and
+/// the fall-through must not quietly take it back.
+#[test]
+fn a_declared_absence_is_still_named_and_its_grounded_sibling_still_ships() {
+    let parts = vec![
+        (
+            "the nickname".to_string(),
+            "Alexander Ossipon, anarchist, nicknamed the Doctor, sat near Mr Verloc.".to_string(),
+            "the Doctor".to_string(),
+        ),
+        (
+            "Verloc's first name".to_string(),
+            "NONE".to_string(),
+            "NONE".to_string(),
+        ),
+        (
+            "his posting".to_string(),
+            "Ossipon served as the Russian ambassador to London.".to_string(),
+            "Russian ambassador".to_string(),
+        ),
+    ];
+    match multiquote_outcome(&parts, &chunks(), &[], &[]) {
+        CitationOutcome::Grounded { answer, .. } => {
+            assert!(answer.contains("the Doctor"), "{answer}");
+            assert!(answer.contains("The passages do not answer"), "{answer}");
+            assert!(answer.contains("Verloc's first name"), "{answer}");
+            assert!(answer.contains("his posting"), "{answer}");
+            assert!(
+                !answer.contains("Russian ambassador"),
+                "a fabricated quote must not ship: {answer}"
+            );
+        }
+        _ => panic!("a declared absence must not trigger the fall-through"),
+    }
+}
+
 #[test]
 fn all_parts_ungrounded_abstains() {
     // Floor unchanged: when nothing grounds, the multi-quote contract
