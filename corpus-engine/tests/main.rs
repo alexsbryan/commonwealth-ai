@@ -90,3 +90,5 @@ mod snapshot_restore_e2e;
 mod tiered_entity_extractor_seam;
 #[path = "main/watcher_e2e.rs"]
 mod watcher_e2e;
+#[path = "main/wiki_snapshot_roundtrip.rs"]
+mod wiki_snapshot_roundtrip;
