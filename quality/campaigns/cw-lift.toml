@@ -40,11 +40,13 @@ status    = "active"
 #   4a  fair_sched -> serving-policy   e26414742  DONE     +107
 #   1a  oplog -> tier-0 leaf           33b003a2e  DONE     +216
 #   ── the precondition is paid; everything below is open ──
-#   1b  git mv the rail into two crates
+#   1b  the rail becomes two crates      ff63884f3  DONE       +8
+#   4b  model_aliases + glob -> oicp     2a5b63325  DONE      +63
+#   G   gate integrity (3 commits)       4759e7b04  DONE
+#   ── open ──
 #   1c  repoint 8 consumers, drop the facade
-#   1d  SEVER rail -> corpus-engine   <- the commit that earns the claim
+#   1d  RE-DERIVE BEFORE RUNNING — 1b already severed corpus-engine
 #   1e  RingVerifier + Membership seams
-#   4b  model_aliases + glob -> oicp-types
 #   1f  the acceptance ledger (canon x rail)
 #   2   route mesh work through the rail (measurement-gated)
 #   3   triage the application layer (unscoped until 2 settles)
@@ -52,14 +54,22 @@ status    = "active"
 #   R   the ratchets + the push decision                      <- OFF-PLAN
 #   G   gate integrity: two gates that pass without running   <- OFF-PLAN
 #
-# G's first finding was RE-DIAGNOSED 2026-09-04 after it reproduced on a
-# one-file commit. `scripts/pre-commit.sh` is not diff-size sensitive: it
-# `export`s the whole work atlas (`work_in_flight --scope=` matches
-# everything), which measured 4,716,818 bytes against an ARG_MAX of 1,048,576.
-# Every child `python3`/`grep` has been dying with E2BIG, and the hook is
-# advisory so the commit proceeds. Both its checks have been silently off on
-# this host for as long as the atlas has been that big. Fix is ~2 lines: export
-# the PATH to a temp file, not the payload.
+# G IS DONE, and it found a third gate the order did not know about.
+# The pre-commit ARG_MAX kill is fixed and WATCHED: scripts/tests/
+# pre-commit-argmax.sh drives the real hook at a 4.7 MB atlas, six cases, with
+# a negative control asserting the OLD form dies so the other five cannot pass
+# vacuously. Re-run 2026-09-04 at HEAD: 6/6.
+# The rebrand.rs parallel-only race is fixed as a PARAMETER, not a mutex
+# (4759e7b04) — 3 failures in 40 parallel runs before, 0 in 200 after. Its
+# census found three MORE tests in that binary reading $HOME unlocked; none
+# was failing, all three were passing on luck, all three now locked.
+# THE THIRD GATE: three doctests in sovereign-cli-llm failed to COMPILE, so
+# `./scripts/sovereign-test.sh` had been exiting 101 while its banner read
+# `pass: 11830  fail: 0` (99bfde104, f22270fa2). A doctest that fails to
+# compile emits `error:` and no per-test line, so that `fail: 0` was
+# STRUCTURAL, not measured — §18.2, a failure present in the exit code and
+# absent from the summary a human reads. Every cw-lift commit before
+# 2026-09-04 landed against that red.
 #
 # 1b-1d SEVERING THE RAIL is the critical path. Phase 2 is the hard
 # precondition for ALL sovereign-mesh work; nothing may touch that crate's
@@ -82,12 +92,18 @@ status       = "open"
 # But 4a cost +107 against a Phase-4 budget of +50 FOR THE WHOLE PHASE, and 4b
 # has not run. Projecting the plan's remaining budgets:
 #
-#   -4,690  landed
-#     +349  1b-1e (the +565 budget less 1a's +216)
+#   -4,690  landed through 1a
+#      +63  4b ACTUAL (2a5b63325) — budgeted +30, so +33 over
+#       +8  1b ACTUAL (ff63884f3) — two module headers, the facade use, one
+#           pub mod line. The split PAID BACK 804 lines of arch-gate band by
+#           splitting tests.rs rather than trimming it to parity.
+#     +341  1c-1e (the +349 budget less 1b's +8)
 #     +550  1f, carried as its own line and not absorbed into slack
-#      +30  4b (a pure move plus one manifest)
 #   -------
-#   -3,761  vs the floor of -3,800 -> MISSES BY ~39
+#   -3,728  vs the floor of -3,800 -> MISSES BY ~72
+#
+# RE-DERIVED 2026-09-04 from wave-1 actuals. The miss GREW from ~39 to ~72 and
+# the whole of that is 4b's overrun; 1b came in at a tenth of its share.
 #
 # The floor already moved once, from -4,000 to -3,800, to pay for 1f visibly.
 # Moving it a second time to absorb an overrun would be exactly the accounting
@@ -109,23 +125,57 @@ kill         = "K4 — Phase 1a-1e Added overruns +900, or 1f's overruns +800. T
 [[bar]]
 id           = "cw-sovereign-commonwealth-edge"
 one_line     = "CLAIM: the ungoverned sovereign -> commonwealth edge narrows as vocabulary is rehomed"
-derives_from = "measured 2026-09-04 on a fresh SCIP index at 83c0caebf"
+derives_from = "P1, re-derived 2026-09-04 at 4b from a per-crate census of the edge"
 status       = "open"
-# 101 types / 616 refs at campaign start -> 95 / 595 now. 4a bought 6 types /
-# 21 refs.
+# ── P1 IS FALSIFIED AND PHASE 4 IS OVER. The claim above is kept verbatim so
+# the miss stays legible; what follows is the correction, not a replacement.
 #
-# P1 AS WRITTEN PREDICTED 13 types / ~144 refs for 4a+4b together (101/616 ->
-# 88/~472). 4a delivered 6/21 and 4b is a SMALLER subject, so the remaining
-# 7/~123 is not credible. RE-DERIVE AT 4b from what actually moved — before
-# claiming it. Target below is the ORIGINAL prediction, deliberately left
-# standing so the miss is visible rather than tidied away.
+# 4a delivered 6 types / 21 refs. 4b (2a5b63325) delivered ZERO: all 55
+# references to the five types and one function it moved were already inside
+# commonwealth/, so nothing it touched was ever ON this edge. Phase 4 has no
+# further rungs. Against P1's 13 / ~144, Phase 4 closes at 6 / 21 — 46% of the
+# type claim and 15% of the ref claim.
 #
-# The governed direction is nearly paid off and moving the WRONG WAY by one:
-# commonwealth -> sovereign was 11 types / 38 refs (2026-08-20), now 12 / 39,
-# all from commonwealth-api, all R6-tracked. Worth one look, not an order.
-floor        = 95.0
-floor_basis  = "python3 scripts/nc-boundary.py, 2026-09-04, fresh SCIP index at 83c0caebf: 95 types / 595 refs (101 / 616 at campaign start)"
-target       = 88.0
+# WHY THE PREDICTION WAS WRONG: it priced the edge as VOCABULARY and the edge
+# is not vocabulary. Per-crate census of the 618 refs (index 997148603):
+#
+#     571 refs / 100 types  sovereign-mesh
+#      14 / 5  sovereign-cli-llm       9 / 2  sovereign-cli-daemon
+#      13 / 2  sovereign-work-atlas    6 / 1  sovereign-tools
+#       4 / 2  sovereign-server        1 / 1  sovereign-desktop
+#
+# 93 of the 104 types are named by sovereign-mesh AND BY NOTHING ELSE. A type
+# with exactly one consumer is not shared vocabulary looking for a neutral
+# home; it is one application naming another's internals, and the edge follows
+# it wherever it is moved. That is why 4a worked and 4b could not: fair_sched
+# was named by two non-mesh crates. It was the LAST of its kind, not the first
+# of thirteen.
+#
+# THE REHOMING LANE'S WHOLE REMAINING HEADROOM IS 4 TYPES / 5 REFS, named:
+#     Error (sovereign-work-atlas, 1)   PeerPreference (sovereign-desktop, 1)
+#     Person (sovereign-cli-llm, 1)     Roster (sovereign-cli-llm, 2)
+# Seven other non-mesh types — MeshStore 27 refs, CorpusShardInfo 6,
+# ConvergenceRecord 3, IrohAcceptor 3, EndpointClaim / NodePubkey / RelayConfig
+# 1 each — are ALSO named by sovereign-mesh, so a move relocates them and does
+# not remove them. And Person/Roster are rail types 1b moved into
+# commonwealth-rail-core: still commonwealth, still on the edge.
+#
+# SO THE TARGET BELOW IS THE CEILING OF THE CLAIM AS WORDED, not a plan. 100 is
+# 104 less those 4 — everything this bar's own sentence can still buy, and it
+# is not funded by any open rung. Below 100 needs a DIFFERENT mechanism:
+# sovereign-mesh ceasing to hold a second substrate (Phase 2), or Phase 3,
+# which is unscoped. When one of those is ordered, open a bar for it rather
+# than lowering this target to a number nothing pays for.
+#
+# THE FLOOR ROSE, AND IT WAS NOT THIS CAMPAIGN. This bar recorded 95 / 595 at
+# 83c0caebf. The same script — unchanged since 27c0fe031, 2026-08-26, verified
+# an ancestor of that commit — reads 104 / 618 at 997148603. +9 types / +23
+# refs from work outside cw-lift. The campaign is not losing ground; it is
+# being outrun, and a floor that moves under you is worth more visible than a
+# target that flatters.
+floor        = 104.0
+floor_basis  = "python3 scripts/nc-boundary.py against the SCIP index at 997148603, read 2026-09-04; the same script read 95/595 at 83c0caebf, so the +9/+23 gap is the tree moving and not the instrument"
+target       = 100.0
 direction    = "lower_is_better"
 instrument   = "python3 scripts/nc-boundary.py  (read the banner — it names the commit the INDEX describes, not your tree)"
 kill         = "a NEW [[exception]] row is needed in ARCH_LAYERS.toml. The edge is being relocated, not deleted."
@@ -133,7 +183,24 @@ kill         = "a NEW [[exception]] row is needed in ARCH_LAYERS.toml. The edge 
 [[bar]]
 id           = "cw-rail-closure"
 one_line     = "CLAIM: the rail is a genuine primitive, not an artifact of this codebase"
-derives_from = "RE-DERIVED 2026-09-04, before 1b, from 1a's own measurement"
+derives_from = "RE-DERIVED 2026-09-04 before 1b from 1a's measurement; MEASURED at 1b (ff63884f3)"
+# ── MEASURED AT 1b: rail-core closure = 42, commonwealth-rail = 43. ──
+# Under the 45-50 the signature stack predicted, above oplog's 28 floor.
+# THE MEMBERSHIP HALF — the real claim — ALREADY HOLDS, at 1b rather than 1d:
+# zero corpus-engine*, zero sovereign-*, zero commonwealth-{knowledge,
+# inference,api} in either closure. Verified twice, by the worker and by the
+# seat re-running cargo tree independently.
+# CONSEQUENCE: 1d's headline ("SEVER rail -> corpus-engine") is already spent.
+# The rail's coupling was seven references to Op/OpId/SkippedLine and they now
+# come from `oplog` directly. What is left for 1d is the CONSUMER side
+# (commonwealth-knowledge still needs corpus-engine for shard_manager) and the
+# closure comparison. Re-derive 1d's claim before running it.
+# STILL OPEN, found at 1b and not decidable there: the rail CANNOT join the
+# `commonwealth` package. commonwealth-rail-core names `oplog`, `oplog` is not
+# a [[package_leaf]], and adding it needs a new grandfathered row — a declared
+# campaign stop condition. So the layer map governs the rail and boundary-gate
+# does not. Promote oplog to a leaf, or leave the rail outside the liftable set
+# and write down why. That is a 1d/1e decision.
 status       = "open"
 # (was "re-derived" — RE-DERIVED 2026-09-04; still open, see below)
 # ── P3 (<= 20 CRATES) WAS FALSIFIED BEFORE THE WORK IT GATES EVEN STARTED ──
