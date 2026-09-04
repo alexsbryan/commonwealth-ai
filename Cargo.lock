@@ -2031,16 +2031,39 @@ dependencies = [
  "anyhow",
  "bytes",
  "commonwealth-core",
+ "commonwealth-rail",
  "commonwealth-state",
  "corpus-engine",
- "ed25519-dalek 2.2.0",
  "hex",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
- "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "commonwealth-rail"
+version = "0.6.0"
+dependencies = [
+ "commonwealth-rail-core",
+ "oplog",
+ "serde_json",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "commonwealth-rail-core"
+version = "0.6.0"
+dependencies = [
+ "ed25519-dalek 2.2.0",
+ "hex",
+ "oplog",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
  "tracing",
 ]
 

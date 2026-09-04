@@ -571,7 +571,7 @@ found = "2026-08-31"
 class = "ambient-dependence"
 tier = 1
 surface = "rust-unit"
-target = "commonwealth-knowledge/src/rail/payload.rs"
+target = "commonwealth/crates/commonwealth-rail-core/src/payload.rs"
 failure = """AN OPAQUE SIGNED PAYLOAD MUST BE CANONICAL BY CONSTRUCTION, OR A
 CARGO FEATURE CAN INVALIDATE EVERY SIGNATURE ON THE MESH. A signature covers
 BYTES; `serde_json::Value` has no bytes of its own, and its serialisation

@@ -31,7 +31,7 @@
 //!
 //! # What is deliberately NOT signed
 //!
-//! The [`OpId`](corpus_engine::oplog::OpId) is not in the message, because it
+//! The [`OpId`](oplog::OpId) is not in the message, because it
 //! is derived from the signature (the id hashes the whole line body, `sig`
 //! included). That is not a hole: admission re-derives the id from content
 //! and ignores the one on the line, so a rewritten `id` changes nothing and
@@ -63,9 +63,9 @@ fn field(msg: &mut Vec<u8>, bytes: &[u8]) {
 /// `DOMAIN || ns || ts[8 BE] || actor || seq[8 BE] || body`, every variable
 /// field preceded by its `u32` big-endian length.
 ///
-/// `body` is the JSON of the [`RailAct`](super::RailAct) alone — not the
+/// `body` is the JSON of the [`RailAct`](crate::RailAct) alone — not the
 /// envelope, not `seq`, not `sig`. serde_json emits struct fields in
-/// declaration order, and a [`Payload`](super::Payload) is canonical by
+/// declaration order, and a [`Payload`](crate::Payload) is canonical by
 /// construction, so the same act produces the same bytes on every node and
 /// build. That is the property the whole scheme rests on, and the payload
 /// half of it is why `Payload` is a type rather than a `serde_json::Value`.
@@ -109,7 +109,7 @@ pub fn sign_ring_op(
 ///
 /// Verifying under `actor`'s own key is self-certifying and therefore proves
 /// nothing on its own — anyone can mint a keypair. It is the
-/// [`Roster`](super::Roster) that makes it mean something, by saying which
+/// [`Roster`](crate::Roster) that makes it mean something, by saying which
 /// keys belong to people in this ring. Both checks are required and admission
 /// runs both.
 pub fn verify_ring_op(

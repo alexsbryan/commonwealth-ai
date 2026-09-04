@@ -1,0 +1,53 @@
+[package]
+name = "commonwealth-rail-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The ring rail's fold — Person/Roster/RailAct/SignedOp, the opaque Payload, Ed25519 authorship, admission into one total order, and the per-actor sync digest. Pure: no filesystem, no clock, no network."
+
+# DELIBERATE: this crate performs NO I/O, and the dependency list is how that
+# is enforced rather than remembered. There is no `std::fs`, no clock read and
+# no socket anywhere in it — `admit` takes the ops it is given, and the caller
+# that read them off a disk is `commonwealth-rail`. Five dependencies:
+#
+#   oplog          the envelope. `Op`/`OpId` are GOSSIPED, so the id
+#                  derivation must come from the one crate that owns it
+#                  (ARCH §10.6, §7.5) — never be re-derived here.
+#   ed25519-dalek  authorship. PLAIN default features: the rail neither
+#                  generates keys (`rand_core`) nor reads them from a file
+#                  (`pkcs8`); it signs bytes it is handed and verifies bytes a
+#                  peer sent.
+#   serde/serde_json  the wire form. `Payload`'s whole thesis is that a signed
+#                  body is canonical bytes, which is a serde property.
+#   hex            actor + signature spelling, as they appear on the wire.
+#
+# What is deliberately ABSENT, and must stay absent: `commonwealth-core` (a
+# rail is not a mesh), `corpus-engine` (the edge order 1a existed to sever),
+# any `sovereign-*` (a peer building a ring app has no sovereign), and any
+# clock — a timestamp is a parameter of `sign_ring_op`, not something this
+# crate can read. See the three [[forbid]] blocks in quality/ARCH_LAYERS.toml,
+# without which the layer entry would be a green gate enforcing nothing.
+[dependencies]
+oplog = { workspace = true }
+# NOT the workspace entry, deliberately: that one carries `pkcs8` +
+# `rand_core` for the crates that generate and load node keys. The rail
+# does neither — it signs bytes it is handed — so a third party lifting
+# this crate gets the plain signature stack and nothing else.
+ed25519-dalek = "2"
+hex = "0.4"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+# Admission decides what it refuses and says so at debug; a fold whose
+# refusals are invisible fails ARCH §9.1.
+tracing = { workspace = true }
+
+[features]
+# The op fixtures, for the crate that owns the journal. `commonwealth-rail`'s
+# tests and this crate's tests must build the same signed op or neither proves
+# anything (ARCH §10.6), and a fixture module cannot cross a crate boundary
+# under `#[cfg(test)]`. Off in every non-test build.
+test-support = []
+
+[lints]
+workspace = true

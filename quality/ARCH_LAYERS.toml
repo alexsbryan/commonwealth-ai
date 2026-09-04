@@ -146,6 +146,17 @@ crates = [
     "commonwealth-inference",
     "commonwealth-knowledge",
     "commonwealth-app",
+    # The ring rail, split out of `commonwealth-knowledge` on 2026-09-04
+    # (cw-lift 1b). `-rail-core` is the fold — vocabulary, signing, admission,
+    # the sync digest, and ZERO I/O — and `-rail` is the JSONL journal that
+    # calls it. Their whole in-repo dependency surface is `oplog` (layer 0)
+    # plus, for `-rail`, `-rail-core`. Sitting here rather than at layer 0 is
+    # the honest placement: a rail is mesh vocabulary, not a neutral kernel.
+    # See the three [[forbid]] blocks below — a layer entry on its own would
+    # be a green gate enforcing nothing (§5.1), and the whole reason these
+    # crates exist is a dependency property.
+    "commonwealth-rail-core",
+    "commonwealth-rail",
 ]
 
 # The agent substrate: runtime core, inference, persistence, and the studio
@@ -355,6 +366,34 @@ reason = "a journal that names the runtime cannot be lifted with the mesh substr
 from = "oplog"
 to = "commonwealth-*"
 reason = "same rule pointing the other way — corpus-engine's three tenants write this journal too, so a mesh dependency would make the knowledge layer link the mesh to append a line"
+
+# The ring rail, split out of commonwealth-knowledge on 2026-09-04 (cw-lift
+# 1b). `commonwealth-rail*` covers BOTH new crates, so the fold and the journal
+# cannot drift apart on what they may name. These three are the whole point of
+# the extraction — the rail is meant to be liftable by a third party building a
+# ring app, and the two edges it just shed are exactly the two a convenience
+# restores first. The `corpus-engine*` rule is load-bearing today rather than
+# aspirational: the rail's coupling to the knowledge layer was seven references
+# to Op/OpId/SkippedLine, order 1a moved those into `oplog`, and this commit is
+# where the dep line actually goes away. Nothing enforced it until now.
+[[forbid]]
+from = "commonwealth-rail*"
+to = "corpus-engine*"
+reason = "the rail's entire reason for being a crate is that a 2,600-line signed log does not need a 578-crate knowledge closure; the oplog extraction (1a) paid for this and a dep back spends it"
+
+[[forbid]]
+from = "commonwealth-rail*"
+to = "sovereign-*"
+reason = "a ring app is composed by a peer that has no sovereign build at all — the rail is the substrate the second application (canon x rail) has to compose on, and naming the runtime makes that untestable"
+
+# The rail came OUT of commonwealth-knowledge and that crate now re-exports it.
+# Without this, the facade is re-invertible: a future convenience in the rail
+# reaches back for a Corpus or a WorkQueue, the layer check passes because both
+# sit in mesh-foundation, and the extraction is undone with nothing red.
+[[forbid]]
+from = "commonwealth-rail*"
+to = "commonwealth-knowledge"
+reason = "these two crates are what came out of commonwealth-knowledge; a dep back would restore the cycle the split exists to break, and layer ordering cannot see it because both sit in mesh-foundation"
 
 [[forbid]]
 from = "commonwealth-core"

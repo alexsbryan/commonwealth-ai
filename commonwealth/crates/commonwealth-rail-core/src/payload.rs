@@ -15,7 +15,7 @@
 //! insertion order; without it, in sorted order. Flip that feature and every
 //! signature in every ring on the mesh stops verifying at once, and the
 //! symptom is not "the feature changed", it is a journal that has become all
-//! [`BadSignature`](super::RailGap::BadSignature).
+//! [`BadSignature`](crate::RailGap::BadSignature).
 //!
 //! A typed body did not have this problem: serde writes struct fields in
 //! declaration order regardless. Making the body opaque is what introduces
@@ -47,7 +47,7 @@
 //! Anything about what the payload *means*. A payload that is well-formed and
 //! canonical but says something absurd — a negative amount, a borrower who is
 //! not in the house — is the app's to judge, in the app's vocabulary. The
-//! rail has no opinion and cannot have one; see [`super::admit`].
+//! rail has no opinion and cannot have one; see [`crate::admit`].
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
@@ -164,7 +164,7 @@ impl Serialize for Payload {
 /// other than the ones its signature covers, and would be reported as a bad
 /// signature rather than as what it is. Canonicalizing here means a line
 /// written by a correct peer always verifies, and a line that cannot be
-/// canonicalized at all is a [`MalformedLine`](super::RailGap::MalformedLine)
+/// canonicalized at all is a [`MalformedLine`](crate::RailGap::MalformedLine)
 /// — which is exactly what it is.
 impl<'de> Deserialize<'de> for Payload {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {

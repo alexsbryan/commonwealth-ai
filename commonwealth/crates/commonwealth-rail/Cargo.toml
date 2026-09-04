@@ -1,0 +1,36 @@
+[package]
+name = "commonwealth-rail"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The ring rail's journal — one append-only JSONL log per namespace under <root>/rings/<ns>/, with the single-writer door that signs and the peer-ingest path that does not."
+
+# DELIBERATE: four dependencies, and the shape is the point. This crate is the
+# I/O half of the rail; `commonwealth-rail-core` is the fold and is re-exported
+# wholesale from `lib.rs`, so an application names ONE crate while a second
+# application that needs only the fold (canon) names the other and links no
+# filesystem code at all.
+#
+# `oplog` is direct rather than reached through the core because `Oplog<K>` —
+# the writer — is the one journal type the core deliberately does not
+# re-export: nothing above this crate opens a journal.
+#
+# ABSENT and must stay absent: `commonwealth-core` (including its clock — see
+# quality/baselines/clock_reads.txt; a rail that had to link the mesh to stamp
+# a line would be the `Op::now` mistake order 1a deleted), `corpus-engine`, and
+# any `sovereign-*`. Enforced by the [[forbid]] blocks in
+# quality/ARCH_LAYERS.toml, not by this comment.
+[dependencies]
+commonwealth-rail-core = { workspace = true }
+oplog = { workspace = true }
+serde_json = { workspace = true }
+# Append, dedupe and batch-ingest decisions are traced at debug (ARCH §9.1).
+tracing = { workspace = true }
+
+[dev-dependencies]
+# The rail's ONE set of op fixtures, from the crate that declares them.
+commonwealth-rail-core = { workspace = true, features = ["test-support"] }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

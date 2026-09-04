@@ -12,20 +12,20 @@
 
 use std::collections::BTreeMap;
 
-use super::*;
+use crate::*;
 
-pub(super) const NS: &str = "house-things";
+pub const NS: &str = "house-things";
 
-pub(super) fn key(seed: u8) -> SigningKey {
+pub fn key(seed: u8) -> SigningKey {
     SigningKey::from_bytes(&[seed; 32])
 }
 
-pub(super) fn p(name: &str) -> Person {
+pub fn p(name: &str) -> Person {
     Person::from(name)
 }
 
 /// A ring of three, each signing with one key.
-pub(super) fn ring() -> Roster {
+pub fn ring() -> Roster {
     let mut m = BTreeMap::new();
     m.insert(p("alex"), vec![actor_of(&key(1))]);
     m.insert(p("bo"), vec![actor_of(&key(2))]);
@@ -34,22 +34,22 @@ pub(super) fn ring() -> Roster {
 }
 
 /// An arbitrary well-formed act. `what` is what distinguishes two of them.
-pub(super) fn payload(what: &str) -> Payload {
+pub fn payload(what: &str) -> Payload {
     Payload::new(serde_json::json!({ "kind": "thing", "what": what })).unwrap()
 }
 
-pub(super) fn record(what: &str) -> RailAct {
+pub fn record(what: &str) -> RailAct {
     RailAct::Record {
         payload: payload(what),
     }
 }
 
 /// Build the op a node would have written, without going through the journal.
-pub(super) fn signed(k: &SigningKey, ts: i64, seq: u64, act: RailAct) -> Op<SignedOp> {
+pub fn signed(k: &SigningKey, ts: i64, seq: u64, act: RailAct) -> Op<SignedOp> {
     signed_in(NS, k, ts, seq, act)
 }
 
-pub(super) fn signed_in(ns: &str, k: &SigningKey, ts: i64, seq: u64, act: RailAct) -> Op<SignedOp> {
+pub fn signed_in(ns: &str, k: &SigningKey, ts: i64, seq: u64, act: RailAct) -> Op<SignedOp> {
     let body = serde_json::to_string(&act).unwrap();
     let signature = sign_ring_op(k, ns, ts, seq, &body);
     Op::new(
@@ -63,13 +63,13 @@ pub(super) fn signed_in(ns: &str, k: &SigningKey, ts: i64, seq: u64, act: RailAc
     )
 }
 
-pub(super) fn admitted(ops: &[Op<SignedOp>]) -> Admission {
+pub fn admitted(ops: &[Op<SignedOp>]) -> Admission {
     admit(ops, &[], &ring(), NS)
 }
 
 /// The `what` of every act an app's reducer would see, in order — the shape
 /// most of these tests assert on.
-pub(super) fn applied(a: &Admission) -> Vec<String> {
+pub fn applied(a: &Admission) -> Vec<String> {
     a.applied()
         .filter_map(|o| {
             o.payload

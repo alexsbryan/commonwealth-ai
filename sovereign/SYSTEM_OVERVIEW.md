@@ -164,7 +164,9 @@ precision ride the baseline — no decider offers nanos.
 - `oplog` — **`Op<K>` + `Oplog<K>`**, one append-only JSONL journal with
   four tenants declaring `Journaled`: `enrichment::governance`,
   `enrichment::reconciliation`, `meta_atlas::bridge` and — since 2026-08-30 —
-  `commonwealth-knowledge::rail` (the ring rail). **It became its own tier-0
+  the ring rail — which became `commonwealth-rail-core`/`commonwealth-rail` on
+  2026-09-04 (cw-lift 1b) and is the only tenant outside corpus-engine.
+  **The journal itself became its own tier-0
   crate on 2026-09-04** and is re-exported as `corpus_engine::oplog`, so no
   call site moved. The reason is the fourth tenant: the ring rail's entire
   coupling to the knowledge layer was seven references to `Op`/`OpId`/
@@ -278,6 +280,8 @@ crates/
 ├── commonwealth-inference    # Scheduling + orchestration
 ├── commonwealth-api          # HTTP servers (client 9741 + internal 9742, plaintext)
 ├── commonwealth-knowledge    # corpus-engine integration over the mesh
+├── commonwealth-rail-core    # The ring rail's FOLD — Person/Roster/RailAct/SignedOp, opaque Payload, Ed25519 authorship, admission into one total order, sync digest. Zero I/O, zero clock; deps are oplog + ed25519 + serde + hex
+├── commonwealth-rail         # The ring rail's JOURNAL — one append-only JSONL log per namespace under <root>/rings/<ns>/, single-writer door + peer ingest; re-exports -rail-core wholesale
 ├── commonwealth-app          # Mesh-app platform (manifest, lifecycle, proxy)
 ├── commonwealth-state        # MeshStore — gossip-replicated SQLite KV w/ TTL GC
 ├── commonwealth-daemon       # CLI entry + signal handling
@@ -4388,8 +4392,20 @@ A guest is not a mesh member — no `mesh_secret`, no gossip, no invite key
 variant plus its `paths()` arm and touches neither auth nor the wire.
 
 **The ring rail is the second scope, and the first deployment target**
-(`commonwealth-api/src/routes_rail.rs` + `commonwealth-knowledge::rail`,
-ring-deploy S1–S6, 2026-08-30). A Commonwealth mesh had no verb for "make this
+(`commonwealth-api/src/routes_rail.rs` + the `commonwealth-rail-core` /
+`commonwealth-rail` pair, ring-deploy S1–S6, 2026-08-30). **It became two
+crates on 2026-09-04** (cw-lift 1b), out of `commonwealth-knowledge/src/rail/`:
+`-rail-core` is the FOLD — the vocabulary, Ed25519 authorship, admission into
+one total order, and the per-actor sync digest, with no filesystem, no clock
+and no socket — and `-rail` is the JSONL journal that calls it. The split is
+what the campaign's second lift needs: a second application composes on the
+fold without inheriting a file layout, and the fold's whole in-repo dependency
+surface is `oplog`. `commonwealth-knowledge::rail` is a re-export for one more
+commit (order 1c drops it), so no consumer moved in the same diff. The three
+`[[forbid]] from = "commonwealth-rail*"` blocks in `quality/ARCH_LAYERS.toml`
+are what hold it — to `corpus-engine*` (the edge order 1a paid for), to
+`sovereign-*`, and back to `commonwealth-knowledge`, which layer ordering
+cannot see because both sit in `mesh-foundation`. A Commonwealth mesh had no verb for "make this
 exist for exactly my trust ring": a VPS makes it public infrastructure, a
 Discord bot puts the data at Discord, and the local-first stack syncs data but
 gives you nowhere to run anything and no idea who is asking. `Scope::Rails(ns)`

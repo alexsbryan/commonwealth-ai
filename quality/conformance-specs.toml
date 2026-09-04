@@ -526,8 +526,8 @@ clause = '''Shared state MUST converge by epidemic replication: a periodic round
 # it. The rail's `sync.rs` does the same digest reconciliation on the path that
 # is live, so the clause moves to the real subject rather than losing its
 # claim — the intent survives the code (plan §"Keep the intent, drop the code").
-target = '''commonwealth/crates/commonwealth-knowledge/src/rail/sync.rs:53::digest'''
-existing = '''commonwealth/crates/commonwealth-knowledge/src/rail/sync.rs:121::a_hole_lowers_the_mark_so_the_peer_re_sends_across_it'''
+target = '''commonwealth/crates/commonwealth-rail-core/src/sync.rs:53::digest'''
+existing = '''commonwealth/crates/commonwealth-rail-core/src/sync.rs:121::a_hole_lowers_the_mark_so_the_peer_re_sends_across_it'''
 
 [[spec]]
 id = "FE-21"

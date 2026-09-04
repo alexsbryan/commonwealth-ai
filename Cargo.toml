@@ -143,6 +143,13 @@ members = [
     "commonwealth/crates/commonwealth-inference",
     "commonwealth/crates/commonwealth-api",
     "commonwealth/crates/commonwealth-knowledge",
+    # The ring rail, split in two on 2026-09-04 (cw-lift 1b). `-rail-core` is
+    # the pure fold — vocabulary, signing, admission, sync digest, zero I/O —
+    # and `-rail` is the JSONL journal under `<root>/rings/<ns>/` that calls
+    # it. Both came out of `commonwealth-knowledge/src/rail/`, whose lib.rs
+    # now re-exports them so no consumer moved in the same commit.
+    "commonwealth/crates/commonwealth-rail-core",
+    "commonwealth/crates/commonwealth-rail",
     "commonwealth/crates/commonwealth-test-harness",
     "commonwealth/crates/commonwealth-app",
     "commonwealth/crates/commonwealth-state",
@@ -273,6 +280,8 @@ commonwealth-discovery = { path = "commonwealth/crates/commonwealth-discovery" }
 commonwealth-inference = { path = "commonwealth/crates/commonwealth-inference" }
 commonwealth-api = { path = "commonwealth/crates/commonwealth-api" }
 commonwealth-knowledge = { path = "commonwealth/crates/commonwealth-knowledge" }
+commonwealth-rail-core = { path = "commonwealth/crates/commonwealth-rail-core" }
+commonwealth-rail = { path = "commonwealth/crates/commonwealth-rail" }
 commonwealth-app = { path = "commonwealth/crates/commonwealth-app" }
 commonwealth-state = { path = "commonwealth/crates/commonwealth-state" }
 

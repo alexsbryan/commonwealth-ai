@@ -12,8 +12,8 @@
 2	commonwealth/crates/commonwealth-api/src/routes_internal/mesh_admin.rs
 3	commonwealth/crates/commonwealth-api/src/state.rs
 2	commonwealth/crates/commonwealth-api/src/yield_hook.rs
-1	commonwealth/crates/commonwealth-knowledge/src/rail/mod.rs
 2	commonwealth/crates/commonwealth-knowledge/src/shard_manager.rs
+1	commonwealth/crates/commonwealth-rail/src/lib.rs
 1	commonwealth/crates/commonwealth-state/src/activity.rs
 1	commonwealth/crates/commonwealth-state/src/contributions.rs
 1	commonwealth/crates/commonwealth-state/src/peer_preferences.rs

@@ -59,11 +59,11 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use corpus_engine::oplog::{Op, OpId};
+use oplog::{Op, OpId};
 
-use super::payload::Payload;
-use super::sig::verify_ring_op;
-use super::{Person, RailAct, Roster, SignedOp};
+use crate::payload::Payload;
+use crate::sig::verify_ring_op;
+use crate::{Person, RailAct, Roster, SignedOp};
 
 /// Something the rail could not account for. Never fatal, always reported.
 ///
@@ -78,9 +78,9 @@ use super::{Person, RailAct, Roster, SignedOp};
 #[serde(tag = "gap", rename_all = "snake_case")]
 pub enum RailGap {
     /// A journal line this build could not parse. From
-    /// [`SkippedLine::Malformed`](corpus_engine::oplog::SkippedLine) — a torn
+    /// [`SkippedLine::Malformed`](oplog::SkippedLine) — a torn
     /// write, or a payload that has no canonical form (see
-    /// [`Payload`](super::Payload)).
+    /// [`Payload`](crate::Payload)).
     MalformedLine { line: u64, error: String },
     /// A journal line written by a NEWER build. Reading it would be guessing;
     /// counting the rest and saying nothing would be worse (ARCH §18.3), so
@@ -188,7 +188,7 @@ impl std::fmt::Display for RailGap {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct AdmittedOp {
     /// Content-derived id. This is what a correction names, and what an app
-    /// hands back to [`RailAct::Correct`](super::RailAct::Correct).
+    /// hands back to [`RailAct::Correct`](crate::RailAct::Correct).
     pub id: OpId,
     /// The signing public key — the only field on the line a writer cannot
     /// forge for someone else (ARCH §18.1).
@@ -271,11 +271,11 @@ struct Candidate<'a> {
 /// join and leave (pinned by a test in the reference app).
 pub fn admit(
     ops: &[Op<SignedOp>],
-    skipped: &[corpus_engine::oplog::SkippedLine],
+    skipped: &[oplog::SkippedLine],
     roster: &Roster,
     namespace: &str,
 ) -> Admission {
-    use corpus_engine::oplog::SkippedLine;
+    use oplog::SkippedLine;
 
     let mut gaps: Vec<RailGap> = skipped
         .iter()
@@ -462,7 +462,7 @@ fn derived_id(op: &Op<SignedOp>) -> OpId {
 }
 
 /// The exact bytes the signature covers — the act alone, in declaration
-/// order, with its payload canonical (see [`Payload`](super::Payload)).
-pub(super) fn body_json(act: &RailAct) -> String {
+/// order, with its payload canonical (see [`Payload`](crate::Payload)).
+pub fn body_json(act: &RailAct) -> String {
     serde_json::to_string(act).unwrap_or_default()
 }

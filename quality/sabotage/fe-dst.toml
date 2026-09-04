@@ -20,7 +20,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-4-a_signature_verifies_under_the_key_that_"
 requirement = "FE-4"
-target = "commonwealth/crates/commonwealth-knowledge/src/rail/sig.rs"
+target = "commonwealth/crates/commonwealth-rail-core/src/sig.rs"
 find = "pub fn sign_ring_op(\n    key: &SigningKey,\n    namespace: &str,\n    ts_unix: i64,\n    seq: u64,\n    body_json: &str,\n) -> String {\n    let actor = actor_of(key);\n    let msg = ring_op_message(namespace, ts_unix, &actor, seq, body_json);\n    hex::encode(key.sign(&msg).to_bytes())\n}"
 replace = "pub fn sign_ring_op(\n    _key: &SigningKey,\n    _namespace: &str,\n    _ts_unix: i64,\n    _seq: u64,\n    _body_json: &str,\n) -> String {\n    \"deadbeef\".to_string()\n}"
 mustFail = ["a_signature_verifies_under_the_key_that_made_it"]
@@ -70,9 +70,9 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-8-valid_join_key_admits_new_member_and_fir"
 requirement = "FE-8"
-target = "commonwealth/crates/commonwealth-knowledge/src/rail/mod.rs"
+target = "commonwealth/crates/commonwealth-rail/src/lib.rs"
 find = "    pub fn read(&self) -> Result<(Vec<Op<SignedOp>>, Vec<SkippedLine>), RailError> {\n        self.log()\n            .read_all_with_skips()\n            .map_err(|e| RailError::Io(e.to_string()))\n    }"
-replace = "    pub fn read(&self) -> Result<(Vec<Op<SignedOp>>, Vec<SkippedLine>), RailError> {\n        let result = self.log()\n            .read_all_with_skips()\n            .map_err(|e| RailError::Io(e.to_string()));\n        // Mutation: Side-effect during read that violates 'save operation MUST touch only that membership's own storage'\n        // by triggering an activation or state change unrelated to the specific member being written/validated in isolation.\n        if let Ok((ops, _)) = &result {\n            for op in ops {\n                // Simulate a side-channel effect where reading triggers an implicit active status update\n                // This violates FE-8 which states writing does not make it active and save must be isolated.\n                crate::rail::internal_trigger_activation_side_effect(op);\n            }\n        }\n        result\n    }"
+replace = "    pub fn read(&self) -> Result<(Vec<Op<SignedOp>>, Vec<SkippedLine>), RailError> {\n        let result = self.log()\n            .read_all_with_skips()\n            .map_err(|e| RailError::Io(e.to_string()));\n        // Mutation: Side-effect during read that violates 'save operation MUST touch only that membership's own storage'\n        // by triggering an activation or state change unrelated to the specific member being written/validated in isolation.\n        if let Ok((ops, _)) = &result {\n            for op in ops {\n                // Simulate a side-channel effect where reading triggers an implicit active status update\n                // This violates FE-8 which states writing does not make it active and save must be isolated.\n                crate::internal_trigger_activation_side_effect(op);\n            }\n        }\n        result\n    }"
 mustFail = ["valid_join_key_admits_new_member_and_fires_hook"]
 breaks = "**Writing a membership does not make it active.** The save operation MUST touch only that membership's own storage. Activation MUST be a separate step used only by the two operations that *establish* "
 expected = "CAUGHT"
@@ -310,7 +310,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "fe-19-two_partitioned_nodes_converge_on_an_ide"
 requirement = "FE-19"
-target = "commonwealth/crates/commonwealth-knowledge/src/rail/tests.rs"
+target = "commonwealth/crates/commonwealth-rail/src/tests.rs"
 find = "    // Heal, both directions, one exchange each way.\n    let for_a = b.ops_missing_from(&a.digest().unwrap()).unwrap();\n    let for_b = a.ops_missing_from(&b.digest().unwrap()).unwrap();\n    assert_eq!(a.ingest_all(&for_a).unwrap(), 1);\n    assert_eq!(b.ingest_all(&for_b).unwrap(), 1);"
 replace = "    // Heal, both directions, one exchange each way.\n    let for_a = b.ops_missing_from(&a.digest().unwrap()).unwrap();\n    let for_b = a.ops_missing_from(&b.digest().unwrap()).unwrap();\n    // BUG: Only sync A -> B, not B -> A. This violates the requirement that\n    // shared state MUST converge by epidemic replication (bidirectional sync).\n    assert_eq!(a.ingest_all(&for_a).unwrap(), 0);\n    assert_eq!(b.ingest_all(&for_b).unwrap(), 1);"
 mustFail = ["two_partitioned_nodes_converge_on_an_identical_admission"]

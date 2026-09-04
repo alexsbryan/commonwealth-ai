@@ -476,7 +476,7 @@ expected = "CAUGHT"
 [[mutant]]
 id = "en-16-a_voided_op_is_still_visible_but_is_neve"
 requirement = "EN-16"
-target = "commonwealth/crates/commonwealth-knowledge/src/rail/tests.rs"
+target = "commonwealth/crates/commonwealth-rail-core/src/tests.rs"
 find = "    assert!(\n        voided.payload.is_some(),\n        \"the app can still show what was corrected away\"\n    );"
 replace = "    // MUTATION: Violates EN-16 by hiding the payload needed to reconstruct the forward operation.\n    let mut mutable_voided = voided.clone();\n    mutable_voided.payload = None;\n    *voided = mutable_voided;"
 mustFail = ["a_voided_op_is_still_visible_but_is_never_applied"]

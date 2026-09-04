@@ -20,7 +20,7 @@
 //! them — **not** the highest seq it holds. A maximum cannot express a hole: a
 //! node holding seq 0 and 2 would advertise `2`, the peer would answer
 //! "nothing above 2", and seq 1 would never arrive. It would sit in the
-//! admission report as a permanent [`SequenceHole`](super::RailGap::SequenceHole)
+//! admission report as a permanent [`SequenceHole`](crate::RailGap::SequenceHole)
 //! while both nodes believed they were in sync.
 //!
 //! An actor missing from the digest means "I hold nothing of theirs", so the
@@ -38,9 +38,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use corpus_engine::oplog::Op;
+use oplog::Op;
 
-use super::SignedOp;
+use crate::SignedOp;
 
 /// Per-actor contiguous high-water marks. `{actor_pubkey_hex → n}`.
 pub type Digest = BTreeMap<String, u64>;
@@ -97,11 +97,11 @@ pub fn ops_missing_from(ops: &[Op<SignedOp>], theirs: &Digest) -> Vec<Op<SignedO
 
 #[cfg(test)]
 mod tests {
-    use super::super::tests_support::{key, record, signed};
     use super::*;
+    use crate::tests_support::{key, record, signed};
 
     fn actor(seed: u8) -> String {
-        super::super::actor_of(&key(seed))
+        crate::actor_of(&key(seed))
     }
 
     fn op(seed: u8, seq: u64, ts: i64) -> Op<SignedOp> {
