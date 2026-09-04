@@ -316,14 +316,35 @@ pub const WIKI_ENTITY_TYPE: &str = "article";
 /// The atom id for a wiki article.
 ///
 /// ONE DERIVATION (ARCH §10.6). This delegates to
-/// [`AtomId::entity_content_hash`], the function `newsworthy_events`,
-/// `code_walk`, `tabular_atoms` and `atoms_delta` already use — including the
-/// `wikipedia-fetched` layer, whose 413 atoms are all `entity-<16 hex>` today.
+/// [`AtomId::exact_entity_content_hash`] — it does not hash anything itself.
 /// A wiki article's identity in `wikipedia` and in its fetched/newsworthy twin
 /// must come off the same function or the two derivations drift; the ids stay
 /// DISTINCT because `corpus_id` is part of the essence, which is by design.
 /// (An earlier draft hashed its own `(title, corpus_id)` framing here — a
 /// second hasher for one essence, which is exactly the smell §10.6 names.)
+///
+/// It delegates to the EXACT constructor, not to [`AtomId::entity_content_hash`],
+/// and that is the whole of the 2026-09-04 fix. The folded constructor keys on
+/// `canonical::lookup_key(title)`, which is the right equivalence for an
+/// LLM-extracted name and the wrong one for a Wikipedia title: MediaWiki
+/// serves `Jigsaw puzzle` and `Jigsaw Puzzle` as two pages, and folding makes
+/// them one atom. The first full rebuild died on exactly that pair. Measured
+/// over the whole live title namespace (1,562,311 titles in
+/// `wikipedia_graph.db`): 38,259 folded keys carry more than one title and
+/// 40,869 titles — 2.62% — would have been silently merged. The collision is
+/// in the key, before the hash, so widening `short_hash` fixes nothing.
+///
+/// WHAT A PEER MUST CALL (the property this id exists to give). Anyone holding
+/// an exact title and a corpus id can compute a wikipedia atom id with no
+/// registry — that is what lets a `CrossCorpusEdge` from `wikipedia-fetched`
+/// name its twin in `wikipedia`. The property survives the fix; the function
+/// a peer has to agree on is now `exact_entity_content_hash`. Note what did
+/// NOT change: `structure_first` and `newsworthy_events` still mint their OWN
+/// corpora's atoms through the folded `entity_content_hash`, because those
+/// paths also serve non-wiki corpora (`update::delta`, `newsworthy_host`) and
+/// re-keying them would re-key every structural atlas in the fleet. Inside a
+/// child layer's own corpus those ids stay folded, and a child layer that
+/// wants its parent's id must route through THIS function.
 ///
 /// Identity from ESSENCE, not from a counter (ARCH §7.5). Wikipedia's atom ids
 /// were `entity-0001`, `entity-0002`, … assigned in sorted-title order, so
@@ -333,13 +354,13 @@ pub const WIKI_ENTITY_TYPE: &str = "article";
 /// what makes it CORRECT for the progressive path: a re-fetched or re-watched
 /// title keeps its id instead of being renumbered by its neighbours.
 ///
-/// The name is normalised by `lookup_key` before hashing, so the `|` field
-/// separator inside `entity_content_hash` cannot appear in it and the framing
-/// is unambiguous by construction. Normalisation does mean two titles differing
-/// only in punctuation or case share an id; [`wiki_rows_from_chunks`] REFUSES
-/// the build on that rather than silently merging two articles (§18.3).
+/// Framing is unambiguous by length-prefix inside the constructor, so a title
+/// containing the field separator cannot be read as two fields.
+/// [`wiki_rows_from_chunks`] still REFUSES a build on a duplicate id — now as
+/// a backstop against a genuine 64-bit hash collision rather than against the
+/// normalisation, which no longer folds anything (§18.1).
 pub fn wiki_atom_id(title: &str, corpus_id: &str) -> String {
-    AtomId::entity_content_hash(
+    AtomId::exact_entity_content_hash(
         title,
         &EntityType::from_str_repr(WIKI_ENTITY_TYPE),
         corpus_id,
@@ -601,7 +622,8 @@ pub fn wiki_rows_from_chunks(
             if other != a.title {
                 return Err(format!(
                     "wiki atom id collision: {atom_id} is both {other:?} and {:?} in corpus \
-                     {corpus_id} — widen wiki_atom_id before rebuilding",
+                     {corpus_id} — two distinct titles hashed to one 64-bit id; widen \
+                     short_hash before rebuilding",
                     a.title
                 ));
             }
@@ -1192,28 +1214,48 @@ mod tests {
         assert_ne!(a, wiki_atom_id("Roman Empire", "wikipedia-newsworthy"));
         // Different title, same corpus → different atom.
         assert_ne!(a, wiki_atom_id("Roman Republic", "wikipedia"));
-        // ONE DERIVATION: this must BE `entity_content_hash`, not merely agree
-        // with it today. A second hasher for one essence is the §10.6 smell,
-        // and it is what an earlier draft of this function was.
+        // ONE DERIVATION: this must BE `exact_entity_content_hash`, not merely
+        // agree with it today. A second hasher for one essence is the §10.6
+        // smell, and it is what an earlier draft of this function was.
         assert_eq!(
             a,
-            AtomId::entity_content_hash(
+            AtomId::exact_entity_content_hash(
                 "Roman Empire",
                 &EntityType::from_str_repr(WIKI_ENTITY_TYPE),
                 "wikipedia"
             )
             .as_str()
         );
-        // The `|` separator inside that hash cannot be smuggled in through a
-        // title, because the name is `lookup_key`-normalised first. These two
-        // would collide under a naive `"{title}|{corpus}"` join.
+        // Field boundaries can't be smuggled through a title: the constructor
+        // length-frames each field. These two would collide under a naive
+        // `"{title}|{corpus}"` join.
         assert_ne!(wiki_atom_id("a|b", "c"), wiki_atom_id("a", "b|c"));
-        // Normalisation is real and deliberate: punctuation and case fold away,
-        // which is why `wiki_rows_from_chunks` refuses a collision rather than
-        // trusting the id to be injective over raw titles.
-        assert_eq!(
+        // A WIKIPEDIA TITLE IS AN IDENTIFIER, NOT A DESCRIPTION. Case and
+        // punctuation are part of it, and this assertion is the inversion of
+        // what stood here before 2026-09-04, when the id folded through
+        // `lookup_key` and these three titles were one atom.
+        assert_ne!(
             wiki_atom_id("Roman Empire", "w"),
             wiki_atom_id("roman  empire!", "w")
+        );
+        assert_ne!(
+            wiki_atom_id("Roman Empire", "w"),
+            wiki_atom_id("Roman empire", "w")
+        );
+        // The folded constructor is what could not tell them apart. Asserted
+        // so this test speaks up if `lookup_key` ever stops folding and the
+        // delegation above becomes a distinction without a difference.
+        assert_eq!(
+            AtomId::entity_content_hash(
+                "Roman Empire",
+                &EntityType::from_str_repr(WIKI_ENTITY_TYPE),
+                "w"
+            ),
+            AtomId::entity_content_hash(
+                "roman  empire!",
+                &EntityType::from_str_repr(WIKI_ENTITY_TYPE),
+                "w"
+            ),
         );
     }
 
@@ -1224,9 +1266,11 @@ mod tests {
     /// ids already) and reach their `wikipedia` twin by atom id — a
     /// `CrossCorpusEdge` carries `peer.corpus_id` + `peer.atom_id`. So the id a
     /// layer mints for "Roman Empire in wikipedia", using the shared
-    /// `entity_content_hash` and knowing nothing about this module, must be the
-    /// id the rebuilt wiki store holds. That is what makes the edge resolve,
-    /// and it is why `wiki_atom_id` delegates rather than agreeing.
+    /// `exact_entity_content_hash` and knowing nothing about this module, must
+    /// be the id the rebuilt wiki store holds. That is what makes the edge
+    /// resolve, and it is why `wiki_atom_id` delegates rather than agreeing.
+    /// The constructor a peer must call changed on 2026-09-04 (folded → exact);
+    /// the property did not.
     ///
     /// The failing input is the previous scheme: a counter id assigned in
     /// sorted-title order can never be computed by a peer, so no cross-corpus
@@ -1249,7 +1293,7 @@ mod tests {
 
         // What a peer layer computes for the SAME article in the parent
         // corpus, through the shared function, with no reference to this file.
-        let peer_minted = AtomId::entity_content_hash(
+        let peer_minted = AtomId::exact_entity_content_hash(
             "Roman Empire",
             &EntityType::from_str_repr("article"),
             "wikipedia",
@@ -1272,6 +1316,63 @@ mod tests {
             peer_minted.as_str(),
             wiki_atom_id("Roman Empire", "wikipedia-fetched")
         );
+    }
+
+    /// THE FAILING INPUT, from production, not from imagination.
+    ///
+    /// The first full wikipedia rebuild (2026-09-04, unit `ei-7c-wiki-rebuild`,
+    /// 1,896,488 chunk records streamed, rc=1) died here:
+    ///
+    /// ```text
+    /// error: build: wiki atom id collision: entity-6b8aef7e6205164a is both
+    /// "Jigsaw puzzle" and "Jigsaw Puzzle" in corpus wikipedia
+    /// ```
+    ///
+    /// Two real encyclopedia articles, one atom id, because the id folded
+    /// through `canonical::lookup_key`. This test is that build in miniature:
+    /// before `wiki_atom_id` delegated to the exact constructor it returned
+    /// `Err(collision)` on these two chunks; the guard did its job (§18.1) and
+    /// the id was the defect. Not a one-off — the same fold merges 40,869 of
+    /// the corpus's 1,562,311 titles.
+    #[test]
+    fn two_wikipedia_titles_differing_only_in_case_build_two_articles() {
+        let chunks = vec![
+            chunk(
+                11,
+                "Jigsaw puzzle",
+                meta_with(vec!["Lead"], "lead", None, vec![("Puzzle", "puzzle")]),
+            ),
+            chunk(
+                12,
+                "Jigsaw Puzzle",
+                meta_with(
+                    vec!["Lead"],
+                    "lead",
+                    None,
+                    vec![("The Rolling Stones", "the Rolling Stones")],
+                ),
+            ),
+        ];
+        let (articles, _edges, _dangling) = wiki_rows_from_chunks("wikipedia", chunks)
+            .expect("two distinct titles must not collide into one atom");
+        assert_eq!(articles.len(), 2, "one row per article, not one merged row");
+
+        let lower = articles
+            .iter()
+            .find(|a| a.title == "Jigsaw puzzle")
+            .expect("the lowercase article survives");
+        let upper = articles
+            .iter()
+            .find(|a| a.title == "Jigsaw Puzzle")
+            .expect("the capitalised article survives");
+        assert_ne!(lower.atom_id, upper.atom_id);
+        assert_eq!(lower.atom_id, wiki_atom_id("Jigsaw puzzle", "wikipedia"));
+        assert_eq!(upper.atom_id, wiki_atom_id("Jigsaw Puzzle", "wikipedia"));
+        // Each keeps its own evidence anchor — the merge would have thrown one
+        // article's chunk away, which is what makes a silent merge worse than
+        // a refused build.
+        assert_eq!(lower.chunk_id, "11");
+        assert_eq!(upper.chunk_id, "12");
     }
 
     /// The evidence anchor is the LOWEST chunk id of the article, so a rebuild

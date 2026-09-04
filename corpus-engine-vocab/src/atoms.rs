@@ -107,6 +107,46 @@ impl AtomId {
         Self(format!("entity-{}", short_hash(&input)))
     }
 
+    /// Entity id for a name drawn from an EXACT namespace — one where two
+    /// names differing only in case or punctuation are two different things.
+    ///
+    /// [`Self::entity_content_hash`] folds the name through
+    /// `canonical::lookup_key` first, which is the right equivalence for an
+    /// LLM-extracted name ("Roman Empire", "roman  empire!" and
+    /// "ROMAN-EMPIRE" are one entity). It is the WRONG equivalence for a name
+    /// that IS an identifier. Wikipedia titles are the case that forced this
+    /// constructor: MediaWiki serves `Jigsaw puzzle` and `Jigsaw Puzzle` as
+    /// two distinct pages, and folding merges them into one atom. Measured on
+    /// the live `wikipedia` corpus (1,562,311 titles in
+    /// `wikipedia_graph.db`): 38,259 `lookup_key` groups hold more than one
+    /// title, and 40,869 titles — 2.62% of the corpus — would be silently
+    /// merged away. That is not a hash-width problem; the collision is in the
+    /// KEY, before any hashing, so widening `short_hash` would not move it.
+    ///
+    /// The two families are disjoint by construction: this hashes under the
+    /// `entity-exact` domain tag, so the exact and the folded id of the same
+    /// name are never equal. The `entity-` id PREFIX is unchanged, because
+    /// that prefix is the atom's type and not its derivation.
+    ///
+    /// Fields are LENGTH-FRAMED. `entity_content_hash` gets an unambiguous
+    /// framing for free — `lookup_key` strips the `|` separator out of the
+    /// name — and a verbatim name does not, so the frame has to be explicit
+    /// or `("a|b", ty, c)` and `("a", ty, "b|c")` would hash alike.
+    pub fn exact_entity_content_hash(
+        name: &str,
+        entity_type: &crate::taxonomy::EntityType,
+        corpus_id: &str,
+    ) -> Self {
+        let ty = entity_type.as_str_repr();
+        let input = format!(
+            "entity-exact|{}:{name}|{}:{ty}|{}:{corpus_id}",
+            name.len(),
+            ty.len(),
+            corpus_id.len()
+        );
+        Self(format!("entity-{}", short_hash(&input)))
+    }
+
     /// Event id: hash(trimmed_description | event_type | first_section_id | corpus_id).
     /// Less stable than Entity across re-extractions when LLM
     /// wording shifts — acceptable for v1 since Event ids primarily
@@ -1477,6 +1517,85 @@ mod tests {
         let a = AtomId::entity_content_hash("Mercury", &EntityType::Place, "wikipedia");
         let b = AtomId::entity_content_hash("Mercury", &EntityType::Concept, "wikipedia");
         assert_ne!(a, b);
+    }
+
+    /// The reason [`AtomId::exact_entity_content_hash`] exists, stated as the
+    /// input that made the folded constructor wrong: two REAL, distinct
+    /// Wikipedia articles whose titles differ only in the case of one letter.
+    /// Under `entity_content_hash` they are one atom, which is a silent merge
+    /// of two encyclopedia pages; under the exact constructor they are two.
+    #[test]
+    fn exact_entity_content_hash_keeps_two_wikipedia_titles_that_differ_only_in_case_apart() {
+        let ty = EntityType::Other("article".to_string());
+        // The pair the full wikipedia rebuild actually died on.
+        let lower = AtomId::exact_entity_content_hash("Jigsaw puzzle", &ty, "wikipedia");
+        let upper = AtomId::exact_entity_content_hash("Jigsaw Puzzle", &ty, "wikipedia");
+        assert_ne!(lower, upper, "two distinct articles must be two atoms");
+        // And the folded constructor is the thing that could not tell them
+        // apart — asserted, so this test fails loudly if `lookup_key` ever
+        // stops folding and the exact constructor becomes redundant.
+        assert_eq!(
+            AtomId::entity_content_hash("Jigsaw puzzle", &ty, "wikipedia"),
+            AtomId::entity_content_hash("Jigsaw Puzzle", &ty, "wikipedia"),
+        );
+    }
+
+    /// The two families never collide, and the id SHAPE is unchanged so
+    /// everything that routes on the `entity-` prefix keeps working.
+    #[test]
+    fn exact_and_folded_entity_ids_are_disjoint_but_the_same_shape() {
+        let ty = EntityType::Person;
+        let exact = AtomId::exact_entity_content_hash("Albert Einstein", &ty, "wikipedia");
+        let folded = AtomId::entity_content_hash("Albert Einstein", &ty, "wikipedia");
+        // Same name, same type, same corpus, DIFFERENT derivation: the domain
+        // tag is what keeps a store built one way from resolving ids minted
+        // the other way by accident.
+        assert_ne!(exact, folded);
+        assert!(exact.as_str().starts_with("entity-"));
+        assert_eq!(exact.as_str().len(), "entity-".len() + 16);
+    }
+
+    /// Length framing, not the `|` separator, is what makes the exact
+    /// constructor unambiguous — the property `lookup_key` supplied for free
+    /// to the folded one. Both of these hash to the same string under a naive
+    /// `"{name}|{ty}|{corpus}"` join.
+    #[test]
+    fn exact_entity_content_hash_cannot_be_confused_across_field_boundaries() {
+        let ty = EntityType::Other("t".to_string());
+        assert_ne!(
+            AtomId::exact_entity_content_hash("a|t|b", &ty, "c"),
+            AtomId::exact_entity_content_hash("a", &ty, "b|c"),
+        );
+        // Colons frame the lengths; a name that contains one is still safe.
+        assert_ne!(
+            AtomId::exact_entity_content_hash("1:x", &ty, "c"),
+            AtomId::exact_entity_content_hash("x", &ty, "c"),
+        );
+    }
+
+    /// Stable and corpus-qualified, exactly as the folded constructor is:
+    /// these are the properties the wiki store cites when it says a peer can
+    /// compute an id with no registry.
+    #[test]
+    fn exact_entity_content_hash_is_stable_and_corpus_qualified() {
+        let ty = EntityType::Other("article".to_string());
+        let a = AtomId::exact_entity_content_hash("Roman Empire", &ty, "wikipedia");
+        assert_eq!(
+            a,
+            AtomId::exact_entity_content_hash("Roman Empire", &ty, "wikipedia")
+        );
+        assert_ne!(
+            a,
+            AtomId::exact_entity_content_hash("Roman Empire", &ty, "wikipedia-fetched")
+        );
+        assert_ne!(
+            a,
+            AtomId::exact_entity_content_hash("Roman Republic", &ty, "wikipedia")
+        );
+        assert_ne!(
+            a,
+            AtomId::exact_entity_content_hash("Roman Empire", &EntityType::Place, "wikipedia")
+        );
     }
 
     #[test]
