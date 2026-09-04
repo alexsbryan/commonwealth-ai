@@ -33,7 +33,7 @@ use corpus_engine::enrichment::atlas::store::{build_and_write_store, store_needs
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 use corpus_engine::wikipedia_graph_present;
 
-use crate::chat_cmd::bootstrap::build_session;
+use crate::chat_cmd::bootstrap::{build_session, ChatSession};
 use crate::chat_cmd::config::parse_globals;
 use crate::eval_cmd::runner::{self, AtlasContextFilter};
 use sovereign_core::atlas_context::build_persistent_ann_seed_table;
@@ -106,13 +106,23 @@ pub async fn run(args: &[String]) -> i32 {
         corpora.len()
     );
 
-    let session = match build_session(&globals).await {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("atlas migrate-all: build session: {e}");
-            return 1;
-        }
-    };
+    // The session is built ON FIRST NEED, not here (ei-3b step 0b).
+    //
+    // Only the ANN sub-step below uses it, and only for a corpus that already
+    // carries an embed marker or an ANN table. The store build
+    // (`build_and_write_store`) and the `read_v2` flip need no daemon, no
+    // inference and no model at all — they are a local file transform. Building
+    // a `ChatSession` up here made every invocation load the wiki graph (51,280
+    // articles, 7.3M edges) and the meta-atlas (1.57M atoms) into this process
+    // first, which is what stopped the ei-3b battery on its first batch: of the
+    // 1,081 store-less `sep-*` atlases the driver calls this verb for, exactly
+    // 34 carry an embed marker, so 1,047 of them paid a full bootstrap to
+    // resolve `ann_state = "n/a"` and touch the session zero times.
+    //
+    // `Err` is remembered as well as `Ok`: without that, a box with no daemon
+    // would re-probe once per corpus, 1,081 times.
+    let mut session: Option<ChatSession> = None;
+    let mut session_err: Option<String> = None;
     // PRODUCTION grounding filter — the ANN table must cover exactly the atom
     // universe the manager seeds from (its `AtlasContextFilter::default()`).
     let prod = AtlasContextFilter::default();
@@ -189,34 +199,63 @@ pub async fn run(args: &[String]) -> i32 {
             // still seed one-shot; a corpus that's STILL empty carries only
             // non-Entity surfaces (investigation graphs) and is genuinely
             // unseedable — skip it without an error rather than reporting failure.
-            let strict = runner::load_atlas_context(&session, corpus_id, prod.top_k, &filter).await;
-            let ctx = match strict {
-                Ok(ctx) if !ctx.entries.is_empty() => Some(ctx),
-                _ => {
-                    let relaxed = AtlasContextFilter {
-                        min_description_chars: 1,
-                        ..filter.clone()
-                    };
-                    runner::load_atlas_context(&session, corpus_id, prod.top_k, &relaxed)
-                        .await
-                        .ok()
-                        .filter(|c| !c.entries.is_empty())
+            // FIRST corpus that actually needs to embed pays for the session;
+            // the rest of the run reuses it, and a failure is remembered so a
+            // dead daemon costs one probe, not one per corpus.
+            if session.is_none() && session_err.is_none() {
+                match build_session(&globals).await {
+                    Ok(s) => session = Some(s),
+                    Err(e) => session_err = Some(e.to_string()),
                 }
-            };
-            match ctx {
-                Some(ctx) => match build_persistent_ann_seed_table(&atlas_dir, &ctx).await {
-                    Ok(_) => {
-                        anns += 1;
-                        "built"
+            }
+            match session.as_ref() {
+                // Named, never defaulted (ARCH §18.3). This corpus asked for a
+                // table and did not get one, so the row reads `err`, not `n/a`
+                // — and control falls through, so the store stays built and the
+                // read_v2 flip below still happens, exactly as on any other ANN
+                // failure.
+                None => {
+                    errs += 1;
+                    eprintln!(
+                        "  {corpus_id}: ann needs the daemon and it is not reachable: {}",
+                        session_err.as_deref().unwrap_or("unknown")
+                    );
+                    "err"
+                }
+                Some(session) => {
+                    let strict =
+                        runner::load_atlas_context(session, corpus_id, prod.top_k, &filter).await;
+                    let ctx = match strict {
+                        Ok(ctx) if !ctx.entries.is_empty() => Some(ctx),
+                        _ => {
+                            let relaxed = AtlasContextFilter {
+                                min_description_chars: 1,
+                                ..filter.clone()
+                            };
+                            runner::load_atlas_context(session, corpus_id, prod.top_k, &relaxed)
+                                .await
+                                .ok()
+                                .filter(|c| !c.entries.is_empty())
+                        }
+                    };
+                    match ctx {
+                        Some(ctx) => {
+                            match build_persistent_ann_seed_table(&atlas_dir, &ctx).await {
+                                Ok(_) => {
+                                    anns += 1;
+                                    "built"
+                                }
+                                Err(e) => {
+                                    errs += 1;
+                                    eprintln!("  {corpus_id}: ann build: {e}");
+                                    "err"
+                                }
+                            }
+                        }
+                        // No seedable atoms even at the relaxed floor (non-Entity surfaces).
+                        None => "none",
                     }
-                    Err(e) => {
-                        errs += 1;
-                        eprintln!("  {corpus_id}: ann build: {e}");
-                        "err"
-                    }
-                },
-                // No seedable atoms even at the relaxed floor (non-Entity surfaces).
-                None => "none",
+                }
             }
         };
 
@@ -275,4 +314,95 @@ fn print_help() {
     println!(
         "wiki-class   -> articles.lance + edges.lance, built by `atlas wikipedia build-graph`"
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    /// Assembled at runtime, never a literal: this test module is INSIDE the
+    /// file it scans, so a literal would match its own source. Same trap as
+    /// `no_session_bootstrap_in_this_verb` and as `lib.rs`'s harness guard.
+    fn session_builder() -> String {
+        ["build", "session"].join("_")
+    }
+
+    /// `svrn atlas migrate-all` must not build a `ChatSession` before it knows
+    /// it needs one.
+    ///
+    /// The store build and the `read_v2` flip are a local file transform — no
+    /// daemon, no inference, no model. Only the ANN sub-step embeds, and only
+    /// for a corpus already carrying an embed marker or an ANN table. Building
+    /// the session in the prologue made every invocation load the wiki graph
+    /// (51,280 articles, 7.3M edges) and the meta-atlas (1.57M atoms) first,
+    /// which is what stopped the ei-3b battery on its first batch: 1,081
+    /// store-less `sep-*` atlases, of which 34 carry an embed marker, so 1,047
+    /// paid a full bootstrap to touch the session zero times.
+    ///
+    /// So the invariant is positional, and this test is positional: the session
+    /// builder may be named only AFTER the per-corpus loop opens. Before it is
+    /// the prologue, and the prologue is the bug.
+    ///
+    /// # What this proves, and what it does not
+    ///
+    /// It pins where the call site sits, not what happens at runtime. The
+    /// behavioural proof is the one recorded in the commit body and is the
+    /// better instrument: with the daemon made unreachable
+    /// (`--daemon http://127.0.0.1:1`) the old binary exits 1 having built
+    /// nothing, and the new one builds the store and exits 0. Reproduce that
+    /// rather than trusting this test if you change the shape here.
+    ///
+    /// Failing inputs, so this is a gate and not a decoration: move the call
+    /// back into the prologue (hop 1 goes red), or delete it entirely (the
+    /// positive control goes red).
+    #[test]
+    fn migrate_all_builds_no_session_before_it_needs_one() {
+        let needle = session_builder();
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("atlas_cmd/migrate_all.rs");
+        let whole = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+        // Production half only — this module's own prose would otherwise trip
+        // the scan, and its assertion literals would flatter the control.
+        let prod = whole
+            .split_once("#[cfg(test)]")
+            .map(|(p, _)| p)
+            .unwrap_or_else(|| panic!("{}: no test module to split on", path.display()));
+
+        // The `use` line legitimately names the builder, so the scan starts at
+        // the function, not at the top of the file.
+        let run_at = prod
+            .find("pub async fn run(")
+            .unwrap_or_else(|| panic!("{}: no `run`", path.display()));
+        let loop_at = prod
+            .find("for corpus_id in &corpora")
+            .unwrap_or_else(|| panic!("{}: no per-corpus loop to divide on", path.display()));
+        assert!(
+            loop_at > run_at,
+            "{}: the loop precedes `run` — the scan is not oriented",
+            path.display()
+        );
+
+        let prologue = &prod[run_at..loop_at];
+        assert!(
+            !prologue.contains(&needle),
+            "{}: `run`'s prologue builds a session before it knows a corpus needs \
+             one. The store build and the read_v2 flip need no daemon; 1,047 of \
+             the 1,081 store-less sep-* atlases never reach the ANN branch. Build \
+             it on first need inside the loop.",
+            path.display()
+        );
+
+        // Positive control: the prologue is trivially clean if the call is gone
+        // altogether, which would strand every embedding-bearing corpus.
+        let body = &prod[loop_at..];
+        assert!(
+            body.contains(&needle),
+            "{}: nothing after the loop builds a session, so the ANN sub-step \
+             cannot embed — either the verb changed shape or this guard is now \
+             checking nothing",
+            path.display()
+        );
+    }
 }

@@ -126,14 +126,31 @@ admits); embed throughput **14.0/s** serial keep-alive against the resident
 1024-d slot (40 calls, 71.2 ms each); 1,108 atlases need their store built
 first. **~106 min of embedding**, plus store builds.
 
-Session bootstrap USED to be the other half of that price — ~40 s per CLI
-invocation, which is what `--batch` existed to amortise. It is gone. `svrn
-atlas backfill-ann` no longer builds a `ChatSession` (ei-3b step 0), and on
-one atlas the same work went **6,911,000 kB peak RSS / 52.4 s → 173,000 kB /
-4.7 s**, byte-identical output. So `--batch` is now a resume-granularity
-knob, not a cost one, and its default is 40: the ledger lands a line per
-corpus when a batch reports, so a smaller batch means less to redo after a
-stop, and it now costs nothing to ask for.
+Session bootstrap USED to be the larger half of that price, and it is gone
+from BOTH verbs. Each invocation of either one built a `ChatSession`, which
+loads the wiki graph (51,280 articles, 7.3M edges) and the meta-atlas (1.57M
+atoms) into the CLI process. Measured on one atlas, `/usr/bin/time -v`, the
+CLI run in a capped cgroup so the resident daemon could not be the victim:
+
+| verb | before | after | atlas |
+|---|---|---|---|
+| `backfill-ann` (ei-3b step 0) | 6,911,000 kB / 52.4 s | 173,000 kB / 4.7 s | `sep-18thGerman-preKant`, 62 atoms |
+| `migrate-all` (ei-3b step 0b) | 6,914,712 kB / 48.1 s | 159,612 kB / **0.05 s** | `sep-hegel` |
+
+Byte-identical output in both cases. The store build is a local file
+transform — no daemon, no inference — and the 48 s was ALL bootstrap; the
+proof is that with the daemon made unreachable the old binary exits 1 having
+built nothing and the new one builds the store and exits 0.
+
+This is why the order's 2.0–2.5 h estimate was low. It priced the embedding
+and treated the store builds as overhead, but **1,081 store-less atlases ×
+48.1 s is 14.4 h of pure bootstrap** — the store half alone would have
+outweighed the embedding six times over. It is now ~0.9 min.
+
+`--batch` is therefore a resume-granularity knob, not a cost one, and its
+default is 40: the ledger lands a line per corpus when a batch reports, so a
+smaller batch means less to redo after a stop, and it now costs nothing to
+ask for.
 
 **It does not self-throttle, because there is nothing to throttle.**
 `load_atlas_context` awaits one embed call at a time — the job is strictly
