@@ -9,6 +9,12 @@ rust-version.workspace = true
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# `ModelAliasTable::default_table` parses the embedded `default_aliases.toml`.
+# THIRD-PARTY, so it costs this crate no in-repo edge — the `[[package_leaf]]`
+# budget in `quality/ARCH_LAYERS.toml` is `allow = []` and stays that way.
+# Pinned through the workspace so the version cannot drift from the other four
+# `toml` consumers (ARCH §8.2).
+toml = { workspace = true }
 
 [lints]
 workspace = true

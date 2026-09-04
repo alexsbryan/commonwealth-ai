@@ -17,12 +17,20 @@ blake3 = "1"
 
 serde = { workspace = true }
 serde_json = { workspace = true }
-toml = { workspace = true }
 thiserror = { workspace = true }
 getrandom = "0.3"
 hex = "0.4"
 tracing = "0.1"
 ed25519-dalek = { workspace = true }
+
+# `toml` is a DEV-dependency only, since 2026-09-04. `model_aliases` was this
+# crate's ONLY production TOML parser and it left for `oicp-types`; the three
+# remaining `toml::from_str` calls are all in `config.rs`'s `#[cfg(test)]`
+# module, which round-trips the shipped `DaemonConfig` / `MeshConfig` shapes.
+# Declared here rather than dropped: `commonwealth/BOUNDARY.md` counts dev
+# edges too, so this is a visible line, not a silent one.
+[dev-dependencies]
+toml = { workspace = true }
 
 [lints]
 workspace = true

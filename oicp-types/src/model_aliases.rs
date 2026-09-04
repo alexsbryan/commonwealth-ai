@@ -1,12 +1,36 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+//! Model aliases — glob patterns over model NAMES, resolved to OICP routing
+//! properties.
+//!
+//! A host is asked for `gpt-5.3-codex` and has to decide what that name
+//! *means* for routing: which [`CapabilityHint`] to match claims against and
+//! which [`LatencyClass`] the caller expects. That is a mapping from a name to
+//! this crate's own vocabulary, so it belongs to the protocol rather than to
+//! any one runtime.
+//!
+//! # Why it lives here
+//!
+//! Until 2026-09-04 it sat in `commonwealth-core`, whose ONLY reason to hold
+//! it was history: every type it produces — [`Capability`],
+//! [`CapabilityHint`], [`CapabilityProfile`], [`LatencyClass`] — is declared
+//! in this crate, and every consumer reached it through a re-export chain
+//! (`commonwealth-inference` re-exported core, `commonwealth-api` imported
+//! that). Moving it costs this crate one THIRD-PARTY dependency (`toml`, for
+//! the embedded default table) and no in-repo edge, so the empty
+//! `[[package_leaf]]` budget in `quality/ARCH_LAYERS.toml` still holds.
+//!
+//! The glob matcher moved with it and is now crate-private: its only caller
+//! ever, on any tree, was this module.
+
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::glob::glob_match;
-use crate::oicp::{
+use crate::capability::{
     infer_hint_from_profile, Capability, CapabilityHint, CapabilityProfile, LatencyClass,
 };
+use crate::error::{InferenceError, InferenceResult};
+use crate::glob::glob_match;
 
 /// The built-in default aliases, embedded at compile time.
 const DEFAULT_ALIASES_TOML: &str = include_str!("default_aliases.toml");
@@ -18,6 +42,7 @@ const DEFAULT_ALIASES_TOML: &str = include_str!("default_aliases.toml");
 /// [`infer_hint_from_profile`] at parse time.
 #[derive(Debug, Clone)]
 pub struct ModelAlias {
+    /// Glob patterns matched against the requested model name, in order.
     pub patterns: Vec<String>,
     /// v0.3 capability hint synthesized from the TOML's
     /// `inferred_preferred` profile.
@@ -38,12 +63,16 @@ pub struct ModelAliasTable {
 /// Resolved alias result with synthesized v0.3 routing properties.
 #[derive(Debug, Clone)]
 pub struct AliasResolution {
+    /// The v0.3 capability hint the matched alias routes to.
     pub hint: CapabilityHint,
+    /// The v0.3 latency class the matched alias routes to.
     pub latency_class: LatencyClass,
+    /// The alias's declared profile, preserved for diagnostics and affinity.
     pub inferred_preferred: CapabilityProfile,
 }
 
 impl ModelAliasTable {
+    /// Build a table from aliases already in resolution order.
     pub fn new(aliases: Vec<ModelAlias>) -> Self {
         Self { aliases }
     }
@@ -70,6 +99,7 @@ impl ModelAliasTable {
         self.aliases.len()
     }
 
+    /// Whether the table holds no aliases at all.
     pub fn is_empty(&self) -> bool {
         self.aliases.is_empty()
     }
@@ -80,9 +110,16 @@ impl ModelAliasTable {
     }
 
     /// Parse an alias table from a TOML string.
-    pub fn parse_toml(toml_str: &str) -> crate::Result<Self> {
-        let file: AliasFile = toml::from_str(toml_str)
-            .map_err(|e| crate::Error::Config(format!("failed to parse alias table: {e}")))?;
+    ///
+    /// The error is [`InferenceError::InvalidInput`] rather than a `toml`
+    /// type: this crate's public surface is the wire contract, and leaking a
+    /// parser's error into it would make `toml` a public dependency of the
+    /// protocol.
+    pub fn parse_toml(toml_str: &str) -> InferenceResult<Self> {
+        let file: AliasFile =
+            toml::from_str(toml_str).map_err(|e| InferenceError::InvalidInput {
+                message: format!("failed to parse alias table: {e}"),
+            })?;
         Ok(Self::from_config(&file.aliases))
     }
 
@@ -165,11 +202,15 @@ struct AliasFile {
 /// proficiency floors.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelAliasConfig {
+    /// Glob patterns this entry matches, in order.
     pub patterns: Vec<String>,
+    /// v0.2 proficiency floors. Deserialized so old files still load; unused.
     #[serde(default)]
     pub inferred_required: HashMap<String, u8>,
+    /// v0.2 preferred proficiencies, collapsed to a v0.3 hint at parse time.
     #[serde(default)]
     pub inferred_preferred: HashMap<String, u8>,
+    /// Legacy latency word (`interactive` / `throughput` / `background`).
     #[serde(default)]
     pub latency: Option<String>,
 }
@@ -192,7 +233,7 @@ fn parse_capability(s: &str) -> Option<Capability> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::oicp;
+    use crate::capability::proficiency;
 
     #[test]
     fn default_table_parses_from_toml() {
@@ -208,7 +249,7 @@ mod tests {
     fn omo_codex_resolves_to_code_hint() {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("gpt-5.3-codex").unwrap();
-        assert!(oicp::proficiency(&result.inferred_preferred, Capability::Code) >= 3);
+        assert!(proficiency(&result.inferred_preferred, Capability::Code) >= 3);
         // The alias's "throughput" latency maps to Extended in v0.3.
         assert_eq!(result.latency_class, LatencyClass::Extended);
     }
@@ -226,7 +267,7 @@ mod tests {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("gpt-5.4-nano").unwrap();
         assert_eq!(
-            oicp::proficiency(&result.inferred_preferred, Capability::General),
+            proficiency(&result.inferred_preferred, Capability::General),
             1
         );
         assert_eq!(result.latency_class, LatencyClass::Fast);
@@ -236,7 +277,7 @@ mod tests {
     fn generic_coder_pattern() {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("deepseek-coder-v3").unwrap();
-        assert!(oicp::proficiency(&result.inferred_preferred, Capability::Code) >= 3);
+        assert!(proficiency(&result.inferred_preferred, Capability::Code) >= 3);
     }
 
     #[test]
@@ -250,7 +291,7 @@ mod tests {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("gpt-5.3-codex").unwrap();
         // The first match (OmO Hephaestus) has instruction: 3.
-        assert!(oicp::proficiency(&result.inferred_preferred, Capability::Instruction) >= 3);
+        assert!(proficiency(&result.inferred_preferred, Capability::Instruction) >= 3);
     }
 
     #[test]
@@ -265,14 +306,8 @@ math = 3
 "#;
         let table = ModelAliasTable::parse_toml(toml).unwrap();
         let result = table.resolve("my-custom-model-v2").unwrap();
-        assert_eq!(
-            oicp::proficiency(&result.inferred_preferred, Capability::Code),
-            4
-        );
-        assert_eq!(
-            oicp::proficiency(&result.inferred_preferred, Capability::Math),
-            3
-        );
+        assert_eq!(proficiency(&result.inferred_preferred, Capability::Code), 4);
+        assert_eq!(proficiency(&result.inferred_preferred, Capability::Math), 3);
         // code:4 with no general → code hint per infer_hint_from_profile.
         assert_eq!(result.hint, CapabilityHint::code());
     }
@@ -298,7 +333,7 @@ creative = 4
     fn kimi_resolves() {
         let table = ModelAliasTable::default_table();
         let result = table.resolve("kimi-k2-latest").unwrap();
-        assert!(oicp::proficiency(&result.inferred_preferred, Capability::Code) >= 3);
+        assert!(proficiency(&result.inferred_preferred, Capability::Code) >= 3);
     }
 
     #[test]

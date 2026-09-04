@@ -11,7 +11,12 @@ pub mod inference_plan;
 // one. Re-exported, not re-declared: one decider, one name
 // (`ARCH_PRINCIPLES` §10.6). Surfaced by nc-22c shape matching, which sees a
 // fork that was renamed or copied — the case a name-based census cannot.
-pub use commonwealth_core::{model, model_aliases, oicp};
+pub use commonwealth_core::{model, oicp};
+// `model_aliases` went one layer FURTHER down on 2026-09-04 (cw-lift 4b): every
+// type it produces is oicp vocabulary, so `oicp-types` is its home and
+// `commonwealth-core` no longer declares it. Re-exported from the same path
+// callers already used, so the seam did not move for them.
+pub use oicp::model_aliases;
 pub mod plan;
 pub mod store_adapter;
 

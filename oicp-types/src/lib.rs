@@ -27,10 +27,16 @@
 pub mod capability;
 pub mod completion;
 pub mod error;
+// Crate-private: `model_aliases` is its only caller and always was. It was
+// `pub mod glob` in `commonwealth-core` and the move is what makes the
+// privacy true rather than intended — a `git grep` before the move found zero
+// consumers outside the module that travels with it.
+mod glob;
 pub mod ingest;
 pub mod jsonrpc;
 pub mod knowledge;
 pub mod manifest;
+pub mod model_aliases;
 pub mod registry;
 pub mod requirements;
 pub mod response;
@@ -66,6 +72,7 @@ pub use manifest::{
     NormalizationStrategy, PeerDescriptor, PoolingStrategy, ProviderInfo, ProviderManifest,
     ProviderModel, ProviderType,
 };
+pub use model_aliases::{AliasResolution, ModelAlias, ModelAliasConfig, ModelAliasTable};
 pub use registry::{ExtensionRegistry, ExtensionStats};
 pub use requirements::{InferenceRequirements, PrivacyRequirements, ShardingPrivacy};
 pub use response::{MatchQuality, OicpResponseMeta};

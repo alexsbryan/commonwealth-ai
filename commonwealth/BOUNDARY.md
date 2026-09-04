@@ -68,8 +68,10 @@ takes exactly two of them, and neither is a concession:
 3. **The shared leaves keep their global budget.** Widening one widens every
    package's contract surface at once.
 4. **No `build.rs`, and no `include_str!`/`include_bytes!` escaping the crate
-   root.** Both of `commonwealth-core`'s embeds (`default_aliases.toml`,
-   `default_pipelines.toml`) are crate-local and stay that way.
+   root.** `commonwealth-core` now has NO embeds at all: `default_pipelines.toml`
+   left with `pipeline_aliases` for `serving-policy` (cw-lift 4a, e26414742) and
+   `default_aliases.toml` left with `model_aliases` for `oicp-types` (cw-lift 4b).
+   Both are still crate-local in their new homes, which is what the rule asks.
 
 The rules count **dev- and build-dependencies too**: a third party who lifts the
 package carries its tests.
