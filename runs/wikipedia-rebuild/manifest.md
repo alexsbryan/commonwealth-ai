@@ -64,11 +64,49 @@ error: build: wiki atom id collision: entity-6b8aef7e6205164a is both
 
 That is not a memory failure and not a scale failure — it is the guard doing
 its job on a real defect. `wiki_atom_id` minted through
-`AtomId::entity_content_hash`, which case-folds the name, and Wikipedia titles
-are case-distinct identifiers. Measured over the whole live title namespace
-(1,562,311 titles): 38,259 folded keys carry more than one title and 40,869
-titles — 2.62% — would have been silently merged into another article's atom.
+`AtomId::entity_content_hash`, which keys on `canonical::lookup_key(title)` —
+case-folded, punctuation-stripped — and a MediaWiki title IS the identifier.
 Fixed in `5219e9971` by minting through a new `AtomId::exact_entity_content_hash`.
+
+### The corpus-wide census — what the guard was standing in front of
+
+The guard aborts on the FIRST collision, so the error names one pair and says
+nothing about scale. This is the scale. Method, so it can be re-run: read every
+title out of the retiring SQLite (read-only, no build, ~20 s) and group by the
+same `lookup_key` the folded constructor used.
+
+```
+sqlite: ~/.svrnmesh/indexes/wikipedia/wikipedia_graph.db   (mode=ro)
+query:  select title from articles where corpus_id = 'wikipedia'
+group:  canonical::lookup_key  — alphanumerics lowercased, every other run
+        of characters collapsed to one space, trimmed
+```
+
+| | titles | distinct `lookup_key`s | keys holding >1 title | titles merged away |
+|---|---|---|---|---|
+| whole namespace | 1,562,311 | 1,521,442 | 38,259 | **40,869 (2.62%)** |
+| in-scope L5 only | 51,280 | 50,741 | 530 | 539 (1.05%) |
+
+Representative groups, none of them exotic: `{C, C++, C--, &c, °C}`,
+`{"+ (album)", "- (album)", "= (album)", Album}`, `{WING, WinG, Wing}`,
+`{Polar BEAR, Polar Bear, Polar bear}`, `{TIME (magazine), Time (magazine),
+TIME Magazine}`, `{Jigsaw puzzle, Jigsaw Puzzle}` — the pair the build died on.
+
+Two things follow. The collision is in the KEY, before any hashing, so widening
+`short_hash` would have moved none of it — the guard's own advice ("widen
+wiki_atom_id") was wrong and is corrected in the code. And a build that had
+merely been allowed through would have produced a store that looks complete:
+1.52M atoms instead of 1.56M, no error, no marker, 40,869 articles quietly
+wearing another article's identity and evidence anchor. That is the failure
+mode this campaign's guards exist for, and it cost a 72.8 s run to find.
+
+**A caveat this run should carry, not hide.** 26,630 of those 1,562,311 titles
+are mojibake in the index itself — UTF-8 decoded as latin-1 at ingest, e.g.
+`!XÃ³Ãµ language` for `!Xóõ language` — identically in the SQLite and in
+`atoms.json`, so it predates all of this. Their atom ids will be minted from
+the corrupted string. Out of this order's scope (ingest, not the store) and
+banked as `wikipedia-titles-mojibake-at-ingest`; named here because an exact id
+inherits the corruption where the folded one partly absorbed it.
 
 **Two numbers from that attempt are real and carry forward as measurements,
 not forecasts.** Streaming the full corpus costs 1.9 s, not the ~2 min the
