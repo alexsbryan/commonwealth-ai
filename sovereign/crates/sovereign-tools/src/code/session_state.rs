@@ -120,6 +120,10 @@ pub struct UpsertOutcome {
     /// automatically bad — a long initiative is legitimate — but it is
     /// the number to look at when the work starts feeling like tweaking.
     pub objective_sessions: usize,
+    /// Set when this frame was written to a directory the boot hook never
+    /// created — i.e. the `session_id` almost certainly came from the wrong
+    /// namespace. See [`orphan_warning`].
+    pub orphan_warning: Option<String>,
 }
 
 /// One `## Next` item that predates this frame.
@@ -285,6 +289,65 @@ fn new_frame(session_id: &str, repo_root: Option<&Path>, update: &FrameUpdate) -
 /// Section-level upsert of a schema-v1 frame. See module docs for the
 /// contract; returns `Err` (and writes nothing) when the result would
 /// bust the token budget or a section name is unknown.
+/// Marker the boot hook writes into a session's directory before anything else.
+/// Its ABSENCE is what distinguishes a real harness session from an id out of
+/// some other namespace.
+const BOOT_MARKER: &str = "boot.json";
+
+/// Detect the orphan-frame trap: a `session_id` that names no harness session.
+///
+/// **Why this exists.** `declare_scope` returns a field literally called
+/// `session_id`, and it is the DAEMON's session identity — a different
+/// namespace from the harness id frames are keyed on. Banking a frame under it
+/// writes a real file, returns `created: true` with a real path, and lists
+/// among the live frames — while the boot hook, which looks up the HARNESS id,
+/// finds nothing and silently falls back to ranking every candidate frame in
+/// the store. The cost lands on the next session, as guessing.
+///
+/// It was diagnosed and written down on 2026-07-29 (note `9d609407`) and it
+/// happened again on 2026-09-04, to a session that had the note injected into
+/// its own context. A rule that keeps being forgotten is a rule that belongs
+/// in the code (ARCH §7, §10.6), so this makes the failure visible AT WRITE
+/// TIME rather than at the next boot.
+///
+/// It warns rather than refuses: not every harness wires the boot hook
+/// (opencode does not), so an absent marker is strong evidence and not proof.
+fn orphan_warning(sessions_root: &Path, session_id: &str) -> Option<String> {
+    if sessions_root.join(session_id).join(BOOT_MARKER).exists() {
+        return None;
+    }
+    // Look for the session this one probably IS: a sibling the boot hook did
+    // create, most recently touched.
+    let mut best: Option<(std::time::SystemTime, String)> = None;
+    for entry in std::fs::read_dir(sessions_root).ok()?.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name == session_id {
+            continue;
+        }
+        let marker = entry.path().join(BOOT_MARKER);
+        let Ok(meta) = std::fs::metadata(&marker) else {
+            continue;
+        };
+        let Ok(mtime) = meta.modified() else { continue };
+        if best.as_ref().is_none_or(|(t, _)| mtime > *t) {
+            best = Some((mtime, name));
+        }
+    }
+    let hint = match best {
+        Some((_, id)) => format!(
+            " The most recently booted session is `{id}` — if that is this \
+             terminal, the frame belongs there."
+        ),
+        None => String::new(),
+    };
+    Some(format!(
+        "session_id `{session_id}` has no {BOOT_MARKER}, so the boot hook never \
+         created it and will never find this frame. Take the id from the \
+         scratchpad path or the boot banner — NEVER from `declare_scope`, whose \
+         `session_id` is the daemon's own namespace (note 9d609407).{hint}"
+    ))
+}
+
 pub fn upsert_frame(
     sessions_root: &Path,
     session_id: &str,
@@ -480,6 +543,9 @@ pub fn upsert_frame(
         .check_budget(&SCHEMA)
         .map_err(|e| format!("session_state: {e}"))?;
 
+    // Computed BEFORE the mkdir — afterwards the directory exists and the
+    // evidence is gone.
+    let orphan_warning = orphan_warning(sessions_root, session_id);
     std::fs::create_dir_all(&dir)
         .map_err(|e| format!("session_state: mkdir {}: {e}", dir.display()))?;
     let tmp = dir.join("frame.md.tmp");
@@ -495,6 +561,7 @@ pub fn upsert_frame(
         approx_tokens: total,
         carried,
         objective_sessions,
+        orphan_warning,
     })
 }
 
@@ -763,6 +830,11 @@ impl SessionStateTool {
             "objective_sessions": outcome.objective_sessions,
             "carried": carried,
         });
+        // FIRST key after the counts, and named `WARNING`, because the whole
+        // failure mode is that every surface reported success.
+        if let Some(w) = &outcome.orphan_warning {
+            doc["WARNING_frame_may_be_orphaned"] = json!(w);
+        }
         if let Some(worst) = outcome.carried.first() {
             doc["advice"] = json!(format!(
                 "{} `Next` item(s) predate this frame; the oldest has ridden {} consecutive \
@@ -1471,5 +1543,63 @@ mod tests {
         assert!(text.contains("status: completed"));
         assert!(!text.contains("ended_at: null"));
         std::fs::remove_dir_all(&root).ok();
+    }
+    /// The orphan-frame trap (note `9d609407`), watched failing.
+    ///
+    /// `declare_scope` hands back a `session_id` from the daemon's namespace.
+    /// A frame banked under it writes a real file and reports success, while
+    /// the boot hook — which looks up the harness id — never finds it.
+    #[test]
+    fn a_session_id_the_boot_hook_never_created_is_reported_as_orphaned() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+
+        // The real harness session: the boot hook wrote its marker.
+        std::fs::create_dir_all(root.join("harness-id")).unwrap();
+        std::fs::write(root.join("harness-id").join("boot.json"), "{}").unwrap();
+
+        // Banking under the wrong namespace still writes, and still warns.
+        let out = upsert_frame(
+            root,
+            "declare-scope-id",
+            None,
+            FrameUpdate {
+                sections: vec![
+                    ("objective".into(), "Outcome: a frame the boot hook can find. Done when: the id namespaces cannot be confused. Not worth continuing if: the boot hook stops writing a marker. Anchored in: §7, §10.6.".into()),
+                    ("state".into(), "anything".into()),
+                ],
+                ..Default::default()
+            },
+        )
+        .expect("the write still succeeds — it warns, it does not refuse");
+        let w = out
+            .orphan_warning
+            .expect("an id with no boot.json must be reported");
+        assert!(w.contains("declare-scope-id"), "names the bad id: {w}");
+        assert!(w.contains("harness-id"), "names the likely real one: {w}");
+        assert!(
+            w.contains("declare_scope"),
+            "names the source of the trap: {w}"
+        );
+
+        // And the real id warns about nothing.
+        let ok = upsert_frame(
+            root,
+            "harness-id",
+            None,
+            FrameUpdate {
+                sections: vec![
+                    ("objective".into(), "Outcome: a frame the boot hook can find. Done when: the id namespaces cannot be confused. Not worth continuing if: the boot hook stops writing a marker. Anchored in: §7, §10.6.".into()),
+                    ("state".into(), "anything".into()),
+                ],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(
+            ok.orphan_warning.is_none(),
+            "a booted session must not warn: {:?}",
+            ok.orphan_warning
+        );
     }
 }
