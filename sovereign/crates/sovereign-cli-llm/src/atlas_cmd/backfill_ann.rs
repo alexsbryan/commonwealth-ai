@@ -20,7 +20,7 @@
 use corpus_engine::enrichment::atlas::ann_store::ANN_TABLE_DIRNAME;
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 
-use crate::chat_cmd::bootstrap::build_session;
+use crate::chat_cmd::bootstrap::build_inference;
 use crate::chat_cmd::config::parse_globals;
 use crate::enrich_cmd::paths;
 use sovereign_tools::atlas_context_manager::{backfill_ann, AtlasContextFilter, BackfillOutcome};
@@ -117,13 +117,29 @@ pub async fn run(args: &[String]) -> i32 {
         return 2;
     }
 
-    let session = match build_session(&globals).await {
-        Ok(s) => s,
+    // An embedder and an atlas directory is the whole of what this verb
+    // needs. It used to ask for a `ChatSession`, which also opens the state
+    // store, builds a `CorpusEngine` and commissions the shared recipe — and
+    // the recipe loads the wiki graph (51,280 articles, 7.3M edges) and the
+    // meta-atlas (1.57M atoms) into THIS process, beside the resident daemon.
+    // Two concurrent invocations OOM-killed the daemon on 2026-09-04
+    // (11:52:08); the embeds were never the price, the bootstrap was.
+    // `build_inference` is the first two steps of that same bootstrap — the
+    // probe, the model-id resolution, the HTTP provider — and nothing after
+    // them (ei-3b step 0). `no_session_bootstrap_in_this_verb` below keeps it
+    // that way structurally rather than by memory (ARCH §7).
+    let inference = match build_inference(&globals).await {
+        Ok((inference, _base, _embed_model)) => inference,
         Err(e) => {
-            eprintln!("atlas backfill-ann: build session: {e}");
+            eprintln!("atlas backfill-ann: reach the daemon: {e}");
             return 1;
         }
     };
+    // The loader is corpus-engine's now and takes an `EmbedFn`; the QUERY-side
+    // adapter keeps this table in the same vector space `atlas_navigate_ann`
+    // queries it in (ei-5a-build-cut). Built once, not once per corpus — the
+    // provider behind it is the same Arc either way.
+    let embed = sovereign_core::embed_fn::inference_to_embed_query_fn(inference);
 
     // CRITICAL: build the ANN table over the SAME atom universe the daemon /
     // desktop ground with — i.e. the production grounding filter, which is the
@@ -175,11 +191,6 @@ pub async fn run(args: &[String]) -> i32 {
     // `sovereign_tools::atlas_context_manager::backfill_ann` (ontology-v1 P0).
     for corpus_id in &corpora {
         let atlas_dir = paths::index_root(corpus_id).join(ATLAS_DIRNAME);
-        // The loader is corpus-engine's now and takes an `EmbedFn`; the
-        // QUERY-side adapter keeps this table in the same vector space
-        // `atlas_navigate_ann` queries it in (ei-5a-build-cut).
-        let embed =
-            sovereign_core::embed_fn::inference_to_embed_query_fn(session.inference.clone());
         match backfill_ann(&embed, &atlas_dir, corpus_id, &filter).await {
             Ok(BackfillOutcome::Built(stats)) => {
                 println!(
@@ -222,4 +233,117 @@ fn csv(s: &str) -> Vec<String> {
         .filter(|t| !t.is_empty())
         .map(String::from)
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::{Path, PathBuf};
+
+    /// The needle, assembled at runtime and never written as a literal.
+    /// THIS FILE IS ONE OF THE FILES BEING SCANNED, so a literal here would
+    /// make the guard match its own source and fail for the wrong reason —
+    /// the same trap `bench_cmd_is_the_only_module_naming_the_eval_harness`
+    /// documents in `lib.rs`. Keep the token out of this file, test names and
+    /// assertion text included.
+    fn session_builder() -> String {
+        ["build", "session"].join("_")
+    }
+
+    fn src(rel: &str) -> (PathBuf, String) {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join(rel);
+        let text = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+        // A guard that scanned nothing is `never-ran`, not `passed` (ARCH
+        // §18.1). If this file is ever moved or renamed, fail here — loudly —
+        // rather than reporting green over an empty scan.
+        assert!(
+            text.len() > 500,
+            "{} is {} bytes — the scan found no source to check",
+            path.display(),
+            text.len()
+        );
+        (path, text)
+    }
+
+    /// `svrn atlas backfill-ann` must reach the daemon through
+    /// `build_inference` (probe + model ids + HTTP provider) and NOT through
+    /// the `ChatSession` bootstrap, which additionally opens the state store,
+    /// builds a `CorpusEngine`, and commissions the shared recipe — the recipe
+    /// that loads the wiki graph (51,280 articles, 7.3M edges) and the
+    /// meta-atlas (1.57M atoms) into this process. Two concurrent invocations
+    /// of this verb OOM-killed the resident daemon on 2026-09-04 at 11:52:08.
+    ///
+    /// # What this proves, and what it does not
+    ///
+    /// It is a two-hop source check over the verb's actual call graph: this
+    /// module, plus the body of the one bootstrap helper it calls. Those are
+    /// the only two places the session builder could be named on the path from
+    /// `run` to `backfill_ann`. It is NOT a whole-graph proof — a future edit
+    /// that routes through some third helper would pass this and still boot a
+    /// session, and the fix then is to add that helper here, not to weaken the
+    /// check. `callees("run")` is the exact instrument; this is the one that
+    /// runs in CI on every push with no index and no daemon.
+    ///
+    /// Failing input, so this is a gate and not a decoration: revert either
+    /// half of ei-3b step 0 and hop 1 or hop 2 fails by name.
+    #[test]
+    fn no_session_bootstrap_in_this_verb() {
+        let needle = session_builder();
+
+        // Hop 1 — the verb's own module, PRODUCTION HALF ONLY. Truncated at
+        // `#[cfg(test)]` because this test module is inside the file it
+        // scans: its own assertion literals would otherwise satisfy the
+        // positive control below even with the call deleted, and a prose
+        // comment in here would trip the negative one (it did, on the first
+        // cut). Scanning only the half that ships makes both honest.
+        let (path, whole) = src("atlas_cmd/backfill_ann.rs");
+        let verb = whole
+            .split_once("#[cfg(test)]")
+            .map(|(prod, _)| prod)
+            .unwrap_or_else(|| panic!("{}: no test module to split on", path.display()));
+        assert!(
+            verb.len() > 500,
+            "{}: production half is {} bytes — the scan found nothing to check",
+            path.display(),
+            verb.len()
+        );
+        assert!(
+            !verb.contains(&needle),
+            "{} names the session bootstrap. This verb needs an embedder and \
+             an atlas dir; a session also loads the wiki graph and the \
+             meta-atlas into this process and has OOM-killed the daemon. Use \
+             `build_inference` (chat_cmd::bootstrap).",
+            path.display()
+        );
+        // Positive control: hop 1 passes trivially if the verb stopped
+        // reaching the daemon at all, so pin the exact call it DOES make.
+        // The full call form, not the bare name: a rename to some
+        // `build_inference<suffix>` would satisfy a substring check while
+        // hop 2 went on inspecting the original function — the wrong one.
+        assert!(
+            verb.contains("build_inference(&globals)"),
+            "{} no longer calls `build_inference(&globals)` — either the verb \
+             changed shape or this guard is now checking nothing",
+            path.display()
+        );
+
+        // Hop 2 — the body of the helper hop 1 pins. Scoped to that
+        // function, because the session builder's `_with_skills` sibling
+        // lives in the same file and is of course allowed to name itself.
+        let (boot_path, boot) = src("chat_cmd/bootstrap.rs");
+        let start = boot
+            .find("pub async fn build_inference(")
+            .unwrap_or_else(|| panic!("{}: no `build_inference`", boot_path.display()));
+        let rest = &boot[start..];
+        let end = rest
+            .find("\n}\n")
+            .unwrap_or_else(|| panic!("{}: `build_inference` has no end", boot_path.display()));
+        let body = &rest[..end];
+        assert!(
+            !body.contains(&needle),
+            "{}: `build_inference` names the session bootstrap, so the verb \
+             reaches it transitively",
+            boot_path.display()
+        );
+    }
 }

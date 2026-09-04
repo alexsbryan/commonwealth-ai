@@ -66,28 +66,28 @@ pub struct ChatSession {
     pub atlas_mgr: Arc<sovereign_tools::atlas_context_manager::AtlasContextManager>,
 }
 
-/// Build a `Runtime` backed by the daemon over HTTP.
+/// Probe the daemon, resolve its `(chat, embed)` model ids, and build the
+/// HTTP `InferenceProvider` over them. Returns `(inference, daemon_base,
+/// embed_model_id)`.
 ///
-/// Fails fast if the daemon isn't answering — there's no recovery
-/// path a retry could fix, and a partially-initialized Runtime
-/// pointing at a dead endpoint would produce confusing errors deep
-/// in retrieval. The caller should exit with a hint.
-pub async fn build_session(globals: &ChatGlobals) -> Result<ChatSession> {
-    build_session_with_skills(globals, SkillRegistry::new()).await
-}
-
-/// Build a daemon-backed `ChatSession` with a caller-supplied
-/// `SkillRegistry`. The default `build_session` passes an empty
-/// registry — chat-as-chat doesn't need skills loaded. The Tier-B
-/// voice eval harness (`svrn voice eval`) supplies a registry
-/// pre-populated with the relational skills (inner-work,
-/// personal-assistant) and pre-activates the per-scenario one so
-/// the runtime's `primary_skill_register()` resolves to
-/// `Relational` and the witness-voice contract gets prepended.
-pub async fn build_session_with_skills(
+/// # Why this is its own function
+///
+/// It is the first two steps of [`build_session_with_skills`], and for one
+/// caller it is ALL of them. `svrn atlas backfill-ann` needs an embedder and
+/// an atlas directory; it was reaching them through `build_session`, which
+/// also opens the state store, builds a `CorpusEngine`, and commissions the
+/// shared recipe — and the recipe loads the wiki graph (51,280 articles, 7.3M
+/// edges) and the meta-atlas (1.57M atoms) into the CLI process beside the
+/// resident daemon. On 2026-09-04 two concurrent `backfill-ann` invocations
+/// OOM-killed the daemon at 11:52:08. The embeds were never the price; the
+/// bootstrap was.
+///
+/// So the cheap half is named, and the expensive half is what a caller opts
+/// INTO by asking for a `ChatSession`. `build_session_with_skills` calls this
+/// rather than keeping a second copy of it (ARCH §10.6).
+pub async fn build_inference(
     globals: &ChatGlobals,
-    skills: SkillRegistry,
-) -> Result<ChatSession> {
+) -> Result<(Arc<dyn InferenceProvider>, String, String)> {
     // 1. Probe the daemon before we touch anything else. A fast fail
     //    here prints a clean "start the daemon" message instead of
     //    the cryptic timeout from the first real request.
@@ -139,6 +139,39 @@ pub async fn build_session_with_skills(
             ),
         },
     );
+
+    Ok((inference, base, embed_model))
+}
+
+/// Build a `Runtime` backed by the daemon over HTTP.
+///
+/// Fails fast if the daemon isn't answering — there's no recovery
+/// path a retry could fix, and a partially-initialized Runtime
+/// pointing at a dead endpoint would produce confusing errors deep
+/// in retrieval. The caller should exit with a hint.
+pub async fn build_session(globals: &ChatGlobals) -> Result<ChatSession> {
+    build_session_with_skills(globals, SkillRegistry::new()).await
+}
+
+/// Build a daemon-backed `ChatSession` with a caller-supplied
+/// `SkillRegistry`. The default `build_session` passes an empty
+/// registry — chat-as-chat doesn't need skills loaded. The Tier-B
+/// voice eval harness (`svrn voice eval`) supplies a registry
+/// pre-populated with the relational skills (inner-work,
+/// personal-assistant) and pre-activates the per-scenario one so
+/// the runtime's `primary_skill_register()` resolves to
+/// `Relational` and the witness-voice contract gets prepended.
+pub async fn build_session_with_skills(
+    globals: &ChatGlobals,
+    skills: SkillRegistry,
+) -> Result<ChatSession> {
+    // Steps 1 and 2 — probe the daemon, resolve the model ids, build the HTTP
+    // provider — are `build_inference` above. They are the whole of what
+    // `svrn atlas backfill-ann` needs, and everything below this line (state
+    // store, CorpusEngine, the recipe's wiki graph and meta-atlas) is what
+    // made that verb cost ~20 GB of RSS beside the resident daemon. One
+    // implementation, two callers (ARCH §10.6) — ei-3b step 0.
+    let (inference, base, embed_model) = build_inference(globals).await?;
 
     // 3. Open the state store. Creating the data dir on the fly is
     //    safe — mirrors the desktop's behaviour and means a first
