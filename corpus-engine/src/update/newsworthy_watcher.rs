@@ -4,10 +4,18 @@
 //! Reads `Portal:Current_events` daily, derives a tracked set of
 //! MediaWiki article titles from event-bullet wikilinks, and reconciles
 //! that tracked set against the parent `wikipedia` corpus. Tracked-set
-//! state, daily portal idempotency markers, and refresh-job rows live
-//! in the host's gossip-replicated KV store via the [`NewsworthyHost`]
-//! adapter trait — `corpus-engine` deliberately does not link
-//! Commonwealth.
+//! state and daily portal idempotency markers live in the host's KV
+//! store via the [`NewsworthyHost`] adapter trait — `corpus-engine`
+//! deliberately does not link Commonwealth.
+//!
+//! Only the tracked set replicates. `wikipedia-newsworthy:portal` is
+//! the leader's own idempotency marker and `wikipedia-newsworthy:status`
+//! is this node's own tick snapshot, so both are gossip-excluded
+//! (`commonwealth-state::peer_preferences::GOSSIP_EXCLUDED_APP_IDS`);
+//! `:status` had to be, since its single unsuffixed `last_tick` key
+//! made a peer's snapshot last-write-wins over yours. A fourth
+//! namespace, `wikipedia-newsworthy:job`, was declared here and never
+//! written or read; cw-lift 2b deleted it.
 //!
 //! Two-phase tick:
 //!
@@ -51,13 +59,11 @@ use crate::recipe::{ChunkerConfig, ExtractorConfig};
 /// `tracked:<title>` with the title normalised (spaces → underscores).
 pub const APP_ID_TRACKED: &str = "wikipedia-newsworthy:tracked";
 
-/// MeshStore namespace for daily portal-page idempotency markers.
-/// Keyed by `portal:<YYYY-MM-DD>`.
+/// KV namespace for daily portal-page idempotency markers. Keyed by
+/// `portal:<YYYY-MM-DD>`. Written and read only inside
+/// [`WikipediaNewsworthyWatcher::run_leader_step`] — the leader reads
+/// back its own marker — so it is gossip-excluded and stays local.
 pub const APP_ID_PORTAL: &str = "wikipedia-newsworthy:portal";
-
-/// MeshStore namespace for refresh-job rows. Keyed by `job:<uuid>`.
-/// Expires under the host's existing 7-day retention GC.
-pub const APP_ID_JOB: &str = "wikipedia-newsworthy:job";
 
 /// MeshStore namespace for the per-node tick-status snapshot. Single
 /// key `last_tick` carrying [`TickStatusSnapshot`] JSON, overwritten
@@ -66,6 +72,12 @@ pub const APP_ID_JOB: &str = "wikipedia-newsworthy:job";
 /// for "is the watcher running, am I leader, what did the last tick
 /// do?" — the watcher's whole point is invisible background work, so
 /// without this snapshot users have no way to verify it.
+///
+/// Gossip-excluded, and it has to be: the key is the unsuffixed
+/// `last_tick` for every node, so while this namespace replicated,
+/// last-write-wins made whichever peer ticked most recently the one
+/// whose `node_id_str` and `role_leader` your own status route
+/// reported (cw-lift 2b).
 pub const APP_ID_STATUS: &str = "wikipedia-newsworthy:status";
 pub const STATUS_KEY_LAST_TICK: &str = "last_tick";
 

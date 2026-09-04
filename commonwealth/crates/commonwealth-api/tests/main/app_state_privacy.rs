@@ -129,6 +129,11 @@ async fn receiver_rejects_gossiped_private_namespaces() {
             ("activity-private", "usage", "tokens=999"),
             ("work-atlas-private", "session", "scope"),
             ("notes-private", "n1", "secret"),
+            // cw-lift 2b — excluded on "no cross-peer consumer", not
+            // privacy, but the receiver refuses them on the same
+            // predicate, so a peer cannot re-create the namespace here.
+            ("atos-sessions", "sess1", "{}"),
+            ("wikipedia-newsworthy:status", "last_tick", "{}"),
             // One legitimate public entry rides along.
             ("contributions", "ev1", "served"),
         ]),
@@ -142,10 +147,12 @@ async fn receiver_rejects_gossiped_private_namespaces() {
         ("activity-private", "usage"),
         ("work-atlas-private", "session"),
         ("notes-private", "n1"),
+        ("atos-sessions", "sess1"),
+        ("wikipedia-newsworthy:status", "last_tick"),
     ] {
         assert!(
             state.inner.mesh_store.get(app, key).unwrap().is_none(),
-            "receiver merged a private namespace from the wire: {app}/{key}"
+            "receiver merged an excluded namespace from the wire: {app}/{key}"
         );
     }
 
@@ -171,7 +178,10 @@ async fn receiver_accepts_ordinary_namespaces() {
 
     let status = post_app_state(
         &state,
-        app_state_body(&[("inference", "plan1", "{}"), ("knowledge", "k1", "{}")]),
+        app_state_body(&[
+            ("inference", "plan1", "{}"),
+            ("corpus-engine", "shards:1", "{}"),
+        ]),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -185,7 +195,7 @@ async fn receiver_accepts_ordinary_namespaces() {
     assert!(state
         .inner
         .mesh_store
-        .get("knowledge", "k1")
+        .get("corpus-engine", "shards:1")
         .unwrap()
         .is_some());
 }

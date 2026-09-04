@@ -16,7 +16,6 @@ use commonwealth_core::mesh::{Mesh, NodeStatus};
 use commonwealth_inference::model_aliases::ModelAliasTable;
 use commonwealth_inference::oicp::ProviderManifest;
 use commonwealth_inference::store_adapter::InferenceStateStore;
-use commonwealth_knowledge::store_adapter::KnowledgeStateStore;
 use commonwealth_knowledge::{
     EphemeralGrantStore, GuestGrantStore, VerifyReport, WorkQueueManager,
 };
@@ -641,8 +640,6 @@ pub struct AppStateInner {
     pub mesh: RwLock<Mesh>,
     /// Inference plan, model info, ledger, and llama addresses — all via MeshStore.
     pub inference_store: InferenceStateStore,
-    /// Knowledge shard plan — via MeshStore.
-    pub knowledge_store: KnowledgeStateStore,
     pub model_aliases: ModelAliasTable,
     /// ATOS pipeline aliases — resolved before `model_aliases` when
     /// an incoming request carries a pipeline name like
@@ -1632,7 +1629,6 @@ impl AppState {
         corpus_engine: Option<Arc<CorpusEngine>>,
     ) -> Self {
         let inference_store = InferenceStateStore::new(Arc::clone(&mesh_store), self_node_id);
-        let knowledge_store = KnowledgeStateStore::new(Arc::clone(&mesh_store), self_node_id);
         let contribution_emitter = ContributionEmitter::new((*mesh_store).clone(), self_node_id);
         let activity_emitter = ActivityEmitter::new((*mesh_store).clone(), self_node_id);
         let peer_preferences = PeerPreferenceStore::new((*mesh_store).clone(), self_node_id);
@@ -1695,7 +1691,6 @@ impl AppState {
                 self_node_id_swap: ArcSwap::from_pointee(self_node_id),
                 mesh: RwLock::new(mesh),
                 inference_store,
-                knowledge_store,
                 model_aliases: ModelAliasTable::default_table(),
                 pipeline_aliases:
                     serving_policy::pipeline_aliases::PipelineAliasTable::default_table(),

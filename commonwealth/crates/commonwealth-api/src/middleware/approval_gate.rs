@@ -5,9 +5,10 @@
 //! Logic, in order:
 //!
 //! 1. Resolve an approval for `ctx.feature_id` via
-//!    [`sovereign_atos::approval::find_approval`]. Git path first,
-//!    MeshStore fallback, `None` if neither matches. Result cached
-//!    on the session state so the next request skips the git walk.
+//!    [`sovereign_atos::approval::find_approval`], git path only —
+//!    see the note on [`ApprovalGate`] for why the MeshStore arm is
+//!    gone. `None` if no commit touched the spec. Result cached on
+//!    the session state so the next request skips the git walk.
 //!
 //! 2. Enforce the write-intent gate. If the request contains a
 //!    tool call targeting a write-intent tool name (`write_note`,
@@ -21,7 +22,6 @@
 //!    surfaces it on next turn). Does NOT fail the request.
 
 use std::path::Path;
-use std::sync::Arc;
 
 use async_trait::async_trait;
 
@@ -57,20 +57,23 @@ const WRITE_INTENT_TOOLS: &[&str] = &[
     "promote_note",
 ];
 
-pub struct ApprovalGate {
-    /// Optional: when set, the gate reads Commonwealth-native
-    /// approvals from MeshStore as a fallback to the git path.
-    mesh: Option<Arc<commonwealth_state::MeshStore>>,
-}
+/// The gate resolves approvals from git only.
+///
+/// It carried an `Option<Arc<MeshStore>>` until cw-lift 2b, so that a
+/// Commonwealth-native approval row under `atos-approvals` could serve
+/// as a fallback. The setter that populated it — `with_mesh` — had no
+/// caller: every construction in the workspace is `ApprovalGate::new()`
+/// (`middleware/mod.rs:495`, `state.rs:1646`, `state.rs:1679`), so the
+/// field was `None` on every request and the mesh arm never ran. The
+/// `atos-approvals` rows the CLI writes live in the repo-local
+/// `.sovereign/mesh.db` and are read back by the same CLI verbs
+/// (`atos_cmd/{doctor,spec}.rs`); no row ever reached the daemon's
+/// gossiping store.
+pub struct ApprovalGate;
 
 impl ApprovalGate {
     pub fn new() -> Self {
-        Self { mesh: None }
-    }
-
-    pub fn with_mesh(mut self, mesh: Arc<commonwealth_state::MeshStore>) -> Self {
-        self.mesh = Some(mesh);
-        self
+        Self
     }
 }
 
@@ -118,7 +121,7 @@ impl Middleware for ApprovalGate {
                 spec_content_snapshot: None,
             })
         } else {
-            find_approval(&ctx.repo_root, &feature_id, self.mesh.as_deref())
+            find_approval(&ctx.repo_root, &feature_id, None)
         };
 
         match approval {

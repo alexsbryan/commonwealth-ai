@@ -52,6 +52,14 @@
 //! (ARCH §7). If you add a namespace that must stay local, the list is the
 //! only place to say so.
 //!
+//! The same list carries a second, non-privacy class since cw-lift 2b:
+//! namespaces every reader resolves against LOCAL state. Replicating those
+//! bought nothing, and for `wikipedia-newsworthy:status` it actively broke
+//! the reader — one unsuffixed `last_tick` key per mesh meant last-write-wins
+//! handed you a peer's tick. Deciding what may leave the machine is one
+//! decision with one implementation (ARCH §10.6), so it did not get a second
+//! list.
+//!
 //! # The rest of the crate, by what it stores
 //!
 //! ```text

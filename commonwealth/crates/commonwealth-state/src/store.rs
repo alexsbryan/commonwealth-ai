@@ -497,6 +497,18 @@ mod tests {
         .unwrap();
         a.set("notes-private", "n1", Bytes::from("secret note"), node(1))
             .unwrap();
+        // cw-lift 2b: excluded for having no cross-peer consumer rather
+        // than for privacy. Same predicate, same chokepoint — and the
+        // count assertion below is what fails if either comes back.
+        a.set("atos-sessions", "sess1", Bytes::from("{}"), node(1))
+            .unwrap();
+        a.set(
+            "wikipedia-newsworthy:status",
+            "last_tick",
+            Bytes::from("{}"),
+            node(1),
+        )
+        .unwrap();
         a.set(CONTRIBUTIONS_APP_ID, "ev1", Bytes::from("served"), node(1))
             .unwrap();
 
@@ -529,14 +541,20 @@ mod tests {
             (ACTIVITY_APP_ID, "usage"),
             ("work-atlas-private", "session"),
             ("notes-private", "n1"),
+            ("atos-sessions", "sess1"),
+            ("wikipedia-newsworthy:status", "last_tick"),
         ] {
             assert!(
                 b.get(app, key).unwrap().is_none(),
-                "private entry {app}/{key} leaked to peer B"
+                "excluded entry {app}/{key} leaked to peer B"
             );
         }
         // And A still has everything locally — excluded ≠ deleted.
         assert!(a.get(ACTIVITY_APP_ID, "usage").unwrap().is_some());
+        assert!(a
+            .get("wikipedia-newsworthy:status", "last_tick")
+            .unwrap()
+            .is_some());
     }
 
     #[test]

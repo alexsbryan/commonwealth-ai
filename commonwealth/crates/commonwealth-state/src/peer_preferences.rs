@@ -176,8 +176,19 @@ impl PeerPreferenceStore {
 
 /// Set of `app_id`s that the gossip layer must skip.
 ///
-/// Each entry is a structural privacy invariant (ARCH_PRINCIPLES §7) —
-/// records under these namespaces never leave the local node.
+/// Two reasons put a namespace here, and the list does not separate
+/// them because the mechanism is the same: `is_gossip_excluded` is the
+/// ONE predicate (ARCH_PRINCIPLES §10.6) and
+/// [`MeshStore::all_entries_for_gossip`] is the ONE place it is
+/// applied.
+///
+/// 1. **Structural privacy** (ARCH_PRINCIPLES §7) — records that must
+///    never leave the local node. The first five entries.
+/// 2. **No cross-peer consumer** — a namespace whose every reader
+///    resolves against local state, so replicating it is cost with no
+///    benefit and, in one case, an outright defect. Added by cw-lift
+///    rung 2b, which censused all 19 declared namespaces against their
+///    readers.
 ///
 /// - `peer_preferences` — private operator sanctions that must not
 ///   leak to the penalized peer.
@@ -209,6 +220,28 @@ impl PeerPreferenceStore {
 ///   freely replicable public EDGAR data. Same structural guarantee as
 ///   the others (FR-11 / AC-7).
 ///
+/// No cross-peer consumer (cw-lift 2b):
+///
+/// - `wikipedia-newsworthy:status` — the per-node watcher tick
+///   snapshot. Its key is the unsuffixed `last_tick` on EVERY node, so
+///   under LWW the most recent peer's snapshot won and
+///   `/internal/newsworthy/status` reported that peer's `node_id_str`
+///   and `role_leader` as yours. Excluding it is the fix, not a
+///   trade-off — the reader (`read_last_tick`) only ever wanted the
+///   local tick.
+/// - `wikipedia-newsworthy:portal` — daily portal idempotency markers.
+///   Written and read inside the leader's own `run_leader_step`; the
+///   only other reader is `svrn newsworthy status` against the
+///   repo-local `.sovereign/mesh.db`.
+/// - `atos-sessions` — one row per opencode session, read back by
+///   local `session_id`. The row is mutated in place by the middleware
+///   chain on every request, so replicating it was a write per gated
+///   request for a key nothing else resolves.
+/// - `atos-approvals` — feature-approval rows. Written and read by the
+///   `svrn atos` CLI verbs against the repo-local `.sovereign/mesh.db`;
+///   the daemon-side reader (`ApprovalGate`) was never constructed with
+///   a store at all, so no row ever reached the gossiping instance.
+///
 /// Each entry is pinned by a test that asserts `is_gossip_excluded`
 /// returns `true` for it.
 pub const GOSSIP_EXCLUDED_APP_IDS: &[&str] = &[
@@ -217,6 +250,10 @@ pub const GOSSIP_EXCLUDED_APP_IDS: &[&str] = &[
     "notes-private",
     "activity-private",
     "portfolio-private",
+    "wikipedia-newsworthy:status",
+    "wikipedia-newsworthy:portal",
+    "atos-sessions",
+    "atos-approvals",
 ];
 
 /// `app_id` namespace for a user's Proxy Voting portfolios — the named
@@ -329,9 +366,41 @@ mod tests {
         // Other namespaces stay gossip-replicated.
         assert!(!is_gossip_excluded("contributions"));
         assert!(!is_gossip_excluded("inference"));
-        assert!(!is_gossip_excluded("knowledge"));
         // Public work-atlas records gossip; Private ones don't.
         assert!(!is_gossip_excluded("work-atlas"));
+        // `knowledge` was here until cw-lift 2b deleted the namespace:
+        // `KnowledgeStateStore::set_shard_plan` had no production
+        // caller, so the reader always saw `unwrap_or_default()`.
+    }
+
+    /// **Pin for the four namespaces excluded on "no cross-peer
+    /// consumer" rather than privacy** (cw-lift 2b). They are ordinary
+    /// local state, so the risk is the inverse of a leak: someone
+    /// reading the list as privacy-only and deleting them as
+    /// unnecessary. Each is named with the reader that makes it local.
+    ///
+    /// This pins the LIST, which is a register of decisions and their
+    /// reasons; it is not the behavioural gate and should not be read
+    /// as one (ARCH §18.1). The gates are
+    /// `store::tests::private_namespaces_never_enter_the_gossip_set`,
+    /// which replicates A → B through `all_entries_for_gossip` and
+    /// fails on the entry count if any of these rejoins the wire, and
+    /// `commonwealth-api`'s `receiver_rejects_gossiped_private_namespaces`
+    /// for the inbound half. Both carry two of these four namespaces.
+    #[test]
+    fn gossip_excludes_namespaces_with_no_cross_peer_consumer() {
+        // Single unsuffixed `last_tick` key — replicating it made a
+        // peer's tick render as yours.
+        assert!(is_gossip_excluded("wikipedia-newsworthy:status"));
+        // Leader reads back its own marker inside `run_leader_step`.
+        assert!(is_gossip_excluded("wikipedia-newsworthy:portal"));
+        // Read back by local `session_id` / by the same CLI process.
+        assert!(is_gossip_excluded("atos-sessions"));
+        assert!(is_gossip_excluded("atos-approvals"));
+        // The tracked set is the newsworthy namespace that DOES have a
+        // cross-peer consumer: the leader writes it, every node reads
+        // it to pick its partition. It must keep replicating.
+        assert!(!is_gossip_excluded("wikipedia-newsworthy:tracked"));
     }
 
     /// **Structural invariant pin** for the work atlas privacy model.

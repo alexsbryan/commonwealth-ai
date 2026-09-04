@@ -210,11 +210,6 @@ impl SimulatedNode {
         self.state.set_llama_server_address(model_id, address);
     }
 
-    /// Set the knowledge shard plan for this node.
-    pub fn set_knowledge_plan(&self, plan: commonwealth_core::knowledge::KnowledgeShardPlan) {
-        self.state.inner.knowledge_store.set_shard_plan(&plan);
-    }
-
     /// Shutdown the node's servers.
     pub fn shutdown(&mut self) {
         if let Some(tx) = self.shutdown_tx.take() {

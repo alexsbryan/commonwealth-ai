@@ -498,10 +498,12 @@ const REGISTRY: &[(&str, Class, usize)] = &[
 
     // ---- corpus-engine ----
     // testing.rs: the deterministic test-fixture module (never
-    // modifies production indexes); acquirers + news stream:
-    // InboundOnly downloads.
+    // modifies production indexes); acquirers: InboundOnly
+    // downloads. The newsworthy EventStreams subscriber
+    // (`update/newsworthy_event_stream.rs`) was the fourth row here
+    // until cw-lift 2b deleted it — its `EventStreamHost` trait had
+    // no implementor in the workspace, so the SSE loop never ran.
     ("corpus-engine/src/testing.rs", Class::TestOnly, 2),
-    ("corpus-engine/src/update/newsworthy_event_stream.rs", Class::InboundOnly, 1),
     ("corpus-engine/src/acquirers/huggingface.rs", Class::InboundOnly, 1),
     ("corpus-engine/src/acquirers/http_api/mod.rs", Class::InboundOnly, 1),
     ("corpus-engine/src/acquirers/bulk_download.rs", Class::InboundOnly, 1),

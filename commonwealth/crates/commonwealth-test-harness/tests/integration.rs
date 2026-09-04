@@ -3,7 +3,6 @@ use std::time::Duration;
 
 use commonwealth_core::capabilities::*;
 use commonwealth_core::ids::*;
-use commonwealth_core::knowledge::*;
 use commonwealth_core::mesh::*;
 use commonwealth_inference::inference_plan::*;
 use commonwealth_inference::oicp::*;
@@ -451,29 +450,11 @@ async fn knowledge_search_returns_results_for_assigned_corpora() {
     let addrs = mesh.start_all().await;
     let client_addr = addrs[0].0;
 
-    // Set up knowledge plan with two corpora.
-    let knowledge_plan = KnowledgeShardPlan {
-        assignments: vec![
-            KnowledgeShardAssignment {
-                node_id: NodeId::from_u128(1),
-                corpus_id: "wikipedia".into(),
-                chunk_range: None,
-                is_replica: false,
-            },
-            KnowledgeShardAssignment {
-                node_id: NodeId::from_u128(1),
-                corpus_id: "sep".into(),
-                chunk_range: None,
-                is_replica: false,
-            },
-        ],
-        redundancy_achieved: [("wikipedia".into(), 1), ("sep".into(), 1)]
-            .into_iter()
-            .collect(),
-    };
-    mesh.nodes[0].set_knowledge_plan(knowledge_plan);
-
-    tokio::time::sleep(Duration::from_millis(50)).await;
+    // No knowledge-plan setup: the `knowledge` MeshStore namespace and
+    // its `KnowledgeShardPlan` were deleted in cw-lift 2b. The plan
+    // never reached this route — `/v1/knowledge/search` reads installed
+    // indexes, not the plan — which is why the assertion below was
+    // already `is_empty()` while the plan named two corpora.
 
     // Search with specific corpora. This exercises shard routing, so we
     // supply a pre-embedded query (the mesh-internal shape). OICP v0.4 §6.1
@@ -491,8 +472,8 @@ async fn knowledge_search_returns_results_for_assigned_corpora() {
     assert_eq!(status, 200);
 
     // No real corpora installed in the test harness — the route returns 200
-    // with empty results. The knowledge plan is set but there are no actual
-    // corpus indexes on disk for the simulated node to search.
+    // with empty results: there are no actual corpus indexes on disk for
+    // the simulated node to search.
     let results = response["results"].as_array().unwrap();
     assert!(results.is_empty());
 }

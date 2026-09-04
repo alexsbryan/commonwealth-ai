@@ -1,18 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
 use crate::ids::{HandoffId, NodeId};
 use crate::oicp::EmbedModelInfo;
-
-/// The complete knowledge shard plan for the mesh.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct KnowledgeShardPlan {
-    pub assignments: Vec<KnowledgeShardAssignment>,
-    /// corpus_id -> replica count achieved.
-    pub redundancy_achieved: HashMap<String, usize>,
-}
 
 /// A single node's assignment for a knowledge corpus shard.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -524,22 +515,5 @@ mod tests {
         assert_eq!(back.atlas_atom_count, 0);
         assert_eq!(back.atlas_tier2_count, 0);
         assert!(back.atlas_fingerprint.is_none());
-    }
-
-    #[test]
-    fn knowledge_shard_plan_serde_roundtrip() {
-        let plan = KnowledgeShardPlan {
-            assignments: vec![KnowledgeShardAssignment {
-                node_id: NodeId::from_u128(1),
-                corpus_id: "wikipedia".into(),
-                chunk_range: None,
-                is_replica: false,
-            }],
-            redundancy_achieved: [("wikipedia".into(), 2)].into_iter().collect(),
-        };
-        let json = serde_json::to_string(&plan).unwrap();
-        let back: KnowledgeShardPlan = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.assignments.len(), 1);
-        assert_eq!(back.redundancy_achieved["wikipedia"], 2);
     }
 }

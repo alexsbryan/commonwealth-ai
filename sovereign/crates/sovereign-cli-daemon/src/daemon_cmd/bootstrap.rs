@@ -1340,15 +1340,15 @@ pub(super) fn wire_note_propagation_sink(
     let self_id_for_sink = self_node_id;
     let sink: corpus_engine_notes::PropagationSinkFn =
         Arc::new(move |ev: &NotePropagationEvent| {
-            let app_id = if ev.tombstone {
-                // Tombstones ride the public namespace so peers
-                // converge to the deleted state. Private notes
-                // never propagate, so private tombstones don't
-                // need to either.
-                "notes"
-            } else {
-                "notes"
-            };
+            // Everything this sink sees rides the public `notes`
+            // namespace, tombstones included, so peers converge to the
+            // deleted state. There is no private branch to take:
+            // `NoteStore` gates BOTH sink call sites on `!private`
+            // (`notes.rs:1841` and `:1936`), so a private note never
+            // reaches here. Until cw-lift 2b this was an `if
+            // ev.tombstone` whose two arms both evaluated to "notes",
+            // which read as a private path that does not exist.
+            let app_id = "notes";
             // Receipt stamp (order commons-fluency fix 3): the wire
             // copy carries the publication clock — the moment THIS
             // sink's set() accepted it — which is the origin end of

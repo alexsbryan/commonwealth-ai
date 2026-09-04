@@ -20,12 +20,6 @@ impl MeshState {
     /// Build a UI-friendly mesh state from the Commonwealth AppState.
     pub async fn from_app_state(app_state: &AppState) -> Self {
         let mesh = app_state.inner.mesh.read().await;
-        let knowledge_plan = app_state
-            .inner
-            .knowledge_store
-            .get_shard_plan()
-            .unwrap_or_default();
-
         let self_node_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
 
         // Members.
@@ -97,26 +91,16 @@ impl MeshState {
             .filter(|m| matches!(m.status, MemberStatus::Online | MemberStatus::Busy))
             .count();
 
-        // Knowledge corpora from the shard plan.
-        let mut corpus_ids: Vec<String> = knowledge_plan
-            .assignments
-            .iter()
-            .map(|a| a.corpus_id.clone())
-            .collect();
-        corpus_ids.sort();
-        corpus_ids.dedup();
-
-        let corpora: Vec<MeshCorpus> = corpus_ids
-            .iter()
-            .map(|id| MeshCorpus {
-                id: id.clone(),
-                name: humanize_corpus_id(id),
-                description: String::new(),
-                article_count: String::new(),
-                download_size: String::new(),
-                status: CorpusStatus::Installed,
-            })
-            .collect();
+        // Knowledge corpora. These read from the `knowledge` MeshStore
+        // namespace until cw-lift 2b: nothing in production ever wrote
+        // `KnowledgeShardPlan` — the only caller of `set_shard_plan`
+        // was the simulated-node test harness — so the reader's
+        // `unwrap_or_default()` meant both lists were ALWAYS empty on a
+        // real daemon. They stay empty here rather than pretending to
+        // be derived. Populating them needs a producer first; the
+        // desktop's MeshSettings panel hides the section when empty.
+        let corpus_ids: Vec<String> = Vec::new();
+        let corpora: Vec<MeshCorpus> = Vec::new();
 
         let status = MeshStatus {
             name: mesh.name.clone(),
@@ -173,40 +157,9 @@ fn compute_type_label(ct: commonwealth_core::capabilities::ComputeType) -> &'sta
     }
 }
 
-fn humanize_corpus_id(id: &str) -> String {
-    match id {
-        "wikipedia" => "Wikipedia".to_string(),
-        "stackexchange" => "Stack Exchange".to_string(),
-        "openalex" => "OpenAlex".to_string(),
-        "gutenberg" => "Project Gutenberg".to_string(),
-        "sep" => "Stanford Encyclopedia of Philosophy".to_string(),
-        "crs_reports" => "CRS Reports".to_string(),
-        other => {
-            // Title case.
-            let mut chars = other.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn humanize_known_corpora() {
-        assert_eq!(humanize_corpus_id("wikipedia"), "Wikipedia");
-        assert_eq!(humanize_corpus_id("stackexchange"), "Stack Exchange");
-        assert_eq!(humanize_corpus_id("openalex"), "OpenAlex");
-    }
-
-    #[test]
-    fn humanize_unknown_corpus() {
-        assert_eq!(humanize_corpus_id("custom"), "Custom");
-    }
 
     /// Regression pin (the per-member panel was blank because the
     /// member list used the lossy `Display` form while contributions +
