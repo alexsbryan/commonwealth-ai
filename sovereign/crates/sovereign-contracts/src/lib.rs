@@ -73,7 +73,12 @@ pub(crate) mod test_support {
     /// READERS must take it too, not just writers: excluding them is what makes
     /// this look like an unreproducible flake. Mirrors the same lock in
     /// `sovereign-desktop`'s `test_support`. Any new HOME-touching test in this
-    /// crate must take it.
+    /// crate must take it — census run 2026-09-04, every one of them now does.
+    /// Three were reading HOME unserialised and passing on luck; the fourth,
+    /// `rebrand::sessions_root_precedence_is_one_decider`, was failing 3 runs
+    /// in 40 and took the better fix instead — the root it needed is a
+    /// parameter now, so that arm reads no environment at all. Prefer that
+    /// where the seam exists: a lock is remembered, a parameter is not.
     ///
     /// Poison is ignored on purpose — a panicking test must not cascade into
     /// every other test in the binary.

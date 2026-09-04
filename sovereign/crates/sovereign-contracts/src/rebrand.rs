@@ -248,21 +248,48 @@ pub fn sessions_root() -> PathBuf {
     ])
 }
 
-/// The prefix precedence, split out pure so the drift that motivated this
-/// accessor is testable without mutating process environment inside a
-/// shared test binary. `candidates` is in preference order; a value that
-/// is absent OR blank is "not set" and falls through to the next.
+/// The prefix precedence over an explicit candidate list, in preference
+/// order; a value that is absent OR blank is "not set" and falls through
+/// to the next. The live root is the fallback — see
+/// [`sessions_root_from_env_under`] for why it is a parameter there.
 pub fn sessions_root_from_env(candidates: &[Option<String>]) -> PathBuf {
-    let pick = candidates.iter().flatten().find(|v| !v.trim().is_empty());
-    sessions_root_from(pick.map(String::as_str))
+    sessions_root_from_env_under(candidates, svrnmesh_root)
 }
 
-/// The pure half of [`sessions_root`], so the precedence is testable
-/// without mutating process environment inside a shared test binary.
+/// The single-override form of [`sessions_root_from_env`]. It does not
+/// re-implement the blank-is-unset rule, it feeds it (§10.6: one decider).
 pub fn sessions_root_from(override_dir: Option<&str>) -> PathBuf {
-    match override_dir.map(str::trim).filter(|v| !v.is_empty()) {
-        Some(v) => PathBuf::from(v),
-        None => svrnmesh_root().join("sessions"),
+    sessions_root_from_env_under(&[override_dir.map(str::to_owned)], svrnmesh_root)
+}
+
+/// THE decider for "which sessions directory", with BOTH inputs as
+/// parameters: the candidate list, and the root to fall back to.
+///
+/// The fallback used to be read from the process right here
+/// (`svrnmesh_root()`, i.e. `$HOME`) while the doc above claimed this half
+/// was "pure ... testable without mutating process environment". It was
+/// not: the no-override arm read a global, so the test pinning that arm
+/// had to compare the call against a SECOND read of the same global taken
+/// at a different instant. A sibling test in this binary swaps `HOME` to a
+/// tempdir (`projects_json_prefers_populated_branded_home`), so the two
+/// reads could disagree — `sessions_root_precedence_is_one_decider` failed
+/// only under the parallel suite (3 of 40 runs, 2026-09-04; never alone,
+/// never under `--test-threads=1`). A serialising lock would have hidden
+/// that; the parameter removes it, and the arm is now exercised with an
+/// injected root and no environment at all — which is what the comment
+/// claimed all along (§10: structural, not remembered).
+///
+/// `live_root` is a thunk rather than a `PathBuf` because resolving the
+/// live root stats the filesystem (`svrnmesh_root` -> `dir_is_populated`
+/// -> `read_dir`), and an override exists precisely so a sandboxed run
+/// never touches it.
+fn sessions_root_from_env_under(
+    candidates: &[Option<String>],
+    live_root: impl FnOnce() -> PathBuf,
+) -> PathBuf {
+    match candidates.iter().flatten().find(|v| !v.trim().is_empty()) {
+        Some(v) => PathBuf::from(v.trim()),
+        None => live_root().join("sessions"),
     }
 }
 
@@ -487,6 +514,10 @@ mod tests {
 
     #[test]
     fn data_dir_honors_override_and_is_never_relative() {
+        // Reads the process-global HOME in the no-override arm below
+        // (`data_dir()` -> `svrnmesh_root()`) — must serialize against the
+        // tests that swap it (see `crate::test_support::home_env_lock`).
+        let _home_guard = crate::test_support::home_env_lock();
         // Explicit override wins (legacy prefix).
         std::env::set_var("SOVEREIGN_DATA_DIR", "/tmp/svrnmesh-data-dir-test");
         // The branded prefix must win over the legacy one when both exist.
@@ -630,7 +661,6 @@ mod tests {
     /// sandboxed run read the sandbox and wrote the live store.
     #[test]
     fn sessions_root_precedence_is_one_decider() {
-        let live = svrnmesh_root().join("sessions");
         let s = |v: &str| Some(v.to_string());
 
         // New prefix wins when both are set and meaningful.
@@ -655,9 +685,38 @@ mod tests {
             PathBuf::from("/tmp/legacy"),
             "whitespace is blank",
         );
-        // Nothing meaningful anywhere: the live store, never a relative path.
+        // Nothing meaningful anywhere: the sessions dir UNDER the fallback
+        // root. Injected, so this arm touches no process environment and
+        // cannot race the sibling test that swaps `HOME` (see
+        // `sessions_root_from_env_under`).
+        let root = PathBuf::from("/tmp/svrnmesh-live-root");
+        assert_eq!(
+            sessions_root_from_env_under(&[None, None], || root.clone()),
+            root.join("sessions"),
+        );
+        assert_eq!(
+            sessions_root_from_env_under(&[s(""), s("  ")], || root.clone()),
+            root.join("sessions"),
+        );
+        // Never a BARE relative name. When home cannot be resolved
+        // `svrnmesh_root()` yields `.`, and the fallback must still be
+        // rooted at it — `./sessions`, not `sessions` and not `.sovereign`
+        // (the pre-2026-07-30 bug that wrote into the process CWD). The
+        // assertion this replaces was `x.is_absolute() || live.is_relative()`
+        // with `x == live` already asserted above, i.e. a tautology with no
+        // failing input (§18.1); this one fails if the join is dropped.
+        assert_eq!(
+            sessions_root_from_env_under(&[None, None], || PathBuf::from(".")),
+            PathBuf::from("./sessions"),
+        );
+
+        // The WIRING, and the only part that needs the real environment:
+        // the env form's fallback IS the live store, not some second
+        // derivation of it. Both sides read `HOME`, so this takes the lock
+        // the crate already keeps for exactly that (`test_support`).
+        let _home_guard = crate::test_support::home_env_lock();
+        let live = svrnmesh_root().join("sessions");
         assert_eq!(sessions_root_from_env(&[None, None]), live);
         assert_eq!(sessions_root_from_env(&[s(""), s("  ")]), live);
-        assert!(sessions_root_from_env(&[None, None]).is_absolute() || live.is_relative());
     }
 }

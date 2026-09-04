@@ -288,6 +288,10 @@ mod tests {
     /// the check is blind to exactly the machines it exists for.
     #[test]
     fn the_candidate_list_names_all_four_historical_roots() {
+        // Reads the process-global HOME (`candidate_roots()` ->
+        // `rebrand::user_home()`) — must serialize against the tests that
+        // swap it (see `crate::test_support::home_env_lock`).
+        let _home_guard = crate::test_support::home_env_lock();
         let roots = candidate_roots();
         let names: Vec<String> = roots.iter().map(|p| p.display().to_string()).collect();
         for suffix in [".svrnmesh", ".sovereign"] {

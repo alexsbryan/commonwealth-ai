@@ -2630,6 +2630,13 @@ yield_to_foreground_secs = 0
 
     #[test]
     fn default_path_is_hidden_brand_dir_with_config_toml() {
+        // Reads the process-global HOME (`default_path()` ->
+        // `default_data_dir()` -> `svrnmesh_root()`) — must serialize against
+        // the tests that swap it (see `crate::test_support::home_env_lock`).
+        // It passed under a swapped HOME only because the swapping test
+        // populates BOTH brand dirs in its tempdir and the assertion accepts
+        // either spelling; that is luck, not coverage.
+        let _home_guard = crate::test_support::home_env_lock();
         // Config lives directly under home in a hidden, brand-named dir:
         // `~/.svrnmesh/config.toml` (preferred) or the legacy
         // `~/.svrnmesh/config.toml`. Post-rename, `default_path()` ->
