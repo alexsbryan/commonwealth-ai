@@ -121,5 +121,14 @@ again with that same collision error — loudly, in seconds, before writing
 anything. There is no path where a stale binary silently mints 1.67M ids under
 the old scheme.
 
+**The memory cap is recorded by the run, not by this file.** The launcher sizes
+`MemoryMax` from what the box has free at launch, so the manifest cannot know
+it — the 40G in the forecast below was an assumption and the real cap may be
+lower. Leg 0 writes the effective limit into `$OUT/provenance.txt` by reading
+`/sys/fs/cgroup/memory.max` from inside the run's own cgroup, alongside
+`MemAvailable` at start. This matters only if the run dies: a kill is
+interpretable only against the number that did the killing, and an OOM at 30G
+read against a manifest saying 40G yields the wrong finding.
+
 **Safety** No lane, no daemon, no embedding, zero model tokens. Nothing is
 written outside `$OUT`. Killing it at any point loses only `$OUT`.

@@ -39,6 +39,14 @@ mkdir -p "$OUT/atlas" "$M"
   for b in sovereign-cli sovereign-cli-llm; do
     echo "binary:      $WT/target/debug/$b  $(date -Is -r "$WT/target/debug/$b" 2>/dev/null || echo MISSING)"
   done
+  # THE CAP THIS RUN ACTUALLY RAN UNDER, read from its own cgroup rather than
+  # from the manifest. The launcher sizes MemoryMax from whatever the box has
+  # free at launch, so the manifest cannot know it — and a kill is only
+  # interpretable against the number that did the killing. Without this, an
+  # OOM at 30G reads as "needs more than 40G", which is a different and wrong
+  # finding (ARCH §18.3: name the constraint, never let it be inferred).
+  echo "memory.max:  $(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo 'unknown — not under a cgroup limit')"
+  echo "mem_avail:   $(awk '/^MemAvailable:/{printf "%.1f GB", $2/1048576}' /proc/meminfo 2>/dev/null)"
 } | tee "$OUT/provenance.txt"
 
 # The `atlas` verb is dispatched into the `sovereign-cli-llm` sibling, so BOTH
