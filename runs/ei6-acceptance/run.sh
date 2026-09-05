@@ -118,8 +118,21 @@ if [[ -n "${SKIP_PULL:-}" ]]; then
   echo "leg 2 (cold-root pull): NEVER-RAN — SKIP_PULL was set" >> "$out/verdicts.txt"
 else
   t0=$(date +%s)
-  ACCEPT_PULL=1 PULL_ROOT="$PULL_ROOT" ${PULL_CORPUS:+PULL_CORPUS="$PULL_CORPUS"} \
-    EMBED_GGUF="$EMBED_GGUF" "$repo/corpus-mcp/acceptance.sh" > "$out/leg2-cold-pull.log" 2>&1
+  # `export` in a subshell, NOT a conditional assignment prefix. The first
+  # launch of this script died here with rc=127 and
+  # `EMBED_GGUF=...: No such file or directory`: the prefix was
+  # `... ${PULL_CORPUS:+PULL_CORPUS="$PULL_CORPUS"} EMBED_GGUF=... <script>`,
+  # and bash decides at PARSE time which words are assignments. A word
+  # beginning with `$` is not one, so it became the COMMAND — and when
+  # PULL_CORPUS was unset it expanded to nothing, leaving bash to take the
+  # next word, `EMBED_GGUF=...`, as the command name. `bash -n` cannot see
+  # this; only running it with the variable unset can, which is what the
+  # dry-invocation check below now does.
+  (
+    export ACCEPT_PULL=1 PULL_ROOT="$PULL_ROOT" EMBED_GGUF="$EMBED_GGUF"
+    [[ -n "${PULL_CORPUS:-}" ]] && export PULL_CORPUS
+    exec "$repo/corpus-mcp/acceptance.sh"
+  ) > "$out/leg2-cold-pull.log" 2>&1
   rc2=$?; mark leg2-cold-pull "$rc2"
   printf 'leg2 wall=%ss\n' "$(( $(date +%s) - t0 ))" >> "$out/walls.txt"
   (( rc2 > worst )) && worst=$rc2

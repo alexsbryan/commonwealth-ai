@@ -9,8 +9,17 @@
 
 | Leg | Invocation | Proves | Forecast |
 |---|---|---|---|
-| 1 | `EMBED_GGUF=… acceptance.sh` | the measured llama-server arm — the three §4 verbs, the discovery ladder, `ask`, the dep-tree closure, and the Ollama arm's verdict *by name* | ~10 min |
+| 1 | `EMBED_GGUF=… acceptance.sh` | the measured llama-server arm — the three §4 verbs, the discovery ladder, `ask`, the dep-tree closure, and the Ollama arm's verdict *by name* | **5 s measured** (2026-09-05T18:10:58Z) |
 | 2 | `ACCEPT_PULL=1 …` | the cold-root pull: `serve --corpus sep` installs from the HF snapshot and serves a cited answer out of it | ~15–25 min, ~875 MB egress |
+
+Leg 1's forecast was **~10 min and the measurement was 5 s** — wrong by two
+orders of magnitude, recorded here rather than quietly corrected. The error was
+forecasting from ei-5b's ledger, which measures a 20-chapter enrichment against
+a live chat model. Leg 1 runs no chat model at all: a 0.6B embedding server
+loads in about a second and every corpus it queries is already installed. The
+rule the campaign already has — forecast from a ledger of the SAME execution
+path — is what I broke; there was no such ledger for this path, and "no ledger"
+should have been said rather than a number borrowed from a different one.
 
 Two legs and not one `ACCEPT_PULL=1` invocation: `acceptance.sh` `fail()`s on
 the first bad assertion, so a pull that dies on somebody else's uptime would
