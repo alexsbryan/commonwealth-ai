@@ -1523,10 +1523,10 @@ pub async fn bootstrap_with_progress(
                 // conclusion in 2026-06 and the recipe now carries it for
                 // everyone, including GLiNER's ~950 ms load.
                 warmth: sovereign_runtime_recipe::LaneWarmth::Deferred,
-            // Serves every installed corpus, so every lane member is
-            // reachable. Byte-identical to the behaviour this host had
-            // before `LaneScope` existed.
-            scope: sovereign_runtime_recipe::LaneScope::All,
+                // Serves every installed corpus, so every lane member is
+                // reachable. Byte-identical to the behaviour this host had
+                // before `LaneScope` existed.
+                scope: sovereign_runtime_recipe::LaneScope::All,
                 // The desktop's embedded engine has no rerank slot of its own, so
                 // a standalone cross-encoder from `SOVEREIGN_RERANK_MODEL_PATH` is
                 // the only way this surface gets one. The VRAM pre-flight inside
