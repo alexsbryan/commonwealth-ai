@@ -91,13 +91,17 @@ status    = "active"
 #       done-when, which Phase 2 moved by ZERO while costing +2,789 lines.
 #       Order: .sovereign/features/cw-lift-3-local-only-daemon/order.md
 #   3a  the two misnamed crates go home                            OPEN
-#   3b  the daemon goes local-only — neutral couplings, the two
-#       ports + honest-N=1 solo adapter, and iroh unforced. ONE rung:
-#       all three share ONE falsifier (a daemon that builds with zero
-#       commonwealth-* and no iroh), and splitting them would put two
-#       workers in bootstrap.rs                                    OPEN
-#   3c  the instrument counts by PATH not prefix — SEAT, LAST, so the
-#       phase's movement is not confused with the redefinition      OPEN
+#   3b  the daemon goes local-only  f15d28a4c 9f1ed6692  PARTIAL +1076/-120
+#       b1+b2 DONE: direct commonwealth-* deps 3 -> 0, behind two narrow
+#       ports whose solo adapters are the honest N=1. b3 (iroh) REFUSED
+#       with data — 45 compile errors, and the no-iroh arm would have NO
+#       CONSUMER while the daemon cannot drop sovereign-mesh, so nothing
+#       would build it. Bonus: sovereign-work-atlas left the substrate too.
+#   3c  the instrument counts CLASSES, by PATH not prefix   DONE  3.0 -> 2.0
+#       and records that the bar's PROSE CLAIM is still unmet: 10
+#       commonwealth crates remain TRANSITIVELY via sovereign-mesh, which
+#       the daemon reaches at 78 distinct items. That is K2's fusion at a
+#       new address and it is the next PHASE, not a rung.
 #   4   RETENTION (the sealed prefix) — was Phase 3's tail, now its own.
 #       K8 proved six namespaces cannot leave the 10s push until the journal
 #       can forget. Opener is 2c, which Phase 2 unblocked by accident: 2ce
@@ -508,11 +512,68 @@ status       = "open"
 # ConvergenceRecord. The other three sites are `kernel_types::NodeId` reached
 # through a re-export (§8.3) and one PURE partition function. So the bar reads
 # 3.0 and overstates the problem by about 2x.
+# ── RUNG 3c CLOSEOUT, 2026-09-05: 3.0 -> 2.0, AND THE CLAIM IS NOT MET ──────
+#
+# CLASS 1 IS CLEARED. `sovereign-cli-daemon` has ZERO direct commonwealth-*
+# deps (3a took tdd/agent-tools out by renaming what was never substrate; 3b
+# took state/core/api out behind two ports). Verified by reading the manifest,
+# not the tree.
+#
+# BUT THE BAR'S PROSE CLAIM IS NOT MET, AND NOW THAT THE INSTRUMENT IS AT
+# TARGET FOR THIS CLASS THAT DISAGREEMENT IS THE WHOLE STORY. The one_line
+# says "a sovereign daemon can compile and boot with zero commonwealth-* and
+# no iroh". Measured at HEAD: the daemon still pulls TEN commonwealth crates
+# TRANSITIVELY, every one through `sovereign-mesh`, because it reaches
+# SEVENTY-EIGHT distinct `sovereign_mesh::` items. The instrument says
+# "direct" and the claim says "zero"; they are different questions and only
+# the first one has been answered.
+#
+# THIS IS K2's FINDING AT A NEW ADDRESS. K2 feared local and mesh state were
+# fused at `AppState`. They are not — the daemon has zero type refs to it, and
+# `ConvergenceRecord` turned out to be two Option<i64> behind a mutex. The
+# fusion is real and it is `sovereign-cli-daemon -> sovereign-mesh`, 78 items
+# wide. By K2's own logic the honest next deliverable is either that seam or a
+# RUNTIME PROFILE, and it is a PHASE, not a rung.
+#
+# CLASS 2, RE-MEASURED, IS ONE FORCING AND NOT TWO. `cargo tree -p
+# sovereign-cli-daemon -e normal` does not contain `sovereign-server` at all,
+# so `sovereign-server/Cargo.toml:95` cannot be a blocker for THIS subject.
+# The floor_basis below counted it and was wrong. The live one is
+# `sovereign-mesh/Cargo.toml:46`.
+#
+# CLASS 2 IS REFUSED FOR NOW, WITH DATA (3b, 9f1ed6692). Not "one line": the
+# manifest change alone is 17 errors in 5 files, and cfg-gating
+# iroh_access/iroh_watchdog/guest_tunnel adds 28 more across daemon.rs (22),
+# join.rs (4) and guest_lender.rs (2) — landing on DaemonState's endpoint
+# fields, create_mesh's invite stamping, start_daemon's bind, mesh_status's
+# reachability and the public join_with_link. Decisive: the no-iroh arm would
+# have NO CONSUMER while the daemon cannot drop sovereign-mesh, so nothing
+# would ever build it. A cfg-split join path that never runs in production is
+# K11's failure moved from runtime to compile time. iroh leaves WITH the mesh.
+#
+# CLASS 3 SURVIVES, AND THE ORDER'S REASONING FOR WHY IT WOULD DIE WAS WRONG.
+# The order said a solo adapter that constructs infallibly makes
+# `daemon_cmd/mod.rs:1182`'s mint "die for free". It does not.
+# `EmbeddedDaemon::create_mesh` generates and persists node identity, builds
+# the mesh record, STARTS THE DAEMON LISTENER and stamps the invite; its
+# `return 1` fires on AlreadyRunning, on Config("no node in mesh"), and on
+# start_daemon's mDNS register/browse failures — real failures a solo node
+# hits, honestly refused (§18.3). A solo ADAPTER constructs infallibly; a solo
+# NODE still needs a listener. What could honestly die is the fusion of "create
+# the mesh record" with "bind the listener" inside create_mesh — surgery in
+# sovereign-mesh's lifecycle that removes no commonwealth-* dep and therefore
+# does not move this bar.
+#
+# THE INSTRUMENT COUNTS CLASSES, NOT SITES, AND NOW SAYS SO. `floor = 3.0`
+# against four deps + two forcings + one mint is only coherent as three
+# CLASSES; read as sites it would have been 7.0. This campaign has already
+# lost one bar to an instrument that was never written down (cw-net-deletion,
+# fa69be382). Naming it here rather than leaving a second one implicit.
 floor        = 3.0
 floor_basis  = "measured 2026-09-04: the three blocker classes above — direct commonwealth-* deps in sovereign-cli-daemon (Cargo.toml:56-63), two unconditional iroh forcings, one mesh-mint-to-boot site (daemon_cmd/mod.rs:1174-1186)"
 target       = 0.0
 direction    = "lower_is_better"
-instrument   = "count of (direct commonwealth-* deps in sovereign-cli-daemon) + (unconditional iroh feature forcings) + (mesh-mint-to-boot sites)"
+instrument   = "count of BLOCKER CLASSES REMAINING (not sites), each measured by PATH not name prefix: (1) sovereign-cli-daemon has a DIRECT dep whose manifest path is under commonwealth/ ; (2) an unconditional iroh feature forcing IN THE DAEMON'S OWN TREE ; (3) a mesh-mint-to-boot site. Re-derived 2026-09-05 by rung 3c — see the CLOSEOUT block above for why each of the three words in this sentence had to change."
 kill         = "K2 — AppState (commonwealth-api/src/state.rs:585, 2,659 lines, 44 crossing refs) cannot be cut without a shim over ~300 lines. Then local and mesh state are genuinely fused and the honest deliverable is a RUNTIME PROFILE, not a package. Say that rather than shipping a shim and calling it a boundary."
 
 [[bar]]
