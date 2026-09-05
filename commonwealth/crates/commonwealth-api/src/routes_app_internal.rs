@@ -1,34 +1,63 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Internal mesh routes for app state and registry gossip.
+//! `POST /internal/app/state` — the ONE receiver for gossiped mesh_store
+//! entries.
 //!
-//! POST /internal/app/state    — receive gossiped AppState entries
-//! POST /internal/app/registry — receive gossiped AppRegistry manifests
+//! Its sibling `POST /internal/app/registry` was deleted by cw-lift rung
+//! 2c. It had **no sender**: nothing in the workspace ever POSTed an
+//! `AppRegistry` manifest to a peer, so `AppRegistry::merge`'s version
+//! comparison ran on exactly zero production inputs and the route was a
+//! standing invitation for any peer that could route here to install an
+//! app manifest. `GROUND_TRUTH.md` had recorded it as senderless since
+//! before this campaign started.
 
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
 use bytes::Bytes;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-use commonwealth_app::manifest::MeshAppManifest;
 use commonwealth_state::{is_gossip_excluded, StoreEntry};
 
 use crate::state::AppState;
 
-/// A batch of store entries received from a peer via gossip.
-#[derive(Deserialize)]
+/// A batch of store entries on the wire — the ONE declaration of this
+/// shape (ARCH §10.6).
+///
+/// `Serialize` as well as `Deserialize` because the SENDERS build it too.
+/// Until cw-lift rung 2c there were three hand-written `serde_json::json!`
+/// literals of these five fields against this one `Deserialize` struct, and
+/// nothing made them agree: a renamed field would have 422'd the round at
+/// runtime, silently, on the branch that logs at debug. The same hazard the
+/// gossip round's own `MeshWire` comment records having been paid twice.
+#[derive(Serialize, Deserialize)]
 pub struct AppStateGossipBody {
     pub entries: Vec<GossipStoreEntry>,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct GossipStoreEntry {
     pub app_id: String,
     pub key: String,
-    pub value_b64: String, // base64-encoded bytes
+    pub value_b64: String, // see `encode_value` / `base64_decode`
     pub timestamp: u64,
     pub origin_hex: String, // hex NodeId (16 bytes = 32 hex chars)
+}
+
+impl From<&StoreEntry> for GossipStoreEntry {
+    /// The one projection from a stored row to its wire form. Its inverse
+    /// is [`recv_app_state`]'s body, and the `value_b64` stub is now a
+    /// single pair of functions rather than an encode spelled at each
+    /// sender and a decode spelled here.
+    fn from(e: &StoreEntry) -> Self {
+        Self {
+            app_id: e.app_id.clone(),
+            key: e.key.clone(),
+            value_b64: encode_value(&e.value),
+            timestamp: e.timestamp,
+            origin_hex: hex::encode(e.origin.as_bytes()),
+        }
+    }
 }
 
 /// `POST /internal/app/state` — merge gossiped store entries.
@@ -78,31 +107,20 @@ pub async fn recv_app_state(
     (StatusCode::OK, Json(serde_json::json!({"merged": merged})))
 }
 
-/// A batch of app manifests received via gossip.
-#[derive(Deserialize)]
-pub struct AppRegistryGossipBody {
-    pub manifests: Vec<MeshAppManifest>,
-}
-
-/// `POST /internal/app/registry` — merge gossiped app manifests.
-pub async fn recv_app_registry(
-    State(state): State<AppState>,
-    Json(body): Json<AppRegistryGossipBody>,
-) -> impl IntoResponse {
-    let mut merged = 0usize;
-    for manifest in body.manifests {
-        if state.inner.app_registry.merge(manifest).await {
-            merged += 1;
-        }
-    }
-    (StatusCode::OK, Json(serde_json::json!({"merged": merged})))
-}
-
 // ── helpers ──────────────────────────────────────────────────────────────────
 
+/// `value_b64` is not base64 yet — the field name is the wire contract and
+/// the encoding is a stub on BOTH ends. Every current namespace stores JSON
+/// blobs, which round-trip through UTF-8 cleanly; a value that does not
+/// would be lossy here, which is why the replacement is a pair and not two
+/// independent edits.
+///
+/// TODO: real base64 once the dep is added — change these two together.
+pub fn encode_value(value: &[u8]) -> String {
+    String::from_utf8_lossy(value).into_owned()
+}
+
 fn base64_decode(s: &str) -> Result<Vec<u8>, ()> {
-    // For now treat value_b64 as raw UTF-8 bytes.
-    // TODO: replace with proper base64 decode once dep is added.
     Ok(s.as_bytes().to_vec())
 }
 
@@ -184,6 +202,58 @@ mod tests {
         assert!(
             hex_to_node_id("b88252e4325bc377465f51a0c0b6830d00").is_none(),
             "too long"
+        );
+    }
+
+    /// RED-FIRST (cw-lift 2c, ARCH §18.1). The two halves of this route's
+    /// contract used to be a `Deserialize` struct here and three
+    /// hand-written `serde_json::json!` literals in two other crates, with
+    /// nothing holding them to the same field names. A rename on either
+    /// side 422s the round at runtime, on a branch that logs at `debug` —
+    /// the same failure the gossip round's `MeshWire` comment records
+    /// having been paid twice.
+    ///
+    /// Now there is one struct and one `From<&StoreEntry>`, and this drives
+    /// a row all the way out and back: project, serialise, parse, decode.
+    /// Watched red by making the projection write `e.key` into `app_id`;
+    /// it fails on the first field assertion rather than anywhere near the
+    /// serde layer, which is the point.
+    #[test]
+    fn a_store_entry_round_trips_through_the_one_wire_shape() {
+        let origin = NodeId::from_u128(0xb882_52e4_325b_c377_465f_51a0_c0b6_830d);
+        let entry = StoreEntry {
+            app_id: "corpus-engine".into(),
+            key: "handoff:7".into(),
+            value: Bytes::from_static(b"{\"units\":3}"),
+            timestamp: 1_788_000_000,
+            origin,
+        };
+
+        // The sender's half, verbatim: the projection, then one body.
+        let body = AppStateGossipBody {
+            entries: vec![GossipStoreEntry::from(&entry)],
+        };
+        let on_the_wire = serde_json::to_vec(&body).expect("serialise");
+
+        // The receiver's half, verbatim: parse, then decode each field the
+        // way `recv_app_state` decodes it.
+        let parsed: AppStateGossipBody = serde_json::from_slice(&on_the_wire).expect(
+            "the sender's body must parse as the receiver's type — this is              the assertion three hand-written json! literals could not make",
+        );
+        assert_eq!(parsed.entries.len(), 1);
+        let raw = &parsed.entries[0];
+        assert_eq!(raw.app_id, entry.app_id);
+        assert_eq!(raw.key, entry.key);
+        assert_eq!(raw.timestamp, entry.timestamp);
+        assert_eq!(
+            Bytes::from(base64_decode(&raw.value_b64).expect("decode value")),
+            entry.value,
+            "encode_value and base64_decode are one pair; a value that              survives one and not the other is a silent truncation"
+        );
+        assert_eq!(
+            hex_to_node_id(&raw.origin_hex),
+            Some(entry.origin),
+            "origin must survive the round trip — the reversal this file's              other test pins is what happens when it does not"
         );
     }
 

@@ -20,6 +20,8 @@
 //! reconciliation. This module is just the network plumbing on top.
 use std::time::{Duration, Instant};
 
+use commonwealth_api::routes_app_internal::{AppStateGossipBody, GossipStoreEntry};
+use commonwealth_api::routes_internal::RING_SYNC_OPS_BUDGET_BYTES;
 use commonwealth_api::state::AppState;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, MeshPeering, NodeStatus};
@@ -92,20 +94,29 @@ pub(crate) fn gossip_client() -> Result<&'static reqwest::Client, &'static str> 
         .map_err(String::as_str)
 }
 
-/// Warn once the mesh_store snapshot reaches half the receiver's body
-/// limit. Derived from `MAX_REQUEST_BODY_BYTES`, never re-typed: the
-/// number a sender warns against and the number a receiver enforces
-/// must be the same number (§10.6).
-///
-/// WHY A GAUGE AT ALL. mesh_store replication is full-snapshot
-/// anti-entropy, so the payload only grows. Two ceilings sit above it,
-/// and both fail silently today: the receiver's 8 MiB body limit
-/// (a 413 that this module logged at `debug`), and — nearer — the
-/// shared client's 3s total POST timeout, which a multi-MB body over a
-/// relay-class link trips well before 8 MiB
-/// (`MESH_SCALE_100_USERS_1000_CORPORA.md` §7.2). Half the limit is
-/// the point where an operator still has room to act.
-const MESH_STORE_PAYLOAD_WARN_BYTES: usize = commonwealth_api::server::MAX_REQUEST_BODY_BYTES / 2;
+// The point at which this module warns about its own payload is
+// `RING_SYNC_OPS_BUDGET_BYTES` — imported, not re-derived.
+//
+// It used to be a second constant here, `MESH_STORE_PAYLOAD_WARN_BYTES`,
+// spelling `MAX_REQUEST_BODY_BYTES / 2` a second time. Two names for one
+// arithmetic is two deciders (§10.6): the number a sender stops at and the
+// number a sender warns at are the same question about the same receiver,
+// and the ring's copy is the one with a budget behind it rather than only a
+// log line.
+//
+// WHY A GAUGE AT ALL. mesh_store replication is full-snapshot anti-entropy,
+// so the payload only grows. Two ceilings sit above it and both fail
+// silently: the receiver's 8 MiB body limit (a 413 that this module logged
+// at `debug`), and — nearer — the shared client's 3s total POST timeout,
+// which a multi-MB body over a relay-class link trips well before 8 MiB
+// (`MESH_SCALE_100_USERS_1000_CORPORA.md` §7.2). Half the limit is the
+// point where an operator still has room to act.
+//
+// The ring answered the same question with a BUDGET and chunking (rung 2f);
+// this push has neither, which is the honest difference between the two
+// senders and the reason this one is still scheduled for deletion.
+//
+// (Imported at the top of the module with the rest.)
 
 /// The outcome of one round's mesh_store push to one peer. A closed
 /// set, so an enum — the whole point is that "rejected with a status"
@@ -783,39 +794,42 @@ pub async fn run_one_round(
     // ── Step 4: mesh_store replication ──────────────────────────────
     //
     // The Mesh gossip above only syncs the member list. Entries in
-    // `mesh_store` (queue-mode IngestionHandoffs, app-state blobs,
-    // app manifests) need their own push — `/internal/app/state`
-    // has been the receiver since before the work-queue work, but
-    // nothing has ever been the *sender*. Without this step, a
-    // coordinator-registered pull-based handoff stays invisible to
-    // peers, their `discover_and_spawn_pull_loops` finds nothing to
-    // scan, and the queue path silently does nothing despite both
-    // nodes thinking they set it up.
+    // `mesh_store` (queue-mode IngestionHandoffs, app-state blobs)
+    // needs its own push, and THIS IS IT — the one and only periodic
+    // sender. Three documents and one production comment used to say
+    // otherwise ("nothing has ever been the sender"); every one of them
+    // was written before this step landed and none was updated with it,
+    // which is how a rung meant to delete it was priced against a sender
+    // that supposedly did not exist.
     //
     // Payload: full snapshot (anti-entropy). LWW merge on the receiver
-    // (`mesh_store::merge_entry`) makes duplicates cheap — the cost is
-    // one POST per online peer per round, and at 10s cadence with a
-    // handful of handoffs that's negligible.
+    // (`mesh_store::merge_entry`) makes duplicates cheap.
+    //
+    // FAN-OUT IS EVERY ONLINE PEER, NOT `FANOUT`. Steps 1-3 above pick at
+    // most `FANOUT` targets; this step does not. A bandwidth model built
+    // on `FANOUT` understates this push by N/2.
+    //
+    // WHY IT IS STILL HERE (cw-lift rung 2e, kill bar K8). It is the ONLY
+    // anti-entropy for every namespace `all_entries_for_gossip` still
+    // yields, and after rung 2b that set is the ones with a real
+    // cross-peer consumer: `inference`, `contributions`, `corpus-engine`,
+    // `notes`, `work-atlas`, `mesh-measurements`,
+    // `wikipedia-newsworthy:tracked`. Only `mesh-measurements` fits the
+    // ring journal today — the other five wait on retention, which the
+    // journal does not have — so deleting this loop would not move
+    // replication anywhere, it would end it. It also carries
+    // `broadcast_now`'s recovery: that push is fire-and-forget and its
+    // documented fallback is this round.
     if let Ok(entries) = app_state.inner.mesh_store.all_entries_for_gossip() {
         if !entries.is_empty() {
-            let wire_entries: Vec<serde_json::Value> = entries
-                .iter()
-                .map(|e| {
-                    serde_json::json!({
-                        "app_id": e.app_id,
-                        "key": e.key,
-                        // `/internal/app/state`'s base64_decode stub
-                        // passes the value through as raw UTF-8. All
-                        // current mesh_store entries are JSON blobs
-                        // (handoffs, app manifests) that round-trip
-                        // cleanly through UTF-8.
-                        "value_b64": String::from_utf8_lossy(&e.value).into_owned(),
-                        "timestamp": e.timestamp,
-                        "origin_hex": hex::encode(e.origin.as_bytes()),
-                    })
-                })
-                .collect();
-            let store_body = serde_json::json!({ "entries": wire_entries });
+            // The receiver's OWN types, built through its own
+            // `From<&StoreEntry>` — not a hand-written `json!` of the same
+            // five field names (§10.6). Three of those literals existed
+            // before rung 2c and nothing made them agree with the struct
+            // that has to parse them.
+            let store_body = AppStateGossipBody {
+                entries: entries.iter().map(GossipStoreEntry::from).collect(),
+            };
 
             // ── Payload gauge ──────────────────────────────────────
             //
@@ -834,15 +848,15 @@ pub async fn run_one_round(
             tracing::debug!(
                 payload_bytes,
                 entries = entries.len(),
-                warn_at_bytes = MESH_STORE_PAYLOAD_WARN_BYTES,
+                warn_at_bytes = RING_SYNC_OPS_BUDGET_BYTES,
                 limit_bytes = commonwealth_api::server::MAX_REQUEST_BODY_BYTES,
                 "gossip: mesh_store payload gauge"
             );
-            if payload_bytes >= MESH_STORE_PAYLOAD_WARN_BYTES {
+            if payload_bytes >= RING_SYNC_OPS_BUDGET_BYTES {
                 warn!(
                     payload_bytes,
                     entries = entries.len(),
-                    warn_at_bytes = MESH_STORE_PAYLOAD_WARN_BYTES,
+                    warn_at_bytes = RING_SYNC_OPS_BUDGET_BYTES,
                     limit_bytes = commonwealth_api::server::MAX_REQUEST_BODY_BYTES,
                     pct_of_limit = (payload_bytes * 100)
                         / commonwealth_api::server::MAX_REQUEST_BODY_BYTES.max(1),
@@ -1100,15 +1114,17 @@ pub async fn broadcast_now(app_state: &AppState, app_id: &str, key: &str) {
     };
 
     let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
-    let wire = serde_json::json!({
-        "entries": [{
-            "app_id": entry.app_id,
-            "key": entry.key,
-            "value_b64": String::from_utf8_lossy(&entry.value).into_owned(),
-            "timestamp": entry.timestamp,
-            "origin_hex": hex::encode(entry.origin.as_bytes()),
-        }]
-    });
+    // Same body type as the round above, one entry wide.
+    let wire = AppStateGossipBody {
+        entries: vec![GossipStoreEntry::from(&entry)],
+    };
+    let wire = match serde_json::to_vec(&wire) {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!(app_id, key, error = %e, "broadcast_now: serialise failed");
+            return;
+        }
+    };
 
     let targets: Vec<PeerContact> = {
         let mesh = app_state.inner.mesh.read().await;
@@ -1139,11 +1155,18 @@ pub async fn broadcast_now(app_state: &AppState, app_id: &str, key: &str) {
         let peer_id = contact.node_id;
         let http = http.clone();
         let body = wire.clone();
+        let body_len = body.len();
         let endpoints = transport.endpoints(&contact, TrafficClass::Gossip).await;
         handles.push(tokio::spawn(async move {
             for ep in endpoints {
                 let url = format!("{}/internal/app/state", ep.base_url);
-                match http.post(&url).json(&body).send().await {
+                match http
+                    .post(&url)
+                    .header(reqwest::header::CONTENT_TYPE, "application/json")
+                    .body(body.clone())
+                    .send()
+                    .await
+                {
                     Ok(resp) if resp.status().is_success() => return,
                     Ok(resp) => {
                         tracing::debug!(
@@ -1165,6 +1188,7 @@ pub async fn broadcast_now(app_state: &AppState, app_id: &str, key: &str) {
             }
             tracing::warn!(
                 peer = %peer_id,
+                body_len,
                 "work_atlas:broadcast_now_failed (all addrs exhausted)"
             );
         }));
@@ -1452,7 +1476,7 @@ mod select_round_peers_tests {
 mod push_surfacing_tests {
     use super::{
         max_online_peers_before_false_offline, PushOutcome, PushStatusLedger,
-        MESH_STORE_PAYLOAD_WARN_BYTES,
+        RING_SYNC_OPS_BUDGET_BYTES,
     };
     use commonwealth_core::ids::NodeId;
     use std::time::Duration;
@@ -1516,15 +1540,36 @@ mod push_surfacing_tests {
         assert!(ledger.note(nid(2), PushOutcome::Transport));
     }
 
-    /// The gauge threshold is DERIVED from the receiver's limit, not a
-    /// second copy of the number. If someone retypes it, this fails.
+    /// ONE decider for the replication byte budget (§10.6), and this is
+    /// the assertion that keeps it one: the number this push warns at and
+    /// the number the ring exchange stops at are the same constant, and
+    /// both are derived from the receiver's limit rather than typed.
+    ///
+    /// Reworked at cw-lift rung 2c. Until then this file declared
+    /// `MESH_STORE_PAYLOAD_WARN_BYTES` — the identical
+    /// `MAX_REQUEST_BODY_BYTES / 2` under a second name — and this test
+    /// pinned that copy against the limit, which is a weaker property: two
+    /// derivations of one number both stay "derived" right up until one of
+    /// them is edited.
     #[test]
     fn the_payload_warn_is_half_the_receivers_limit() {
         assert_eq!(
-            MESH_STORE_PAYLOAD_WARN_BYTES * 2,
+            RING_SYNC_OPS_BUDGET_BYTES * 2,
             commonwealth_api::server::MAX_REQUEST_BODY_BYTES
         );
-        assert_eq!(MESH_STORE_PAYLOAD_WARN_BYTES, 4 * 1024 * 1024);
+        assert_eq!(RING_SYNC_OPS_BUDGET_BYTES, 4 * 1024 * 1024);
+        // The identifier this replaced must not come back. A second
+        // spelling is how the two drift.
+        //
+        // The needle is assembled with `concat!` deliberately: this file is
+        // its own haystack, so writing the joined literal here would make
+        // the assertion match ITSELF and fail on the fixed code. It did,
+        // once, which is the cheapest possible demonstration that the scan
+        // really reads this file.
+        assert!(
+            !include_str!("gossip.rs").contains(concat!("const ", "MESH_STORE_PAYLOAD_WARN_BYTES")),
+            "a second name for MAX_REQUEST_BODY_BYTES / 2 is a second decider"
+        );
     }
 
     /// The rail the loop now checks. Named here so the formula's

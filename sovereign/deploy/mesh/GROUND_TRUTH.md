@@ -53,8 +53,11 @@ both files owe a fix in the same commit (§1.1).
 ## The app platform is a seam
 
 - `AppProcess` zero callers; `AppPortMap::set` never called ⇒ proxy always 503 (`routes_apps.rs:115-124`);
-  `/internal/app/registry` receiver with no sender; app mDNS trio dead; `install` is a HashMap insert
-  (`routes_apps.rs:62-67`); registry unpersisted with lexicographic version compare (`registry.rs:53`).
+  app mDNS trio dead; `install` is a HashMap insert (`routes_apps.rs:62-67`); registry unpersisted.
+  **Closed 2026-09-04 (cw-lift 2c):** the `/internal/app/registry` receiver with no sender is gone,
+  and `AppRegistry::merge` — its only caller — went with it, so the version compare it fixed in
+  2026 has no input left to get wrong. `AppRegistry` is now local-only: register / unregister /
+  get / list over apps this node installed.
 - `MeshStore`: 7-day TTL, UTF-8 mangling on replication, same-second cross-node divergence
   (`store.rs:329-337`).
 - Worker pods: single-tenant, one job; the only production runner POSTs HTTP to a child Sovereign
@@ -160,14 +163,14 @@ both files owe a fix in the same commit (§1.1).
   (`auto_ingest.rs:693-701`) — both advisory. `QueueError::EmbedModelMismatch`
   (`work_queue.rs:70-73`) is never constructed; merge treats an empty model stamp as a wildcard
   (`sharding.rs:632-641`); the re-embed sample check is report-only (`shard_manager.rs:749-792`).
-- Queue discovery: the coordinator unicasts the handoff blob to embed-compatible candidates via
-  `POST /internal/app/state` (`corpus_collaborate.rs:572-657`); peers also scan `mesh_store` on a
-  30s tick (`auto_ingest.rs:653`). **Corrected 2026-09-04: the "sender half is missing" reason given
-  here is false** — `gossip.rs:799` (Step 4) has been a periodic full-snapshot sender on the 10 s
-  round. The unicast is a latency shortcut, not a substitute for an absent sender, and BOTH are
-  senders of replicated state that cw-lift rung 2e is deleting. Incidental
-  find: `recv_app_state`'s `base64_decode` is a stub that treats `value_b64` as raw UTF-8
-  (`routes_app_internal.rs:101-105`).
+- Queue discovery: the coordinator writes the handoff blob to its own `mesh_store`; peers learn it
+  from the gossip round's Step 4 push and scan `mesh_store` on a 30s tick (`auto_ingest.rs`).
+  **Corrected 2026-09-04: the "sender half is missing" reason was false** — `gossip.rs` Step 4 has
+  been a periodic full-snapshot sender on the 10 s round since it landed. **Closed 2026-09-04
+  (cw-lift 2c):** the unicast is deleted. Its targets were a strict subset of the round's, and the
+  consumer it fed polls at 30 s, so the <= 10 s it bought was inside that poll. `recv_app_state`'s
+  `base64_decode` is still a stub that treats `value_b64` as raw UTF-8 — now paired with an
+  `encode_value` in the same module, so replacing it is one edit rather than four.
 
 ## Identity dies at the server; the tensor port is open *(staff pass)*
 

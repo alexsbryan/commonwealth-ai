@@ -276,3 +276,152 @@ async fn the_payload_gauge_renders_at_debug() {
         );
     }
 }
+
+// ─── the sender census ──────────────────────────────────────────
+
+// `cw-twin-visibility`'s instrument is a one-line question — **how many
+// senders of replicated state does this workspace have?** — and until now
+// the only way to answer it was a hand-run `git grep` that nobody ran. The
+// rest of this file proves one sender REPORTS; this half proves no OTHER
+// sender exists.
+//
+// Deterministic, no model: every workspace member's `src/` tree, test
+// modules excluded, counting the URL-join form `{…}/internal/<route>` that
+// only a sender writes. A route STRING (the receiver's `.route(…)`) and a
+// doc mention both lack the brace, so they do not count — which is the
+// distinction the census exists to make.
+
+/// Every production site that puts replicated state on the wire, by route
+/// and by file.
+///
+/// **Three, and the fourth is what rung 2c deleted.** Before it,
+/// `corpus_collaborate.rs` hand-rolled a fourth POST of the identical wire
+/// shape to the identical route, under a comment asserting that no periodic
+/// sender existed — an assertion that had been false since the sender
+/// landed. Its targets were a strict subset of the round's (online AND
+/// embed-compatible AND allowlisted, against the round's every online peer)
+/// and its consumer polls at `auto_ingest::CHECK_INTERVAL` = 30 s, so the
+/// ≤10 s it bought was inside the poll it fed.
+///
+/// A new row here is a review moment, never a silent pass. Adding a sender
+/// is allowed; adding one without saying so in this table is not.
+const REPLICATION_SENDERS: &[(&str, &str, usize)] = &[
+    // The 10 s full-snapshot anti-entropy push, and the event-driven
+    // single-entry push the work atlas needs for same-round-trip claims.
+    // Both are the same route and the same body shape; `broadcast_now`'s
+    // documented recovery IS the round above it, which is why the two
+    // cannot be counted apart.
+    (
+        "/internal/app/state",
+        "sovereign/crates/sovereign-mesh/src/gossip.rs",
+        2,
+    ),
+    // The ring journal's own digest exchange — its own route on its own
+    // 60 s cadence, budgeted in both directions.
+    (
+        "/internal/ring/sync",
+        "sovereign/crates/sovereign-mesh/src/ring_sync.rs",
+        1,
+    ),
+];
+
+fn workspace_root() -> std::path::PathBuf {
+    let mut dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    loop {
+        let toml = dir.join("Cargo.toml");
+        if toml.is_file()
+            && std::fs::read_to_string(&toml)
+                .map(|t| t.contains("[workspace]"))
+                .unwrap_or(false)
+        {
+            return dir;
+        }
+        assert!(dir.pop(), "workspace root not found");
+    }
+}
+
+fn workspace_members(root: &std::path::Path) -> Vec<String> {
+    let text = std::fs::read_to_string(root.join("Cargo.toml")).expect("root Cargo.toml");
+    let start = text.find("members = [").expect("no members list");
+    let end = text[start..].find(']').expect("unterminated members") + start;
+    text[start + "members = [".len()..end]
+        .lines()
+        .map(|l| l.trim().trim_matches(',').trim_matches('"'))
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(String::from)
+        .collect()
+}
+
+fn walk_rs(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let p = entry.path();
+        if p.is_dir() {
+            walk_rs(&p, out);
+        } else if p.extension().map(|e| e == "rs").unwrap_or(false) {
+            out.push(p);
+        }
+    }
+}
+
+/// The census, as `(route, repo-relative file, sites)`.
+///
+/// Everything from the first `#[cfg(test)]` is dropped: a test that spins a
+/// fake peer builds the same URL and is not a production sender. Both files
+/// in the table put their test modules last, which is this workspace's
+/// convention.
+fn scan_senders() -> Vec<(String, String, usize)> {
+    let root = workspace_root();
+    let mut files = Vec::new();
+    for member in workspace_members(&root) {
+        walk_rs(&root.join(&member).join("src"), &mut files);
+    }
+    files.sort();
+    let mut out = Vec::new();
+    for path in files {
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let production = match text.find("#[cfg(test)]") {
+            Some(i) => &text[..i],
+            None => &text[..],
+        };
+        for (route, _, _) in REPLICATION_SENDERS {
+            let needle = format!("}}{route}");
+            let n = production.matches(needle.as_str()).count();
+            if n > 0 {
+                let rel = path
+                    .strip_prefix(&root)
+                    .unwrap_or(&path)
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                out.push(((*route).to_string(), rel, n));
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+/// RED-FIRST (cw-lift 2c, ARCH §18.1). At the commit before this one the
+/// scan returned a THIRD row —
+/// `commonwealth-api/src/routes_internal/corpus_collaborate.rs` on
+/// `/internal/app/state` — and this assertion failed printing it.
+#[test]
+fn every_sender_of_replicated_state_is_declared() {
+    let mut expected: Vec<(String, String, usize)> = REPLICATION_SENDERS
+        .iter()
+        .map(|(route, file, n)| ((*route).to_string(), (*file).to_string(), *n))
+        .collect();
+    expected.sort();
+    assert_eq!(
+        scan_senders(),
+        expected,
+        "the count of senders of replicated state is this campaign's instrument \
+         (cw-twin-visibility). A row that appears here is a second answer to \
+         \"how does state reach a peer\" (ARCH §10.6) and must be argued, not \
+         discovered later by grep"
+    );
+}

@@ -531,9 +531,23 @@ pub async fn corpus_collaborate(
                 .bind_handoff(&handoff.corpus_id, handoff.handoff_id);
         }
 
-        // Write the handoff announcement into the local mesh_store so
-        // `ShardManager::load_handoff` and `discover_and_spawn_pull_loops`
-        // can find it on this node.
+        // Write the handoff announcement into the local mesh_store. That
+        // is the WHOLE announcement: `ShardManager::load_handoff` and
+        // `discover_and_spawn_pull_loops` read it here, and the gossip
+        // round's anti-entropy push carries the row to every online peer
+        // within one `DEFAULT_GOSSIP_INTERVAL`.
+        //
+        // This used to be followed by a hand-rolled fan-out of the same
+        // row to `candidates`, under a comment asserting the periodic
+        // sender did not exist. It has existed since it landed
+        // (`sovereign-mesh/src/gossip.rs`, Step 4), the round's targets
+        // are a SUPERSET of `candidates` (every online peer, against
+        // online AND embed-compatible AND allowlisted here), and the
+        // consumer this fed polls at `auto_ingest::CHECK_INTERVAL` = 30 s
+        // — so the <= 10 s the unicast bought was inside the poll it was
+        // buying it for. Deleted by cw-lift rung 2c; the census of
+        // senders is pinned in `sovereign-mesh/tests/main/
+        // gossip_push_surfacing.rs`.
         let gossip_key = format!("handoff:{}", handoff.handoff_id);
         let handoff_bytes = match serde_json::to_vec(&handoff) {
             Ok(b) => b,
@@ -549,7 +563,7 @@ pub async fn corpus_collaborate(
         let _ = state.inner.mesh_store.set(
             "corpus-engine",
             &gossip_key,
-            bytes::Bytes::from(handoff_bytes.clone()),
+            bytes::Bytes::from(handoff_bytes),
             self_id,
         );
 
@@ -568,109 +582,13 @@ pub async fn corpus_collaborate(
             );
         }
 
-        // The gossip loop only replicates the `Mesh` member list; it does
-        // NOT yet replicate mesh_store entries (the sender half is
-        // missing — `all_entries_for_gossip` is defined but unused, and
-        // nothing POSTs to `/internal/app/state`). So without an explicit
-        // push here, peers never learn of the open queue and their
-        // `discover_and_spawn_pull_loops` has nothing to scan. Mirrors
-        // the legacy path's direct peer-dispatch, but pushes into the
-        // mesh_store namespace the pull-loop already scans.
-        let handoff_id_for_log = handoff.handoff_id;
-        let corpus_id_for_log = handoff.corpus_id.clone();
-        let transport = state.peer_transport();
-        for peer in &candidates {
-            // The transport owns address ordering (canonical
-            // `peer_addr` ranking — this loop used to carry its own
-            // inline copy that had drifted to rank Tailscale ULA
-            // tied with CGNAT IPv4) and the port policy.
-            let endpoints = transport
-                .endpoints(
-                    &commonwealth_transport::peer_contact(peer),
-                    commonwealth_transport::TrafficClass::ControlPlane,
-                )
-                .await;
-            if endpoints.is_empty() {
-                tracing::warn!(
-                    node = %peer.node_id,
-                    handoff = %handoff_id_for_log,
-                    "queue broadcast: peer has no address — skipping"
-                );
-                continue;
-            }
-            let body = serde_json::json!({
-                "entries": [{
-                    "app_id": "corpus-engine",
-                    "key": gossip_key.clone(),
-                    // `/internal/app/state` currently treats value_b64 as
-                    // raw UTF-8 (its base64_decode is a stub). JSON is
-                    // UTF-8, so round-trips cleanly.
-                    "value_b64": String::from_utf8_lossy(&handoff_bytes).into_owned(),
-                    "timestamp": std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_secs())
-                        .unwrap_or(0),
-                    "origin_hex": hex::encode(self_id.as_bytes()),
-                }]
-            });
-            let node_id = peer.node_id;
-            let corpus_log = corpus_id_for_log.clone();
-            tokio::spawn(async move {
-                let client = match reqwest::Client::builder()
-                    .timeout(std::time::Duration::from_secs(10))
-                    .build()
-                {
-                    Ok(c) => c,
-                    Err(e) => {
-                        tracing::warn!(error = %e, "queue broadcast: reqwest build failed");
-                        return;
-                    }
-                };
-                for ep in &endpoints {
-                    let peer_url = format!("{}/internal/app/state", ep.base_url);
-                    match client.post(&peer_url).json(&body).send().await {
-                        Ok(resp) if resp.status().is_success() => {
-                            tracing::info!(
-                                node = %node_id,
-                                url = %peer_url,
-                                handoff = %handoff_id_for_log,
-                                corpus = %corpus_log,
-                                "queue broadcast: handoff delivered to peer"
-                            );
-                            return;
-                        }
-                        Ok(resp) => {
-                            tracing::warn!(
-                                node = %node_id,
-                                url = %peer_url,
-                                status = %resp.status(),
-                                "queue broadcast: peer rejected handoff"
-                            );
-                            return;
-                        }
-                        Err(e) => {
-                            tracing::debug!(
-                                node = %node_id,
-                                url = %peer_url,
-                                error = %e,
-                                "queue broadcast: transport error — trying next address"
-                            );
-                        }
-                    }
-                }
-                tracing::warn!(
-                    node = %node_id,
-                    handoff = %handoff_id_for_log,
-                    "queue broadcast: could not reach peer on any advertised address"
-                );
-            });
-        }
-
         tracing::info!(
             corpus = %handoff.corpus_id,
             handoff = %handoff.handoff_id,
             units = unit_count,
-            peers_notified = candidates.len(),
+            // Eligible, not notified: this handler no longer sends
+            // anything — the gossip round replicates the handoff row.
+            peers_eligible = candidates.len(),
             "corpus_collaborate: pull-based queue registered"
         );
 

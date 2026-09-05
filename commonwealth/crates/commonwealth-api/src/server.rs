@@ -470,10 +470,6 @@ pub fn internal_router(state: AppState) -> Router {
         // full snapshot to every online peer every 10s, which for a ledger
         // that only grows is a bandwidth bill that never stops climbing.
         .route("/internal/ring/sync", post(routes_internal::ring_sync))
-        .route(
-            "/internal/app/registry",
-            post(routes_app_internal::recv_app_registry),
-        )
         // Runtime slot management — load/unload extras chat slots
         // without daemon restart. Complements the static
         // `[models.extra]` config table (loaded at startup) by
