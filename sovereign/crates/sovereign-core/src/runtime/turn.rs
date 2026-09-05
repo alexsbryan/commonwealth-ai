@@ -582,8 +582,14 @@ impl Runtime {
         }
 
         // 2b'. Ambient field_model — append a landscape digest for any
-        // `field_skeleton`-built corpus the turn is scoped to (mirror of the
-        // streaming path; shared Runtime helper so every surface gains it).
+        // field-model-built corpus the turn is scoped to, read from that
+        // corpus's ATLAS since ei-7b (mirror of the streaming path; shared
+        // Runtime helper so every surface gains it).
+        //
+        // It runs BEFORE retrieval in source order but cannot influence it:
+        // `context.knowledge_view_digests` has exactly ONE reader,
+        // `system_message.rs`'s prompt assembly. So a change to what this
+        // splices moves the prompt, never the retrieved set.
         self.splice_ambient_field_digests(&mut context).await;
 
         // 2c. R3 — temporal tension pre-pass. Mirror of the

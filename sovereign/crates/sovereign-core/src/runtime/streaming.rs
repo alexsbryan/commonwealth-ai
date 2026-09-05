@@ -4433,9 +4433,10 @@ impl Runtime {
         }
 
         // 3c. Ambient field_model — append a landscape digest for any
-        // `field_skeleton`-built corpus the turn is scoped to (closes the
-        // "compute_digests is view-fixed" gap; shared so bench/desktop/server
-        // all gain it). No-op when unscoped or the corpus has no skeleton.
+        // field-model-built corpus the turn is scoped to, read from that
+        // corpus's ATLAS since ei-7b (closes the "compute_digests is
+        // view-fixed" gap; shared so bench/desktop/server all gain it). No-op
+        // when unscoped or the atlas carries no field model.
         self.splice_ambient_field_digests(&mut context).await;
 
         // R3 — temporal tension pre-pass. Active for relational
