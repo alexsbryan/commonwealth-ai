@@ -1,0 +1,2136 @@
+{
+  "bank_name": "wikipedia-core-v2-ei7c",
+  "corpus": "wikipedia-ei7c",
+  "limit": 10,
+  "started_at_unix": 1788595011,
+  "results": [
+    {
+      "question_id": "factual_einstein_1905",
+      "category": "factual_recall",
+      "question": "What were Einstein's four 1905 'Annus Mirabilis' papers about?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 1.0,
+          "snippet": "Albert Einstein (/ ˈ aɪ n s t aɪ n / EYEN -styne; German:; 14 March 1879 – 18 April 1955) was a German-born theoretical physicist who is widely held as one of the most influential scientists. Best known for developing the theory of relativity, Einstein also made important contributions to quantum mechanics. His mass–energy equivalence formula E = mc, which arises from special relativity, has been called \"the world's most famous equation\". He received the 1921 Nobel Prize in Physics \"for his services to theoretical physics, and especially for his discovery of the law of the photoelectric effect…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 1.0,
+          "snippet": "Albert Einstein  Born in the German Empire, Einstein moved to Switzerland in 1895, forsaking his German citizenship (as a subject of the Kingdom of Württemberg) the following year. In 1897, at the age of seventeen, he enrolled in the mathematics and physics teaching diploma program at the Swiss federal polytechnic school in Zürich, graduating in 1900. In 1901, he acquired Swiss citizenship, which he kept for the rest of his life. In 1903, he secured a permanent position at the Swiss Patent Office in Bern. In 1905, he submitted a successful PhD dissertation to the University of Zurich. In 1914,…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 1.0,
+          "snippet": "Albert Einstein  Horrified by the Nazi war of extermination against his fellow Jews, Einstein decided to remain in the US, and was granted American citizenship in 1940. On the eve of World War II, he endorsed a letter to President Franklin D. Roosevelt alerting him to the potential German nuclear weapons program and recommended that the US begin similar research. Einstein supported the Allies but generally viewed the idea of nuclear weapons with great dismay."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 0.035353538,
+          "snippet": "Albert Einstein  and especially for his discovery of the law of the photoelectric effect \", a pivotal step in the development of quantum theory.  Einstein's work is also known for its influence on the philosophy of science. In 1905, he published four groundbreaking papers, sometimes described as his annus mirabilis (miracle year). These papers outlined a theory of the photoelectric effect, explained Brownian motion, introduced his special theory of relativity—a theory which addressed the inability of classical mechanics to account satisfactorily for the behavior of the electromagnetic field —a…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 1.0,
+          "snippet": "Albert Einstein  In the middle part of his career, Einstein made important contributions to statistical mechanics and quantum theory. Especially notable was his work on the quantum physics of radiation, in which light consists of particles, subsequently called photons. With the Indian physicist Satyendra Nath Bose, he laid the groundwork for Bose-Einstein statistics. For much of the last phase of his academic life, Einstein worked on two endeavors that proved ultimately unsuccessful. First, he advocated against quantum theory's introduction of fundamental randomness into science's picture of t…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 1.0,
+          "snippet": "Albert Einstein  laid out the implications of general relativity for the modeling of the structure and evolution of the universe as a whole."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#1900–1905:_First_scientific_papers",
+          "score": 1.0,
+          "snippet": "Albert Einstein  Einstein's first paper, \"Folgerungen aus den Capillaritätserscheinungen\" (\"Conclusions drawn from the phenomena of capillarity\"), in which he proposed a model of intermolecular attraction that he afterwards disavowed as worthless, was published in the journal Annalen der Physik in 1901. His 24-page doctoral dissertation also addressed a topic in molecular physics. Titled \"Eine neue Bestimmung der Moleküldimensionen\" (\"A New Determination of Molecular Dimensions\") and dedicated to his friend Marcel Grossman, it was completed on 30 April 1905 and approved by Professor Alfred Kle…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#1900–1905:_First_scientific_papers",
+          "score": 0.07526882,
+          "snippet": "Albert Einstein  (Einstein was formally awarded his PhD on 15 January 1906.) Four other pieces of work that Einstein completed in 1905— his famous papers on the photoelectric effect, Brownian motion, his special theory of relativity and the equivalence of mass and energy —have led to the year being celebrated as an annus mirabilis for physics akin to 1666 (the year in which Isaac Newton experienced his greatest epiphanies). The publications deeply impressed Einstein's contemporaries."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#1905_–_Annus_Mirabilis_papers",
+          "score": 0.077140264,
+          "snippet": "Albert Einstein  The Annus Mirabilis papers are four articles pertaining to the photoelectric effect (which gave rise to quantum theory), Brownian motion, the special theory of relativity, and E = mc that Einstein published in the Annalen der Physik scientific journal in 1905. These four works contributed substantially to the foundation of modern physics and changed views on space, time, and matter. The four papers are:"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "History of electromagnetic theory",
+          "url": "https://en.wikipedia.org/wiki/History_of_electromagnetic_theory#Einstein's_Annus_Mirabilis",
+          "score": 0.06612022,
+          "snippet": "History of electromagnetic theory  In 1905, while he was working in the patent office, Albert Einstein had four papers published in the Annalen der Physik, the leading German physics journal. These are the papers that history has come to call the Annus Mirabilis papers:  All four papers are today recognized as tremendous achievements—and hence 1905 is known as Einstein's \" Wonderful Year \". At the time, however, they were not noticed by most physicists as being important, and many of those who did notice them rejected them outright. Some of this work—such as the theory of light quanta—remained…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Albert Einstein"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "photoelectric effect",
+          "Brownian motion",
+          "special relativity",
+          "mass-energy equivalence",
+          "1905"
+        ],
+        "missing": [],
+        "total_expected": 5,
+        "ratio": 1.0
+      },
+      "embed_ms": 0,
+      "search_ms": 9257,
+      "corpora_hit": [
+        "wikipedia-ei7c"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "factual_yalta_leaders",
+      "category": "factual_recall",
+      "question": "Who were the three Allied leaders at the Yalta Conference?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Yalta Conference",
+          "url": "https://en.wikipedia.org/wiki/Yalta_Conference",
+          "score": 0.039344262,
+          "snippet": "Yalta Conference  The Yalta Conference, held 4–11 February 1945, was the World War II meeting of the heads of government of the United States, the United Kingdom and the Soviet Union to discuss the postwar reorganization of Germany and Europe. The three states were represented by President Franklin D. Roosevelt, Prime Minister Winston Churchill, and General Secretary Joseph Stalin. The conference was held near Yalta in Crimea, Soviet Union, within the Livadia, Yusupov, and Vorontsov palaces. The aim of the conference was to shape a postwar peace that represented not only a collective security …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Yalta Conference",
+          "url": "https://en.wikipedia.org/wiki/Yalta_Conference",
+          "score": 1.0,
+          "snippet": "Yalta Conference  It was preceded by the Tehran Conference in November 1943 and was followed by the Potsdam Conference in July of the same year, 1945. It was also preceded by a conference in Moscow in October 1944, not attended by Roosevelt, in which Churchill and Stalin had spoken about Western and Soviet spheres of influence in Europe."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Yalta Conference",
+          "url": "https://en.wikipedia.org/wiki/Yalta_Conference#Conference",
+          "score": 1.0,
+          "snippet": "Yalta Conference  Truman. In return, Stalin pledged that the Soviet Union would enter the Pacific War three months after the defeat of Germany.  The fate of Korea is not mentioned on the records of demands and concessions at Yalta. However, several declassified documents later revealed that on 8 February, while Churchill was not present, Roosevelt and Stalin secretly discussed the peninsula. Roosevelt brought up the idea of putting Korea into a trusteeship divided among the Soviets, the Americans, and the Chinese for a period of 20 to 30 years. He expressed reluctance to invite the British to …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Yalta Conference",
+          "url": "https://en.wikipedia.org/wiki/Yalta_Conference#Conference",
+          "score": 1.0,
+          "snippet": "Yalta Conference  two quickly agreed that their troops should not be stationed in Korea. Korea was not discussed again throughout the conference.  Furthermore, the Soviets agreed to join the United Nations because of a secret understanding of a voting formula with a veto power for permanent members of the Security Council, which ensured that each country could block unwanted decisions.  The Soviet Army had occupied Poland completely and held much of Eastern Europe with a military power three times greater than Allied forces in the West. The Declaration of Liberated Europe did little to dispel …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Yalta Conference",
+          "url": "https://en.wikipedia.org/wiki/Yalta_Conference#Conference",
+          "score": 1.0,
+          "snippet": "Yalta Conference  All three leaders ratified the agreement of the European Advisory Commission setting the boundaries of postwar occupation zones for Germany with three zones of occupation, one for each of the three principal Allies. They also agreed to give France a zone of occupation carved out of the US and UK zones, but De Gaulle maintained the principle of refusing to accept that the French zone would be defined by boundaries established in his absence. He thus ordered French forces to occupy Stuttgart in addition to the lands earlier agreed upon as comprising the French occupation zone. …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Yalta Conference",
+          "url": "https://en.wikipedia.org/wiki/Yalta_Conference#Conference",
+          "score": 0.03380282,
+          "snippet": "Yalta Conference  Stalin resisted that until Roosevelt backed Churchill's position, but Stalin still remained adamant that the French should not be admitted to full membership of the Allied Reparations Commission to be established in Moscow and relented only at the Potsdam Conference."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Yalta Conference",
+          "url": "https://en.wikipedia.org/wiki/Yalta_Conference#Conference",
+          "score": 1.0,
+          "snippet": "Yalta Conference  Europe did little to dispel the sphere of influence agreements, which had been incorporated into armistice agreements.  Also, the Big Three agreed that all original governments would be restored to the invaded countries, with the exceptions of Romania and Bulgaria, and Poland, whose government-in-exile was also excluded by Stalin, and that all of their civilians would be repatriated."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Yalta Conference",
+          "url": "https://en.wikipedia.org/wiki/Yalta_Conference#Eastern_Bloc",
+          "score": 1.0,
+          "snippet": "Yalta Conference  Because of Stalin's promises, Churchill believed that he would keep his word regarding Poland and he remarked, \"Poor Neville Chamberlain believed he could trust Hitler. He was wrong. But I don't think I am wrong about Stalin.\"  Churchill defended his actions at Yalta in a three-day parliamentary debate starting on February 27, which ended in a vote of confidence. During the debate, many MPs criticised Churchill and expressed deep reservations about Yalta and support for Poland, with 25 drafting an amendment protesting the agreement.  After the Second World War ended, a commun…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Yalta Conference",
+          "url": "https://en.wikipedia.org/wiki/Yalta_Conference#Eastern_Bloc",
+          "score": 0.03666667,
+          "snippet": "Yalta Conference  members of the AK (Armia Krajowa). The result was the Polish Resettlement Act 1947, Britain's first mass immigration law.  On March 1, 1945, Roosevelt assured Congress, \"I come from the Crimea with a firm belief that we have made a start on the road to a world of peace\". However, the Western Powers soon realized that Stalin would not honour his promise of free elections for Poland. After receiving considerable criticism in London following Yalta regarding the atrocities committed in Poland by Soviet troops, Churchill wrote Roosevelt a desperate letter referencing the wholesal…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Yalta Conference",
+          "url": "https://en.wikipedia.org/wiki/Yalta_Conference#Eastern_Bloc",
+          "score": 1.0,
+          "snippet": "Yalta Conference  participation in a fraud or a mere whitewash of the Lublin government and the solution must be as we envisaged it in Yalta.\"  By March 21, Roosevelt's Ambassador to the Soviet Union, Averell Harriman, cabled Roosevelt that \"we must come clearly to realize that the Soviet program is the establishment of totalitarianism, ending personal liberty and democracy as we know it\". Two days later, Roosevelt began to admit that his view of Stalin had been excessively optimistic and that \"Averell is right.\""
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Yalta Conference"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "Franklin D. Roosevelt",
+          "Winston Churchill",
+          "Joseph Stalin",
+          "February 1945"
+        ],
+        "missing": [],
+        "total_expected": 4,
+        "ratio": 1.0
+      },
+      "embed_ms": 0,
+      "search_ms": 751,
+      "corpora_hit": [
+        "wikipedia-ei7c"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "factual_special_vs_general_relativity",
+      "category": "factual_recall",
+      "question": "What is the core difference between special relativity and general relativity?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "General relativity",
+          "url": "https://en.wikipedia.org/wiki/General_relativity",
+          "score": 0.07468142,
+          "snippet": "General relativity, also known as the general theory of relativity, and as Einstein's theory of gravity, is the geometric theory of gravitation published by Albert Einstein in 1915 and is the current description of gravitation in modern physics. General relativity generalizes special relativity and refines Newton's law of universal gravitation, providing a unified description of gravity as a geometric property of space and time or four-dimensional spacetime. In particular, the curvature of spacetime is directly related to the energy and momentum of whatever matter and radiation are present. Th…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Introduction to general relativity",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_general_relativity",
+          "score": 0.03747072,
+          "snippet": "Introduction to general relativity  General relativity also predicts novel effects of gravity, such as gravitational waves, gravitational lensing and an effect of gravity on time known as gravitational time dilation. Many of these predictions have been confirmed by experiment or observation, most recently gravitational waves. General relativity has developed into an essential tool in modern astrophysics. It provides the foundation for the current understanding of black holes, regions of space where the gravitational effect is strong enough that even light cannot escape. Their strong gravity is…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Mathematics of general relativity",
+          "url": "https://en.wikipedia.org/wiki/Mathematics_of_general_relativity#Abstract",
+          "score": 0.07373271,
+          "snippet": "Mathematics of general relativity  When studying and formulating Albert Einstein 's theory of general relativity, various mathematical structures and techniques are utilized. The main tools used in this geometrical theory of gravitation are tensor fields defined on a Lorentzian manifold representing spacetime. This article is a general description of the mathematics of general relativity.  Note: General relativity articles using tensors will use the abstract index notation."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "General relativity",
+          "url": "https://en.wikipedia.org/wiki/General_relativity#Relativistic_generalization",
+          "score": 0.0809608,
+          "snippet": "General relativity  As intriguing as geometric Newtonian gravity may be, its basis, classical mechanics, is merely a limiting case of (special) relativistic mechanics. In the language of symmetry: where gravity can be neglected, physics is Lorentz invariant as in special relativity rather than Galilei invariant as in classical mechanics. (The defining symmetry of special relativity is the Poincaré group, which includes translations, rotations, boosts and reflections.) The differences between the two become significant when dealing with speeds approaching the speed of light, and with high-energ…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "History of special relativity",
+          "url": "https://en.wikipedia.org/wiki/History_of_special_relativity#Acceleration",
+          "score": 0.076059975,
+          "snippet": "History of special relativity  gravitational fields, transcended the limits of special relativity and resulted in the formulation of general relativity."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "History of special relativity",
+          "url": "https://en.wikipedia.org/wiki/History_of_special_relativity#Lorentz_transformation_without_second_postulate",
+          "score": 0.06999265,
+          "snippet": "History of special relativity  However, until today, others continued the attempts to derive special relativity without the light postulate."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "General relativity",
+          "url": "https://en.wikipedia.org/wiki/General_relativity#Abstract",
+          "score": 0.06243032,
+          "snippet": "General relativity  Despite the introduction of a number of alternative theories, general relativity continues to be the simplest theory consistent with experimental data."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Special relativity",
+          "url": "https://en.wikipedia.org/wiki/Special_relativity#Abstract",
+          "score": 0.06658618,
+          "snippet": "Special relativity  In physics, the special theory of relativity, or special relativity for short, is a scientific theory of the relationship between space and time. In Albert Einstein 's 1905 paper, On the Electrodynamics of Moving Bodies, the theory is presented as being based on just two postulates:  The first postulate was first formulated by Galileo Galilei (see Galilean invariance)."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Tests of general relativity",
+          "url": "https://en.wikipedia.org/wiki/Tests_of_general_relativity#Perihelion_precession_of_Mercury",
+          "score": 0.059106722,
+          "snippet": "Tests of general relativity  A few systems, such as DI Herculis, have been measured as test cases for general relativity."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Tests of general relativity",
+          "url": "https://en.wikipedia.org/wiki/Tests_of_general_relativity#Tests_of_special_relativity",
+          "score": 0.058736254,
+          "snippet": "Tests of general relativity  The general theory of relativity incorporates Einstein's special theory of relativity, and hence tests of special relativity are also testing aspects of general relativity. As a consequence of the equivalence principle, Lorentz invariance holds locally in non-rotating, freely falling reference frames. Experiments related to Lorentz invariance special relativity (that is, when gravitational effects can be neglected) are described in tests of special relativity."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Special relativity",
+          "General relativity"
+        ],
+        "missing": [],
+        "total_expected": 2,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "gravity",
+          "spacetime curvature",
+          "1905",
+          "1915"
+        ],
+        "missing": [
+          "inertial frames",
+          "accelerated frames"
+        ],
+        "total_expected": 6,
+        "ratio": 0.6666667
+      },
+      "embed_ms": 0,
+      "search_ms": 929,
+      "corpora_hit": [
+        "wikipedia-ei7c"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "synth_manhattan_emigre_physicists",
+      "category": "multi_article_synthesis",
+      "question": "How did the Manhattan Project draw on European physicists who fled Nazi Germany?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Manhattan Project",
+          "url": "https://en.wikipedia.org/wiki/Manhattan_Project#Abstract",
+          "score": 0.057855196,
+          "snippet": "Manhattan Project  Man plutonium implosion-type weapon was developed in a concerted design and development effort by the Los Alamos Laboratory.  The project was also charged with gathering intelligence on the German nuclear weapon project. Through Operation Alsos, Manhattan Project personnel served in Europe, sometimes behind enemy lines, where they gathered nuclear materials and documents, and rounded up German scientists. Despite the Manhattan Project's emphasis on security, Soviet atomic spies penetrated the program."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Nazi Germany",
+          "url": "https://en.wikipedia.org/wiki/Nazi_Germany#Religion",
+          "score": 0.028688524,
+          "snippet": "Nazi Germany  -like messiah, a \"figure of redemption according to the Christian model\", \"who would liberate the world from the Antichrist\"."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Manhattan Project",
+          "url": "https://en.wikipedia.org/wiki/Manhattan_Project#After_the_war",
+          "score": 0.055203676,
+          "snippet": "Manhattan Project  The Manhattan Project became instantly famous after the bombing of Hiroshima and the partial lifting of its secrecy. It was widely credited with ending the war, and Groves worked to credit its contractors, whose work had hitherto been secret. Groves and Nichols presented them with Army–Navy \"E\" Awards, and over 20 Presidential Medals for Merit were awarded to key contractors and scientists, including Bush and Oppenheimer. Military personnel received the Legion of Merit.  The Manhattan Project persisted until 31 December 1946, and the Manhattan District to 15 August 1947. Dur…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Nazism",
+          "url": "https://en.wikipedia.org/wiki/Nazism#Abstract",
+          "score": 0.020833334,
+          "snippet": "Nazism  The Sturmabteilung (SA) and the Schutzstaffel (SS) functioned as the paramilitary organisations of the Nazi Party. Using the SS for the task, Hitler purged the party's more socially and economically radical factions in the mid-1934 Night of the Long Knives, including the leadership of the SA. After the death of President Hindenburg on 2 August 1934, political power was concentrated in Hitler's hands and he became Germany's head of state as well as the head of the government, with the title of Führer und Reichskanzler, meaning \"leader and Chancellor of Germany\" (see also here). From tha…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "European Union",
+          "url": "https://en.wikipedia.org/wiki/European_Union",
+          "score": 0.020833334,
+          "snippet": "uropean Union |url=http://158.167.241.123:8090/jcms/jcms/Jo2_7024/en/ |access-date=2025-10-27 |website=CURIA |language=en}}"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Manhattan Project",
+          "url": "https://en.wikipedia.org/wiki/Manhattan_Project#Bomb_design_concepts",
+          "score": 0.05691433,
+          "snippet": "Manhattan Project  Compton asked theoretical physicist J. Robert Oppenheimer of the University of California to take over research into fast neutron calculations —key to calculations of critical mass and weapon detonation—from Gregory Breit, who had quit on 18 May 1942 because of concerns over lax operational security. John H. Manley, a physicist at the Metallurgical Laboratory, was assigned to assist Oppenheimer by coordinating experimental physics groups scattered across the country. Oppenheimer and Robert Serber of the University of Illinois examined the problems of neutron diffusion—how ne…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "European Parliament",
+          "url": "https://en.wikipedia.org/wiki/European_Parliament",
+          "score": 1.0,
+          "snippet": "electorate in the world (after the Parliament of India), with an electorate of around 375&nbsp;million eligible voters in 2024.  Since 1979, the Parliament has been directly elected every five years by the citizens of the European Union through universal suffrage. Voter turnout in parliamentary elections decreased each time after 1979 until 2019, when voter turnout increased by eight percentage points, and rose above 50% for the first time since 1994. The voting age is 18 in all EU member states except for Malta, Belgium, Austria and Germany, where it is 16, and Greece, where it is 17."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "European Parliament",
+          "url": "https://en.wikipedia.org/wiki/European_Parliament",
+          "score": 1.0,
+          "snippet": "2014 }}  in Strasbourg, France in January 1967. Willy Brandt, West German minister for Foreign Affairs, is speaking.]]  The body was not mentioned in the original Schuman Declaration. It was assumed or hoped that difficulties with the British would be resolved to allow the Parliamentary Assembly of the Council of Europe to perform legislative tasks. A separate Assembly was introduced during negotiations on the Treaty as an institution to counterbalance and monitor the executive while providing democratic legitimacy. The wording of the ECSC Treaty demonstrated leaders' desire for more than a no…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Fundamental Law of Hungary",
+          "url": "https://en.wikipedia.org/wiki/Fundamental_Law_of_Hungary",
+          "score": 0.018442621,
+          "snippet": "presidency of the Council of the European Union (EU)."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Chicago",
+          "url": "https://en.wikipedia.org/wiki/Chicago",
+          "score": 0.03629725,
+          "snippet": "Exposition World's Fair. The theme of the fair was technological innovation over the century since Chicago's founding.  (1967) inspired a new era in urban public art.]] During World War II, the city of Chicago alone produced more steel than the United Kingdom every year from 1939 â 1945, and more than Nazi Germany from 1943 â 1945. outside the 1968 Democratic National Convention]] The Great Migration, which had been on pause due to the Depression, resumed at an even faster pace in the second wave, as hundreds of thousands of blacks from the South arrived in the city to work in the steel mi…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Manhattan Project"
+        ],
+        "missing": [
+          "Albert Einstein",
+          "Leo Szilard",
+          "Enrico Fermi"
+        ],
+        "total_expected": 4,
+        "ratio": 0.25
+      },
+      "fact_score": {
+        "matched": [
+          "Enrico Fermi",
+          "Los Alamos"
+        ],
+        "missing": [
+          "Albert Einstein",
+          "Leo Szilard",
+          "Edward Teller",
+          "Einstein-Szilard letter"
+        ],
+        "total_expected": 6,
+        "ratio": 0.33333334
+      },
+      "embed_ms": 0,
+      "search_ms": 1256,
+      "corpora_hit": [
+        "wikipedia-ei7c"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "synth_einstein_bohr_debate",
+      "category": "multi_article_synthesis",
+      "question": "What were the central scientific disagreements between Einstein and Bohr about quantum mechanics?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Uncertainty principle",
+          "url": "https://en.wikipedia.org/wiki/Uncertainty_principle#Critical_reactions",
+          "score": 0.04880953,
+          "snippet": "Uncertainty principle  The Copenhagen interpretation of quantum mechanics and Heisenberg's uncertainty principle were, in fact, initially seen as twin targets by detractors. According to the Copenhagen interpretation of quantum mechanics, there is no fundamental reality that the quantum state describes, just a prescription for calculating experimental results. There is no way to say what the state of a system fundamentally is, only what the result of observations might be.  Albert Einstein believed that randomness is a reflection of our ignorance of some fundamental property of reality, while …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Bohr_versus_Einstein",
+          "score": 0.06198771,
+          "snippet": "Albert Einstein  The Bohr–Einstein debates were a series of public disputes about quantum mechanics between Einstein and Niels Bohr, who were two of its founders. Their debates are remembered because of their importance to the philosophy of science. Their debates would influence later interpretations of quantum mechanics."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Quantum mechanics",
+          "url": "https://en.wikipedia.org/wiki/Quantum_mechanics#Philosophical_implications",
+          "score": 0.06350806,
+          "snippet": "Quantum mechanics  Albert Einstein, himself one of the founders of quantum theory, was troubled by its apparent failure to respect some cherished metaphysical principles, such as determinism and locality. Einstein's long-running exchanges with Bohr about the meaning and status of quantum mechanics are now known as the Bohr–Einstein debates. Einstein believed that underlying quantum mechanics must be a theory that explicitly forbids action at a distance. He argued that quantum mechanics was incomplete, a theory that was valid but not fundamental, analogous to how thermodynamics is valid, but th…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Mathematical formulation of quantum mechanics",
+          "url": "https://en.wikipedia.org/wiki/Mathematical_formulation_of_quantum_mechanics#The_\"old_quantum_theory\"_and_the_need_for_new_mathematics",
+          "score": 0.029761907,
+          "snippet": "Mathematical formulation of quantum mechanics  of the photoelectric effect by assuming that Planck's energy quanta were actual particles, which were later dubbed photons.  All of these developments were phenomenological and challenged the theoretical physics of the time. Bohr and Sommerfeld went on to modify classical mechanics in an attempt to deduce the Bohr model from first principles. They proposed that, of all closed classical orbits traced by a mechanical system in its phase space, only the ones that enclosed an area which was a multiple of Planck's constant were actually allowed. The mo…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "History of quantum mechanics",
+          "url": "https://en.wikipedia.org/wiki/History_of_quantum_mechanics#Schrödinger_and_the_wave_mechanics",
+          "score": 0.04508612,
+          "snippet": "History of quantum mechanics  of the electrical potential created by the proton. This calculation accurately reproduced the energy levels of the Bohr model.  In May 1926, Schrödinger proved that Heisenberg's matrix mechanics and his own wave mechanics made the same predictions about the properties and behavior of the electron; mathematically, the two theories had an underlying common form. Yet the two men disagreed on the interpretation of their mutual theory. For instance, Heisenberg accepted the theoretical prediction of jumps of electrons between orbitals in an atom, but Schrödinger hoped t…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Niels Bohr",
+          "url": "https://en.wikipedia.org/wiki/Niels_Bohr#Quantum_mechanics",
+          "score": 0.05082071,
+          "snippet": "Niels Bohr  Philosophical issues that arose from the novel aspects of quantum mechanics became widely celebrated subjects of discussion. Einstein and Bohr had good-natured arguments over such issues throughout their lives."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Interpretations of quantum mechanics",
+          "url": "https://en.wikipedia.org/wiki/Interpretations_of_quantum_mechanics#Copenhagen_interpretation",
+          "score": 0.05284454,
+          "snippet": "Interpretations of quantum mechanics  The Copenhagen interpretation is a collection of views about the meaning of quantum mechanics principally attributed to Niels Bohr and Werner Heisenberg. It is one of the oldest attitudes towards quantum mechanics, as features of it date to the development of quantum mechanics during 1925–1927, and it remains one of the most commonly taught. There is no definitive historical statement of what is the Copenhagen interpretation, and there were in particular fundamental disagreements between the views of Bohr and Heisenberg. For example, Heisenberg emphasized …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Niels Bohr",
+          "url": "https://en.wikipedia.org/wiki/Niels_Bohr#Institute_of_Physics",
+          "score": 0.025,
+          "snippet": "Niels Bohr  quantum phenomena were treated by imposing quantum restrictions on a classical wave description of the electromagnetic field.  Modelling atomic behaviour under incident electromagnetic radiation using \"virtual oscillators\" at the absorption and emission frequencies, rather than the (different) apparent frequencies of the Bohr orbits, led Max Born, Werner Heisenberg and Kramers to explore different mathematical models. They led to the development of matrix mechanics, the first form of modern quantum mechanics. The BKS theory also generated discussion of, and renewed attention to, di…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Copenhagen interpretation",
+          "url": "https://en.wikipedia.org/wiki/Copenhagen_interpretation#Incompleteness_and_indeterminism",
+          "score": 0.04032258,
+          "snippet": "Copenhagen interpretation  Einstein was an early and persistent supporter of objective reality. Bohr and Heisenberg advanced the position that no physical property could be understood without an act of measurement, while Einstein refused to accept this. Abraham Pais recalled a walk with Einstein when the two discussed quantum mechanics: \"Einstein suddenly stopped, turned to me and asked whether I really believed that the moon exists only when I look at it.\" While Einstein did not doubt that quantum mechanics was a correct physical theory in that it gave correct predictions, he maintained that …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Arik Einstein",
+          "url": "https://en.wikipedia.org/wiki/Arik_Einstein#Abstract",
+          "score": 1.0,
+          "snippet": "Arik Einstein  Arieh Lieb \" Arik \" Einstein (Hebrew: אָרִיק אַייְנְשְׁטֵייְן; 3 January 1939 – 26 November 2013) was an Israeli singer, songwriter, actor, comedian and screenwriter. He was a pioneer of Israeli rock music and was named \"the voice of Israel.\" Through both high public and critical acclaim, Einstein is regarded as one of the greatest, most popular, and most influential Israeli artists of all time.  An illustrious musical career that spanned over 50 years saw Einstein recording over 500 songs and releasing, collaborating, and featuring in 34 albums, far more than any other Israeli …"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Albert Einstein",
+          "Niels Bohr",
+          "Copenhagen interpretation"
+        ],
+        "missing": [],
+        "total_expected": 3,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "Copenhagen interpretation",
+          "EPR paradox"
+        ],
+        "missing": [
+          "hidden variables",
+          "Solvay Conference",
+          "God does not play dice",
+          "complementarity"
+        ],
+        "total_expected": 6,
+        "ratio": 0.33333334
+      },
+      "embed_ms": 0,
+      "search_ms": 946,
+      "corpora_hit": [
+        "wikipedia-ei7c"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "synth_industrial_revolution_origins",
+      "category": "multi_article_synthesis",
+      "question": "What conditions in 18th-century Britain enabled the Industrial Revolution to begin there first?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Industrial Revolution",
+          "url": "https://en.wikipedia.org/wiki/Industrial_Revolution",
+          "score": 0.033333335,
+          "snippet": "Industrial Revolution  Many of the technological and architectural innovations were of British origin. By the mid-18th century, Britain was the world's leading commercial nation, controlling a global trading empire with colonies in North America and the Caribbean. Britain had major military and political hegemony on the Indian subcontinent; particularly with the proto-industrialised Mughal Bengal, through the activities of the East India Company. The development of trade and the rise of business were among the major causes of the Industrial Revolution. Developments in law also facilitated the …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Industrial Revolution",
+          "url": "https://en.wikipedia.org/wiki/Industrial_Revolution#Causes_in_Britain",
+          "score": 0.04644808,
+          "snippet": "Industrial Revolution  Great Britain provided the legal and cultural foundations that enabled entrepreneurs to pioneer the Industrial Revolution. Key factors fostering this environment were:  \"An unprecedented explosion of new ideas, and new technological inventions, transformed our use of energy, creating an increasingly industrial and urbanised country. Roads, railways and canals were built. Great cities appeared. Scores of factories and mills sprang up. Our landscape would never be the same again. It was a revolution that transformed not only the country, but the world itself.\"  – British h…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "England",
+          "url": "https://en.wikipedia.org/wiki/England",
+          "score": 0.025089605,
+          "snippet": "remained separate.  during the Georgian period from the Terrace of Somerset House looking towards St. Paul's, ]]  Following the formation of the Kingdom of Great Britain, output from the Royal Society and other English initiatives combined with the Scottish Enlightenment to create innovations in science and engineering, while the enormous growth in British overseas trade protected by the Royal Navy paved the way for the establishment of the British Empire. Domestically it drove the Industrial Revolution, a period of profound change in the socioeconomic and cultural conditions of England, resul…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Second Industrial Revolution",
+          "url": "https://en.wikipedia.org/wiki/Second_Industrial_Revolution#Overview",
+          "score": 0.060961794,
+          "snippet": "Second Industrial Revolution  The Second Industrial Revolution was a period of rapid industrial development, primarily in the United Kingdom, Germany, and the United States, but also in France, the Low Countries, Italy and Japan. It followed on from the First Industrial Revolution that began in Britain in the late 18th century that then spread throughout Western Europe. It came to an end with the start of the World War I. While the First Revolution was driven by limited use of steam engines, interchangeable parts and mass production, and was largely water-powered, especially in the United Stat…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Industrial Revolution",
+          "url": "https://en.wikipedia.org/wiki/Industrial_Revolution#Causes_in_Britain",
+          "score": 0.046879534,
+          "snippet": "Industrial Revolution  of Europe. This was further aided by Britain's geographical position — an island separated from the rest of mainland Europe.  Another theory is that Britain was able to succeed in the Industrial Revolution due to the availability of key resources it possessed. It had a dense population for its small geographical size. Enclosure of common land and the related agricultural revolution made a supply of this labour readily available. There was also a local coincidence of natural resources in the North of England, the English Midlands, South Wales and the Scottish Lowlands. Lo…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "New Britain",
+          "url": "https://en.wikipedia.org/wiki/New_Britain#Before_1700",
+          "score": 1.0,
+          "snippet": "New Britain  First noted in Europe by the explorer Sir Harper Matthew. Claimed by the Crown of England."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "New Britain",
+          "url": "https://en.wikipedia.org/wiki/New_Britain#1700–1914",
+          "score": 1.0,
+          "snippet": "New Britain  William Dampier became the first known British man to visit New Britain on 27 February 1700; he dubbed the island with the Latin name Nova Britannia (Eng: New Britain).  Whaling ships from Britain, Australia and America called at the island in the 19th century for food, water and wood. The first on record was the Roscoe in 1822. The last known whaling visitor was the Palmetto in 1881.  In November 1884, Germany proclaimed its protectorate over the New Britain Archipelago; the German colonial administration gave New Britain and New Ireland the names of Neupommern (or Neu-Pommern; \"…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Northern England",
+          "url": "https://en.wikipedia.org/wiki/Northern_England#Industrial_Revolution",
+          "score": 0.021164022,
+          "snippet": "Northern England  At the beginning of the Industrial Revolution, Northern England had plentiful coal and water power while the poor agriculture in the uplands meant that labour in the area was cheap. Mining and milling, which had been practised on a small scale in the area for generations, began to grow and centralise. The boom in industrial textile manufacture is sometimes attributed to the damp climate and soft water making it easier to wash and work fibres, although the success of Northern fabric mills has no single clear source. Readily available coal and the discovery of large iron deposi…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Europe",
+          "url": "https://en.wikipedia.org/wiki/Europe#Economic_history",
+          "score": 0.053333335,
+          "snippet": "Europe  Capitalism has been dominant in the Western world since the end of feudalism. From Britain, it gradually spread throughout Europe. The Industrial Revolution started in Europe, specifically the United Kingdom in the late 18th century, and the 19th century saw Western Europe industrialise. Economies were disrupted by the First World War, but by the beginning of the Second World War, they had recovered and were having to compete with the growing economic strength of the United States. The Second World War, again, damaged much of Europe's industries."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "England",
+          "url": "https://en.wikipedia.org/wiki/England",
+          "score": 0.02415459,
+          "snippet": "the Acts of Union brought into effect a political union with the Kingdom of Scotland, forming the Kingdom of Great Britain.  England is the origin of the English language, the English legal system (which served as the basis for the common law systems of many other countries), association football, and the Anglican branch of Christianity; its parliamentary system of government has been widely adopted by other nations. The Industrial Revolution began in 18th-century England, transforming its society into the world's first industrialised nation. England is home to the two oldest universities in t…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Industrial Revolution"
+        ],
+        "missing": [
+          "James Watt",
+          "Steam engine",
+          "Enclosure"
+        ],
+        "total_expected": 4,
+        "ratio": 0.25
+      },
+      "fact_score": {
+        "matched": [
+          "coal",
+          "iron",
+          "steam engine",
+          "enclosure",
+          "agricultural",
+          "colonial",
+          "textile"
+        ],
+        "missing": [
+          "James Watt"
+        ],
+        "total_expected": 8,
+        "ratio": 0.875
+      },
+      "embed_ms": 0,
+      "search_ms": 1028,
+      "corpora_hit": [
+        "wikipedia-ei7c"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "synth_evolution_natural_selection",
+      "category": "multi_article_synthesis",
+      "question": "How does Darwin's theory of natural selection account for the diversity of species?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "The Descent of Man, and Selection in Relation to Sex",
+          "url": "https://en.wikipedia.org/wiki/The_Descent_of_Man,_and_Selection_in_Relation_to_Sex#Apparently_non-adaptive_features",
+          "score": 0.065069504,
+          "snippet": "The Descent of Man, and Selection in Relation to Sex  In Darwin's view, anything that could be expected to have some adaptive feature could be explained easily with his theory of natural selection. In On the Origin of Species, Darwin wrote that to use natural selection to explain something as complicated as a human eye, \"with all its inimitable contrivances for adjusting the focus to different distances, for admitting different amounts of light, and for the correction of spherical and chromatic aberration\" might at first appear \"absurd in the highest possible degree,\" but nevertheless, if \"num…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Evolution",
+          "url": "https://en.wikipedia.org/wiki/Evolution",
+          "score": 0.044708997,
+          "snippet": "Evolution is the change in the heritable characteristics of biological populations over successive generations. It occurs when evolutionary processes such as natural selection and genetic drift act on genetic variation, resulting in certain characteristics becoming more or less common within a population over successive generations. The process of evolution has given rise to biodiversity at every level of biological organisation. The scientific theory of evolution by natural selection was conceived independently by two British naturalists, Charles Darwin and Alfred Russel Wallace, in the mid-1…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "On the Origin of Species",
+          "url": "https://en.wikipedia.org/wiki/On_the_Origin_of_Species#Title_pages_and_introduction",
+          "score": 0.029953917,
+          "snippet": "On the Origin of Species  's letter suggesting that the origin of species \"would be found to be a natural in contradistinction to a miraculous process\":  WHEN on board HMS Beagle, as naturalist, I was much struck with certain facts in the distribution of the inhabitants of South America, and in the geological relations of the present to the past inhabitants of that continent. These facts seemed to me to throw some light on the origin of species—that mystery of mysteries, as it has been called by one of our greatest philosophers.  Darwin refers specifically to the distribution of the species rh…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "On the Origin of Species",
+          "url": "https://en.wikipedia.org/wiki/On_the_Origin_of_Species#Difficulties_for_the_theory",
+          "score": 0.029017858,
+          "snippet": "On the Origin of Species  and the behaviours to use them, when it would be difficult to imagine how intermediate forms could be functional. Darwin said:  Secondly, is it possible that an animal having, for instance, the structure and habits of a bat, could have been formed by the modification of some animal with wholly different habits? Can we believe that natural selection could produce, on the one hand, organs of trifling importance, such as the tail of a giraffe, which serves as a fly-flapper, and, on the other hand, organs of such wonderful structure, as the eye, of which we hardly as yet …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Charles Darwin",
+          "url": "https://en.wikipedia.org/wiki/Charles_Darwin",
+          "score": 0.054308955,
+          "snippet": "Charles Darwin  In 1871, he examined human evolution and sexual selection in The Descent of Man, and Selection in Relation to Sex, followed by The Expression of the Emotions in Man and Animals (1872). His research on plants was published in a series of books, and in his final book, The Formation of Vegetable Mould, through the Actions of Worms (1881), he examined earthworms and their effect on soil. Darwin published his theory of evolution with compelling evidence in his 1859 book On the Origin of Species. By the 1870s, the scientific community and a majority of the educated public had accepte…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Death",
+          "url": "https://en.wikipedia.org/wiki/Death#Natural_selection",
+          "score": 0.028103042,
+          "snippet": "Death  The contemporary evolutionary theory sees death as an important part of the process of natural selection. It is considered that organisms less adapted to their environment are more likely to die, having produced fewer offspring, thereby reducing their contribution to the gene pool. Their genes are thus eventually bred out of a population, leading at worst to extinction and, more positively, making the process possible, referred to as speciation. Frequency of reproduction plays an equally important role in determining species survival: an organism that dies young but leaves numerous offs…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Thomas Hunt Morgan",
+          "url": "https://en.wikipedia.org/wiki/Thomas_Hunt_Morgan#Morgan_and_evolution",
+          "score": 0.042101018,
+          "snippet": "Thomas Hunt Morgan  Morgan was interested in evolution throughout his life. He wrote his thesis on the phylogeny of sea spiders (pycnogonids) and wrote four books about evolution. In Evolution and Adaptation (1903), he argued the anti-Darwinist position that selection could never produce wholly new species by acting on slight individual differences. He rejected Darwin's theory of sexual selection and the Neo-Lamarckian theory of the inheritance of acquired characters. Morgan was not the only scientist attacking natural selection. The period 1875–1925 has been called ' The eclipse of Darwinism …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Alfred Russel Wallace",
+          "url": "https://en.wikipedia.org/wiki/Alfred_Russel_Wallace#Assessment_of_Wallace's_role_in_history_of_evolutionary_theory",
+          "score": 0.045963302,
+          "snippet": "Alfred Russel Wallace  In many accounts of the development of evolutionary theory, Wallace is mentioned only in passing as simply being the stimulus to the publication of Darwin's own theory. In reality, Wallace developed his own distinct evolutionary views which diverged from Darwin's, and was considered by many (especially Darwin) to be a leading thinker on evolution in his day, whose ideas could not be ignored. One historian of science has pointed out that, through both private correspondence and published works, Darwin and Wallace exchanged knowledge and stimulated each other's ideas and t…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Darwin's frog",
+          "url": "https://en.wikipedia.org/wiki/Darwin%27s_frog#Abstract",
+          "score": 1.0,
+          "snippet": "Darwin's frog  Darwin’s frog (Rhinoderma darwinii), also called the Southern Darwin's frog, is a species of Chilean/Argentinian frog of the family Rhinodermatidae. It was discovered by Charles Darwin during his voyage on HMS Beagle. on a trip to Chile. In 1841, French zoologist André Marie Constant Duméril and his assistant Gabriel Bibron described and named Darwin's frog. The diet of R. darwinii consists mostly of herbivore invertebrates. R. darwinii is currently classified as an endangered species by the International Union for Conservation of Nature.  Darwin’s frog is most known for its uni…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Darwin's frog",
+          "url": "https://en.wikipedia.org/wiki/Darwin%27s_frog",
+          "score": 1.0,
+          "snippet": "Darwin's frog  Darwin’s frog, also called the Southern Darwin's frog, is a species of Chilean/Argentinian frog of the family Rhinodermatidae. It was discovered by Charles Darwin during his voyage on HMS Beagle. on a trip to Chile. In 1841, French zoologist André Marie Constant Duméril and his assistant Gabriel Bibron described and named Darwin's frog. The diet of R. darwinii consists mostly of herbivore invertebrates. R. darwinii is currently classified as an endangered species by the International Union for Conservation of Nature. Darwin’s frog is most known for its unique method of brooding.…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Charles Darwin",
+          "On the Origin of Species",
+          "Evolution"
+        ],
+        "missing": [
+          "Natural selection"
+        ],
+        "total_expected": 4,
+        "ratio": 0.75
+      },
+      "fact_score": {
+        "matched": [
+          "Charles Darwin",
+          "natural selection",
+          "variation",
+          "heritable",
+          "On the Origin of Species",
+          "speciation",
+          "adaptation"
+        ],
+        "missing": [],
+        "total_expected": 7,
+        "ratio": 1.0
+      },
+      "embed_ms": 0,
+      "search_ms": 735,
+      "corpora_hit": [
+        "wikipedia-ei7c"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "causal_roman_empire_fall",
+      "category": "causal_reasoning",
+      "question": "What caused the fall of the Western Roman Empire?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire",
+          "score": 0.10970597,
+          "snippet": "Fall of the Western Roman Empire  The fall of the Western Roman Empire, also called the fall of the Roman Empire or the fall of Rome, was the loss of central political control in the Western Roman Empire, a process in which the Empire failed to enforce its rule, and its vast territory was divided between several successor polities. The Roman Empire lost the strengths that had allowed it to exercise effective control over its Western provinces; modern historians posit factors including the effectiveness and numbers of the army, the health and numbers of the Roman population, the strength of the…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Empire",
+          "url": "https://en.wikipedia.org/wiki/Empire#Roman_Empire",
+          "score": 0.07870968,
+          "snippet": "Empire  The fall of the western half of the Roman Empire is seen as one of the most pivotal points in all of human history. This event traditionally marks the transition from classical civilization to the birth of Europe. The Roman Empire started to decline at the end of the reign of the last of the Five Good Emperors, Marcus Aurelius in 161–180 A.D. There is still a debate over the cause of the fall of one of the largest empires in history. Piganiol argues that the Roman Empire under its authority can be described as \"a period of terror\", holding its imperial system accountable for its failur…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Abstract",
+          "score": 0.10017204,
+          "snippet": "Fall of the Western Roman Empire  Western Roman Empire in Italy, Romulus Augustulus, and the Senate sent the imperial insignia to the Eastern Roman Emperor Zeno.  While its legitimacy lasted for centuries longer and its cultural influence remains today, the Western Empire never had the strength to rise again. The Eastern Roman, or Byzantine, Empire, survived and remained for centuries an effective power of the Eastern Mediterranean, although it lessened in strength. Additionally, while the loss of political unity and military control is universally acknowledged, the fall of Rome is not the onl…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Underlying_causes",
+          "score": 0.08975773,
+          "snippet": "Fall of the Western Roman Empire  When Gibbon published his landmark work, it quickly became the standard. Peter Brown has written that \"Gibbon's work formed the peak of a century of scholarship which had been conducted in the belief that the study of the declining Roman Empire was also the study of the origins of modern Europe\". Gibbon was the first to attempt an explanation of causes of a Fall of empire. Like other Enlightenment thinkers and British citizens of the age steeped in institutional anti-Catholicism, Gibbon held in contempt the Middle Ages as a priest-ridden, superstitious Dark Ag…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Abstract",
+          "score": 0.08213225,
+          "snippet": "Fall of the Western Roman Empire  The reasons for the collapse are major subjects of the historiography of the ancient world and they inform much modern discourse on state failure."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Fall_of_the_Empire",
+          "score": 0.090322584,
+          "snippet": "Western Roman Empire  As 480 marks the end of the juridical division of the empire into two imperial courts, some historians refer to the death of Nepos and abolition of the Western Empire by Zeno as the end of the Western Roman Empire."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Western_Roman_Empire#Fall_of_the_Empire",
+          "score": 0.08825438,
+          "snippet": "Western Roman Empire  Some historians thus refer to the reorganizations of Italy and abolition of the old and separate Western Roman administrative units, such as the Praetorian prefecture of Italy, during the sixth century as the \"true\" fall of the Western Roman Empire."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Another_paradigm_of_the_period",
+          "score": 0.106249996,
+          "snippet": "Fall of the Western Roman Empire  From at least the time of Henri Pirenne (1862–1935), scholars have described a continuity of Roman culture and political legitimacy long after 476. Pirenne postponed the demise of classical civilization to the 8th century. He challenged the notion that Germanic barbarians had caused the Western Roman Empire to end, and he refused to equate the end of the Western Roman Empire with the end of the office of emperor in Italy. He pointed out the essential continuity of the economy of the Roman Mediterranean even after the barbarian invasions, and suggested that onl…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Western world",
+          "url": "https://en.wikipedia.org/wiki/Western_world#Ancient_Roman_world_(6th_century_BC_–_AD_395–476)",
+          "score": 0.03666667,
+          "snippet": "Western world  eventual decline and ultimately fall of the Roman Empire.  The Roman Empire is where the idea of \"the West\" began to emerge."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Fall of the Western Roman Empire",
+          "url": "https://en.wikipedia.org/wiki/Fall_of_the_Western_Roman_Empire#Underlying_causes",
+          "score": 0.07252954,
+          "snippet": "Fall of the Western Roman Empire  the role of Christianity, but he gave great weight to other causes of internal decline and to attacks from outside the Empire.  The story of its ruin is simple and obvious; and, instead of inquiring why the Roman empire was destroyed, we should rather be surprised that it had subsisted so long. The victorious legions, who, in distant wars, acquired the vices of strangers and mercenaries, first oppressed the freedom of the republic, and afterwards violated the majesty of the purple. The emperors, anxious for their personal safety and the public peace, were redu…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Fall of the Western Roman Empire"
+        ],
+        "missing": [
+          "Roman Empire",
+          "Migration Period"
+        ],
+        "total_expected": 3,
+        "ratio": 0.33333334
+      },
+      "fact_score": {
+        "matched": [
+          "barbarian",
+          "invasions",
+          "476",
+          "Christianity",
+          "military",
+          "political"
+        ],
+        "missing": [
+          "economic",
+          "Migration Period"
+        ],
+        "total_expected": 8,
+        "ratio": 0.75
+      },
+      "embed_ms": 0,
+      "search_ms": 660,
+      "corpora_hit": [
+        "wikipedia-ei7c"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "causal_french_revolution",
+      "category": "causal_reasoning",
+      "question": "What were the main causes of the French Revolution?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "French Revolution",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution#Historiography",
+          "score": 0.045833334,
+          "snippet": "French Revolution  The first writings on the French revolution were near contemporaneous with events and mainly divided along ideological lines. These included Edmund Burke 's conservative critique Reflections on the Revolution in France (1790) and Thomas Paine 's response Rights of Man (1791). From 1815, narrative histories dominated, often based on first-hand experience of the revolutionary years. By the mid-nineteenth century, more scholarly histories appeared, written by specialists and based on original documents and a more critical assessment of contemporary accounts."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "French Revolution",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution#Abstract",
+          "score": 0.048387095,
+          "snippet": "French Revolution  The French Revolution was a period of political and societal change in France that began with the Estates General of 1789, and ended with the coup of 18 Brumaire in November 1799 and the formation of the French Consulate. Many of its ideas are considered fundamental principles of liberal democracy, while its values and institutions remain central to modern French political discourse.  Its causes are generally agreed to be a combination of social, political, and economic factors, which the Ancien Régime proved unable to manage. A financial crisis and widespread social distres…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "French Revolution of 1848",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution_of_1848#Economic_and_international_influences",
+          "score": 0.08420991,
+          "snippet": "French Revolution of 1848  Bastiat, who was one of the most famous political writers of the 1840s, had written countless works concerning the economic situation before 1848, and provided a different explanation of why the French people were forced to rise in the revolt. He believed that the main reasons were primarily the political corruption, along with its very complex system of monopolies, permits, and bureaucracy, which made those who were able to obtain political favors unjustly privileged and able to dictate the market conditions and caused a myriad of businesses to collapse, as well as …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "France",
+          "url": "https://en.wikipedia.org/wiki/France",
+          "score": 0.05275081,
+          "snippet": "the primary source of legitimacy, undermined the power of and support for the monarchy and was a factor in the Revolution.  on 14 July 1789 was the most emblematic event of the French Revolution.]] The French Revolution was a period of political and societal change that began with the Estates General of 1789, and ended with the coup of 18 Brumaire in 1799 and the formation of the French Consulate. Many of its ideas are fundamental principles of liberal democracy, while its values and institutions remain central to modern political discourse.  Its causes were a combination of social, political …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "French Revolution of 1848",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution_of_1848#Economic_and_international_influences",
+          "score": 0.091095895,
+          "snippet": "French Revolution of 1848  its most important economic partner, one that could have supplied France with what it lacked and bought surplus French goods.  Such governmental policies and obliviousness to the real reasons of economic troubles were, according to Bastiat, the main causes of the French Revolution of the 1848 and the rise of socialists and anarchists in the years preceding the revolution itself."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "French Revolution",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution#Causes",
+          "score": 0.03846154,
+          "snippet": "French Revolution  The Revolution resulted from multiple long-term and short-term factors, culminating in a social, economic, financial and political crisis in the late 1780s. Combined with resistance to reform by the ruling elite, and indecisive policy by Louis XVI and his ministers, the state was unable to manage the crisis."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "French Revolution of 1848",
+          "url": "https://en.wikipedia.org/wiki/French_Revolution_of_1848#Background",
+          "score": 0.06006865,
+          "snippet": "French Revolution of 1848  Starting in July 1847 the Reformists of all shades began to hold \"banquets\" at which toasts were drunk to \"République française\" (the French Republic), \" Liberté, égalité, fraternité \", etc. Louis Philippe turned a deaf ear to the reform movement, and discontent among wide sections of the French people continued to grow. Social and political discontent sparked revolutions in France in 1830 and 1848, which in turn inspired revolts in other parts of Europe. Workers lost their jobs, bread prices rose, and people accused the government of corruption. The French revolted …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "French and Indian War",
+          "url": "https://en.wikipedia.org/wiki/French_and_Indian_War#Consequences",
+          "score": 0.029411765,
+          "snippet": "French and Indian War  Act served as the constitutional document for the Province of Quebec until it was superseded by the Constitutional Act 1791.  The Seven Years' War nearly doubled Great Britain's national debt. The Crown sought sources of revenue to pay it off and attempted to impose new taxes on its colonies. These attempts were met with increasingly stiff resistance, until troops were called in to enforce the Crown's authority, and they ultimately led to the start of the American Revolutionary War. France attached comparatively little value to its American possessions, apart from the hi…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "France",
+          "url": "https://en.wikipedia.org/wiki/France",
+          "score": 0.024590163,
+          "snippet": "The French Revolution of 1789 overthrew the  and produced the Declaration of the Rights of Man, which expresses the nation's ideals to this day. France reached its political and military zenith in the early 19th century under Napoleon Bonaparte, subjugating much of continental Europe and establishing the First French Empire. Its collapse initiated a period of relative decline during which France endured the Bourbon Restoration until the founding of the French Second Republic, which was succeeded by the Second French Empire upon Napoleon III's takeover. His empire collapsed during the Franco-Pr…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "France",
+          "url": "https://en.wikipedia.org/wiki/France",
+          "score": 0.0234375,
+          "snippet": "rule, including the decadence of his court, discredited the monarchy, which in part paved the way for the French Revolution.  Louis XVI supported America with money, fleets and armies, helping them win independence from Great Britain. France gained revenge but verged on bankruptcyâa factor that contributed to the Revolution. Some of the Enlightenment occurred in French intellectual circles, and scientific breakthroughs, such as the naming of oxygen and the first hot air balloon carrying passengers, were achieved by French scientists. French explorers took part in the voyages of scientific ex…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "French Revolution"
+        ],
+        "missing": [
+          "Storming of the Bastille"
+        ],
+        "total_expected": 2,
+        "ratio": 0.5
+      },
+      "fact_score": {
+        "matched": [
+          "financial",
+          "American Revolution",
+          "Enlightenment",
+          "1789",
+          "feudal",
+          "third estate",
+          "Louis XVI",
+          "Bastille"
+        ],
+        "missing": [],
+        "total_expected": 8,
+        "ratio": 1.0
+      },
+      "embed_ms": 0,
+      "search_ms": 745,
+      "corpora_hit": [
+        "wikipedia-ei7c"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "causal_great_depression_to_fascism",
+      "category": "causal_reasoning",
+      "question": "How did the Great Depression contribute to the rise of fascism in Europe?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Great Depression",
+          "url": "https://en.wikipedia.org/wiki/Great_Depression#Naming",
+          "score": 0.0647343,
+          "snippet": "Great Depression  recent economic crisis, the Depression of 1920–21, had been referred to as a \"depression\" by then-president Calvin Coolidge.  Financial crises were traditionally referred to as \"panics\", most recently the major Panic of 1907, and the minor Panic of 1910–11, though the 1929 crisis was called \"The Crash\", and the term \"panic\" has since fallen out of use. At the time of the Great Depression, the term \"The Great Depression\" was already used to refer to the period 1873–96 (in the United Kingdom), or more narrowly 1873–79 (in the United States), which has retroactively been renamed…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Liberalism",
+          "url": "https://en.wikipedia.org/wiki/Liberalism#History",
+          "score": 0.055568308,
+          "snippet": "Liberalism  In the United States, modern liberalism traces its history to the popular presidency of Franklin D. Roosevelt, who initiated the New Deal in response to the Great Depression and won an unprecedented four elections. The New Deal coalition established by Roosevelt left a strong legacy and influenced many future American presidents, including John F. Kennedy. Meanwhile, the definitive liberal response to the Great Depression was given by the British economist John Maynard Keynes, who had begun a theoretical work examining the relationship between unemployment, money and prices back in…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Great Depression",
+          "url": "https://en.wikipedia.org/wiki/Great_Depression#Romania",
+          "score": 0.06410257,
+          "snippet": "Great Depression  Romania was also affected by the Great Depression."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Lost Generation",
+          "url": "https://en.wikipedia.org/wiki/Lost_Generation#Politics_and_economics",
+          "score": 0.04810005,
+          "snippet": "Lost Generation  This more optimistic period was short-lived, however, as 1929 saw the beginning of the Great Depression, which would continue throughout the 1930s and become the longest and most severe financial downturn ever experienced in Western industrialized history. Though it had begun in the United States, the crises led to sharp increases in worldwide unemployment, reductions in economic output and deflation. The depression was also a major catalyst for the rise of Nazism in Germany and the beginnings of its quest to establish dominance over the European continent, which would eventua…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Fascism",
+          "url": "https://en.wikipedia.org/wiki/Fascism#Background_and_19th-century_roots",
+          "score": 0.024590163,
+          "snippet": "Fascism  Early influences that shaped the ideology of fascism have been dated back to ancient Greece. The political culture of ancient Greece and specifically the ancient Greek city state of Sparta under Lycurgus, with its emphasis on militarism and racial purity, were admired by the Nazis. Nazi Führer Adolf Hitler emphasized that Germany should adhere to Hellenic values and culture – particularly that of ancient Sparta.  Georges Valois, founder of the first non-Italian fascist party Faisceau, claimed the roots of fascism stemmed from the late 18th century Jacobin movement, seeing in its total…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Fascism",
+          "url": "https://en.wikipedia.org/wiki/Fascism#Ideological_dishonesty:_Italian_fascism",
+          "score": 0.024193548,
+          "snippet": "Fascism  after 1936, when Germany was the only significant power that did not denounce Italy's invasion and occupation of Ethiopia."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Wall Street Crash of 1929",
+          "url": "https://en.wikipedia.org/wiki/Wall_Street_Crash_of_1929#Europe",
+          "score": 0.0234375,
+          "snippet": "Wall Street Crash of 1929  The stock market crash of October 1929 led directly to the Great Depression in Europe. When stocks plummeted on the New York Stock Exchange, the world noticed immediately. Although financial leaders in the United Kingdom, as in the United States, vastly underestimated the extent of the crisis that ensued, it soon became clear that the world's economies were more interconnected than ever. The effects of the disruption to the global system of financing, trade, and production and the subsequent meltdown of the American economy were soon felt throughout Europe."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Europe",
+          "url": "https://en.wikipedia.org/wiki/Europe#Abstract",
+          "score": 1.0,
+          "snippet": "Europe  centuries, European powers colonised at various times the Americas, almost all of Africa and Oceania, and the majority of Asia.  The Age of Enlightenment, the French Revolution, and the Napoleonic Wars shaped the continent culturally, politically, and economically from the end of the 17th century until the first half of the 19th century. The Industrial Revolution, which began in Great Britain at the end of the 18th century, gave rise to radical economic, cultural, and social change in Western Europe and eventually the wider world. Both world wars began and were fought to a great extent…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Europe",
+          "url": "https://en.wikipedia.org/wiki/Europe",
+          "score": 1.0,
+          "snippet": "Europe  Between the 16th and 20th centuries, European powers colonised at various times the Americas, almost all of Africa and Oceania, and the majority of Asia. The Age of Enlightenment, the French Revolution, and the Napoleonic Wars shaped the continent culturally, politically, and economically from the end of the 17th century until the first half of the 19th century. The Industrial Revolution, which began in Great Britain at the end of the 18th century, gave rise to radical economic, cultural, and social change in Western Europe and eventually the wider world. Both world wars began and were…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Anti-fascism",
+          "url": "https://en.wikipedia.org/wiki/Anti-fascism",
+          "score": 0.023809524,
+          "snippet": "Anti-fascism  Fascism became the state ideology of Italy in 1922 and of Germany in 1933, spurring a large increase in anti-fascist action, including German resistance to Nazism and the Italian resistance movement. Anti-fascism was a major aspect of the Spanish Civil War, which foreshadowed World War II. Before World War II, the West had not taken seriously the threat of fascism, and anti-fascism was sometimes associated with communism. However, the outbreak of World War II greatly changed Western perceptions, and fascism was seen as an existential threat by not only the communist Soviet Union …"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Great Depression",
+          "Fascism"
+        ],
+        "missing": [
+          "Weimar Republic",
+          "Adolf Hitler"
+        ],
+        "total_expected": 4,
+        "ratio": 0.5
+      },
+      "fact_score": {
+        "matched": [
+          "mass unemployment",
+          "Adolf Hitler",
+          "1929"
+        ],
+        "missing": [
+          "Weimar Republic",
+          "Benito Mussolini",
+          "loss of faith in liberal democracy"
+        ],
+        "total_expected": 6,
+        "ratio": 0.5
+      },
+      "embed_ms": 0,
+      "search_ms": 1017,
+      "corpora_hit": [
+        "wikipedia-ei7c"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "compare_buddhism_christianity",
+      "category": "comparative",
+      "question": "How do Buddhism and Christianity differ in their conceptions of salvation and the afterlife?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Christianity",
+          "url": "https://en.wikipedia.org/wiki/Christianity",
+          "score": 0.02777778,
+          "snippet": "Christianity is an Abrahamic monotheistic religion, professing that Jesus Christ was raised from the dead and is the Son of God, whose coming as the Messiah was prophesied in the Hebrew Bible and chronicled in the New Testament. It is the world's largest and most widespread religion with roughly 2.4 billion followers, comprising around 31.2% of the world population. Its adherents, known as Christians, are estimated to make up a majority of the population in 157 countries and territories. Christianity remains culturally diverse in its Western and Eastern branches, and doctrinally diverse concer…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Buddhism",
+          "url": "https://en.wikipedia.org/wiki/Buddhism#Classification",
+          "score": 0.02777778,
+          "snippet": "Buddhism  There is consensus among religious studies scholars that Buddhism is a religion. However, Buddhism has posed problems to Western scholars of religion who define religion based solely on a \"theistic conception\". Further, some Western Buddhists and commentators like Alan Watts maintain that Buddhism does not constitute a religion but rather a philosophy, a psychotherapy, or a way of life. This conception is rooted in 19th century orientalist writers, such as theosophist Henry Steel Olcott, which reinterpreted Buddhism in a Protestant lens and viewed Buddhism in Asia as representing a d…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Comparative religion",
+          "url": "https://en.wikipedia.org/wiki/Comparative_religion#History",
+          "score": 0.05774636,
+          "snippet": "Comparative religion  that they may not even see themselves as religions in precisely the same way in which Christianity sees itself as a religion.  Examples that demonstrate this point are Buddhism and Chinese Folk Religions. These belief systems have not historically been seen as mutually exclusive and have blended over time into different beliefs such as Pure Land Buddhism. This shows a marked difference from Western conceptions of religions which see adherence to one religion as precluding membership of another faith.  Hinduism and Buddhism provide another insight in the form of soteriolog…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Buddhism in the West",
+          "url": "https://en.wikipedia.org/wiki/Buddhism_in_the_West#Temples_and_monasteries",
+          "score": 0.024193548,
+          "snippet": "Buddhism in the West  Thousand Buddhas in 1974 and established its headquarters there. The City currently comprises approximately 700 acres of land.\"  In 2006, a western ecumenical Buddhist temple called Dharma Bum Temple was founded in San Diego, California. The temple focuses on being an introductory center for westerners to learn more about Buddhism. It regularly hosts guest speakers from various traditions of Buddhism and is known for directing members to other Buddhist temples in the area after they start showing deeper interest in a particular form of the religion."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Buddhism",
+          "url": "https://en.wikipedia.org/wiki/Buddhism",
+          "score": 0.0234375,
+          "snippet": "Buddhism  Historically, until the early 2nd millennium, Buddhism was widely practiced in the Indian subcontinent before declining there; it also had a foothold to some extent elsewhere in Asia, namely Afghanistan, Turkmenistan, Uzbekistan, and Tajikistan."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Christian culture",
+          "url": "https://en.wikipedia.org/wiki/Christian_culture#Literature_and_poetry",
+          "score": 0.018817203,
+          "snippet": "Christian culture  any area that Christianity has taken hold. Christian poems often directly reference the Bible, while others provide allegory."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Afterlife",
+          "url": "https://en.wikipedia.org/wiki/Afterlife#Different_metaphysical_models",
+          "score": 0.053599376,
+          "snippet": "Afterlife  Theist immortalists generally believe some afterlife awaits people when they die. Members of some generally non-theistic religions believe in an afterlife without reference to a deity.  Many religions, such as Christianity, Islam and various pagan belief systems, believe in the soul's existence in another world, while others, like many forms of Hinduism and Buddhism, believe in reincarnation. In both cases, these religions hold that one's status in the afterlife is determined by their conduct during life."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Asia",
+          "url": "https://en.wikipedia.org/wiki/Asia",
+          "score": 0.018229166,
+          "snippet": "Christianity is a widespread religion in Asia, with more than 286&nbsp;million adherents in 2010 according to Pew Research Center, and nearly 364&nbsp;million according to Britannica Book of the Year 2014. Christians constitute around 12.6% of the total population of Asia. In the Philippines and Timor-Leste, Catholicism is the predominant religion; it was introduced by the Spaniards and the Portuguese, respectively. In Armenia and Georgia, Eastern Orthodoxy is the predominant religion. In the Middle East, such as in the Levant, Anatolia and Fars, Syriac Christianity (Church of the East) and Or…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Tenrikyo",
+          "url": "https://en.wikipedia.org/wiki/Tenrikyo#Comparison_to_karmic_belief",
+          "score": 0.049590167,
+          "snippet": "Tenrikyo  Also Tenrikyo's concept of salvation, which is to live the Joyous Life in this existence and therefore does not promise a liberated afterlife outside of this existence, differs from Buddhist concepts of saṃsāra and nirvana."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Singapore",
+          "url": "https://en.wikipedia.org/wiki/Singapore",
+          "score": 0.019125681,
+          "snippet": "vada Buddhism]] has seen growing popularity among the populace (not only the Chinese) during the past decade. Soka Gakkai International, a Japanese Buddhist organisation, is practised by many people in Singapore, and mostly by those of Chinese descent. Tibetan Buddhism has also made slow inroads into the country in recent years."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Buddhism",
+          "Christianity"
+        ],
+        "missing": [
+          "Salvation",
+          "Nirvana"
+        ],
+        "total_expected": 4,
+        "ratio": 0.5
+      },
+      "fact_score": {
+        "matched": [
+          "nirvana",
+          "salvation",
+          "Jesus",
+          "Buddha"
+        ],
+        "missing": [
+          "rebirth",
+          "heaven",
+          "enlightenment",
+          "grace"
+        ],
+        "total_expected": 8,
+        "ratio": 0.5
+      },
+      "embed_ms": 0,
+      "search_ms": 808,
+      "corpora_hit": [
+        "wikipedia-ei7c"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "compare_einstein_newton_gravity",
+      "category": "comparative",
+      "question": "How do Einstein's and Newton's conceptions of gravity differ?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Gravity",
+          "url": "https://en.wikipedia.org/wiki/Gravity#General_relativity",
+          "score": 0.033333335,
+          "snippet": "Gravity  In 1915, Albert Einstein developed a theory of general relativity which was able to accurately model Mercury's orbit.  In general relativity, the effects of gravitation are ascribed to spacetime curvature instead of a force. Einstein began to toy with this idea in the form of the equivalence principle, a discovery which he later described as \"the happiest thought of my life.\" In this theory, free fall is considered to be equivalent to inertial motion, meaning that free-falling inertial objects are accelerated relative to non-inertial observers on the ground. In contrast to Newtonian p…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Gravitational_waves",
+          "score": 0.047868766,
+          "snippet": "Albert Einstein  In 1916, Einstein predicted gravitational waves, ripples in the curvature of spacetime which propagate as waves, traveling outward from the source, transporting energy as gravitational radiation. The existence of gravitational waves is possible under general relativity due to its Lorentz invariance which brings the concept of a finite speed of propagation of the physical interactions of gravity with it. By contrast, gravitational waves cannot exist in the Newtonian theory of gravitation, which postulates that the physical interactions of gravity propagate at infinite speed."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "General relativity",
+          "url": "https://en.wikipedia.org/wiki/General_relativity",
+          "score": 0.057157256,
+          "snippet": "General relativity, also known as the general theory of relativity, and as Einstein's theory of gravity, is the geometric theory of gravitation published by Albert Einstein in 1915 and is the current description of gravitation in modern physics. General relativity generalizes special relativity and refines Newton's law of universal gravitation, providing a unified description of gravity as a geometric property of space and time or four-dimensional spacetime. In particular, the curvature of spacetime is directly related to the energy and momentum of whatever matter and radiation are present. Th…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Gravity",
+          "url": "https://en.wikipedia.org/wiki/Gravity#General_relativity",
+          "score": 0.050070412,
+          "snippet": "Gravity  of the Earth exerts an upward force on them. This explains why moving along the geodesics in spacetime is considered inertial.  Einstein's description of gravity was quickly accepted by the majority of physicists, as it was able to explain a wide variety of previously baffling experimental results. In the coming years, a wide range of experiments provided additional support for the idea of general relativity. Today, Einstein's theory of relativity is used for all gravitational calculations where absolute precision is desired, although Newton's inverse-square law is accurate enough for…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Childhood,_youth_and_education",
+          "score": 0.02666667,
+          "snippet": "Albert Einstein  While in Italy as a teenager, he wrote an essay entitled \"On the Investigation of the State of the Ether in a Magnetic Field\"."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Newton (unit)",
+          "url": "https://en.wikipedia.org/wiki/Newton_(unit)#Abstract",
+          "score": 0.02666667,
+          "snippet": "Newton (unit)  The newton (symbol: N) is the unit of force in the International System of Units (SI). It is defined as 1 kg ⋅ m/s 2 {\\displaystyle 1\\ {\\text{kg}}\\cdot {\\text{m/s}}^{2}}, the force which gives a mass of 1 kilogram an acceleration of 1 metre per second squared.  It is named after Isaac Newton in recognition of his work on classical mechanics, specifically his second law of motion."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Heliocentrism",
+          "url": "https://en.wikipedia.org/wiki/Heliocentrism#Age_of_Reason",
+          "score": 0.022580644,
+          "snippet": "Heliocentrism  into English and other languages in the coming years. It has been called \"one of the first great popularizations of science.\"  In 1687, Isaac Newton published Philosophiæ Naturalis Principia Mathematica, which provided an explanation for Kepler's laws in terms of universal gravitation and what came to be known as Newton's laws of motion. This placed heliocentrism on a firm theoretical foundation, although Newton's heliocentrism was of a somewhat modern kind. Already in the mid-1680s he recognized the \"deviation of the Sun\" from the center of gravity of the Solar System. For Newt…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Newton's laws of motion",
+          "url": "https://en.wikipedia.org/wiki/Newton%27s_laws_of_motion#Force_and_the_second_law",
+          "score": 0.02117647,
+          "snippet": "Newton's laws of motion  One important characteristic of Newtonian physics is that forces can act at a distance without requiring physical contact. For example, the Sun and the Earth pull on each other gravitationally, despite being separated by millions of kilometres. This contrasts with the idea, championed by Descartes among others, that the Sun's gravity held planets in orbit by swirling them in a vortex of transparent matter, aether. Newton considered aetherial explanations of force but ultimately rejected them. The study of magnetism by William Gilbert and others created a precedent for …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Force",
+          "url": "https://en.wikipedia.org/wiki/Force#Gravitational",
+          "score": 0.022222223,
+          "snippet": "Force  This was the first time that Newton's theory of gravity had been shown to be inexact."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "History of general relativity",
+          "url": "https://en.wikipedia.org/wiki/History_of_general_relativity",
+          "score": 0.027692307,
+          "snippet": "History of general relativity  General relativity is a theory of gravitation that was developed by Albert Einstein between 1907 and 1915, with contributions by many others after 1915. According to general relativity, the observed gravitational attraction between masses results from the warping of space and time by those masses. Before the advent of general relativity, Newton's law of universal gravitation had been accepted for more than two hundred years as a valid description of the gravitational force between masses, even though Newton himself did not regard the theory as the final word on t…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Albert Einstein",
+          "General relativity"
+        ],
+        "missing": [
+          "Isaac Newton",
+          "Newton's law of universal gravitation"
+        ],
+        "total_expected": 4,
+        "ratio": 0.5
+      },
+      "fact_score": {
+        "matched": [
+          "action at a distance",
+          "spacetime curvature",
+          "inverse-square law",
+          "geodesic",
+          "equivalence principle"
+        ],
+        "missing": [
+          "Mercury perihelion"
+        ],
+        "total_expected": 6,
+        "ratio": 0.8333333
+      },
+      "embed_ms": 0,
+      "search_ms": 810,
+      "corpora_hit": [
+        "wikipedia-ei7c"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "compare_curie_meitner",
+      "category": "comparative",
+      "question": "Compare the scientific contributions of Marie Curie and Lise Meitner.",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Marie Curie",
+          "url": "https://en.wikipedia.org/wiki/Marie_Curie",
+          "score": 0.030952383,
+          "snippet": "Marie Curie  In 1895, she married the French physicist Pierre Curie, and she shared the 1903 Nobel Prize in Physics with him and with the physicist Henri Becquerel for their pioneering work developing the theory of \"radioactivity\"—a term she coined. In 1906, Pierre Curie died in a Paris street accident. Marie won the 1911 Nobel Prize in Chemistry for her discovery of the elements polonium and radium, using techniques she invented for isolating radioactive isotopes. Under her direction, the world's first studies were conducted into the treatment of neoplasms by the use of radioactive isotopes. …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Lise Meitner",
+          "url": "https://en.wikipedia.org/wiki/Lise_Meitner#Awards_and_honours",
+          "score": 0.030952383,
+          "snippet": "Lise Meitner  Glenn Seaborg, the discoverer of plutonium, presented it to her in the home of Max Perutz in Cambridge on 23 October 1966."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Lise Meitner",
+          "url": "https://en.wikipedia.org/wiki/Lise_Meitner#University_of_Vienna",
+          "score": 0.030444965,
+          "snippet": "Lise Meitner  was published as Wärmeleitung in inhomogenen Körpern (\"Thermal Conduction in Inhomogeneous Bodies\") on 22 February 1906.  Paul Ehrenfest asked her to investigate an article on optics by Lord Rayleigh detailing an experiment that produced results Rayleigh had been unable to explain. She was able to explain the results, and also made predictions based on her explanation, which she then verified experimentally, demonstrating her ability to carry out independent and unsupervised research. She published the results in her report on \"Some Conclusions Derived from the Fresnel Reflection…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Lise Meitner",
+          "url": "https://en.wikipedia.org/wiki/Lise_Meitner#Abstract",
+          "score": 0.06445047,
+          "snippet": "Lise Meitner  \"fission\". The discovery of nuclear fission led to the development of atomic bombs and nuclear reactors during World War II.  Meitner did not share the 1944 Nobel Prize in Chemistry for nuclear fission, which was awarded to her long-time collaborator Otto Hahn. Several scientists and journalists have called her exclusion \"unjust\". According to the Nobel Prize archive, she was nominated 19 times for the Nobel Prize in Chemistry between 1924 and 1948, and 30 times for the Nobel Prize in Physics between 1937 and 1967. Despite not having been awarded the Nobel Prize, Meitner was invi…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Marie Curie",
+          "url": "https://en.wikipedia.org/wiki/Marie_Curie#Commemoration_and_cultural_depictions",
+          "score": 0.06504495,
+          "snippet": "Marie Curie  As one of the most famous scientists in history, Marie Curie has become an icon in the scientific world and has received tributes from across the globe, even in the realm of pop culture. She also received many honorary degrees from universities across the world.  Marie Curie was the first woman to win a Nobel Prize, the first person to win two Nobel Prizes, the only woman to win in two fields, and the only person to win in multiple sciences. Awards and honours that she received include:  Entities that have been named after Marie Curie include:  Numerous biographies are devoted to …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Lise Meitner",
+          "url": "https://en.wikipedia.org/wiki/Lise_Meitner#Awards_and_honours",
+          "score": 0.056484528,
+          "snippet": "Lise Meitner  Seaborg, the discoverer of plutonium, presented it to her in the home of Max Perutz in Cambridge on 23 October 1966."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Lise Meitner",
+          "url": "https://en.wikipedia.org/wiki/Lise_Meitner#Nobel_Prize",
+          "score": 0.06153846,
+          "snippet": "Lise Meitner  the joint work that had preceded the discovery and of Meitner's written and verbal contributions after her flight from Berlin."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Lise Meitner",
+          "url": "https://en.wikipedia.org/wiki/Lise_Meitner#Transmutation",
+          "score": 0.050824933,
+          "snippet": "Lise Meitner  particles. Enrico Fermi and his colleagues in Rome picked up on this idea, and began irradiating elements with neutrons."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Lise Meitner",
+          "url": "https://en.wikipedia.org/wiki/Lise_Meitner#Awards_and_honours",
+          "score": 0.06283906,
+          "snippet": "Lise Meitner  After her death in 1968, Meitner received many naming honours. In 1997, element 109 was named meitnerium. She is the first and so far the only non-mythological woman thus exclusively honoured (since curium was named after both Marie and Pierre Curie). Additional naming honours are the Hahn–Meitner-Institut in Berlin, craters on the Moon and Venus, and the main-belt asteroid 6999 Meitner. In 2000, the European Physical Society established the biennial Lise Meitner Prize for excellent research in nuclear science. In 2006 the \"Gothenburg Lise Meitner Award\" was established by the Un…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Lise Meitner",
+          "url": "https://en.wikipedia.org/wiki/Lise_Meitner",
+          "score": 0.060799323,
+          "snippet": "Lise Meitner  According to the Nobel Prize archive, she was nominated 19 times for the Nobel Prize in Chemistry between 1924 and 1948, and 30 times for the Nobel Prize in Physics between 1937 and 1967. Despite not having been awarded the Nobel Prize, Meitner was invited to attend the Lindau Nobel Laureate Meeting in 1962. She received many other honours, including the posthumous naming of element 109 meitnerium in 1997. Meitner was praised by Albert Einstein as the \"German Marie Curie.\""
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Marie Curie",
+          "Lise Meitner"
+        ],
+        "missing": [
+          "Otto Hahn"
+        ],
+        "total_expected": 3,
+        "ratio": 0.6666667
+      },
+      "fact_score": {
+        "matched": [
+          "radioactivity",
+          "polonium",
+          "radium",
+          "nuclear fission",
+          "Otto Hahn",
+          "Nobel Prize"
+        ],
+        "missing": [],
+        "total_expected": 6,
+        "ratio": 1.0
+      },
+      "embed_ms": 0,
+      "search_ms": 873,
+      "corpora_hit": [
+        "wikipedia-ei7c"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "boundary_ada_lovelace",
+      "category": "boundary_coverage",
+      "question": "What was Ada Lovelace's contribution to computing, and how did it relate to Babbage's Analytical Engine?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Ada Lovelace",
+          "url": "https://en.wikipedia.org/wiki/Ada_Lovelace",
+          "score": 0.06507937,
+          "snippet": "Ada Lovelace  Between 1842 and 1843, Lovelace translated an article by the military engineer Luigi Menabrea about the Analytical Engine, supplementing it with an elaborate set of seven notes, simply called \"Notes\". Lovelace's notes are important in the early history of computers, especially since the seventh one contained what many consider to be the first computer program—that is, an algorithm designed to be carried out by a machine. Other historians reject this perspective and point out that Babbage's personal notes from 1837 to 1840 contain the first programs for the engine. She also develo…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Charles Babbage",
+          "url": "https://en.wikipedia.org/wiki/Charles_Babbage#Analytical_Engine",
+          "score": 0.055357143,
+          "snippet": "Charles Babbage  After the attempt at making the first difference engine fell through, Babbage worked to design a more complex machine called the Analytical Engine. He hired C. G. Jarvis, who had previously worked for Clement as a draughtsman. The Analytical Engine marks the transition from mechanised arithmetic to fully-fledged general purpose computation. It is largely on it that Babbage's standing as computer pioneer rests."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Ada Lovelace",
+          "url": "https://en.wikipedia.org/wiki/Ada_Lovelace#Work",
+          "score": 0.06003584,
+          "snippet": "Ada Lovelace  computer program. Others dispute this because some of Charles Babbage's earlier writings could be considered computer programs.  Note G also contains Lovelace's dismissal of artificial intelligence. She wrote that \"The Analytical Engine has no pretensions whatever to originate anything. It can do whatever we know how to order it to perform. It can follow analysis; but it has no power of anticipating any analytical relations or truths.\" This objection has been the subject of much debate and rebuttal, for example by Alan Turing in his paper \" Computing Machinery and Intelligence \".…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Analytical engine",
+          "url": "https://en.wikipedia.org/wiki/Analytical_engine#Abstract",
+          "score": 0.06507937,
+          "snippet": "Analytical engine  computer design in the electronic era. The analytical engine is one of the most successful achievements of Charles Babbage.  Babbage was never able to complete construction of any of his machines due to conflicts with his chief engineer and inadequate funding. It was not until 1941 that Konrad Zuse built the first general-purpose computer, Z3, more than a century after Babbage had proposed the pioneering analytical engine in 1837."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Ada Lovelace",
+          "url": "https://en.wikipedia.org/wiki/Ada_Lovelace#Insight_into_potential_of_computing_devices",
+          "score": 0.06073154,
+          "snippet": "Ada Lovelace  constructing the first complete Analytical Engine.  According to the historian of computing and Babbage specialist Doron Swade:  Ada saw something that Babbage in some sense failed to see. In Babbage's world his engines were bound by number...What Lovelace saw...was that number could represent entities other than quantity. So once you had a machine for manipulating numbers, if those numbers represented other things, letters, musical notes, then the machine could manipulate symbols of which number was one instance, according to rules. It is this fundamental transition from a machi…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Ada Lovelace",
+          "url": "https://en.wikipedia.org/wiki/Ada_Lovelace#Controversy_over_contribution",
+          "score": 0.06458333,
+          "snippet": "Ada Lovelace  only person to see the potential of the analytical engine as a machine capable of expressing entities other than quantities.  In his book, Idea Makers, Stephen Wolfram defends Lovelace's contributions. While acknowledging that Babbage wrote several unpublished algorithms for the Analytical Engine prior to Lovelace's notes, Wolfram argues that \"there's nothing as sophisticated—or as clean—as Ada's computation of the Bernoulli numbers. Babbage certainly helped and commented on Ada's work, but she was definitely the driver of it.\" Wolfram then suggests that Lovelace's main achieveme…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Ada Lovelace",
+          "url": "https://en.wikipedia.org/wiki/Ada_Lovelace#Insight_into_potential_of_computing_devices",
+          "score": 0.05499439,
+          "snippet": "Ada Lovelace  and adaptations, the engine might compose elaborate and scientific pieces of music of any degree of complexity or extent.  This analysis was an important development from previous ideas about the capabilities of computing devices and anticipated the implications of modern computing one hundred years before they were realised. Walter Isaacson ascribes Ada's insight regarding the application of computing to any process based on logical symbols to an observation about textiles: \"When she saw some mechanical looms that used punchcards to direct the weaving of beautiful patterns, it r…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Ada Lovelace",
+          "url": "https://en.wikipedia.org/wiki/Ada_Lovelace#Abstract",
+          "score": 0.058035716,
+          "snippet": "Ada Lovelace  Augusta Ada King, Countess of Lovelace (née Byron; 10 December 1815 – 27 November 1852), also known as Ada Lovelace, was an English mathematician and writer chiefly known for her work on Charles Babbage 's proposed mechanical general-purpose computer, the Analytical Engine. She was the first to recognise that the machine had applications beyond pure calculation."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Analytical engine",
+          "url": "https://en.wikipedia.org/wiki/Analytical_engine",
+          "score": 0.06355611,
+          "snippet": "Analytical engine  The analytical engine was a proposed digital mechanical general-purpose computer designed by English mathematician and computer pioneer Charles Babbage. It was first described in 1837 as the successor to Babbage's difference engine, which was a design for a simpler mechanical calculator. The analytical engine incorporated an arithmetic logic unit, control flow in the form of conditional branching and loops, and integrated memory, making it the first design for a general-purpose computer that could be described in modern terms as Turing-complete. In other words, the structure…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Ada Lovelace",
+          "url": "https://en.wikipedia.org/wiki/Ada_Lovelace#First_published_computer_program",
+          "score": 0.057628524,
+          "snippet": "Ada Lovelace  Menabrea's paper, were then published in the September 1843 edition of Taylor's Scientific Memoirs under the initialism AAL.  Ada Lovelace's notes were labelled alphabetically from A to G. In Note G, she describes an algorithm for the Analytical Engine to compute Bernoulli numbers. It is considered to be the first published algorithm ever specifically tailored for implementation on a computer, and Ada Lovelace has often been cited as the first computer programmer for this reason. The engine was never completed and so her program was never tested.  In 1953, more than a century aft…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Ada Lovelace",
+          "Analytical Engine",
+          "Charles Babbage"
+        ],
+        "missing": [],
+        "total_expected": 3,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "Analytical Engine",
+          "Charles Babbage",
+          "algorithm",
+          "1843",
+          "Bernoulli numbers",
+          "first computer programmer",
+          "notes"
+        ],
+        "missing": [],
+        "total_expected": 7,
+        "ratio": 1.0
+      },
+      "embed_ms": 0,
+      "search_ms": 816,
+      "corpora_hit": [
+        "wikipedia-ei7c"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "boundary_emmy_noether",
+      "category": "boundary_coverage",
+      "question": "Who was Emmy Noether and what is the significance of Noether's theorem?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Abstract",
+          "score": 0.09600614,
+          "snippet": "Emmy Noether  Amalie Emmy Noether (US: / ˈ n ʌ t ər /, UK: / ˈ n ɜː t ə /; German:; 23 March 1882 – 14 April 1935) was a German mathematician who made many important contributions to abstract algebra. She proved Noether's first and second theorems, which are fundamental in mathematical physics. She was described by Pavel Alexandrov, Albert Einstein, Jean Dieudonné, Hermann Weyl and Norbert Wiener as the most important woman in the history of mathematics. As one of the leading mathematicians of her time, she developed theories of rings, fields, and algebras. In physics, Noether's theorem explai…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Abstract",
+          "score": 1.0,
+          "snippet": "Emmy Noether  of rings, fields, and algebras. In physics, Noether's theorem explains the connection between symmetry and conservation laws.  Noether was born to a Jewish family in the Franconian town of Erlangen; her father was the mathematician Max Noether. She originally planned to teach French and English after passing the required examinations but instead studied mathematics at the University of Erlangen, where her father lectured. After completing her doctorate in 1907 under the supervision of Paul Gordan, she worked at the Mathematical Institute of Erlangen without pay for seven years. A…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Abstract",
+          "score": 1.0,
+          "snippet": "Emmy Noether  years lecturing under Hilbert's name. Her habilitation was approved in 1919, allowing her to obtain the rank of Privatdozent.  Noether remained a leading member of the Göttingen mathematics department until 1933; her students were sometimes called the \"Noether Boys\". In 1924, Dutch mathematician B. L. van der Waerden joined her circle and soon became the leading expositor of Noether's ideas; her work was the foundation for the second volume of his influential 1931 textbook, Moderne Algebra. By the time of her plenary address at the 1932 International Congress of Mathematicians in…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Abstract",
+          "score": 1.0,
+          "snippet": "Emmy Noether  Noether's mathematical work has been divided into three \" epochs \". In the first (1908–1919), she made contributions to the theories of algebraic invariants and number fields. Her work on differential invariants in the calculus of variations, Noether's theorem, has been called \"one of the most important mathematical theorems ever proved in guiding the development of modern physics\". In the second epoch (1920–1926), she began work that \"changed the face of algebra\". In her classic 1921 paper Idealtheorie in Ringbereichen (Theory of Ideals in Ring Domains), Noether developed the th…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Graduate_students",
+          "score": 1.0,
+          "snippet": "Emmy Noether  in 1935 due to accusations of homosexual acts. He was later reinstated and became a professor at Humboldt University in 1948.  Noether then supervised Werner Weber and Jakob Levitzki, who both defended their theses in 1929. Weber, who was considered only a modest mathematician, would later take part in driving Jewish mathematicians out of Göttingen. Levitzki worked first at Yale University and then at the Hebrew University of Jerusalem in Palestine, making significant contributions (in particular Levitzky's theorem and the Hopkins–Levitzki theorem) to ring theory."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Graduate_students",
+          "score": 1.0,
+          "snippet": "Emmy Noether  making significant contributions (in particular Levitzky's theorem and the Hopkins–Levitzki theorem) to ring theory.  Other Noether Boys included Max Deuring, Hans Fitting, Ernst Witt, Chiungtze C. Tsen and Otto Schilling. Deuring, who had been considered the most promising of Noether's students, was awarded his doctorate in 1930. He worked in Hamburg, Marden and Göttingen and is known for his contributions to arithmetic geometry. Fitting graduated in 1931 with a thesis on abelian groups and is remembered for his work in group theory, particularly Fitting's theorem and the Fittin…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Graduate_students",
+          "score": 1.0,
+          "snippet": "Emmy Noether  his work in group theory, particularly Fitting's theorem and the Fitting lemma. He died at the age of 31 from a bone disease.  Witt was initially supervised by Noether, but her position was revoked in April 1933 and he was assigned to Gustav Herglotz instead. He received his PhD in July 1933 with a thesis on the Riemann-Roch Theorem and zeta-functions, and went on to make several contributions that now bear his name. Tsen, best remembered for proving Tsen's theorem, received his doctorate in December of the same year. He returned to China in 1935 and started teaching at National …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Graduate_students",
+          "score": 0.04590164,
+          "snippet": "Emmy Noether  at the University of Marburg. He later worked as a post doc at Trinity College, Cambridge before moving to the United States.  Noether's other students were Wilhelm Dörnte, who received his doctorate in 1927 with a thesis on groups, Werner Vorbeck, who did so in 1935 with a thesis on splitting fields, and Wolfgang Wichmann, who did so 1936 with a thesis on p-adic theory. There is no information about the first two, but it is known that Wichmann supported a student initiative that unsuccessfully attempted to revoke Noether's dismissal and died as a soldier on the Eastern Front dur…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Contributions_to_mathematics_and_physics",
+          "score": 1.0,
+          "snippet": "Emmy Noether  Noether's work in abstract algebra and topology was influential in mathematics, while Noether's theorem has widespread consequences for theoretical physics and dynamical systems. Noether showed an acute propensity for abstract thought, which allowed her to approach problems of mathematics in fresh and original ways. Her friend and colleague Hermann Weyl described her scholarly output in three epochs:  (1) the period of relative dependence, 1907–1919  (2) the investigations grouped around the general theory of ideals 1920–1926  (3) the study of the non-commutative algebras, their …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Contributions_to_mathematics_and_physics",
+          "score": 1.0,
+          "snippet": "Emmy Noether  by linear transformations, and their application to the study of commutative number fields and their arithmetics  In the first epoch (1907–1919), Noether dealt primarily with differential and algebraic invariants, beginning with her dissertation under Paul Gordan. Her mathematical horizons broadened, and her work became more general and abstract, as she became acquainted with the work of David Hilbert, through close interactions with a successor to Gordan, Ernst Sigismund Fischer. Shortly after moving to Göttingen in 1915, she proved the two Noether's theorems, \"one of the most i…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Emmy Noether"
+        ],
+        "missing": [
+          "Noether's theorem"
+        ],
+        "total_expected": 2,
+        "ratio": 0.5
+      },
+      "fact_score": {
+        "matched": [
+          "abstract algebra",
+          "ring theory",
+          "symmetry",
+          "conservation laws",
+          "Göttingen"
+        ],
+        "missing": [
+          "1918"
+        ],
+        "total_expected": 6,
+        "ratio": 0.8333333
+      },
+      "embed_ms": 0,
+      "search_ms": 650,
+      "corpora_hit": [
+        "wikipedia-ei7c"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "boundary_copenhagen_interpretation",
+      "category": "boundary_coverage",
+      "question": "What is the Copenhagen interpretation of quantum mechanics?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Interpretations of quantum mechanics",
+          "url": "https://en.wikipedia.org/wiki/Interpretations_of_quantum_mechanics#Copenhagen_interpretation",
+          "score": 0.09918033,
+          "snippet": "Interpretations of quantum mechanics  The Copenhagen interpretation is a collection of views about the meaning of quantum mechanics principally attributed to Niels Bohr and Werner Heisenberg. It is one of the oldest attitudes towards quantum mechanics, as features of it date to the development of quantum mechanics during 1925–1927, and it remains one of the most commonly taught. There is no definitive historical statement of what is the Copenhagen interpretation, and there were in particular fundamental disagreements between the views of Bohr and Heisenberg. For example, Heisenberg emphasized …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Interpretations of quantum mechanics",
+          "url": "https://en.wikipedia.org/wiki/Interpretations_of_quantum_mechanics#Copenhagen_interpretation",
+          "score": 1.0,
+          "snippet": "Interpretations of quantum mechanics  on an \"irreversible\" or effectively irreversible process that imparts the classical behavior of \"observation\" or \"measurement\".  Features common to Copenhagen-type interpretations include the idea that quantum mechanics is intrinsically indeterministic, with probabilities calculated using the Born rule, and the principle of complementarity, which states certain pairs of complementary properties cannot all be observed or measured simultaneously. Moreover, properties only result from the act of \"observing\" or \"measuring\"; the theory avoids assuming definite …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Interpretations of quantum mechanics",
+          "url": "https://en.wikipedia.org/wiki/Interpretations_of_quantum_mechanics#Consistent_histories",
+          "score": 0.07896104,
+          "snippet": "Interpretations of quantum mechanics  The consistent histories interpretation generalizes the conventional Copenhagen interpretation and attempts to provide a natural interpretation of quantum cosmology. The theory is based on a consistency criterion that allows the history of a system to be described so that the probabilities for each history obey the additive rules of classical probability. It is claimed to be consistent with the Schrödinger equation.  According to this interpretation, the purpose of a quantum-mechanical theory is to predict the relative probabilities of various alternative …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Interpretations of quantum mechanics",
+          "url": "https://en.wikipedia.org/wiki/Interpretations_of_quantum_mechanics#Objective-collapse_theories",
+          "score": 0.07017784,
+          "snippet": "Interpretations of quantum mechanics  Objective-collapse theories differ from the Copenhagen interpretation by regarding both the wave function and the process of collapse as ontologically objective (meaning these exist and occur independent of the observer). In objective theories, collapse occurs either randomly (\"spontaneous localization\") or when some physical threshold is reached, with observers having no special role. Thus, objective-collapse theories are realistic, indeterministic, no-hidden-variables theories. Standard quantum mechanics does not specify any mechanism of collapse; quantu…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "History of quantum mechanics",
+          "url": "https://en.wikipedia.org/wiki/History_of_quantum_mechanics#Copenhagen_interpretation",
+          "score": 0.09384164,
+          "snippet": "History of quantum mechanics  Bohr, Heisenberg, and others tried to explain what these experimental results and mathematical models really mean. The term Copenhagen interpretation has been applied to their views in retrospect, glossing over differences among them. While no definitive statement of \"the\" Copenhagen interpretation exists, the following ideas are widely seen as characteristic of it."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Copenhagen interpretation",
+          "url": "https://en.wikipedia.org/wiki/Copenhagen_interpretation#Alternatives",
+          "score": 0.08893281,
+          "snippet": "Copenhagen interpretation  A large number of alternative interpretations have appeared, sharing some aspects of the Copenhagen interpretation while providing alternatives to other aspects. The ensemble interpretation is similar; it offers an interpretation of the wave function, but not for single particles. The consistent histories interpretation advertises itself as \"Copenhagen done right\". More recently, interpretations inspired by quantum information theory like QBism and relational quantum mechanics have appeared. Experts on quantum foundational issues continue to favor the Copenhagen inte…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Copenhagen interpretation"
+        ],
+        "missing": [
+          "Niels Bohr",
+          "Werner Heisenberg"
+        ],
+        "total_expected": 3,
+        "ratio": 0.33333334
+      },
+      "fact_score": {
+        "matched": [
+          "wavefunction collapse",
+          "complementarity",
+          "Niels Bohr",
+          "Werner Heisenberg",
+          "measurement"
+        ],
+        "missing": [
+          "no underlying reality independent of observation"
+        ],
+        "total_expected": 6,
+        "ratio": 0.8333333
+      },
+      "embed_ms": 0,
+      "search_ms": 520,
+      "corpora_hit": [
+        "wikipedia-ei7c"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "contested_atomic_bombings_morality",
+      "category": "contested",
+      "question": "What are the major arguments for and against the morality of the atomic bombings of Hiroshima and Nagasaki?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki",
+          "score": 0.08198924,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  According to supporters, the atomic bombings were necessary to bring an end to the war with minimal casualties and ultimately prevented a greater loss of life; according to critics, the bombings were unnecessary for the war's end and were a war crime, raising moral and ethical implications."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Legal_considerations",
+          "score": 0.07642962,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  all major belligerents during World War II was not prohibited by positive or specific customary international humanitarian law.  In 1963 the bombings were subjected to judicial review in Ryuichi Shimoda v. The State. The District Court of Tokyo ruled the use of nuclear weapons in warfare was not illegal, but held in its obiter dictum that the atomic bombings of both Hiroshima and Nagasaki were illegal under international law of that time, as an indiscriminate bombardment of undefended cities. The court denied the appellants compensation on the grounds…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Abstract",
+          "score": 0.07619487,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  compounded by illness and malnutrition. Though Hiroshima had a sizable military garrison, most of the dead were civilians.  Scholars have extensively studied the effects of the bombings on the social and political character of subsequent world history and popular culture, and there is still much debate concerning the ethical and legal justification for the bombings. According to supporters, the atomic bombings were necessary to bring an end to the war with minimal casualties and ultimately prevented a greater loss of life; according to critics, the bo…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki",
+          "score": 0.067116484,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  By July 1945, the Allies' Manhattan Project had produced two types of atomic bombs: \"Little Boy\", an enriched uranium gun-type fission weapon, and \"Fat Man\", a plutonium implosion-type nuclear weapon. The 509th Composite Group of the United States Army Air Forces was trained and equipped with the specialized Silverplate version of the Boeing B-29 Superfortress, and deployed to Tinian in the Mariana Islands. The Allies called for the unconditional surrender of the Imperial Japanese armed forces in the Potsdam Declaration on 26 July 1945, the alternativ…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Debate_over_bombings",
+          "score": 0.06951219,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  Ward Wilson believes that the bombing of Hiroshima was not the reason for Japan's surrender, because the preliminary report of the Japanese Army investigation team on the bombing of Hiroshima was not submitted until August 10. Ward Wilson believes that Japan decided to surrender long before its leaders realized the devastation caused by the atomic bombs on Hiroshima and Nagasaki.According to Ward Wilson, Japanese leaders had long concluded: it is possible to fight a decisive battle against a great power attacking from one direction, but it is impossib…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Debate_over_bombings",
+          "score": 0.06282364,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  idea became the accepted position in Japan and that it may have played some part in the decision-making of the US government."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
+          "score": 0.07619487,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  to destroy the enemy's war industries, kill or disable civilian employees of these industries, and undermine civilian morale."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Reportage",
+          "score": 0.0703125,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  Less than a week after his New York Times story was published, Lawrence also backtracked and dismissed the reports on radiation sickness as Japanese efforts to undermine American morale."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
+          "score": 0.067075334,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  fire-bombed over a hundred Japanese towns and cities."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Air raids on Japan",
+          "url": "https://en.wikipedia.org/wiki/Air_raids_on_Japan#Morality",
+          "score": 0.048366018,
+          "snippet": "Air raids on Japan  The atomic bomb attacks have been the subject of long-running controversy. While conventional attacks inflicted more damage and casualties on Japan than the atomic bombs, discussions of the air campaign have been focused on the use of nuclear weapons. Shortly after the atomic bombings an opinion poll found that about 85 percent of Americans supported the use of atomic weapons, and the wartime generation believed that they had saved millions of lives. Criticisms over the decision to use the bombs have increased over time, however. Arguments made against the attacks include t…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Atomic bombings of Hiroshima and Nagasaki"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "civilian casualties"
+        ],
+        "missing": [
+          "ended the war sooner",
+          "saved lives by avoiding invasion",
+          "alternatives existed",
+          "demonstration",
+          "Soviet entry"
+        ],
+        "total_expected": 6,
+        "ratio": 0.16666667
+      },
+      "embed_ms": 0,
+      "search_ms": 889,
+      "corpora_hit": [
+        "wikipedia-ei7c"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "contested_colonialism_legacy",
+      "category": "contested",
+      "question": "How is the legacy of European colonialism in Africa contested today?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "History of Africa",
+          "url": "https://en.wikipedia.org/wiki/History_of_Africa#Postcolonial_historiography",
+          "score": 0.048015878,
+          "snippet": "History of Africa  Post-colonialist historiography studies the relationship between European colonialism and domination in Africa and the construction of African history and representation. It has roots in Orientalism, the construction of cultures from the Asian, Arabian and North African world in a patronizing manner stemming from a sense of Western superiority, first theorized by Edward Said. A general perception of Western superiority throughout European academics and historians prominent during the height of colonialism led to the defining traits of colonial historical works, which post-co…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "History of West Africa",
+          "url": "https://en.wikipedia.org/wiki/History_of_West_Africa#Historiographic_and_conceptual_problems",
+          "score": 0.02645503,
+          "snippet": "History of West Africa  The current major problem in African studies that Mohamed (2010/2012) identified is the inherited religious, Orientalist, colonial paradigm that European Africanists have preserved in present-day secularist, post-colonial, Anglophone African historiography. African and African-American scholars also bear some responsibility in perpetuating this European Africanist preserved paradigm."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "European Union",
+          "url": "https://en.wikipedia.org/wiki/European_Union",
+          "score": 0.022222225,
+          "snippet": "uropean Union |url=http://158.167.241.123:8090/jcms/jcms/Jo2_7024/en/ |access-date=2025-10-27 |website=CURIA |language=en}}"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Colonialism",
+          "url": "https://en.wikipedia.org/wiki/Colonialism#Marxism",
+          "score": 0.025252527,
+          "snippet": "Colonialism  In his critique of colonialism in Africa, the Guyanese historian and political activist Walter Rodney states:"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Central Africa",
+          "url": "https://en.wikipedia.org/wiki/Central_Africa#Architecture",
+          "score": 0.023076924,
+          "snippet": "Central Africa  Further information in the sections of Architecture of Africa:"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "South Africa",
+          "url": "https://en.wikipedia.org/wiki/South_Africa#Abstract",
+          "score": 0.031862743,
+          "snippet": "South Africa  Today, about 80% of the population are Black South Africans. The remaining population consists of Africa's largest communities of European (White South Africans), Asian (Indian South Africans and Chinese South Africans), and multiracial (Coloured South Africans) ancestry. South Africa is a multi-ethnic society encompassing a wide variety of cultures, languages, and religions. Its pluralistic makeup is reflected in the Constitution 's recognition of 12 official languages, the fourth-highest number in the world. According to the 2022 census, the two most-spoken first languages are …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Stuart Hall (cultural theorist)",
+          "url": "https://en.wikipedia.org/wiki/Stuart_Hall_(cultural_theorist)#Presences",
+          "score": 0.05002987,
+          "snippet": "Stuart Hall (cultural theorist)  For many black people living in the diaspora, Africa becomes an \" imagined community \" to which they feel a sense of belonging.  However, Hall points out, there is no going back to the Africa that existed before slavery, because Africa too has changed. Secondly, Hall describes the European presence in Caribbean cultural identity as the legacy of colonialism, racism, power and exclusion. Unlike the \"Présence Africaine\", the European presence is not unspoken even though many would like to be separated from the history of the oppressor. But Hall argues that Caribb…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Discrimination based on skin tone",
+          "url": "https://en.wikipedia.org/wiki/Discrimination_based_on_skin_tone#Africa",
+          "score": 0.023076924,
+          "snippet": "Discrimination based on skin tone  barrier has resulted in millions of women and men turning to skin-lightening treatments, many of which are harmful to the body.  Historically, skin lightening in Africa can be dated to European colonialism, where individuals with lighter skin received greater privilege than those of darker tones. European colonists in Rwanda established a color-based caste system that placed the Tutsi people above the Hutu people on the basis of their somewhat lighter skin, leading to the development of racialized political identities that had not existed in Rwanda before col…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Hugh Trevor-Roper",
+          "url": "https://en.wikipedia.org/wiki/Hugh_Trevor-Roper#Debates_on_African_history",
+          "score": 0.021857923,
+          "snippet": "Hugh Trevor-Roper  Another aspect of Trevor-Roper's outlook on history and on scholarly research that has inspired controversy is his statement about the historical experiences of pre-literate societies. Following Voltaire's remarks on the fall of the Roman Empire at the hands of barbarian tribes, he asserted that Africa had no history prior to European exploration and colonisation. Trevor-Roper said \"there is only the history of Europeans in Africa. The rest is darkness\", its past \"the unedifying gyrations of barbarous tribes in picturesque but irrelevant corners of the globe\". These comments…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "European Parliament",
+          "url": "https://en.wikipedia.org/wiki/European_Parliament",
+          "score": 1.0,
+          "snippet": "The European Parliament (EP) is one of the two legislative bodies of the European Union (EU) and one of its seven institutions. Together with the Council of the European Union (known as the Council and informally as the Council of Ministers), it adopts European legislation, following a proposal by the European Commission. The Parliament is composed of 720 members (MEPs), after the June 2024 European elections, from a previous 705 MEPs. It represents the second-largest democratic electorate in the world (after the Parliament of India), with an electorate of around 375&nbsp;million eligible vote…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Colonialism"
+        ],
+        "missing": [
+          "Scramble for Africa",
+          "Decolonization"
+        ],
+        "total_expected": 3,
+        "ratio": 0.33333334
+      },
+      "fact_score": {
+        "matched": [
+          "slavery"
+        ],
+        "missing": [
+          "Scramble for Africa",
+          "extraction",
+          "borders",
+          "decolonization",
+          "underdevelopment",
+          "exploitation"
+        ],
+        "total_expected": 7,
+        "ratio": 0.14285715
+      },
+      "embed_ms": 0,
+      "search_ms": 926,
+      "corpora_hit": [
+        "wikipedia-ei7c"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "contested_globalization_effects",
+      "category": "contested",
+      "question": "What are the major arguments for and against globalization's economic effects?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Globalization",
+          "url": "https://en.wikipedia.org/wiki/Globalization#Economics",
+          "score": 0.046497587,
+          "snippet": "Globalization  centuries, and was a central doctrine of classical liberals of that era, such as the young John Maynard Keynes (1883–1946).  Some opponents of globalization see the phenomenon as a promotion of corporate interests. They also claim that the increasing autonomy and strength of corporate entities shapes the political policy of countries. They advocate global institutions and policies that they believe better address the moral claims of poor and working classes as well as environmental concerns. Economic arguments by fair trade theorists claim that unrestricted free trade benefits t…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Economic globalization",
+          "url": "https://en.wikipedia.org/wiki/Economic_globalization#Inequality",
+          "score": 0.031746034,
+          "snippet": "Economic globalization  Later studies claimed that one of the most robust determinants of sustained economic growth is the level of income inequality.  International inequality is inequality between countries. Income differences between rich and poor countries are very large, although they are changing rapidly. Per capita incomes in China and India doubled in the prior twenty years, a feat that required 150 years in the US. According to the United Nations Human Development Report for 2013, for countries at varying levels of the UN Human Development Index the GNP per capita grew between 2004 an…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Globalization",
+          "url": "https://en.wikipedia.org/wiki/Globalization",
+          "score": 0.027322404,
+          "snippet": "Globalization, or globalisation, is the process of interaction and integration among people, companies, and governments worldwide. The term globalization first appeared in the early 20th century, developed its current meaning sometime in the second half of the 20th century, and came into popular use in the 1990s to describe the unprecedented international connectivity of the post–Cold War world. Its origins can be traced back to 18th and 19th centuries due to advances in transportation and communications technology. This increase in global interactions has caused a growth in international trad…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Economic globalization",
+          "url": "https://en.wikipedia.org/wiki/Economic_globalization",
+          "score": 0.03125,
+          "snippet": "Economic globalization  with the two others being political globalization and cultural globalization, as well as the general term of globalization."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Globalization",
+          "url": "https://en.wikipedia.org/wiki/Globalization#Economics",
+          "score": 0.023076924,
+          "snippet": "Globalization  Additionally, Oxfam International argues that poor people are often excluded from globalization-induced opportunities \"by a lack of productive assets, weak infrastructure, poor education and ill-health;\" effectively leaving these marginalized groups in a poverty trap. Economist Paul Krugman is another staunch supporter of globalization and free trade with a record of disagreeing with many critics of globalization. He argues that many of them lack a basic understanding of comparative advantage and its importance in today's world."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Free trade",
+          "url": "https://en.wikipedia.org/wiki/Free_trade#Politics",
+          "score": 0.048611116,
+          "snippet": "Free trade  Academics, governments and interest groups debate the relative costs, benefits and beneficiaries of free trade.  Arguments for protectionism fall into the economic category (trade hurts the economy or groups in the economy) or into the moral category (the effects of trade might help the economy but have ill effects in other areas). A general argument against free trade is that it represents neocolonialism in disguise. The moral category is wide, including concerns about:  Economic arguments against free trade criticize the assumptions or conclusions of economic theories."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Global North and Global South",
+          "url": "https://en.wikipedia.org/wiki/Global_North_and_Global_South",
+          "score": 0.03752274,
+          "snippet": "Global North and Global South  The Global North and the Global South are often defined in terms of their differing levels of wealth, economic development, income inequality, and strength of democracy, as well as by their political freedom and economic freedom, as defined by a variety of freedom indices. Countries of the Global North tend to be wealthier, and capable of exporting technologically advanced manufactured products, among other characteristics. In contrast, countries of the Global South tend to be poorer, and heavily dependent on their largely agrarian-based economic primary sectors.…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Tariff",
+          "url": "https://en.wikipedia.org/wiki/Tariff",
+          "score": 0.020202022,
+          "snippet": "There is near unanimous consensus among economists that tariffs are self-defeating and have a negative effect on economic growth and economic welfare, while free trade and the reduction of trade barriers has a positive effect on economic growth. American economist Milton Friedman said of tariffs: \"We call a tariff a protective measure. It does protect . . . It protects the consumer against low prices.\" Although trade liberalisation can sometimes result in unequally distributed losses and gains, and can, in the short run, cause economic dislocation of workers in import-competing sectors, the ad…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "First World",
+          "url": "https://en.wikipedia.org/wiki/First_World#Globalization",
+          "score": 0.019900497,
+          "snippet": "First World  The United Nations 's ESCWA has written that globalization \"is a widely-used term that can be defined in a number of different ways\". Joyce Osland from San Jose State University wrote: \"Globalization has become an increasingly controversial topic, and the growing number of protests around the world has focused more attention on the basic assumptions of globalization and its effects.\" \"Globalization is not new, though. For thousands of years, people—and, later, corporations—have been buying from and selling to each other in lands at great distances, such as through the famed Silk R…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "War",
+          "url": "https://en.wikipedia.org/wiki/War",
+          "score": 0.015765766,
+          "snippet": "This \"power preponderance\" hypothesis has empirical support. The two theories are not mutually exclusive and may be used to explain disparate events according to the circumstance. Liberalism as it relates to international relations emphasizes factors such as trade, and its role in disincentivizing conflict which will damage economic relations. Critics respond that military force may sometimes be at least as effective as trade at achieving economic benefits, especially historically if not as much today. Further"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Globalization",
+          "Free trade"
+        ],
+        "missing": [
+          "Capitalism"
+        ],
+        "total_expected": 3,
+        "ratio": 0.6666667
+      },
+      "fact_score": {
+        "matched": [
+          "free trade",
+          "inequality",
+          "development",
+          "poverty",
+          "growth"
+        ],
+        "missing": [
+          "labor",
+          "competition",
+          "outsourcing"
+        ],
+        "total_expected": 8,
+        "ratio": 0.625
+      },
+      "embed_ms": 0,
+      "search_ms": 589,
+      "corpora_hit": [
+        "wikipedia-ei7c"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "contested_quantum_determinism",
+      "category": "contested",
+      "question": "How did Heisenberg's uncertainty principle reshape philosophical debate about determinism?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Uncertainty principle",
+          "url": "https://en.wikipedia.org/wiki/Uncertainty_principle#Critical_reactions",
+          "score": 0.06769723,
+          "snippet": "Uncertainty principle  The Copenhagen interpretation of quantum mechanics and Heisenberg's uncertainty principle were, in fact, initially seen as twin targets by detractors. According to the Copenhagen interpretation of quantum mechanics, there is no fundamental reality that the quantum state describes, just a prescription for calculating experimental results. There is no way to say what the state of a system fundamentally is, only what the result of observations might be.  Albert Einstein believed that randomness is a reflection of our ignorance of some fundamental property of reality, while …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Uncertainty principle",
+          "url": "https://en.wikipedia.org/wiki/Uncertainty_principle#Einstein's_box",
+          "score": 0.054063477,
+          "snippet": "Uncertainty principle  Bohr was present when Einstein proposed the thought experiment which has become known as Einstein's box. Einstein argued that \"Heisenberg's uncertainty equation implied that the uncertainty in time was related to the uncertainty in energy, the product of the two being related to the Planck constant.\" Consider, he said, an ideal box, lined with mirrors so that it can contain light indefinitely. The box could be weighed before a clockwork mechanism opened an ideal shutter at a chosen instant to allow one single photon to escape. \"We now know, explained Einstein, precisely …"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Uncertainty principle",
+          "url": "https://en.wikipedia.org/wiki/Uncertainty_principle#History",
+          "score": 0.058277026,
+          "snippet": "Uncertainty principle  In 1925 Heisenberg published the Umdeutung (reinterpretation) paper where he showed that central aspect of quantum theory was the non- commutativity: the theory implied that the relative order of position and momentum measurement was significant. Working with Max Born and Pascual Jordan, he continued to develop matrix mechanics, that would become the first modern quantum mechanics formulation.  In March 1926, working in Bohr's institute, Heisenberg realized that the non- commutativity implies the uncertainty principle. Writing to Wolfgang Pauli in February 1927, he worke…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Uncertainty principle",
+          "url": "https://en.wikipedia.org/wiki/Uncertainty_principle#Rejection_of_the_principle",
+          "score": 0.02947846,
+          "snippet": "Uncertainty principles relate quantum particles–electrons for example–to classical concepts–position and momentum. This presumes quantum particles have position and momentum. Edwin C. Kemble pointed out in 1937 that such properties cannot be experimentally verified and assuming they exist gives rise to many contradictions; similarly Rudolf Haag notes that position in quantum mechanics is an attribute of an interaction, say between an electron and a detector, not an intrinsic property. From this point of view the uncertainty principle is not a fundamental quantum property but a concept \"carried…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Uncertainty principle",
+          "url": "https://en.wikipedia.org/wiki/Uncertainty_principle#Popper's_criticism",
+          "score": 0.052991454,
+          "snippet": "Uncertainty principle  the statistical interpretation. In 1982, he further developed his theory in Quantum theory and the schism in Physics, writing:  formulae are, beyond all doubt, derivable statistical formulae of the quantum theory. But they have been habitually misinterpreted by those quantum theorists who said that these formulae can be interpreted as determining some upper limit to the precision of our measurements.  Popper proposed an experiment to falsify the uncertainty relations, although he later withdrew his initial version after discussions with Carl Friedrich von Weizsäcker, Hei…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Uncertainty principle",
+          "url": "https://en.wikipedia.org/wiki/Uncertainty_principle#Terminology_and_translation",
+          "score": 0.059523813,
+          "snippet": "Uncertainty principle  Throughout the main body of his original 1927 paper, written in German, Heisenberg used the word \"Ungenauigkeit\", to describe the basic theoretical principle. Only in the endnote did he switch to the word \"Unsicherheit\". Later on, he always used \"Unbestimmtheit\". When the English-language version of Heisenberg's textbook, The Physical Principles of the Quantum Theory, was published in 1930, however, only the English word \"uncertainty\" was used, and it became the term in the English language."
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Niels Bohr",
+          "url": "https://en.wikipedia.org/wiki/Niels_Bohr#Quantum_mechanics",
+          "score": 0.049521443,
+          "snippet": "Niels Bohr  In February 1927, Heisenberg developed the first version of the uncertainty principle, presenting it using a thought experiment where an electron was observed through a gamma-ray microscope. Bohr was dissatisfied with Heisenberg's argument, since it required only that a measurement disturb properties that already existed, rather than the more radical idea that the electron's properties could not be discussed at all apart from the context they were measured in. In a paper presented at the Volta Conference at Como in September 1927, Bohr emphasized that Heisenberg's uncertainty relat…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Uncertainty principle",
+          "url": "https://en.wikipedia.org/wiki/Uncertainty_principle#History",
+          "score": 0.054212455,
+          "snippet": "Uncertainty principle  commutativity implies the uncertainty principle. Writing to Wolfgang Pauli in February 1927, he worked out the basic concepts.  In his celebrated 1927 paper \" Über den anschaulichen Inhalt der quantentheoretischen Kinematik und Mechanik \" (\"On the Perceptual Content of Quantum Theoretical Kinematics and Mechanics\"), Heisenberg established this expression as the minimum amount of unavoidable momentum disturbance caused by any position measurement, but he did not give a precise definition for the uncertainties Δx and Δ p. Instead, he gave some plausible estimates in each c…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Uncertainty principle",
+          "url": "https://en.wikipedia.org/wiki/Uncertainty_principle#Heisenberg's_microscope",
+          "score": 0.050763052,
+          "snippet": "Uncertainty principle  device.  He imagines an experimenter trying to measure the position and momentum of an electron by shooting a photon at it.  The combination of these trade-offs implies that no matter what photon wavelength and aperture size are used, the product of the uncertainty in measured position and measured momentum is greater than or equal to a lower limit, which is (up to a small numerical factor) equal to the Planck constant. Heisenberg did not care to formulate the uncertainty principle as an exact limit, and preferred to use it instead, as a heuristic quantitative statement,…"
+        },
+        {
+          "corpus_id": "wikipedia-ei7c",
+          "title": "Uncertainty principle",
+          "url": "https://en.wikipedia.org/wiki/Uncertainty_principle#Free_will",
+          "score": 0.042790487,
+          "snippet": "Uncertainty principle  Some scientists including Arthur Compton and Martin Heisenberg have suggested that the uncertainty principle, or at least the general probabilistic nature of quantum mechanics, could be evidence for the two-stage model of free will. One critique, however, is that apart from the basic role of quantum mechanics as a foundation for chemistry, nontrivial biological mechanisms requiring quantum mechanics are unlikely, due to the rapid decoherence time of quantum systems at room temperature. Proponents of this theory commonly say that this decoherence is overcome by both scree…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Uncertainty principle"
+        ],
+        "missing": [
+          "Determinism",
+          "Werner Heisenberg",
+          "Hidden-variable theory"
+        ],
+        "total_expected": 4,
+        "ratio": 0.25
+      },
+      "fact_score": {
+        "matched": [
+          "Bohr",
+          "Einstein",
+          "free will"
+        ],
+        "missing": [
+          "indeterminism",
+          "Laplace's demon",
+          "hidden variables"
+        ],
+        "total_expected": 6,
+        "ratio": 0.5
+      },
+      "embed_ms": 0,
+      "search_ms": 699,
+      "corpora_hit": [
+        "wikipedia-ei7c"
+      ],
+      "vector_eligible": true
+    }
+  ]
+}
