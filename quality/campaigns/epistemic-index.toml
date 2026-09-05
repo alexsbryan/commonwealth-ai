@@ -180,6 +180,7 @@ kill         = "a pipeline that writes an atlas without naming its AtlasSeeding 
 # live-model build (~8 min) per row. The disk-wide ratio is deliberately NOT the
 # instrument — it measures history (2/27 non-SEP dirs complete, all legacy).
 instrument   = "scripts/ei4-fresh-build.sh"
+timeout_s    = 1200   # run-tier: a fresh build on the resident model is ~8 min; absent, the loader read-tiers it at 10 s and it can never be judged
 
 [[bar]]
 id           = "EI5-one-walk"
