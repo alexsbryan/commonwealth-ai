@@ -1,0 +1,1 @@
+1.2G	/home/alexbryan/dev/ei6-wt/test-artifacts/ei6-probe-root

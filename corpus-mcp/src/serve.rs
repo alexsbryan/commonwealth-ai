@@ -90,6 +90,18 @@ pub struct ServeArgs {
 /// is `pub(crate)`.
 pub const PULL_DEADLINE_MINS: u64 = 30;
 
+/// The mean-cosine bar the restore's embedding-space probe applies, named here
+/// only so the refusal can quote it to the person reading it.
+///
+/// ONE decider, and it is not this line: the value lives in
+/// `corpus-engine/src/engine/ingest_prebuilt.rs::PREBUILT_PROBE_THRESHOLD` and
+/// is `pub(crate)` there, so this host cannot read it. Quoting a number this
+/// crate cannot import is a §10.6 hazard, and it is written down here rather
+/// than inline so a drift has ONE place to be fixed and this comment to be
+/// found. Measured against it on 2026-09-05: 0.6822 for a bare llama-server
+/// against sep's snapshot (run 20260905T201633Z).
+const PREBUILT_PROBE_THRESHOLD: f32 = 0.92;
+
 pub async fn run(args: ServeArgs) -> Result<()> {
     let profile =
         crate::host::discover_and_probe(args.base_url.as_deref(), args.embed_model).await?;
@@ -230,15 +242,24 @@ async fn ensure_installed(engine: &CorpusEngine, id: &str, deadline_mins: u64) -
             return Err(e).with_context(|| format!("pulling corpus `{id}`"))
         }
         Err(PullOutcome::Overran(mins)) => bail!(
-            "corpus `{id}`: the pull has run {mins} minutes and has not finished. A prebuilt \
-             restore is a download and an extract — minutes. Overrunning by this much means \
-             the snapshot was DISCARDED (its embedding space did not match this endpoint) and \
-             a full rebuild from source started instead, which is hours and is not what \
-             serving asked for. Refusing rather than continuing.\n  \
-             To rebuild deliberately:  corpus-mcp ingest <recipe.toml>\n  \
-             To accept the snapshot on its declared name and skip the probe: \
-             SOVEREIGN_FORCE_PREBUILT=1\n  \
-             To wait longer:           --pull-deadline-mins <n> (0 disables)"
+            "corpus `{id}`: the pull has run {mins} minutes and has not finished, so the \
+             snapshot was DISCARDED and a full rebuild from source started instead — hours, \
+             and not what serving asked for. Refusing rather than continuing.\n\n  \
+             WHY: the restore runs an embedding-space probe — it re-embeds a sample of the \
+             snapshot's own chunks through YOUR endpoint and compares them to the stored \
+             vectors, requiring a mean cosine of at least {PREBUILT_PROBE_THRESHOLD}. Look \
+             a few lines up in this output for the line reading `embedding-space probe \
+             FAILED ... probe_cosine=<n>`: that number is your endpoint's actual agreement \
+             with the snapshot, and it is the whole reason this is happening.\n  \
+             A LOW COSINE WITH THE RIGHT MODEL IS NORMAL AND IS NOT YOUR MISTAKE. \
+             Qwen3-Embedding is last-token pooled and requires an EOS token appended to \
+             every input; a bare llama-server `/v1/embeddings` does not append one, so the \
+             pooled vector is taken at a different token and the space differs even though \
+             the model file is identical. That is a property of the endpoint, not of you.\n\n  \
+             Build it yourself instead:   corpus-mcp ingest <recipe.toml>\n  \
+             Trust the snapshot's name and skip the probe:  SOVEREIGN_FORCE_PREBUILT=1 \
+             (only if you know your endpoint matches the one that BUILT it)\n  \
+             Wait longer:                 --pull-deadline-mins <n> (0 disables)"
         ),
     };
     eprintln!(

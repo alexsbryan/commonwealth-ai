@@ -1,0 +1,67 @@
+corpus-mcp: endpoint candidate --base-url http://127.0.0.1:8089/v1 — 1 model(s) listed, first `Qwen3-Embedding-0.6B-Q8_0.gguf`
+corpus-mcp: host http://127.0.0.1:8089: baseline OpenAI-compatible path — http://127.0.0.1:8089/oicp/v1/capabilities returned 404 Not Found
+corpus-mcp: embeddings via http://127.0.0.1:8089/v1/embeddings, model `Qwen3-Embedding-0.6B-Q8_0.gguf`, 1024-d (baseline (OpenAI-compatible))
+corpus-mcp: data root /home/alexbryan/dev/ei6-wt/test-artifacts/ei6-probe-root
+[2m2026-09-05T20:16:36.869332Z[0m [33m WARN[0m [2mcorpus_engine::registry[0m[2m:[0m Recipe URL has no sha256 in the registry; preferring the bundled compile-time recipe over the unverified remote to avoid silent drift (set a sha256 in registry.toml to let a verified remote override the bundled recipe) [3mcorpus[0m[2m=[0msep [3murl[0m[2m=[0mhttps://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/sep/recipe.toml
+corpus-mcp: corpus `sep` is not installed — pulling the prebuilt snapshot from huggingface.co/datasets/svrnmesh/sep-index (sep-qwen-embedding-0.6b-2026-06-29.tar.zst)
+corpus-mcp: if `qwen-embedding-0.6b`'s embedding space does not match this endpoint, the restore is DISCARDED and `ingest` rebuilds `sep` from source instead — hours, not minutes. Ctrl-C and run `corpus-mcp ingest` deliberately if that is what you want; set SOVEREIGN_FORCE_PREBUILT=1 to accept the snapshot on its declared name and skip the probe.
+[2m2026-09-05T20:16:36.931021Z[0m [33m WARN[0m [2mcorpus_engine::registry[0m[2m:[0m Recipe URL has no sha256 in the registry; preferring the bundled compile-time recipe over the unverified remote to avoid silent drift (set a sha256 in registry.toml to let a verified remote override the bundled recipe) [3mcorpus[0m[2m=[0msep [3murl[0m[2m=[0mhttps://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/sep/recipe.toml
+[2m2026-09-05T20:20:57.058409Z[0m [33m WARN[0m [2mcorpus_engine::engine::ingest_prebuilt[0m[2m:[0m ingest: embedding-space probe FAILED — discarding snapshot, full ingest [3mcorpus_id[0m[2m=[0msep [3msnapshot_model[0m[2m=[0mqwen-embedding-0.6b [3mlocal_model[0m[2m=[0mQwen3-Embedding-0.6B-Q8_0 [3mprobe_cosine[0m[2m=[0m0.6822375655174255 [3mthreshold[0m[2m=[0m0.9200000166893005
+[2m2026-09-05T20:20:57.308695Z[0m [33m WARN[0m [2mcorpus_engine::engine::ingest[0m[2m:[0m ingest: prebuilt snapshot not usable with the local embedding model — running full ingest [3mcorpus_id[0m[2m=[0msep [3mlocal_model[0m[2m=[0mQwen3-Embedding-0.6B-Q8_0
+[sep] Starting embed+index pipeline (embed_batch=256, index_flush=2000, batch_embed=false)
+[sep] 256 embedded (256 buffered) | 254 docs | 24.3 chunks/s | 0m30s
+[sep] 512 embedded (512 buffered) | 509 docs | 28.2 chunks/s | 0m39s
+[sep] 768 embedded (768 buffered) | 760 docs | 28.4 chunks/s | 0m48s
+[sep] 1024 embedded (1024 buffered) | 1013 docs | 27.8 chunks/s | 0m58s
+[sep] 1280 embedded (1280 buffered) | 1263 docs | 28.0 chunks/s | 1m7s
+[sep] 1536 embedded (1536 buffered) | 1516 docs | 31.4 chunks/s | 1m15s
+[sep] 1792 embedded (1792 buffered) | 1768 docs | 27.1 chunks/s | 1m24s
+[sep] 2048 embedded (2048 buffered) | 2006 docs | 25.1 chunks/s | 1m34s
+[sep] Flushed 2048 chunks to index (153ms) — 2048 total committed
+[sep] 2304 embedded (256 buffered) | 2253 docs | 28.5 chunks/s | 1m43s
+[sep] 2560 embedded (512 buffered) | 2505 docs | 32.9 chunks/s | 1m51s
+[sep] 2816 embedded (768 buffered) | 2752 docs | 31.2 chunks/s | 1m59s
+[sep] 3072 embedded (1024 buffered) | 2990 docs | 27.6 chunks/s | 2m9s
+[sep] 3328 embedded (1280 buffered) | 3233 docs | 27.2 chunks/s | 2m18s
+[sep] 3584 embedded (1536 buffered) | 3471 docs | 27.1 chunks/s | 2m28s
+[sep] 3840 embedded (1792 buffered) | 3708 docs | 27.6 chunks/s | 2m37s
+[sep] 4096 embedded (2048 buffered) | 3952 docs | 25.0 chunks/s | 2m47s
+[sep] Flushed 2048 chunks to index (113ms) — 4096 total committed
+[sep] 4352 embedded (256 buffered) | 4203 docs | 25.4 chunks/s | 2m57s
+[sep] 4608 embedded (512 buffered) | 4459 docs | 31.1 chunks/s | 3m5s
+[sep] 4864 embedded (768 buffered) | 4701 docs | 26.6 chunks/s | 3m15s
+[sep] 5120 embedded (1024 buffered) | 4945 docs | 24.8 chunks/s | 3m25s
+[sep] 5376 embedded (1280 buffered) | 5192 docs | 27.0 chunks/s | 3m35s
+[sep] 5632 embedded (1536 buffered) | 5426 docs | 25.2 chunks/s | 3m45s
+[sep] 5888 embedded (1792 buffered) | 5669 docs | 26.6 chunks/s | 3m55s
+[sep] 6144 embedded (2048 buffered) | 5899 docs | 28.1 chunks/s | 4m4s
+[sep] Flushed 2048 chunks to index (152ms) — 6144 total committed
+[sep] 6400 embedded (256 buffered) | 6146 docs | 24.1 chunks/s | 4m14s
+[sep] 6656 embedded (512 buffered) | 6395 docs | 25.4 chunks/s | 4m24s
+[sep] 6912 embedded (768 buffered) | 6639 docs | 32.3 chunks/s | 4m32s
+[sep] 7168 embedded (1024 buffered) | 6890 docs | 29.4 chunks/s | 4m41s
+[sep] 7424 embedded (1280 buffered) | 7144 docs | 27.7 chunks/s | 4m50s
+[sep] 7680 embedded (1536 buffered) | 7376 docs | 31.3 chunks/s | 4m58s
+[sep] 7936 embedded (1792 buffered) | 7597 docs | 25.1 chunks/s | 5m9s
+[sep] 8192 embedded (2048 buffered) | 7810 docs | 29.0 chunks/s | 5m17s
+[sep] Flushed 2048 chunks to index (154ms) — 8192 total committed
+[sep] 8448 embedded (256 buffered) | 8066 docs | 30.0 chunks/s | 5m26s
+[sep] 8704 embedded (512 buffered) | 8317 docs | 32.1 chunks/s | 5m34s
+[sep] 8960 embedded (768 buffered) | 8562 docs | 25.3 chunks/s | 5m44s
+[sep] 9216 embedded (1024 buffered) | 8813 docs | 28.2 chunks/s | 5m53s
+[sep] 9472 embedded (1280 buffered) | 9063 docs | 27.9 chunks/s | 6m2s
+[sep] 9728 embedded (1536 buffered) | 9317 docs | 29.8 chunks/s | 6m11s
+[sep] 9984 embedded (1792 buffered) | 9571 docs | 27.5 chunks/s | 6m20s
+[sep] 10240 embedded (2048 buffered) | 9816 docs | 28.0 chunks/s | 6m29s
+[sep] Flushed 2048 chunks to index (154ms) — 10240 total committed
+[sep] 10496 embedded (256 buffered) | 10052 docs | 23.8 chunks/s | 6m40s
+[sep] 10752 embedded (512 buffered) | 10304 docs | 28.3 chunks/s | 6m49s
+[sep] 11008 embedded (768 buffered) | 10541 docs | 23.1 chunks/s | 7m0s
+[sep] 11264 embedded (1024 buffered) | 10784 docs | 26.4 chunks/s | 7m10s
+[sep] 11520 embedded (1280 buffered) | 11014 docs | 24.4 chunks/s | 7m21s
+[sep] 11776 embedded (1536 buffered) | 11263 docs | 25.0 chunks/s | 7m31s
+[sep] 12032 embedded (1792 buffered) | 11515 docs | 31.2 chunks/s | 7m39s
+Error: corpus `sep`: the pull has run 12 minutes and has not finished. A prebuilt restore is a download and an extract — minutes. Overrunning by this much means the snapshot was DISCARDED (its embedding space did not match this endpoint) and a full rebuild from source started instead, which is hours and is not what serving asked for. Refusing rather than continuing.
+  To rebuild deliberately:  corpus-mcp ingest <recipe.toml>
+  To accept the snapshot on its declared name and skip the probe: SOVEREIGN_FORCE_PREBUILT=1
+  To wait longer:           --pull-deadline-mins <n> (0 disables)

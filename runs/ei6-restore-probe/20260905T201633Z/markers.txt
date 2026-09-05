@@ -1,0 +1,7 @@
+preflight rc=0 2026-09-05T20:16:33Z
+box-before rc=0 2026-09-05T20:16:33Z
+probe rc=1 2026-09-05T20:28:36Z
+pull-err-captured rc=0 2026-09-05T20:28:36Z
+VERDICT-REFUSED-BY-DEADLINE rc=0 2026-09-05T20:28:36Z
+indexes-sep-present rc=1 2026-09-05T20:28:37Z
+DONE rc=1

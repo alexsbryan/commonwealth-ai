@@ -54,7 +54,7 @@ which is what the development host has. The Ollama path is exercised by the
 same code on the same flags and has not been run end to end against a live
 Ollama; if you find a difference, it is a bug and not a design.
 
-### A named corpus is pulled if you do not have it
+### A named corpus is pulled if you do not have it — but read this first
 
 ```sh
 corpus-mcp serve --corpus sep     # ~875 MB from HuggingFace on a cold machine
@@ -64,8 +64,51 @@ corpus-mcp serve --corpus sep     # ~875 MB from HuggingFace on a cold machine
 a prebuilt snapshot: the archive carries the chunk index AND the atlas, so
 what you get is the enriched corpus, not a re-embed. A corpus whose recipe
 declares no snapshot is **not** pulled — building it is `corpus-mcp ingest`'s
-job, and serving will not quietly start an hours-long acquire on your behalf.
-Either way you are told which.
+job. Either way you are told which.
+
+**A shipped snapshot will very likely be REJECTED against a bare llama-server,
+and this is measured, not hypothetical.** Before it trusts a snapshot, the
+restore re-embeds a sample of that snapshot's own chunks through your endpoint
+and compares them to the stored vectors, requiring a mean cosine of at least
+0.92. On 2026-09-05, `sep`'s snapshot against a bare
+`llama-server --embeddings` on the *identical* `Qwen3-Embedding-0.6B-Q8_0.gguf`
+scored **0.68**.
+
+The model file is not the problem. Qwen3-Embedding is **last-token pooled** and
+requires an **EOS token appended to every input**; the pooling itself comes
+from the GGUF metadata, so both servers agree on it, but the EOS append is
+something the *caller* does before tokenizing, and a bare llama-server
+`/v1/embeddings` does not do it. The pooled vector is therefore taken at a
+different token, and the space differs. **There is no llama-server flag for
+this** — `--pooling last` changes nothing, because last-token pooling is
+already what the GGUF declares.
+
+So on a bare endpoint, expect this:
+
+    corpus-mcp serve --corpus sep
+    → snapshot discarded (probe_cosine=0.68 < 0.92), full rebuild starts
+    → refused after 30 minutes, because a rebuild of sep is hours, not minutes
+
+That refusal is deliberate — `serve` will not silently spend hours rebuilding a
+corpus you asked it to fetch. Your options, in the order most people want them:
+
+1. **Use an endpoint that matches the one the snapshot was built with.** For
+   the corpora this project ships, that is the sovereign daemon's embedder,
+   which appends EOS as the model requires.
+2. **Build the corpus yourself** — `corpus-mcp ingest <recipe.toml>`. The
+   vectors are then yours and match your endpoint by construction. This is the
+   honest path for a bare llama-server, and it is what the three-command
+   experience above is for.
+3. `SOVEREIGN_FORCE_PREBUILT=1` skips the probe and accepts the snapshot on its
+   declared name. Only do this if you know your endpoint matches the one that
+   built it; otherwise you get an index whose vectors disagree with your own
+   queries, and retrieval quietly degrades instead of failing.
+4. `--pull-deadline-mins 0` disables the bound if you genuinely want to wait
+   out a rebuild.
+
+The snapshot manifest does not record the embedder configuration it was built
+with, only a model NAME — which is why this can only be discovered by probing
+rather than read off the archive.
 
 ## The MCP config block
 
