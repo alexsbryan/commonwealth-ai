@@ -58,7 +58,76 @@ fn sources(repo: Option<&Path>) -> Vec<Judgement> {
         env_gate_row(repo),
         oicp_conformance_row(),
         bench_baselines_row(repo),
+        instrument_coverage_row(repo),
     ]
+}
+
+/// The instrument registry's own closure trigger.
+///
+/// Every other row here answers "is this artifact fresh". This one answers a
+/// different question — "what verifies this repo, and what about it is not
+/// verified at all" — and it is here because that question had no home: the
+/// quality surface was eleven private lists, and `QUALITY_SURFACE.md`'s
+/// postmortem is about an instrument that sat on none of them for ten days.
+///
+/// It PASSES whenever the registry can be read. The four numbers are a census,
+/// not a bar, and inventing a threshold for them ("fewer than N unmeasured")
+/// would be a bar nobody pre-registered — the thing §18.6 warns about. What
+/// makes it a trigger is that the numbers are in front of you every session:
+/// `9 run nowhere` is a sentence somebody eventually acts on, where the same
+/// fact spread across eleven lists was not sayable at all.
+///
+/// Repo-scoped, so it degrades to could-not-judge outside a checkout like
+/// every other repo-scoped row here.
+fn instrument_coverage_row(repo: Option<&Path>) -> Judgement {
+    let name = "instrument-coverage";
+    let Some(repo) = repo else {
+        return Judgement::could_not_judge(
+            name,
+            Reason::literal(
+                "quality/instruments.toml is repo data and this is not a checkout —                  run from a source tree",
+            ),
+        );
+    };
+    let path = repo.join("quality/instruments.toml");
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return Judgement::never_ran(
+            name,
+            Reason::literal(
+                "no quality/instruments.toml — the instrument registry has not been minted here",
+            ),
+        );
+    };
+    // A registry that stopped parsing is a FAILURE, not a missing row: the
+    // closure gate, `svrn quality map` and this line all go dark together, and
+    // reporting that as an absence would hide the one fact worth knowing.
+    let registry = match kernel_types::quality::Registry::parse(&text) {
+        Ok(r) => r,
+        Err(errs) => {
+            return Judgement::failed(
+                name,
+                Reason::new(format!(
+                    "quality/instruments.toml does not parse ({} problem(s), first: {}) —                      detail: cargo xtask instrument-gate",
+                    errs.len(),
+                    errs.first().map(String::as_str).unwrap_or("unknown")
+                ))
+                .unwrap_or_else(|| Reason::literal(
+                    "quality/instruments.toml does not parse — detail: cargo xtask instrument-gate",
+                )),
+            );
+        }
+    };
+    let c = registry.coverage();
+    let nowhere = registry.nowhere().len();
+    Judgement::passed(
+        name,
+        Reason::new(format!(
+            "{} instruments, {} with a negative control, {} unmeasured cost, \
+             {} by-hand only ({nowhere} run nowhere) — detail: svrn quality map",
+            c.total, c.with_negative_control, c.unmeasured_cost, c.by_hand_only
+        ))
+        .unwrap_or_else(|| Reason::literal("instrument census — detail: svrn quality map")),
+    )
 }
 
 /// The OICP v0.4 wire contract, as last certified against a live host.
@@ -557,7 +626,44 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
         crate::util::help::HelpSection::Usage("svrn posture"),
         crate::util::help::HelpSection::Examples(&[(
             "svrn posture",
-            "drift / arch / capability / contract-nightly / watchers / env-gate / bench rows",
+            "drift / arch / capability / contract-nightly / watchers / env-gate / bench / \n             instrument-coverage rows",
         )]),
     ],
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Both absences, watched (ARCH §18.1). A repo-scoped row that degrades to
+    /// a PASS outside a checkout would be a green nobody earned, and a missing
+    /// registry is never-ran rather than could-not-judge: nothing was there to
+    /// judge, which is a different fact from "I could not reach it".
+    #[test]
+    fn instrument_coverage_reports_both_absences_apart() {
+        let no_repo = instrument_coverage_row(None);
+        assert_eq!(no_repo.verdict(), kernel_types::Verdict::CouldNotJudge);
+        assert!(no_repo.reason().as_str().contains("not a checkout"));
+
+        let empty = std::env::temp_dir().join("posture-instrument-row-empty");
+        std::fs::create_dir_all(&empty).expect("temp dir");
+        let _ = std::fs::remove_file(empty.join("quality/instruments.toml"));
+        let missing = instrument_coverage_row(Some(&empty));
+        assert_eq!(missing.verdict(), kernel_types::Verdict::NeverRan);
+        assert!(missing.reason().as_str().contains("has not been minted"));
+    }
+
+    /// A registry that stopped parsing takes the closure gate, `quality map`
+    /// and this line dark together. Reporting that as an absence would hide
+    /// the one fact worth knowing, so it is a FAILURE naming its detail
+    /// command (ARCH §18.3).
+    #[test]
+    fn an_unparseable_registry_fails_rather_than_going_quiet() {
+        let dir = std::env::temp_dir().join("posture-instrument-row-broken/quality");
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        std::fs::write(dir.join("instruments.toml"), "schema_version = 1\n").expect("write");
+        let j = instrument_coverage_row(Some(&dir.parent().expect("parent").to_path_buf()));
+        assert_eq!(j.verdict(), kernel_types::Verdict::Failed);
+        assert!(j.reason().as_str().contains("cargo xtask instrument-gate"));
+    }
+}

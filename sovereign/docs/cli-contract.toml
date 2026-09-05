@@ -583,7 +583,7 @@ feature = "dev-tools"
 # posture — the cross-subsystem roll-up beside `contract`'s CLI-only view:
 # one read-only table of artifact age + verdict per quality subsystem
 # (drift / arch / capability / contract-nightly / watchers / env-gate /
-# bench baselines), each row naming its refresh command.
+# bench baselines / instrument-coverage), each row naming its refresh command.
 [[command]]
 path = "posture"
 binary = "dispatcher"

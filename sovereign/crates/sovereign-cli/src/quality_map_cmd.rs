@@ -115,7 +115,7 @@ fn write_golden(path: &PathBuf, rendered: &str) -> i32 {
 
 /// Which table. A closed set with its words named in the refusal, so a typo
 /// is a two-second fix rather than a whole map to scroll.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Section {
     Layers,
     Fidelity,
@@ -189,28 +189,36 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
 mod tests {
     use super::*;
 
+    /// Every variant round-trips through its own flag, and a near-miss is
+    /// refused. Driven off `Section::ALL`, so a variant added there without a
+    /// `flag()` arm fails to compile and one added to `flag()` without `ALL`
+    /// fails here — unlike the first draft of this test, which hardcoded the
+    /// same four literals it was checking and could only have failed if
+    /// somebody deleted one (ARCH §18.1).
     #[test]
-    fn every_section_flag_parses_and_nothing_else_does() {
-        for (arg, want) in [
-            ("--layers", Section::Layers),
-            ("--fidelity", Section::Fidelity),
-            ("--load-bearing", Section::LoadBearing),
-            ("--where", Section::Where),
-        ] {
-            assert!(Section::parse(arg) == Some(want), "{arg}");
+    fn every_section_round_trips_through_its_flag() {
+        assert_eq!(Section::ALL.len(), 4, "a section was added or removed");
+        for s in Section::ALL {
+            assert_eq!(Section::parse(s.flag()), Some(s), "{}", s.flag());
         }
         assert!(Section::parse("--loadbearing").is_none());
         assert!(Section::parse("--all").is_none());
+        assert!(Section::parse("--layer").is_none());
     }
 
-    /// The refusal has to name the legal words, or a typo costs a doc read.
+    /// A refusal listing three of four sections is worse than no refusal: it
+    /// reads authoritative. The text is DERIVED from the same array `parse`
+    /// uses, and this is what pins that.
     #[test]
-    fn the_section_words_are_named_in_one_place() {
-        for word in ["--layers", "--fidelity", "--load-bearing", "--where"] {
+    fn the_refusal_names_every_section_because_it_is_derived_from_them() {
+        let words = Section::words();
+        for s in Section::ALL {
             assert!(
-                Section::WORDS.contains(word),
-                "{word} missing from the refusal text"
+                words.contains(s.flag()),
+                "{} missing from `{words}`",
+                s.flag()
             );
         }
+        assert_eq!(words.matches(", ").count(), Section::ALL.len() - 1);
     }
 }
