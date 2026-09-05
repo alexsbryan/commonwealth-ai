@@ -510,8 +510,12 @@ reason = "cross-family reach — harness should simulate against the OICP/contra
 # A PACKAGE is a crate set that must stay liftable out of this monorepo and
 # buildable against nothing but the `[[package_leaf]]` set below. Enforced by
 # `cargo run -p xtask -- boundary-gate` (blocking, one of the eight pre-push
-# ratchets), which adds the two filesystem rules a manifest cannot express: no
-# `build.rs`, and no `include_str!`/`include_bytes!` escaping the crate root.
+# ratchets), which adds the THREE filesystem rules a manifest cannot express:
+# no `build.rs` (3a), no `include_str!`/`include_bytes!` escaping the crate
+# root (3b), and no RUNTIME reach-out past it (3c) — a path derived from
+# `CARGO_MANIFEST_DIR` that climbs, or a `git` subprocess with no
+# `current_dir`. 3c landed 2026-09-04 (787eda806) because the first two are
+# both COMPILE-TIME rules and the commonwealth lift failed on neither.
 #
 # WHY THIS IS A SEPARATE RULE FROM THE LAYERS ABOVE. Layers answer "may this
 # edge exist anywhere in the workspace"; a package answers "is this edge inside
@@ -623,8 +627,9 @@ name = "oplog"
 # kernel-types, itoa, memchr, once_cell, …) are already inside an admitted
 # leaf, so the real widening is the crate and nothing else. On size it is
 # mid-pack: kernel-types 16, oicp-types 20, corpus-engine-vocab 21, oplog 28,
-# sovereign-contracts 147. Both filesystem rules pass — no `build.rs`, no
-# `include_str!`/`include_bytes!` escaping the crate root.
+# sovereign-contracts 147. All three filesystem rules pass — no `build.rs`,
+# no `include_str!`/`include_bytes!` escaping the crate root, and no runtime
+# reach-out past it.
 #
 # `kernel-types` is its ONE internal dep and that is the contract: oplog owns
 # ordering and dedup, not identity. Three crates name it today —

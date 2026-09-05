@@ -23,8 +23,9 @@
 //! - `xtask layer-gate` feeds Cargo-DECLARED dependency edges (deterministic,
 //!   runs in CI without a daemon).
 //! - `xtask boundary-gate` feeds the same edges to [`evaluate_packages`], and
-//!   adds the two filesystem rules a manifest cannot express (no `build.rs`,
-//!   no crate-escaping `include_str!`).
+//!   adds the three filesystem rules a manifest cannot express (no `build.rs`,
+//!   no crate-escaping `include_str!`, and no runtime reach-out past the
+//!   crate root).
 //! - the code-intel `arch_report` feeds SCIP-OBSERVED symbol-reference edges
 //!   (catches coupling that re-exports hide from Cargo).
 //!

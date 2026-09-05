@@ -84,7 +84,7 @@ pub fn run() -> i32 {
         .collect();
     fails.extend(dep_fails.iter().cloned());
 
-    // Rules 3a/3b — the filesystem half, which no manifest can express.
+    // Rules 3a/3b/3c — the filesystem half, which no manifest can express.
     let mut checked = 0usize;
     for (scope, name) in governed_crates(&map) {
         let Some(rel) = dir_of.get(name) else {
@@ -205,9 +205,9 @@ fn governed_crates(map: &arch_layers::LayerMap) -> Vec<(&str, &str)> {
     out
 }
 
-/// Flag `include_str!` / `include_bytes!` literals that escape the crate root
-/// (climb two+ levels) unless they target the checked-in `sovereign-recipes/`
-/// tree. Grep-level (per-line), recursing the crate's `src/`.
+/// Rule 3b — `include_str!` / `include_bytes!` literals that escape the crate
+/// root (climb two+ levels), unless they target the checked-in
+/// `sovereign-recipes/` tree. Grep-level and windowed, recursing `src/`.
 ///
 /// The `sovereign-recipes/` carve-out is the one recorded exception, and it is
 /// worth knowing that it is not free: when the studio closure was actually
@@ -215,36 +215,104 @@ fn governed_crates(map: &arch_layers::LayerMap) -> Vec<(&str, &str)> {
 /// edits, but had to preserve the monorepo's directory shape to compile —
 /// because of exactly this embed. A green gate is not a proven lift.
 fn include_escapes(dir: &Path, crate_name: &str, scope: &str, fails: &mut Vec<String>) {
-    fn walk(dir: &Path, crate_name: &str, scope: &str, fails: &mut Vec<String>) {
-        let Ok(rd) = std::fs::read_dir(dir) else {
-            return;
+    let mut files = Vec::new();
+    rs_files(&dir.join("src"), &mut files);
+    files.sort();
+    for path in files {
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
         };
-        for entry in rd.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                walk(&path, crate_name, scope, fails);
-            } else if path.extension().map(|e| e == "rs").unwrap_or(false) {
-                let Ok(text) = std::fs::read_to_string(&path) else {
-                    continue;
-                };
-                for line in text.lines() {
-                    let t = line.trim();
-                    if !(t.contains("include_str!") || t.contains("include_bytes!")) {
-                        continue;
-                    }
-                    // Escapes the crate root iff it climbs two+ levels.
-                    if t.contains("../..") && !t.contains("sovereign-recipes") {
-                        fails.push(format!(
-                            "[{scope}] {crate_name}: {} embeds a file outside the crate root \
-                             and outside sovereign-recipes/: `{t}`",
-                            path.file_name().unwrap_or_default().to_string_lossy()
-                        ));
-                    }
-                }
-            }
+        let name = path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        for e in scan_include_escapes(&text) {
+            fails.push(format!(
+                "[{scope}] {crate_name}: src/{name}:{} {}",
+                e.line,
+                e.describe()
+            ));
         }
     }
-    walk(&dir.join("src"), crate_name, scope, fails);
+}
+
+/// One compile-time embed that climbs out of the crate root, with the line
+/// that proves it.
+struct IncludeEscape {
+    line: usize,
+    evidence: String,
+}
+
+impl IncludeEscape {
+    /// The fix goes in the message, same as rules 3a and 3c: a violation a
+    /// reader has to go look up is a violation that gets grandfathered.
+    fn describe(&self) -> String {
+        format!(
+            "embeds a file outside the crate root and outside `sovereign-recipes/` at \
+             COMPILE TIME (`{}`) — a third party who lifts this package has none of that \
+             tree, and the embed makes the monorepo's directory shape a build requirement. \
+             Move the data inside the crate, or into the carved-out recipes tree",
+            self.evidence
+        )
+    }
+}
+
+/// Scan one file's text for embeds that climb two+ levels out of the crate
+/// root — WINDOWED over the statement, because the shape that actually ships
+/// does not fit on one line.
+///
+/// Rule 3b tested a single trimmed line until 2026-09-04, so it required the
+/// macro and the climbing path to appear TOGETHER. Both of
+/// `sovereign-contracts`'s recipe embeds (`src/recipe/{registry,schema}.rs`)
+/// spread the macro, the `env!("CARGO_MANIFEST_DIR")` and the
+/// `"/../../../sovereign-recipes/…"` literal across three lines, so neither
+/// line satisfied both halves and the rule never saw them. It was green by
+/// accident — and would have stayed green with the carve-out deleted, which
+/// is the tell: a check with no failing input you can name is not a check
+/// (ARCH §18.1).
+///
+/// The window is the STATEMENT rather than a fixed lookahead, so one embed's
+/// carve-out cannot excuse the embed underneath it.
+fn scan_include_escapes(text: &str) -> Vec<IncludeEscape> {
+    /// How far a macro invocation may run before this rule stops looking for
+    /// the `;` that ends it. The shipped shapes use four lines.
+    const FWD: usize = 8;
+
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out = Vec::new();
+    // One report per STATEMENT, for the same reason rule 3c dedupes: two
+    // findings for one defect is how a burn-down list stops being a count.
+    let mut examined_through: Option<usize> = None;
+
+    for (i, line) in lines.iter().enumerate() {
+        if !(line.contains("include_str!") || line.contains("include_bytes!")) {
+            continue;
+        }
+        if examined_through.is_some_and(|through| i <= through) {
+            continue;
+        }
+        // The statement: the macro line through the line that terminates it.
+        let cap = (i + FWD + 1).min(lines.len());
+        let hi = (i..cap)
+            .find(|&k| lines[k].contains(';'))
+            .map_or(cap, |k| k + 1);
+        let window = &lines[i..hi];
+        examined_through = Some(hi.saturating_sub(1));
+
+        // The carve-out is read over the SAME window as the escape. Reading
+        // them on different lines is exactly how the per-line version passed.
+        if window.iter().any(|l| l.contains("sovereign-recipes")) {
+            continue;
+        }
+        if let Some(hop) = window.iter().find(|l| l.contains("../..")) {
+            out.push(IncludeEscape {
+                line: i + 1,
+                evidence: hop.trim().to_string(),
+            });
+        }
+    }
+    out
 }
 
 /// Rule 3c — RUNTIME reach-outs past the crate root, in `src/`, `tests/`,
@@ -542,6 +610,79 @@ crates = ["pkg-a", "pkg-b"]
             optional: false,
         };
         assert!(arch_layers::evaluate_packages(&map, &[outside]).is_empty());
+    }
+
+    /// Rule 3b's positive controls. The first is the shape that actually
+    /// ships and that the per-line rule scored ZERO on for as long as it
+    /// existed: the macro is on one line and the climb is two lines below it,
+    /// so no single line satisfies both halves.
+    #[test]
+    fn include_scan_sees_an_embed_that_wraps_over_three_lines() {
+        // sovereign-contracts/src/recipe/registry.rs's exact shape, with the
+        // recorded carve-out swapped out so the escape is the only variable.
+        let wrapped = r#"
+pub const OTHER_TOML: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../elsewhere/registry.toml"
+));
+"#;
+        let hits = scan_include_escapes(wrapped);
+        assert_eq!(hits.len(), 1, "the three-line embed must be seen");
+        assert!(hits[0].evidence.contains("elsewhere/registry.toml"));
+    }
+
+    #[test]
+    fn include_scan_still_sees_a_single_line_embed() {
+        let inline = r#"const X: &str = include_str!("../../elsewhere/x.json");"#;
+        assert_eq!(scan_include_escapes(inline).len(), 1);
+        let bytes = r#"const X: &[u8] = include_bytes!("../../elsewhere/x.bin");"#;
+        assert_eq!(scan_include_escapes(bytes).len(), 1);
+    }
+
+    /// Rule 3b's negative controls — the recorded carve-out, and the embeds
+    /// that lift fine because they never leave the crate.
+    #[test]
+    fn include_scan_leaves_the_carve_out_and_what_stays_inside() {
+        // The real registry.rs. The carve-out sits on a DIFFERENT line from
+        // the macro, which is why the window has to be the whole statement.
+        let carved = r#"
+pub const RECIPE_REGISTRY_TOML: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../sovereign-recipes/registry.toml"
+));
+"#;
+        assert!(scan_include_escapes(carved).is_empty());
+
+        // Inside the crate, and one level up from a file in `src/` is still
+        // the crate root — only a two+ level climb leaves.
+        let local = r#"const X: &str = include_str!("fixtures/x.json");"#;
+        assert!(scan_include_escapes(local).is_empty());
+        let crate_root = r#"const X: &[u8] = include_bytes!("../README.md");"#;
+        assert!(scan_include_escapes(crate_root).is_empty());
+    }
+
+    /// The window is a statement and not a fixed lookahead, so a carve-out
+    /// cannot excuse the embed above or below it. A `[i, i+8]` window would
+    /// have let the second statement here hide the first.
+    #[test]
+    fn include_scan_does_not_let_a_carve_out_cover_its_neighbour() {
+        let two = r#"
+pub const ESCAPES: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../elsewhere/a.toml"
+));
+pub const CARVED: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../sovereign-recipes/b.toml"
+));
+"#;
+        let hits = scan_include_escapes(two);
+        assert_eq!(
+            hits.len(),
+            1,
+            "the first embed escapes; only the second is carved out"
+        );
+        assert!(hits[0].evidence.contains("elsewhere/a.toml"));
     }
 
     /// Rule 3c's positive controls — the three shapes that actually shipped,
