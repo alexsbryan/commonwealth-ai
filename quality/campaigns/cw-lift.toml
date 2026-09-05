@@ -61,9 +61,21 @@ status    = "active"
 #       REPLACED BY 1f' — the convergence-ceiling test, below.
 #   2a  the ceiling, measured + watched red   b55b9179e 73a273dd1 DONE  +423
 #   2b  twelve free namespaces off the wire   4747d6fa6          DONE  -461
-#   2f  chunk the exchange (NEW, earned by 2a's measurement)      OPEN
+#   2f  chunk the exchange (NEW, earned by 2a's measurement)
+#                                             bc600f424 DONE  +949
 #   2d  mesh-measurements onto the rail                           OPEN
-#   2c+2e the projection + delete the 10s push (ONE order)        OPEN
+#   2c+2e one wire shape, one budget, 4th sender gone
+#                                             92a64d778 PARTIAL +92
+#       K8 FIRED. 2e proper is NOT deletable this phase: Step 4 is the only
+#       anti-entropy for the seven namespaces still gossiped after 2b, and six
+#       wait on retention. 2c proper is blocked by the same gap — a projection
+#       fed by admission needs a namespace on the rail, and none is yet, so
+#       building the seam now would be inventory (§19). Landed instead: the
+#       fourth sender deleted (census 4 -> 3), one wire shape for the gossip
+#       body, one byte budget (MESH_STORE_PAYLOAD_WARN_BYTES gone, reads
+#       RING_SYNC_OPS_BUDGET_BYTES), the senderless /internal/app/registry
+#       route deleted, and every_sender_of_replicated_state_is_declared as a
+#       STRUCTURAL census — cw-twin-visibility's instrument, watched red.
 #   3   triage the application layer (unscoped until 2 settles)
 #   T   the twin census + an instrument that can see a twin   <- OFF-PLAN
 #   R   the ratchets + the push decision                      <- OFF-PLAN
@@ -138,16 +150,63 @@ status       = "open"
 #   -------
 #   -3,907  LANDED. Floor is -3,800, so it CLEARS BY 107.
 #
-# THE MARGIN IS ~107, NOT ~592, AND THE EARLIER FIGURE WAS AN ARITHMETIC
-# ERROR RATHER THAN A DRIFT. A 2026-09-04 handoff recorded ~-4,732 by
-# subtracting 2b's deletion WITHOUT adding 2a's +423. The pair nets -38, not
-# -378. Recount, per commit, `git show --numstat --format="" <sha> -- '*.rs'`:
-# that is the instrument this bar now uses and it is reproducible.
+# ^^^ THE BLOCK ABOVE IS SUPERSEDED. IT MIXES TWO INSTRUMENTS. Kept because
+# the correction is the finding, not the number.
 #
-# The bar is NOT at risk: 2e is Phase 2's other large deletion (Step 4 alone
-# is ~195 lines, plus the gauge, the receiver, the dead registry route and
-# Tier D). But it is no longer true that this bar cannot lose from either
-# direction, and a rung that overruns now shows up in the margin immediately.
+# ── THIS BAR CANNOT STATE ITS POSITION, AND HAS NOT BEEN ABLE TO SINCE 1b ──
+#
+# The ladder's recorded rows were checked against git on 2026-09-04, per rung:
+#
+#   rung  sha         recorded   all-files   .rs-only
+#   0a    5cc9076fc     -1,892     -1,892     -1,862   all-files MATCHES
+#   0b    e9f20feec     -3,155     -3,155     -3,122   all-files MATCHES
+#   0c    cfa70611f        +34        +34        +34   all-files MATCHES
+#   4a    e26414742       +107       +107        +23   all-files MATCHES
+#   1a    33b003a2e       +216       +216       +114   all-files MATCHES
+#   4b    2a5b63325        +63        +63        +45   all-files MATCHES
+#   1b    ff63884f3         +8       +251        +74   NEITHER
+#   1c    b94d399eb        -10        +22        +12   NEITHER
+#   1e    34d308b85       +104       +190       +177   NEITHER
+#   S     dc9010181       +171       +391       +360   NEITHER
+#
+# The first six rungs are a MECHANICAL all-files diff. From 1b onward the rows
+# are HAND-CURATED — 1c's row is a per-crate hand count, S's row says "the
+# mechanism is TWENTY lines" against a 391-line diff. The switch was never
+# recorded, and it understated four rungs by 581 lines in total.
+#
+# THE FLOOR WAS SET UNDER THE FIRST INSTRUMENT AND THE POSITION IS REPORTED
+# UNDER THE SECOND. That is why -4,354 looked comfortable.
+#
+# Recomputed end-to-end, ONE instrument, every DONE rung including Phase 2:
+#
+#   all-files   -2,250   vs floor -3,800   BREACHED by 1,550
+#   production  -3,609   vs floor -3,800   BREACHED by 191
+#     (production = .rs, excluding tests/ dirs, *tests.rs, benches/, examples/;
+#      it OVERCOUNTS, because inline `#[cfg(test)]` modules are not excluded —
+#      2f's +779 "production" is mostly the inline test module in ring_sync.rs)
+#
+# IT BREACHES UNDER BOTH, AND IT DID NOT START IN PHASE 2. Under all-files the
+# position at S was already -3,772 — past the floor before Phase 2 opened.
+#
+# NO THIRD INSTRUMENT WAS SOUGHT. Choosing the measure after seeing which one
+# passes is §18.6, and this bar has already been decided once that way by
+# accident. The instrument is a DECISION and it is the operator's: declare one,
+# restate the floor in its terms, and re-derive every row from git so the
+# ladder is reproducible. Until then this bar's status is COULD-NOT-JUDGE, not
+# open and not cleared (§18.2).
+#
+# WHAT PHASE 2 ACTUALLY COST, all-files: 2a +457, 2b -461, bench +485,
+# 2f +949, 2ce +92 = +1,522, with 2d still outstanding. Phase 2 was
+# verification-heavy BY DESIGN — 2a's whole deliverable was "the instrument,
+# and watch it fail" — and this bar counts test lines. That tension is real
+# and is what the hand-curation was groping at.
+#
+# AND THE DELETION THAT WAS GOING TO PAY FOR IT IS NOT COMING. K8 FIRED
+# (2ce, 92a64d778): Step 4 is the ONLY anti-entropy for the seven namespaces
+# still gossiped after 2b, six of which cannot move until retention lands in
+# the next phase. Deleting it would END replication for six namespaces rather
+# than move it. So "2e is Phase 2's other large deletion" — written in
+# f460df57a, above — is now FALSE.
 #
 # THE BENCH WAS A DELIBERATE +485 AGAINST THIS BAR. It is 2a's instrument and
 # it existed only in a session-scoped tmp directory — one GC from lost, and
