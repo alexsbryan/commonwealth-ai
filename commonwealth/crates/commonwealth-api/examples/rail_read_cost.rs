@@ -14,10 +14,9 @@
 //! Clear `RUSTC_WRAPPER` when timing a rebuild — sccache is on by default on
 //! this host and misreports build wall time.
 
-
 use commonwealth_rail::{
-    sign_ring_op, Digest, Ed25519Verifier, Op, Payload, Person, RailAct, RingJournal,
-    RingVerifier, Roster, SignedOp,
+    sign_ring_op, Digest, Ed25519Verifier, Op, Payload, Person, RailAct, RingJournal, RingVerifier,
+    Roster, SignedOp,
 };
 use ed25519_dalek::SigningKey;
 use std::collections::BTreeMap;
@@ -390,11 +389,17 @@ fn main() {
         let (mut lo, mut hi) = (1usize, cap);
         while lo < hi {
             let mid = (lo + hi + 1) / 2;
-            if body_bytes(mid) <= LIMIT { lo = mid; } else { hi = mid - 1; }
+            if body_bytes(mid) <= LIMIT {
+                lo = mid;
+            } else {
+                hi = mid - 1;
+            }
         }
         println!(
             "  {label:<20} last N that FITS = {lo:>6}  ({} B)   first that does NOT = {} ({} B)",
-            body_bytes(lo), lo + 1, body_bytes(lo + 1)
+            body_bytes(lo),
+            lo + 1,
+            body_bytes(lo + 1)
         );
     }
     println!();
