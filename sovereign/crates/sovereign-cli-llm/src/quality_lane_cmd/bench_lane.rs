@@ -902,7 +902,10 @@ mod tests {
             Vec::<String>::new(),
             "a fixture whose replays never ran must not appear as scored-zero"
         );
-        assert_eq!(c.tallies, vec![("01_corpus_definitional".to_string(), 3, 3)]);
+        assert_eq!(
+            c.tallies,
+            vec![("01_corpus_definitional".to_string(), 3, 3)]
+        );
         assert_eq!(
             c.never_ran,
             vec!["05_noresults_honesty: 3 of 3 replay(s) never ran".to_string()]
