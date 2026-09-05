@@ -1,0 +1,46 @@
+ei-7c: why the rebuilt store has 51,781 in-scope articles and the retiring SQLite has 51,280
+
+  in both stores       51,280
+  ONLY in new store       501
+  ONLY in old SQLite        0   <- nothing was lost
+
+evidence chunk_id ranges (the article's lowest chunk):
+  shared    n=51,280           1 ..  1,845,541
+  only-new  n=   501   1,847,443 ..  1,953,568
+  overlap between the two ranges: 0 of 501
+
+revision_id (-1 = the sentinel for 'absent in chunk metadata'):
+  shared   with a real revision: 51,280 / 51,280
+  only-new with a real revision:      0 / 501
+  SQLite max revision_id: 1245937477
+
+CONCLUSION: the 501 are a contiguous LATER ingest batch appended to
+chunks.lance after the SQLite graph was built, carrying no revision
+metadata. The new store is a strict SUPERSET of the old one.
+
+first 25 only-new titles:
+    150 metres
+    1998–99 New York Knicks season
+    2005 Palestinian presidential election
+    2006 Palestinian legislative election
+    2006 Stanley Cup Final
+    2008 NBA Finals
+    2021–2023 inflation surge
+    2022 24 Hours of Le Mans
+    2024 South Korean martial law crisis
+    2025–2026 Iran–United States negotiations
+    2025–26 NHL season
+    2026
+    2026 24 Hours of Le Mans
+    2026 Afghanistan–Pakistan war
+    2026 Angeles City building collapse
+    2026 Angola gold mine landslide
+    2026 Atlantic hurricane season
+    2026 Blue Nile campaign
+    2026 Bolivian protests
+    2026 Central Sulawesi earthquake
+    2026 Colorado wildfires
+    2026 Cook Islands general election
+    2026 Côte-des-Neiges shooting
+    2026 Ebola epidemic
+    2026 Edwards Air Force Base B-52 crash
