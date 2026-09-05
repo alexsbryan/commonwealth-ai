@@ -63,7 +63,16 @@ status    = "active"
 #   2b  twelve free namespaces off the wire   4747d6fa6          DONE  -461
 #   2f  chunk the exchange (NEW, earned by 2a's measurement)
 #                                             bc600f424 DONE  +949
-#   2d  mesh-measurements onto the rail                           OPEN
+#   2d  mesh-measurements onto the rail, roster DERIVED not written
+#                                             ce42f893f DONE +1267
+#       No roster route (K10 not hit) — each node derives its roster from
+#       membership it already holds, so MeshRoster has no writer. A member
+#       with node_pubkey None gets NO placeholder (one default collides every
+#       unidentified node into one identity); its ops are UnknownSigner gaps,
+#       REPORTED in `unreadable`, and they HEAL when that node's round stamps
+#       its key, because the roster is a parameter of the read. Tombstones
+#       keep their keys. 12 injected defects, each reverted, each turning
+#       exactly the gate that names it red.
 #   2c+2e one wire shape, one budget, 4th sender gone
 #                                             92a64d778 PARTIAL +92
 #       K8 FIRED. 2e proper is NOT deletable this phase: Step 4 is the only
@@ -196,7 +205,14 @@ status       = "open"
 # open and not cleared (§18.2).
 #
 # WHAT PHASE 2 ACTUALLY COST, all-files: 2a +457, 2b -461, bench +485,
-# 2f +949, 2ce +92 = +1,522, with 2d still outstanding. Phase 2 was
+# 2f +949, 2ce +92, 2d +1,267 = +2,789. Phase 2 is COMPLETE and it is the
+# most ADDITIVE phase of the campaign by a wide margin.
+#
+#   FINAL POSITION, every DONE rung, one instrument each way:
+#     all-files    -983   vs floor -3,800   BREACHED by 2,817
+#     production -3,037   vs floor -3,800   BREACHED by   763
+#
+# Phase 2 was
 # verification-heavy BY DESIGN — 2a's whole deliverable was "the instrument,
 # and watch it fail" — and this bar counts test lines. That tension is real
 # and is what the hand-curation was groping at.
