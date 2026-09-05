@@ -98,12 +98,19 @@ leg sizes bash -c "
     du -sh \"\$HOME/.svrnmesh/indexes/wikipedia/wikipedia_graph.db\" 2>/dev/null;
   } | tee '$OUT/sizes.txt'"
 
-# LEG 3 — the new store answers both faces on real articles. Read-only, and it
-# is the first evidence that the rebuild is usable at all.
+# LEG 3 — the NEW store answers on real articles. Read-only.
+#
+# `--atlas-dir "$OUT/atlas"` is the whole point and it is why this leg was
+# worthless on 2026-09-04: `neighbors` had no such flag, dropped it silently,
+# and read the INSTALLED store instead — so the probe reported on the store the
+# rebuild was meant to replace and was cited as evidence for the rebuild. Fixed
+# in the verb (it now honours the flag, REFUSES an unknown one, and prints the
+# store it read on every line of output). Keep the flag here and keep the
+# `store:` line in probe.txt: that line is what makes this leg checkable.
 leg probe bash -c "
-  for t in 'Roman Empire' 'Albert Einstein' 'Byzantine Empire'; do
+  for t in 'Roman Empire' 'Albert Einstein' 'Byzantine Empire' 'Jigsaw puzzle' 'Jigsaw Puzzle'; do
     toolbox run -c sovereign-vulkan '$CLI' atlas wikipedia neighbors wikipedia \"\$t\" --limit 10 \
-      2>/dev/null || exit 1
+      --atlas-dir '$OUT/atlas' || exit 1
   done | tee '$OUT/probe.txt'"
 
 date -Is > "$M/DONE"

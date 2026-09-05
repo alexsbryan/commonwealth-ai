@@ -1,4 +1,5 @@
-neighbors of "Roman Empire" in corpus `wikipedia` — 10 results in 227 ms
+neighbors of "Roman Empire" in corpus `wikipedia` — 10 results in 25 ms
+  store: /home/alexbryan/dev/ei7c-wt/runs/wikipedia-rebuild/out/atlas
 
   Roman Empire [topical] occ=6 in_scope=true
   Crisis of the Third Century [topical] occ=5 in_scope=true
@@ -10,9 +11,10 @@ neighbors of "Roman Empire" in corpus `wikipedia` — 10 results in 227 ms
   Ancient Greek art [topical] occ=3 in_scope=true
   Augustus [topical] occ=3 in_scope=true
   Byzantine Empire [topical] occ=3 in_scope=true
-neighbors of "Albert Einstein" in corpus `wikipedia` — 10 results in 299 ms
+  [exit 0]
+neighbors of "Albert Einstein" in corpus `wikipedia` — 10 results in 23 ms
+  store: /home/alexbryan/dev/ei7c-wt/runs/wikipedia-rebuild/out/atlas
 
-  Hebrew University of Jerusalem [topical] occ=4 in_scope=true
   Spacetime [topical] occ=4 in_scope=true
   Annus mirabilis papers [topical] occ=3 in_scope=false
   Brownian motion [topical] occ=3 in_scope=true
@@ -22,7 +24,9 @@ neighbors of "Albert Einstein" in corpus `wikipedia` — 10 results in 299 ms
   Nathan Rosen [topical] occ=3 in_scope=false
   Nobel Prize in Physics [topical] occ=3 in_scope=false
   Photoelectric effect [topical] occ=3 in_scope=true
-neighbors of "Byzantine Empire" in corpus `wikipedia` — 10 results in 122 ms
+  [exit 0]
+neighbors of "Byzantine Empire" in corpus `wikipedia` — 10 results in 22 ms
+  store: /home/alexbryan/dev/ei7c-wt/runs/wikipedia-rebuild/out/atlas
 
   Justinian I [topical] occ=5 in_scope=true
   Constantinople [topical] occ=4 in_scope=true
@@ -34,3 +38,23 @@ neighbors of "Byzantine Empire" in corpus `wikipedia` — 10 results in 122 ms
   Eastern Orthodox Church [topical] occ=3 in_scope=true
   Greek fire [topical] occ=3 in_scope=true
   Italian Renaissance [topical] occ=3 in_scope=true
+  [exit 0]
+neighbors of "Jigsaw puzzle" in corpus `wikipedia` — 10 results in 23 ms
+  store: /home/alexbryan/dev/ei7c-wt/runs/wikipedia-rebuild/out/atlas
+
+  Fretsaw [topical] occ=2 in_scope=false
+  Jigsaw (tool) [topical] occ=2 in_scope=false
+  John Spilsbury (cartographer) [topical] occ=2 in_scope=false
+  Paperboard [topical] occ=2 in_scope=false
+  Scroll saw [topical] occ=2 in_scope=false
+  Advertising [topical] occ=1 in_scope=true
+  Alzheimer Society of Canada [topical] occ=1 in_scope=false
+  Alzheimer's disease [topical] occ=1 in_scope=true
+  Art [topical] occ=1 in_scope=true
+  Autism (journal) [topical] occ=1 in_scope=false
+  [exit 0]
+neighbors of "Jigsaw Puzzle" in corpus `wikipedia` — 0 results in 15 ms
+  store: /home/alexbryan/dev/ei7c-wt/runs/wikipedia-rebuild/out/atlas
+
+(article present in this store, 0 in-store outgoing edges)
+  [exit 0]
