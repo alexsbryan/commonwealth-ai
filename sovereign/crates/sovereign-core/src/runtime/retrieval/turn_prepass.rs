@@ -169,7 +169,21 @@ impl Runtime {
             let skeleton =
                 corpus_engine::enrichment::field_atoms::skeleton_from_atoms(corpus_id, &atoms);
             if skeleton.is_empty() {
-                continue; // atlas present, but it carries no field model
+                // `FieldSkeleton::is_empty` asks about CANONICAL questions
+                // only, so an atlas whose questions are all `Open` renders
+                // nothing here. That is unchanged from the v1 file — SEP's
+                // skeleton carries 0 open questions and every per-article
+                // `sep-<slug>` atlas carries only open ones — and it is left
+                // alone deliberately: widening it would start splicing a
+                // digest into per-article turns that never had one, which is a
+                // behaviour change this order does not measure.
+                tracing::debug!(
+                    corpus = %corpus_id,
+                    atoms = atoms.len(),
+                    open_questions = skeleton.open_questions.len(),
+                    "ambient field_model: atlas carries no canonical questions — nothing to splice"
+                );
+                continue;
             }
             let heading = format!("Field guide — {corpus_id}");
             let body = skeleton.render_landscape(&heading, FIELD_DIGEST_BUDGET_TOKENS);
