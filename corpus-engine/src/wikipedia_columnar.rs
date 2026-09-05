@@ -879,6 +879,10 @@ impl WikiAtlasProvider {
 }
 
 impl AtlasProvider for WikiAtlasProvider {
+    fn provider_class(&self) -> &'static str {
+        "wiki-class"
+    }
+
     fn atlas_corpus_id(&self) -> &str {
         &self.atlas_corpus_id
     }

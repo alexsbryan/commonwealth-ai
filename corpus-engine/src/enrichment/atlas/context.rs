@@ -1726,16 +1726,26 @@ pub trait AtlasContextProvider: Send + Sync {
     /// be (`WIKIPEDIA_ATLAS_V2.md`: its edges carry per-edge strings a CSR
     /// cannot hold).
     ///
-    /// The default delegates, so every existing implementor is already correct
-    /// and an atom-class corpus behaves exactly as before. Only a provider that
-    /// can serve a NON-atom store overrides it.
+    /// REQUIRED, and it used to have a default that delegated to `graph()`.
+    /// That default was the §18.3 shape: `graph()` can only ever hand back an
+    /// atom store, so an implementor that did nothing got "no walkable store"
+    /// for a corpus holding a perfectly good `articles.lance` — an absence
+    /// DEFAULTED, silently, to the bag-of-atoms branch. It cost nothing while
+    /// `AtlasContextManager` was the only implementor and overrode it
+    /// correctly; it would have cost the next implementor a wrong answer that
+    /// looked like a right one, and in an A/B two arms that agree perfectly
+    /// because neither read its store.
+    ///
+    /// The default cannot be repaired in place: resolving BY CLASS needs the
+    /// atlas directory (`open_walk_provider` takes one) and this trait does not
+    /// have it. So the honest move is to remove the default and let the
+    /// compiler ask each implementor the question, rather than answer it for
+    /// them (principle 10 — make it structural, not remembered). Implementors
+    /// that serve only atom-class stores write the old one-liner and mean it.
     fn walk_provider(
         &self,
         atlas_corpus_id: &str,
-    ) -> Option<Arc<dyn super::provider::AtlasProvider>> {
-        self.graph(atlas_corpus_id)
-            .map(|g| g as Arc<dyn super::provider::AtlasProvider>)
-    }
+    ) -> Option<Arc<dyn super::provider::AtlasProvider>>;
 
     /// Ensure the given atlas corpora are loaded (bag + graph + ANN seed
     /// table), loading any not already resident. The lazy-load hook for

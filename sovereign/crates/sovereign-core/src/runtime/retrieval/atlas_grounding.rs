@@ -78,13 +78,37 @@ impl Runtime {
     ) -> crate::runtime::retrieval_ledger::StepLedger {
         use crate::runtime::retrieval_ledger::{DropReason, StepLedger};
         use corpus_engine::enrichment::atlas::ground;
+        // THE THREE WAYS THIS STEP DOES NOTHING, each said out loud.
+        //
+        // All three used to return an empty ledger in silence, and from outside
+        // they are indistinguishable from "the atlas had nothing to add" — the
+        // §18.3 shape, an absence defaulted. It cost an afternoon on
+        // 2026-09-04: wikipedia contributed nothing to a prod-pipeline eval,
+        // the store class was blamed, and the store was never asked because
+        // this step returned before it got there.
         if !atlas_grounding_enabled() {
+            tracing::info!(
+                label,
+                reason = "feature-disabled",
+                "atlas-grounding: skipped (SOVEREIGN_ATLAS_GROUNDING is off)"
+            );
             return StepLedger::injected(0).drop(DropReason::FeatureDisabled, 0);
         }
         let Some(provider) = lane.atlas_context.as_ref() else {
+            tracing::info!(
+                label,
+                reason = "no-atlas-provider-on-lane",
+                "atlas-grounding: skipped — this lane carries no atlas provider, so NO store \
+                 of any class can be reached from it"
+            );
             return StepLedger::injected(0);
         };
         if embedding.is_empty() {
+            tracing::info!(
+                label,
+                reason = "empty-query-embedding",
+                "atlas-grounding: skipped (no query embedding)"
+            );
             return StepLedger::injected(0);
         }
 
@@ -110,6 +134,21 @@ impl Runtime {
             scoped.extend(enabled.iter().cloned());
         }
         let mut corpus_ids: Vec<String> = scoped.into_iter().collect();
+        // WHICH CORPORA WERE EVEN CONSIDERED. Without this, an empty set and a
+        // set whose stores all refused look identical from outside — both
+        // simply produce no grounding and no line. That ambiguity cost real
+        // time on 2026-09-04: wikipedia contributed nothing to a prod-pipeline
+        // eval and the store class was blamed, when the candidate set was
+        // empty and no store was ever asked. Absence reported, not inferred
+        // (ARCH §18.3).
+        tracing::info!(
+            label,
+            candidates = corpus_ids.len(),
+            corpora = %corpus_ids.join(","),
+            from_chunks = chunks.len(),
+            scoped_by_conversation = enabled_corpora.map(|e| e.len()).unwrap_or(0),
+            "atlas-grounding: candidate atlas corpora for this query"
+        );
         provider.ensure_loaded(&corpus_ids).await;
         // Scope-driven atlas filtering. When the router classifies
         // the query against a `scope = "personal"`-tagged exemplar
@@ -150,7 +189,35 @@ impl Runtime {
         // bag-of-atoms branch below no matter what store it had.
         let graphs: Vec<Arc<dyn corpus_engine::enrichment::atlas::AtlasProvider>> = corpus_ids
             .iter()
-            .filter_map(|id| provider.walk_provider(id))
+            .filter_map(|id| {
+                let p = provider.walk_provider(id);
+                // WHICH STORE ANSWERED is a decision, so it is visible (ARCH §9,
+                // principle 1). It lands here rather than at the open site
+                // because this crate is in the eval subscriber's default filter
+                // (`sovereign_core=info`) while the manager's is not — the
+                // allowlist trap: a `debug!` on an unlisted target is dark, and
+                // chasing this exact question through dark targets is what cost
+                // an afternoon. Once per corpus per grounding call, not once per
+                // load: the open behind it IS memoised, and repeating the line
+                // per question is what lets a lane row assert that every
+                // question in an arm was served by the same class.
+                match &p {
+                    Some(g) => tracing::info!(
+                        label,
+                        corpus = id.as_str(),
+                        provider_class = g.provider_class(),
+                        seed_table = g.has_ann_seed_table(),
+                        "atlas-grounding: store class serving this corpus"
+                    ),
+                    None => tracing::info!(
+                        label,
+                        corpus = id.as_str(),
+                        provider_class = "none",
+                        "atlas-grounding: no store the walk can read — bag-of-atoms for this corpus"
+                    ),
+                }
+                p
+            })
             .collect();
 
         if graphs.is_empty() {

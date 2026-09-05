@@ -80,6 +80,18 @@ use super::evidence_site::EvidenceSite;
 pub trait AtlasProvider: Send + Sync {
     /// This atlas's own id — an EXTRACTION address (`sep-freewill`), never a
     /// corpus to search. Ask [`Self::site`] for that.
+    /// Which STORE CLASS is serving this corpus — `"atom-class"` or
+    /// `"wiki-class"`.
+    ///
+    /// Required, with no default, deliberately (principle 10: structural, not
+    /// remembered). An A/B whose arms differ only in their store has to show
+    /// that each arm was served by the store it names; "atom-class" appearing
+    /// where "wiki-class" was expected is the silent-identical-arms failure,
+    /// and it is invisible unless something says which one answered. A default
+    /// here would let a new backend inherit another class's label, which is
+    /// worse than no label at all.
+    fn provider_class(&self) -> &'static str;
+
     fn atlas_corpus_id(&self) -> &str;
 
     /// Where the chunks this atlas cites actually live, and whether a title
@@ -154,6 +166,10 @@ pub trait AtlasProvider: Send + Sync {
 /// for no gain. What the trait adds is that the WALK no longer names this
 /// type.
 impl AtlasProvider for AtlasGraph {
+    fn provider_class(&self) -> &'static str {
+        "atom-class"
+    }
+
     fn atlas_corpus_id(&self) -> &str {
         &self.atlas_corpus_id
     }
@@ -340,6 +356,10 @@ mod tests {
     }
 
     impl AtlasProvider for Elsewhere {
+        fn provider_class(&self) -> &'static str {
+            "test-double"
+        }
+
         fn atlas_corpus_id(&self) -> &str {
             "elsewhere"
         }
