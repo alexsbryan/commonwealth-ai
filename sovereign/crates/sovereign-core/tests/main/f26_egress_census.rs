@@ -151,6 +151,14 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // loopback-only at both layers and refuses anything else — so the class
     // is LocalDaemon, not egress. Nothing here leaves the machine.
     ("sovereign/crates/sovereign-turn-client/src/lib.rs", Class::LocalDaemon, 1),
+    // sovereign-cli `svrn quality check` (quality_check_cmd.rs, 2026-09-04,
+    // order quality-check-lean): two `reqwest::Client`s against the host
+    // daemon on :9741 — the stack fingerprint reads `/v1/models`, and the
+    // `SlotDecodes` precondition sends a one-token completion so a lane
+    // never runs against a daemon that answers the models route but
+    // cannot decode. Both loopback; neither carries estate content off the
+    // machine. LocalDaemon, not egress.
+    ("sovereign/crates/sovereign-cli/src/quality_check_cmd.rs", Class::LocalDaemon, 2),
 
     // ---- sovereign-mesh: the estate's own transport (Mesh) ----
     // Peer-to-peer / daemon-mesh HTTP; own auth + custody class.
@@ -548,7 +556,11 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // corpus-mcp's host probe: `GET /oicp/v1/capabilities`, `GET /v1/models`,
     // one `POST /v1/embeddings` — all against the operator's `--base-url`.
     ("corpus-mcp/src/host.rs", Class::OperatorSurface, 1),
-    ("commonwealth/crates/commonwealth-api/src/routes_internal/corpus_collaborate.rs", Class::Mesh, 2),
+    // 2 -> 1 at cw-lift rung 2c: the queue-handoff unicast to
+    // `/internal/app/state` built its own client with its own 10s timeout,
+    // a second answer to "how long do we wait on a peer" beside
+    // `gossip_client()`. The gossip round already replicated the row.
+    ("commonwealth/crates/commonwealth-api/src/routes_internal/corpus_collaborate.rs", Class::Mesh, 1),
     ("commonwealth/crates/commonwealth-api/src/routes_knowledge.rs", Class::Mesh, 1),
     ("commonwealth/crates/commonwealth-api/src/routes_internal/pipeline_pause.rs", Class::LocalDaemon, 1),
     ("commonwealth/crates/oicp-conformance/src/checks.rs", Class::LocalDaemon, 1),
