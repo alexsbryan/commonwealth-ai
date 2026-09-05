@@ -6910,34 +6910,50 @@ band refuses an 800-1,200 residual). The three new crossings are new to the
 BASELINE, not to the repository, and each is one owner's call to make when
 they next open it.
 
-### 10.1m Approach band +1 line — ei-5b-build-verb (2026-09-04), owed to the seat's merge
+### 10.1n Approach band +3 lines of a +4,643 finding — ei-5b-build-verb (2026-09-04), owed to the seat's merge
 
-`arch-gate` blocks this branch on one finding: `approach band GREW: lines
-171751 -> 171752 (+1)`. The whole of it is one struct field.
+Re-measured at this branch's tip after the 2026-09-04 rebase onto upstream
+`b9f41d18e` (251 files changed), which replaced the numbers this row first
+carried. `arch-gate` now blocks with `approach band GREW: files 176 -> 181
+(+5)` and `lines 171751 -> 176394 (+4643)` against the baseline re-pinned on
+main at `88ee493d4` (§10.1k). **Three of those 4,643 lines are this branch's,
+and none of the five files is.** Every `.rs` file in `git diff main...HEAD`
+was measured at both ends; only two land in ARCH §3.1's 800-1200 band:
 
-`EnrichConfig` gained `embed_base_url: Option<String>` because llama-server
-loads one model per process, so a corpus ingested against two of them has a
-chat host and an embed host, and reading `base_url` for both sent every phase's
-resolution embedding to the chat process — which answers 200 with a vector of
-the wrong width. Rust requires every field at every struct literal, and one of
-the five literals is in `sovereign-tools/src/local_corpus/watched/enrich.rs`,
-which sits in the 800-1200 approach band at 1,080 lines. `embed_base_url:
+| file | main | tip | in band |
+|---|---|---|---|
+| `sovereign/crates/sovereign-core/tests/main/f26_egress_census.rs` | 811 | 813 | at both ends — +2 |
+| `sovereign/crates/sovereign-tools/src/local_corpus/watched/enrich.rs` | 1080 | 1081 | at both ends — +1 |
+
+The remaining +4,640 lines, the +5 files, and the sibling
+`instruction surface GREW: AGENTS.md 46852 -> 47190 (+338)` are upstream's;
+this branch touches neither `AGENTS.md` nor any of the five.
+
+**Why the +1.** `EnrichConfig` gained `embed_base_url: Option<String>` because
+llama-server loads one model per process, so a corpus ingested against two of
+them has a chat host and an embed host, and reading `base_url` for both sent
+every phase's resolution embedding to the chat process — which answers 200
+with a vector of the wrong width, a corruption nothing downstream re-checks.
+Rust requires every field at every struct literal, and one of the five
+literals is in that `watched/enrich.rs`, which sits in the band. `embed_base_url:
 None,` there is the +1.
 
-What was traded to get it that low, in this order and by hand, so the number
-is the field and nothing else: the commit's other in-band entrant,
-`sovereign-core/tests/main/f26_egress_census.rs`, crossed 800 on an
-eight-line registry comment and was trimmed to one line, taking the file to
-799 and the band's file count back to 176; the two-line comment beside the
-field in `watched/enrich.rs` was dropped, the type's own doc carrying it. The
-same commit CUT 221 lines from `enrich_cmd/init.rs` (1,531 → 1,310) by moving
-the from-corpus manifest builder down — a real cut, but above the band's
-ceiling, so the band cannot see it.
+**Why the +2.** Two registry rows in the F26 egress census, one per new
+construction site in `corpus-mcp` — the entry the census test demands before
+it will pass. That file was trimmed to 799 on the pre-rebase base precisely
+to keep it out of the band; upstream has since grown it to 811, so it is in
+the band at both ends now and the trim buys nothing. It is not re-trimmed:
+deleting a registry comment to move a counter is the tuning this ledger
+exists to refuse.
 
-+1 line is not worth a worker re-pinning `quality/baselines/` on a working
-tree, which absorbs every peer's growth along with its own (the trap named in
-`AGENTS.md`). It is owed to whoever merges this branch: re-pin at
-`origin/main` in a worktree, or accept the +1 against this row.
+The same commit CUT 221 lines from `sovereign/crates/sovereign-cli-llm/src/enrich_cmd/init.rs` (1,531 -> 1,310) by
+moving the from-corpus manifest builder down — a real cut, and still above
+the band's 1200 ceiling, so the band cannot see it.
+
+3 lines are not worth a worker re-pinning `quality/baselines/` on a working
+tree, which would absorb the +4,640 that is not ours along with the +3 that
+is (the trap named in `AGENTS.md`). It is owed to whoever merges this branch:
+re-pin at `origin/main` in a worktree, or accept the +3 against this row.
 
 ### 10.1k Size RE-PINNED at `origin/main` — 2026-09-04 (epistemic-index landings, seat)
 

@@ -63,6 +63,14 @@ ACCEPT_INGEST="${ACCEPT_INGEST:-}"
 CHAT_GGUF="${CHAT_GGUF:-}"
 CHAT_PORT="${CHAT_PORT:-8090}"
 INGEST_CORPUS="${INGEST_CORPUS:-wessex-hoard-bare}"
+# A FORECAST mode, not a shortcut. Set INGEST_CHAPTERS to a comma-separated
+# list of manifest section ids (the verb's own `--chapters` shape) to ingest only those, so the per-chapter wall
+# can be measured before a full run is committed to a lane window. A partial
+# atlas cannot be compared to the control on truth.json recall — fewer
+# chapters means fewer atoms for reasons that have nothing to do with the
+# endpoint — so this mode reports the recall leg COULD-NOT-JUDGE by name
+# (ARCH §18.2/§18.3) rather than printing a number that would read as the bar.
+INGEST_CHAPTERS="${INGEST_CHAPTERS:-}"
 FIXTURE_DIR="$repo/sovereign-recipes/wessex-hoard"
 # A THEMATIC question, deliberately: it is the row `ask` must classify onto
 # (Configuration + concept Entity seeds, Involves -> Tension -> Grounds), and
@@ -204,12 +212,17 @@ else
   curl -sf "http://127.0.0.1:$CHAT_PORT/health" >/dev/null || fail "chat llama-server never became healthy"
   echo "acceptance: chat frontend up on :$CHAT_PORT ($(basename "$CHAT_GGUF"))"
 
+  ingest_argv=(ingest "$stage/recipe.toml"
+    --chat-url "http://127.0.0.1:$CHAT_PORT/v1"
+    --embed-url "http://127.0.0.1:$PORT/v1")
+  if [[ -n "$INGEST_CHAPTERS" ]]; then
+    ingest_argv+=(--chapters "$INGEST_CHAPTERS")
+    echo "acceptance: FORECAST MODE — ingesting only [$INGEST_CHAPTERS];" \
+         "the truth.json recall leg will report COULD-NOT-JUDGE"
+  fi
   t_ingest=$(date +%s)
   set +e
-  "$CORPUS_MCP" ingest "$stage/recipe.toml" \
-      --chat-url "http://127.0.0.1:$CHAT_PORT/v1" \
-      --embed-url "http://127.0.0.1:$PORT/v1" \
-      2>&1 | tee "$work/ingest.log"
+  "$CORPUS_MCP" "${ingest_argv[@]}" 2>&1 | tee "$work/ingest.log"
   ingest_rc=${PIPESTATUS[0]}
   set -e
   ingest_secs=$(( $(date +%s) - t_ingest ))
@@ -231,6 +244,13 @@ else
   # THE BAR: the same recall table, on the same truth.json, for both atlases.
   # `--recipe-unchanged` because the staged recipe and the committed one have
   # checkout-fresh mtimes; the structural type-name comparison still runs.
+  if [[ -n "$INGEST_CHAPTERS" ]]; then
+    n_ch=$(tr ',' '\n' <<<"$INGEST_CHAPTERS" | grep -c .)
+    echo "acceptance: truth.json recall -> COULD-NOT-JUDGE — this run ingested" \
+         "$n_ch chapter(s) (INGEST_CHAPTERS), not the whole manifest the control" \
+         "was built from; the recall table is not comparable. Wall measured:" \
+         "${ingest_secs}s for $n_ch chapter(s)."
+  else  # the real bar: the whole manifest, comparable to the control
   echo "--- truth.json recall: CONTROL (daemon-built wessex-hoard) ---"
   "$repo/scripts/setup-numismatics-corpus.sh" --atlas wessex-hoard --recipe-unchanged \
     2>&1 | tee "$work/recall-control.txt" || true
@@ -269,6 +289,7 @@ if worse:
     sys.exit("acceptance: FAIL - recall below the daemon-built control on: " + "; ".join(worse))
 print("acceptance: corpus ingest -> truth.json recall >= the daemon-built control on every bar")
 RECALLPY
+  fi
   # ── the §6 row-3 bar for THIS corpus: attribution claims, cited, connected ──
   #
   # The recall table above says the declared nouns reached the atoms. This
