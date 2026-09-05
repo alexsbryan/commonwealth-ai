@@ -1,0 +1,146 @@
+# chat-ask.toml — the focus lane's bank.
+#
+# One turn, asked the way a user asks it, against a corpus the lane ingests
+# from source on every run. It exists because of issue #57: a fully
+# answerable two-part question came back with the first half answered and
+# the second half refused ("The passages do not answer: Role of the
+# grounding gate"), and nothing in the bench suite could see that — the
+# suites either score a bank of short questions or judge answers with no
+# access to what the turn DID.
+#
+# Every number below is PRE-REGISTERED. The ceilings are the ones order
+# quality-check-lean fixed on 2026-09-04 from the issue's own 26.6 s turn,
+# with headroom, and they are NOT to be edited to fit a run that failed
+# them — that is the whole point of writing them down first (ARCH §18.4).
+# Raising one is an operator decision, made in this file, with the reason.
+
+schema_version = 1
+
+[bank]
+id = "chat-ask"
+# Ingested FROM SOURCE each run into `qc-arch-tour-<fingerprint8>`, which is
+# deleted first. The desktop's upload of this same file makes 10 chunks and
+# this path makes 40 — the lane says which path it measures, and asserting
+# the count is how a silent chunker change is caught.
+fixture = "docs/ARCHITECTURE_TOUR.md"
+corpus_prefix = "qc-arch-tour"
+declared_chunks = 40
+# `corpus search <id> <probe>` must return the fixture. A corpus that
+# ingested and cannot be found is `ready` and useless.
+search_probe = "what does the grounding gate guard"
+search_must_hit = "ARCHITECTURE_TOUR"
+# Warm runs per question, plus one warm-up that is DISCARDED. Three is the
+# minimum that gives a spread; one run is not a measurement (ARCH §18.5).
+runs = 3
+warmup = 1
+
+# ── The usefulness judge ────────────────────────────────────────────
+# The gate's own forced-choice A/B probe, reused rather than re-derived
+# (ARCH §19): POST /v1/chat/completions with max_tokens 1, temperature 0,
+# and a `{"type":"string","enum":["A","B"],"x_forced_choice":true}` schema,
+# which the engine routes to PRIMARY for calibrated logprobs and answers as
+# `{"A":p,"B":p}`. Same register as `bench_cmd/live_runner.rs::forced_choice_ab`,
+# which is the function this lane calls.
+#
+# THE TWO CONTROLS RUN EVERY TIME. A judge whose separation nobody checked
+# is not an instrument (ARCH §18.4), and a usefulness score is exactly the
+# kind of number that keeps reading plausible while the probe has drifted.
+# If the controls do not separate by `control_gap`, the `useful` row is
+# could-not-judge — never a pass, and never a failure attributed to the
+# answer.
+[judge]
+model = "primary"
+threshold = 0.80
+control_gap = 0.60
+control_good_min = 0.80
+control_flat_max = 0.20
+# Measured 2026-09-04 on Qwen3.6-35B-A3B-UD-MTP-IQ4_NL, before any lane
+# code existed: good 0.9998 · flat abstention 0.00004 · gap 0.9998.
+control_good = """
+The runtime pipeline is router -> policy -> retrieval -> synthesis -> grounding gate. \
+The router classifies the ask, policy sets the route, retrieval searches local corpora \
+and mesh peers, synthesis drafts an answer, and the grounding gate extracts each claim \
+and checks it against the sealed evidence before release. Its three outcomes are: \
+release with citations, rewrite the unsupported spans and re-check, or abstain honestly.\
+"""
+control_flat = "I don't have enough information in the provided passages to answer that question."
+
+# ── Pre-registered per-stage ceilings, PER MODEL STEM ────────────────
+# A latency ceiling without a model is not a ceiling. A stem with no table
+# here is could-not-judge, not a pass — running a different model is not
+# evidence that this one got faster.
+#
+# Source: order quality-check-lean, from issue #57's measured turn
+# (retrieval 410 / draft 18,573 ×1 / citation 7,517 / total 26,605 ms).
+[ceilings."Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"]
+retrieval_ms = 2000
+draft_ms = 30000
+draft_calls = 1
+citation_ms = 15000
+audit_ms = 30000
+audit_calls = 12
+total_ms = 60000
+
+# ── The two questions ───────────────────────────────────────────────
+
+[[question]]
+id = "q1"
+# Issue #57, verbatim. Answerable in full from the tour: the pipeline is in
+# the §"the journey" prose and the gate's role is row 1 of the gate table,
+# which ranks #1 on `corpus search` and sits at index 1 of the 20 retrieved
+# chunks. Half of it was refused anyway.
+text = """\
+According to the Architecture Tour, what is the runtime pipeline, and what \
+role does the grounding gate play? Answer concisely but with enough detail \
+to explain the full flow.\
+"""
+expected_route = "DeepQuery"
+# Any release-family action. `abstain*` is failed by the `not abstained`
+# row, which reads the production gate's own decision.
+allowed_gate_actions = [
+    "citation_grounded",
+    "released",
+    "annotated_marked",
+    "verified",
+    "rewritten",
+]
+# The SECOND half — the one issue #57 refused. Spans an answer covering the
+# gate's ROLE has to reach, taken from the tour's own gate-table row
+# ("claims verified against the sealed corpus before release; deterministic
+# vetoes; rewrite or grounded abstention").
+#
+# STEMS, not whole words. The first run of this lane failed here on
+# `abstention` against an answer that said "the model must honestly
+# abstain" — a wording coupling, not a missing half, and exactly the defect
+# `scripts/lib/ci-bench-verdict.sh` is made of. `abstain` matches both. The
+# row still discriminates: `both_halves_answered_rejects_the_issue_57_shape`
+# runs it against the #57 answer verbatim.
+must_locate = [
+    "sealed",
+    "abstain",
+]
+
+[[question]]
+id = "q2"
+# Chosen to make the AUDIT pass fire — the per-claim judge fan-out, which
+# is where the latency cliff lived and which q1 does not reach. CONFIRMED
+# on the first instrumented run, 2026-09-04: gate action `annotated_marked`,
+# mode `per_claim`, `audit 26,842 ms over 7 calls`. The order allowed for
+# tuning the wording until audit fired; none was needed, and this is the
+# wording that fired it.
+text = """\
+Explain every stage of the runtime pipeline in order and what each gate in \
+the ladder guards.\
+"""
+expected_route = "DeepQuery"
+allowed_gate_actions = [
+    "citation_grounded",
+    "released",
+    "annotated_marked",
+    "verified",
+    "rewritten",
+]
+must_locate = [
+    "sealed",
+    "audit",
+]

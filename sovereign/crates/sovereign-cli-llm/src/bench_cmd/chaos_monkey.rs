@@ -828,12 +828,67 @@ async fn run(rest: &[String]) -> i32 {
     verdict.overall.exit_code()
 }
 
+/// The abstention decision, and the ONE place it is made.
+///
+/// `Some(action)` when the turn carried a signal that DECIDES — the gate's
+/// own persisted action, the typed ledger verdict, or an armed abstention
+/// gate. `None` only when there is no gate signal at all (a naked baseline,
+/// or the gate switched off), and the caller must then reach for a judge.
+///
+/// Extracted from `chaos_monkey`'s scoring body on 2026-09-04 so
+/// `quality lane chat-ask` could ask the same question without writing a
+/// second detector (ARCH §10.6). The rules are VERBATIM, and each is
+/// load-bearing:
+///
+/// - Trust the production gate's own decision rather than re-judging the
+///   visible text. That re-judge was the chaos measurement's main noise
+///   source: it mis-scored grounded short answers ("Chief Inspector") as
+///   abstentions.
+/// - `abstain*` is authoritative; any release-family action delivered the
+///   draft to the reader, so it is Answered. Empty text is the degenerate
+///   decline either way.
+/// - The typed path (I2-C, parity-gated) reads `cannot_know_from_here` off
+///   the turn's ledger instead of prefix-matching the action string.
+///
+/// The honesty truth for a RELEASED self-decline is not here — it lives in
+/// the value-presence axis (blatant_confab / the partition). This function
+/// answers "did the system decline", not "was the decline honest".
+pub(crate) fn action_from_gate_signal(
+    gated: bool,
+    typed_verdict: bool,
+    ledger_verdict: Option<&str>,
+    gate_action: Option<&str>,
+    visible: &str,
+) -> Option<AgentAction> {
+    if gated {
+        return Some(AgentAction::Abstained);
+    }
+    if typed_verdict {
+        return Some(
+            if ledger_verdict == Some("cannot_know_from_here") || visible.trim().is_empty() {
+                AgentAction::Abstained
+            } else {
+                AgentAction::Answered
+            },
+        );
+    }
+    let action = gate_action?;
+    Some(
+        if action.starts_with("abstain") || visible.trim().is_empty() {
+            AgentAction::Abstained
+        } else {
+            AgentAction::Answered
+        },
+    )
+}
+
 /// Score one already-answered question. The answer (`live`) comes from
 /// whichever transport the caller used — sealed in-process Runtime,
 /// desktop bridge, or naked baseline — so the judges, the critic's
 /// grounding gate, and the deterministic checks are one implementation
 /// across all of them.
 #[allow(clippy::too_many_arguments)]
+
 async fn score_question(
     live: crate::bench_cmd::live_runner::LiveAnswer,
     judge: &dyn InferenceProvider,
@@ -902,33 +957,14 @@ async fn score_question(
     // as an answer (attached-doc lane 2026-06-11, absent questions). The
     // extraction framing scores both by reader takeaway — the quantity
     // the red lines are actually about.
-    let agent_action = if gated {
-        AgentAction::Abstained
-    } else if typed_verdict {
-        // I2-C typed path (parity-gated): read the answer-vs-abstain
-        // decision off the turn's own typed verdict rather than the
-        // gate-action string prefix. `cannot_know_from_here` is the
-        // abstention verdict (derived from the same gate action, but as a
-        // typed contract); an empty reply is still the degenerate decline.
-        if ledger_verdict.as_deref() == Some("cannot_know_from_here") || visible.trim().is_empty() {
-            AgentAction::Abstained
-        } else {
-            AgentAction::Answered
-        }
-    } else if let Some(action) = gate_action.as_deref() {
-        // Trust the production gate's OWN decision — it ran in-process this turn
-        // and persisted its action — instead of re-judging the visible text. That
-        // re-judge was the measurement's main noise source: it mis-scored grounded
-        // short answers ("Chief Inspector") as abstentions. `abstain*` → Abstained
-        // (authoritative); any release-family action delivered the draft to the
-        // reader → Answered (empty text is the degenerate decline). The honesty
-        // truth for a released self-decline lives in the value-presence axis
-        // (blatant_confab / the partition), not this action proxy.
-        if action.starts_with("abstain") || visible.trim().is_empty() {
-            AgentAction::Abstained
-        } else {
-            AgentAction::Answered
-        }
+    let agent_action = if let Some(action) = action_from_gate_signal(
+        gated,
+        typed_verdict,
+        ledger_verdict.as_deref(),
+        gate_action.as_deref(),
+        &visible,
+    ) {
+        action
     } else {
         // No gate signal (naked baseline or gate disabled): fall back to the
         // forced-choice judge.

@@ -86,6 +86,10 @@ sovereign-eval = { workspace = true }
 # `meshapp dev` serves a bundle + proxies the explorer ops to this shared lib.
 sovereign-meshapp = { workspace = true }
 sovereign-cli-shared = { workspace = true, features = ["scip", "mcp-client"] }
+# The neutral kernel — `quality lane` rows are `Judgement`s, so the lane and
+# the runner that reads its trailing line speak one verdict vocabulary rather
+# than two (noun-convergence rung nc-10-judgement). Layer 0, edge points DOWN.
+kernel-types = { workspace = true }
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 # `svrn ring` reads and writes the ring roster, and needs the node key the

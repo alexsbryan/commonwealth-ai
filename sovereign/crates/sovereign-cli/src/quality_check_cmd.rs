@@ -748,6 +748,40 @@ fn comparable_baselines(repo: &Path, lanes: &[LaneSpec], fp: &Fingerprint) -> us
         .count()
 }
 
+/// `svrn quality <subcommand>` — the verb's own router.
+///
+/// It lives beside the runner rather than in `main.rs` because `main.rs` is
+/// a DISPATCHER: 1,500 lines of verb table and exec hops, sitting on
+/// ARCH §3.1's slack. A subcommand split belongs with the subcommand.
+///
+/// `exec_lane` is passed in rather than named here: the LANES live in
+/// `sovereign-cli-llm` (each drives inference, ingests a corpus or runs a
+/// judge) and this crate reaches that sibling by exec, which is the
+/// dispatcher's business, not the runner's.
+pub async fn run_verb(args: &[String], exec_lane: impl Fn(&str, &[String]) -> i32) -> i32 {
+    match args.first().map(String::as_str) {
+        Some("check") => run(&args[1..]).await,
+        Some("lane") => exec_lane("quality-lane", &args[1..]),
+        // An unknown subcommand is REFUSED, never defaulted to `check`
+        // (ARCH §18.3): running a 30-minute suite because someone typo'd a
+        // lane name is not a courtesy.
+        Some(other) if other != "--help" && other != "-h" => {
+            eprintln!("svrn quality: unknown subcommand `{other}`. Try: svrn quality check");
+            2
+        }
+        _ => {
+            println!("Usage: svrn quality check [--lane <id>]... [--budget-secs 1800] [--mint]");
+            println!("       svrn quality lane <id>");
+            println!();
+            println!("  check   Run the curated breakage lanes and write the table to");
+            println!("          target/quality-check/<stamp>/summary.json");
+            println!("  lane    Run ONE lane directly, printing its own rows. The");
+            println!("          runner above drives the same command per lane.");
+            0
+        }
+    }
+}
+
 pub async fn run(args: &[String]) -> i32 {
     if args.iter().any(|a| a == "--help" || a == "-h") {
         crate::util::help::print(&HELP);

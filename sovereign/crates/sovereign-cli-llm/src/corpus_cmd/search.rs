@@ -35,48 +35,10 @@ pub async fn cmd_corpus_search(args: &[String]) -> i32 {
         return 1;
     }
 
-    // Embed the query via the daemon's embed slot, resolved through the ONE
-    // decider (`sovereign_workflow_host::daemon_models`): configured stem →
-    // advertised id, proved by a `/v1/embeddings` probe. The refusal names
-    // what was probed; "advertises no embedding model" is no longer a
-    // verdict anything here reaches from an id substring.
-    let v1 = format!("{DEFAULT_DAEMON}/v1");
-    let embed_model = match sovereign_workflow_host::resolve_embed_model(&v1, None).await {
-        Ok(r) => r.id,
-        Err(e) => {
-            eprintln!("Cannot embed the query via the daemon at {DEFAULT_DAEMON}: {e}");
-            eprintln!("Start it with `svrn daemon` if it is not running.");
-            return 1;
-        }
-    };
-    let provider = RemoteApiProvider::new(&v1, None, &embed_model, 8192);
-    let embedding = match provider.embed(&query).await {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!("embed query failed: {e}");
-            return 1;
-        }
-    };
-
-    // Open the corpus by id under the canonical index dir.
-    let index_dir = sovereign_core::setup_config::SetupConfig::default_path()
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_default()
-        .join("indexes");
-    let path = index_dir.join(&id);
-    let index = match CorpusIndex::open(&path).await {
-        Ok(idx) => idx,
-        Err(e) => {
-            eprintln!("open corpus `{id}` at {}: {e}", path.display());
-            return 1;
-        }
-    };
-
-    let hits = match index.search(&embedding, &query, limit).await {
+    let hits = match search_corpus(&id, &query, limit).await {
         Ok(h) => h,
         Err(e) => {
-            eprintln!("search `{id}`: {e}");
+            eprintln!("{e}");
             return 1;
         }
     };
@@ -95,4 +57,69 @@ pub async fn cmd_corpus_search(args: &[String]) -> i32 {
         println!("   {}\u{2026}\n", preview.replace('\n', " ").trim());
     }
     0
+}
+
+/// Search one corpus and hand back the hits.
+///
+/// Extracted from [`cmd_corpus_search`] on 2026-09-04 so
+/// `svrn quality lane chat-ask` can assert "the fixture is findable" through
+/// the SAME embed-model resolution, the same index path and the same hybrid
+/// search the operator's `svrn corpus search` runs. A lane that opened the
+/// index its own way would be checking a different question than the one the
+/// operator would type (ARCH §10.6).
+///
+/// Errors are strings a human can act on — they are what the command prints.
+pub(crate) async fn search_corpus(
+    id: &str,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<corpus_engine::ScoredChunk>, String> {
+    // Embed the query via the daemon's embed slot, resolved through the ONE
+    // decider (`sovereign_workflow_host::daemon_models`): configured stem →
+    // advertised id, proved by a `/v1/embeddings` probe. The refusal names
+    // what was probed; "advertises no embedding model" is no longer a
+    // verdict anything here reaches from an id substring.
+    let v1 = format!("{DEFAULT_DAEMON}/v1");
+    let embed_model = sovereign_workflow_host::resolve_embed_model(&v1, None)
+        .await
+        .map(|r| r.id)
+        .map_err(|e| {
+            format!(
+                "Cannot embed the query via the daemon at {DEFAULT_DAEMON}: {e}\n\
+                 Start it with `svrn daemon` if it is not running."
+            )
+        })?;
+    let provider = RemoteApiProvider::new(&v1, None, &embed_model, 8192);
+    let embedding = provider
+        .embed(query)
+        .await
+        .map_err(|e| format!("embed query failed: {e}"))?;
+
+    // Open the corpus by id under the canonical index dir.
+    let index_dir = sovereign_core::setup_config::SetupConfig::default_path()
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_default()
+        .join("indexes");
+    let path = index_dir.join(id);
+    let index = CorpusIndex::open(&path)
+        .await
+        .map_err(|e| format!("open corpus `{id}` at {}: {e}", path.display()))?;
+    index
+        .search(&embedding, query, limit)
+        .await
+        .map_err(|e| format!("search `{id}`: {e}"))
+}
+
+/// Just the titles, for a caller asserting that a probe finds a document.
+pub(crate) async fn search_titles(
+    id: &str,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<String>, String> {
+    Ok(search_corpus(id, query, limit)
+        .await?
+        .into_iter()
+        .map(|h| h.title.unwrap_or_default())
+        .collect())
 }

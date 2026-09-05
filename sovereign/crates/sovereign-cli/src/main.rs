@@ -559,39 +559,6 @@ fn print_usage() {
     crate::util::help::print_subcommands_titled("Developer toolchain", DEV_SUBCOMMANDS);
 }
 
-/// `svrn quality <subcommand>` — the quality-control surface this repo runs
-/// on itself. One subcommand today (`check`); the verb exists rather than a
-/// bare `svrn quality-check` because the campaign it seeds retires five bash
-/// orchestrators into siblings of it.
-#[cfg(feature = "dev-tools")]
-async fn run_quality(args: &[String]) -> i32 {
-    match args.first().map(String::as_str) {
-        Some("check") => quality_check_cmd::run(&args[1..]).await,
-        // The LANES live in the LLM sibling — every one of them drives the
-        // inference stack, ingests a corpus or runs a judge. The runner
-        // above is deliberately the half that does none of those, which is
-        // why it can live in the dispatcher and be gated `dev-tools`.
-        Some("lane") => llm_bin::exec("quality-lane", &args[1..]),
-        // An unknown subcommand is REFUSED, never defaulted to `check`
-        // (ARCH §18.3): running a 30-minute suite because someone typo'd is
-        // not a courtesy.
-        Some(other) if other != "--help" && other != "-h" => {
-            eprintln!("svrn quality: unknown subcommand `{other}`. Try: svrn quality check");
-            2
-        }
-        _ => {
-            println!("Usage: svrn quality check [--lane <id>]... [--budget-secs 1800] [--mint]");
-            println!("       svrn quality lane <id>");
-            println!();
-            println!("  check   Run the curated breakage lanes and write the table to");
-            println!("          target/quality-check/<stamp>/summary.json");
-            println!("  lane    Run ONE lane directly, printing its own rows. The");
-            println!("          runner above drives the same command per lane.");
-            0
-        }
-    }
-}
-
 /// `svrn nudge dismiss <id>` — record a nudge id in
 /// `~/.svrnmesh/dismissed_nudges.json` so the audit / status
 /// surfaces stop showing it. The id can be a family name (e.g.
@@ -1162,7 +1129,7 @@ async fn async_main() {
                 // fingerprint inputs, each precondition probe, each lane's
                 // cap and exit — is a debug event under `sovereign_cli`.
                 util::tracing_init::init_tracing("sovereign_cli=info");
-                let code = run_quality(&raw_args[1..]).await;
+                let code = quality_check_cmd::run_verb(&raw_args[1..], llm_bin::exec).await;
                 std::process::exit(code);
             }
             #[cfg(feature = "dev-tools")]

@@ -17,8 +17,8 @@ mod inventory;
 mod optimize;
 mod partitions;
 mod recipe_source;
-mod search;
-mod status;
+pub(crate) mod search;
+pub(crate) mod status;
 
 use diagnostics::{
     cmd_corpus_dedupe, cmd_corpus_diag, cmd_corpus_export_parcels, cmd_corpus_repair,

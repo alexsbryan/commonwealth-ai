@@ -33,7 +33,7 @@ mod atlas;
 // a second on-disk layout for the same job.
 pub(crate) mod baselines;
 mod book_report;
-mod chaos_monkey;
+pub(crate) mod chaos_monkey;
 mod desktop_bridge;
 mod discover;
 mod enron;
@@ -43,7 +43,7 @@ mod gate;
 mod governance;
 mod judge_replay;
 mod lane_baseline;
-mod live_runner;
+pub(crate) mod live_runner;
 mod mechanism_fidelity;
 mod model_resolve;
 mod moral;

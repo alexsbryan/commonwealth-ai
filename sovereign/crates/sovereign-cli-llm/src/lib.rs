@@ -83,6 +83,7 @@ mod newsworthy_cmd;
 mod pipeline_cmd;
 mod portfolio_cmd;
 mod proxy_cmd;
+mod quality_lane_cmd;
 mod reading_diag_cmd;
 mod recipe_agent_cmd;
 mod recipe_agent_live_trial;
@@ -201,6 +202,11 @@ async fn async_main() {
         "mesh" => mesh_cmd::run_mesh(rest).await,
         "mobile" => mobile_cmd::run_mobile(rest).await,
         "corpus" => corpus_cmd::run_corpus(rest).await,
+        // One lane of `svrn quality check`. The runner lives in
+        // `sovereign-cli` and touches no model; the lanes live here,
+        // because every one of them drives inference, ingests a corpus or
+        // runs a judge.
+        "quality-lane" => quality_lane_cmd::run(rest).await,
         "" => {
             eprintln!("sovereign-cli-llm: usage: sovereign-cli-llm <subcommand> [args...]");
             2
