@@ -1,0 +1,24 @@
+corpus `wessex-hoard-bare-35b-a` ingested and enriched in 5390s (0s index, 5389s enrich).
+acceptance: corpus ingest(wessex-hoard-bare-35b-a) -> ok in 5391s
+acceptance: FAIL - the control produced no recall table to compare against
+corpus `wessex-hoard-bare-35b-b` ingested and enriched in 4772s (0s index, 4771s enrich).
+acceptance: corpus ingest(wessex-hoard-bare-35b-b) -> ok in 4773s
+  catalogue_ref           7 / 7   ok      
+  coin family            19 / 7   ok      coin + sceatta
+  mint                    3 / 3   ok      
+  ruler                   4 / 4   ok      
+  attribution            49 / 7   ok      
+  grade values            1 / 1   ok      3 of 4 declared — never extracted: die-link
+  catalogue_ref           7 / 7   ok      
+  coin family            20 / 7   ok      coin + sceatta
+  mint                    3 / 3   ok      
+  ruler                   4 / 4   ok      
+  attribution            40 / 7   ok      
+  grade values            1 / 1   ok      4 of 4 declared
+  catalogue_ref             7 / 7       7 / 7   
+  coin family              20 / 7      19 / 7   
+  mint                      3 / 3       3 / 3   
+  ruler                     4 / 4       4 / 4   
+  attribution              40 / 7      49 / 7      <-- BELOW CONTROL
+  grade values              1 / 1       1 / 1   
+acceptance: FAIL - recall below the daemon-built control on: attribution: 40 vs 49

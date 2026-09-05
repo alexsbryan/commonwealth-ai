@@ -36,7 +36,28 @@ for id in $RUN_IDS; do
 done
 mark control-guard 0
 
+# The box conditions the campaign requires before a lane. RECORDED *and*
+# ENFORCED. The first launch of this script (2026-09-05T08:26:39Z) wrote
+# `builds: 5` into box-before.txt and then ran anyway, colliding with a
+# sibling's gate sweep and costing the run. A check that observes and does not
+# stop is not a check (ARCH §18.1) — so this refuses, and names both measured
+# values rather than saying "busy". ALLOW_BUSY_BOX=1 is the deliberate
+# override, the shape `--allow-empty` has on the test script: an operator who
+# means it is not blocked, and nobody drifts past it by accident.
+MEM_FLOOR_GB="${MEM_FLOOR_GB:-40}"
 box before
+builds_now=$(pgrep -af 'cargo|rustc' | grep -v lspmux | grep -vc pgrep)
+avail_now=$(awk '/MemAvailable/{print int($2/1048576)}' /proc/meminfo)
+if [[ -z "${ALLOW_BUSY_BOX:-}" ]] && { (( builds_now != 0 )) || (( avail_now < MEM_FLOOR_GB )); }; then
+  echo "run.sh: REFUSED — builds=$builds_now (want 0), MemAvailable=${avail_now}G (want >= ${MEM_FLOOR_GB}G)." \
+       "A 35B ingest beside a cargo sweep reaches this box's ceiling, the wall would not mean what it says," \
+       "and the daemon is the preferred OOM victim. Override with ALLOW_BUSY_BOX=1 if you mean it." >&2
+  mark box-before 1
+  echo "DONE rc=1" >> "$out/markers.txt"
+  exit 1
+fi
+mark box-before 0
+
 cd "$repo"
 worst=0
 n=0

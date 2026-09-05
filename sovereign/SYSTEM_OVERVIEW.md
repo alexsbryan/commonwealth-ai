@@ -6914,10 +6914,11 @@ they next open it.
 
 Re-measured at this branch's tip after the 2026-09-04 rebase onto upstream
 `b9f41d18e` (251 files changed), which replaced the numbers this row first
-carried. `arch-gate` now blocks with `approach band GREW: files 176 -> 181
-(+5)` and `lines 171751 -> 176394 (+4643)` against the baseline re-pinned on
-main at `88ee493d4` (§10.1k). **Three of those 4,643 lines are this branch's,
-and none of the five files is.** Every `.rs` file in `git diff main...HEAD`
+carried. `arch-gate` now blocks with `approach band GREW: files 176 -> 183
+(+7)` and `lines 171751 -> 177970 (+6219)` against the baseline re-pinned on
+main at `88ee493d4` (§10.1k) — re-measured 2026-09-05 after a second rebase,
+onto `49e964120`. **Three of those 6,219 lines are this branch's, and none of
+the seven files is.** Every `.rs` file in `git diff main...HEAD`
 was measured at both ends; only two land in ARCH §3.1's 800-1200 band:
 
 | file | main | tip | in band |
@@ -6925,7 +6926,7 @@ was measured at both ends; only two land in ARCH §3.1's 800-1200 band:
 | `sovereign/crates/sovereign-core/tests/main/f26_egress_census.rs` | 811 | 813 | at both ends — +2 |
 | `sovereign/crates/sovereign-tools/src/local_corpus/watched/enrich.rs` | 1080 | 1081 | at both ends — +1 |
 
-The remaining +4,640 lines, the +5 files, and the sibling
+The remaining +6,216 lines, the +7 files, and the sibling
 `instruction surface GREW: AGENTS.md 46852 -> 47190 (+338)` are upstream's;
 this branch touches neither `AGENTS.md` nor any of the five.
 
@@ -6951,7 +6952,7 @@ moving the from-corpus manifest builder down — a real cut, and still above
 the band's 1200 ceiling, so the band cannot see it.
 
 3 lines are not worth a worker re-pinning `quality/baselines/` on a working
-tree, which would absorb the +4,640 that is not ours along with the +3 that
+tree, which would absorb the +6,216 that is not ours along with the +3 that
 is (the trap named in `AGENTS.md`). It is owed to whoever merges this branch:
 re-pin at `origin/main` in a worktree, or accept the +3 against this row.
 

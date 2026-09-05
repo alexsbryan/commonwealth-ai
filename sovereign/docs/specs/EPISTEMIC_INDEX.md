@@ -270,10 +270,46 @@ lane names an owner and a scheduled measurement before it is accepted.
    putting a 20-chapter ingest into hours. The same endpoint returned
    conforming JSON for a schema at a 16,384-token budget and an empty string
    for the identical request at 64, so the endpoint's `json_schema` support
-   is not in question — the model's budget is. The bar is therefore taken on
-   `Qwen3.6-35B-A3B`, the engine the control was built on, through the run
-   channel (`runs/ei5b-stage2/`), twice, because one run is not a
-   measurement.
+   is not in question — the model's budget is.
+
+   **The bar was then taken on `Qwen3.6-35B-A3B`, twice** (`runs/ei5b-stage2/`,
+   2026-09-05; walls 5,418 s and 4,796 s against the daemon control's 333-360 s
+   for the same 20 chapters). Both atlases PASS `truth.json` standing alone —
+   every declared row met, and both extract `die-link`, which the control never
+   did:
+
+   | row (required) | control | run a | run b |
+   |---|---|---|---|
+   | catalogue_ref (7) | 7 | 7 | 7 |
+   | coin family (7) | 19 | 22 | 20 |
+   | mint (3) | 3 | 3 | 3 |
+   | ruler (4) | 4 | 4 | 4 |
+   | attribution (7) | 49 | 44 | 40 |
+   | grade values | 3 of 4 | **4 of 4** | **4 of 4** |
+   | atoms | 159 | 172 | 165 |
+
+   The acceptance nonetheless reports FAIL, on `attribution: 40 vs 49`. That
+   is a real disagreement about what the bar means and it is left open rather
+   than resolved by editing the comparison: the first column of each row is
+   how many atoms matched, the second is how many `truth.json` REQUIRES, and
+   every run clears its requirement. Comparing the first numbers to the
+   control's asks whether the bare endpoint YIELDED as many atoms; comparing
+   coverage of the requirement asks whether it RECALLED what was declared.
+   Under the second reading both runs equal the control everywhere and beat it
+   on `grade values`; under the first they trail it on one row, twice, by
+   10-18%. The scorer implements the first and this section's bar is worded as
+   the second. Do not change the rule to make a run pass (ARCH §18.6).
+
+   **Two phases return nothing on a bare endpoint, on both runs.** Phase 3
+   (cluster naming) reports `0/4` and `0/7` named, all ParseDrift; phase 6
+   (the tension classifier) reports 0 of 164 and 0 of 124 classified, every
+   candidate a parse failure. Extraction and resolve are unaffected — 172 and
+   165 atoms against 159 — so what a bare endpoint loses is the classified
+   layer above the atoms, not the atoms. Phase 1 also needed the terse retry
+   on 18 of 20 chapters and recovered all 18, spending 201,596 completion
+   tokens against the daemon's 17,940 for the same extraction. Whether the
+   classified layer is a daemon-only capability under §4's own kill rule is
+   the open question this step hands on.
 
    One caveat the step surfaced and did not own, the sibling of step 4's.
    §6 row 3 asks the map to name `coin` / `attribution` **and** a `Tension` or

@@ -1,0 +1,728 @@
+acceptance: frontend up on :8089; /oicp/v1/capabilities -> 404 (404 = the baseline path under test)
+--- corpus-mcp stderr ---
+corpus-mcp: host http://127.0.0.1:8089: baseline OpenAI-compatible path — http://127.0.0.1:8089/oicp/v1/capabilities returned 404 Not Found
+corpus-mcp: embeddings via http://127.0.0.1:8089/v1/embeddings, model `Qwen3-Embedding-0.6B-Q8_0.gguf`, 1024-d (baseline (OpenAI-compatible))
+corpus-mcp: data root /home/alexbryan/.svrnmesh
+[2m2026-09-05T10:05:07.178696Z[0m [33m WARN[0m [2mcorpus_engine::engine[0m[2m:[0m Corpus 'sep' records embedding model 'qwen-embedding-0.6b' but this engine expects ''. The widths agree, so this is most likely the same model under a different file name or quantisation and search is fine. Re-install only if results look wrong.
+corpus-mcp: corpus `sep`: atlas has no `atoms_ann.lance` — `ask` will walk from name matches only; run `svrn atlas backfill-ann sep`
+corpus-mcp: serving 1 corpus: sep
+corpus-mcp: ready on stdio
+-------------------------
+acceptance: corpus_search -> 10 chunks, 10 cited; top: incompatibilism-arguments https://plato.stanford.edu/entries/incompatibilism-arguments/ score=0.0317
+acceptance: atoms_lookup -> 5 Claim atoms of 338 in sep-freewill; first: 'Disputes about free will involve disputes about metaphysics (causation, time) and ethics (blame, praise).'
+acceptance: corpus_ontology(sep-freewill) -> absent, reported: corpus `sep-freewill` recorded no ontology at /home/alexbryan/.svrnmesh/indexes/sep-freewill/atlas/ontology.json — eithe
+acceptance: corpus_ontology(wessex-hoard) -> 5 declared types: coin, sceatta, ruler, mint, attribution
+acceptance: corpus_list -> sep: 1024-d vector=True atlas=True atoms=0 ontology_declared=False
+acceptance: chat frontend up on :8090 (Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf)
+corpus-mcp: data root /home/alexbryan/.svrnmesh
+corpus-mcp: host http://127.0.0.1:8089: baseline OpenAI-compatible path — http://127.0.0.1:8089/oicp/v1/capabilities returned 404 Not Found
+corpus-mcp: embeddings via http://127.0.0.1:8089/v1/embeddings, model `Qwen3-Embedding-0.6B-Q8_0.gguf`, 1024-d (baseline (OpenAI-compatible))
+corpus-mcp: chat endpoint http://127.0.0.1:8090: baseline OpenAI-compatible path — http://127.0.0.1:8090/oicp/v1/capabilities returned 404 Not Found
+corpus-mcp: chat via http://127.0.0.1:8090/v1/chat/completions, model `Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf` (baseline (OpenAI-compatible))
+corpus-mcp: structured output = response_format json_schema (refined from /oicp/v1/capabilities when the host advertises)
+corpus-mcp: GLiNER is NOT linked in this binary (ort is outside the package boundary) — the entity pass is the chat model's, and slower
+registered /tmp/tmp.qVbODOWx9u/wessex-hoard-bare-35b-b/recipe.toml as corpus `wessex-hoard-bare-35b-b` → /home/alexbryan/.svrnmesh/recipes/wessex-hoard-bare-35b-b/recipe.toml
+  acquire path `wessex-hoard.md` resolved against the recipe → /tmp/tmp.qVbODOWx9u/wessex-hoard-bare-35b-b/wessex-hoard.md
+enrichment: custom_atlas (declared ontology `numismatics`)
+
+=== corpus ingest — wessex-hoard-bare-35b-b ===
+[wessex-hoard-bare-35b-b] Starting embed+index pipeline (embed_batch=256, index_flush=2000, batch_embed=false)
+[wessex-hoard-bare-35b-b] Final flush — 20 chunks — 20 total committed from 20 docs (0 skipped)
+[wessex-hoard-bare-35b-b] Index build starting — model: Qwen3-Embedding-0.6B-Q8_0.gguf (1024d), chunks: 20, vector: true (IVF-PQ auto ≈ 4 partitions), fts: true
+[wessex-hoard-bare-35b-b] Pre-build dedupe pass (0/3)...
+[wessex-hoard-bare-35b-b] Dedupe: no duplicates found (20 rows)
+[wessex-hoard-bare-35b-b] Skipping vector index — fewer than 256 rows (1/3)
+[wessex-hoard-bare-35b-b] Building FTS content index (2/3)...
+[wessex-hoard-bare-35b-b] FTS content index done
+[wessex-hoard-bare-35b-b] Building FTS title index (3/3)...
+[wessex-hoard-bare-35b-b] FTS title index done
+[2m2026-09-05T10:05:30.650945Z[0m [33m WARN[0m [2mcorpus_engine::engine::ingest[0m[2m:[0m Recipe 'wessex-hoard-bare-35b-b' requests enrichment but no InferenceFn was provided to CorpusEngine — skipping
+[wessex-hoard-bare-35b-b] Ingestion complete — 20 chunks in 0m0s
+indexed: 20 chunks in 0s (0 doc(s) skipped), 0 MB
+[2m2026-09-05T10:05:30.670110Z[0m [33m WARN[0m [2mcorpus_engine::engine[0m[2m:[0m Corpus 'wessex-hoard-bare-35b-b' records embedding model 'Qwen3-Embedding-0.6B-Q8_0.gguf' but this engine expects ''. The widths agree, so this is most likely the same model under a different file name or quantisation and search is fine. Re-install only if results look wrong.
+manifest: 20 articles, 20 sections — keeping 20 articles
+wrote /home/alexbryan/.svrnmesh/indexes/wessex-hoard-bare-35b-b/chapters.json (20 chapters)
+wrote /home/alexbryan/.svrnmesh/enrichment/wessex-hoard-bare-35b-b/config.json
+  pipeline    = custom_atlas
+  ontology    = numismatics (version 1, 5 declared types)
+  chat_model  = Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf @ http://127.0.0.1:8090/v1
+  embed_model = Qwen3-Embedding-0.6B-Q8_0.gguf @ http://127.0.0.1:8089/v1/embeddings (1024-d)
+
+=== enrich — pipeline custom_atlas, 8 step(s): extract → cluster → name → resolve → tensions → gaps → report → backfill ===
+[1/8] extract …
+[2m2026-09-05T10:05:30.999235Z[0m [33m WARN[0m [2mcorpus_engine::engine[0m[2m:[0m Corpus 'wessex-hoard-bare-35b-b' records embedding model 'Qwen3-Embedding-0.6B-Q8_0.gguf' but this engine expects ''. The widths agree, so this is most likely the same model under a different file name or quantisation and search is fine. Re-install only if results look wrong.
+  running phase 1 (full) over 20 chapter(s) — checkpoint: /home/alexbryan/.svrnmesh/enrichment/wessex-hoard-bare-35b-b/runs/_phase1_checkpoint.jsonl
+    · 0 exemplar(s) loaded, 20 chapter(s) to process
+    [1/20] sec_00001…       · waiting on daemon (15s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+FAILED: parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+    [2/20] sec_00002…       · waiting on daemon (15s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+FAILED: parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+    [3/20] sec_00003…       · waiting on daemon (15s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+FAILED: parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: {\n  \"section_id\": \"sec_00003\",\n  \"questions_raised\": [\n    {\n      \"content\": \"What is the correct narrower dating for the Series Y issue within the reign of Aldfrith?\",\n      \"anchor\": \"narrower dati | response[head]: { "section_id": "sec_00003", "questions_raised": [ { "content": "What is the correct narrower dating for the Series Y issue within the reign of Aldfrith?", "anchor": "narrower dating within that reign…
+    [4/20] sec_00004…       · waiting on daemon (15s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+FAILED: parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+    [5/20] sec_00005…       · waiting on daemon (15s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+FAILED: parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+    [6/20] sec_00006…       · waiting on daemon (15s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+FAILED: parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+    [7/20] sec_00007…       · waiting on daemon (15s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+FAILED: parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+    [8/20] sec_00008…       · waiting on daemon (15s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+FAILED: parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+    [9/20] sec_00009…       · waiting on daemon (15s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+FAILED: parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+    [10/20] sec_00010…       · waiting on daemon (15s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+FAILED: parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+    [11/20] sec_00011…       · waiting on daemon (15s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+FAILED: parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+    [12/20] sec_00012…       · waiting on daemon (15s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+FAILED: parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+    [13/20] sec_00013…       · waiting on daemon (15s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+FAILED: parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+    [14/20] sec_00014…       · waiting on daemon (15s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+FAILED: parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+    [15/20] sec_00015…       · waiting on daemon (15s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+FAILED: parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+    [16/20] sec_00016…       · waiting on daemon (15s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (90s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+FAILED: parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+    [17/20] sec_00017…       · waiting on daemon (15s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (90s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+FAILED: parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+    [18/20] sec_00018…       · waiting on daemon (15s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+FAILED: parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+    [19/20] sec_00019…       · waiting on daemon (15s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+FAILED: parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+    [20/20] sec_00020…       · waiting on daemon (15s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+FAILED: parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+  ✓ 0 ok, 20 failed — /home/alexbryan/.svrnmesh/enrichment/wessex-hoard-bare-35b-b/runs/questions-full-001.json
+  · token spend: 20 call(s), 53530 prompt + 81920 completion = 135450 total
+  ✓ cache updated (cache/questions.json)
+
+  ! 20 chapter(s) failed — run file: /home/alexbryan/.svrnmesh/enrichment/wessex-hoard-bare-35b-b/runs/questions-full-001.json
+      · sec_00001    parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+      · sec_00002    parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+      · sec_00003    parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: {\n  \"section_id\": \"sec_00003\",\n  \"questions_raised\": [\n    {\n      \"content\": \"What is the correct narrower dating for the Series Y issue within the reign of Aldfrith?\",\n      \"anchor\": \"narrower dati | response[head]: { "section_id": "sec_00003", "questions_raised": [ { "content": "What is the correct narrower dating for the Series Y issue within the reign of Aldfrith?", "anchor": "narrower dating within that reign…
+      · sec_00004    parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+      · sec_00005    parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+      · sec_00006    parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+      · sec_00007    parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+      · sec_00008    parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+      · sec_00009    parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+      · sec_00010    parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+      · sec_00011    parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+      · sec_00012    parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+      · sec_00013    parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+      · sec_00014    parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+      · sec_00015    parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+      · sec_00016    parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+      · sec_00017    parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+      · sec_00018    parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+      · sec_00019    parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+      · sec_00020    parse error: Serialization error: phase 1 (atlas) response contained no recognisable JSON object | response[head]: <empty response> | response[head]: <empty response>
+
+    Retry just these chapters:
+      svrn enrich extract wessex-hoard-bare-35b-b --chapters sec_00001,sec_00002,sec_00003,sec_00004,sec_00005,sec_00006,sec_00007,sec_00008,sec_00009,sec_00010,sec_00011,sec_00012,sec_00013,sec_00014,sec_00015,sec_00016,sec_00017,sec_00018,sec_00019,sec_00020
+    Or, from the latest run file:
+      svrn enrich extract wessex-hoard-bare-35b-b --retry-failed
+
+  · auto-retry: 20 retriable failure(s) (parse_drift / think_truncated / deadline_exceeded) — running `--retry-failed --terse` once
+
+[2m2026-09-05T10:33:20.237153Z[0m [33m WARN[0m [2mcorpus_engine::engine[0m[2m:[0m Corpus 'wessex-hoard-bare-35b-b' records embedding model 'Qwen3-Embedding-0.6B-Q8_0.gguf' but this engine expects ''. The widths agree, so this is most likely the same model under a different file name or quantisation and search is fine. Re-install only if results look wrong.
+  · retrying 20 failed chapter(s) from /home/alexbryan/.svrnmesh/enrichment/wessex-hoard-bare-35b-b/runs/_phase1_checkpoint.jsonl
+  running phase 1 (retry) over 20 chapter(s) — checkpoint: /home/alexbryan/.svrnmesh/enrichment/wessex-hoard-bare-35b-b/runs/_phase1_checkpoint.jsonl
+    · 0 exemplar(s) loaded, 20 chapter(s) to process
+    [1/20] sec_00001…       · waiting on daemon (15s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (90s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (105s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (120s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+0 e, 1 q
+    [2/20] sec_00002…       · waiting on daemon (15s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (90s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (105s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (120s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (135s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (150s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+5 e [ruler, sceatta], 1 q
+    [3/20] sec_00003…       · waiting on daemon (15s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (90s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (105s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (120s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (135s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+0 e, 1 q
+    [4/20] sec_00004…       · waiting on daemon (15s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+3 e [sceatta, mint], 1 q
+    [5/20] sec_00005…       · waiting on daemon (15s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (90s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (105s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+5 e [coin, ruler, mint, sceatta], 1 q
+    [6/20] sec_00006…       · waiting on daemon (15s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (90s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+4 e [coin, ruler, mint], 1 q
+    [7/20] sec_00007…       · waiting on daemon (15s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (90s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+5 e [coin, ruler, mint], 1 q
+    [8/20] sec_00008…       · waiting on daemon (15s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+3 e [sceatta, mint], 1 q
+    [9/20] sec_00009…       · waiting on daemon (15s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (90s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (105s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (120s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (135s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+6 e [sceatta, coin], 1 q
+    [10/20] sec_00010…       · waiting on daemon (15s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (90s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (105s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (120s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (135s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+8 e [ruler, coin, mint], 1 q
+    [11/20] sec_00011…       · waiting on daemon (15s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (90s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+4 e [coin], 1 q
+    [12/20] sec_00012…       · waiting on daemon (15s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (90s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (105s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (120s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+6 e [sceatta, ruler], 1 q
+    [13/20] sec_00013…       · waiting on daemon (15s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (90s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (105s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (120s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (135s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+5 e [coin], 1 q
+    [14/20] sec_00014…       · waiting on daemon (15s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+5 e [sceatta, coin, ruler], 1 q
+    [15/20] sec_00015…       · waiting on daemon (15s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (90s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (105s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (120s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+4 e [coin], 1 q
+    [16/20] sec_00016…       · waiting on daemon (15s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (90s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (105s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+5 e [ruler, coin, sceatta], 1 q
+    [17/20] sec_00017…       · waiting on daemon (15s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (90s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (105s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+3 e [mint, sceatta], 1 q
+    [18/20] sec_00018…       · waiting on daemon (15s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (90s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (105s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (120s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (135s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+6 e [mint, sceatta, coin, ruler], 1 q
+    [19/20] sec_00019…       · waiting on daemon (15s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (90s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (105s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+4 e [mint, coin], 1 q
+    [20/20] sec_00020…       · waiting on daemon (15s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (30s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (45s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (60s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (75s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (90s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (105s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+      · waiting on daemon (120s elapsed, phase=phase1_terse, model=Qwen3.6-35B-A3B-MTP-UD-Q6_K.gguf, schema=true)
+4 e [coin, mint], 1 q
+  ✓ 20 ok, 0 failed — /home/alexbryan/.svrnmesh/enrichment/wessex-hoard-bare-35b-b/runs/questions-terse-retry-001.json
+  · token spend: 20 call(s), 53530 prompt + 118779 completion = 172309 total
+  ✓ cache updated (cache/questions.json)
+
+  ✓ auto-retry resolved 20 chapter(s).
+  · 0 failure(s) no retry can help (skipped / empty / chat error); 20 chapter(s) extracted — continuing the build. Detail: `svrn enrich errors wessex-hoard-bare-35b-b`
+[done] extract: 20 chapter(s) extracted; 0 non-retriable failure(s) remain
+[2/8] cluster …
+  running phase 2 (atlas) for wessex-hoard-bare-35b-b
+    · 2 cluster(s): question
+    · 5 cluster(s): claim
+    · 30 sketch(es) classified as noise
+  ✓ wrote /home/alexbryan/.svrnmesh/enrichment/wessex-hoard-bare-35b-b/runs/atlas-clusters-full-001.json
+  ✓ cache updated
+[done] cluster: 7 cluster(s): 2 question, 5 claim; 30 noise
+[3/8] name …
+  running phase 3 (atlas) — naming 7 cluster(s) across 2 facet(s)
+    [1/7] question_cl_0000 (question)… FAILED: parse error: Serialization error: phase 3 (atlas) response contained no recognisable JSON object | response[head]: <empty response>
+    [2/7] question_cl_0001 (question)… FAILED: parse error: Serialization error: phase 3 (atlas) response contained no recognisable JSON object | response[head]: <empty response>
+    [3/7] claim_cl_0000 (claim)… FAILED: parse error: Serialization error: phase 3 (atlas) response contained no recognisable JSON object | response[head]: <empty response>
+    [4/7] claim_cl_0001 (claim)… FAILED: parse error: Serialization error: phase 3 (atlas) response contained no recognisable JSON object | response[head]: <empty response>
+    [5/7] claim_cl_0002 (claim)… FAILED: parse error: Serialization error: phase 3 (atlas) response contained no recognisable JSON object | response[head]: <empty response>
+    [6/7] claim_cl_0003 (claim)… FAILED: parse error: Serialization error: phase 3 (atlas) response contained no recognisable JSON object | response[head]: <empty response>
+    [7/7] claim_cl_0004 (claim)… FAILED: parse error: Serialization error: phase 3 (atlas) response contained no recognisable JSON object | response[head]: <empty response>
+  ✓ 0 named cluster(s) — /home/alexbryan/.svrnmesh/enrichment/wessex-hoard-bare-35b-b/runs/atlas-named-clusters-full-001.json
+[done] name: 0/7 cluster(s) named, 7 failed (ParseDrift); no exemplar bank
+[4/8] resolve …
+  loaded 20 section(s) with atlas sketches (of 20 total chapter(s) in cache)
+  ✓ 46 entity atom(s)
+  ✓ 7 event atom(s)
+  ✓ 14 state atom(s)
+  ✓ 38 relation atom(s)
+  ✓ 40 claim atom(s)
+  ✓ 20 question atom(s)
+  ✓ 0 argument-reconstruction atom(s)
+  ✓ 0 position atom(s)
+  ✓ 0 opposition atom(s)
+  ✓ 173 edge(s) total
+  ✓ 6 trajectory chain(s)
+  ✓ wrote /home/alexbryan/.svrnmesh/indexes/wessex-hoard-bare-35b-b/atlas/atoms.json
+  ✓ wrote /home/alexbryan/.svrnmesh/indexes/wessex-hoard-bare-35b-b/atlas/edges.json
+  ✓ atoms_ann.lance: 99/99 atoms embedded
+  ✓ wrote /home/alexbryan/.svrnmesh/indexes/wessex-hoard-bare-35b-b/atlas/ontology.json (5 declared type(s), ontology version 1, pipeline custom_atlas)
+  ✓ wrote /home/alexbryan/.svrnmesh/indexes/wessex-hoard-bare-35b-b/atlas/trajectories.json
+  ! 5 drop(s) — see /home/alexbryan/.svrnmesh/indexes/wessex-hoard-bare-35b-b/atlas/resolution_failures.json (run `svrn enrich errors wessex-hoard-bare-35b-b` for remediation)
+[done] resolve: 165 atom(s) (46 entity, 7 event, 14 state, 38 relation, 40 claim, 20 question), 173 edge(s), 6 trajectory chain(s); 5 resolution drop(s)
+[5/8] tensions …
+  loaded 40 claim atom(s) + 14 state atom(s) + 46 entity atom(s) from atlas
+  · tension.between = [attribution]: 40 claim(s) in scope (0 outside the declared types)
+  · corpus shape: 40 claim(s) across 11 document(s)/section(s), 10% attributed
+  · candidate strategy: embedding top-K (k=10, floor=0.5)
+  · embedded 40 claim(s) for similarity selection
+  · same = [subject, clock]: dropped 1 non-comparable pair(s) — subject (on 4/40 claim(s), ruled out 1); clock (on 0/40 claim(s), ruled out 0); 27 pair(s) had a field on one side only and could not be judged
+  ⚠ `same` field(s) [clock] are absent from every claim in scope — they ruled nothing out. Comparability rests on the remaining field(s).
+[2m2026-09-05T11:13:28.676270Z[0m [33m WARN[0m [2matlas.tensions[0m[2m:[0m declared `same` fields carried by no claim [3minert[0m[2m=[0m["clock"]
+  ✓ 124 candidate pair(s)
+  ✓ wrote /home/alexbryan/.svrnmesh/indexes/wessex-hoard-bare-35b-b/atlas/tension_candidates.json
+  loaded 124 candidate(s) (from 124 total in tension_candidates.json)
+  [1/124] cand-0001 claim-0001↔claim-0002 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [2/124] cand-0002 claim-0001↔claim-0003 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [3/124] cand-0003 claim-0001↔claim-0005 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [4/124] cand-0004 claim-0001↔claim-0006 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [5/124] cand-0005 claim-0001↔claim-0007 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [6/124] cand-0006 claim-0001↔claim-0008 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [7/124] cand-0007 claim-0001↔claim-0025 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [8/124] cand-0008 claim-0001↔claim-0027 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [9/124] cand-0009 claim-0002↔claim-0003 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [10/124] cand-0010 claim-0002↔claim-0005 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [11/124] cand-0011 claim-0002↔claim-0006 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [12/124] cand-0012 claim-0002↔claim-0007 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [13/124] cand-0013 claim-0002↔claim-0008 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [14/124] cand-0014 claim-0002↔claim-0026 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [15/124] cand-0015 claim-0003↔claim-0005 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [16/124] cand-0016 claim-0003↔claim-0006 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [17/124] cand-0017 claim-0003↔claim-0007 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [18/124] cand-0018 claim-0003↔claim-0008 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [19/124] cand-0019 claim-0003↔claim-0014 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [20/124] cand-0020 claim-0003↔claim-0021 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [21/124] cand-0021 claim-0003↔claim-0025 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [22/124] cand-0022 claim-0003↔claim-0026 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [23/124] cand-0023 claim-0003↔claim-0028 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [24/124] cand-0024 claim-0003↔claim-0029 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [25/124] cand-0025 claim-0003↔claim-0038 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [26/124] cand-0026 claim-0003↔claim-0039 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [27/124] cand-0027 claim-0004↔claim-0025 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [28/124] cand-0028 claim-0004↔claim-0032 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [29/124] cand-0029 claim-0005↔claim-0006 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [30/124] cand-0030 claim-0005↔claim-0007 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [31/124] cand-0031 claim-0005↔claim-0008 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [32/124] cand-0032 claim-0005↔claim-0025 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [33/124] cand-0033 claim-0005↔claim-0026 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [34/124] cand-0034 claim-0005↔claim-0027 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [35/124] cand-0035 claim-0005↔claim-0028 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [36/124] cand-0036 claim-0005↔claim-0029 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [37/124] cand-0037 claim-0005↔claim-0030 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [38/124] cand-0038 claim-0005↔claim-0032 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [39/124] cand-0039 claim-0006↔claim-0007 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [40/124] cand-0040 claim-0006↔claim-0008 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [41/124] cand-0041 claim-0006↔claim-0011 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [42/124] cand-0042 claim-0006↔claim-0025 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [43/124] cand-0043 claim-0006↔claim-0026 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [44/124] cand-0044 claim-0006↔claim-0027 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [45/124] cand-0045 claim-0006↔claim-0028 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [46/124] cand-0046 claim-0006↔claim-0029 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [47/124] cand-0047 claim-0007↔claim-0008 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [48/124] cand-0048 claim-0007↔claim-0025 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [49/124] cand-0049 claim-0007↔claim-0026 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [50/124] cand-0050 claim-0007↔claim-0027 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [51/124] cand-0051 claim-0007↔claim-0029 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [52/124] cand-0052 claim-0007↔claim-0030 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [53/124] cand-0053 claim-0007↔claim-0032 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [54/124] cand-0054 claim-0008↔claim-0009 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [55/124] cand-0055 claim-0008↔claim-0014 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [56/124] cand-0056 claim-0008↔claim-0015 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [57/124] cand-0057 claim-0008↔claim-0016 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [58/124] cand-0058 claim-0008↔claim-0021 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [59/124] cand-0059 claim-0008↔claim-0022 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [60/124] cand-0060 claim-0008↔claim-0025 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [61/124] cand-0061 claim-0008↔claim-0026 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [62/124] cand-0062 claim-0008↔claim-0028 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [63/124] cand-0063 claim-0008↔claim-0031 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [64/124] cand-0064 claim-0009↔claim-0010 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [65/124] cand-0065 claim-0009↔claim-0014 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [66/124] cand-0066 claim-0009↔claim-0015 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [67/124] cand-0067 claim-0009↔claim-0031 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [68/124] cand-0068 claim-0009↔claim-0034 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [69/124] cand-0069 claim-0009↔claim-0035 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [70/124] cand-0070 claim-0010↔claim-0034 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [71/124] cand-0071 claim-0010↔claim-0035 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [72/124] cand-0072 claim-0011↔claim-0017 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [73/124] cand-0073 claim-0013↔claim-0021 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [74/124] cand-0074 claim-0013↔claim-0038 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [75/124] cand-0075 claim-0014↔claim-0015 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [76/124] cand-0076 claim-0014↔claim-0016 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [77/124] cand-0077 claim-0014↔claim-0017 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [78/124] cand-0078 claim-0014↔claim-0018 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [79/124] cand-0079 claim-0014↔claim-0020 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [80/124] cand-0080 claim-0014↔claim-0021 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [81/124] cand-0081 claim-0014↔claim-0022 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [82/124] cand-0082 claim-0014↔claim-0026 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [83/124] cand-0083 claim-0014↔claim-0028 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [84/124] cand-0084 claim-0014↔claim-0029 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [85/124] cand-0085 claim-0014↔claim-0036 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [86/124] cand-0086 claim-0014↔claim-0038 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [87/124] cand-0087 claim-0014↔claim-0039 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [88/124] cand-0088 claim-0015↔claim-0016 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [89/124] cand-0089 claim-0015↔claim-0019 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [90/124] cand-0090 claim-0015↔claim-0020 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [91/124] cand-0091 claim-0016↔claim-0017 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [92/124] cand-0092 claim-0016↔claim-0022 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [93/124] cand-0093 claim-0017↔claim-0018 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [94/124] cand-0094 claim-0019↔claim-0020 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [95/124] cand-0095 claim-0021↔claim-0022 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [96/124] cand-0096 claim-0021↔claim-0031 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [97/124] cand-0097 claim-0021↔claim-0038 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [98/124] cand-0098 claim-0021↔claim-0039 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [99/124] cand-0099 claim-0022↔claim-0026 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [100/124] cand-0100 claim-0022↔claim-0029 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [101/124] cand-0101 claim-0022↔claim-0031 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [102/124] cand-0102 claim-0022↔claim-0038 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [103/124] cand-0103 claim-0022↔claim-0039 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [104/124] cand-0104 claim-0023↔claim-0024 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [105/124] cand-0106 claim-0025↔claim-0032 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [106/124] cand-0107 claim-0026↔claim-0028 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [107/124] cand-0108 claim-0026↔claim-0029 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [108/124] cand-0109 claim-0026↔claim-0039 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [109/124] cand-0110 claim-0027↔claim-0029 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [110/124] cand-0111 claim-0028↔claim-0031 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [111/124] cand-0112 claim-0028↔claim-0036 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [112/124] cand-0113 claim-0028↔claim-0039 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [113/124] cand-0114 claim-0029↔claim-0030 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [114/124] cand-0115 claim-0029↔claim-0033 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [115/124] cand-0116 claim-0030↔claim-0032 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [116/124] cand-0117 claim-0030↔claim-0033 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [117/124] cand-0118 claim-0031↔claim-0036 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [118/124] cand-0119 claim-0031↔claim-0039 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [119/124] cand-0120 claim-0032↔claim-0033 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [120/124] cand-0121 claim-0034↔claim-0035 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [121/124] cand-0122 claim-0036↔claim-0039 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [122/124] cand-0123 claim-0038↔claim-0039 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [123/124] cand-0124 claim-0038↔claim-0040 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+  [124/124] cand-0125 claim-0039↔claim-0040 — parse failed: Serialization error: phase 6 atlas classifier response parse failed: EOF while parsing a value at line 1 column 0
+
+  Phase 6 classifier summary: 0 tension(s), 0 rejected, 0 equivalent, 0 chat failure(s), 124 parse failure(s)
+  ✓ wrote /home/alexbryan/.svrnmesh/indexes/wessex-hoard-bare-35b-b/atlas/edges.json
+[done] tensions: 124 candidate pair(s) via embedding top-10 (floor 0.5) over 40 claim(s) + 14 state(s) + 46 entity atom(s); 1 non-comparable pair(s) dropped; 0 tension(s), 0 rejected; 0 chat + 124 parse failure(s) — recall degraded
+[6/8] gaps …
+  loaded 40 claim(s) + 14 state(s) + 20 question(s) + 173 edge(s)
+  ✓ 27 gap(s) total
+    · open-question: 20
+    · transition-without-trigger: 7
+  ✓ wrote /home/alexbryan/.svrnmesh/indexes/wessex-hoard-bare-35b-b/atlas/gaps.json
+[done] gaps: 27 gap(s): 20 open-question, 7 transition-without-trigger
+[7/8] report …
+=== Schema validation — wessex-hoard-bare-35b-b ===
+
+  sections with atom evidence: 17
+
+  [1] Extraction coverage
+      total atoms: 165
+        · Entity        46
+        · Event         7
+        · State         14
+        · Relation      38
+        · Claim         40
+        · Question      20
+        · Configuration 0
+      zero-coverage types: Configuration
+
+  [2] Enrichment-depth distribution
+        · Extracted             165
+        · Structural            0
+        · StructuralClassified  0
+
+  [3] Confidence distribution
+      total atoms with confidence: 46
+      low-confidence fraction (<0.5): 78.3%
+        · [0.0–0.1)     0  
+        · [0.1–0.2)    28  ██████████████████████████████
+        · [0.2–0.3)     0  
+        · [0.3–0.4)     8  ████████
+        · [0.4–0.5)     0  
+        · [0.5–0.6)     4  ████
+        · [0.6–0.7)     4  ████
+        · [0.7–0.8)     0  
+        · [0.8–0.9)     0  
+        · [0.9–1.0)     2  ██
+
+  [4] Atom-type utilisation
+        · Entity        27.9%
+        · Event         4.2%
+        · State         8.5%
+        · Relation      23.0%
+        · Claim         24.2%
+        · Question      12.1%
+        · Configuration 0.0%
+      under-utilised types (<3%): Configuration
+
+  [5] Orphan analysis
+      orphan atoms: 25/165  (15.2% of non-Configuration atoms have no edges)
+        · Entity         5/46   (  11%)
+        · Event          0/7    (   0%)
+        · State          0/14   (   0%)
+        · Relation       0/38   (   0%)
+        · Claim          0/40   (   0%)
+        · Question      20/20   ( 100%)
+
+  [6] Discourse-act distribution (Claim atoms)
+      total claims: 40
+      top act: assert (100.0%)
+        · assert          40
+
+  [7] Cross-corpus connectivity
+      (cross_corpus_edges.json not present — run `svrn enrich atlas-cross-corpus <this> <peer>` to populate)
+
+  [8] Deterministic gap counts
+        · transition_without_trigger: 7/8
+        · ungrounded_claim:           0/40
+        · open_question:              20/20
+
+  [9] Declared ontology (version 1)
+      per-type coverage
+        · entity     coin               16  (with subtypes 20)
+        · entity     sceatta             4  (with subtypes 4)
+        · entity     ruler              12  (with subtypes 12)
+        · entity     mint                5  (with subtypes 5)
+        · claim      attribution        40  (with subtypes 40)
+      identity criteria
+        · coin           external:catalogue_ref
+        · sceatta        external:catalogue_ref
+        · ruler          default:canonical_name
+        · mint           default:canonical_name
+        · attribution    default:canonical_name
+      merges: not run (`svrn enrich reconcile wessex-hoard-bare-35b-b`)
+      same_as claims: 0
+      claims of a subject-declaring type with no subject: 39
+      declared attributes filled
+        · coin       ruler               6/20
+        · coin       mint                6/20
+        · coin       denomination       10/20
+        · coin       metal              11/20
+        · coin       weight              7/20
+        · coin       struck              9/20
+        · coin       catalogue_ref       8/20
+        · sceatta    ruler               1/4
+        · sceatta    mint                2/4
+        · sceatta    denomination        2/4
+        · sceatta    metal               4/4
+        · sceatta    weight              3/4
+        · sceatta    struck              2/4
+        · sceatta    catalogue_ref       4/4
+        · attribution proposed_date      17/40
+
+  ⚠ Gap signatures detected (6):
+        · coverage:zero:Configuration
+        · confidence:low_fraction_over_20pct
+        · utilisation:under:Configuration
+        · orphans:type_over_80pct:Question
+        · discourse:dominance:assert
+        · gaps:transition_without_trigger_over_80pct
+
+  ✓ wrote /home/alexbryan/.svrnmesh/indexes/wessex-hoard-bare-35b-b/atlas/schema_validation.json
+[done] report: 165 atom(s) over 17 section(s); 6 schema gap signature(s)
+[8/8] backfill …
+  · backfill cached file at /home/alexbryan/.svrnmesh/indexes/wessex-hoard-bare-35b-b/atlas/atoms_ann.lance is older than atlas/atoms.json (the atlas was re-resolved since it was embedded); invalidating cache.
+  · wrote /home/alexbryan/.svrnmesh/indexes/wessex-hoard-bare-35b-b/atlas/atoms_ann.lance — 99/99 entries resolved to atom-ids
+[done] backfill: wrote atlas/atoms_ann.lance — 99/99 entries resolved to atom-ids
+=== enrich complete: 8 step(s) ===
+
+corpus `wessex-hoard-bare-35b-b` ingested and enriched in 4772s (0s index, 4771s enrich).
+Serve it:  corpus-mcp --base-url http://127.0.0.1:8089/v1 --corpus wessex-hoard-bare-35b-b
+acceptance: corpus ingest(wessex-hoard-bare-35b-b) -> ok in 4773s
+--- truth.json recall: CONTROL (daemon-built wessex-hoard) ---
+── 5. the payload: are the author's nouns in the atoms of wessex-hoard? ──
+ASSUMED: --recipe-unchanged — /home/alexbryan/dev/ei5b-wt/sovereign-recipes/wessex-hoard/recipe.toml has a newer mtime than the atlas,
+         and the caller asserts its CONTENT is the declaration the build used.
+         The structural type-name check above ran and passed.
+ASSUMED: --recipe-unchanged — /home/alexbryan/dev/ei5b-wt/sovereign-recipes/wessex-hoard/wessex-hoard.md also has a checkout-fresh mtime.
+atlas: 159 atoms, fingerprint sha256:22c90ef2a1aa332e459d711c5e3cf692a5be1602d7e519788b21e3d1c0c0b247
+atoms: 159
+
+  catalogue_ref           7 / 7   ok      
+  coin family            19 / 7   ok      coin + sceatta
+  mint                    3 / 3   ok      
+  ruler                   4 / 4   ok      
+  attribution            49 / 7   ok      
+  grade values            1 / 1   ok      3 of 4 declared — never extracted: die-link
+
+PASS: every bar in /home/alexbryan/dev/ei5b-wt/sovereign-recipes/wessex-hoard/truth.json is met by the atlas at /home/alexbryan/.svrnmesh/indexes/wessex-hoard/atlas/atoms.json.
+--- truth.json recall: THIS RUN (wessex-hoard-bare-35b-b, bare endpoints) ---
+── 5. the payload: are the author's nouns in the atoms of wessex-hoard-bare-35b-b? ──
+atoms: 165
+
+  catalogue_ref           7 / 7   ok      
+  coin family            20 / 7   ok      coin + sceatta
+  mint                    3 / 3   ok      
+  ruler                   4 / 4   ok      
+  attribution            40 / 7   ok      
+  grade values            1 / 1   ok      4 of 4 declared
+
+PASS: every bar in /home/alexbryan/dev/ei5b-wt/sovereign-recipes/wessex-hoard/truth.json is met by the atlas at /home/alexbryan/.svrnmesh/indexes/wessex-hoard-bare-35b-b/atlas/atoms.json.
+  bar                         bare    control
+  catalogue_ref             7 / 7       7 / 7   
+  coin family              20 / 7      19 / 7   
+  mint                      3 / 3       3 / 3   
+  ruler                     4 / 4       4 / 4   
+  attribution              40 / 7      49 / 7      <-- BELOW CONTROL
+  grade values              1 / 1       1 / 1   
+acceptance: FAIL - recall below the daemon-built control on: attribution: 40 vs 49

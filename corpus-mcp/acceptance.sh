@@ -85,6 +85,17 @@ fail() { echo "acceptance: FAIL — $*" >&2; exit 1; }
 [[ -x "$CORPUS_MCP" ]] || fail "$CORPUS_MCP not built (cargo build -p corpus-mcp)"
 [[ -f "$EMBED_GGUF" ]] || fail "embedding model $EMBED_GGUF not found"
 command -v llama-server >/dev/null || fail "llama-server not on PATH"
+# Every external tool a LATER leg needs, checked HERE. Run 1 of stage 2
+# (2026-09-05) spent 5,418 s on the ingest and then died in the scorer on
+# `FATAL: jq is required` — jq is on this host and was not in the toolbox the
+# run was launched into. A dependency check that runs after the expensive step
+# is not a preflight, it is an autopsy: the artifact survived and was scorable
+# post hoc, but the run's own verdict was lost. Named individually so the
+# refusal says which one (ARCH §18.3).
+for tool in jq python3; do
+  command -v "$tool" >/dev/null \
+    || fail "$tool not on PATH — the truth.json recall leg needs it, and this refuses now rather than after the ingest"
+done
 
 # ── 1. bare frontend ────────────────────────────────────────────────────────
 llama-server -m "$EMBED_GGUF" --embeddings --host 127.0.0.1 --port "$PORT" \
