@@ -217,6 +217,11 @@ struct Census {
     /// The report could not be read at all — reported, never counted as
     /// zero findings.
     unreadable: Vec<String>,
+    /// Scored units that NEVER RAN — the daemon refused them, the request
+    /// could not be built. Distinct from `errored` (an item that ran and
+    /// raised) because the verdicts differ: never-ran is could-not-judge,
+    /// raised is failed.
+    never_ran: Vec<String>,
     errored: Vec<String>,
     empty_answers: Vec<String>,
     abstained_on_present: Vec<String>,
@@ -417,17 +422,46 @@ fn census_gym(v: &serde_json::Value, c: &mut Census) {
         return;
     }
     for row in per {
-        let Some(cells) = row.as_array() else {
+        let Some(obj) = row.as_object() else {
+            c.unreadable
+                .push("a per_fixture row is not an object".into());
             continue;
         };
-        let slug = cells
-            .first()
+        let slug = obj
+            .get("slug")
             .and_then(|v| v.as_str())
             .unwrap_or("<unnamed>")
             .to_string();
-        let passes = cells.get(1).and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-        let total = cells.get(2).and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-        c.tallies.push((slug, total, passes));
+        // REQUIRED, not defaulted. Defaulting `errored` to 0 would mean "no
+        // replay was refused" on a rollup that never said so — the exact
+        // substitution this reader exists to remove, reintroduced one layer
+        // out (ARCH §18.3). A row missing any of the three is unreadable,
+        // which is could-not-judge.
+        let num = |k: &str| obj.get(k).and_then(|v| v.as_u64()).map(|n| n as usize);
+        let (Some(passes), Some(replays), Some(errored)) =
+            (num("passed"), num("replays"), num("errored"))
+        else {
+            c.unreadable.push(format!(
+                "per_fixture row `{slug}` is missing passed/replays/errored"
+            ));
+            continue;
+        };
+        let judged = replays.saturating_sub(errored);
+
+        // A replay the daemon refused never ran, so it is could-not-judge and
+        // NOT a zero in the tally. Folding it in scored a contended host as a
+        // broken model: three 503s read as `0/3`, the same shape a real
+        // honesty failure makes (ARCH §18.3).
+        if errored > 0 {
+            c.never_ran.push(format!(
+                "{slug}: {errored} of {replays} replay(s) never ran"
+            ));
+        }
+        if judged == 0 {
+            // Nothing to score. Pushing `(slug, 0, 0)` would be scored-zero.
+            continue;
+        }
+        c.tallies.push((slug, judged, passes));
     }
 }
 
@@ -548,6 +582,17 @@ fn rows(report: &mut LaneReport, id: &str, reader: LaneReader, c: &Census) {
                 "{} report problem(s): {}",
                 c.unreadable.len(),
                 c.unreadable.join("; ")
+            ),
+        );
+    }
+
+    if !c.never_ran.is_empty() {
+        report.cannot_judge(
+            "replays that ran",
+            format!(
+                "{} fixture(s) had replays that never ran: {}",
+                c.never_ran.len(),
+                c.never_ran.join("; ")
             ),
         );
     }
@@ -816,8 +861,10 @@ mod tests {
     fn the_gym_reader_reads_per_fixture_and_an_all_zero_fixture_is_a_catastrophe() {
         let v: serde_json::Value = serde_json::from_str(
             r#"{"fixtures":2,"total_replays":6,"total_passes":3,"pass_rate":0.5,
-                "per_fixture":[["05_noresults_honesty",3,3,1.0],
-                               ["06_fabricated_id_blocked",0,3,0.0]]}"#,
+                "total_errored":0,
+                "per_fixture":[
+                  {"slug":"05_noresults_honesty","passed":3,"errored":0,"replays":3,"pass_rate":1.0},
+                  {"slug":"06_fabricated_id_blocked","passed":0,"errored":0,"replays":3,"pass_rate":0.0}]}"#,
         )
         .unwrap();
         let mut c = Census::default();
@@ -825,6 +872,76 @@ mod tests {
         assert_eq!(
             c.all_zero(),
             vec!["06_fabricated_id_blocked 0/3".to_string()]
+        );
+        assert!(c.never_ran.is_empty(), "nothing errored in this report");
+    }
+
+    /// The addendum defect, as a test: a fixture whose replays the daemon
+    /// REFUSED must not read as a fixture the model failed.
+    ///
+    /// `Replay::passed()` folded `runner_error` into the failure count, so
+    /// three 503s under a peer's load scored `0/3` — the same shape a real
+    /// honesty failure makes, and `all-zero tally` is a HARD row. A replay
+    /// that never ran is could-not-judge (ARCH §18.3).
+    #[test]
+    fn gym_replays_that_never_ran_are_could_not_judge_and_never_a_zero_tally() {
+        let v: serde_json::Value = serde_json::from_str(
+            r#"{"fixtures":2,"total_replays":6,"total_passes":3,"pass_rate":1.0,
+                "total_errored":3,
+                "per_fixture":[
+                  {"slug":"01_corpus_definitional","passed":3,"errored":0,"replays":3,"pass_rate":1.0},
+                  {"slug":"05_noresults_honesty","passed":0,"errored":3,"replays":3,"pass_rate":null}]}"#,
+        )
+        .unwrap();
+        let mut c = Census::default();
+        census_gym(&v, &mut c);
+
+        // The refused fixture contributes NO tally, so it cannot be a zero.
+        assert_eq!(
+            c.all_zero(),
+            Vec::<String>::new(),
+            "a fixture whose replays never ran must not appear as scored-zero"
+        );
+        assert_eq!(c.tallies, vec![("01_corpus_definitional".to_string(), 3, 3)]);
+        assert_eq!(
+            c.never_ran,
+            vec!["05_noresults_honesty: 3 of 3 replay(s) never ran".to_string()]
+        );
+
+        // And it reaches the lane as could-not-judge, not as a failure.
+        let v = verdicts(&c, LaneReader::KnowledgeGym);
+        assert_eq!(find(&v, "replays that ran"), Verdict::CouldNotJudge);
+        assert_eq!(
+            find(&v, "all-zero tally"),
+            Verdict::Passed,
+            "the fixture that DID run passed 3/3, and the refused one must not \
+             turn this row red"
+        );
+    }
+
+    /// A partially-refused fixture is judged on what RAN, not on what was
+    /// dispatched — otherwise the denominator silently charges the model for
+    /// the daemon's refusals.
+    #[test]
+    fn gym_partial_refusal_scores_only_the_replays_that_ran() {
+        let v: serde_json::Value = serde_json::from_str(
+            r#"{"fixtures":1,"total_replays":3,"total_passes":1,"pass_rate":1.0,
+                "total_errored":2,
+                "per_fixture":[
+                  {"slug":"01_corpus_definitional","passed":1,"errored":2,"replays":3,"pass_rate":1.0}]}"#,
+        )
+        .unwrap();
+        let mut c = Census::default();
+        census_gym(&v, &mut c);
+        assert_eq!(
+            c.tallies,
+            vec![("01_corpus_definitional".to_string(), 1, 1)],
+            "one replay ran and it passed — 1/1, not 1/3"
+        );
+        assert_eq!(c.all_zero(), Vec::<String>::new());
+        assert_eq!(
+            c.never_ran,
+            vec!["01_corpus_definitional: 2 of 3 replay(s) never ran".to_string()]
         );
     }
 
