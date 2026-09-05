@@ -1227,6 +1227,11 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
         work_atlas_cfg.clone(),
     );
 
+    // Measurement history onto the ring journal: a migration for records filed
+    // before the namespace moved to the rail, and the closure loop for a run
+    // taken before this node was in a mesh. Deferred — it needs `app_state`.
+    bootstrap::reconcile_local_measurements(Arc::clone(&daemon));
+
     bootstrap::install_foreground_yield_hook(
         Arc::clone(&daemon),
         lint_watcher.clone(),

@@ -148,9 +148,31 @@
 //! travel at all ([`to_wire`] refuses them) — a failure is glassbox material for
 //! the operator who caused it and noise to everyone else.
 //!
-//! The mesh KV store is a wire buffer, not storage: it is in-memory in the
-//! daemon and empties on restart. The durable file stays authoritative and the
-//! daemon republishes it at boot. See the `Travel` section below.
+//! **The transport is the ring rail, not the gossip KV store** (cw-lift 2d).
+//! That store is `in_memory()` in the daemon — a wire buffer, not storage — so
+//! everything a node had published evaporated from the mesh on every restart,
+//! and a boot step re-uploaded the whole file to compensate. The rail is an
+//! append-only journal on disk under `rings/mesh-measurements/`, replicated by
+//! anti-entropy, so a record is written once and stays written; the boot step
+//! is now a one-shot reconcile rather than a standing upload.
+//!
+//! Three consequences worth knowing here, all of them in
+//! `sovereign_mesh::measurements_rail`:
+//!
+//! - A record rides as [`to_wire`]'s exact bytes inside a rail payload, as a
+//!   JSON **string**. A rail payload may not contain a fractional number — two
+//!   nodes must derive identical bytes from it and JSON does not promise that
+//!   for fractions — and a [`MeasurementRecord`] is nine `f64`s. A string has
+//!   one spelling and the bytes inside it are never re-serialized, so the
+//!   hazard the rule guards against is absent rather than merely checked.
+//! - Every line is signed by the publisher's node key, and a reader admits it
+//!   only if the mesh's own membership claims that key. The publisher is named
+//!   from the signature, never from anything inside the payload.
+//! - A node that is not in a mesh is REFUSED at publish, because no roster
+//!   could claim its signer. The file still holds the run and the reconcile
+//!   carries it once membership exists — the refusal is not a loss.
+//!
+//! The durable file stays authoritative for [`lookup`] either way.
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -1457,12 +1479,21 @@ pub fn save(file: &MeasurementFile) -> std::io::Result<()> {
 // measured — so no peer's number can ever be served as the reader's own. They
 // reach the operator through [`near_misses`], attributed, and nowhere else.
 
-/// Gossip namespace for measurement envelopes in the mesh KV store.
+/// The namespace measurements travel under. ONE name, and it is this one.
 ///
-/// Not in `GOSSIP_EXCLUDED_APP_IDS`, so entries replicate by default. That is
-/// the intent: a measurement describes hardware capability, which is the same
-/// class of fact the mesh already gossips in `NodeCapabilities`. It carries no
-/// prompt text, no corpus content, and no model size — see the module docs.
+/// It was the mesh KV `app_id` and it is now also the ring-rail namespace
+/// (cw-lift 2d) — deliberately the same string, because minting a second
+/// spelling for the rail side would be two answers to what this data is
+/// called (ARCH §10.6). It is a legal rail namespace as it stands: lowercase,
+/// digits and `-`, under 64 characters.
+///
+/// It IS in `GOSSIP_EXCLUDED_APP_IDS` now, and that is not a privacy
+/// judgement — a measurement describes hardware capability, the same class of
+/// fact the mesh already gossips in `NodeCapabilities`, and it carries no
+/// prompt text, no corpus content and no model size. Records still reach every
+/// peer; they reach them on the rail. The exclusion is what stops a peer on an
+/// older build re-creating the dead KV namespace here and a reader seeing one
+/// measurement arrive twice by two transports.
 pub const MEASUREMENTS_APP_ID: &str = "mesh-measurements";
 
 /// A record on the wire, versioned so a future incompatible change is *dropped*

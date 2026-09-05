@@ -44,6 +44,14 @@
 //! all.** There is no roster route, so a deployed app cannot add a key to the
 //! ring — including its own. That is a property of the route set rather than a
 //! check, which is the same move the rail itself makes (ARCH §7.1).
+//!
+//! One namespace has a roster nobody writes at all. `mesh-measurements` is the
+//! daemon's own ring (cw-lift 2d), and its roster is the mesh's membership,
+//! re-derived from local state on every read. That is still not a route —
+//! nothing is accepted from a peer, and a key is in it only because a member
+//! row already carried it — but it does mean `roster add` and `ring log` have
+//! nothing useful to do there, and both refuse rather than write or read a
+//! file the daemon ignores. See [`refuse_derived_roster`].
 
 use std::collections::BTreeMap;
 
@@ -105,6 +113,34 @@ use scaffold::run_new;
 fn ring_journal(namespace: &str) -> Result<commonwealth_rail::RingJournal, String> {
     commonwealth_rail::RingJournal::open(&sovereign_cli_shared::dirs::sovereign_root(), namespace)
         .map_err(|e| e.to_string())
+}
+
+/// Refuse a namespace whose roster is DERIVED rather than written here.
+///
+/// `mesh-measurements` is the daemon's own ring (cw-lift 2d). Its roster is
+/// the mesh's membership, re-derived from state the node already holds on
+/// every read (`sovereign_mesh::ring_roster`) — which is what lets an
+/// unplaceable signer HEAL when that node finally advertises a key, and why
+/// nothing writes it down.
+///
+/// Every command in this module that touches `roster.json` therefore has to
+/// stop here. A file written by `roster add` would be a second answer to who
+/// is in that ring (ARCH §10.6): ignored by the daemon's own read path and
+/// believed by `ring log`, which is worse than either alone. And `ring log`
+/// itself reads the on-disk roster, so on this namespace it would report
+/// every line as an unplaceable signer and read as breakage.
+///
+/// One predicate, so the two refusals cannot drift apart.
+fn refuse_derived_roster(namespace: &str) -> Option<String> {
+    if namespace != sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID {
+        return None;
+    }
+    Some(format!(
+        "`{namespace}` is the daemon's own ring — its roster IS the mesh's membership, \
+         derived fresh on every read and never written down.\n\
+         Who is in it: svrn mesh status\n\
+         What is on it: svrn mesh plan (peers' runs, attributed) or svrn mesh bench --history"
+    ))
 }
 
 /// Read the daemon's client port from config rather than hardcoding 9741 —
@@ -217,6 +253,10 @@ async fn run_roster(args: &[String]) -> i32 {
         eprintln!("ring roster: which ring? pass --ring <namespace>");
         return 2;
     };
+    if let Some(why) = refuse_derived_roster(namespace) {
+        eprintln!("ring roster: {why}");
+        return 2;
+    }
     match sub {
         Some("add") => roster_add(namespace, &args[1..]).await,
         _ => roster_list(namespace).await,
@@ -389,6 +429,10 @@ async fn run_log(args: &[String]) -> i32 {
         eprintln!("ring log: which ring? `svrn ring log <namespace>`");
         return 2;
     };
+    if let Some(why) = refuse_derived_roster(namespace) {
+        eprintln!("ring log: {why}");
+        return 2;
+    }
     let v = match rail_log(namespace).await {
         Ok(v) => v,
         Err(e) => {
@@ -551,6 +595,25 @@ mod tests {
         assert!(
             line.contains("no replacement"),
             "a correction that states nothing must not read as an empty act: {line}"
+        );
+    }
+
+    /// The one namespace whose roster is derived is refused by BOTH commands
+    /// that would otherwise touch `roster.json`, and every other namespace is
+    /// untouched. The refusal names where to look instead — a "no" with no
+    /// next step is how an operator ends up hand-writing the file anyway.
+    #[test]
+    fn the_daemons_own_ring_refuses_a_hand_written_roster() {
+        let why = refuse_derived_roster("mesh-measurements")
+            .expect("the namespace whose roster is the mesh's membership");
+        assert!(why.contains("svrn mesh status"), "{why}");
+        assert!(why.contains("svrn mesh plan"), "{why}");
+        assert!(refuse_derived_roster("house-expenses").is_none());
+        assert!(refuse_derived_roster("mesh-measurement").is_none());
+        assert_eq!(
+            refuse_derived_roster(sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID).is_some(),
+            true,
+            "the guard reads the ONE constant, not a second spelling of it"
         );
     }
 }

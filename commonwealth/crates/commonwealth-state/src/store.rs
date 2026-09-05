@@ -509,6 +509,17 @@ mod tests {
             node(1),
         )
         .unwrap();
+        // cw-lift 2d: excluded because it MOVED to the ring rail, not because
+        // it is private. Nothing on this side writes it any more; the entry
+        // is what stops a peer on an older build putting it back on the wire,
+        // and this count is what fails if it rejoins.
+        a.set(
+            "mesh-measurements",
+            "1700000000-abc",
+            Bytes::from("{}"),
+            node(1),
+        )
+        .unwrap();
         a.set(CONTRIBUTIONS_APP_ID, "ev1", Bytes::from("served"), node(1))
             .unwrap();
 

@@ -592,11 +592,14 @@ pub struct PublishMeasurementResponse {
 /// One peer's measurement, as `GET /v1/mesh/measurements` returns it.
 #[derive(Debug, Serialize)]
 pub struct PeerMeasurementDto {
-    /// Hex node id of the publisher, from the KV entry's own origin — not from
-    /// anything inside the payload, which the publisher controls.
+    /// Hex node id of the publisher, resolved from the journal line's `actor`
+    /// through the ring roster — not from anything inside the payload, which
+    /// the publisher controls. The `actor` is the public key that SIGNED the
+    /// line, which is the one field a writer cannot forge for someone else
+    /// (ARCH §18.1).
     pub origin_node: String,
-    /// Friendly mesh name, resolved against live membership. Absent when the
-    /// peer has left or was never named.
+    /// Friendly mesh name, as the roster resolved the signing key. Absent only
+    /// when this build could not name the node behind an admitted key.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub origin_name: Option<String>,
     /// What they measured.
@@ -649,14 +652,22 @@ pub struct PeerMeasurementsResponse {
     /// holds those on disk, and they are the authoritative copy — unless
     /// [`PeerMeasurementsQuery::include_self`] was set.
     pub records: Vec<PeerMeasurementDto>,
-    /// Entries that were present but could not be read as measurements, usually
-    /// a peer on an incompatible schema. Reported rather than swallowed: a
-    /// reader seeing `records: []` deserves to know whether the mesh is quiet or
-    /// whether it is talking in a dialect this build does not speak.
+    /// Journal lines that were admitted but could not be read as measurements,
+    /// usually a peer on an incompatible schema, PLUS everything admission
+    /// could not account for at all — an unplaceable signer, a hole in a peer's
+    /// sequence, a torn line. Reported rather than swallowed: a reader seeing
+    /// `records: []` deserves to know whether the ring is quiet or whether this
+    /// answer covers a subset (ARCH §18.3).
     pub unreadable: usize,
 }
 
-/// Publish a locally-taken measurement to the mesh.
+/// Publish a locally-taken measurement onto this node's ring journal.
+///
+/// The journal is the durable copy and `ring_sync`'s ordinary anti-entropy
+/// round carries it to every peer — there is nothing to broadcast here and
+/// nothing to re-upload at boot, which is what the gossip KV store needed
+/// because it was an in-memory buffer that lost this node's history on every
+/// restart. See [`crate::measurements_rail`].
 async fn publish_measurement(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
@@ -665,13 +676,13 @@ async fn publish_measurement(
     if let Err(r) = enforce_localhost(&peer) {
         return r;
     }
-    let refuse = |why: &str| {
+    let refuse = |why: String| {
         (
             StatusCode::OK,
             Json(PublishMeasurementResponse {
                 published: false,
                 key: None,
-                refused: Some(why.to_string()),
+                refused: Some(why),
             }),
         )
             .into_response()
@@ -681,58 +692,68 @@ async fn publish_measurement(
     // on a solo node is a completely normal thing to do. Saying so beats a 503
     // the CLI would have to interpret.
     let Some(app_state) = daemon.app_state().await else {
-        return refuse("the daemon has no mesh state yet");
+        return refuse("the daemon has no mesh state yet".into());
+    };
+    let Some(rail) = app_state.ring_rail() else {
+        return refuse("this daemon keeps no ring journal".into());
+    };
+    let journal = match rail.journal(sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID) {
+        Ok(j) => j,
+        Err(e) => return refuse(format!("the ring journal could not be opened: {e}")),
     };
 
-    let Some(bytes) = sovereign_core::mesh_measurements::to_wire(&record) else {
-        return refuse("an invalid run does not travel");
-    };
-    let key = sovereign_core::mesh_measurements::wire_key(&record);
-    let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
-
-    if let Err(e) = app_state.inner.mesh_store.set(
-        sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID,
-        &key,
-        bytes::Bytes::from(bytes),
-        self_id,
-    ) {
-        tracing::warn!(key = %key, error = %e, "mesh-measurements: store write failed");
-        return refuse("the gossip buffer rejected the write");
+    // Derived here from membership this node already holds, and never accepted
+    // over the wire — there is no roster route, and its absence is the safety
+    // property (ARCH §7.1). See `crate::ring_roster`.
+    let roster = crate::ring_roster::MeshRoster::from_app_state(&app_state).await;
+    // Asked here, in the mesh's own words, because the rail's door would
+    // answer the same condition with `svrn ring roster add … --self` — the
+    // right instruction for a ring whose roster is written by hand, and one
+    // that does not apply to a namespace whose roster IS the membership.
+    if !roster.claims(&rail.signer().actor()) {
+        return refuse(
+            "this node is not in a mesh yet, so a run it published would be \
+             unreadable to every peer — `svrn mesh create` or join one first. \
+             The run is already on disk and travels once membership exists."
+                .into(),
+        );
     }
-
-    // Push now rather than waiting up to a full anti-entropy round. A bench run
-    // costs the operator minutes; making them wait another gossip interval to
-    // see it land on the peer they were benchmarking against would make the
-    // feature feel broken. Best-effort by design — the next round carries it
-    // anyway if every peer is unreachable right now.
-    crate::gossip::broadcast_now(
-        &app_state,
-        sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID,
-        &key,
-    )
-    .await;
-
-    tracing::info!(
-        target = "mesh_measurements",
-        key = %key,
-        decode_tok_s = record.decode_tok_s,
-        model = %record.model_name,
-        placement = %record.placement_human,
-        "mesh-measurements: published a run to the mesh"
-    );
-
-    (
-        StatusCode::OK,
-        Json(PublishMeasurementResponse {
-            published: true,
-            key: Some(key),
-            refused: None,
-        }),
-    )
-        .into_response()
+    match crate::measurements_rail::publish(&journal, rail.signer(), roster.roster(), &record) {
+        Ok(op) => {
+            tracing::info!(
+                target = "mesh_measurements",
+                id = %op.id,
+                seq = op.kind.seq,
+                decode_tok_s = record.decode_tok_s,
+                model = %record.model_name,
+                placement = %record.placement_human,
+                "mesh-measurements: appended a run to the ring journal"
+            );
+            (
+                StatusCode::OK,
+                Json(PublishMeasurementResponse {
+                    published: true,
+                    key: Some(op.id.to_string()),
+                    refused: None,
+                }),
+            )
+                .into_response()
+        }
+        // The rail's own refusals are already sentences naming the fix — a
+        // node that cannot place its own key is told which command adds it —
+        // so they are passed through rather than restated (ARCH §10.6).
+        Err(why) => {
+            tracing::warn!(
+                target = "mesh_measurements",
+                why,
+                "mesh-measurements: not published"
+            );
+            refuse(why)
+        }
+    }
 }
 
-/// Every measurement peers have gossiped to this node.
+/// Every measurement the ring has put on this namespace's journal.
 async fn peer_measurements(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
@@ -754,74 +775,72 @@ async fn peer_measurements(
     let Some(app_state) = daemon.app_state().await else {
         return empty();
     };
-
-    let entries = match app_state
-        .inner
-        .mesh_store
-        .scan(sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID, "")
-    {
-        Ok(e) => e,
+    let Some(rail) = app_state.ring_rail() else {
+        return empty();
+    };
+    let journal = match rail.journal(sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID) {
+        Ok(j) => j,
         Err(e) => {
-            tracing::warn!(error = %e, "mesh-measurements: peer scan failed");
+            tracing::warn!(error = %e, "mesh-measurements: ring journal unavailable");
             return empty();
         }
     };
+    let roster = crate::ring_roster::MeshRoster::from_app_state(&app_state).await;
+    let admission = match journal.admit(roster.roster(), &commonwealth_rail::Ed25519Verifier) {
+        Ok(a) => a,
+        Err(e) => {
+            // NOT `empty()`. A journal we could not open and a ring with
+            // nothing on it are different facts, and answering the second when
+            // the first is true is a claim of completeness this node cannot
+            // make (ARCH §18.3). One thing was unreadable: the journal.
+            tracing::warn!(error = %e, "mesh-measurements: journal unreadable");
+            return (
+                StatusCode::OK,
+                Json(PeerMeasurementsResponse {
+                    records: Vec::new(),
+                    unreadable: 1,
+                }),
+            )
+                .into_response();
+        }
+    };
 
-    // Friendly names for whoever is currently in the mesh. A peer that has left
-    // keeps its records and loses its name — the id still identifies it.
-    let names: std::collections::HashMap<String, String> = daemon
-        .mesh_state()
-        .await
-        .map(|s| {
-            s.members
-                .iter()
-                .filter(|m| !m.name.trim().is_empty())
-                .map(|m| (m.node_id.to_lowercase(), m.name.clone()))
-                .collect()
-        })
-        .unwrap_or_default();
-
-    // `None` drops the own-origin filter entirely; see `include_self`.
-    let self_id =
-        (!q.include_self).then(|| *app_state.inner.self_node_id_swap.load_full().as_ref());
-    (StatusCode::OK, Json(peer_view(entries, self_id, &names))).into_response()
+    // `None` drops the own-author filter entirely; see `include_self`.
+    let mine = rail.signer().actor();
+    let exclude = (!q.include_self).then_some(mine.as_str());
+    let seen = crate::measurements_rail::read(&admission, exclude);
+    (StatusCode::OK, Json(peer_view(seen, &roster))).into_response()
 }
 
-/// Turn raw KV entries into the peer view. Pure, so every decision in it is
-/// testable without a live daemon: which entries are ours, which are unreadable,
-/// how a publisher is named, and what order a reader sees them in.
-///
-/// `self_id` is the node whose records to exclude. `None` excludes nothing — the
-/// diagnostic path, never the one the CLI takes.
+/// Turn what the rail admitted into the peer view. Pure, so every decision in
+/// it is testable without a live daemon: how a publisher is named, what a
+/// reader is told about the lines that did not survive, and what order they
+/// come back in.
 fn peer_view(
-    entries: Vec<commonwealth_state::StoreEntry>,
-    self_id: Option<commonwealth_core::ids::NodeId>,
-    names: &std::collections::HashMap<String, String>,
+    seen: crate::measurements_rail::RailMeasurements,
+    roster: &crate::ring_roster::MeshRoster,
 ) -> PeerMeasurementsResponse {
-    let mut unreadable = 0usize;
-    let mut records: Vec<PeerMeasurementDto> = Vec::new();
-    for entry in entries {
-        // Our own runs live in `~/.svrnmesh/mesh-measurements.json`, which the
-        // CLI reads directly and which is the authoritative copy. Returning them
-        // here would double-count every local record as also being a peer's —
-        // and worse, `near_misses` would show the reader their own measurement
-        // labelled with their own node name, as though a stranger had confirmed
-        // it.
-        if self_id == Some(entry.origin) {
-            continue;
-        }
-        let Some(record) = sovereign_core::mesh_measurements::from_wire(&entry.value) else {
-            unreadable += 1;
-            continue;
-        };
-        let origin_node = hex::encode(entry.origin.as_bytes());
-        records.push(PeerMeasurementDto {
-            origin_name: names.get(&origin_node).cloned(),
-            origin_node,
-            record,
-        });
-    }
-    records.sort_by(|a, b| b.record.measured_at.cmp(&a.record.measured_at));
+    // One count, not two. A line this build cannot decode and a line the rail
+    // could not account for are both "your answer covers less than the ring
+    // holds", and splitting them across two fields would let a caller read one
+    // and believe the other was zero (ARCH §18.3).
+    let unreadable = seen.unreadable + seen.gaps;
+    let records = seen
+        .found
+        .into_iter()
+        .map(|m| PeerMeasurementDto {
+            origin_node: roster
+                .node_id_of(&m.actor)
+                .map(|id| hex::encode(id.as_bytes()))
+                // Unreachable while admission and the roster share one
+                // derivation — an admitted op's key is by definition claimed —
+                // but the signing key is the honest fallback rather than a
+                // blank, because it still identifies the writer.
+                .unwrap_or_else(|| m.actor.clone()),
+            origin_name: Some(m.person.as_str().to_string()),
+            record: m.record,
+        })
+        .collect();
     PeerMeasurementsResponse {
         records,
         unreadable,
@@ -1673,182 +1692,75 @@ mod tests {
     }
 
     // -- Measurements -------------------------------------------------------
+    //
+    // The namespace lives on the ring rail (`crate::measurements_rail`), so
+    // the journal-level properties — self-exclusion, ordering, what an
+    // undecodable line costs — are pinned there, against a real journal. What
+    // is left here is the MAPPING: how an admitted op becomes the DTO the CLI
+    // reads.
+
+    use crate::measurements_rail::{RailMeasurement, RailMeasurements};
+    use crate::ring_roster::tests::{key, member, mesh_of, pubkey_of};
+    use crate::ring_roster::MeshRoster;
+    use commonwealth_rail::{Person, RingSigner};
+
+    use crate::measurements_rail::tests::a_measurement;
 
     fn node(b: u8) -> commonwealth_core::ids::NodeId {
         commonwealth_core::ids::NodeId::from_u128(u128::from(b))
     }
 
-    fn a_measurement(tok_s: f64, at: u64) -> sovereign_core::mesh_measurements::MeasurementRecord {
-        use sovereign_core::mesh_measurements as mm;
-        let host = mm::HostIdentity::from_live_mesh(Some(0xf0f)).expect("a fingerprint is a host");
-        mm::MeasurementRecord {
-            key: mm::MeasurementKey::for_plan(
-                host,
-                "mf1:deadbeef".into(),
-                "pd2:cafef00d".into(),
-                32768,
-                mm::LinkClass::Direct,
-            ),
-            decode_tok_s: tok_s,
-            decode_tok_s_min: tok_s - 0.1,
-            decode_tok_s_max: tok_s + 0.1,
-            ttft_ms: 2203.0,
-            itl_p50_ms: 90.0,
-            itl_p95_ms: 98.0,
-            prefill_tok_s: None,
-            cold_load_s: None,
-            trials: 3,
-            content_frames: 256,
-            model_name: "Qwen3.5-122B".into(),
-            placement_human: "36 local + 12 @beefymac".into(),
-            nodes: 2,
-            hops: 1,
-            measured_at: at,
-            build: "0.10.0".into(),
-            backend: Some("vulkan".into()),
-            link_rtt_ms: None,
-            verdict: mm::Verdict::Valid,
-            witness: None,
-            conditions: None,
-        }
-    }
-
-    fn entry(
-        origin: commonwealth_core::ids::NodeId,
-        value: Vec<u8>,
-    ) -> commonwealth_state::StoreEntry {
-        commonwealth_state::StoreEntry {
-            app_id: sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID.to_string(),
-            key: "k".into(),
-            value: bytes::Bytes::from(value),
-            timestamp: 0,
-            origin,
-        }
-    }
-
+    /// A publisher is named from the ROSTER, never from the payload it wrote.
+    /// The `actor` on a journal line is the key that signed it — the one field
+    /// a writer cannot forge for someone else (ARCH §18.1) — so both halves of
+    /// the attribution, the node id and the display name, are derived from it.
     #[test]
-    fn our_own_published_records_are_not_returned_as_a_peers() {
-        use sovereign_core::mesh_measurements as mm;
-        let me = node(1);
-        let entries = vec![
-            entry(me, mm::to_wire(&a_measurement(7.75, 100)).unwrap()),
-            entry(node(2), mm::to_wire(&a_measurement(11.08, 200)).unwrap()),
-        ];
-        let view = peer_view(entries, Some(me), &Default::default());
-        assert_eq!(
-            view.records.len(),
-            1,
-            "the local copy on disk is authoritative; echoing it back would show \
-             the reader their own run wearing their own node name"
-        );
-        assert_eq!(view.records[0].record.decode_tok_s, 11.08);
-    }
-
-    /// Through the real router, because the thing being tested is what axum's
-    /// extractor does with an operator's `curl` — not what a parser would do in
-    /// isolation. `?include_self=1` answered 400 before this was lenient.
-    #[tokio::test]
-    async fn the_diagnostic_flag_accepts_however_a_person_spelled_it() {
-        let (_daemon, base, _tmp) = spawn_test_router().await;
-        let client = reqwest::Client::new();
-        for q in [
-            "?include_self=1",
-            "?include_self=true",
-            "?include_self=YES",
-            "?include_self=on",
-            "?include_self",
-            "?include_self=0",
-            "?include_self=false",
-            "",
-        ] {
-            let resp = client
-                .get(format!("{base}/v1/mesh/measurements{q}"))
-                .send()
-                .await
-                .unwrap();
-            assert_eq!(
-                resp.status(),
-                200,
-                "a diagnostic an operator reaches for with curl must not answer \
-                 400 because they typed the wrong spelling of true: {q:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn the_diagnostic_path_shows_our_own_records_and_still_names_the_origin() {
-        use sovereign_core::mesh_measurements as mm;
-        let me = node(1);
-        let entries = vec![
-            entry(me, mm::to_wire(&a_measurement(7.75, 100)).unwrap()),
-            entry(node(2), mm::to_wire(&a_measurement(11.08, 200)).unwrap()),
-        ];
-        let view = peer_view(entries, None, &Default::default());
-        assert_eq!(view.records.len(), 2, "None excludes nothing");
-        assert!(
-            view.records
-                .iter()
-                .any(|r| r.origin_node == hex::encode(me.as_bytes())),
-            "our own record must still say it is ours — the origin is what makes \
-             this diagnostic rather than misleading"
-        );
-    }
-
-    #[test]
-    fn an_unreadable_entry_is_counted_not_swallowed() {
-        use sovereign_core::mesh_measurements as mm;
-        let entries = vec![
-            entry(node(2), b"{not a measurement".to_vec()),
-            entry(node(3), mm::to_wire(&a_measurement(11.08, 200)).unwrap()),
-        ];
-        let view = peer_view(entries, Some(node(1)), &Default::default());
-        assert_eq!(view.records.len(), 1);
-        assert_eq!(
-            view.unreadable, 1,
-            "\"no peer has measured this\" and \"a peer has, in a dialect we do \
-             not speak\" send an operator to different places"
-        );
-    }
-
-    #[test]
-    fn a_publisher_is_named_when_the_mesh_knows_it_and_identified_when_not() {
-        use sovereign_core::mesh_measurements as mm;
-        let known = node(2);
-        let mut names = std::collections::HashMap::new();
-        names.insert(hex::encode(known.as_bytes()), "BeefyMac".to_string());
-
-        let entries = vec![
-            entry(known, mm::to_wire(&a_measurement(11.08, 200)).unwrap()),
-            entry(node(9), mm::to_wire(&a_measurement(9.0, 300)).unwrap()),
-        ];
-        let view = peer_view(entries, Some(node(1)), &names);
-        let by_name: std::collections::HashMap<_, _> = view
-            .records
-            .iter()
-            .map(|r| (r.origin_node.clone(), r.origin_name.clone()))
-            .collect();
-        assert_eq!(
-            by_name[&hex::encode(known.as_bytes())],
-            Some("BeefyMac".to_string())
-        );
-        assert_eq!(
-            by_name[&hex::encode(node(9).as_bytes())],
+    fn a_publisher_is_named_from_the_key_that_signed_the_line() {
+        let k = key(71);
+        let id = node(2);
+        let roster = MeshRoster::derive(
+            &mesh_of(vec![member(id, "BeefyMac", Some(pubkey_of(&k)))]),
+            node(1),
             None,
-            "a peer that has left keeps its records and loses only its name"
         );
+        let view = peer_view(
+            RailMeasurements {
+                found: vec![RailMeasurement {
+                    actor: RingSigner::actor(&k),
+                    person: Person::from("BeefyMac"),
+                    record: a_measurement(11.08, 200),
+                }],
+                unreadable: 0,
+                gaps: 0,
+            },
+            &roster,
+        );
+        assert_eq!(view.records.len(), 1);
+        assert_eq!(view.records[0].origin_node, hex::encode(id.as_bytes()));
+        assert_eq!(view.records[0].origin_name.as_deref(), Some("BeefyMac"));
     }
 
+    /// **An incomplete answer says so, in one number.** A line this build
+    /// cannot decode and a line the rail could not account for at all are both
+    /// "your answer covers less than the ring holds"; reporting them in two
+    /// fields would let a caller read one and believe the other was zero
+    /// (ARCH §18.3). Before the move this counted only the first.
     #[test]
-    fn peers_are_returned_newest_first() {
-        use sovereign_core::mesh_measurements as mm;
-        let entries = vec![
-            entry(node(2), mm::to_wire(&a_measurement(7.0, 100)).unwrap()),
-            entry(node(3), mm::to_wire(&a_measurement(11.0, 900)).unwrap()),
-            entry(node(4), mm::to_wire(&a_measurement(9.0, 500)).unwrap()),
-        ];
-        let view = peer_view(entries, Some(node(1)), &Default::default());
-        let times: Vec<u64> = view.records.iter().map(|r| r.record.measured_at).collect();
-        assert_eq!(times, vec![900, 500, 100]);
+    fn a_gap_the_rail_reported_reaches_the_reader_as_an_unreadable_line() {
+        let view = peer_view(
+            RailMeasurements {
+                found: Vec::new(),
+                unreadable: 1,
+                gaps: 2,
+            },
+            &MeshRoster::default(),
+        );
+        assert!(view.records.is_empty());
+        assert_eq!(
+            view.unreadable, 3,
+            "\"nobody has measured this\" and \"three lines did not survive \
+             admission\" send an operator to different places"
+        );
     }
 
     #[tokio::test]

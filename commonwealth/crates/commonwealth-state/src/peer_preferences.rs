@@ -242,6 +242,18 @@ impl PeerPreferenceStore {
 ///   the daemon-side reader (`ApprovalGate`) was never constructed with
 ///   a store at all, so no row ever reached the gossiping instance.
 ///
+/// Moved to the ring rail (cw-lift 2d):
+///
+/// - `mesh-measurements` — measured throughput per model per split. It is
+///   NOT private and it still travels; it travels on the ring rail instead,
+///   which is a journal on disk rather than an in-memory buffer, so a node's
+///   history stops evaporating on restart. Its entry here is the receiving
+///   half: `routes_app_internal.rs` refuses an excluded namespace inbound, so
+///   a peer on an older build cannot re-create the dead KV namespace on this
+///   node. There is no writer left on this side (`sovereign_mesh::
+///   measurements_rail` is the only publisher and it appends to the journal),
+///   which is exactly the shape `notes-private` already has.
+///
 /// Each entry is pinned by a test that asserts `is_gossip_excluded`
 /// returns `true` for it.
 pub const GOSSIP_EXCLUDED_APP_IDS: &[&str] = &[
@@ -254,6 +266,7 @@ pub const GOSSIP_EXCLUDED_APP_IDS: &[&str] = &[
     "wikipedia-newsworthy:portal",
     "atos-sessions",
     "atos-approvals",
+    "mesh-measurements",
 ];
 
 /// `app_id` namespace for a user's Proxy Voting portfolios — the named
@@ -371,6 +384,22 @@ mod tests {
         // `knowledge` was here until cw-lift 2b deleted the namespace:
         // `KnowledgeStateStore::set_shard_plan` had no production
         // caller, so the reader always saw `unwrap_or_default()`.
+    }
+
+    /// **The namespace that left the wire because it moved, not because it
+    /// is private** (cw-lift 2d). `mesh-measurements` has a real cross-peer
+    /// consumer and still travels — on the ring rail, whose journal is on
+    /// disk. Keeping it out of the KV replication is what stops a peer on an
+    /// older build re-creating the dead namespace here, and what stops a
+    /// reader ever seeing two copies of one measurement from two transports.
+    ///
+    /// This pins the LIST, not the behaviour (ARCH §18.1). The outbound gate
+    /// is `store::tests::private_namespaces_never_enter_the_gossip_set`,
+    /// which replicates A → B through `all_entries_for_gossip` and fails on
+    /// the entry count; it carries this namespace.
+    #[test]
+    fn the_measurements_namespace_left_the_wire_for_the_rail() {
+        assert!(is_gossip_excluded("mesh-measurements"));
     }
 
     /// **Pin for the four namespaces excluded on "no cross-peer

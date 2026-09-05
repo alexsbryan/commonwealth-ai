@@ -1266,60 +1266,66 @@ pub(super) fn spawn_slot_alias_push(
     });
 }
 
-/// Load this node's measurement history into the gossip buffer.
+/// Reconcile this node's measurement history onto its ring journal.
 ///
-/// The mesh KV store is `in_memory()` — a wire buffer, not storage — so
-/// everything this node has ever published vanishes from the mesh when the daemon
-/// restarts. `svrn mesh bench` publishes each run as it takes it
-/// (`POST /v1/mesh/measurements`), which covers new runs and nothing else: after
-/// a restart a peer's next anti-entropy round would find our namespace empty and
-/// our history would quietly evaporate one restart at a time, while still looking
-/// perfectly intact in `~/.svrnmesh/mesh-measurements.json`. This is the step
-/// that makes the file authoritative rather than merely local.
+/// This used to load the history into the gossip KV store on every start,
+/// because that store is `in_memory()` — a wire buffer, not storage — so
+/// everything this node had ever published evaporated from the mesh at each
+/// restart, and re-uploading it was the only way the file stayed
+/// authoritative. `mesh-measurements` is on the ring rail now
+/// (`sovereign_mesh::measurements_rail`): the journal is on disk, ordinary
+/// anti-entropy carries it, and nothing needs re-uploading.
 ///
-/// Idempotent by construction: `wire_key` is derived from the record, so a
-/// republish overwrites its own entry instead of accumulating copies. Invalid
-/// runs are refused by `to_wire` and stay home.
+/// What remains is the part the buffer never did, and it runs once per boot
+/// rather than continuously:
 ///
-/// Synchronous and cheap — the file is capped at `MAX_RUNS_PER_KEY` per
-/// configuration and is a few KB in practice. No spawn, so a peer that gossips
-/// with us immediately after boot cannot race an empty namespace.
-pub(super) fn republish_local_measurements(
-    work_atlas_mesh_store: &commonwealth_state::MeshStore,
-    self_node_id: NodeId,
-) {
-    use sovereign_core::mesh_measurements as mm;
-
-    let file = mm::load();
-    let (mut published, mut withheld) = (0usize, 0usize);
-    for rec in file.records() {
-        let Some(bytes) = mm::to_wire(rec) else {
-            withheld += 1;
-            continue;
+/// - **Migration.** Records filed before the namespace moved reach the ring
+///   the first time this node boots on this build.
+/// - **Closure.** A run taken before this node was in a mesh is refused at
+///   publish time — correctly, since no roster could claim its signer — and
+///   this is what carries it the moment membership exists. Without it the
+///   refusal would be a quiet loss.
+///
+/// Deferred, with the same deadline pattern as the work-atlas broadcaster
+/// wire-up: the roster is derived from live membership, so this cannot run
+/// until `daemon.app_state()` answers.
+pub(super) fn reconcile_local_measurements(daemon: Arc<EmbeddedDaemon>) {
+    tokio::spawn(async move {
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+        let app_state = loop {
+            if let Some(state) = daemon.app_state().await {
+                break state;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                tracing::warn!(
+                    target = "mesh_measurements",
+                    "mesh-measurements: no mesh state within 30s — local history stays \
+                     on disk until the next start"
+                );
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         };
-        match work_atlas_mesh_store.set(
-            mm::MEASUREMENTS_APP_ID,
-            &mm::wire_key(rec),
-            bytes.into(),
-            self_node_id,
-        ) {
-            Ok(_) => published += 1,
-            Err(e) => tracing::warn!(
-                target = "mesh_measurements",
-                error = %e,
-                "mesh-measurements: boot republish set() failed"
-            ),
-        }
-    }
-    if published > 0 || withheld > 0 {
-        tracing::info!(
-            target = "mesh_measurements",
-            published,
-            withheld,
-            total = file.records().len(),
-            "mesh-measurements: republished local history into the gossip buffer"
+        let Some(rail) = app_state.ring_rail() else {
+            return;
+        };
+        let namespace = sovereign_core::mesh_measurements::MEASUREMENTS_APP_ID;
+        let journal = match rail.journal(namespace) {
+            Ok(j) => j,
+            Err(e) => {
+                tracing::warn!(error = %e, "mesh-measurements: ring journal unavailable");
+                return;
+            }
+        };
+        let roster = sovereign_mesh::ring_roster::MeshRoster::from_app_state(&app_state).await;
+        let file = sovereign_core::mesh_measurements::load();
+        sovereign_mesh::measurements_rail::republish(
+            &journal,
+            rail.signer(),
+            roster.roster(),
+            file.records(),
         );
-    }
+    });
 }
 
 /// Wire NoteStore's outbound propagation sink to publish notes via the mesh store.
@@ -2463,11 +2469,6 @@ pub(super) fn setup_watchers_and_work_atlas(
     // it starts (file-on-disk → mesh.json → generate). Resolved early
     // so `WorkAtlasStore::node_id` matches the daemon's `self_id`.
     let work_atlas_node_id = resolve_self_node_id(data_dir);
-    // Measurement history is durable on disk but the buffer above is not; without
-    // this, everything this node has measured leaves the mesh at every restart.
-    // Runs before anything can gossip, so a peer never sees a momentarily empty
-    // namespace and concludes we have measured nothing.
-    republish_local_measurements(&work_atlas_mesh_store, work_atlas_node_id);
     let work_atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
         Arc::clone(&work_atlas_mesh_store),
         work_atlas_node_id,

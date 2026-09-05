@@ -4352,15 +4352,27 @@ itself, so even a pre-witness record reports "measured: 32768 · yours: 8192".
 **Measurements travel** (2026-07-30). A measurement is worth most to the machine
 that did not take it: locally it recalls what a run felt like, on a peer it
 answers what a configuration *would* feel like on hardware the reader cannot try.
-Records gossip under `app_id = "mesh-measurements"` as versioned `to_wire`
-envelopes (a peer on another `SCHEMA_VERSION` is dropped by `from_wire`, not
-half-read), keyed by `wire_key` — `{measured_at:010}/{hash}`, derived from the
-record so a republish overwrites its own entry rather than accumulating copies,
-and lexicographically chronological so a raw `scan` is readable. The rate enters
+Records travel as versioned `to_wire` envelopes (a peer on another
+`SCHEMA_VERSION` is dropped by `from_wire`, not half-read). `wire_key` —
+`{measured_at:010}/{hash}`, derived from the record and lexicographically
+chronological — is what makes a record identifiable by content; the rate enters
 that hash **quantized to 0.001 tok/s** because `serde_json` is built without
-`float_roundtrip`: a record passes through JSON twice (file, then wire) and can
-come back one ULP off, which would otherwise let the same run compute two keys
-and leave an orphan entry LWW could never overwrite.
+`float_roundtrip`: a record passes through JSON twice and can come back one ULP
+off, which would otherwise let the same run compute two keys.
+
+**The transport is the ring rail, not the gossip KV store** (cw-lift 2d,
+2026-09-04). `mesh-measurements` is the first namespace to move, and it moved
+because it is the one that fits: `MAX_RUNS_PER_KEY` bounds it, so the journal
+never has to forget. It is now in `GOSSIP_EXCLUDED_APP_IDS` — not a privacy
+judgement, and it still reaches every peer; the entry is the receiving half,
+stopping a peer on an older build re-creating the dead KV namespace here.
+`sovereign_mesh::measurements_rail` is the only publisher and it appends to
+`rings/mesh-measurements/ring_oplog.jsonl`, which ordinary `ring_sync`
+anti-entropy carries. A record rides as `to_wire`'s exact bytes inside a rail
+payload, as a JSON **string**: a rail payload may not contain a fractional
+number and a `MeasurementRecord` is nine `f64`s, and a string has one spelling
+whose bytes are never re-serialized — the hazard the rule guards against is
+absent rather than checked (`a_measurement_record_cannot_be_a_rail_payload_directly`).
 
 Three constraints make travel safe rather than merely working:
 
@@ -4372,31 +4384,66 @@ Three constraints make travel safe rather than merely working:
 - **Invalid runs do not travel.** `to_wire` refuses them: a failure is glassbox
   material for the operator who caused it and noise, or worse a mis-read
   capability claim, to everyone else. `--history` still shows them locally.
-- **Origin comes from the KV entry, not the payload.** A node cannot claim to be
-  someone else by writing a name into bytes it controls. `ForeignRecord` pairs the
-  gossip-carried origin with the record; the friendly name is resolved against
-  live membership at read time, so a departed peer keeps its records and loses
-  only its name.
+- **Origin comes from the SIGNATURE, not the payload.** A node cannot claim to
+  be someone else by writing a name into bytes it controls. The journal line's
+  `actor` is the public key that signed it — the one field a writer cannot forge
+  for someone else (ARCH §18.1) — and both halves of the attribution, node id
+  and display name, are resolved from it through the ring roster.
 
 An exact-key *peer* hit is kept (`NearMiss::is_exact`) rather than filtered as a
 non-miss — someone with the same silicon, split, link and context measured the
 thing being asked about, and that is the most informative record travel can
 deliver. It is still never the headline.
 
-The pipes: `svrn mesh bench` runs in the CLI, and gossip publishes from the
-daemon's `MeshStore`, which is `in_memory()` — no file to open, no lock to share.
-So the daemon hands over a door at `POST`/`GET /v1/mesh/measurements`
-(`mesh_http.rs`, localhost-only like its siblings; `?include_self=true` is a
-diagnostic that shows what this node has put on the wire). The CLI's only caller
-is `mesh_travel.rs`. Disk is written *before* the wire, so `mesh bench` works with
-no daemon and a failed publish reads as "not on the mesh yet", never as a lost
-record. Because the buffer empties on daemon restart,
-`bootstrap::republish_local_measurements` reloads the durable file at boot —
-without it every node's history would evaporate from the mesh one restart at a
-time while looking perfectly intact locally. Verified live: `published=3
-withheld=3 total=6` at boot, and re-POSTing a record returns the same key with no
-new entry. **Not** routed through `NodeCapabilities.benchmark`, which stays
-`None` — that field feeds the ranked-dispatch clamp and arms the §4.5 size-law;
+**The roster bridge, and why there is no roster route.** A ring journal admits
+an op only if a roster claims the key that signed it, and `svrn ring`'s roster is
+written by hand from the CLI — deliberately unreachable from the rail, so a
+deployed app cannot admit signers to a ring (ARCH §7.1). A namespace the *daemon*
+publishes to needs a roster anyway, and the shape that keeps §7.1 is
+`sovereign_mesh::ring_roster::MeshRoster`: derived from the membership this node
+already holds, never accepted over the wire. The bridge is one equality —
+`MemberRecord.node_pubkey` and the rail's `Op.actor` are both
+`hex(verifying_key)` over the SAME `load_or_generate_node_key`, so there is no
+mapping table (`a_member_pubkey_and_a_rail_actor_are_the_same_spelling`).
+
+Three decisions the derivation makes, each pinned:
+
+- **A member with `node_pubkey: None` is not in the roster, under any
+  placeholder** — a shared default would collide every unidentified node into
+  one identity. Its ops are `UnknownSigner` gaps, and the gaps are REPORTED
+  (they reach the reader in `unreadable`), never swallowed.
+- **Those gaps HEAL.** The roster is a parameter of the read, not a file:
+  nothing is dropped when a signer cannot be placed, so the same journal admits
+  the same ops the moment that node's gossip round stamps its key — under the
+  same actor, because the signing key is stable on disk
+  (`an_op_from_an_unidentified_peer_is_a_gap_that_heals_when_its_key_arrives`).
+  This is the whole reason `MeshRoster` has no writer.
+- **A tombstone retires a member, not their journal.** A departed member's keys
+  stay in the roster; dropping them would turn their whole history into gaps on
+  the day they left.
+
+The pipes: `svrn mesh bench` runs in the CLI and the daemon owns the journal, so
+the door stays at `POST`/`GET /v1/mesh/measurements` (`mesh_http.rs`,
+localhost-only; `?include_self=true` is the diagnostic that shows what this node
+has put on the ring). The CLI's only caller is `mesh_travel.rs`. Disk is written
+*before* the door, so `mesh bench` works with no daemon and a refusal reads as
+"not on the ring yet", never as a lost record — which is what makes refusing
+honest for a node that is not in a mesh yet and therefore has no roster that
+could claim its signer. `bootstrap::reconcile_local_measurements` is the closure
+loop for that: once per boot, deferred until `app_state` answers, it appends any
+local record the journal lacks, keyed by `wire_key` so it is idempotent by
+content and the journal cannot grow one copy per start. It replaced
+`republish_local_measurements`, which had to re-upload the whole file on every
+restart because the KV buffer was in memory.
+
+`svrn ring roster add --ring mesh-measurements` and `svrn ring log
+mesh-measurements` both REFUSE: the first would write a `roster.json` the daemon
+ignores, and the second reads that file and would report every line as an
+unplaceable signer. One predicate, `ring_cmd::refuse_derived_roster`, and it
+names `svrn mesh status` / `svrn mesh plan` instead.
+
+**Not** routed through `NodeCapabilities.benchmark`, which stays `None` — that
+field feeds the ranked-dispatch clamp and arms the §4.5 size-law;
 `gossip_never_advertises_a_benchmark` fails the build if it is populated.
 
 The strong-peer-topology roadmap (latency-class hierarchy: cascade
