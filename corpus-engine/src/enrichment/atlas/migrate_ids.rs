@@ -219,6 +219,14 @@ pub fn migrate_atlas_ids(
                 summary.atoms_already_content_hash += 1;
                 continue;
             }
+            // Same as Asset: a Summary id is content-addressed at birth
+            // from its RAPTOR node id (`AtomId::summary_content_hash`),
+            // and no Summary predates that constructor — the kind and
+            // the constructor landed in one commit. Nothing to migrate.
+            AtomEnvelope::Summary(_) => {
+                summary.atoms_already_content_hash += 1;
+                continue;
+            }
         };
         check_collision(
             &mut new_ids_seen,
@@ -492,6 +500,17 @@ fn rewrite_atom(env: &mut AtomEnvelope, id_map: &HashMap<AtomId, AtomId>) {
             if let Some(desc) = a.described_by.as_mut() {
                 if let Some(new) = id_map.get(desc) {
                     *desc = new.clone();
+                }
+            }
+        }
+        AtomEnvelope::Summary(s) => {
+            // `id` is content-addressed and never in `id_map`, but
+            // `children` are other Summary ids and are remapped for the
+            // same reason `described_by` is: a rewrite that renamed a
+            // child would leave the parent pointing at a dead id.
+            for c in s.children.iter_mut() {
+                if let Some(new) = id_map.get(c) {
+                    *c = new.clone();
                 }
             }
         }

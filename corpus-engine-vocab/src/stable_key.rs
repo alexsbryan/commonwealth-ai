@@ -143,6 +143,14 @@ impl AtomEnvelope {
                 a.sha256.as_str(),
                 a.first_seen_source_doc_id.as_str(),
             ),
+            // The RAPTOR node id, not the summary text. Same reasoning
+            // as `AtomId::summary_content_hash`: a re-summarisation of
+            // the same cluster is the same node with better words, and
+            // keying on the words would hand it a new identity and
+            // orphan every curation overlay pointing at it. The anchor
+            // is empty because a Summary has no single first
+            // appearance — its evidence is its whole subtree.
+            AtomEnvelope::Summary(a) => ("Summary", a.node_id.as_str(), ""),
         };
 
         let mut h = blake3::Hasher::new();

@@ -888,6 +888,11 @@ fn atom_brief(atom: &AtomEnvelope) -> (&'static str, String, String) {
                 &a.sha256[..16.min(a.sha256.len())]
             ),
         ),
+        AtomEnvelope::Summary(sm) => (
+            "summary",
+            format!("Summary (level {})", sm.level),
+            sm.text.clone(),
+        ),
     }
 }
 

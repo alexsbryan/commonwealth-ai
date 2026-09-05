@@ -21,8 +21,8 @@ use corpus_engine::enrichment::atlas::{
         ConfigurationsOutput, Phase8ParseItem,
     },
     ann_store::AtlasSeeding,
-    read_atlas_atoms, read_atlas_edges, write_atlas_configurations, write_atlas_full, AtomEnvelope,
-    Configuration, ATLAS_DIRNAME,
+    append_atoms_and_edges, read_atlas_atoms, read_atlas_edges, write_atlas_configurations,
+    write_atlas_full, AtomEnvelope, Configuration, ATLAS_DIRNAME,
 };
 use corpus_engine::enrichment::pipeline::ChatPrompt;
 
@@ -269,6 +269,14 @@ pub fn finalize_configurations(
     let mut argument_reconstructions = Vec::new();
     let mut positions = Vec::new();
     let mut oppositions = Vec::new();
+    // Summary atoms are NOT a partition this pass rebuilds; they are
+    // carried across the rewrite and re-appended below. `write_atlas_full`
+    // takes one positional slice per kind and has no Summary parameter, so
+    // a `=> {}` arm here would DELETE every Summary atom the moment anyone
+    // ran a configuration pass — a silent loss of a whole kind, discovered
+    // only by a walk that stopped seeding. Held and restored instead
+    // (ARCH §18.3: never silently substitute, and never silently drop).
+    let mut summaries = Vec::new();
     for a in atoms_file.atoms {
         match a {
             AtomEnvelope::Entity(x) => entities.push(x),
@@ -285,6 +293,7 @@ pub fn finalize_configurations(
             // Asset substrate is preserved by the writer, not here (matches the
             // bespoke cmd_atlas_configuration partition).
             AtomEnvelope::Asset(_) => {}
+            AtomEnvelope::Summary(x) => summaries.push(x),
         }
     }
 
@@ -356,6 +365,18 @@ pub fn finalize_configurations(
         ),
     )
     .map_err(|e| format!("rewriting atoms.json: {e}"))?;
+
+    // Restore the Summary atoms the rewrite above could not carry. Through
+    // the writer's own append door rather than a hand-rolled merge, so the
+    // v2 store is rebuilt from the merged set exactly as `write_atlas_full`
+    // would have (`append_atoms_and_edges` ends in `write_atlas_v2_store`).
+    // Their edges are already in `edges_file.edges` and were written above.
+    if !summaries.is_empty() {
+        let envelopes: Vec<AtomEnvelope> =
+            summaries.into_iter().map(AtomEnvelope::Summary).collect();
+        append_atoms_and_edges(&atlas_dir, &envelopes, &[])
+            .map_err(|e| format!("restoring Summary atoms after the rewrite: {e}"))?;
+    }
 
     Ok(configurations)
 }

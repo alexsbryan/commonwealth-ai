@@ -10,7 +10,7 @@ fn atom_type_is_a_closed_set_that_round_trips() {
     // this pins them together. A variant added to the enum and not to ALL
     // fails on the length assert — which is the only reason ALL is safe to
     // iterate as "every kind".
-    assert_eq!(AtomType::ALL.len(), 11);
+    assert_eq!(AtomType::ALL.len(), 12);
     let mut seen: Vec<String> = Vec::new();
     for t in AtomType::ALL {
         let v = serde_json::to_value(t).unwrap();

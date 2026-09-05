@@ -160,12 +160,27 @@ fn exemplars(of: &[&str]) -> Vec<String> {
 }
 
 impl WalkPolicy {
-    /// thematic: seed on Configuration and concept Entity; walk Involves →
-    /// Tension → Grounds; 2 hops.
+    /// thematic: seed on Configuration, concept Entity and Summary; walk
+    /// Involves → Tension → Grounds; 2 hops.
+    ///
+    /// `Summary` was added by ei-7a, and it is a REPAIR of an internal
+    /// inconsistency in the spec rather than a tuning move. The port table
+    /// (EPISTEMIC_INDEX.md §3, RAPTOR row) says summaries "become `Summary`
+    /// nodes … the walk reaches them", but §2.2's pre-registered table
+    /// predates the kind and lists it in no row — and a kind no row seeds on
+    /// is written, embedded and never reached. This is the row whose question
+    /// IS whole-work summarisation ("what is this about", "what does this
+    /// work say as a whole"), which is the capability the RAPTOR bench
+    /// measured the summaries adding (+5 summarize-judge, 2026-06-08). The
+    /// other four rows are untouched, as are hops and budget.
+    ///
+    /// A Summary seed does NOT expand and does NOT score leaf evidence —
+    /// see `atlas::ground`'s R1/R2 and [`AtomType::grain`]. Listing it here
+    /// makes it reachable; it does not make it a route.
     pub fn thematic() -> Self {
         Self {
             seed: SeedPolicy {
-                kinds: vec![AtomType::Configuration, AtomType::Entity],
+                kinds: vec![AtomType::Configuration, AtomType::Entity, AtomType::Summary],
                 entity_types: vec![EntityType::Concept],
                 declared: false,
             },
@@ -374,9 +389,13 @@ mod tests {
     fn defaults_are_the_spec_table() {
         let n = NavigationPolicy::default();
         let t = n.walk(QuestionKind::Thematic);
+        // `Summary` joined this row in ei-7a (2026-09-04) — a repair of a
+        // spec inconsistency, not a tuning move: §3's port table says the
+        // walk reaches Summary nodes and §2.2's table predated the kind.
+        // The other four rows, the hops and the budget are untouched.
         assert_eq!(
             t.seed.kinds,
-            vec![AtomType::Configuration, AtomType::Entity]
+            vec![AtomType::Configuration, AtomType::Entity, AtomType::Summary]
         );
         assert_eq!(t.seed.entity_types, vec![EntityType::Concept]);
         assert_eq!(

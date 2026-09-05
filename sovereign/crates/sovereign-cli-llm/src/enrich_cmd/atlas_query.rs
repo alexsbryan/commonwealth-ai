@@ -153,7 +153,11 @@ pub async fn cmd_atlas_query(args: &[String]) -> i32 {
             AtomEnvelope::Configuration(x) => configurations.push(x),
             AtomEnvelope::Position(x) => positions.push(x),
             AtomEnvelope::Opposition(x) => oppositions.push(x),
-            AtomEnvelope::ArgumentReconstruction(_) | AtomEnvelope::Asset(_) => {}
+            // Read-only partition feeding the query classifier; nothing is
+            // written back, so an unused kind is dropped here without loss.
+            AtomEnvelope::ArgumentReconstruction(_)
+            | AtomEnvelope::Asset(_)
+            | AtomEnvelope::Summary(_) => {}
         }
     }
 

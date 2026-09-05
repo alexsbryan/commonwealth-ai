@@ -195,6 +195,17 @@ pub struct WalkLedger {
     /// never become a citation, and a walk that reaches only these looks
     /// exactly like a walk that reached nothing.
     pub atoms_without_evidence: usize,
+    /// Seeds whose kind is [`Grain::Summary`](kernel_types::Grain::Summary).
+    /// The order's third done-when: "atlas_retrieval shows Summary seeds in
+    /// the yield ledger" is this counter.
+    pub summary_seeds: usize,
+    /// Times a Summary was reached and NOT expanded from — rule R1. Counted
+    /// so the hold-out is visible at `tracing=debug` rather than being a
+    /// silent branch (principle 1): a walk where this is 0 on a corpus that
+    /// has Summary atoms is a walk where the hold-out did not fire.
+    pub summary_expansions_suppressed: usize,
+    /// Summary nodes carried out for late append — rule R3.
+    pub summaries_appended: usize,
 }
 
 /// A named thing that was NOT available, stated rather than defaulted
@@ -257,10 +268,48 @@ impl Degradation {
 
 /// Everything one walk produced.
 #[derive(Debug, Clone)]
+pub struct SummaryNode {
+    /// The Summary atom this came from.
+    pub atom_id: String,
+    /// Where the summarised chunks live — the same site a
+    /// [`ChunkRequest`] carries, so a consumer attributes a summary to
+    /// the same corpus it would attribute a chunk to.
+    pub site: EvidenceSite,
+    /// The paraphrase. Never quotable: this is
+    /// [`Grain::Summary`](kernel_types::Grain::Summary) text.
+    pub text: String,
+    /// The walk weight that reached it. Orders the summaries among
+    /// THEMSELVES; deliberately never compared against a
+    /// [`ChunkRequest::score`], because the two are not on one scale and
+    /// putting them on one is the whole failure this design avoids.
+    pub score: f32,
+}
+
+/// The most summaries one walk carries out.
+///
+/// 8, which is not a fresh guess: it is `SOVEREIGN_RAPTOR_TOP_M`'s
+/// shipped default in the injector this replaces
+/// (`raptor_grounding.rs`). Carrying the number across means the volume
+/// of late-appended summary text is unchanged by the port, so a lane
+/// delta is attributable to the WALK reaching them rather than to more
+/// of them arriving (§18.4 — validate the instrument before the result).
+pub const SUMMARY_APPEND_CAP: usize = 8;
+
 pub struct Grounding {
     /// Evidence requests, highest score first. Hand these to
     /// [`resolve_evidence`].
     pub requests: Vec<ChunkRequest>,
+    /// Summary-grain nodes the walk reached, highest weight first, for
+    /// LATE append by the consumer — rule R3.
+    ///
+    /// A separate field from [`Self::requests`] on purpose, and this is
+    /// the load-bearing line of the whole port. Summaries do not consume
+    /// [`Self::budget`], are never sorted against leaf requests, and are
+    /// appended after the leaf pipeline has finished — the position that
+    /// was MEASURED QA-neutral (SEP sources 86% vs an 85% no-RAPTOR
+    /// baseline, 2026-06-08) after the pre-merge position measured −14
+    /// points. Put them in `requests` and that result is re-opened.
+    pub summaries: Vec<SummaryNode>,
     /// The row that was executed, and where it came from.
     pub kind: QuestionKind,
     pub kind_source: KindSource,
@@ -282,6 +331,7 @@ impl Grounding {
     fn empty(selection: &WalkSelection, degradations: Vec<Degradation>) -> Self {
         Self {
             requests: Vec::new(),
+            summaries: Vec::new(),
             kind: selection.kind,
             kind_source: selection.kind_source,
             kind_score: selection.kind_score,
@@ -681,6 +731,21 @@ pub async fn ground(
             entry.weight = *seed_score;
         }
 
+        // ── R1: a Summary is a TERMINUS, never a route ──────────────────
+        //
+        // It is in the neighbourhood (so §5's map shows it and §4 carries
+        // its text), and the BFS stops there. A summary's `EvidenceFor`
+        // edges fan out over its whole subtree, so expanding from one pulls
+        // that entire subtree into the neighbourhood at hop 1 — dozens of
+        // leaf atoms admitted for no reason except that one paraphrase
+        // matched the question. That is the displacement mechanism, and
+        // this is where it is refused.
+        if is_summary_grain(*graph, atom_id) {
+            ledger.summary_seeds += 1;
+            ledger.summary_expansions_suppressed += 1;
+            continue;
+        }
+
         let mut frontier: Vec<(String, f32)> = vec![(atom_id.clone(), *seed_score)];
         let mut visited: HashSet<String> = HashSet::new();
         visited.insert(atom_id.clone());
@@ -724,6 +789,14 @@ pub async fn ground(
                             entry.from = Some(current_id.clone());
                         }
                         visited.insert(neighbor_id.to_string());
+                        // R1 again, for a Summary reached through an edge
+                        // rather than seeded: it stays in `neighborhood`
+                        // (already inserted above) and does not join the
+                        // next frontier.
+                        if is_summary_grain(*graph, neighbor_id) {
+                            ledger.summary_expansions_suppressed += 1;
+                            return;
+                        }
                         out.push((neighbor_id.to_string(), neighbor_score));
                     };
                 for edge in graph.edges_from(current_id) {
@@ -761,10 +834,37 @@ pub async fn ground(
         (EvidenceSite, ChunkSelector),
         (f32, String, Vec<String>, Vec<String>),
     > = HashMap::new();
+    let mut summaries: Vec<SummaryNode> = Vec::new();
     for ((atlas_id, atom_id), reach) in &neighborhood {
         let Some(graph) = graph_by_id.get(atlas_id.as_str()) else {
             continue;
         };
+        // ── R2: a Summary's reach NEVER scores a leaf request ───────────
+        //
+        // The loop below does `entry.0 += reach.weight` for every chunk an
+        // atom cites, and `requests` is then sorted by that sum. A Summary
+        // cites its entire subtree, so letting it accumulate here adds one
+        // weight to dozens of chunks at once and re-ranks the evidence pool
+        // toward whichever subtree happened to match — the −14pt SEP
+        // source-coverage regression of 2026-06-08, reproduced inside the
+        // walk. Its text leaves by the other door (R3) instead.
+        //
+        // Note this also keeps Summary atoms out of `atoms_without_evidence`:
+        // an edges-omitted Summary (every SEP article but
+        // `computational-complexity`, whose tree columns are absent from the
+        // published artifact) is not a walk that failed to find anchors.
+        if is_summary_grain(*graph, atom_id) {
+            let text = summary_text(*graph, atom_id);
+            if !text.is_empty() {
+                summaries.push(SummaryNode {
+                    atom_id: atom_id.clone(),
+                    site: graph.site().clone(),
+                    text,
+                    score: reach.weight,
+                });
+            }
+            continue;
+        }
         let evidence = graph.atom_evidence(atom_id);
         if evidence.is_empty() {
             ledger.atoms_without_evidence += 1;
@@ -820,6 +920,16 @@ pub async fn ground(
     });
     ledger.requests = requests.len();
 
+    // R3: highest walk weight first, capped. Ordered among THEMSELVES only —
+    // never merged into `requests`.
+    summaries.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    summaries.truncate(SUMMARY_APPEND_CAP);
+    ledger.summaries_appended = summaries.len();
+
     // ── 5. The map section ──────────────────────────────────────────────
     let map = build_map(&neighborhood, &graph_by_id);
     if map.truncated() {
@@ -849,11 +959,15 @@ pub async fn ground(
         nodes_reached = ledger.nodes_reached,
         atoms_without_evidence = ledger.atoms_without_evidence,
         requests = ledger.requests,
+        summary_seeds = ledger.summary_seeds,
+        summary_expansions_suppressed = ledger.summary_expansions_suppressed,
+        summaries_appended = ledger.summaries_appended,
         "ground: walk ledger"
     );
 
     Grounding {
         requests,
+        summaries,
         kind: selection.kind,
         kind_source: selection.kind_source,
         kind_score: selection.kind_score,
@@ -863,6 +977,42 @@ pub async fn ground(
         ledger,
         degradations,
     }
+}
+
+/// The paraphrase carried by a Summary atom, for the late append (R3).
+///
+/// Reads the projected `content` column, which
+/// [`projection`](super::projection) fills from `Summary.text`, and falls
+/// back to a payload parse for a record projected before that column carried
+/// this kind. Empty means "nothing to append", and the caller drops the node
+/// rather than appending a blank — absence reported, never defaulted.
+fn summary_text(graph: &dyn AtlasProvider, atom_id: &str) -> String {
+    let Some(view) = graph.atom(atom_id) else {
+        return String::new();
+    };
+    if !view.content().is_empty() {
+        return view.content().to_string();
+    }
+    match view.atom_envelope() {
+        Some(crate::enrichment::atlas::atoms::AtomEnvelope::Summary(s)) => s.text,
+        _ => String::new(),
+    }
+}
+
+/// Is this atom summary-grain — derived text that may orient retrieval but
+/// may not be quoted, and may not score a leaf?
+///
+/// One line, but it is the enforcement point for the ei-7a hold-out, so it
+/// has a name and a single definition. The DECISION itself lives on
+/// [`AtomType::grain`] in `corpus-engine-vocab` (one decider, ARCH §10.6);
+/// this only asks the store for the kind. An atom the store cannot produce
+/// is NOT treated as a summary — the permissive answer is the leaf one, and
+/// a missing atom is already counted as a dropped seed elsewhere.
+fn is_summary_grain(graph: &dyn AtlasProvider, atom_id: &str) -> bool {
+    graph
+        .atom(atom_id)
+        .map(|a| a.kind().grain() == kernel_types::Grain::Summary)
+        .unwrap_or(false)
 }
 
 /// Does this row filter its seeds at all? An unfiltered row seeds on whatever
@@ -958,6 +1108,261 @@ fn build_map(
 mod tests {
     use super::*;
     use corpus_engine_vocab::taxonomy::EntityType;
+
+    use crate::enrichment::atlas::ann_store::AnnSeedTable;
+    use crate::enrichment::atlas::context::{AtlasEntry, AtomView, EdgeView, EvidenceRef};
+    use crate::enrichment::atlas::projection::AtomRecord;
+    use corpus_engine_vocab::atoms::ChunkRef;
+    use corpus_engine_vocab::edges::EdgeProvenance;
+
+    // ── The displacement fixture (§18.1) ────────────────────────────────
+    //
+    // One rollup atom whose evidence is five chunks, and five ordinary
+    // atoms with one chunk each. The rollup matches the question better
+    // than any single leaf does — which is the NORMAL case for a rollup,
+    // not a contrived one: a paraphrase of a whole region is written to
+    // be about the region.
+    //
+    // Everything below is shared by the two tests that follow. They
+    // differ in ONE field — the rollup atom's `kind` — and that field is
+    // the whole hold-out. Keeping both directions as tests is deliberate:
+    // a guard whose failing input is not itself run is a guard nobody has
+    // watched fail (ARCH §18.1), and "I disabled it once locally" is not
+    // evidence anybody can re-check.
+
+    const ROLLUP_CHUNKS: [&str; 5] = ["c1", "c2", "c3", "c4", "c5"];
+    const LEAF_CHUNKS: [&str; 5] = ["c6", "c7", "c8", "c9", "c10"];
+
+    struct FixtureAtlas {
+        site: EvidenceSite,
+        atoms: std::collections::HashMap<String, AtomRecord>,
+        edges: Vec<(String, String, EdgeType)>,
+    }
+
+    fn record(id: &str, kind: AtomType, content: &str, chunks: &[&str]) -> AtomRecord {
+        AtomRecord {
+            id: id.to_string(),
+            kind,
+            name: String::new(),
+            label: String::new(),
+            content: content.to_string(),
+            subtype: String::new(),
+            description: String::new(),
+            excerpt: String::new(),
+            confidence: 0.0,
+            salience: 0.0,
+            aliases: Vec::new(),
+            participants: Vec::new(),
+            evidence: chunks
+                .iter()
+                .map(|c| ChunkRef::new(*c, Some(format!("preview of {c}"))))
+                .collect(),
+            payload: Vec::new(),
+        }
+    }
+
+    /// `rollup_kind` is the ONLY variable. `Summary` is the shipped
+    /// behaviour; any leaf-grain kind reproduces the pre-ei-7a mechanism.
+    fn fixture(rollup_kind: AtomType) -> FixtureAtlas {
+        let mut atoms = std::collections::HashMap::new();
+        atoms.insert(
+            "rollup".to_string(),
+            record(
+                "rollup",
+                rollup_kind,
+                "a paraphrase of the whole region",
+                &ROLLUP_CHUNKS,
+            ),
+        );
+        let mut edges = Vec::new();
+        for (i, chunk) in LEAF_CHUNKS.iter().enumerate() {
+            let id = format!("leaf{i}");
+            atoms.insert(
+                id.clone(),
+                record(&id, AtomType::Claim, "an ordinary claim", &[chunk]),
+            );
+            // The rollup cites the leaves it summarises. This is what makes
+            // the hazard structural rather than incidental: EvidenceFor is
+            // exactly the edge the port introduces, and it fans out over the
+            // whole subtree by construction.
+            edges.push(("rollup".to_string(), id, EdgeType::EvidenceFor));
+        }
+        FixtureAtlas {
+            site: EvidenceSite::derive("fixture"),
+            atoms,
+            edges,
+        }
+    }
+
+    impl AtlasProvider for FixtureAtlas {
+        fn atlas_corpus_id(&self) -> &str {
+            "fixture"
+        }
+        fn site(&self) -> &EvidenceSite {
+            &self.site
+        }
+        fn atom(&self, atom_id: &str) -> Option<AtomView<'_>> {
+            self.atoms.get(atom_id).map(AtomView::new)
+        }
+        fn atom_evidence(&self, atom_id: &str) -> Vec<EvidenceRef<'_>> {
+            self.atoms
+                .get(atom_id)
+                .map(|a| a.evidence.iter().map(EvidenceRef::new).collect())
+                .unwrap_or_default()
+        }
+        fn edges_from(&self, atom_id: &str) -> Vec<EdgeView<'_>> {
+            self.edges
+                .iter()
+                .filter(|(s, _, _)| s == atom_id)
+                .map(|(s, t, k)| EdgeView {
+                    source: s.as_str(),
+                    target: t.as_str(),
+                    edge_type: *k,
+                    confidence: 1.0,
+                    provenance: EdgeProvenance::Derived,
+                })
+                .collect()
+        }
+        fn edges_to(&self, atom_id: &str) -> Vec<EdgeView<'_>> {
+            self.edges
+                .iter()
+                .filter(|(_, t, _)| t == atom_id)
+                .map(|(s, t, k)| EdgeView {
+                    source: s.as_str(),
+                    target: t.as_str(),
+                    edge_type: *k,
+                    confidence: 1.0,
+                    provenance: EdgeProvenance::Derived,
+                })
+                .collect()
+        }
+        fn ann_seed_table(&self) -> Option<&std::sync::Arc<AnnSeedTable>> {
+            None
+        }
+        fn ontology(&self) -> Option<&OntologyPolicies> {
+            None
+        }
+    }
+
+    /// The bag that seeds the walk by name match. The rollup's embedding
+    /// IS the question (cosine 1.0); the leaves are further away. A
+    /// rollup outscoring its own leaves is the ordinary case.
+    fn fixture_bag() -> AtlasContext {
+        let mut entries = vec![AtlasEntry {
+            atom_id: "rollup".to_string(),
+            canonical_name: "rollup".to_string(),
+            embed_text: "rollup".to_string(),
+            embedding: vec![1.0, 0.0],
+        }];
+        for i in 0..LEAF_CHUNKS.len() {
+            entries.push(AtlasEntry {
+                atom_id: format!("leaf{i}"),
+                canonical_name: format!("leaf{i}"),
+                embed_text: format!("leaf{i}"),
+                embedding: vec![0.5, 0.866],
+            });
+        }
+        AtlasContext {
+            atlas_corpus_id: "fixture".to_string(),
+            entries,
+            top_k: 32,
+        }
+    }
+
+    async fn walk_fixture(rollup_kind: AtomType) -> Grounding {
+        let atlas = fixture(rollup_kind);
+        let bag = fixture_bag();
+        // Names every atom so seeding is deterministic and does not depend
+        // on an ANN table the fixture deliberately does not have.
+        let question = "rollup leaf0 leaf1 leaf2 leaf3 leaf4";
+        ground(
+            question,
+            &[1.0, 0.0],
+            &[&bag],
+            &[&atlas as &dyn AtlasProvider],
+            &WalkSelection::unfiltered(KindSource::Abstained, None, PolicySource::PreRegistered),
+            12,
+        )
+        .await
+    }
+
+    fn requested_chunks(g: &Grounding) -> Vec<String> {
+        g.requests
+            .iter()
+            .map(|r| r.selector.as_str().to_string())
+            .collect()
+    }
+
+    /// THE FAILING INPUT, kept runnable. With the rollup carrying a
+    /// LEAF-grain kind — which is exactly what a RAPTOR summary was
+    /// before `AtomType::Summary` existed — its weight lands on all five
+    /// of the chunks it covers, and those chunks outrank every leaf. This
+    /// is the −14pt SEP source-coverage mechanism (2026-06-08) reproduced
+    /// deterministically, with no model and no corpus.
+    ///
+    /// If this test ever goes green-by-accident (no displacement), the
+    /// sibling test below is proving nothing and both need re-deriving.
+    #[tokio::test]
+    async fn a_leaf_grain_rollup_displaces_the_leaf_chunks_it_covers() {
+        let g = walk_fixture(AtomType::Claim).await;
+        let chunks = requested_chunks(&g);
+        let top: Vec<&String> = chunks.iter().take(ROLLUP_CHUNKS.len()).collect();
+        for c in ROLLUP_CHUNKS {
+            assert!(
+                top.iter().any(|t| t.as_str() == c),
+                "rollup chunk {c} should have crowded the top; got {chunks:?}"
+            );
+        }
+        assert!(
+            g.summaries.is_empty(),
+            "a leaf-grain atom is not carried as a summary"
+        );
+        assert_eq!(g.ledger.summary_seeds, 0);
+    }
+
+    /// THE GUARD. Same fixture, same scores, same edges — the rollup is
+    /// `Summary` grain. R2 keeps its weight off every leaf request, so the
+    /// five leaf chunks are the whole request list and the rollup's text
+    /// leaves by the other door (R3) instead.
+    #[tokio::test]
+    async fn a_summary_seed_cannot_displace_a_leaf_chunk() {
+        let g = walk_fixture(AtomType::Summary).await;
+        let chunks = requested_chunks(&g);
+
+        for c in ROLLUP_CHUNKS {
+            assert!(
+                !chunks.iter().any(|r| r == c),
+                "summary-covered chunk {c} entered the requests; the hold-out did not fire \
+                 ({chunks:?})"
+            );
+        }
+        for c in LEAF_CHUNKS {
+            assert!(
+                chunks.iter().any(|r| r == c),
+                "leaf chunk {c} was displaced ({chunks:?})"
+            );
+        }
+
+        // R3: the text is carried, not dropped — the capability survives
+        // the hold-out. Losing it would be the other way to pass this test
+        // and is not a fix.
+        assert_eq!(
+            g.summaries.len(),
+            1,
+            "the summary is carried for late append"
+        );
+        assert_eq!(g.summaries[0].atom_id, "rollup");
+        assert!(g.summaries[0].text.contains("paraphrase"));
+
+        // R1 + the ledger: the hold-out is VISIBLE, not silent.
+        assert_eq!(g.ledger.summary_seeds, 1);
+        assert!(
+            g.ledger.summary_expansions_suppressed >= 1,
+            "R1 never fired: {:?}",
+            g.ledger
+        );
+        assert_eq!(g.ledger.summaries_appended, 1);
+    }
 
     /// The chunk → atlas id derivation, in both shapes, and its agreement
     /// with `EvidenceSite`'s reading in the other direction. Failing input:

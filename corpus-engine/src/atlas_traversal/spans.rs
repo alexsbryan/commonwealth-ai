@@ -175,6 +175,12 @@ fn atom_anchored_at(atom: &AtomEnvelope, section: &str) -> bool {
         // Asset atoms attach to documents, not sections — anchored
         // at the corpus level rather than within a single chunk.
         AtomEnvelope::Asset(_) => false,
+        // A Summary spans a whole subtree of chunks, so "is it anchored
+        // at THIS section" has no useful answer: every section under it
+        // would say yes and the highlight would cover the article. The
+        // reading surface reaches summaries through the atom panel, not
+        // through span highlighting.
+        AtomEnvelope::Summary(_) => false,
     }
 }
 
@@ -255,6 +261,11 @@ fn atom_surface_forms(atom: &AtomEnvelope) -> Vec<String> {
         | AtomEnvelope::Claim(_)
         | AtomEnvelope::Question(_)
         | AtomEnvelope::Configuration(_)
+        // A Summary is a paraphrase of text elsewhere; span-matching it
+        // against chunk text would highlight the source it paraphrases
+        // as though the summary were quoted from it, which is exactly
+        // the confusion `AtomType::grain` exists to prevent.
+        | AtomEnvelope::Summary(_)
         // Asset atoms surface via the Attaches edge from their
         // carrier doc, not via span-matching in chunk text.
         | AtomEnvelope::Asset(_) => Vec::new(),

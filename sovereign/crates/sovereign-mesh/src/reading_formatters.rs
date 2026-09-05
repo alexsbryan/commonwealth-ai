@@ -112,6 +112,20 @@ pub(crate) fn atom_surface_fields(
             );
             (name, Vec::new(), detail, None)
         }
+        AtomEnvelope::Summary(sm) => {
+            // The label says "Summary" and the level in it. A reading
+            // surface must be able to tell derived text from source text
+            // at a glance, and this projection is the only thing the
+            // panel shows — an unlabelled paraphrase beside real
+            // passages reads as a quotation, which is precisely what
+            // `AtomType::grain` says it is not.
+            (
+                format!("Summary (level {})", sm.level),
+                Vec::new(),
+                sm.text.clone(),
+                None,
+            )
+        }
     }
 }
 

@@ -160,6 +160,13 @@ fn project(atom: &AtomEnvelope) -> Row {
         AtomEnvelope::Position(_) => r.kind = 8,
         AtomEnvelope::Opposition(_) => r.kind = 9,
         AtomEnvelope::Asset(_) => r.kind = 10,
+        AtomEnvelope::Summary(sm) => {
+            r.kind = 11;
+            r.description = sm.text.clone();
+            let (c, p) = first_ev(sm.evidence.first());
+            r.ev_chunk_id = c;
+            r.ev_preview = p;
+        }
     }
     r
 }

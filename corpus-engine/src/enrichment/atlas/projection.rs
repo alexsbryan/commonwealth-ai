@@ -36,7 +36,7 @@ pub struct AtomRecord {
     pub name: String,
     /// `Relation.label` (else `""`).
     pub label: String,
-    /// `Claim.content` (else `""`).
+    /// `Claim.content` / `Summary.text` (else `""`) — the kind's own prose.
     pub content: String,
     /// `Entity.entity_type` string repr (else `""`).
     pub subtype: String,
@@ -189,6 +189,16 @@ pub fn project(atom: &AtomEnvelope) -> AtomRecord {
             excerpt = c.quotable_excerpt.clone().unwrap_or_default();
             confidence = c.confidence.unwrap_or(0.5);
             subtype = subtype_of(atom);
+        }
+        // A Summary's paraphrase goes in `content` — the column that
+        // already means "this kind's prose". Projected rather than left
+        // to a payload parse because both readers are hot: the seed
+        // table's embed-text rendering, and the walk's late-append
+        // carry (`ground::summary_text`). Deliberately NOT `excerpt`:
+        // that column is quotable text, and this kind's contract is
+        // that its text is not (`AtomType::grain`).
+        AtomEnvelope::Summary(s) => {
+            content = s.text.clone();
         }
         // Event and State DO carry a subtype since P3 (a declared event type,
         // a `role_of` role) and [`subtype_of`] returns it — but putting it in

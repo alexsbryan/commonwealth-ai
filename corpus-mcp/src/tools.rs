@@ -923,7 +923,7 @@ mod tests {
         // interpolated from the constant on purpose: a test that reads the
         // same constant the renderer reads cannot notice the number moving.
         assert!(
-            out.text.contains("navigation.thematic: seed Configuration, Entity, entity_type in [concept] | walk Involves → Tension → Grounds | hops 2 | budget 12"),
+            out.text.contains("navigation.thematic: seed Configuration, Entity, Summary, entity_type in [concept] | walk Involves → Tension → Grounds | hops 2 | budget 12"),
             "{}",
             out.text
         );

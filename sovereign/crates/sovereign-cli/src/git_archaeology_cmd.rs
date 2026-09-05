@@ -400,6 +400,10 @@ fn anchor_chunk_id(atom: &AtomEnvelope) -> Option<&str> {
         // Asset atoms aren't chunk-anchored; git-archaeology of a
         // described binary lives outside the per-chunk file-path map.
         Asset(_) => None,
+        // A Summary spans a subtree, so its "anchor" is many chunks in
+        // many files. Picking the first would attribute the whole rollup
+        // to one file's history, which is worse than declining.
+        Summary(_) => None,
     }
 }
 

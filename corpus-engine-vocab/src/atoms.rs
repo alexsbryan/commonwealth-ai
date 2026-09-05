@@ -68,6 +68,9 @@ impl AtomId {
     pub fn opposition(index: usize) -> Self {
         Self(format!("opposition-{index:04}"))
     }
+    pub fn summary(index: usize) -> Self {
+        Self(format!("summary-{index:04}"))
+    }
 
     /// Build from a raw string. Callers are responsible for honouring
     /// the `<type>-<index>` convention; use the typed constructors
@@ -93,6 +96,20 @@ impl AtomId {
     // sufficient for <10M atoms per corpus by the birthday bound;
     // a pre-deployment scan over the live atlas confirms zero
     // collisions before migration is run.
+
+    /// Summary id: hash(node_id | corpus_id).
+    ///
+    /// The RAPTOR node id IS the essence (ARCH §7.5) — it is what the
+    /// tree already calls this node, so re-projecting the same tree
+    /// reproduces the same atom ids and the atlas stays incrementally
+    /// updatable. Deliberately NOT hashed over the summary TEXT: a
+    /// re-summarisation of the same cluster is the same node with
+    /// better words, and keying on the words would fork the atom and
+    /// orphan every edge pointing at it.
+    pub fn summary_content_hash(node_id: &str, corpus_id: &str) -> Self {
+        let input = format!("summary|{node_id}|{corpus_id}");
+        Self(format!("summary-{}", short_hash(&input)))
+    }
 
     /// Entity id: hash(lookup_key(canonical_name) | entity_type | corpus_id).
     /// Doesn't depend on first_appearance so the id is stable when
@@ -925,6 +942,67 @@ pub struct Opposition {
     pub enrichment_depth: EnrichmentDepth,
 }
 
+// ── Summary (ei-7a: RAPTOR rollups as atlas nodes) ───────────
+
+/// A DERIVED node: the paraphrase of a cluster of chunks, or of a
+/// cluster of other summaries. The atlas face of one RAPTOR
+/// collapsed-tree node (`conv_raptor_nodes`), which until ei-7a was
+/// reachable only through a separate retrieval-time injector
+/// (`raptor_grounding.rs`) that ran beside the walk and knew nothing
+/// about it.
+///
+/// **This is the one kind that may not be quoted.** Every other atom
+/// anchors to text somebody wrote; a Summary anchors to text a model
+/// wrote ABOUT text somebody wrote. [`AtomType::grain`] is where that
+/// distinction is enforced, and it is the same
+/// [`kernel_types::Grain`] the chunk pipeline already keys on — so
+/// "may orient retrieval, may not be quoted as source text" has ONE
+/// definition across the atom graph and the chunk pool rather than
+/// two that can drift (ARCH §10.6).
+///
+/// A Summary's `evidence` is its subtree's chunks (`EvidenceFor`
+/// edges) and its `children` are the summaries one level down
+/// (`Composes` edges). Both edge kinds already existed; no edge arm
+/// was added for this kind.
+///
+/// ## What is deliberately NOT here
+///
+/// `conv_raptor_nodes` also carries `centroid_embedding`,
+/// `quote_spans`, `primary_entities` and `cluster_coherence`. None is
+/// projected, because no consumer in this phase reads one (the order's
+/// "Less" rule: a field nothing reads is left out with a note, not
+/// built speculatively). `quote_spans` is the pointed omission — it is
+/// verbatim text, and admitting it here would hand a quotable payload
+/// to the one kind whose whole contract is that it may not be quoted.
+/// The spans remain where the RAPTOR build left them.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Summary {
+    pub id: AtomId,
+    /// The `conv_raptor_nodes.node_id` this atom is the face of. The
+    /// join key back to the tree, and the essence the atom id hashes
+    /// (ARCH §7.5) — never a row counter.
+    pub node_id: String,
+    /// Tree level: 0 summarises chunks, higher summarises summaries.
+    /// Carried because the retiring injector's `min_level` knob was a
+    /// real navigation control ("section/doc summaries only"), and a
+    /// map row that wants the same distinction needs the field to
+    /// exist before it can ask for it.
+    pub level: u32,
+    /// The paraphrase itself.
+    pub text: String,
+    /// Every chunk this summary's subtree covers. Materialised as
+    /// `EvidenceFor` edges by the writer; kept on the atom too so
+    /// [`AtomEnvelope::evidence`] answers for this kind the way it
+    /// answers for every other.
+    #[serde(default)]
+    pub evidence: Vec<ChunkRef>,
+    /// The summaries one level down. Materialised as `Composes` edges.
+    /// Empty at level 0.
+    #[serde(default)]
+    pub children: Vec<AtomId>,
+    pub enrichment_depth: EnrichmentDepth,
+}
+
 // ── Asset (AD-2: described-asset substrate) ──────────────────
 
 /// An opaque-bytes object — an email attachment, a folder-walked
@@ -1021,6 +1099,10 @@ pub enum AtomType {
     Opposition,
     /// AD-2: described-asset substrate. See [`Asset`].
     Asset,
+    /// ei-7a: a derived rollup over chunks or over other summaries.
+    /// The only kind whose [`AtomType::grain`] is not `Leaf`. See
+    /// [`Summary`].
+    Summary,
 }
 
 impl AtomType {
@@ -1054,10 +1136,46 @@ impl AtomType {
             AtomType::Position => "position",
             AtomType::Opposition => "opposition",
             AtomType::Asset => "asset",
+            AtomType::Summary => "summary",
         }
     }
 
-    pub const ALL: [AtomType; 11] = [
+    /// Whether this kind's text is source material or a derivation OF
+    /// source material — the atom-graph half of the contract
+    /// [`kernel_types::Grain`] already states for chunks.
+    ///
+    /// This is the DECIDER for the ei-7a hold-out: a `Summary` seed
+    /// does not expand in the walk's BFS and its reach never scores a
+    /// leaf evidence request (`atlas::ground`). The reason is measured,
+    /// not stylistic — a summary's `EvidenceFor` edges fan out over its
+    /// ENTIRE subtree, so letting one score leaf chunks re-ranks the
+    /// evidence pool toward whichever subtree it covers. That is the
+    /// displacement that cost 14 points of SEP source coverage when
+    /// RAPTOR summaries were injected pre-merge (2026-06-08; fixed then
+    /// by moving injection late, which is why late injection exists at
+    /// all). Porting the summaries INTO the walk re-opens the same
+    /// mechanism one layer earlier, and this is what closes it.
+    ///
+    /// No wildcard arm: a twelfth kind must answer here rather than
+    /// inherit `Leaf`, which is the permissive value (ARCH §2).
+    pub const fn grain(self) -> kernel_types::Grain {
+        match self {
+            AtomType::Summary => kernel_types::Grain::Summary,
+            AtomType::Entity
+            | AtomType::Event
+            | AtomType::State
+            | AtomType::Relation
+            | AtomType::Claim
+            | AtomType::Question
+            | AtomType::Configuration
+            | AtomType::ArgumentReconstruction
+            | AtomType::Position
+            | AtomType::Opposition
+            | AtomType::Asset => kernel_types::Grain::Leaf,
+        }
+    }
+
+    pub const ALL: [AtomType; 12] = [
         AtomType::Entity,
         AtomType::Event,
         AtomType::State,
@@ -1069,6 +1187,7 @@ impl AtomType {
         AtomType::Position,
         AtomType::Opposition,
         AtomType::Asset,
+        AtomType::Summary,
     ];
 }
 
@@ -1108,6 +1227,8 @@ pub enum AtomEnvelope {
     Opposition(Opposition),
     /// AD-2 described-asset atom — see [`Asset`].
     Asset(Asset),
+    /// ei-7a derived rollup — see [`Summary`].
+    Summary(Summary),
 }
 
 impl AtomEnvelope {
@@ -1134,6 +1255,7 @@ impl AtomEnvelope {
             AtomEnvelope::Position(_) => AtomType::Position,
             AtomEnvelope::Opposition(_) => AtomType::Opposition,
             AtomEnvelope::Asset(_) => AtomType::Asset,
+            AtomEnvelope::Summary(_) => AtomType::Summary,
         }
     }
 
@@ -1150,6 +1272,7 @@ impl AtomEnvelope {
             AtomEnvelope::Position(a) => &a.id,
             AtomEnvelope::Opposition(a) => &a.id,
             AtomEnvelope::Asset(a) => &a.id,
+            AtomEnvelope::Summary(a) => &a.id,
         }
     }
 
@@ -1166,6 +1289,7 @@ impl AtomEnvelope {
             AtomEnvelope::Position(a) => a.enrichment_depth,
             AtomEnvelope::Opposition(a) => a.enrichment_depth,
             AtomEnvelope::Asset(a) => a.enrichment_depth,
+            AtomEnvelope::Summary(a) => a.enrichment_depth,
         }
     }
 
@@ -1187,6 +1311,7 @@ impl AtomEnvelope {
             AtomEnvelope::ArgumentReconstruction(a) => a.evidence.iter().collect(),
             AtomEnvelope::Question(a) => a.raised_at.iter().collect(),
             AtomEnvelope::Asset(_) => Vec::new(),
+            AtomEnvelope::Summary(a) => a.evidence.iter().collect(),
         }
     }
 
@@ -1244,6 +1369,7 @@ impl AtomEnvelope {
                 .chain(a.right_atom_id.iter())
                 .collect(),
             AtomEnvelope::Asset(a) => a.described_by.iter().collect(),
+            AtomEnvelope::Summary(a) => a.children.iter().collect(),
         }
     }
 
@@ -1295,6 +1421,9 @@ impl AtomEnvelope {
                     a.original_filename.clone()
                 }
             }
+            // Prose, like Event / Claim / Question — a summary has no
+            // name, only its text.
+            AtomEnvelope::Summary(a) => prose(&a.text),
         }
     }
 
@@ -1389,7 +1518,26 @@ impl AtomsFile {
     ///   for ontology-v1 declared types. All default; old atoms.json
     ///   deserialise unchanged and the v2 store's lossless `payload`
     ///   column needs no migration.
-    pub const SCHEMA_VERSION: &'static str = "2.4";
+    /// - `2.5` — added the `Summary` variant (ei-7a; RAPTOR rollups
+    ///   become atlas nodes). Same reader contract as `2.1`'s `Asset`,
+    ///   and worth stating rather than inferring, because this is the
+    ///   second time the closed set has grown and both consequences
+    ///   are load-bearing:
+    ///     * **Old reader, new file.** An `AtomEnvelope` has no
+    ///       `#[serde(other)]` by deliberate choice, so a reader built
+    ///       before this version fails LOUDLY on a `Summary` envelope
+    ///       rather than silently dropping it. That is the intended
+    ///       behaviour — a dropped atom is an atlas that quietly
+    ///       disagrees with itself.
+    ///     * **Snapshots and peers.** An atlas containing `Summary`
+    ///       atoms is not readable by a mesh peer running older
+    ///       `corpus-engine-vocab`. Publishing such a snapshot to
+    ///       peers is a coordinated upgrade, not a drop-in — the same
+    ///       constraint `Asset` introduced, now with a second
+    ///       producer.
+    ///   Atlases written before this version are unaffected: the
+    ///   variant is additive and no existing field moved.
+    pub const SCHEMA_VERSION: &'static str = "2.5";
 
     pub fn new(atoms: Vec<AtomEnvelope>) -> Self {
         Self {

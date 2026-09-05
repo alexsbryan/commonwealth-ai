@@ -55,8 +55,12 @@ use crate::enrichment::ontology::{NavigationPolicy, TypeKind};
 /// population wrong — a new pre-registered seed row, a kind added to a default
 /// row, a change to [`ALWAYS_SEEDED`]. A table written under an older version
 /// is stale by definition, because nothing on disk records what the code used
-/// to think. `1` is ei-3c, the first version there is.
-pub const SEED_POPULATION_SCHEMA: u32 = 1;
+/// to think. `1` is ei-3c, the first version there is. `2` is ei-7a:
+/// `Summary` joined the `thematic` row's seed kinds, which is exactly the
+/// "a kind added to a default row" case above — every table written under
+/// `1` derives a population its map no longer agrees with, so it is stale
+/// by definition and rebuilds on next read.
+pub const SEED_POPULATION_SCHEMA: u32 = 2;
 
 /// The marker file, beside `atoms_ann.lance` in the atlas dir. Small on
 /// purpose: `AtlasContextManager::init()` stats it once per installed atlas
@@ -250,8 +254,9 @@ mod tests {
                 AtomType::Claim,
                 AtomType::Position,
                 AtomType::State,
+                AtomType::Summary,
             ]),
-            "thematic seeds Configuration+Entity, trajectory Entity+State, \
+            "thematic seeds Configuration+Entity+Summary, trajectory Entity+State, \
              tension Claim+Position; Entity and ArgumentReconstruction are the floor"
         );
     }

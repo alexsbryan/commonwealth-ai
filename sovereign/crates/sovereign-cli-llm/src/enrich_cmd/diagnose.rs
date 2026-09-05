@@ -334,6 +334,7 @@ fn print_atoms(snap: &Snapshot, limit: usize) {
                 unreachable!("typed atoms wired in Gap B Stage 4")
             }
             AtomEnvelope::Asset(_) => "Asset",
+            AtomEnvelope::Summary(_) => "Summary",
         };
         *counts.entry(key).or_insert(0) += 1;
     }

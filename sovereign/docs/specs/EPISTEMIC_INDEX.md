@@ -92,9 +92,16 @@ names the inferred edges. What is missing is the third role.
    means the map declares no classifier, which is reported rather than
    defaulted.
 
+   `Summary` joined the thematic row in ei-7a. That is a REPAIR, not a
+   tuning move: §3's RAPTOR row says the walk reaches Summary nodes, and a
+   kind that no row seeds on is written, embedded and never reached — this
+   table simply predated the kind. A Summary seed does not expand and does
+   not score leaf evidence (`atlas::ground` R1/R2), so listing it changes
+   what the walk can REACH, not how leaf evidence is ranked.
+
    | Question kind | Seed on | Walk | Hops |
    |---|---|---|---|
-   | thematic ("what is this about", "themes") | Configuration, concept Entity | Involves → Tension → Grounds | 2 |
+   | thematic ("what is this about", "themes") | Configuration, concept Entity, Summary | Involves → Tension → Grounds | 2 |
    | trajectory ("how does X change") | Entity, State | Transition, Causes | 2 |
    | tension ("where does it disagree") | Claim, Position | Tension, Opposition | 1 |
    | enumeration ("which X") | declared type + subtypes | none (enumerate) | 0 |

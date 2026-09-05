@@ -719,6 +719,17 @@ fn atom_surface_dto(
             ),
             None,
         ),
+        // Labelled, for the same reason the mesh's copy of this
+        // projection labels it: the panel shows this text beside real
+        // passages, and derived text that does not say so reads as a
+        // quotation. `AtomType::grain` is the fact; this is its rendering.
+        AtomEnvelope::Summary(sm) => (
+            "summary",
+            format!("Summary (level {})", sm.level),
+            Vec::new(),
+            sm.text.clone(),
+            None,
+        ),
     }
 }
 

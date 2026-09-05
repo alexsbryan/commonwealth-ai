@@ -493,6 +493,14 @@ fn partition_atoms(
                 // histogram does not score them. Same treatment as
                 // the other additive atom kinds above.
             }
+            AtomEnvelope::Summary(_) => {
+                // Derived rollups (ei-7a). Not extracted from a
+                // schema, so there is no declared shape to validate
+                // them against; and their anchors span a subtree
+                // rather than a chunk, so the chunk-anchored coverage
+                // histogram would misreport them. Additive, like the
+                // kinds above.
+            }
         }
     }
     (
@@ -735,6 +743,12 @@ fn build_orphan_analysis(atoms: &[AtomEnvelope], edges: &[Edge]) -> OrphanAnalys
             AtomEnvelope::ArgumentReconstruction(_) => ("", None),
             AtomEnvelope::Position(_) | AtomEnvelope::Opposition(_) => ("", None),
             AtomEnvelope::Asset(_) => ("", None),
+            // No orphan bucket: a Summary is referenced by its PARENT
+            // summary, and a root summary is unreferenced by
+            // construction. Scoring it here would report every RAPTOR
+            // root as an orphan atom and move the orphan fraction for a
+            // reason that is not a defect.
+            AtomEnvelope::Summary(_) => ("", None),
         };
         let Some(idx) = bucket_idx else {
             continue;

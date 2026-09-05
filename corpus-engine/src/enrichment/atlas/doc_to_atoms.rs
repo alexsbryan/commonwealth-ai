@@ -123,6 +123,14 @@ pub fn extract_doc_id(env: &AtomEnvelope) -> Option<String> {
                 Some(a.first_seen_source_doc_id.clone())
             }
         }
+        // A Summary's first evidence chunk, when it has one. An
+        // edges-omitted Summary (the SEP articles whose tree columns are
+        // absent from the published artifact) has none and returns
+        // `None` — the caller's documented "skip from doc index" signal,
+        // which is correct: a summary with no anchors cannot be placed
+        // in a document index, and pretending otherwise would file it
+        // under the corpus root.
+        AtomEnvelope::Summary(s) => s.evidence.first().map(|cr| cr.chunk_id.clone()),
     }
 }
 

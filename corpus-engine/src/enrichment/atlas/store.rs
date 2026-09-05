@@ -123,6 +123,10 @@ fn kind_u8(k: AtomType) -> u8 {
         AtomType::Position => 8,
         AtomType::Opposition => 9,
         AtomType::Asset => 10,
+        // Appended, never inserted: these bytes are on disk in every
+        // `atoms.csr` written so far, so a new kind takes the next
+        // number and the existing ten keep theirs.
+        AtomType::Summary => 11,
     }
 }
 

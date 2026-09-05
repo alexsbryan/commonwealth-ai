@@ -88,10 +88,16 @@ fn schema_version_constant_is_current() {
     // Phase 1 bumped from 2.0 → 2.1 (Asset variant). Phase 4 bumped
     // from 2.1 → 2.2 (Entity::provenance). The SF-LVT tabular track
     // bumped 2.2 → 2.3 (Entity::attributes). Ontology v1 P2 bumped
-    // 2.3 → 2.4 (Relation/Event/Claim::attributes, Claim::subject). If a
-    // later phase bumps further, update this assertion deliberately —
-    // the test is the canary.
-    assert_eq!(AtomsFile::SCHEMA_VERSION, "2.4");
+    // 2.3 → 2.4 (Relation/Event/Claim::attributes, Claim::subject).
+    // ei-7a bumped 2.4 → 2.5 (the `Summary` variant — RAPTOR rollups as
+    // atlas nodes). Deliberate, 2026-09-04: `Summary` is the second
+    // variant added to the closed set, and it carries the same reader
+    // contract `Asset` set at 2.1 — no `#[serde(other)]`, so an old
+    // reader FAILS on a Summary envelope rather than dropping it, and a
+    // snapshot containing Summary atoms needs peers on the new vocab.
+    // If a later phase bumps further, update this assertion
+    // deliberately — the test is the canary.
+    assert_eq!(AtomsFile::SCHEMA_VERSION, "2.5");
 }
 
 #[test]

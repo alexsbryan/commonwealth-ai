@@ -411,6 +411,7 @@ mod tests {
         let reached = nodes.len();
         Grounding {
             requests: Vec::new(),
+            summaries: Vec::new(),
             kind: sel.kind,
             kind_source: sel.kind_source,
             kind_score: None,

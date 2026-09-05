@@ -288,6 +288,9 @@ fn endpoint_text(atom: Option<&AtomEnvelope>, atom_id: &str) -> String {
         Some(ArgumentReconstruction(a)) => format!("Argument: {}", a.name),
         Some(Position(p)) => format!("Position ({}): {}", p.stance, p.canonical_name),
         Some(Opposition(o)) => format!("Opposition: {}", o.canonical_label),
+        // Labelled so a reader of the rendered line can tell derived
+        // text from source text without consulting the atom.
+        Some(Summary(s)) => format!("Summary (level {}): {}", s.level, s.text),
         Some(Asset(a)) => {
             let name = if a.original_filename.is_empty() {
                 format!("asset:{}", &a.sha256[..12.min(a.sha256.len())])

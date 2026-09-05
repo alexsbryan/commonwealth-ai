@@ -68,7 +68,7 @@ weights (created by `svrn setup`, gitignored).
 | `corpus-engine-archaeology` | Git history mining + rough-edge surfacing + atom-provenance eval (carved out) | — |
 | `corpus-engine-yield` | `YieldHook` cooperative foreground-yield contract — a Tier-0 leaf (one trait, zero deps) shared by the data plane and the watchers so the daemon's `Arc<dyn YieldHook>` has one trait identity on both. Also carries the seam's **liveness bound**: `MAX_FOREGROUND_DEFERRAL` (300 s) + `DeferralBudget`, because `should_yield()` is a level predicate that any request cadence shorter than the yield window pins true forever — see "Foreground yield is bounded" below. Since 2026-09-02 it also carries the WRITE side, `ForegroundSignal` + `ForegroundLease`: the daemon installs both halves on the corpus engine, and every `Runtime` turn holds a lease on its stream handle for the turn's whole life, so ingest, enrichment and the newsworthy tick park for the entire turn (measured: background commits inside one grounded turn 42 → 1). Until then the only bump site was `chat_completions`, which the product's own chat paths never cross. | — |
 | `corpus-engine-sections` | Section detectors (`SectionDetector`, `DetectedSection`, `ChapterRegexDetector`, `TocAnchoredDetector`) — corpus-engine's own segmentation vocabulary, carved into a `regex`-only leaf so the studio `SectionTool` shares the ONE implementation by reaching DOWN, instead of corpus-engine reaching UP into `sovereign-contracts` (noun-convergence rung 2) | `regex` |
-| `corpus-engine-vocab` | The atlas vocabulary — `AtomsFile` / `AtomEnvelope` + the eleven atom kinds (`atoms`), `Edge` / `EdgesFile` (`edges`), `EnrichmentDepth` + the eight `string_enum_with_other!` kind enums (`taxonomy`), `lookup_key` (`canonical`), `StableAtomKey` (`stable_key`, an inherent `impl AtomEnvelope` so it must live with the type), and — Step 3 — `OntologyPolicies` + its five axes and the navigation section (`ontology`, `ontology::navigation`: `NavigationPolicy` / `WalkPolicy` / `SeedPolicy` per `QuestionKind`, spec §2.2 defaults) with everything an author declares under `ontology::decl` (`OntologyTypeDecl`, `TypeKind`, `AttrDecl`, `OntologyV1`, the investigation `EntityTypeDecl` / `RelationshipTypeDecl` / `PatternDecl`, `OntologyVocabulary`; the shape of `atlas/ontology.json`). Carved out 2026-09-03 (enrichment-as-plugin Steps 2–3) so a thin host can READ `atlas/atoms.json` without linking the 162k lines that write it; corpus-engine re-exports every item at its historical path (`enrichment::atlas::{atoms,edges,stable_key}`, `enrichment::pipeline::atlas::*`, `atlas_canonical`), so no in-repo importer changed. Declared `[[package_leaf]]`; `sovereign-core`'s evidence-loop gazetteer and `sovereign-cli-llm`'s scrub/scaffold commands name it directly, and the three lookalike `atoms.json` shapes they carried are gone — `corpus-engine/xtask/tests/atoms_file_census.rs` pins the count at ONE | `kernel-types`, `serde`, `serde_json`, `blake3` |
+| `corpus-engine-vocab` | The atlas vocabulary — `AtomsFile` / `AtomEnvelope` + the twelve atom kinds (`atoms`; `Summary` is ei-7a's, and `AtomType::grain` is the one decider for whether a kind's text may be quoted or may score leaf evidence), `Edge` / `EdgesFile` (`edges`), `EnrichmentDepth` + the eight `string_enum_with_other!` kind enums (`taxonomy`), `lookup_key` (`canonical`), `StableAtomKey` (`stable_key`, an inherent `impl AtomEnvelope` so it must live with the type), and — Step 3 — `OntologyPolicies` + its five axes and the navigation section (`ontology`, `ontology::navigation`: `NavigationPolicy` / `WalkPolicy` / `SeedPolicy` per `QuestionKind`, spec §2.2 defaults) with everything an author declares under `ontology::decl` (`OntologyTypeDecl`, `TypeKind`, `AttrDecl`, `OntologyV1`, the investigation `EntityTypeDecl` / `RelationshipTypeDecl` / `PatternDecl`, `OntologyVocabulary`; the shape of `atlas/ontology.json`). Carved out 2026-09-03 (enrichment-as-plugin Steps 2–3) so a thin host can READ `atlas/atoms.json` without linking the 162k lines that write it; corpus-engine re-exports every item at its historical path (`enrichment::atlas::{atoms,edges,stable_key}`, `enrichment::pipeline::atlas::*`, `atlas_canonical`), so no in-repo importer changed. Declared `[[package_leaf]]`; `sovereign-core`'s evidence-loop gazetteer and `sovereign-cli-llm`'s scrub/scaffold commands name it directly, and the three lookalike `atoms.json` shapes they carried are gone — `corpus-engine/xtask/tests/atoms_file_census.rs` pins the count at ONE | `kernel-types`, `serde`, `serde_json`, `blake3` |
 | `corpus-mcp` | The thin knowledge host (enrichment-as-plugin Step 5, 2026-09-03): `corpus-mcp --base-url http://localhost:8080/v1 --corpus sep` serves `corpus_list` / `corpus_search` (cited chunks via `CorpusIndex::search`) / `atoms_lookup` (tier 1.5: `atlas/atoms.json` through `corpus_engine_vocab::atoms::AtomsFile`) / `corpus_ontology` (`atlas/ontology.json` through `read_atlas_ontology` — the file is an `AtlasOntologyFile` envelope, and parsing it as bare `OntologyPolicies` silently reads as "declared nothing"; fixed 2026-09-04, pinned by `ontology_reads_the_envelope_not_bare_policies` and by `acceptance.sh` judging the read on a corpus that DECLARED types) over MCP-on-stdio, against ANY OpenAI-compatible endpoint. Host capability is DETECTED (`GET /oicp/v1/capabilities`; 404 = the baseline path), the embed model id comes from `GET /v1/models` unless `--embed-model` says otherwise, and a width mismatch between an index and the endpoint degrades that corpus to full-text with a printed notice. Declared `[[package]]` (with two grandfathered engine edges to code-intel crates); `tests/no_inference_stack.rs` pins the third-party closure; `acceptance.sh` is the end-to-end proof against a real `llama-server`. `corpus_list` reports each atlas's atom count from the CURRENT `_summary.json` only (`read_current_summary`, never computes or writes — the host promises not to write), whether an ontology was declared, and (ei-3-index) its ANN seed-table coverage — `atoms_embedded` in the structured row, and in the text either `N/M atoms embedded` or `NO seed table - cannot ground, run \`svrn atlas backfill-ann\``. A missing table is that sentence, never a zero, because it is the one fact a client needs before trusting a connected answer. **`ask` is the composed default since ei-4-walk (2026-09-04)** (`EPISTEMIC_INDEX.md` §4): embed ONCE, tier 1, then the walk — `corpus_engine::enrichment::atlas::ground`, the same function `sovereign-core::apply_atlas_grounding` calls — resolved against the host's own `CorpusIndex` handles through the two-method `EvidenceFetcher`, returning cited passages PLUS a map section (nodes traversed, their kinds, the edges followed) and every degradation as a sentence. No generation and no chat client: §4 hands the model on the other side of the wire its evidence and its map, so the closure is unchanged. The host loads each atlas ONCE at open on its long-lived runtime (`open_and_attach_ann_seed_table` requires it) and passes NO atom bag — building one re-embeds every entity per call — so the walk seeds from the ANN table alone and NAMES the missing name-match half rather than losing it quietly. A passage the search ranked and the walk cited is ONE passage carrying both facts: merging rather than deduplicating is load-bearing, because dropping the walk's copy discards its attribution (measured on wessex-hoard: three themes reached, one creditable). The four earlier tools stay as the advanced surface; `corpus_search` is still tier 1 alone with nothing from the atlas in its ranking. NOT here, by design: the atom-grounded RANKING in `sovereign-core` | `corpus-engine`, `corpus-engine-vocab`, `oicp-types`, `sovereign-contracts` |
 | `corpus-engine-watchers` | Lint/test/project-index watchers + their SQLite result stores + coordinator (carved out of corpus-engine, R4 Step 1 — cuts the watcher-edit rebuild set 22→12 crates, measured). Compiles unconditionally; the SCIP `CodeWatcher` stays in corpus-engine | `corpus-engine-notes`, `corpus-engine-yield`, `rusqlite`, `notify` |
 | `sovereign-recipes`  | Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build) | —                                       |
@@ -1678,6 +1678,63 @@ means one thing.
   landed before 2026-08-14 (fabrication-etiology D0,
   `bench/chaos_monkey/results/fabrication_etiology_20260814.md`).
   Deep-dive: [`docs/TIERED_RETRIEVAL.md`](./docs/TIERED_RETRIEVAL.md).
+
+- **`Summary` — RAPTOR rollups as atlas nodes (ei-7a, 2026-09-04)** — the
+  twelfth atom kind, and the only one whose
+  [`AtomType::grain`] is `Grain::Summary` rather than `Grain::Leaf`. A
+  Summary atom is the atlas face of one `conv_raptor_nodes` row: its
+  `text` is the paraphrase, its `evidence` the chunks its subtree covers
+  (`EvidenceFor` edges), its `children` the summaries one level down
+  (`Composes`). Both edge kinds already existed — no `EdgeType` arm was
+  added. `atoms.json` schema `2.4` → `2.5`; the reader contract is the
+  one `Asset` set at `2.1` (no `#[serde(other)]`, so an old reader fails
+  loudly rather than dropping the atom, and a snapshot carrying Summary
+  atoms needs peers on the new vocab).
+
+  **The walk holds Summary seeds OUT of leaf scoring, and that is the
+  point of the design, not a detail.** `atlas::ground` enforces three
+  rules: a Summary seed does not expand (it is a terminus, R1); its
+  reach never accumulates into a leaf chunk's evidence score (R2); its
+  text leaves on `Grounding::summaries`, a field beside `requests` that
+  does not consume the walk's budget and is never sorted against leaf
+  requests (R3). The reason is measured. RAPTOR summaries injected
+  pre-merge cost −14 points of SEP source coverage in 2026-06-08's A/B
+  ("tangential-summary displacement… crowded out the leaf chunks that
+  actually answer"), and the fix was not additivity at the truncate but
+  moving injection LATE, post-rerank, where it measured QA-neutral (86%
+  sources vs an 85% no-RAPTOR baseline) while keeping +5 on the
+  summarize judge. A Summary's `EvidenceFor` edges fan out over its
+  entire subtree, so a Summary seed that scored leaf evidence would
+  re-rank the pool toward whichever subtree matched — the same mechanism,
+  one layer earlier. `ground.rs`'s two hold-out sites are where it is
+  refused, and `a_leaf_grain_rollup_displaces_the_leaf_chunks_it_covers`
+  is the failing input kept runnable beside the guard that closes it
+  (ARCH §18.1). The ledger counts `summary_seeds`,
+  `summary_expansions_suppressed` and `summaries_appended`, so the
+  hold-out is visible at `tracing=debug` rather than silent.
+
+  `Summary` joined spec §2.2's `thematic` row — the row whose question IS
+  whole-work summarisation — because §3's port table says the walk
+  reaches these nodes and a kind no row seeds on is never reached; the
+  §2.2 table simply predated the kind. `SEED_POPULATION_SCHEMA` 1 → 2
+  follows, so every seed table written under `1` is stale by definition
+  and rebuilds.
+
+  `raptor_grounding.rs` is NOT retired. The order that added the kind
+  would have deleted it once both lanes were within band, and the lanes
+  cannot judge it on this box: `conv_raptor_nodes` is EMPTY in both
+  stores, so the tree — `children_node_ids`, `evidence_chunk_ids` — is
+  gone, and the surviving artifacts are SEP's 11,181-row
+  `raptor_summaries.lance` (summary text + embedding only; the JSON tree
+  columns are dropped at build time) plus a 37-node `_raptor_checkpoint`
+  for one article, `computational-complexity`. The published HuggingFace
+  snapshot is an index-dir tarball and carries exactly the same two.
+  Wikipedia and every other one of 2,160 corpora have no RAPTOR artifact
+  at all, so the wikipedia lane cannot distinguish the arms. Deleting the
+  injector would therefore remove a capability that is live on SEP today
+  and replace it with atoms that cannot be written at that scale. The
+  deletion is gated on a full-SEP RAPTOR rebuild, which is a control
+  write and an operator decision.
 
 See [`corpus-engine/ENRICHMENT_V2.md`](../corpus-engine/ENRICHMENT_V2.md)
 for status table, landing-by-landing scope, and validation targets.
@@ -7035,6 +7092,31 @@ files currently sit above their entries inside the 50-line slack —
 `eval_cmd/runner.rs` +2. Only `approach_band.txt` was copied back from the
 `origin/main` worktree. `--tighten` banked the one real cut this session made:
 `judge.rs` 1,846 → 1,845, a duplicated `#[cfg(test)]` attribute removed.
+
+### 10.1n Size — the twelfth atom kind, and a walk that grew a hold-out (ei-7a-raptor, 2026-09-04)
+
+Two arch-gate size findings, both from order ei-7a-raptor, both DEFERRED via
+this row rather than split in the same commit (ARCH §3.1: the split is its own
+backlog item, not this order's work). The baseline bump is the seat's at merge;
+this order did not touch `quality/baselines/`.
+
+| File | Before | After | Delta | Why |
+|---|---|---|---|---|
+| `corpus-engine-vocab/src/atoms.rs` | 1914 | 2062 | +148 (slack 50) | The `Summary` struct, the `AtomType::Summary` arm and its eleven fan-out arms, `AtomId::summary_content_hash`, `AtomType::grain()`, and the schema-2.5 note. |
+| `corpus-engine/src/enrichment/atlas/ground.rs` | 1165 | 1570 | +405 (new, >1200) | R1/R2/R3 (~60 lines) plus the §18.1 displacement fixture and its two directions (~290 lines of `#[cfg(test)]`). |
+
+Worth stating plainly: **most of the second number is test**. `ground.rs`'s
+non-test growth is about 60 lines; the rest is the fixture that keeps the
+failing input runnable — an in-memory `AtlasProvider`, a leaf-grain arm that
+REPRODUCES the −14pt displacement, and the Summary arm that refuses it. That
+fixture is the evidence for the whole order, and the alternative to carrying it
+is a guard nobody has watched fail (§18.1). If the band wants it elsewhere the
+split is `ground.rs`'s tests into a sibling `ground/tests.rs`, which is a
+mechanical move and a clean backlog item.
+
+`atoms.rs` is the closed set's home and grows once per kind. It has now grown
+twice — `Asset` at 2.1, `Summary` at 2.5 — and the natural split when it next
+crosses is one module per kind under `atoms/`, not a line trim.
 
 ### 10.1m Both blocking gates were red ON MAIN, and both were paid rather than re-pinned — 2026-09-04
 

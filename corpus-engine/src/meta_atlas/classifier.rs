@@ -144,6 +144,13 @@ pub fn classify_articulation_with(
         // or temporal trace by itself. The carrier doc's atoms supply
         // those — the Asset only inventories the thing.
         AtomEnvelope::Asset(_) => ArticulationVector::new(0.90, 0.05, 0.05),
+        // Summary — Inventory-leaning with an Argument component. A
+        // rollup says "this region of the corpus is about X", which is
+        // an inventory claim about the corpus rather than an argued
+        // move IN it; the Argument share is there because the
+        // paraphrase does compress an articulated structure. Never
+        // Trace: a summary is not located in time.
+        AtomEnvelope::Summary(_) => ArticulationVector::new(0.65, 0.35, 0.00),
     }
 }
 
