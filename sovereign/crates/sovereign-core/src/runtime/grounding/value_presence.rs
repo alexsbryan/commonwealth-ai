@@ -239,23 +239,45 @@ fn value_claim(question: &str, value: &str) -> String {
     )
 }
 
-/// The evidence the probe is shown: the chunks that CARRY the value's tokens,
-/// in snapshot order, up to the register's own passage cap.
+/// The evidence the probe is shown: a window around the value in EVERY chunk
+/// that carries it, sized so they all fit the register's own passage cap.
 ///
-/// Returns `(passage, chunks_held, chunks_dropped)`.
+/// Returns `(passage, chunks_shown, chunks_dropped)`.
 ///
-/// Which chunks is decided by the same predicate the veto just ran, applied
-/// one chunk at a time — one implementation of "does this text carry the
-/// value", never two (ARCH §10.6). Showing the probe the value's whole
-/// neighbourhood rather than one chosen chunk is a MEASURED choice: on the
-/// chaos corpus the same fabrication scored 0.2956 and 0.4001 against two
-/// single chunks that merely mention Mrs Neale near Winnie (both would have
-/// released at tau) and 0.0060 against those two chunks TOGETHER — the
-/// register can only apply its "merely mentioning … does NOT count" rule
-/// when it can see what the evidence does and does not establish.
+/// Which chunks carry the value is decided by the same predicate the veto just
+/// ran, applied one chunk at a time — one implementation of "does this text
+/// carry the value", never two (ARCH §10.6).
 ///
-/// Truncation is reported, never silent (§18.3), and it is safe in one
-/// direction only: less evidence can make the probe refuse, never approve.
+/// # Why every carrier, and why a window
+///
+/// Showing the probe ONE chunk was measured and rejected: the same fabrication
+/// scores 0.2956 against the paragraph where Mrs Neale scrubs a floor near
+/// Winnie and 0.4001 against the retrieved summary that mentions them in one
+/// sentence — both RELEASE at tau — and 0.0060 against those two together. The
+/// register can only apply its own rule ("merely mentioning the people or
+/// things involved, without establishing the claimed connection, does NOT
+/// count") when it can see what the evidence does and does not establish.
+///
+/// Taking WHOLE chunks in order was measured and rejected too, and this is the
+/// sharper failure: with twenty 2,000-char chunks the cap admits ONE, and if
+/// the establishing chunk is not that one the probe refuses a correct answer
+/// for a reason that is about the budget rather than the evidence. Measured on
+/// a real turn — "On what street is Verloc's shop located?" / "Brett Street",
+/// four carrying chunks, three dropped: support 0.0066 on the kept chunk,
+/// which says only "Brett Street was not very far away. It branched off,
+/// narrow, from…" and genuinely does not place the shop. The probe was right
+/// about what it was shown and wrong about the corpus.
+///
+/// So the budget is SPLIT rather than spent first-come: each carrier
+/// contributes a window of `cap / carriers` characters centred on the value's
+/// longest token. The share is arithmetic over the two quantities already in
+/// hand, not a tuned size. Same turn, same evidence, after the split: 0.9631 —
+/// grounded, correctly. The mother fabrication is unmoved at 0.0052 and "Mrs
+/// Neale is the charwoman" at 0.9994, so the split buys the competence case
+/// without spending the refusal it was built for.
+///
+/// Truncation is still reported (§18.3) and is still safe in one direction
+/// only: less evidence can make the probe refuse, never approve.
 fn value_evidence(value: &str, chunks: &[String]) -> (String, usize, usize) {
     let carrying: Vec<&String> = chunks
         .iter()
@@ -269,29 +291,53 @@ fn value_evidence(value: &str, chunks: &[String]) -> (String, usize, usize) {
     } else {
         carrying
     };
-    let mut passage = String::new();
-    let mut held = 0usize;
+    let share = (CHUNK_JUDGE_PASSAGE_CHARS / selected.len().max(1)).max(1);
+    let mut parts: Vec<String> = Vec::new();
+    let mut used = 0usize;
     for c in &selected {
-        if !passage.is_empty()
-            && passage.chars().count() + c.chars().count() + 2 > CHUNK_JUDGE_PASSAGE_CHARS
-        {
+        if used >= CHUNK_JUDGE_PASSAGE_CHARS {
             break;
         }
-        if !passage.is_empty() {
-            passage.push_str("\n\n");
-        }
-        passage.push_str(c);
-        held += 1;
+        let room = share.min(CHUNK_JUDGE_PASSAGE_CHARS - used);
+        let w = window_around(value, c, room);
+        used += w.chars().count() + 2;
+        parts.push(w);
     }
-    (passage, held, selected.len().saturating_sub(held))
+    let shown = parts.len();
+    (
+        parts.join("\n\n"),
+        shown,
+        selected.len().saturating_sub(shown),
+    )
 }
 
-/// Extract the value the answer gives in reply to the question — the one step
-/// that genuinely needs an LLM. `None` on a failed/empty extraction, or when the
-/// answer asserts no value (a decline), so callers treat it as nothing-to-ground.
-/// Scoped to the ANSWER (not every mentioned noun) and kept complete (the full
-/// value with its qualifiers, e.g. "Russian embassy") so the deterministic
-/// presence test can catch an invented qualifier, not just a missing headline.
+/// At most `room` characters of `chunk`, centred on the first occurrence of
+/// the value's LONGEST token — the one most likely to be the value itself
+/// rather than a qualifier the corpus uses everywhere ("Mrs", "the").
+///
+/// A chunk that already fits comes back whole; a chunk with no token match
+/// (unreachable for a carrier, reachable on the all-chunks fallback) comes
+/// back from its start, which is where its own topic sentence is.
+fn window_around(value: &str, chunk: &str, room: usize) -> String {
+    let chars: Vec<char> = chunk.chars().collect();
+    if chars.len() <= room {
+        return chunk.to_string();
+    }
+    let low = chunk.to_lowercase();
+    let mut tokens: Vec<&str> = value
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| w.chars().count() >= 2)
+        .collect();
+    tokens.sort_by_key(|t| std::cmp::Reverse(t.chars().count()));
+    let at = tokens
+        .iter()
+        .find_map(|t| low.find(&t.to_lowercase()))
+        .map(|byte_idx| low[..byte_idx].chars().count())
+        .unwrap_or(0);
+    let start = at.saturating_sub(room / 2).min(chars.len() - room);
+    chars[start..start + room].iter().collect()
+}
+
 async fn extract_answer_value(
     inference: &dyn InferenceProvider,
     question: &str,
@@ -418,6 +464,7 @@ pub fn value_present_in_chunks(value: &str, chunks: &[String]) -> bool {
 mod tests {
     use super::{
         assess_asserted_value, value_claim, value_evidence, value_present_in_chunks, AssertedValue,
+        CHUNK_JUDGE_PASSAGE_CHARS,
     };
     use crate::oicp::ShardingPrivacy;
     use crate::runtime::grounding::tests::GateMock;
@@ -596,17 +643,57 @@ mod tests {
         assert_eq!(v, AssertedValue::NoValue);
     }
 
-    /// The probe is shown the chunks that CARRY the value, joined — measured
-    /// better than any single chunk (0.0060 across the pair vs 0.2956 and
-    /// 0.4001 against each alone, both of which would have released).
+    /// The probe is shown a window from EVERY chunk that carries the value,
+    /// and from no other — measured better than any single chunk (0.0060
+    /// across the pair vs 0.2956 and 0.4001 against each alone, both of which
+    /// would have released).
     #[test]
     fn the_probe_sees_every_chunk_that_carries_the_value() {
         let mut chunks = neale_chunks();
         chunks.push("The Assistant Commissioner walked to Westminster.".to_string());
-        let (passage, held, dropped) = value_evidence("Mrs Neale", &chunks);
-        assert_eq!((held, dropped), (2, 0), "both Neale chunks, and only those");
+        let (passage, shown, dropped) = value_evidence("Mrs Neale", &chunks);
+        assert_eq!(
+            (shown, dropped),
+            (2, 0),
+            "both Neale chunks, and only those"
+        );
         assert!(passage.contains("charwoman") && passage.contains("scrubbing"));
         assert!(!passage.contains("Westminster"));
+    }
+
+    /// THE BUDGET IS SPLIT, NOT SPENT FIRST-COME. With more carriers than the
+    /// register's cap can hold whole, taking them in order shows the probe one
+    /// chunk and drops the rest — and if the establishing chunk is among the
+    /// dropped, a correct answer is refused for a reason about the budget.
+    /// Measured on a real turn: "Brett Street" scored 0.0066 whole-chunk-first
+    /// (the kept chunk says only "Brett Street was not very far away") and
+    /// 0.9631 once every carrier contributed a window.
+    ///
+    /// FAILS IF the selector goes back to whole chunks in order: `shown` falls
+    /// to 1 and the last carrier's text disappears from the passage.
+    #[test]
+    fn every_carrier_gets_a_share_of_the_budget() {
+        let filler = "x".repeat(1_800);
+        let chunks: Vec<String> = (0..4)
+            .map(|i| format!("{filler} chunk{i} names Mrs Neale here. {filler}"))
+            .collect();
+        let (passage, shown, dropped) = value_evidence("Mrs Neale", &chunks);
+        assert_eq!(
+            (shown, dropped),
+            (4, 0),
+            "every carrier is represented, none dropped"
+        );
+        assert!(
+            passage.chars().count() <= CHUNK_JUDGE_PASSAGE_CHARS,
+            "the register's own cap is respected: {}",
+            passage.chars().count()
+        );
+        for i in 0..4 {
+            assert!(
+                passage.contains(&format!("chunk{i} names Mrs Neale here.")),
+                "carrier {i} lost its window; passage={passage}"
+            );
+        }
     }
 
     /// The claim carries the QUESTION'S frame, not just the value — without
