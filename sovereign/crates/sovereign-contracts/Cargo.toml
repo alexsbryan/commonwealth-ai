@@ -17,6 +17,10 @@ rust-version.workspace = true
 # backflow edge. Re-exported from types::custody so callers are unchanged.
 kernel-types = { workspace = true }
 oicp-types = { workspace = true }
+# `peer::PeerEntry.value`. A leaf third-party crate with no in-repo edges, so
+# it costs the contract seam nothing — and it keeps the port's payload the
+# SAME type the mesh store already speaks, so an adapter is a move, not a copy.
+bytes = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 async-trait = { workspace = true }

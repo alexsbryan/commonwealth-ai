@@ -11,9 +11,10 @@ use std::sync::Arc;
 use super::discovery_policy;
 use super::lifecycle::daemon_pid_path;
 use super::warn_orphaned_indexes;
-use commonwealth_core::ids::NodeId;
 use corpus_engine::{CorpusEngine, EmbedFn};
 use corpus_engine_notes::{NodeRoster, NotePropagationEvent, NoteStore, RosterEntry};
+use kernel_types::NodeId;
+use sovereign_contracts::peer::{Convergence, PeerStore};
 use sovereign_core::model_family::{
     EmbedModelInfo, ModelFamily, NormalizationStrategy, PoolingStrategy,
 };
@@ -656,7 +657,7 @@ pub(super) fn spawn_rpc_worker_discovery(
                 // otherwise the host role is the elected leader of the anchors.
                 let host_pin = std::env::var("SOVEREIGN_SHARED_MODEL_HOST_NODE_ID")
                     .ok()
-                    .and_then(|s| commonwealth_core::ids::NodeId::from_hex(&s));
+                    .and_then(|s| NodeId::from_hex(&s));
                 let allowlist = worker_allowlist();
                 if let Some(list) = &allowlist {
                     tracing::info!(
@@ -758,18 +759,19 @@ pub(super) fn spawn_rpc_worker_discovery(
                     // split. `should_host` is deterministic over the anchor set, so
                     // all anchors converge without coordination; a minority that can't
                     // see quorum still won't load (the quorum gate holds it "forming").
-                    let anchors = daemon_for_disco.eligible_anchors().await;
-                    let am_host = match daemon_for_disco.self_node_id().await {
-                        Some(me) => {
-                            commonwealth_core::partition::should_host(me, host_pin, &anchors)
-                        }
-                        None => false, // identity not ready yet → don't host
-                    };
+                    // ONE call, not three reads and a partition function: the
+                    // mesh handle owns the membership AND our identity, so it
+                    // is what can answer "am I the host" — and answering it
+                    // here meant this binary linked the mesh substrate to ask
+                    // about itself (cw-lift 3b). A mesh of one answers `true`,
+                    // by election over a roster of one, not by a local branch.
+                    let role = daemon_for_disco.host_role(host_pin).await;
+                    let am_host = role.am_host;
                     if am_host != was_host {
                         tracing::info!(
                             am_host,
-                            anchors = anchors.len(),
-                            pinned = host_pin.is_some(),
+                            anchors = role.eligible_anchors,
+                            pinned = role.pinned,
                             "shared-model: host-role transition"
                         );
                         // Publish for `/v1/mesh/status` so the mesh soak can assert
@@ -1331,9 +1333,9 @@ pub(super) fn reconcile_local_measurements(daemon: Arc<EmbeddedDaemon>) {
 /// Wire NoteStore's outbound propagation sink to publish notes via the mesh store.
 pub(super) fn wire_note_propagation_sink(
     notes_store: Arc<NoteStore>,
-    work_atlas_mesh_store: Arc<commonwealth_state::MeshStore>,
+    peer_store: Arc<dyn PeerStore>,
     self_node_id: NodeId,
-    convergence: Arc<commonwealth_api::state::ConvergenceRecord>,
+    convergence: Arc<dyn Convergence>,
 ) {
     // ── NoteStore propagation wiring ─────────────────────────────
     //
@@ -1341,8 +1343,8 @@ pub(super) fn wire_note_propagation_sink(
     // sink to publish global non-private notes via app_id="notes"
     // (and private notes via "notes-private", which is
     // structurally gossip-excluded — see
-    // `commonwealth-state::peer_preferences::GOSSIP_EXCLUDED_APP_IDS`).
-    let mesh_for_sink = Arc::clone(&work_atlas_mesh_store);
+    // the mesh's own `GOSSIP_EXCLUDED_APP_IDS`).
+    let mesh_for_sink = Arc::clone(&peer_store);
     let self_id_for_sink = self_node_id;
     let sink: corpus_engine_notes::PropagationSinkFn =
         Arc::new(move |ev: &NotePropagationEvent| {
@@ -1526,10 +1528,10 @@ pub(super) fn spawn_notes_tier_backfill(notes_store: Arc<NoteStore>) {
 
 /// Spawn the poller that bridges inbound gossip note entries into `NoteStore`.
 pub(super) fn spawn_notes_ingest_poller(
-    work_atlas_mesh_store: Arc<commonwealth_state::MeshStore>,
+    peer_store: Arc<dyn PeerStore>,
     notes_store: Arc<NoteStore>,
     self_node_id: NodeId,
-    convergence: Arc<commonwealth_api::state::ConvergenceRecord>,
+    convergence: Arc<dyn Convergence>,
 ) {
     // Ingest poller: bridge inbound MeshStore entries (merged from
     // gossip) into `NoteStore::ingest_remote_notes`. MeshStore
@@ -1541,7 +1543,7 @@ pub(super) fn spawn_notes_ingest_poller(
     // entries whose `origin` is `self_node_id` (those are notes
     // WE published; reingesting via our own sink would be a no-op
     // but wastes a JSON roundtrip).
-    let mesh_for_poller = Arc::clone(&work_atlas_mesh_store);
+    let mesh_for_poller = Arc::clone(&peer_store);
     let notes_for_poller = Arc::clone(&notes_store);
     let self_id_for_poller = self_node_id;
     let convergence_for_poller = Arc::clone(&convergence);
@@ -2417,7 +2419,7 @@ pub(super) struct WatcherAtlasSetup {
     pub(super) watched_lint_scope: Option<String>,
     pub(super) watched_test_scope: Option<String>,
     pub(super) watcher_monitor: Option<tokio::task::JoinHandle<()>>,
-    pub(super) work_atlas_mesh_store: Arc<commonwealth_state::MeshStore>,
+    pub(super) work_atlas_mesh_store: Arc<sovereign_mesh::peer_adapter::MeshPeerStore>,
     pub(super) work_atlas_store: Arc<sovereign_work_atlas::WorkAtlasStore>,
     pub(super) work_atlas_broadcaster: Arc<sovereign_work_atlas::tools::DeferredBroadcaster>,
     pub(super) work_atlas_cfg: sovereign_work_atlas::WorkAtlasConfig,
@@ -2462,15 +2464,16 @@ pub(super) fn setup_watchers_and_work_atlas(
     // In-memory is intentional — matches the daemon's existing
     // long-term-persistence-via-mesh.json design. The atlas-relevant
     // records have TTLs measured in hours; restart cost is acceptable.
-    let work_atlas_mesh_store: Arc<commonwealth_state::MeshStore> = Arc::new(
-        commonwealth_state::MeshStore::in_memory().expect("in-memory MeshStore for work atlas"),
+    let work_atlas_mesh_store: Arc<sovereign_mesh::peer_adapter::MeshPeerStore> = Arc::new(
+        sovereign_mesh::peer_adapter::MeshPeerStore::in_memory()
+            .expect("in-memory MeshStore for work atlas"),
     );
     // Node identity — same resolution order EmbeddedDaemon uses when
     // it starts (file-on-disk → mesh.json → generate). Resolved early
     // so `WorkAtlasStore::node_id` matches the daemon's `self_id`.
     let work_atlas_node_id = resolve_self_node_id(data_dir);
     let work_atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
-        Arc::clone(&work_atlas_mesh_store),
+        Arc::clone(&work_atlas_mesh_store) as Arc<dyn PeerStore>,
         work_atlas_node_id,
     ));
     // Deferred broadcaster — `MeshBroadcaster` needs `AppState`, which

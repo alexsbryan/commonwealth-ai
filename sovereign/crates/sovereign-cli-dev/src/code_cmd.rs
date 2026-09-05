@@ -1838,7 +1838,7 @@ fn local_brief_overlaps(
     if !mesh_db.exists() {
         return Vec::new();
     }
-    let Ok(mesh_store) = commonwealth_state::MeshStore::open(&mesh_db) else {
+    let Ok(mesh_store) = sovereign_mesh::peer_adapter::MeshPeerStore::open(&mesh_db) else {
         return Vec::new();
     };
     let node_id = crate::atlas_identity::atlas_node_id();

@@ -8,14 +8,14 @@
 
 use std::path::PathBuf;
 
-use commonwealth_core::ids::NodeId;
+use kernel_types::NodeId;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// MeshStore namespace for Public records. Gossips across the mesh.
+/// Peer-store namespace for Public records. Gossips across the mesh.
 pub const APP_ID_PUBLIC: &str = "work-atlas";
 
-/// MeshStore namespace for Private records. Excluded from gossip via
+/// Peer-store namespace for Private records. Excluded from gossip via
 /// `GOSSIP_EXCLUDED_APP_IDS` — cannot leak by construction.
 pub const APP_ID_PRIVATE: &str = "work-atlas-private";
 
@@ -48,7 +48,7 @@ impl AgentKind {
 
 /// Visibility of a session and everything attributed to it.
 ///
-/// Encoded structurally: `app_id()` returns the MeshStore namespace,
+/// Encoded structurally: `app_id()` returns the peer-store namespace,
 /// and Private's namespace is in `GOSSIP_EXCLUDED_APP_IDS`. There is
 /// no third value, and the mapping is `const fn` so the compiler can
 /// verify there is no runtime path that selects an arbitrary string.

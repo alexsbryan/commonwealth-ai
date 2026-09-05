@@ -255,7 +255,7 @@ impl WorkInFlightTool {
 
         // Resolve owning sessions so we can filter to peers only.
         let sessions = self.store.scan_sessions().ok()?;
-        let session_node = |sid: uuid::Uuid| -> Option<commonwealth_core::ids::NodeId> {
+        let session_node = |sid: uuid::Uuid| -> Option<kernel_types::NodeId> {
             sessions
                 .iter()
                 .find(|s| s.session_id == sid)

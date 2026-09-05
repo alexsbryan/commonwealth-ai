@@ -851,22 +851,22 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // reads it, and handed to BOTH the outbound publish sink and the inbound
     // ingest poller so the writers' stamps are what `/status` reports. A second
     // copy would let the status section disagree with the sink — never.
-    let convergence_recorder = Arc::new(commonwealth_api::state::ConvergenceRecord::new());
+    let convergence_recorder = Arc::new(sovereign_mesh::peer_adapter::MeshConvergence::new());
 
     bootstrap::wire_note_propagation_sink(
         Arc::clone(&notes_store),
-        Arc::clone(&work_atlas_mesh_store),
+        Arc::clone(&work_atlas_mesh_store) as Arc<dyn sovereign_contracts::peer::PeerStore>,
         self_node_id,
-        Arc::clone(&convergence_recorder),
+        Arc::clone(&convergence_recorder) as Arc<dyn sovereign_contracts::peer::Convergence>,
     );
 
     bootstrap::spawn_notes_tier_backfill(Arc::clone(&notes_store));
 
     bootstrap::spawn_notes_ingest_poller(
-        Arc::clone(&work_atlas_mesh_store),
+        Arc::clone(&work_atlas_mesh_store) as Arc<dyn sovereign_contracts::peer::PeerStore>,
         Arc::clone(&notes_store),
         self_node_id,
-        Arc::clone(&convergence_recorder),
+        Arc::clone(&convergence_recorder) as Arc<dyn sovereign_contracts::peer::Convergence>,
     );
 
     bootstrap::spawn_lazy_stamp_fingerprints(Arc::clone(&engine));
@@ -1006,6 +1006,10 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
             // the desktop reached the same conclusion in 2026-06 and has
             // warmed it in the background ever since.
             warmth: sovereign_runtime_recipe::LaneWarmth::Deferred,
+            // Serves every installed corpus, so every lane member is
+            // reachable. Byte-identical to the behaviour this host had
+            // before `LaneScope` existed.
+            scope: sovereign_runtime_recipe::LaneScope::All,
             // `build::inference::load_provider` above already installed a
             // rerank slot INSIDE the embedded engine from the same
             // `SOVEREIGN_RERANK_MODEL_PATH`. A standalone one here would put

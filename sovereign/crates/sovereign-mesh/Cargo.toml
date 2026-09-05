@@ -11,6 +11,10 @@ commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 # Rebrand-aware path SSOT: the projects.json writer must derive the same
 # path its readers (symbol_lookup, daemon re-registration) resolve.
 sovereign-contracts = { workspace = true }
+# `NodeId` straight from the neutral kernel rather than through
+# `commonwealth_core::ids`'s re-export of it (ARCH §8.3) — the peer adapters
+# below sit on the port's own vocabulary.
+kernel-types = { workspace = true }
 # `features = ["iroh"]`: the daemon's dial-by-key binding (W1 of
 # TRANSPORT_MIGRATION.md) is compiled into the default build —
 # runtime-gated by `[iroh] enabled`, not cfg-gated — so the shipped

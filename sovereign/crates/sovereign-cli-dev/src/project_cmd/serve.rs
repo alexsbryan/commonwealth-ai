@@ -492,13 +492,13 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         let _ = std::fs::create_dir_all(parent);
     }
     let atlas_mesh_store = Arc::new(
-        commonwealth_state::MeshStore::open(&atlas_mesh_db)
-            .or_else(|_| commonwealth_state::MeshStore::in_memory())
+        sovereign_mesh::peer_adapter::MeshPeerStore::open(&atlas_mesh_db)
+            .or_else(|_| sovereign_mesh::peer_adapter::MeshPeerStore::in_memory())
             .expect("work atlas mesh store"),
     );
     let atlas_node_id = crate::atlas_identity::atlas_node_id();
     let atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
-        Arc::clone(&atlas_mesh_store),
+        Arc::clone(&atlas_mesh_store) as Arc<dyn sovereign_work_atlas::PeerStore>,
         atlas_node_id,
     ));
     let atlas_cfg_path = sovereign_cli_shared::dirs::work_atlas_toml();

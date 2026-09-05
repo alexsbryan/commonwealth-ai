@@ -53,13 +53,23 @@ sovereign-cli-shared = { workspace = true, features = ["scip"] }
 # rather than keeping it. Now a capability, one layer down, and the interface
 # is two names: `build_with_progress_with_embedder` and `ParsedBuild`.
 sovereign-enrichment-build = { workspace = true }
-commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
-commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
-# Direct edge for the notes convergence recorder (order commons-fluency
-# fix 9): the daemon stamps `ConvergenceRecord` from its publish sink +
-# ingest poller; already transitive via sovereign-mesh, made explicit
-# here because the type is named in the daemon's own bootstrap.
-commonwealth-api = { path = "../../../commonwealth/crates/commonwealth-api" }
+# `commonwealth-state`, `commonwealth-core` and `commonwealth-api` WERE HERE,
+# and cw-lift rung 3b deleted all three. The whole coupling was eleven lines in
+# two files: `NodeId` reached through `commonwealth_core::ids`'s re-export of
+# the kernel type (ARCH §8.3), one call to the pure `partition::should_host`,
+# and the two real types — `MeshStore` and `ConvergenceRecord`.
+#
+# What replaced them: `kernel-types` for `NodeId` directly;
+# `EmbeddedDaemon::host_role` for the host decision, asked of the handle that
+# owns both its inputs; and `sovereign-contracts::peer`'s two narrow ports for
+# the store and the convergence stamps, with `sovereign-mesh::peer_adapter`
+# supplying the mesh implementations. The mesh-of-one is untouched at RUNTIME —
+# the solo adapters are the honest N=1 answers, not skips — and what changed is
+# that a daemon with no mesh configured no longer LINKS the mesh substrate to
+# say so.
+#
+# `NodeId` straight from the neutral kernel, not through a re-export.
+kernel-types = { workspace = true }
 sovereign-tdd = { workspace = true }
 corpus-engine = { workspace = true, features = ["treesitter"] }
 corpus-engine-notes = { workspace = true }

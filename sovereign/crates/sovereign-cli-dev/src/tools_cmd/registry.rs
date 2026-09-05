@@ -222,8 +222,8 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
         let _ = std::fs::create_dir_all(parent);
     }
     let mesh_store = Arc::new(
-        commonwealth_state::MeshStore::open(&mesh_db)
-            .or_else(|_| commonwealth_state::MeshStore::in_memory())
+        sovereign_mesh::peer_adapter::MeshPeerStore::open(&mesh_db)
+            .or_else(|_| sovereign_mesh::peer_adapter::MeshPeerStore::in_memory())
             .map_err(|e| format!("work atlas mesh store: {e}"))?,
     );
     // Identity MUST come from the ROOT data dir with the daemon's full
@@ -233,7 +233,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // (2026-07-31).
     let node_id = crate::atlas_identity::atlas_node_id();
     let atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
-        Arc::clone(&mesh_store),
+        Arc::clone(&mesh_store) as Arc<dyn sovereign_work_atlas::PeerStore>,
         node_id,
     ));
     let atlas_cfg = sovereign_work_atlas::WorkAtlasConfig::defaults();

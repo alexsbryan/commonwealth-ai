@@ -110,7 +110,7 @@ pub fn resource_verdict(
     // the one canonical carrier. Claims written by an older binary
     // lack the field (`None`); for those only, fall back to session
     // resolution and say so (never silently substitute, §18.3).
-    let claim_node = |c: &ClaimRecord| -> Option<commonwealth_core::ids::NodeId> {
+    let claim_node = |c: &ClaimRecord| -> Option<kernel_types::NodeId> {
         if let Some(n) = c.node_id {
             return Some(n);
         }
@@ -266,15 +266,15 @@ use sovereign_core::time::unix_now_u64 as now_secs;
 mod tests {
     use super::*;
     use crate::model::{AgentKind, Privacy, SessionRecord, SymbolRef};
-    use commonwealth_core::ids::NodeId;
-    use commonwealth_state::MeshStore;
+    use kernel_types::NodeId;
+    use sovereign_contracts::peer::{PeerStore, SoloPeerStore};
     use sovereign_core::types::{ConversationId, ToolContext};
     use std::path::PathBuf;
     use uuid::Uuid;
 
     fn mk_store() -> WorkAtlasStore {
-        let mesh = Arc::new(MeshStore::in_memory().unwrap());
-        WorkAtlasStore::new(mesh, NodeId::from_u128(1))
+        let mesh = Arc::new(SoloPeerStore::new());
+        WorkAtlasStore::new(mesh as Arc<dyn PeerStore>, NodeId::from_u128(1))
     }
 
     fn ctx() -> ToolContext {

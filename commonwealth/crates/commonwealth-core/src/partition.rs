@@ -146,6 +146,36 @@ mod tests {
         assert!(!should_host(NodeId::from_u128(8), None, &anchors));
     }
 
+    /// A MESH OF ONE. This is the case the whole local-only daemon rests on
+    /// (cw-lift 3b): the degenerate roster must produce a CORRECT answer, not
+    /// a skipped one, because that is what lets the same code path serve a
+    /// solo node and a fleet with no `if local { … }` branch anywhere.
+    ///
+    /// All three pin shapes are asserted, because the pin arm is where a
+    /// "nobody hosts" answer could hide: with no pin it is election over a
+    /// one-node set, with self pinned it is the pin, and with a STALE pin
+    /// (an operator-designated host that is not currently eligible) it must
+    /// fail over to the only survivor rather than strand the node.
+    #[test]
+    fn should_host_is_true_for_a_roster_of_one() {
+        let me = NodeId::from_u128(4);
+        let alone = [me];
+
+        assert!(
+            should_host(me, None, &alone),
+            "no pin: the only anchor is the elected leader"
+        );
+        assert!(
+            should_host(me, Some(me), &alone),
+            "self-pinned and eligible: the pin is us"
+        );
+        assert!(
+            should_host(me, Some(NodeId::from_u128(9)), &alone),
+            "a pin that is not eligible fails over to election, and election \
+             over a roster of one is us — a stale pin must not strand a solo node"
+        );
+    }
+
     #[test]
     fn should_host_nobody_when_no_anchors() {
         assert!(!should_host(NodeId::from_u128(2), None, &[]));

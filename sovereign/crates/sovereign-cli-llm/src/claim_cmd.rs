@@ -16,7 +16,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use commonwealth_state::MeshStore;
+use sovereign_mesh::peer_adapter::MeshPeerStore;
 use uuid::Uuid;
 
 use sovereign_cli_shared::mcp_client::{daemon_tool_call, DaemonCallError};
@@ -807,7 +807,7 @@ fn open_atlas() -> Result<CliCtx, i32> {
     let sovereign_dir = repo_root.join(".sovereign");
     let _ = std::fs::create_dir_all(&sovereign_dir);
     let mesh_path = sovereign_dir.join("mesh.db");
-    let mesh = match MeshStore::open(&mesh_path) {
+    let mesh = match MeshPeerStore::open(&mesh_path) {
         Ok(m) => m,
         Err(e) => {
             eprintln!("claim: mesh open {}: {e}", mesh_path.display());
