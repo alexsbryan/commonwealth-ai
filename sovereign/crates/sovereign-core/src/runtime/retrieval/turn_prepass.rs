@@ -85,9 +85,9 @@ impl Runtime {
             );
         }
     }
-    /// Ambient field_model: for each corpus the turn is scoped to, load its
-    /// `field_skeleton.json` (System-1 enrichment) and splice a compact landscape
-    /// digest into `context.knowledge_view_digests` — the same channel the
+    /// Ambient field_model: for each corpus the turn is scoped to, read its
+    /// ATLAS and splice a compact landscape digest into
+    /// `context.knowledge_view_digests` — the same channel the
     /// system-prompt assembler renders (`system_message.rs`). This closes the
     /// "field_model is ambient for only 3 hardcoded views" gap: a turn scoped to
     /// sep / gutenberg / maple-house now gets THAT corpus's settled concerns, live
@@ -101,8 +101,26 @@ impl Runtime {
     /// Runs AFTER `splice_landscape_digests`, so it APPENDS to (never clobbers)
     /// any view digests the provider produced. No-op when the turn is unscoped
     /// (`enabled_corpora` empty/None — we don't pay to scan every installed
-    /// corpus's skeleton) or the scoped corpus has no `field_skeleton.json`.
-    /// Bounded: one small JSON read + a pure render per scoped corpus.
+    /// corpus's atlas) or the scoped corpus's atlas holds no `Question` atoms.
+    ///
+    /// ## ei-7b: the source moved, the renderer did not
+    ///
+    /// Until 2026-09-05 this read `field_skeleton.json` — a parallel artifact
+    /// beside the index that only this function ever read. It now reads the
+    /// atlas the rest of retrieval already reads, through
+    /// `field_atoms::skeleton_from_atoms`, and hands the result to the SAME
+    /// `render_landscape` (ARCH §10.6: one renderer, two sources; the digest
+    /// text is pinned byte-identical across the two by
+    /// `field_atoms::tests::digest_from_atoms_is_byte_identical_to_digest_from_the_v1_file`).
+    ///
+    /// Cost. The v1 read was one JSON per scoped corpus and so is this one, but
+    /// `atoms.json` is a whole atlas where `field_skeleton.json` was one
+    /// pipeline's output — on a large corpus that is a much bigger parse to pay
+    /// on every turn. So the atlas's own census (`_summary.json`, already
+    /// written by the atlas writer) is consulted first and the corpus is skipped
+    /// when it reports zero `Question` atoms. A census that is ABSENT or STALE
+    /// is not read as "no questions" (ARCH §18.3) — that falls through to the
+    /// full read, which is correct and merely slower.
     pub(crate) async fn splice_ambient_field_digests(&self, context: &mut ConversationContext) {
         let Some(engine) = self.corpus_engine.as_ref() else {
             return;
@@ -123,21 +141,43 @@ impl Runtime {
                     continue;
                 }
             };
-            match index.load_field_skeleton() {
-                Ok(Some(skeleton)) if !skeleton.is_empty() => {
-                    let heading = format!("Field guide — {corpus_id}");
-                    let body = skeleton.render_landscape(&heading, FIELD_DIGEST_BUDGET_TOKENS);
-                    if !body.trim().is_empty() {
-                        added.push(crate::types::LandscapeDigest {
-                            view_id: format!("field:{corpus_id}"),
-                            body,
-                        });
-                    }
+            let atlas_dir = index.path().join("atlas");
+            if let Some(census) =
+                corpus_engine::enrichment::atlas::read_current_atlas_summary(&atlas_dir)
+            {
+                let questions = census
+                    .atom_counts
+                    .get(&corpus_engine::enrichment::atlas::atoms::AtomType::Question)
+                    .copied()
+                    .unwrap_or(0);
+                if questions == 0 {
+                    tracing::debug!(
+                        corpus = %corpus_id,
+                        atoms = census.atom_count,
+                        "ambient field_model: census says no Question atoms — skipped without reading the atlas"
+                    );
+                    continue;
                 }
-                Ok(_) => {} // no skeleton on disk, or empty — nothing to splice
+            }
+            let atoms = match corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir) {
+                Ok(f) => f.atoms,
                 Err(e) => {
-                    tracing::debug!(corpus = %corpus_id, error = %e, "ambient field_model: load_field_skeleton failed");
+                    tracing::debug!(corpus = %corpus_id, error = %e, "ambient field_model: read_atlas_atoms failed");
+                    continue;
                 }
+            };
+            let skeleton =
+                corpus_engine::enrichment::field_atoms::skeleton_from_atoms(corpus_id, &atoms);
+            if skeleton.is_empty() {
+                continue; // atlas present, but it carries no field model
+            }
+            let heading = format!("Field guide — {corpus_id}");
+            let body = skeleton.render_landscape(&heading, FIELD_DIGEST_BUDGET_TOKENS);
+            if !body.trim().is_empty() {
+                added.push(crate::types::LandscapeDigest {
+                    view_id: format!("field:{corpus_id}"),
+                    body,
+                });
             }
         }
         if added.is_empty() {

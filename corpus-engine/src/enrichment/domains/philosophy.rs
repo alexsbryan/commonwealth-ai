@@ -244,7 +244,11 @@ Return JSON:
     }
 
     fn skeleton_storage(&self) -> SkeletonStorage {
-        SkeletonStorage::JsonAndLance
+        // ei-7b: the philosophy field model publishes into the atlas. Its
+        // digest consumer is `turn_prepass::splice_ambient_field_digests`,
+        // which reads the atlas; nothing reads a `field_skeleton.json` for
+        // this domain any more.
+        SkeletonStorage::AtlasAtoms
     }
 }
 
@@ -276,10 +280,10 @@ mod tests {
     }
 
     #[test]
-    fn skeleton_storage_is_json_and_lance() {
+    fn skeleton_storage_is_atlas_atoms() {
         assert!(matches!(
             PhilosophyDomain.skeleton_storage(),
-            SkeletonStorage::JsonAndLance
+            SkeletonStorage::AtlasAtoms
         ));
     }
 

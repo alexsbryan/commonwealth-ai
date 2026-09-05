@@ -264,7 +264,15 @@ async fn parquet_ingest_creates_searchable_index() {
 /// The enrichment-enabled ingest path. This is the SEP demo target:
 /// parquet → chunks → embeddings → LanceDB → field model enrichment.
 /// Verifies the engine invokes the `InferenceFn` for skeleton extraction
-/// and cluster labeling, and writes the field_skeleton.json artifact.
+/// and cluster labeling, and PUBLISHES the field model into the corpus atlas.
+///
+/// Since ei-7b (2026-09-05) the `philosophy` domain is
+/// `SkeletonStorage::AtlasAtoms`: the artifact is `atlas/atoms.json`, not
+/// `field_skeleton.json`. This test reads the atoms back through
+/// `field_atoms::skeleton_from_atoms` — the same inverse projection
+/// `turn_prepass::splice_ambient_field_digests` uses — so what it asserts is
+/// what a turn would actually see, not an intermediate the runtime never
+/// touches.
 #[tokio::test]
 async fn parquet_ingest_with_enrichment_creates_field_model() {
     let dir = tempfile::tempdir().unwrap();
@@ -285,17 +293,32 @@ async fn parquet_ingest_with_enrichment_creates_field_model() {
 
     assert!(result.chunks_created >= 4);
 
-    // The field skeleton should exist and contain the mock-extracted data.
     let index = engine.open_index_for_corpus("test_corpus").await.unwrap();
-    let skeleton = index
-        .load_field_skeleton()
-        .expect("load_field_skeleton should not error")
-        .expect("field_skeleton.json should exist after enrichment");
 
-    assert_eq!(skeleton.schema_version, 1);
+    // The v1 artifact must NOT be written by an `AtlasAtoms` domain — this is
+    // the retirement half of the port, and it is asserted rather than assumed.
+    assert!(
+        index.load_field_skeleton().unwrap().is_none(),
+        "an AtlasAtoms domain must not write field_skeleton.json"
+    );
+
+    // The field model is in the atlas, and is read back the way the runtime
+    // reads it.
+    let atlas_dir = index
+        .path()
+        .join(corpus_engine::enrichment::atlas::ATLAS_DIRNAME);
+    let atoms = corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir)
+        .expect("an enriched AtlasAtoms corpus has an atlas")
+        .atoms;
+    assert!(
+        atoms
+            .iter()
+            .any(|a| a.atom_type() == corpus_engine::enrichment::atlas::atoms::AtomType::Question),
+        "the published atlas should carry Question atoms"
+    );
+    let skeleton =
+        corpus_engine::enrichment::field_atoms::skeleton_from_atoms("test_corpus", &atoms);
     assert_eq!(skeleton.corpus_id, "test_corpus");
-    assert_eq!(skeleton.domain_id, "philosophy");
-    assert!(!skeleton.generated_at.is_empty());
 
     // The mock inference returns a question about free will with a
     // Compatibilism position for every batch of overview chunks.
@@ -318,17 +341,19 @@ async fn parquet_ingest_with_enrichment_creates_field_model() {
     );
     let pos = &q.positions[0];
     assert_eq!(pos.name, "Compatibilism");
+    // The position status rides on `Position.stance` verbatim, which is what
+    // `is_settled_status` reads to decide the digest's "Settled concerns".
     assert_eq!(pos.status, "majority");
-    assert_eq!(pos.source, "skeleton");
-    assert!(pos.proponents.contains(&"Frankfurt".to_string()));
+    // `source` and `proponents` do NOT survive the projection — the atom
+    // vocabulary has no home for either (see `field_atoms`'s module doc). The
+    // read-back names them as `"atlas"` / empty rather than pretending.
+    assert_eq!(pos.source, "atlas");
+    assert!(pos.proponents.is_empty());
 
-    // The skeleton JSON should be valid — round-trip test.
-    let json = serde_json::to_string_pretty(&skeleton).unwrap();
-    let reparsed: corpus_engine::FieldSkeleton = serde_json::from_str(&json).unwrap();
-    assert_eq!(
-        reparsed.canonical_questions.len(),
-        skeleton.canonical_questions.len()
-    );
+    // And the digest a turn would see is non-empty and names the position's
+    // question — the end the whole pipeline exists to serve.
+    let digest = skeleton.render_landscape("Field guide — test_corpus", 250);
+    assert!(digest.contains("free will"), "digest was: {digest}");
 }
 
 /// Verify that the enrichment checkpoint is cleared after successful completion.
@@ -384,6 +409,14 @@ async fn non_enriched_corpus_has_no_field_model() {
     assert!(
         skeleton.is_none(),
         "non-enriched corpus should not have field_skeleton.json"
+    );
+    assert!(
+        !index
+            .path()
+            .join(corpus_engine::enrichment::atlas::ATLAS_DIRNAME)
+            .join("atoms.json")
+            .exists(),
+        "non-enriched corpus should not have a published atlas either"
     );
     assert!(
         !index.has_field_model_tables().await,

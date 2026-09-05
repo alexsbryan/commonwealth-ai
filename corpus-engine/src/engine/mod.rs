@@ -2793,10 +2793,13 @@ impl CorpusEngine {
     }
 
     /// Declared-vs-built enrichment **drift**: `Some(reason)` when the corpus's
-    /// recipe DECLARES an `[enrichment] type` whose on-disk artifact is MISSING —
-    /// e.g. a recipe that says `type = "atlas"` on a machine whose local index
-    /// only has `field_skeleton.json` (a stale HF pull that never carried the
-    /// `atlas/` build). Such a corpus is still SEARCHABLE, so this is NOT a hard
+    /// recipe DECLARES an `[enrichment] type` and NONE of that type's on-disk
+    /// artifacts is present — e.g. a recipe that says `type = "atlas"` on a
+    /// machine whose local index only has `field_skeleton.json` (a stale HF pull
+    /// that never carried the `atlas/` build). A type may name more than one
+    /// artifact (`field_model` writes a different one per domain since ei-7b),
+    /// and ANY of them present means built. Such a corpus is still SEARCHABLE,
+    /// so this is NOT a hard
     /// readiness failure (`validate_corpus_readiness` stays orthogonal) — but a
     /// chat/bench/parity run over it measures a DIFFERENT enrichment surface than
     /// the recipe promises. The parity harness uses this to flag a confounded run
@@ -2804,7 +2807,7 @@ impl CorpusEngine {
     /// freshness disclosure can surface it to the user.
     ///
     /// Conservative: only artifact-backed types are checked (via
-    /// [`crate::enrichment::pass::EnrichmentPass::declared_artifact`]); `None`
+    /// [`crate::enrichment::pass::EnrichmentPass::declared_artifacts`]); `None`
     /// when enrichment is disabled, the type has no verifiable artifact, the
     /// recipe can't be loaded, or the artifact is present.
     pub async fn enrichment_drift(&self, corpus_id: &str) -> Option<String> {
@@ -2813,19 +2816,23 @@ impl CorpusEngine {
         if !enrichment.enabled {
             return None;
         }
-        let rel = crate::enrichment::pass::EnrichmentPassRegistry::builtin()
+        let rels = crate::enrichment::pass::EnrichmentPassRegistry::builtin()
             .get(&enrichment.enrichment_type)?
-            .declared_artifact()?;
-        let path = self.index_dir.join(corpus_id).join(rel);
-        if path.exists() {
+            .declared_artifacts();
+        if rels.is_empty() {
+            return None;
+        }
+        let index_root = self.index_dir.join(corpus_id);
+        if rels.iter().any(|rel| index_root.join(rel).exists()) {
             return None;
         }
         Some(format!(
-            "recipe declares `[enrichment] type = \"{ty}\"` but the built artifact \
-             `{rel}` is missing on disk — this corpus's {ty} enrichment was not \
+            "recipe declares `[enrichment] type = \"{ty}\"` but none of its built \
+             artifacts ({rels}) is on disk — this corpus's {ty} enrichment was not \
              pulled/built (likely a stale index). Re-sync or rebuild it to restore \
              the enrichment surface.",
             ty = enrichment.enrichment_type,
+            rels = rels.join(", "),
         ))
     }
 

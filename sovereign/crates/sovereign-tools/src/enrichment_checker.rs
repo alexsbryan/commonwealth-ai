@@ -1,8 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! `EnrichmentChecker` — health-checks field model enrichment for every corpus.
 //!
-//! Checks for enrichment completeness based on the `field_skeleton.json`
-//! artifact and the `_enrichment_checkpoint.json` resume state.
+//! Checks for enrichment completeness based on what the field-model pipeline
+//! actually leaves behind and the `_enrichment_checkpoint.json` resume state.
+//!
+//! **What "a field model was built here" means changed on 2026-09-05 (ei-7b).**
+//! The pipeline used to publish `field_skeleton.json` beside the index; it now
+//! publishes `Question` and `Position` atoms into the corpus atlas. So the
+//! check below accepts EITHER signal: the `field_questions` LanceDB tables the
+//! v1 pipeline wrote, or an atlas whose census reports `Question` atoms. A
+//! corpus enriched before the port keeps passing on the first; one enriched
+//! after passes on the second. Requiring only the old signal would have turned
+//! every newly-enriched corpus into a `LowEnrichmentCoverage` issue reporting
+//! 0% coverage for a corpus that is fully enriched — a false alarm that reads
+//! exactly like a real one.
 //!
 //! It looks at TWO sets of directories, because the corpora that failed
 //! hardest are the ones the normal listing cannot see:
@@ -103,8 +114,10 @@ impl HealthCheckable for EnrichmentChecker {
                     }
                 };
 
-                // Check if field model tables exist.
-                let has_field_model = index.has_field_model_tables().await;
+                // Either signal counts as "the field model was built": the v1
+                // LanceDB tables, or field-model atoms in the atlas (ei-7b).
+                let has_field_model =
+                    index.has_field_model_tables().await || atlas_has_field_model(&index);
 
                 if !has_field_model {
                     // No field model — enrichment was enabled but never completed.
@@ -244,5 +257,42 @@ mod tests {
     fn checker_exists() {
         // Basic compilation test — the checker struct compiles.
         // Integration tests require a real CorpusEngine.
+    }
+}
+
+/// True when this corpus's atlas carries the atoms the field-model pipeline
+/// publishes (ei-7b).
+///
+/// Reads the atlas's own census (`_summary.json`) when it is CURRENT for
+/// `atoms.json`, and falls through to the atoms themselves when it is absent or
+/// stale — a missing census is not evidence of a missing field model (§18.3).
+fn atlas_has_field_model(index: &CorpusIndex) -> bool {
+    use corpus_engine::enrichment::atlas::atoms::AtomType;
+    let atlas_dir = index
+        .path()
+        .join(corpus_engine::enrichment::atlas::ATLAS_DIRNAME);
+    if let Some(census) = corpus_engine::enrichment::atlas::read_current_atlas_summary(&atlas_dir) {
+        return census
+            .atom_counts
+            .get(&AtomType::Question)
+            .copied()
+            .unwrap_or(0)
+            > 0;
+    }
+    match corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir) {
+        Ok(file) => !corpus_engine::enrichment::field_atoms::skeleton_from_atoms(
+            index.corpus_id(),
+            &file.atoms,
+        )
+        .is_empty(),
+        Err(e) => {
+            tracing::debug!(
+                corpus = %index.corpus_id(),
+                atlas_dir = %atlas_dir.display(),
+                error = %e,
+                "enrichment check: no readable atlas — field-model atoms unknown"
+            );
+            false
+        }
     }
 }

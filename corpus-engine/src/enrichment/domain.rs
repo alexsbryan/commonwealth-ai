@@ -135,8 +135,24 @@ pub enum QuestionType {
 
 #[derive(Debug, Clone)]
 pub enum SkeletonStorage {
+    /// LanceDB tables AND `Question` / `Position` atoms published into the
+    /// corpus atlas (`enrichment::field_atoms::publish_to_atlas`).
+    ///
+    /// The target shape since ei-7b (2026-09-05): the field model is part of
+    /// the atlas the rest of retrieval reads, and the ambient "Field guide"
+    /// digest is rendered from it. Use for any domain whose digest consumer is
+    /// `turn_prepass::splice_ambient_field_digests` — `philosophy` (SEP) today.
+    AtlasAtoms,
     /// LanceDB tables AND field_skeleton.json export.
-    /// Use for small bounded domains: SEP, CRS, CBO.
+    ///
+    /// Kept for the three KnowledgeView domains — `personal`,
+    /// `conversational`, `institutional` — because their reader
+    /// (`sovereign-tools::knowledge_view::manager`, which has its own
+    /// `format_landscape`, an mtime-keyed digest cache, and a cross-view
+    /// digest that embeds skeleton content) is a separate port. Moving those
+    /// three before their reader moves would take three live views dark, which
+    /// is why the storage arm — not the pipeline — is where the two paths
+    /// diverge.
     JsonAndLance,
     /// LanceDB tables only. field_index.json carries stats only.
     /// Use for large unbounded domains: Wikipedia, Stack Exchange.

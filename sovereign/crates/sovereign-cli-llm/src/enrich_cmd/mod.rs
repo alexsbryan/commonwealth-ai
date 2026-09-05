@@ -58,6 +58,7 @@ pub mod eval_median;
 pub mod exemplars;
 pub mod extract;
 pub mod extract_typed;
+pub mod field_atoms;
 pub mod ingest;
 pub mod init;
 pub mod investigation;
@@ -100,6 +101,7 @@ const HELP: Help = Help {
                 ("ingest", "Run an AtlasIngestion strategy end-to-end (today: structure_first deterministic Wikipedia parser)."),
                 ("raptor", "Retrofit an installed corpus with a per-document RAPTOR tier-3 summary tree (additive to any existing atom-graph atlas) — powers whole-document summarization."),
                 ("raptor-index", "(Re)build the RAPTOR summary-node ANN index (raptor_summaries.lance) from conv_raptor_nodes — the query-time fast path; 'enrich raptor' builds it automatically at the end of a run."),
+                ("field-atoms", "Project the corpus's EXISTING field_skeleton.json into `Question` and `Position` atoms in an atlas, so the ambient \"Field guide\" digest renders from the atlas instead of a parallel JSON file. No extraction, no re-embed, idempotent; --into writes a fixture copy."),
                 ("summary-atoms", "Project the corpus's EXISTING raptor_summaries.lance rows into `Summary` atoms in its atlases, reusing the stored embeddings as seed rows — so the atlas walk reaches summaries instead of a separate injector. No RAPTOR pass, no re-embed, idempotent."),
                 ("code-intel", "Summarize every function in a CODE corpus (plain-English intent + the questions it answers) and index them as searchable chunks — the conceptual->code retrieval bridge."),
                 ("atlas-patch-code", "Incrementally patch a CODE atlas for the functions that changed: refresh summaries, re-derive only those atoms+edges, apply the delta, and rebuild the v2 store (atoms.lance + edges.csr). No full rebuild."),
@@ -240,6 +242,7 @@ pub async fn run_enrich(args: &[String]) -> i32 {
         "investigation" => investigation::cmd_investigation(rest).await,
         "raptor" => raptor::cmd_raptor(rest).await,
         "raptor-index" => raptor_index::cmd_raptor_index(rest).await,
+        "field-atoms" => field_atoms::cmd_field_atoms(rest).await,
         "summary-atoms" => summary_atoms::cmd_summary_atoms(rest).await,
 
         // ── Code intelligence (per-symbol intent summaries -> chunks) ──

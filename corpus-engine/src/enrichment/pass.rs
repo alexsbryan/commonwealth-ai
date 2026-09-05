@@ -24,7 +24,7 @@
 //! |---|---|
 //! | [`EnrichmentPass::runs_at_install`] | `engine/ingest.rs` — run it now, or stamp "deferred" and move on |
 //! | [`EnrichmentPass::deferred_hint`]   | the same site — what to tell the user instead |
-//! | [`EnrichmentPass::declared_artifact`] | `CorpusEngine::enrichment_drift` — is the promised artifact on disk |
+//! | [`EnrichmentPass::declared_artifacts`] | `CorpusEngine::enrichment_drift` — is a promised artifact on disk |
 //! | [`EnrichmentPass::resumable_at_boot`] | `conversation_enrichment_is_resumable` — re-kick after a crash |
 //! | [`EnrichmentPass::produces_atoms`]   | `Recipe::produces_enriched_atoms` — the dashboard readiness lint |
 //! | [`EnrichmentPass::run`]              | `engine/ingest.rs`, for passes that run at install |
@@ -76,12 +76,19 @@ pub trait EnrichmentPass: Send + Sync {
     fn deferred_hint(&self) -> Option<&'static str> {
         None
     }
-    /// The artifact a BUILT enrichment of this type writes, relative to the
-    /// index dir. Drives `enrichment_drift`; `None` means "no single
-    /// verifiable artifact" and drift stays silent rather than asserting
-    /// what it cannot check.
-    fn declared_artifact(&self) -> Option<&'static str> {
-        None
+    /// The artifacts a BUILT enrichment of this type may write, relative to
+    /// the index dir. Drives `enrichment_drift`, which reports drift only when
+    /// NONE of them is on disk; empty means "no verifiable artifact" and drift
+    /// stays silent rather than asserting what it cannot check.
+    ///
+    /// A LIST rather than one path because `field_model` writes a different
+    /// artifact per domain since ei-7b (2026-09-05) — `atlas/atoms.json` for
+    /// an `AtlasAtoms` domain, `field_skeleton.json` for the three
+    /// KnowledgeView ones. Naming only one of the two would have reported
+    /// every corpus on the other arm as drifted: a false alarm indistinguishable
+    /// from a real one.
+    fn declared_artifacts(&self) -> &'static [&'static str] {
+        &[]
     }
     /// May a boot-time resume re-enter this pass mid-flight?
     fn resumable_at_boot(&self) -> bool {
@@ -151,9 +158,15 @@ fn refuse_deferred(pass: &dyn EnrichmentPass) -> Error {
 
 // ── field_model ───────────────────────────────────────────────────────────
 
-/// The legacy field-model pipeline (`FieldModelEngine`): skeleton extraction,
-/// clustering, cluster labelling. Runs at install; writes
-/// `field_skeleton.json`.
+/// The field-model pipeline (`FieldModelEngine`): skeleton extraction,
+/// clustering, cluster labelling. Runs at install; publishes its canonical
+/// questions and their positions into the corpus atlas as `Question` and
+/// `Position` atoms (ei-7b).
+///
+/// Before 2026-09-05 it declared `field_skeleton.json` — a parallel artifact
+/// beside the index with exactly one reader. It declares `atlas/atoms.json`
+/// now, the same artifact the atlas pass declares, because the two write the
+/// same file and a pass that appends atoms is a pass that produces atoms.
 pub struct FieldModelPass;
 
 #[async_trait]
@@ -164,8 +177,13 @@ impl EnrichmentPass for FieldModelPass {
     fn runs_at_install(&self) -> bool {
         true
     }
-    fn declared_artifact(&self) -> Option<&'static str> {
-        Some("field_skeleton.json")
+    fn declared_artifacts(&self) -> &'static [&'static str] {
+        // Two, because the domain decides which: `AtlasAtoms` publishes the
+        // first, `JsonAndLance` the second. See `SkeletonStorage`.
+        &["atlas/atoms.json", "field_skeleton.json"]
+    }
+    fn produces_atoms(&self) -> bool {
+        true
     }
 
     async fn run(&self, ctx: &EnrichmentContext<'_>) -> Result<()> {
@@ -497,8 +515,8 @@ impl EnrichmentPass for AtlasPass {
              then `enrich build <id>` to enrich",
         )
     }
-    fn declared_artifact(&self) -> Option<&'static str> {
-        Some("atlas/atoms.json")
+    fn declared_artifacts(&self) -> &'static [&'static str] {
+        &["atlas/atoms.json"]
     }
     fn produces_atoms(&self) -> bool {
         true
@@ -550,25 +568,25 @@ mod tests {
         let reg = EnrichmentPassRegistry::builtin();
         assert_eq!(reg.ids(), vec![ATLAS, FIELD_MODEL, INVESTIGATION, TIERED]);
 
-        // (id, runs_at_install, declared_artifact, resumable_at_boot, produces_atoms, has_hint)
+        // (id, runs_at_install, declared_artifacts, resumable_at_boot, produces_atoms, has_hint)
         let expected = [
             (
                 FIELD_MODEL,
                 true,
-                Some("field_skeleton.json"),
+                &["atlas/atoms.json", "field_skeleton.json"][..],
                 false,
-                false,
+                true,
                 false,
             ),
-            (TIERED, true, None, true, false, false),
-            (ATLAS, false, Some("atlas/atoms.json"), false, true, true),
-            (INVESTIGATION, false, None, false, true, true),
+            (TIERED, true, &[][..], true, false, false),
+            (ATLAS, false, &["atlas/atoms.json"][..], false, true, true),
+            (INVESTIGATION, false, &[][..], false, true, true),
         ];
         for (id, install, artifact, resumable, atoms, hint) in expected {
             let p = reg.get(id).unwrap_or_else(|| panic!("missing pass: {id}"));
             assert_eq!(p.id(), id);
             assert_eq!(p.runs_at_install(), install, "{id}: runs_at_install");
-            assert_eq!(p.declared_artifact(), artifact, "{id}: declared_artifact");
+            assert_eq!(p.declared_artifacts(), artifact, "{id}: declared_artifacts");
             assert_eq!(p.resumable_at_boot(), resumable, "{id}: resumable_at_boot");
             assert_eq!(p.produces_atoms(), atoms, "{id}: produces_atoms");
             assert_eq!(p.deferred_hint().is_some(), hint, "{id}: deferred_hint");

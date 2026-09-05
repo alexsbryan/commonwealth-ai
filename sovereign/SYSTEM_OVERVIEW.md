@@ -1342,7 +1342,7 @@ Since 2026-09-03 that string resolves through ONE table —
 `atlas`, `investigation`; shape copied from `DomainRegistry`) — and every
 question the pipeline asks about a type is a method on the resolved
 `EnrichmentPass`: `runs_at_install()` (the `'enrichment:` block in
-`engine/ingest.rs` and its no-`InferenceFn` arm), `declared_artifact()`
+`engine/ingest.rs` and its no-`InferenceFn` arm), `declared_artifacts()`
 (`CorpusEngine::enrichment_drift`), `resumable_at_boot()`
 (`conversation_enrichment_is_resumable`), `produces_atoms()`
 (`Recipe::produces_enriched_atoms`), and `run()` for the install-time passes.
@@ -1362,6 +1362,48 @@ means one thing.
   `philosophy`, `multi` (Wikipedia), `personal` / `conversational` /
   `institutional` (KnowledgeView). Legacy but live (KnowledgeView digests,
   full-corpus SEP epistemic flow).
+
+  **Its artifact is the atlas, not a JSON file beside it (ei-7b, 2026-09-05).**
+  The pipeline used to publish `field_skeleton.json` — a parallel artifact
+  with exactly one reader, `turn_prepass::splice_ambient_field_digests`, which
+  spliced a 250-token "Field guide" digest into the system prompt for every
+  scoped corpus. It now publishes `Question` and `Position` atoms into
+  `atlas/atoms.json` (`declared_artifacts()` = `["atlas/atoms.json",
+  "field_skeleton.json"]` — a LIST since the domain decides which, so
+  `enrichment_drift` reports drift only when neither is on disk;
+  `produces_atoms()` = true), and the digest is rendered from those atoms.
+  `enrichment/field_atoms.rs` is the whole port: `skeleton_to_atoms` on the
+  write side, `skeleton_from_atoms` on the read side, `publish_to_atlas` as
+  the one write path both the pipeline and the one-shot
+  `svrn enrich field-atoms <corpus> [--into <corpus>]` migration go through.
+  There is NO second renderer — `skeleton_from_atoms` rebuilds the
+  `FieldSkeleton` view and the existing `FieldSkeleton::render_landscape` does
+  the rest, with the digest text pinned byte-identical across the two sources
+  by `field_atoms::tests::digest_from_atoms_is_byte_identical_to_digest_from_the_v1_file`
+  (ARCH §10.6). The projection writes no ANN seed row, so the walk's seed
+  space is unchanged and a retrieval lane measures the digest move alone.
+  Which of the two a domain publishes is the existing `SkeletonStorage`
+  decider, extended with an `AtlasAtoms` arm: `philosophy` (SEP) takes it;
+  `personal` / `conversational` / `institutional` stay on `JsonAndLance`
+  because their reader is `sovereign-tools::knowledge_view::manager` — its own
+  `format_landscape`, an mtime-keyed digest cache, and a cross-view digest that
+  embeds skeleton content — and moving those three before their reader moves
+  would take three live views dark. So `field_skeleton.json` is still written,
+  by those three domains and only by them; it is no longer written for SEP and
+  no longer read by retrieval. Porting the KnowledgeView reader is the
+  remaining half. The pipeline's phase-1 resume state moved out of the artifact
+  either way, into `_field_skeleton_checkpoint.json`
+  (`CorpusIndex::{write,load}_field_checkpoint`, which falls back to
+  `load_field_skeleton` so an interrupted pre-port run still resumes and a
+  `JsonAndLance` domain still reads its own artifact).
+  `EnrichmentChecker` accepts EITHER signal as "a field model was built here":
+  the v1 `field_questions` LanceDB tables, or an atlas whose census reports
+  `Question` atoms — requiring only the old one would have reported 0%
+  coverage for every corpus enriched after the port. Fields with no home in
+  the atom vocabulary (position proponents, cluster ids, centroid chunk ids,
+  discovery confidence, `primary_entries`) are dropped by the projection and
+  named in `field_atoms`'s module doc; none is read by the digest, and all are
+  read by phase-1 resume, which is why that keeps its own checkpoint.
 - **`atlas` — System 2, `enrichment/pipeline/`** — *per-document* typed
   atom graph (Entity, Claim, Event, Question, Position, Opposition,
   ArgumentReconstruction, Configuration, Asset). `Pipeline` trait +

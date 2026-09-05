@@ -97,7 +97,7 @@ pub use schema_validation::{
 };
 pub use stable_key::StableAtomKey;
 pub use summary::{
-    compute_summary as compute_atlas_summary,
+    compute_summary as compute_atlas_summary, read_current_summary as read_current_atlas_summary,
     read_or_compute_summary as read_or_compute_atlas_summary, AnnSummary, AtlasSummary,
     OntologySummary,
 };

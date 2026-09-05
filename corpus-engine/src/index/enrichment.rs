@@ -509,29 +509,94 @@ impl CorpusIndex {
         self.has_table("field_questions").await
     }
 
-    /// Write a field skeleton JSON file to the index directory.
-    pub fn write_field_skeleton(
+    /// Write the field-model pipeline's own resume checkpoint.
+    ///
+    /// This is NOT a corpus artifact and nothing outside `field_engine.rs`
+    /// reads it. It exists because `FieldModelEngine`'s phase-1 resume needs
+    /// fields the atom vocabulary has no home for (position proponents, cluster
+    /// ids, centroid chunk ids, discovery confidence — see
+    /// `enrichment::field_atoms`), so the pipeline keeps its working state in
+    /// its own file and publishes atoms.
+    pub fn write_field_checkpoint(
         &self,
         skeleton: &crate::enrichment::skeleton::FieldSkeleton,
     ) -> Result<()> {
-        let path = self.path().join("field_skeleton.json");
+        let path = self.path().join(FIELD_CHECKPOINT_FILENAME);
         let json = serde_json::to_string_pretty(skeleton)
             .map_err(|e| Error::Serialization(e.to_string()))?;
         std::fs::write(path, json)?;
         Ok(())
     }
 
-    /// Load the field skeleton JSON file if it exists.
+    /// Read the field-model pipeline's resume checkpoint, falling back to a
+    /// `field_skeleton.json` when no checkpoint exists.
+    ///
+    /// The fallback is what lets an interrupted pre-ei-7b run resume after the
+    /// upgrade instead of restarting phase 1 from nothing, and it is also the
+    /// right read for a `JsonAndLance` domain, whose artifact IS that file.
+    pub fn load_field_checkpoint(
+        &self,
+    ) -> Result<Option<crate::enrichment::skeleton::FieldSkeleton>> {
+        match read_skeleton_json(&self.path().join(FIELD_CHECKPOINT_FILENAME))? {
+            Some(s) => Ok(Some(s)),
+            None => self.load_field_skeleton(),
+        }
+    }
+
+    /// Write the field skeleton JSON artifact.
+    ///
+    /// The terminal artifact of a `SkeletonStorage::JsonAndLance` domain only
+    /// — the three KnowledgeView domains, whose reader
+    /// (`sovereign-tools::knowledge_view::manager`) has not been ported. A
+    /// `SkeletonStorage::AtlasAtoms` domain publishes atoms instead and never
+    /// reaches here (ei-7b).
+    pub fn write_field_skeleton(
+        &self,
+        skeleton: &crate::enrichment::skeleton::FieldSkeleton,
+    ) -> Result<()> {
+        let path = self.path().join(FIELD_SKELETON_FILENAME);
+        let json = serde_json::to_string_pretty(skeleton)
+            .map_err(|e| Error::Serialization(e.to_string()))?;
+        std::fs::write(path, json)?;
+        Ok(())
+    }
+
+    /// Load the field skeleton JSON artifact if it exists.
+    ///
+    /// Readers: the KnowledgeView manager and its cross-view digest, the
+    /// desktop budget probe, `sovereign-tools::epistemic`, the one-shot
+    /// `enrich field-atoms` migration, and [`Self::load_field_checkpoint`]'s
+    /// fallback. For an `AtlasAtoms` domain this file is a pre-ei-7b leftover
+    /// and the live field model is in the atlas.
     pub fn load_field_skeleton(
         &self,
     ) -> Result<Option<crate::enrichment::skeleton::FieldSkeleton>> {
-        let path = self.path().join("field_skeleton.json");
-        if !path.exists() {
-            return Ok(None);
-        }
-        let raw = std::fs::read_to_string(&path)?;
-        let skeleton = serde_json::from_str(&raw)
-            .map_err(|e| Error::Serialization(format!("Bad field_skeleton.json: {e}")))?;
-        Ok(Some(skeleton))
+        read_skeleton_json(&self.path().join(FIELD_SKELETON_FILENAME))
     }
+}
+
+/// The field-model pipeline's resume checkpoint. Named `_`-prefixed like every
+/// other working file in an index directory (`_enrichment_state.json`,
+/// `_enrichment_checkpoint.json`, `_raptor_checkpoint/`).
+///
+/// It is separate from [`FIELD_SKELETON_FILENAME`] because until ei-7b the
+/// working state and the published artifact were the SAME file, which is how
+/// one pipeline's checkpoint ended up being read at retrieval time by
+/// `turn_prepass::splice_ambient_field_digests`.
+pub const FIELD_CHECKPOINT_FILENAME: &str = "_field_skeleton_checkpoint.json";
+
+/// The field-model JSON artifact. Written only by `JsonAndLance` domains.
+pub const FIELD_SKELETON_FILENAME: &str = "field_skeleton.json";
+
+fn read_skeleton_json(
+    path: &std::path::Path,
+) -> Result<Option<crate::enrichment::skeleton::FieldSkeleton>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let raw = std::fs::read_to_string(path)?;
+    let skeleton = serde_json::from_str(&raw).map_err(|e| {
+        Error::Serialization(format!("Bad field skeleton at {}: {e}", path.display()))
+    })?;
+    Ok(Some(skeleton))
 }

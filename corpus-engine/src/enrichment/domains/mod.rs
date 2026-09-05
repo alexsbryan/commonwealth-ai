@@ -7,7 +7,7 @@ pub mod philosophy;
 
 #[cfg(test)]
 mod tests {
-    use crate::enrichment::domain::Domain;
+    use crate::enrichment::domain::{Domain, SkeletonStorage};
     use crate::enrichment::domains::business_email::BusinessEmailDomain;
     use crate::enrichment::domains::conversational::ConversationalDomain;
     use crate::enrichment::domains::institutional::InstitutionalDomain;
@@ -67,5 +67,44 @@ mod tests {
         assert_eq!(delegated.max_cluster_points, inner.max_cluster_points);
         assert_eq!(delegated.reduced_dims, inner.reduced_dims);
         assert_eq!(delegated.min_cluster_size, inner.min_cluster_size);
+    }
+
+    /// The one table, pinned: where each built-in domain publishes its field
+    /// model. A domain that moves to `AtlasAtoms` without its digest reader
+    /// moving takes that reader's views dark, and a domain left on
+    /// `JsonAndLance` after its reader moves goes dark the other way — neither
+    /// failure raises anything at runtime, both are silent, so the pairing is
+    /// asserted here rather than remembered (ARCH §7).
+    ///
+    /// | Domain | Storage | Who reads the digest |
+    /// |---|---|---|
+    /// | `philosophy` | `AtlasAtoms` | `turn_prepass::splice_ambient_field_digests`, from the atlas |
+    /// | `personal` / `conversational` / `institutional` | `JsonAndLance` | `sovereign-tools::knowledge_view::manager`, from `field_skeleton.json` |
+    /// | `business_email` | delegates to `conversational` | as above |
+    #[test]
+    fn each_domain_publishes_where_its_digest_reader_looks() {
+        assert!(
+            matches!(
+                PhilosophyDomain.skeleton_storage(),
+                SkeletonStorage::AtlasAtoms
+            ),
+            "philosophy's digest is rendered from the atlas (ei-7b)"
+        );
+        for (name, storage) in [
+            ("personal", PersonalDomain.skeleton_storage()),
+            ("conversational", ConversationalDomain.skeleton_storage()),
+            ("institutional", InstitutionalDomain.skeleton_storage()),
+        ] {
+            assert!(
+                matches!(storage, SkeletonStorage::JsonAndLance),
+                "{name} is a KnowledgeView domain — its reader has not been ported, \
+                 so moving it to AtlasAtoms takes that view dark"
+            );
+        }
+        // The delegating domain inherits rather than minting a third answer.
+        assert!(matches!(
+            BusinessEmailDomain::new().skeleton_storage(),
+            SkeletonStorage::JsonAndLance
+        ));
     }
 }

@@ -120,7 +120,7 @@ impl FieldModelEngine {
             });
             // Reload skeleton from file
             index
-                .load_field_skeleton()?
+                .load_field_checkpoint()?
                 .map(|s| {
                     let mut ps = PartialSkeleton::new(self.domain.id());
                     for q in &s.canonical_questions {
@@ -336,9 +336,16 @@ impl FieldModelEngine {
         // state the truth.
         let stats = FieldModelStats::default();
 
-        // Write JSON skeleton if the domain requests it.
-        if let SkeletonStorage::JsonAndLance = self.domain.skeleton_storage() {
-            self.write_json_skeleton(index, &skeleton, &stats, &open_questions)?;
+        // Publish the field model where this domain's reader looks for it.
+        // `LanceOnly` publishes neither — its stats are the artifact.
+        match self.domain.skeleton_storage() {
+            SkeletonStorage::AtlasAtoms => {
+                self.publish_skeleton_atoms(index, &skeleton, &stats, &open_questions)?
+            }
+            SkeletonStorage::JsonAndLance => {
+                self.write_json_skeleton(index, &skeleton, &stats, &open_questions)?
+            }
+            SkeletonStorage::LanceOnly => {}
         }
 
         // Clear checkpoint — clean completion.
@@ -488,7 +495,7 @@ impl FieldModelEngine {
         let resume_from = checkpoint.phase_1_batches_done;
         let mut skeleton = if resume_from > 0 {
             // Load the partial skeleton that was flushed to disk.
-            let existing = index.load_field_skeleton()?;
+            let existing = index.load_field_checkpoint()?;
             let loaded = existing
                 .map(|fs| {
                     let mut ps = PartialSkeleton::new(self.domain.id());
@@ -672,7 +679,7 @@ impl FieldModelEngine {
             open_questions: Vec::new(),
             field_stats: FieldModelStats::default(),
         };
-        index.write_field_skeleton(&field_skeleton)
+        index.write_field_checkpoint(&field_skeleton)
     }
 
     async fn label_clusters_phase(
@@ -778,14 +785,20 @@ impl FieldModelEngine {
         Ok(clusters)
     }
 
-    fn write_json_skeleton(
+    /// Build the complete field skeleton the terminal step publishes.
+    ///
+    /// ONE builder for both storage arms (ARCH §10.6): before ei-7b the
+    /// partial-checkpoint writer and the terminal writer each assembled this
+    /// struct from `PartialSkeleton` with their own copy of the mapping, and
+    /// the two drifted on `open_questions`.
+    fn complete_skeleton(
         &self,
         index: &CorpusIndex,
         skeleton: &PartialSkeleton,
         stats: &FieldModelStats,
         open_questions: &[OpenQuestion],
-    ) -> Result<()> {
-        let field_skeleton = FieldSkeleton {
+    ) -> FieldSkeleton {
+        FieldSkeleton {
             schema_version: 1,
             corpus_id: index.corpus_id().to_string(),
             generated_at: chrono::Utc::now().to_rfc3339(),
@@ -810,9 +823,65 @@ impl FieldModelEngine {
                 .map(open_question_to_skeleton)
                 .collect(),
             field_stats: stats.clone(),
-        };
+        }
+    }
 
+    /// `SkeletonStorage::AtlasAtoms` — publish the field model into the corpus
+    /// atlas (ei-7b).
+    ///
+    /// The published artifact is the atlas, not a JSON file beside it.
+    /// `field_atoms` owns both the projection onto the atom vocabulary and the
+    /// write; `turn_prepass::splice_ambient_field_digests` reads the atoms back
+    /// through the inverse projection and renders the same digest.
+    fn publish_skeleton_atoms(
+        &self,
+        index: &CorpusIndex,
+        skeleton: &PartialSkeleton,
+        stats: &FieldModelStats,
+        open_questions: &[OpenQuestion],
+    ) -> Result<()> {
+        let field_skeleton = self.complete_skeleton(index, skeleton, stats, open_questions);
+        let atlas_dir = index.path().join(crate::enrichment::atlas::ATLAS_DIRNAME);
+        let published =
+            crate::enrichment::field_atoms::publish_to_atlas(&atlas_dir, &field_skeleton).map_err(
+                |e| {
+                    Error::Serialization(format!(
+                        "field model: could not publish atoms to {}: {e}",
+                        atlas_dir.display()
+                    ))
+                },
+            )?;
+        tracing::info!(
+            corpus = %index.corpus_id(),
+            domain = %self.domain.id(),
+            questions = field_skeleton.canonical_questions.len(),
+            open_questions = field_skeleton.open_questions.len(),
+            report = %published.describe(),
+            "field model: published the field skeleton as atlas atoms"
+        );
+        Ok(())
+    }
+
+    /// `SkeletonStorage::JsonAndLance` — write `field_skeleton.json`.
+    ///
+    /// The pre-ei-7b path, kept for the three KnowledgeView domains whose
+    /// reader has not been ported. See `SkeletonStorage::JsonAndLance`.
+    fn write_json_skeleton(
+        &self,
+        index: &CorpusIndex,
+        skeleton: &PartialSkeleton,
+        stats: &FieldModelStats,
+        open_questions: &[OpenQuestion],
+    ) -> Result<()> {
+        let field_skeleton = self.complete_skeleton(index, skeleton, stats, open_questions);
         index.write_field_skeleton(&field_skeleton)?;
+        tracing::info!(
+            corpus = %index.corpus_id(),
+            domain = %self.domain.id(),
+            questions = field_skeleton.canonical_questions.len(),
+            open_questions = field_skeleton.open_questions.len(),
+            "field model: wrote field_skeleton.json"
+        );
         Ok(())
     }
 }
@@ -898,7 +967,7 @@ pub fn reprocess_skeleton_failures(index: &CorpusIndex) -> Result<(usize, usize)
 
     if salvaged_count > 0 {
         // Load existing skeleton and merge.
-        if let Some(mut existing) = index.load_field_skeleton()? {
+        if let Some(mut existing) = index.load_field_checkpoint()? {
             for q in &salvaged_questions {
                 // Check for duplicate question IDs before merging.
                 if let Some(existing_q) = existing
@@ -927,7 +996,7 @@ pub fn reprocess_skeleton_failures(index: &CorpusIndex) -> Result<(usize, usize)
                 }
             }
             existing.generated_at = chrono::Utc::now().to_rfc3339();
-            index.write_field_skeleton(&existing)?;
+            index.write_field_checkpoint(&existing)?;
             tracing::info!(
                 salvaged = salvaged_count,
                 total_questions = existing.canonical_questions.len(),
