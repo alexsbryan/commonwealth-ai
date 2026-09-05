@@ -2469,6 +2469,42 @@ came from is still decided upstream by `locate_quote_in_chunks` (the seal is
 narrowed to that member before the kernel door sees it). What is new is that a
 drop is a named `Refused` value on `grounding.seal` rather than a `None`
 vanishing inside a `filter_map`.
+**The citation stage's support decider is the gate's own judge as of
+2026-09-04** (order `citation-decider-structural`). `citation.rs` grounds a
+`(quote, answer)` pair on two rules. The quote must be verbatim in the passages
+(`locate_quote_in_chunks`, unchanged). Whether the ANSWER is supported is now
+decided by `judge::claim_chunk_support` — the calibrated forced-choice A/B
+register `verify_grounding`'s per-claim loop runs and the bench faithfulness
+lane shares — asked against the MATCHED CHUNK (`evidence_for`) and compared in
+the audit's own terms: `violation_prob = 1 - support`, released iff
+`< profile.tau`. There is no second threshold, and the ~60-line
+`answer_supported_by_quote` it replaces is DELETED with its stop list. That
+check was a conjunction over every ≥2-char non-stop word of the answer, so it
+refused a CORRECT paraphrase whenever the answer carried a connective or a
+morphological variant — its pass probability decayed with answer LENGTH — and
+`multiquote_outcome` then wrote the verification failure up as "The passages do
+not answer: <part>", a claim about the corpus the check never tested (issue
+#57, notes `7a8a2e97` / `afd0ea0d`; `a4f8f2a95` quarantined the sentence, this
+change removes the check). Measured on the resident primary over the same
+pairs, 2026-09-04: the #57 paraphrase scores 0.9993 support where the
+conjunction refused it, while the embassy confabulation (0.0043) and an
+out-of-corpus control (0.0000) are refused exactly as before — one verdict
+changed, in one direction (§18.6). **The exact-value rule survives as a VETO,
+in code** (§7.6): `numeric_veto` refuses a pair whose answer carries a complete
+number token the evidence does not, runs BEFORE the probe, and may only refuse
+— no probe verdict licenses a number the evidence lacks. **Truncation is
+reported, never silent:** `build_passages` returns how many chunks
+`PASSAGE_CHAR_BUDGET` (28,000) kept out of the window, that count rides the
+release as `grounding_gate.evidence_window_dropped`, and a part whose absence
+coincides with dropped evidence is could-not-judge — the turn falls through to
+the audit ladder rather than asserting an absence over evidence nobody looked
+at (§18.3). A probe that returns no verdict is the same could-not-judge,
+fail-open. **The path selector is a budget, not a cliff:**
+`profile.longform_chars` (1,800) decides whether a draft takes the citation
+contract or the audit ladder, and
+`the_longform_pivot_changes_the_route_and_not_the_holding` pins that the same
+content at 1,799 and 1,801 characters releases the same holding and differs
+only in `mode` (`single_claim` vs `per_claim`).
 **Per-turn STACK ATTRIBUTION — the strip that says which system spent the
 turn (G4, 2026-08-12).** `NATIVE_GROUNDING_ECONOMY.md` §3.4 named G4 ("the
 system can tell what it decided and why") as a function no stage owned, on
@@ -6760,7 +6796,7 @@ every chaos bank on disk.
 | Multi-embed-model dispatch | `commonwealth-api/src/routes_inference.rs` | `/v1/embeddings` ignores the `model` field; gated on a second production embed model. |
 | `embed_batch` | `commonwealth-api/src/routes_inference.rs` | Inputs fan out one at a time; gated on a backend that batches more efficiently. |
 | Knowledge replica fanout | `commonwealth-api/src/routes_knowledge.rs` | Knowledge fan-out only hits non-hosted corpora today; gated on merge-dedupe hardening. |
-| mesh_store gossip replication | `commonwealth-api/src/routes_internal/` | Gossip replicates the `Mesh` member list only. The `POST /internal/app/state` receiver exists (`routes_app_internal::recv_app_state`) and explicit peer push at queue-handoff time uses it; the periodic gossip *sender* is still missing (`all_entries_for_gossip` remains test-only). |
+| mesh_store gossip replication | `commonwealth-api/src/routes_internal/` | Gossip replicates the `Mesh` member list only. The `POST /internal/app/state` receiver exists (`routes_app_internal::recv_app_state`) and explicit peer push at queue-handoff time uses it. **The periodic sender EXISTS** — `gossip.rs:799` Step 4, a full-snapshot anti-entropy push on the 10 s round; `all_entries_for_gossip` has not been test-only since it landed. It is scheduled for deletion by cw-lift rung 2e, which is why the count of senders (3 today: this push, the ring digest, and `broadcast_now`'s single-entry POST) is the twin census's instrument. Note `FANOUT = 2` governs Steps 1-3 only — Step 4 hits EVERY online peer (`gossip.rs:859-867`), so a bandwidth model built on `FANOUT` understates it by N/2. |
 | Mesh Health attach-mode HTTP | `commonwealth-api/src/state.rs` + `sovereign-desktop/src-tauri/src/mesh_commands.rs` | Local-mode UI works; `mesh_get_contributions` now fetches `GET /internal/contribution/view` in attach mode. Remaining: `mesh_set_peer_preference` returns an explicit "not exposed over the daemon HTTP API in Attach mode" error — the set/clear route is still missing. |
 | ATOS middleware no-op fall-through | `commonwealth-api/src/routes_inference.rs` | When no session store is configured, the ATOS pipeline degrades to legacy routing. By design; operators should expect the silent fall-through. |
 

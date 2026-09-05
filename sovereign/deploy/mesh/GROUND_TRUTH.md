@@ -161,8 +161,11 @@ both files owe a fix in the same commit (§1.1).
   (`work_queue.rs:70-73`) is never constructed; merge treats an empty model stamp as a wildcard
   (`sharding.rs:632-641`); the re-embed sample check is report-only (`shard_manager.rs:749-792`).
 - Queue discovery: the coordinator unicasts the handoff blob to embed-compatible candidates via
-  `POST /internal/app/state` (`corpus_collaborate.rs:572-657`) because mesh_store gossip's sender
-  half is missing; peers also scan `mesh_store` on a 30s tick (`auto_ingest.rs:653`). Incidental
+  `POST /internal/app/state` (`corpus_collaborate.rs:572-657`); peers also scan `mesh_store` on a
+  30s tick (`auto_ingest.rs:653`). **Corrected 2026-09-04: the "sender half is missing" reason given
+  here is false** — `gossip.rs:799` (Step 4) has been a periodic full-snapshot sender on the 10 s
+  round. The unicast is a latency shortcut, not a substitute for an absent sender, and BOTH are
+  senders of replicated state that cw-lift rung 2e is deleting. Incidental
   find: `recv_app_state`'s `base64_decode` is a stub that treats `value_b64` as raw UTF-8
   (`routes_app_internal.rs:101-105`).
 

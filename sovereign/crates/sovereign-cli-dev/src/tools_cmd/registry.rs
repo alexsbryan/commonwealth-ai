@@ -208,11 +208,15 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
             .declared(),
     ));
     // Work atlas — coordination layer for agents sharing the repo.
-    // Best-effort: the canonical mesh.db (the same one the daemon
-    // writes to) lives at `.sovereign/mesh.db`. Falling back to
-    // in-memory keeps the CLI usable in a fresh checkout, with the
-    // understanding that nothing the CLI writes will be visible to
-    // a separately-running daemon.
+    // Best-effort: `.sovereign/mesh.db` is the REPO-LOCAL atlas, and
+    // it is NOT the store a running daemon writes — that is the whole
+    // reason the note four lines down is true. `code_cmd.rs:1825` has
+    // the right framing (a fallback for when the daemon is down);
+    // this comment claimed the opposite and then contradicted itself
+    // in its own last sentence. Falling back to in-memory keeps the
+    // CLI usable in a fresh checkout, with the understanding that
+    // nothing the CLI writes here is visible to a separately-running
+    // daemon.
     let mesh_db = sovereign_dir.join("mesh.db");
     if let Some(parent) = mesh_db.parent() {
         let _ = std::fs::create_dir_all(parent);
