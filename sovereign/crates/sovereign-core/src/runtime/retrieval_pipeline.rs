@@ -3199,60 +3199,11 @@ mod tests {
     }
 }
 
+/// The three tests that answer "does the atlas step reach a wiki-class
+/// store?" — the step list here, and the step's returned `StepLedger` over
+/// a real wiki fixture. A sibling file because they need a `Runtime` and
+/// sovereign-tools' `AtlasContextManager`, and this file is already past
+/// the size ratchet (ARCH §3.1).
 #[cfg(test)]
-mod atlas_step_reachability_tests {
-    use super::*;
-
-    /// THE ATLAS STEP IS IN EVERY PIPELINE THAT SEARCHES A CORPUS.
-    ///
-    /// Written while chasing why a `--prod-pipeline` wikipedia eval showed no
-    /// atlas contribution. The hypothesis on the table was that a pipeline-level
-    /// predicate skips the step for a wiki-class corpus before
-    /// `apply_atlas_grounding` is ever called. This pins the half of that
-    /// question that can be answered without a Runtime: whether the step is in
-    /// the list at all. It is, for both pipelines `retrieve_evidence`
-    /// dispatches to (`kq_pipeline` for KnowledgeQuery / ComparisonQuery,
-    /// `deep_pipeline` for DeepQuery), and it is in `shared_core_steps` so
-    /// neither can drop it by drifting apart.
-    ///
-    /// What this test does NOT establish, said plainly so nobody reads more
-    /// into a green: that the step's body runs, or that it reaches a store.
-    /// Those need the step's returned `StepLedger`, not its name.
-    #[test]
-    fn atlas_grounding_is_in_every_corpus_searching_pipeline() {
-        for (name, steps) in [
-            ("kq", kq_pipeline().step_names()),
-            ("deep", deep_pipeline(true).step_names()),
-        ] {
-            assert!(
-                steps.contains(&"atlas_grounding"),
-                "{name}: atlas_grounding must be in the pipeline — a corpus \
-                 search that cannot reach the atlas grounds nothing, and the \
-                 absence is invisible from outside"
-            );
-        }
-    }
-
-    /// The ONE legitimate omission, pinned so it stays the only one.
-    ///
-    /// `deep_pipeline(false)` is the attached-doc turn: no corpus search, so no
-    /// pool to seed from and no query embedding computed. Dropping the step
-    /// there is deliberate (see the doc comment on `deep_pipeline`). Pinning it
-    /// means a future change that drops `atlas_grounding` from a SEARCHING
-    /// pipeline cannot hide behind "it was already conditional".
-    #[test]
-    fn the_only_pipeline_without_atlas_grounding_is_the_one_without_corpus_search() {
-        let without = deep_pipeline(false).step_names();
-        assert!(
-            !without.contains(&"atlas_grounding"),
-            "attached-doc turns intentionally drop atlas grounding"
-        );
-        // And it is dropped for the stated reason — the corpus head is gone
-        // too, not just the grounding step.
-        assert!(
-            !without.contains(&"raptor_grounding_early"),
-            "the same no-corpus-search condition drops the RAPTOR early inject; \
-             if these two ever diverge the reason given here is stale"
-        );
-    }
-}
+#[path = "retrieval_pipeline/atlas_step_reachability_tests.rs"]
+mod atlas_step_reachability_tests;

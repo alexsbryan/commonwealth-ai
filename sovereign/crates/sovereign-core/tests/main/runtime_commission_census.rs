@@ -293,8 +293,9 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
 }
 
 /// Production CODE only: everything from the first `#[cfg(test)]` onward is
-/// dropped, files that are wholly test modules are skipped by their path, and
-/// comments are stripped.
+/// dropped, files that are wholly test modules are skipped by their path
+/// (`tests.rs` / `*_tests.rs` — see [`files_containing`]), and comments are
+/// stripped.
 ///
 /// Comments are stripped for the reason `daemon_variant_census` learned by
 /// sabotage on 2026-08-25 — prose about an invariant satisfying the check FOR
@@ -337,9 +338,25 @@ fn files_containing(matches: impl Fn(&str) -> usize) -> Vec<String> {
     rust_files(&root, &mut files);
     let mut hits = Vec::new();
     for f in files {
-        // `http_tests.rs` is a `#[cfg(test)]` module included from a binary's
-        // `main.rs`; `production_source` cannot see that from inside the file.
-        if f.file_name().and_then(|n| n.to_str()) == Some("http_tests.rs") {
+        // A `#[cfg(test)]` module carved into its own file: the gate is on the
+        // `mod` DECLARATION in the parent, so `production_source` cannot see it
+        // from inside the file and every line reads as production.
+        //
+        // The name is the only signal available from in here, and the repo
+        // already has a convention for it — `tests.rs` beside the module it
+        // tests (`wiki_store/tests.rs`), or `<subject>_tests.rs`
+        // (`sovereign-server`'s `http_tests.rs`). Both are matched, because
+        // this exclusion was a single hardcoded filename until the second such
+        // file appeared and was reported as a new Runtime host
+        // (`retrieval_pipeline/atlas_step_reachability_tests.rs`, a walk test
+        // that builds a fake Runtime). A rule with one member is a special
+        // case wearing a rule's doc comment.
+        //
+        // This does not widen what the census can miss: a production file is
+        // never named `tests.rs`, and `production_source` still truncates every
+        // ordinary inline `#[cfg(test)] mod tests`.
+        let name = f.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if name == "tests.rs" || name.ends_with("_tests.rs") {
             continue;
         }
         let Ok(src) = std::fs::read_to_string(&f) else {
