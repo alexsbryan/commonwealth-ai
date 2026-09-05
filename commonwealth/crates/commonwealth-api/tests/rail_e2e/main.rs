@@ -654,7 +654,6 @@ async fn a_node_without_ring_storage_refuses_the_exchange() {
     assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
 
-
 // The convergence ceiling and the byte budget that ended it live in their
 // own module: this suite crossed ARCH §3.2's 1200-line ceiling when rung 2f
 // landed the chunking tests. Split rather than re-baselined, and kept as ONE
