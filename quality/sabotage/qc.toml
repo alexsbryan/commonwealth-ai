@@ -1,0 +1,61 @@
+# qc.toml — falsifiers for `svrn quality check`'s own lanes.
+#
+# SAME SCHEMA as every other bank here (see `seed.toml:1-24`), and one
+# difference that matters: **`mustFail` names a quality-check LANE ROW, not a
+# nextest test.** `scripts/sabotage.py` runs `cargo nextest`, finds no test by
+# that name, and reports COULD-NOT-JUDGE — which is the correct verdict for a
+# killer it cannot reach, and the reason these mutants live in their own bank
+# rather than polluting one the driver is pointed at.
+#
+# The killer is a live daemon lane because the thing under test is only
+# observable there. Nothing in the workspace's 8,400 tests reads the
+# `stage_attribution` seal at its streaming call sites: the projection test
+# `a_turn_that_opened_no_ledger_has_no_stage_attribution_key` covers the
+# PROJECTION (does an absent ledger stay absent on the wire), and
+# `stage_ledger::records_only_inside_a_scope` covers the LEDGER (does a
+# scope-less seal return None). Neither covers "the daemon, serving a real
+# turn, put the ledger on the message" — which is exactly the claim the
+# chat-ask lane's `ledger present` row makes, and exactly what these mutants
+# take away.
+#
+# ── Running one, by hand ────────────────────────────────────────────
+#
+#   1. Apply BOTH mutants below (they are the two call sites; a turn reaches
+#      one or the other depending on route, so suppressing one leaves the
+#      other answering).
+#   2. cargo build --workspace --features corpus-engine/treesitter
+#   3. sovereign daemon stop && sovereign daemon start     # the daemon runs the runtime
+#   4. svrn quality check --lane chat-ask
+#      EXPECT: `ledger present` = could-not-judge, and every row that reads
+#      the ledger (route, per-stage ceilings, per-stage baseline) with it.
+#      NEVER a pass — an absent ledger is not evidence that the turn was fast.
+#   5. git checkout sovereign/crates/sovereign-core/src/runtime/streaming.rs
+#   6. rebuild + restart, and re-run to confirm the lane comes back.
+#
+# The two `find` strings are byte-identical in their call expression — the
+# three lines `"stage_attribution": crate::runtime::stage_ledger::seal_ambient(
+# … )` occur TWICE in this file — so each anchors on the comment line above
+# it, which differs by one word between the sites ("did not open a ledger" vs
+# "opened no ledger"). Anchoring on the call alone yields n == 2 and STALE.
+
+[[mutant]]
+id = "qc-ledger-suppressed-knowledge-stream"
+requirement = "quality-check/chat-ask#ledger-present"
+target = "sovereign/crates/sovereign-core/src/runtime/streaming.rs"
+find = "                // any surface that did not open a ledger — never an empty\n                // ledger, so \"not measured\" stays distinguishable from\n                // \"measured, nothing to report\". DISPLAY ONLY.\n                \"stage_attribution\": crate::runtime::stage_ledger::seal_ambient(\n                    turn_started.elapsed().as_millis() as u64,\n                ),"
+replace = "                // SABOTAGE: the seal is suppressed. The key stays, the\n                // ledger does not.\n                \"stage_attribution\": Option::<sovereign_contracts::types::TurnStageLedger>::None,"
+mustFail = ["quality-check:chat-ask/ledger present"]
+breaks = "The KnowledgeQuery stream MUST persist the turn's stage ledger on the message metadata, so a lane can assert what the turn DID rather than how its answer reads."
+userImpact = "Per-stage latency becomes unobservable: a turn that spends 60 s in the citation pass looks identical to one that spends 7 s, and the ceiling that would have caught it has nothing to read."
+expected = "CAUGHT"
+
+[[mutant]]
+id = "qc-ledger-suppressed-reasoning-stream"
+requirement = "quality-check/chat-ask#ledger-present"
+target = "sovereign/crates/sovereign-core/src/runtime/streaming.rs"
+find = "                // any surface that opened no ledger — never an empty\n                // ledger, so \"not measured\" stays distinguishable from\n                // \"measured, nothing to report\". DISPLAY ONLY.\n                \"stage_attribution\": crate::runtime::stage_ledger::seal_ambient(\n                    turn_started.elapsed().as_millis() as u64,\n                ),"
+replace = "                // SABOTAGE: the seal is suppressed. The key stays, the\n                // ledger does not.\n                \"stage_attribution\": Option::<sovereign_contracts::types::TurnStageLedger>::None,"
+mustFail = ["quality-check:chat-ask/ledger present"]
+breaks = "The DeepQuery / reasoning stream MUST persist the turn's stage ledger on the message metadata. This is the site the chat-ask lane's own questions reach, since both route DeepQuery."
+userImpact = "As above, on the route the focus lane actually takes."
+expected = "CAUGHT"
