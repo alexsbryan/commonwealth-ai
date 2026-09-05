@@ -209,7 +209,7 @@ impl Server {
             },
             {
                 "name": "corpus_list",
-                "description": "List the corpora this host serves: index width, whether vector search is live, whether an atlas (atoms.json) is present and how many atoms it holds, and whether the corpus declared an ontology.",
+                "description": "List the corpora this host serves: index width, whether vector search is live, whether an atlas (atoms.json) is present and how many atoms it holds, and whether the corpus declared an ontology. Also reports the inference endpoint in use and, when it was discovered rather than named, what every candidate that was tried said.",
                 "inputSchema": { "type": "object", "properties": {} }
             },
             {
@@ -302,10 +302,53 @@ impl Server {
             })
             .collect::<Vec<_>>()
             .join("\n");
+        // The endpoint discovery ladder, reported HERE and not only at boot
+        // (order ei-6-distribution; ARCH §18.3 "absence is reported"). A
+        // person whose Ollama is stopped is looking at their chat app, not at
+        // this host's stderr — so `corpus_list` carries what each rung said,
+        // in ladder order, and names the one that won.
+        let probes: Vec<Value> = self
+            .profile
+            .attempts
+            .iter()
+            .map(|a| {
+                json!({
+                    "candidate": a.label,
+                    "url": a.url,
+                    "reachable": a.reachable(),
+                    "finding": a.finding(),
+                })
+            })
+            .collect();
+        let probe_text = if probes.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "\n\nendpoint ({} in use):\n{}",
+                self.profile.base_url,
+                self.profile
+                    .attempts
+                    .iter()
+                    // ONE renderer for a rung, shared with the boot line and
+                    // the refusal text (ARCH §10.6).
+                    .map(|a| format!("  {}", a.line()))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+        };
         ToolOutcome {
-            text,
+            text: format!("{text}{probe_text}"),
             is_error: false,
-            structured: Some(json!({ "corpora": rows })),
+            structured: Some(json!({
+                "corpora": rows,
+                "endpoint": {
+                    "base_url": self.profile.base_url,
+                    "embed_model": self.profile.embed_model,
+                    "embedding_dimensions": self.profile.embed_dims,
+                    "kind": self.profile.kind.label(),
+                    "discovery": probes,
+                }
+            })),
         }
     }
 

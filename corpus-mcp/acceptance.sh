@@ -26,9 +26,26 @@
 #      This leg is the SLOW one (a live model over ~20 chapters), so it is
 #      opt-in via ACCEPT_INGEST=1 and reports NEVER-RAN by name otherwise
 #      (ARCH §18.2) rather than being silently absent.
+#   3d. pull-if-absent — `corpus serve --corpus sep` on a COLD, isolated data
+#      root installs the corpus from its prebuilt HF snapshot and then serves
+#      a cited answer out of it. ~875 MB of egress, so opt-in via ACCEPT_PULL=1
+#      and NEVER-RAN by name otherwise (ARCH §18.2);
 #   4. the dep tree, asserted free of llama.cpp / ort / iroh.
 #
-# Env: EMBED_GGUF (default sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf),
+# Steps 0 and 0b run BEFORE any model loads, because neither needs one:
+#   0.  `corpus recipe new` — the FIRST of §4's three commands: it scaffolds
+#      from the numismatics template, substitutes --id, leaves the source path
+#      for the author, and refuses to overwrite. Then the endpoint discovery
+#      ladder (order ei-6-distribution): every rung named whichever way it
+#      goes, and a `--base-url` that does not answer REFUSED rather than
+#      swapped for one that does (ARCH §18.3);
+#   0b. Ollama — §4's default shape. Reported PASS or COULD-NOT-RUN by name,
+#      never skipped; where it runs, the embedding-width question §7 step 6
+#      asks is answered from the real index.
+#
+# Env: OLLAMA_URL (default http://localhost:11434/v1), ACCEPT_PULL / PULL_ROOT /
+#      PULL_CORPUS (the cold-root pull leg),
+#      EMBED_GGUF (default sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf),
 #      PORT (8089), CORPUS (sep), ATLAS_CORPUS (sep-freewill),
 #      ONTOLOGY_CORPUS (wessex-hoard — a corpus that DECLARED types; SEP
 #      declares none, so the ontology read is judged on this one and reported
@@ -48,6 +65,13 @@ ATLAS_CORPUS="${ATLAS_CORPUS:-sep-freewill}"
 ONTOLOGY_CORPUS="${ONTOLOGY_CORPUS:-wessex-hoard}"
 DATA_ROOT="${SOVEREIGN_DATA_DIR:-$HOME/.svrnmesh}"
 CORPUS_MCP="${CORPUS_MCP:-target/debug/corpus-mcp}"
+# Resolved ONCE, absolute: the `recipe new` leg runs in a scratch directory
+# (the scaffold must not land in the repo) and a relative path would not
+# survive the `cd`. Done here so there is one spelling of "the binary".
+[[ "$CORPUS_MCP" = /* ]] || CORPUS_MCP="$repo/$CORPUS_MCP"
+# Ollama's OpenAI-compatible surface — the first rung of the discovery ladder
+# and the shape §4's commands are written for. Probed, never assumed.
+OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434/v1}"
 # Every corpus the `ask` step runs on; each one not installed here is
 # reported COULD-NOT-JUDGE rather than skipped silently. wessex-hoard is
 # §6 row 3's own fixture (declared types, an ontology.json, near-full seed
@@ -96,6 +120,102 @@ for tool in jq python3; do
   command -v "$tool" >/dev/null \
     || fail "$tool not on PATH — the truth.json recall leg needs it, and this refuses now rather than after the ingest"
 done
+
+# ── 0. the three commands, and the ladder — no model needed ─────────────────
+#
+# EPISTEMIC_INDEX.md §4 is `recipe new` -> `ingest` -> `serve`, and the first
+# and third of those are judged here because neither needs an endpoint. They
+# run FIRST for that reason: a broken verb should cost a second, not the
+# minutes it takes llama-server to load (ARCH §18.4, validate the instrument
+# before the result).
+
+scaffold_dir="$work/scaffold"
+mkdir -p "$scaffold_dir"
+( cd "$scaffold_dir" && "$CORPUS_MCP" recipe new --ontology numismatics --id my-coins ) \
+  >"$work/recipe-new.out" 2>"$work/recipe-new.err" \
+  || { cat "$work/recipe-new.err" >&2; fail "recipe new exited non-zero"; }
+[[ -f "$scaffold_dir/my-coins.toml" ]] || fail "recipe new wrote no my-coins.toml"
+grep -q '^id = "my-coins"' "$scaffold_dir/my-coins.toml" \
+  || fail "recipe new did not substitute --id into the scaffold"
+# The source path is the ONE thing only the author knows; a scaffold that
+# guessed it would ingest the wrong directory without asking. It stays.
+grep -q 'path = "REPLACE_ME"' "$scaffold_dir/my-coins.toml" \
+  || fail "recipe new no longer leaves the source path for the author"
+echo "acceptance: recipe new -> wrote my-coins.toml from the numismatics template"
+
+# Never overwrites. The one destructive mistake this verb could make.
+echo "MINE" > "$scaffold_dir/my-coins.toml"
+if ( cd "$scaffold_dir" && "$CORPUS_MCP" recipe new --ontology numismatics --id my-coins ) \
+     >/dev/null 2>"$work/recipe-clobber.err"; then
+  fail "recipe new overwrote an existing recipe"
+fi
+grep -q 'never overwrites' "$work/recipe-clobber.err" \
+  || fail "the overwrite refusal does not say why: $(cat "$work/recipe-clobber.err")"
+[[ "$(cat "$scaffold_dir/my-coins.toml")" == "MINE" ]] \
+  || fail "the refusal still modified the file"
+echo "acceptance: recipe new -> refuses to overwrite, and did not touch the file"
+
+# The discovery ladder. Pointed at ports nothing serves, so what is asserted is
+# the REPORT, not whatever happens to be up on the machine running this.
+if SOVEREIGN_DAEMON_URL="http://127.0.0.1:1" "$CORPUS_MCP" serve </dev/null \
+     >/dev/null 2>"$work/ladder.err"; then
+  fail "serve succeeded with no endpoint reachable anywhere"
+fi
+for rung in ollama llama-server "oicp daemon" 11434 8080; do
+  grep -q -- "$rung" "$work/ladder.err" \
+    || fail "the discovery ladder did not name the '$rung' rung: $(cat "$work/ladder.err")"
+done
+grep -q 'no inference endpoint found' "$work/ladder.err" \
+  || fail "an absent endpoint was not reported as an absence (ARCH §18.3)"
+echo "acceptance: discovery -> all three rungs probed and named, absence reported"
+
+# ARCH §18.3, the rule that matters most here: an endpoint the caller NAMED is
+# refused when it does not answer, never swapped for one that does. A
+# fall-through would serve a different model, successfully and silently.
+if "$CORPUS_MCP" serve --base-url "http://127.0.0.1:1/v1" </dev/null \
+     >/dev/null 2>"$work/named.err"; then
+  fail "a dead --base-url did not refuse"
+fi
+grep -q -- '--base-url' "$work/named.err" \
+  || fail "the refusal does not name the flag: $(cat "$work/named.err")"
+for other in 11434 8080; do
+  grep -q -- "$other" "$work/named.err" \
+    && fail "a named --base-url fell through to the ladder (found $other)"
+done
+echo "acceptance: discovery -> a named --base-url is refused, never substituted"
+
+# ── 0b. Ollama ──────────────────────────────────────────────────────────────
+#
+# §4 names Ollama as the shape the three commands are written for (one
+# process, one URL, both models). Whether it is HERE is a property of the
+# machine, so this reports which of the two it is BY NAME and never silently
+# skips (ARCH §18.2: four verdicts, not two).
+if command -v ollama >/dev/null && curl -sf -m 3 "$OLLAMA_URL/models" >/dev/null 2>&1; then
+  ollama_models="$(curl -s -m 5 "$OLLAMA_URL/models")"
+  echo "acceptance: ollama -> reachable at $OLLAMA_URL"
+  { echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"acceptance","version":"0"}}}'
+    echo '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+    echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"corpus_list","arguments":{}}}'
+  } | "$CORPUS_MCP" serve --base-url "$OLLAMA_URL" --corpus "$CORPUS" \
+      >"$work/ollama.jsonl" 2>"$work/ollama.err" \
+      || { cat "$work/ollama.err" >&2; fail "corpus-mcp against Ollama exited non-zero"; }
+  grep -q 'corpus_id' "$work/ollama.jsonl" \
+    || fail "corpus_list returned nothing against Ollama: $(cat "$work/ollama.err")"
+  # The width question §7 step 6 asks by name: an Ollama embedding whose width
+  # does not match the shipped index degrades to full-text and SAYS so. Which
+  # way it went is reported either way; neither is a failure of this host.
+  if grep -q 'vector search DISABLED' "$work/ollama.err"; then
+    echo "acceptance: ollama -> WIDTH MISMATCH against $CORPUS; degraded to full-text and said so"
+  else
+    echo "acceptance: ollama -> embedding width matches $CORPUS; vector + full-text live"
+  fi
+  echo "acceptance: ollama arm -> PASS"
+else
+  echo "acceptance: ollama arm -> COULD-NOT-RUN (not installed or not serving at $OLLAMA_URL)."
+  echo "acceptance:   This is NOT a pass and NOT a fail. The llama-server arm below is the"
+  echo "acceptance:   measured one; the Ollama default is a documented option until a host"
+  echo "acceptance:   with Ollama runs this. To run it: \`ollama serve\`, then re-run."
+fi
 
 # ── 1. bare frontend ────────────────────────────────────────────────────────
 llama-server -m "$EMBED_GGUF" --embeddings --host 127.0.0.1 --port "$PORT" \
@@ -554,6 +674,76 @@ else:
           f"above ran.")
 ASKPY
 done
+
+# ── 3d. pull-if-absent on a COLD data root ──────────────────────────────────
+#
+# EPISTEMIC_INDEX.md §1's Distribution row: `corpus serve --corpus <id>` on a
+# machine that has never held the corpus installs it first, from the prebuilt
+# snapshot its recipe declares — chunks AND atlas in one archive, not a
+# re-embed.
+#
+# Opt-in, because it is ~875 MB of egress from HuggingFace. Absent the opt-in
+# it reports NEVER-RAN by name (ARCH §18.2) rather than being silently skipped
+# — the same shape as the ingest leg above.
+#
+# The root is ISOLATED and must be COLD. Two reasons it is not $work: $work is
+# under /tmp, which is tmpfs on the development host (a 875 MB pull would be
+# 875 MB of RAM on a box whose daemon is the kernel's first OOM victim), and a
+# root that already holds `sep` would make this leg pass without pulling
+# anything — the thing it exists to prove.
+PULL_ROOT="${PULL_ROOT:-$repo/test-artifacts/ei6-pull-root}"
+PULL_CORPUS="${PULL_CORPUS:-$CORPUS}"
+if [[ -z "${ACCEPT_PULL:-}" ]]; then
+  echo "acceptance: pull-if-absent -> NEVER-RAN (opt-in; ~875 MB of egress). To run it:"
+  echo "acceptance:   ACCEPT_PULL=1 $0"
+else
+  [[ -e "$PULL_ROOT" ]] && fail "PULL_ROOT $PULL_ROOT already exists — this leg needs a COLD root; remove it or set PULL_ROOT"
+  mkdir -p "$PULL_ROOT"
+  echo "acceptance: pull-if-absent -> cold root $PULL_ROOT, pulling \`$PULL_CORPUS\`"
+  # SOVEREIGN_DATA_DIR and not --data-dir: the enrichment store derives its own
+  # root from the env var, so the flag alone would put the two halves of one
+  # corpus in two roots. `corpus ingest` refuses that disagreement by name; here
+  # we simply set the thing both halves read.
+  { echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"acceptance","version":"0"}}}'
+    echo '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+    printf '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"corpus_search","arguments":{"query":"%s","corpus":"%s"}}}\n' "$QUERY" "$PULL_CORPUS"
+    echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"corpus_list","arguments":{}}}'
+  } | SOVEREIGN_DATA_DIR="$PULL_ROOT" "$CORPUS_MCP" serve \
+        --base-url "http://127.0.0.1:$PORT/v1" --corpus "$PULL_CORPUS" \
+        >"$work/pull.jsonl" 2>"$work/pull.err" \
+    || { cat "$work/pull.err" >&2; fail "serve on a cold root exited non-zero"; }
+  grep -q 'is not installed — pulling the prebuilt snapshot' "$work/pull.err" \
+    || fail "the cold root did not pull — it was not cold, or the pull was silent: $(cat "$work/pull.err")"
+  [[ -d "$PULL_ROOT/indexes/$PULL_CORPUS" ]] \
+    || fail "the pull reported success but wrote no index under $PULL_ROOT/indexes/$PULL_CORPUS"
+  # SERVES, not just installs: the done-when is "pulls and serves", so the
+  # proof is a cited chunk out of the corpus that was not there a minute ago.
+  python3 - "$work/pull.jsonl" "$PULL_CORPUS" <<'PULLPY'
+import json, sys
+out, corpus = sys.argv[1], sys.argv[2]
+by_id = {}
+for line in open(out):
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        msg = json.loads(line)
+    except json.JSONDecodeError:
+        continue
+    if "id" in msg:
+        by_id[msg["id"]] = msg
+search = by_id.get(2, {}).get("result", {})
+text = "".join(c.get("text", "") for c in search.get("content", []))
+if search.get("isError") or not text.strip():
+    sys.exit(f"acceptance: FAIL — corpus_search on the pulled `{corpus}` returned nothing: {search}")
+# A citation, not just prose: the whole claim of the snapshot is that what
+# arrives is a searchable corpus.
+if corpus not in text and "chunk" not in text.lower():
+    sys.exit(f"acceptance: FAIL — the pulled corpus answered without citing anything:\n{text[:400]}")
+print(f"acceptance: pull-if-absent -> `{corpus}` pulled onto a cold root and SERVED a cited answer")
+PULLPY
+  rm -rf "$PULL_ROOT"
+fi
 
 # ── 4. the closure ──────────────────────────────────────────────────────────
 if command -v cargo >/dev/null; then

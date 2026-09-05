@@ -2,20 +2,91 @@
 
 A corpus-engine MCP host that needs nothing but an OpenAI-compatible endpoint.
 
-Two verbs. It SERVES a corpus over MCP, and it BUILDS one from a recipe —
-both against nothing but an OpenAI-compatible endpoint.
+## Three commands
+
+You have a folder of documents, an MCP-capable chat app, and a machine that
+runs Ollama or llama-server. That is the whole prerequisite list.
 
 ```sh
-# serve (the default; no subcommand)
-llama-server -m Qwen3-Embedding-0.6B-Q8_0.gguf --embeddings --port 8080
-corpus-mcp --base-url http://localhost:8080/v1 --corpus sep
+corpus-mcp recipe new --ontology numismatics --id my-coins   # writes my-coins.toml
+corpus-mcp ingest my-coins.toml                              # acquire → chunk → embed → enrich → index
+corpus-mcp serve --corpus my-coins                           # the MCP host, on stdio
+```
 
-# build. llama-server loads one model per process, so chat and embeddings
-# are two of them; Ollama serves both, and takes a single --base-url.
+Step 1 scaffolds a recipe from a built-in ontology template — `--ontology
+list` names them all — and leaves you two things to fill in: `path`, the
+folder your documents are in, and the type guidance. It never overwrites.
+
+Step 2 builds the corpus. Step 3 serves it. **Neither line names a URL**, and
+that is deliberate: with no endpoint given, both walk the same ladder and
+print what each rung said.
+
+    --base-url <url>              if you passed one — and if it does not
+                                  answer, that is a refusal, never a
+                                  fall-through to something else
+    http://localhost:11434/v1     Ollama
+    http://localhost:8080/v1      llama-server
+    the OICP daemon               this host's own, if you happen to run one
+
+`corpus_list` reports the same ladder to the chat app, so a stopped Ollama is
+visible where you are actually looking.
+
+Name the endpoint yourself when you want to:
+
+```sh
+# One host serving both chat and embeddings (Ollama, vLLM, our own daemon).
+corpus-mcp ingest my-coins.toml --base-url http://localhost:11434/v1
+
+# llama-server loads ONE model per process, so chat and embeddings are two of
+# them and discovery cannot tell which port is which. Name them.
 llama-server -m Qwen3-Embedding-0.6B-Q8_0.gguf --embeddings --port 8089 &
 llama-server -m <an-instruct-model>.gguf --port 8090 &
-corpus-mcp ingest my-coins.toml --chat-url  http://localhost:8090/v1                                 --embed-url http://localhost:8089/v1
+corpus-mcp ingest my-coins.toml --chat-url  http://localhost:8090/v1 \
+                                --embed-url http://localhost:8089/v1
 ```
+
+### Ollama
+
+Ollama is the shape these commands are written for — one process, one URL,
+both models — and it is the first rung of the ladder for that reason. It is
+NOT the tested default: the acceptance suite runs against `llama-server`,
+which is what the development host has. The Ollama path is exercised by the
+same code on the same flags and has not been run end to end against a live
+Ollama; if you find a difference, it is a bug and not a design.
+
+### A named corpus is pulled if you do not have it
+
+```sh
+corpus-mcp serve --corpus sep     # ~875 MB from HuggingFace on a cold machine
+```
+
+`serve` installs a corpus you named but do not have, when its recipe declares
+a prebuilt snapshot: the archive carries the chunk index AND the atlas, so
+what you get is the enriched corpus, not a re-embed. A corpus whose recipe
+declares no snapshot is **not** pulled — building it is `corpus-mcp ingest`'s
+job, and serving will not quietly start an hours-long acquire on your behalf.
+Either way you are told which.
+
+## The MCP config block
+
+One block, in your chat app's MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "corpus": {
+      "command": "corpus-mcp",
+      "args": ["serve", "--corpus", "my-coins"]
+    }
+  }
+}
+```
+
+Add `"--base-url", "http://localhost:11434/v1"` to `args` to skip discovery.
+Everything diagnostic goes to stderr — stdout is the MCP channel — so the
+probe findings above appear in your app's server log, and in `corpus_list`.
+
+## What the verbs do
 
 `ingest` runs the whole of `sovereign/docs/specs/EPISTEMIC_INDEX.md` §4:
 acquire → extract → chunk → embed → index, then the atlas enrichment (seed,
@@ -42,9 +113,9 @@ sovereign surface uses), `atoms_lookup` (the atoms a corpus's enrichment
 produced, read from `atlas/atoms.json`) and `corpus_ontology` (what the corpus
 declared, from `atlas/ontology.json` — read through the writer's own
 `read_atlas_ontology`, because the file is an `AtlasOntologyFile` envelope and
-parsing it as bare policies silently yields an empty declaration). `--base-url`
-is the only flag a serve requires;
-whether the host is an OICP daemon or a bare `llama-server` is detected from
+parsing it as bare policies silently yields an empty declaration). No flag is
+required to serve; whether the host is an OICP daemon or a bare `llama-server`
+is detected from
 `GET /oicp/v1/capabilities`, and a 404 there is the normal case. Every
 degradation — a width mismatch between an index and the endpoint's embeddings,
 a corpus with no atlas — is printed to stderr and reported in the tool result,

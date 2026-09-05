@@ -48,7 +48,7 @@ tiers as separate tools the client must compose.
 | **Map** (the ontology) | `atlas/ontology.json`, one per atlas, from **every** pipeline | an atlas that cannot describe itself is not an atlas | every pipeline writes it (ei-2-map, 2026-09-04): built-in vocabularies as version-1 TOML under `pipelines/ontologies/`, the envelope names its `pipeline_id`, `navigation` carries the §2.2 table as defaults; existing atlases get it on their next build — nothing reads `navigation` yet | three sections: schema, navigation policy, vocabulary + prose (§2); the walker reads `navigation` (step 4) |
 | **Walk** | `ground(question, embedding, atlases, graphs, selection, max_seeds) → evidence requests`, then resolve to chunks | ONE implementation, in corpus-engine, driven by the map | **done (ei-4-walk, 2026-09-04)**: `corpus-engine/src/enrichment/atlas/{ground,resolve}.rs` over `&[&dyn AtlasProvider]`, reading seed kinds / edge kinds / hops / budget from the corpus's `navigation` section; the question's kind is a centroid over the map's own exemplars, and an abstain runs `WalkPolicy::unfiltered` (the pre-policy behaviour, as data) and says so. `apply_atlas_grounding` and `corpus-mcp`'s `ask` are the two callers; `atlas_navigate_ann` is a thin caller under the unfiltered row. The chunk→atlas id derivation is `ground::candidate_atlas_ids`. The evidence budget round-robins across the ideas the walk reached — the loop it replaced spent all of it on the first | unchanged |
 | **Surface** | MCP tools | the default tool composes the layers; the client never has to | **done (ei-4-walk, 2026-09-04)**: `ask` composes embed → tier 1 → walk → resolve and returns cited passages plus the map section, with every degradation as a sentence; the four earlier tools stay as the advanced surface | unchanged |
-| **Distribution** | prebuilt snapshot (HF datasets, `ingest_prebuilt.rs`) | the snapshot carries all layers; absence is reported, never defaulted | snapshot carries chunks + atlas; host does not pull | `corpus-mcp --corpus sep` pulls if absent; width mismatch degrades and says so |
+| **Distribution** | prebuilt snapshot (HF datasets, `ingest_prebuilt.rs`) | the snapshot carries all layers; absence is reported, never defaulted | **done (ei-6-distribution, 2026-09-05)**: `corpus-mcp serve --corpus <id>` on a machine without `<id>` installs it through `CorpusEngine::ingest(CorpusSpec::Builtin)` → the existing `engine/ingest_prebuilt.rs`, so the archive's chunks AND atlas land in one go and no second downloader exists. A recipe with no `[prebuilt]` block is refused by name, never turned into a silent acquire-and-embed; pull-if-absent applies only to ids the caller named. Width mismatch still degrades that corpus to full-text and says so. The three §4 commands are all verbs now — `recipe new` reuses `corpus_engine::recipe_templates` (nothing moved: `svrn recipe new` is the other caller of the same three functions), and neither `ingest` nor `serve` needs a URL, because `host::discover` walks Ollama `:11434` → llama-server `:8080` → `client_daemon_base()` and names every rung on stderr, at debug, and in `corpus_list`. A named `--base-url` is refused when it does not answer rather than swapped (§18.3) | Ollama measured end to end (the ladder and flags ship; the acceptance arm reports COULD-NOT-RUN by name where no Ollama is installed, and llama-server is the measured arm) |
 
 Principle 8 runs through the table: one store, one map format, one walk, one
 id derivation.
@@ -329,7 +329,20 @@ lane names an owner and a scheduled measurement before it is accepted.
    atlas's, and reports COULD-NOT-JUDGE naming both sets otherwise. It belongs
    to the navigation defaults, not to the build.
 6. Distribution: pull-if-absent and endpoint discovery; acceptance against
-   Ollama; `corpus serve` and `corpus recipe new`.
+   Ollama; `corpus serve` and `corpus recipe new`. **Landed 2026-09-05
+   (ei-6-distribution)**, with one arm reported rather than measured: the
+   development host has no Ollama (`command -v ollama` empty, `:11434`
+   refusing), and installing software on it is the operator's call, so the
+   Ollama acceptance leg reports COULD-NOT-RUN BY NAME — not a pass, not a
+   fail — and this order's fallback clause applies: the llama-server path
+   ships and is measured, the Ollama default is a documented option. The
+   `sovereign contract census` half of the done-when is COULD-NOT-JUDGE by
+   construction: `cli-contract.toml` declares itself the manifest of "the
+   commands `sovereign` promises", `Contract::binary` is a closed enum of the
+   four sovereign siblings, and a journey step's `run` is argv for the `svrn`
+   runner — so no `corpus-mcp` verb is representable in it (ei-5b's `ingest`
+   has no row either). The verbs' falsifiable proof is `corpus-mcp/tests/verbs.rs`
+   instead; widening the shared manifest is banked.
 7. Ports, one per commit, each measured on its lane: RAPTOR, field model,
    wikipedia store.
 

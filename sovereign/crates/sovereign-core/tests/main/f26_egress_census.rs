@@ -553,11 +553,25 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // `--base-url` from corpus-mcp — an operator-owned target, so it carries
     // the operator's class, never RemotePayload's exemption.
     ("corpus-engine/src/embed_http.rs", Class::OperatorSurface, 1),
-    // corpus-mcp's host probe: `GET /oicp/v1/capabilities`, `GET /v1/models`,
-    // one `POST /v1/embeddings` — all against the operator's `--base-url`.
+    // corpus-mcp's ONE client constructor (`host::client()`) and every probe
+    // that rides it: `GET /oicp/v1/capabilities`, `GET /v1/models`, one `POST
+    // /v1/embeddings`, `corpus ingest`'s chat probe, and the endpoint
+    // discovery ladder — all against the operator's own endpoint, whether
+    // named with `--base-url` or found on the ladder (Ollama :11434,
+    // llama-server :8080, this host's OICP daemon).
+    //
+    // 2 -> 1 at order ei-6-distribution: `corpus ingest` built its own
+    // `reqwest::Client::new()` for the chat capability probe, a second answer
+    // to "how long do we wait on an endpoint" beside the embed probe's — and
+    // the discovery ladder made the absent timeout load-bearing (three
+    // unreachable rungs at reqwest's default is an unbounded hang). One
+    // constructor with one timeout, ARCH §10.6.
+    //
+    // The HF pull `corpus serve` performs when a named corpus is absent adds
+    // NO row: it goes through `CorpusEngine::ingest` to
+    // corpus-engine/src/acquirers/bulk_download.rs, registered InboundOnly
+    // above since this census was written.
     ("corpus-mcp/src/host.rs", Class::OperatorSurface, 1),
-    // `corpus ingest`: the chat endpoint's capability probe (embed reuses host.rs).
-    ("corpus-mcp/src/ingest.rs", Class::OperatorSurface, 1),
     // 2 -> 1 at cw-lift rung 2c: the queue-handoff unicast to
     // `/internal/app/state` built its own client with its own 10s timeout,
     // a second answer to "how long do we wait on a peer" beside

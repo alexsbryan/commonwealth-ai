@@ -142,18 +142,33 @@ struct Endpoints {
     embed_root: String,
 }
 
-/// `--base-url` XOR (`--chat-url` AND `--embed-url`). Anything else is a
-/// refusal naming what is missing: a half-specified pair would otherwise
-/// silently send phase 1 to the embedding process (ARCH §18.3).
-fn resolve_endpoints(args: &IngestArgs) -> Result<Endpoints> {
+/// `--base-url` XOR (`--chat-url` AND `--embed-url`) — or NEITHER, which runs
+/// the discovery ladder. Anything else is a refusal naming what is missing: a
+/// half-specified pair would otherwise silently send phase 1 to the embedding
+/// process (ARCH §18.3).
+///
+/// Discovery finds ONE host serving both halves, which is Ollama's shape and
+/// the reason `EPISTEMIC_INDEX.md` §4 writes the command as a bare `corpus
+/// ingest my-coins.toml`. It cannot find llama-server's two-process shape —
+/// nothing on the wire says which of `:8089` and `:8090` is the embedder — so
+/// a discovered llama-server that serves only one of the two fails its OTHER
+/// probe by name, with the pair of flags in the message.
+async fn resolve_endpoints(args: &IngestArgs) -> Result<Endpoints> {
     let (chat, embed) = match (&args.base_url, &args.chat_url, &args.embed_url) {
         (Some(b), None, None) => (b.clone(), b.clone()),
         (None, Some(c), Some(e)) => (c.clone(), e.clone()),
-        (None, None, None) => bail!(
-            "no inference endpoint given. Pass --base-url <url> for a host that serves both \
-             chat and embeddings (Ollama), or --chat-url <url> --embed-url <url> for two \
-             llama-server processes."
-        ),
+        (None, None, None) => {
+            // The SAME ladder `corpus serve` walks (ARCH §10.6) — one
+            // implementation of "which endpoint", so the verb that builds a
+            // corpus and the verb that serves it cannot find different hosts.
+            let (url, _attempts) = host::discover(None).await?;
+            eprintln!(
+                "corpus-mcp: no endpoint given — using the discovered host {url} for BOTH \
+                 chat and embeddings. Two llama-server processes need --chat-url and \
+                 --embed-url."
+            );
+            (url.clone(), url)
+        }
         (None, Some(_), None) => bail!("--chat-url given without --embed-url"),
         (None, None, Some(_)) => bail!("--embed-url given without --chat-url"),
         (Some(_), _, _) => bail!(
@@ -173,7 +188,7 @@ fn resolve_endpoints(args: &IngestArgs) -> Result<Endpoints> {
 
 pub async fn run(args: IngestArgs) -> Result<()> {
     let started = std::time::Instant::now();
-    let endpoints = resolve_endpoints(&args)?;
+    let endpoints = resolve_endpoints(&args).await?;
     let data_dir = args
         .data_dir
         .clone()
@@ -191,12 +206,20 @@ pub async fn run(args: IngestArgs) -> Result<()> {
     let embed_profile = host::probe(&endpoints.embed_v1, args.embed_model.clone())
         .await
         .with_context(|| format!("embedding endpoint {}", endpoints.embed_v1))?;
-    let chat_kind = host::probe_capability(
-        &reqwest::Client::new(),
-        &endpoints.chat_root,
-        "chat endpoint",
-    )
-    .await;
+    // `host::client()` and not a second client built here: ONE constructor
+    // for this crate, so there is one answer to "how long do we wait on an
+    // endpoint" — and one row in the F26 egress census instead of two (order
+    // ei-6-distribution).
+    //
+    // The naming above is deliberate. That census is a TEXT scan — a line
+    // carrying the `reqwest` constructor token counts as a construction site
+    // whether it is code or a comment — so spelling the thing this line no
+    // longer does would re-register the site it just removed. Watched
+    // failing: it did exactly that, as `UNREGISTERED: corpus-mcp/src/
+    // ingest.rs (1 site(s))`, with the only match in the file being the
+    // comment.
+    let chat_kind =
+        host::probe_capability(&host::client(), &endpoints.chat_root, "chat endpoint").await;
     let chat_model = match args.chat_model.clone() {
         Some(m) => m,
         None => {
@@ -570,29 +593,34 @@ mod tests {
         }
     }
 
-    #[test]
-    fn one_url_serves_both_halves() {
-        let e = resolve_endpoints(&args(Some("http://h:11434/v1"), None, None)).unwrap();
+    #[tokio::test]
+    async fn one_url_serves_both_halves() {
+        let e = resolve_endpoints(&args(Some("http://h:11434/v1"), None, None))
+            .await
+            .unwrap();
         assert_eq!(e.chat_v1, "http://h:11434/v1");
         assert_eq!(e.embed_v1, "http://h:11434/v1");
         assert_eq!(e.chat_root, "http://h:11434");
         assert_eq!(e.embed_root, "http://h:11434");
     }
 
-    #[test]
-    fn a_bare_root_is_accepted_and_normalised() {
-        let e = resolve_endpoints(&args(Some("http://h:11434"), None, None)).unwrap();
+    #[tokio::test]
+    async fn a_bare_root_is_accepted_and_normalised() {
+        let e = resolve_endpoints(&args(Some("http://h:11434"), None, None))
+            .await
+            .unwrap();
         assert_eq!(e.chat_v1, "http://h:11434/v1");
         assert_eq!(e.chat_root, "http://h:11434");
     }
 
-    #[test]
-    fn two_processes_are_named_apart() {
+    #[tokio::test]
+    async fn two_processes_are_named_apart() {
         let e = resolve_endpoints(&args(
             None,
             Some("http://h:8090/v1"),
             Some("http://h:8089/v1"),
         ))
+        .await
         .unwrap();
         assert_eq!(e.chat_v1, "http://h:8090/v1");
         assert_eq!(e.embed_v1, "http://h:8089/v1");
@@ -605,24 +633,39 @@ mod tests {
     /// The failure this refusal exists for: with only `--chat-url`, a guessed
     /// `--embed-url` would send every embedding to the chat process, which
     /// answers 200 with the wrong width and is only noticed at retrieval.
-    #[test]
-    fn a_half_specified_pair_is_refused_by_name() {
-        let err = resolve_endpoints(&args(None, Some("http://h:8090/v1"), None)).unwrap_err();
+    #[tokio::test]
+    async fn a_half_specified_pair_is_refused_by_name() {
+        let err = resolve_endpoints(&args(None, Some("http://h:8090/v1"), None))
+            .await
+            .unwrap_err();
         assert!(err.to_string().contains("--embed-url"), "{err}");
-        let err = resolve_endpoints(&args(None, None, Some("http://h:8089/v1"))).unwrap_err();
+        let err = resolve_endpoints(&args(None, None, Some("http://h:8089/v1")))
+            .await
+            .unwrap_err();
         assert!(err.to_string().contains("--chat-url"), "{err}");
     }
 
-    #[test]
-    fn no_endpoint_at_all_names_both_forms() {
-        let err = resolve_endpoints(&args(None, None, None)).unwrap_err();
-        assert!(err.to_string().contains("--base-url"), "{err}");
-        assert!(err.to_string().contains("--chat-url"), "{err}");
-    }
+    // WHERE `no_endpoint_at_all_names_both_forms` WENT (order ei-6-distribution).
+    //
+    // It asserted that naming no endpoint is a REFUSAL listing both flag
+    // forms. That stopped being true: `EPISTEMIC_INDEX.md` §4 writes the
+    // command as a bare `corpus ingest my-coins.toml`, so no endpoint now runs
+    // the discovery ladder, and the message a person gets is the ladder's
+    // report. The test went red on exactly that change, which is what it was
+    // for.
+    //
+    // It is not rewritten HERE because the honest version cannot live in a
+    // unit test: `resolve_endpoints(None, None, None)` performs live probes,
+    // and on a developer's box the third rung is their own running daemon —
+    // the test would pass or fail on what happens to be up. The behaviour is
+    // proven in `tests/verbs.rs::ingest_with_no_endpoint_walks_the_same_ladder`,
+    // which runs the binary as a subprocess with the daemon knob pointed at a
+    // dead port, and the ladder's ORDER is pinned by `host::tests` next door.
 
-    #[test]
-    fn a_base_url_alongside_a_half_is_refused_rather_than_ranked() {
+    #[tokio::test]
+    async fn a_base_url_alongside_a_half_is_refused_rather_than_ranked() {
         let err = resolve_endpoints(&args(Some("http://h:1/v1"), Some("http://h:2/v1"), None))
+            .await
             .unwrap_err();
         assert!(err.to_string().contains("--base-url"), "{err}");
     }
