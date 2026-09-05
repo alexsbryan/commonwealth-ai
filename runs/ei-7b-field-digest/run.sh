@@ -54,9 +54,22 @@ box () { # label -> one line of box state, before and after (§18.5)
 box before
 
 # ── Refuse a busy box, with an explicit override ────────────────────────────
+#
+# MATCH THE BINARY, NOT THE STRING "cargo". `pgrep -af 'cargo|rustc'` matches
+# on the full command line, and `~/.cargo/bin/lspmux` — the rust-analyzer proxy
+# the daemon keeps running PERMANENTLY — contains `.cargo/` in its path. So the
+# obvious pattern refuses on a completely idle box, every time, and the seat's
+# launch window is spent on an exit 3 that looks like a real busy-box refusal.
+# Verified on a quiet box 2026-09-05: the loose pattern matched 1 process
+# (lspmux), the exact-name form matched 0.
+builds_running () { pgrep -x rustc >/dev/null 2>&1 || pgrep -x cargo >/dev/null 2>&1; }
 if [ "${EI7B_FORCE:-0}" != "1" ]; then
-  if pgrep -af 'cargo|rustc' | grep -v pgrep | grep -qv "$0"; then
-    echo "REFUSED: a build is running; set EI7B_FORCE=1 to override"; exit 3
+  if builds_running; then
+    # Name what was seen — a refusal that does not say what it refused on
+    # cannot be told from a broken check (ARCH §18.3).
+    echo "REFUSED: a build is running; set EI7B_FORCE=1 to override"
+    pgrep -ax rustc; pgrep -ax cargo
+    exit 3
   fi
   avail=$(awk '/MemAvailable/{printf "%.0f", $2/1048576}' /proc/meminfo)
   if [ "$avail" -lt 40 ]; then
