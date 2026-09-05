@@ -363,3 +363,48 @@ async fn provider_refuses_a_v1_store_by_name() {
         "error must name the repair: {err}"
     );
 }
+
+/// EMPTY AND ABSENT ARE DIFFERENT FACTS, and `record` is what tells them apart.
+///
+/// `neighbors` returns an empty vec for both "this article has no outgoing
+/// links in the store" and "there is no such article", and for a while the
+/// `neighbors` CLI verb printed the same thing for each and asked the reader to
+/// guess. That guess was made wrong at least once: a 0-result query against a
+/// rebuilt wikipedia store was explained as "present, no edges" when the real
+/// cause was reading a different store entirely.
+///
+/// This pins the property the verb now relies on. It is a CHARACTERISATION
+/// test, not a watched-failing one: `record` already behaved this way, and what
+/// changed on 2026-09-04 was that the caller started asking it. Its job is to
+/// make the behaviour break loudly if `record` is ever narrowed to "articles
+/// that have edges".
+#[tokio::test]
+async fn record_distinguishes_an_edgeless_article_from_an_absent_one() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    // "Lonely" is a real in-scope article that no edge mentions — the shape of
+    // a stub, and of the Rolling Stones song that started this.
+    let articles = vec![art("Linked", false), art("Lonely", false)];
+    let edges = vec![edge("Linked", "Elsewhere", "topical", "Intro", 1)];
+    write_wikipedia_columnar_store(dir, &articles, &edges)
+        .await
+        .unwrap();
+    let g = ColumnarWikipediaGraph::open(dir).await.unwrap();
+
+    // Both return NO neighbors — this is the ambiguity, reproduced.
+    assert!(g.neighbors("Lonely", 10).await.is_empty());
+    assert!(g.neighbors("Nonexistent Article", 10).await.is_empty());
+
+    // And `record` separates them, which is the whole point.
+    assert!(
+        g.record("Lonely").await.is_some(),
+        "an edgeless article is PRESENT and must be reported as present"
+    );
+    assert!(
+        g.record("Nonexistent Article").await.is_none(),
+        "an absent title must be reported as absent, not as an empty result"
+    );
+
+    // Case still matters here as everywhere in this store.
+    assert!(g.record("lonely").await.is_none());
+}
