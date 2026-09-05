@@ -88,6 +88,11 @@ elif grep -qE 'the pull has run [0-9]+ minutes' "$err" 2>/dev/null; then
   mark VERDICT-REFUSED-BY-DEADLINE 0
 elif grep -qE 'probe FAILED|probe could not run|falling through to full ingest' "$err" 2>/dev/null; then
   mark VERDICT-FELL-THROUGH-CAUGHT-BY-ASSERTION 0
+elif grep -q 'embedding model name not configured' "$err" 2>/dev/null; then
+  # Added after run 20260905T201154Z, which hit exactly this and could only be
+  # reported UNCLASSIFIED. A precondition error before any egress is its own
+  # outcome and a cheap one — the run cost 4 seconds and zero bytes.
+  mark VERDICT-PRECONDITION-ERROR-NO-EGRESS 1
 else
   mark VERDICT-UNCLASSIFIED 1
 fi
