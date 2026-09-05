@@ -1,0 +1,111 @@
+{
+  "bank_name": "wikipedia-cutover-probe",
+  "corpus": "wikipedia",
+  "limit": 10,
+  "started_at_unix": 1788596570,
+  "results": [
+    {
+      "question_id": "factual_einstein_1905",
+      "category": "factual_recall",
+      "question": "What were Einstein's four 1905 'Annus Mirabilis' papers about?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 1.0,
+          "snippet": "Albert Einstein (/ ˈ aɪ n s t aɪ n / EYEN -styne; German:; 14 March 1879 – 18 April 1955) was a German-born theoretical physicist who is widely held as one of the most influential scientists. Best known for developing the theory of relativity, Einstein also made important contributions to quantum mechanics. His mass–energy equivalence formula E = mc, which arises from special relativity, has been called \"the world's most famous equation\". He received the 1921 Nobel Prize in Physics \"for his services to theoretical physics, and especially for his discovery of the law of the photoelectric effect…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 1.0,
+          "snippet": "Albert Einstein  Born in the German Empire, Einstein moved to Switzerland in 1895, forsaking his German citizenship (as a subject of the Kingdom of Württemberg) the following year. In 1897, at the age of seventeen, he enrolled in the mathematics and physics teaching diploma program at the Swiss federal polytechnic school in Zürich, graduating in 1900. In 1901, he acquired Swiss citizenship, which he kept for the rest of his life. In 1903, he secured a permanent position at the Swiss Patent Office in Bern. In 1905, he submitted a successful PhD dissertation to the University of Zurich. In 1914,…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 1.0,
+          "snippet": "Albert Einstein  Horrified by the Nazi war of extermination against his fellow Jews, Einstein decided to remain in the US, and was granted American citizenship in 1940. On the eve of World War II, he endorsed a letter to President Franklin D. Roosevelt alerting him to the potential German nuclear weapons program and recommended that the US begin similar research. Einstein supported the Allies but generally viewed the idea of nuclear weapons with great dismay."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 0.035353538,
+          "snippet": "Albert Einstein  and especially for his discovery of the law of the photoelectric effect \", a pivotal step in the development of quantum theory.  Einstein's work is also known for its influence on the philosophy of science. In 1905, he published four groundbreaking papers, sometimes described as his annus mirabilis (miracle year). These papers outlined a theory of the photoelectric effect, explained Brownian motion, introduced his special theory of relativity—a theory which addressed the inability of classical mechanics to account satisfactorily for the behavior of the electromagnetic field —a…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 1.0,
+          "snippet": "Albert Einstein  In the middle part of his career, Einstein made important contributions to statistical mechanics and quantum theory. Especially notable was his work on the quantum physics of radiation, in which light consists of particles, subsequently called photons. With the Indian physicist Satyendra Nath Bose, he laid the groundwork for Bose-Einstein statistics. For much of the last phase of his academic life, Einstein worked on two endeavors that proved ultimately unsuccessful. First, he advocated against quantum theory's introduction of fundamental randomness into science's picture of t…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 1.0,
+          "snippet": "Albert Einstein  laid out the implications of general relativity for the modeling of the structure and evolution of the universe as a whole."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#1900–1905:_First_scientific_papers",
+          "score": 1.0,
+          "snippet": "Albert Einstein  Einstein's first paper, \"Folgerungen aus den Capillaritätserscheinungen\" (\"Conclusions drawn from the phenomena of capillarity\"), in which he proposed a model of intermolecular attraction that he afterwards disavowed as worthless, was published in the journal Annalen der Physik in 1901. His 24-page doctoral dissertation also addressed a topic in molecular physics. Titled \"Eine neue Bestimmung der Moleküldimensionen\" (\"A New Determination of Molecular Dimensions\") and dedicated to his friend Marcel Grossman, it was completed on 30 April 1905 and approved by Professor Alfred Kle…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#1900–1905:_First_scientific_papers",
+          "score": 0.07526882,
+          "snippet": "Albert Einstein  (Einstein was formally awarded his PhD on 15 January 1906.) Four other pieces of work that Einstein completed in 1905— his famous papers on the photoelectric effect, Brownian motion, his special theory of relativity and the equivalence of mass and energy —have led to the year being celebrated as an annus mirabilis for physics akin to 1666 (the year in which Isaac Newton experienced his greatest epiphanies). The publications deeply impressed Einstein's contemporaries."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#1905_–_Annus_Mirabilis_papers",
+          "score": 0.077140264,
+          "snippet": "Albert Einstein  The Annus Mirabilis papers are four articles pertaining to the photoelectric effect (which gave rise to quantum theory), Brownian motion, the special theory of relativity, and E = mc that Einstein published in the Annalen der Physik scientific journal in 1905. These four works contributed substantially to the foundation of modern physics and changed views on space, time, and matter. The four papers are:"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of electromagnetic theory",
+          "url": "https://en.wikipedia.org/wiki/History_of_electromagnetic_theory#Einstein's_Annus_Mirabilis",
+          "score": 0.06612022,
+          "snippet": "History of electromagnetic theory  In 1905, while he was working in the patent office, Albert Einstein had four papers published in the Annalen der Physik, the leading German physics journal. These are the papers that history has come to call the Annus Mirabilis papers:  All four papers are today recognized as tremendous achievements—and hence 1905 is known as Einstein's \" Wonderful Year \". At the time, however, they were not noticed by most physicists as being important, and many of those who did notice them rejected them outright. Some of this work—such as the theory of light quanta—remained…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Albert Einstein"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "photoelectric effect",
+          "Brownian motion",
+          "special relativity",
+          "mass-energy equivalence",
+          "1905"
+        ],
+        "missing": [],
+        "total_expected": 5,
+        "ratio": 1.0
+      },
+      "embed_ms": 0,
+      "search_ms": 11897,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    }
+  ]
+}

@@ -836,6 +836,19 @@ identical schema for a full index or a shard.
 │       │                                # OWN atoms folded — those paths also serve
 │       │                                # non-wiki corpora — so a child layer wanting
 │       │                                # its parent's id routes through wiki_atom_id.
+│                                        # CUT OVER 2026-09-05 (ei-7c). The installed
+│                                        # wikipedia serves from this store alone. Three
+│                                        # renames, nothing deleted: the v1 store is
+│                                        # `atlas.pre-ei7c` (3.5 GB, atoms.json + edges.json
+│                                        # intact) and the SQLite is
+│                                        # `wikipedia_graph.db.retired-ei7c` (2.3 GB).
+│                                        # THE ATOM COUNT CHANGED, deliberately: 1.67M ->
+│                                        # 51,781. atoms.json counted every LINK TARGET,
+│                                        # including ~1.6M that are not indexed articles,
+│                                        # have no chunk, and could never become a citation.
+│                                        # articles.lance holds the 51,781 IN-SCOPE ones. A
+│                                        # surface that counts atoms will show the drop; it
+│                                        # is a correction, not a loss.
 │       ├── edges.lance/                 # row per (source, section, target) wikilink, with
 │                                        # `link_text` + `source_section_path` — the two
 │                                        # per-edge STRINGS `neighbors_for_axis` filters on

@@ -1,0 +1,81 @@
+# ONE question, against the INSTALLED `wikipedia` after the ei-7c cutover.
+# Purpose is the PROVIDER LINE, not the score: `atlas wikipedia neighbors`
+# reads the columnar neighbor face and never touches `open_walk_provider`, so
+# it cannot say whether the walk found the seed table. This can.
+
+[bank]
+name = "wikipedia-cutover-probe"
+corpus = "wikipedia"
+description = """
+20-question bank focused on WWII, foundational physics, and contested 20th-century topics.
+
+v2 (2026-04-29): Pruned every `expected_source` that wasn't on the bundled
+vital_articles_l5 list — those titles were unreachable by definition (the recipe
+filter excludes them at ingest), and their presence put a hard ~73% ceiling on
+sources-matched even with a perfect retrieval pipeline. The questions are
+unchanged; expected_sources now lists only articles the corpus *can* contain.
+After this prune the achievable ceiling is 100%, so deviations from 100% are
+real signal.
+"""
+
+# Latency budgets calibrated for Strix Halo (Vulkan) + gemma-4-E4B-it
+# Q4_K_M as the chat model. Targets are the *p95 wall time* per category;
+# rows over budget are flagged in the rollup but don't fail scoring.
+#
+# Calibration sources:
+#   - gemma-4-E4B Q4_K_M throughput on Strix Halo Vulkan: ~30-60 tok/s
+#   - Typical answer length: 200-500 tokens
+#   - Routing classifier (Fast slot): ~1s
+#   - Hybrid retrieval over 1.85M chunks: ~300-500ms
+#   - Prompt eval at 8000 chars / 2k tokens: ~1-2s
+#
+# Categories that route via KnowledgeQuery (factual_recall +
+# boundary_coverage) take the FastFocused path with no thinking budget,
+# capped at 600 output tokens. Synthesis-class queries (multi_article,
+# causal, comparative, contested) route via DeepQuery / PrimarySynthesis
+# with full thinking and the configured max_tokens.
+[bank.latency_budget]
+default_p95_ms = 30000
+max_per_question_ms = 60000
+
+[bank.latency_budget.by_category.factual_recall]
+p50_ms = 8000
+p95_ms = 15000
+
+[bank.latency_budget.by_category.boundary_coverage]
+p50_ms = 10000
+p95_ms = 18000
+
+[bank.latency_budget.by_category.multi_article_synthesis]
+p50_ms = 22000
+p95_ms = 35000
+
+[bank.latency_budget.by_category.causal_reasoning]
+p50_ms = 22000
+p95_ms = 35000
+
+[bank.latency_budget.by_category.comparative]
+p50_ms = 25000
+p95_ms = 40000
+
+[bank.latency_budget.by_category.contested]
+p50_ms = 25000
+p95_ms = 40000
+
+# ─── Factual recall ─────────────────────────────────────────────
+
+[[questions]]
+id = "factual_einstein_1905"
+category = "factual_recall"
+question = "What were Einstein's four 1905 'Annus Mirabilis' papers about?"
+expected_facts = [
+    "photoelectric effect",
+    "Brownian motion",
+    "special relativity",
+    "mass-energy equivalence",
+    "1905",
+]
+expected_sources = [
+    "Albert Einstein",
+]
+
