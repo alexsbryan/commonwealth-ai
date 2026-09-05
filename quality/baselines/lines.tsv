@@ -4,7 +4,7 @@
 # Bank improvements only (never adds, never raises — safe to run anytime):
 #   cargo run -p xtask -- size-gate --tighten
 18001	commonwealth/crates/commonwealth-api
-15613	commonwealth/crates/commonwealth-api::tests
+15848	commonwealth/crates/commonwealth-api::tests
 229	commonwealth/crates/commonwealth-app
 93	commonwealth/crates/commonwealth-app::tests
 3017	commonwealth/crates/commonwealth-core
