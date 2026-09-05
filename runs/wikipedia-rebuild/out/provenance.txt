@@ -1,0 +1,7 @@
+commit:      20cf91407f1bf5098f231dd1c57ae2652647bb1b
+branch:      ei-7c
+dirty:       0 uncommitted path(s)
+binary:      /home/alexbryan/dev/ei7c-wt/target/debug/sovereign-cli  2026-09-04T16:55:21-07:00
+binary:      /home/alexbryan/dev/ei7c-wt/target/debug/sovereign-cli-llm  2026-09-04T16:56:22-07:00
+memory.max:  unknown — not under a cgroup limit
+mem_avail:   36.1 GB

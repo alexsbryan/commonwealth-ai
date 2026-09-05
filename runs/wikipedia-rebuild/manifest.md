@@ -121,6 +121,27 @@ again with that same collision error — loudly, in seconds, before writing
 anything. There is no path where a stale binary silently mints 1.67M ids under
 the old scheme.
 
+## Launch form for any re-run — the cap must be applied INSIDE the container
+
+The 2026-09-04 launch used `systemd-run --user --unit=… -p MemoryMax=28G` on
+the HOST, and the cap was a placebo. It applied to the unit's own cgroup, but
+`toolbox run` hands the real work to the container's cgroup (`libpod-…`, shared
+with the daemon and every cargo), so the build ran uncapped. Measured while it
+ran: the capped unit's `memory.current` was **34 MB** while the container's was
+**41.4 GB**. Nothing was at risk this time — peak RSS was 7.3 GB and the run
+took two minutes — but the guard was not armed, and a guard you have not
+watched hold is not a guard (§18.1).
+
+The verified form puts the wrapper inside the container:
+
+```
+toolbox run -c sovereign-vulkan \
+  systemd-run --user --scope -p MemoryMax=<N>G -- <cmd>
+```
+
+That lands the process in a capped `app.slice` scope; confirmed by the seat at
+2 GiB with `memory.max` read back from the process's own cgroup.
+
 **The memory cap is recorded by the run, not by this file.** The launcher sizes
 `MemoryMax` from what the box has free at launch, so the manifest cannot know
 it — the 40G in the forecast below was an assumption and the real cap may be

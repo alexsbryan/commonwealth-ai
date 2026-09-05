@@ -1,0 +1,36 @@
+neighbors of "Roman Empire" in corpus `wikipedia` — 10 results in 227 ms
+
+  Roman Empire [topical] occ=6 in_scope=true
+  Crisis of the Third Century [topical] occ=5 in_scope=true
+  Aurelian [topical] occ=4 in_scope=true
+  Diocletian [topical] occ=4 in_scope=true
+  Pax Romana [topical] occ=4 in_scope=true
+  Pliny the Younger [topical] occ=4 in_scope=true
+  Seneca the Younger [topical] occ=4 in_scope=true
+  Ancient Greek art [topical] occ=3 in_scope=true
+  Augustus [topical] occ=3 in_scope=true
+  Byzantine Empire [topical] occ=3 in_scope=true
+neighbors of "Albert Einstein" in corpus `wikipedia` — 10 results in 299 ms
+
+  Hebrew University of Jerusalem [topical] occ=4 in_scope=true
+  Spacetime [topical] occ=4 in_scope=true
+  Annus mirabilis papers [topical] occ=3 in_scope=false
+  Brownian motion [topical] occ=3 in_scope=true
+  ETH Zurich [topical] occ=3 in_scope=true
+  Institute for Advanced Study [topical] occ=3 in_scope=false
+  Massâenergy equivalence [topical] occ=3 in_scope=false
+  Nathan Rosen [topical] occ=3 in_scope=false
+  Nobel Prize in Physics [topical] occ=3 in_scope=false
+  Photoelectric effect [topical] occ=3 in_scope=true
+neighbors of "Byzantine Empire" in corpus `wikipedia` — 10 results in 122 ms
+
+  Justinian I [topical] occ=5 in_scope=true
+  Constantinople [topical] occ=4 in_scope=true
+  Anthony Kaldellis [topical] occ=3 in_scope=false
+  Byzantium [topical] occ=3 in_scope=true
+  Corpus Juris Civilis [topical] occ=3 in_scope=true
+  Diocletian [topical] occ=3 in_scope=true
+  Early Muslim conquests [topical] occ=3 in_scope=true
+  Eastern Orthodox Church [topical] occ=3 in_scope=true
+  Greek fire [topical] occ=3 in_scope=true
+  Italian Renaissance [topical] occ=3 in_scope=true

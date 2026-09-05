@@ -1,0 +1,14 @@
+/home/alexbryan/.bashrc: line 51: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+streaming chunk metadata from LanceDB...
+streamed 1896488 chunk records in 1891 ms
+building columnar link graph into /home/alexbryan/dev/ei7c-wt/runs/wikipedia-rebuild/out/atlas ...
+
+graph build complete:
+  chunks:   1896488 with metadata, 0 skipped
+  articles: 51781 in scope (1615645 dangling targets)
+  edges:    7847320 unique (source, section, target)
+  sections: 757835
+  revision: max 1245937477
+  build:    116864 ms
+  store:    /home/alexbryan/dev/ei7c-wt/runs/wikipedia-rebuild/out/atlas

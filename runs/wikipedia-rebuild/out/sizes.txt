@@ -1,0 +1,13 @@
+--- new (this run) ---
+5.4M	/home/alexbryan/dev/ei7c-wt/runs/wikipedia-rebuild/out/atlas/articles.lance
+1.1G	/home/alexbryan/dev/ei7c-wt/runs/wikipedia-rebuild/out/atlas/edges.lance
+--- live (untouched) ---
+4.6M	/home/alexbryan/.svrnmesh/indexes/wikipedia/atlas/articles.lance
+722M	/home/alexbryan/.svrnmesh/indexes/wikipedia/atlas/atoms.json
+59M	/home/alexbryan/.svrnmesh/indexes/wikipedia/atlas/doc_to_atoms.json
+1.3G	/home/alexbryan/.svrnmesh/indexes/wikipedia/atlas/edges.json
+1.4G	/home/alexbryan/.svrnmesh/indexes/wikipedia/atlas/edges.lance
+4.0K	/home/alexbryan/.svrnmesh/indexes/wikipedia/atlas/schema_validation.json
+4.0K	/home/alexbryan/.svrnmesh/indexes/wikipedia/atlas/_summary.json
+--- live sqlite (retired by this order) ---
+2.3G	/home/alexbryan/.svrnmesh/indexes/wikipedia/wikipedia_graph.db
