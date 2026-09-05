@@ -308,8 +308,33 @@ impl RingJournal {
     /// Every op this node holds that `theirs` says the peer is missing.
     /// Author-blind: a node republishes what it HOLDS, so a housemate who
     /// leaves the ring does not take their half of the journal with them.
+    ///
+    /// The honest TOTAL, and therefore the wrong thing to put on a wire: use
+    /// [`RingJournal::ops_missing_from_within`] for that.
     pub fn ops_missing_from(&self, theirs: &Digest) -> Result<Vec<Op<SignedOp>>, RailError> {
         Ok(ops_missing_from(&self.read()?.0, theirs))
+    }
+
+    /// [`RingJournal::ops_missing_from`], stopped at `budget_bytes` of
+    /// serialised ops. Returns `(ops, more)` — see
+    /// [`ops_missing_from_within`] for why the truncation is in the return
+    /// type and why repeating this terminates.
+    ///
+    /// This is what every caller that sends ops over the wire uses. The
+    /// budget itself is NOT decided here: it is derived from the receiver's
+    /// body limit by the crate that owns that limit
+    /// (`commonwealth_api::routes_internal::RING_SYNC_OPS_BUDGET_BYTES`), so
+    /// the rail stays a crate a ring app can lift without an HTTP server.
+    pub fn ops_missing_from_within(
+        &self,
+        theirs: &Digest,
+        budget_bytes: usize,
+    ) -> Result<(Vec<Op<SignedOp>>, bool), RailError> {
+        Ok(ops_missing_from_within(
+            &self.read()?.0,
+            theirs,
+            budget_bytes,
+        ))
     }
 
     /// Append a batch of peer ops, skipping the ones already held. Returns

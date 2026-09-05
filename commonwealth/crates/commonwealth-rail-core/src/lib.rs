@@ -90,7 +90,7 @@ use serde::{Deserialize, Serialize};
 pub use admit::{admit, body_json, Admission, AdmittedOp, RailGap};
 pub use payload::{Payload, PayloadError, MAX_PAYLOAD_BYTES};
 pub use sig::{actor_of, ring_op_message, sign_ring_op};
-pub use sync::{digest, ops_missing_from, Digest};
+pub use sync::{digest, ops_missing_from, ops_missing_from_within, Digest, NO_BUDGET};
 
 /// The journal envelope, re-exported so a consumer of the rail names ONE
 /// crate. `Op<SignedOp>` is what crosses the ring-sync wire

@@ -6,11 +6,25 @@
 //!
 //! The caller sends what it holds (a per-actor contiguous high-water
 //! [`Digest`]) and, optionally, ops it believes the responder lacks. The
-//! responder ingests those, then answers with its own digest and every op the
-//! caller's digest says it is missing. Two calls converge both directions:
-//! the first learns the peer's digest, the second delivers against it. Both
-//! are idempotent, so a dropped call costs one round and never a duplicate
-//! entry.
+//! responder ingests those, then answers with its own digest and as much of
+//! what the caller's digest says it is missing as fits one budget. Two calls
+//! converge both directions: the first learns the peer's digest, the second
+//! delivers against it. Both are idempotent, so a dropped call costs one round
+//! and never a duplicate entry.
+//!
+//! # Both directions are budgeted, and neither is capped
+//!
+//! `ops` on the way in and `ops` on the way out are each stopped at
+//! [`RING_SYNC_OPS_BUDGET_BYTES`], and the sender repeats the exchange until
+//! nothing moves. Nothing on the wire changed shape to make that work — the
+//! exchange was always idempotent, so a partial one is safe.
+//!
+//! Before that, one exchange carried the whole selection and the receiver's
+//! `DefaultBodyLimit` refused it at ~9,599 ops of the measured fixture. The
+//! refusal was answered at the extractor, so this handler never ran: no gauge
+//! fired, the sender filed the 413 as an unreachable peer, and the peer that
+//! had been refused the journal reported zero ops, zero gaps and a COMPLETE
+//! ring. A budget is the fix a bigger limit would only have postponed.
 //!
 //! # Nothing here validates an op, and that is the design
 //!
@@ -36,11 +50,23 @@ use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;
 
-/// Past this, a single exchange is carrying enough history that the
-/// checkpoint work the journal deferred has become due. Half the receiver's
-/// body limit, matching the gauge `gossip.rs` already keeps on the mesh-store
-/// snapshot — a rail, not a cap: the exchange still goes through.
-const RING_PAYLOAD_WARN_BYTES: usize = crate::server::MAX_REQUEST_BODY_BYTES / 2;
+/// The byte budget one exchange's `ops` array may fill, in either direction.
+///
+/// **ONE decider** (ARCH §10.6): derived from the receiver's body limit and
+/// never re-typed, the same shape `MESH_STORE_PAYLOAD_WARN_BYTES` uses at
+/// `sovereign-mesh/src/gossip.rs:108`. Half the limit, so the digest, the
+/// namespace and the JSON scaffolding around the array have four megabytes of
+/// headroom they will never need — and a peer running a build whose limit is
+/// lower than ours still has room under it.
+///
+/// It is a BUDGET, not a cap. `ops_missing_from_within` hands back what fits
+/// and says that more remains; the sender repeats the exchange
+/// (`sovereign-mesh/src/ring_sync.rs::exchange`) until nothing does. Before
+/// this existed the whole selection went in one body, and past
+/// ~9,599 ops of the measured fixture the receiver answered 413 at the
+/// extractor — so the handler never ran, no gauge fired, and the refused peer
+/// reported a complete and empty ring.
+pub const RING_SYNC_OPS_BUDGET_BYTES: usize = crate::server::MAX_REQUEST_BODY_BYTES / 2;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RingSyncRequest {
@@ -78,10 +104,19 @@ fn err(status: StatusCode, msg: impl Into<String>) -> Response {
     (status, Json(serde_json::json!({ "error": msg.into() }))).into_response()
 }
 
-pub async fn ring_sync(
-    State(state): State<AppState>,
-    Json(req): Json<RingSyncRequest>,
-) -> Response {
+/// The body arrives as raw [`Bytes`] rather than `Json<RingSyncRequest>` for
+/// exactly one reason: **the gauge below has to read the direction that can
+/// fail.** `DefaultBodyLimit` bounds the REQUEST; the response has no cap at
+/// all. Measuring the deserialised struct back would be a second answer to
+/// "how big was this" (ARCH §10.6) and would not be the number the extractor
+/// compared against anyway.
+pub async fn ring_sync(State(state): State<AppState>, body: axum::body::Bytes) -> Response {
+    // Read before anything can fail, so a 400 still carries the size.
+    let request_bytes = body.len();
+    let req: RingSyncRequest = match serde_json::from_slice(&body) {
+        Ok(r) => r,
+        Err(e) => return err(StatusCode::BAD_REQUEST, format!("malformed body: {e}")),
+    };
     let Some(rail) = state.ring_rail() else {
         // A node with no ring storage cannot participate. Refusing is the
         // honest answer; a 200 with an empty digest would tell the peer this
@@ -100,7 +135,12 @@ pub async fn ring_sync(
         Ok(n) => n,
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
-    let (digest, ops) = match (journal.digest(), journal.ops_missing_from(&req.digest)) {
+    // Budgeted in BOTH directions. The response was the unbounded half —
+    // the pull direction converged at a size where the identical peer being
+    // pushed to was refused — and an unbounded body is also an unbounded
+    // allocation on a route any peer that can route here may call.
+    let selection = journal.ops_missing_from_within(&req.digest, RING_SYNC_OPS_BUDGET_BYTES);
+    let (digest, (ops, more_for_caller)) = match (journal.digest(), selection) {
         (Ok(d), Ok(o)) => (d, o),
         (Err(e), _) | (_, Err(e)) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
@@ -117,21 +157,33 @@ pub async fn ring_sync(
     };
     tracing::debug!(
         namespace = %req.namespace,
+        request_bytes,
         offered = req.ops.len(),
         ingested,
         sending = body.ops.len(),
+        more_for_caller,
         payload_bytes = bytes.len(),
         "ring sync: exchange"
     );
-    if bytes.len() >= RING_PAYLOAD_WARN_BYTES {
+    // **The gauge watches the request, because the request is the direction
+    // with a limit.** It read `bytes.len()` — the response — until 2f, which
+    // meant the rail's one instrument watched the half that cannot fail.
+    //
+    // A caller whose body reached the budget filled a whole chunk, so it has
+    // more to send and will be back this round: that is the named trigger for
+    // the checkpoint work the journal defers, and it is now also how an
+    // UNBUDGETED sender (an older build, which puts its whole selection in
+    // one body) becomes visible before the extractor refuses it.
+    if request_bytes >= RING_SYNC_OPS_BUDGET_BYTES {
         tracing::warn!(
             namespace = %req.namespace,
-            payload_bytes = bytes.len(),
-            warn_at_bytes = RING_PAYLOAD_WARN_BYTES,
+            request_bytes,
+            budget_bytes = RING_SYNC_OPS_BUDGET_BYTES,
             limit_bytes = crate::server::MAX_REQUEST_BODY_BYTES,
-            "ring sync: one exchange is past half the receiver's body limit — \
-             this is the named trigger for journal checkpoints, and past the \
-             limit peers stop converging"
+            offered = req.ops.len(),
+            "ring sync: a caller filled its whole exchange budget — this ring \
+             is carrying more history than one exchange holds, which is the \
+             named trigger for journal checkpoints"
         );
     }
     (

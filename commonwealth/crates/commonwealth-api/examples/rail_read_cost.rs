@@ -2,14 +2,20 @@
 //! `cargo run --release -p commonwealth-api --example rail_read_cost`
 //!
 //! Prices the RAIL READ PATH — read / parse / fold, separately — against the
-//! MeshStore read it would replace, and binary-searches the one-exchange
-//! byte ceiling per payload shape. Measured for cw-lift order 2 rung 2a.
+//! MeshStore read it would replace, and binary-searches the one-BODY byte
+//! ceiling per payload shape. Measured for cw-lift order 2 rung 2a.
+//!
+//! Since rung 2f the one-body figure is a CHUNK size, not a convergence
+//! ceiling: the exchange is budgeted at `RING_SYNC_OPS_BUDGET_BYTES` and
+//! repeated, so the ceiling arm below reports both — the body that still
+//! cannot be exceeded, and the chunk the loop actually sends.
 //!
 //! An example rather than a test because a 50k-op sweep is ~40 s and every
 //! number here is a CONSTANT in N: the curve's shape is settled, and what a
-//! test can usefully pin (the ceiling, and what happens past it) is pinned in
-//! `tests/rail_e2e.rs` §"the convergence ceiling". Precedent for the target
-//! kind: `commonwealth-transport/examples/tunnel_bench.rs`.
+//! test can usefully pin (the chunk size, and that convergence outruns it) is
+//! pinned in `tests/rail_e2e.rs` §"the convergence ceiling, and the budget
+//! that ended it". Precedent for the target kind:
+//! `commonwealth-transport/examples/tunnel_bench.rs`.
 //!
 //! Clear `RUSTC_WRAPPER` when timing a rebuild — sccache is on by default on
 //! this host and misreports build wall time.
@@ -355,7 +361,9 @@ fn main() {
             });
             let rq = serde_json::to_vec(&req).unwrap().len();
             let rs = serde_json::to_vec(&resp).unwrap().len();
-            const LIMIT: usize = 8 * 1024 * 1024;
+            // Derived, never re-typed: this instrument's numbers have to be
+            // quoted against the limit the receiver actually enforces.
+            const LIMIT: usize = commonwealth_api::server::MAX_REQUEST_BODY_BYTES;
             println!(
                 "    WIRE: RingSyncRequest {rq} B ({} B/op) · Response {rs} B · \
                  {:.1}% of the 8 MiB body limit · ceiling ~{} ops",
@@ -369,7 +377,9 @@ fn main() {
 
     // ── the EXACT ceiling, by binary search on the real wire body ──
     println!("── exact ceiling per fixture (real RingSyncRequest bytes) ───");
-    const LIMIT: usize = 8 * 1024 * 1024;
+    const LIMIT: usize = commonwealth_api::server::MAX_REQUEST_BODY_BYTES;
+    const BUDGET: usize = commonwealth_api::routes_internal::RING_SYNC_OPS_BUDGET_BYTES;
+    println!("   body limit {LIMIT} B · exchange budget {BUDGET} B (rung 2f)");
     for (label, mk) in &shapes {
         let dir = Path::new(&root).join(format!("ceiling-{label}"));
         std::fs::create_dir_all(&dir).unwrap();
@@ -395,11 +405,27 @@ fn main() {
                 hi = mid - 1;
             }
         }
+        // The same search against the BUDGET: what one chunk carries.
+        let (mut blo, mut bhi) = (1usize, cap);
+        while blo < bhi {
+            let mid = (blo + bhi + 1) / 2;
+            if body_bytes(mid) <= BUDGET {
+                blo = mid;
+            } else {
+                bhi = mid - 1;
+            }
+        }
         println!(
             "  {label:<20} last N that FITS = {lo:>6}  ({} B)   first that does NOT = {} ({} B)",
             body_bytes(lo),
             lo + 1,
             body_bytes(lo + 1)
+        );
+        println!(
+            "  {:<20} one CHUNK = {blo:>6} ops ({} B) — and the exchange repeats, so \
+             convergence is not bounded by either figure",
+            "",
+            body_bytes(blo),
         );
     }
     println!();

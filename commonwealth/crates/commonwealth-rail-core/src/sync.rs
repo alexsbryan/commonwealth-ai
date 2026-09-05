@@ -160,17 +160,90 @@ pub fn digest(ops: &[Op<SignedOp>]) -> Digest {
 /// `(actor, seq)` so the wire payload is deterministic — two nodes with the
 /// same holdings produce byte-identical bodies, which makes a diff of two
 /// captures mean something.
+///
+/// This is [`ops_missing_from_within`] with no budget, and it is the honest
+/// TOTAL: what a caller wants when it is measuring, not when it is sending.
+/// Everything that puts ops on a wire uses the budgeted form.
 pub fn ops_missing_from(ops: &[Op<SignedOp>], theirs: &Digest) -> Vec<Op<SignedOp>> {
-    let mut out: Vec<Op<SignedOp>> = ops
+    ops_missing_from_within(ops, theirs, NO_BUDGET).0
+}
+
+/// The budget that never binds — what [`ops_missing_from`] passes.
+///
+/// Named rather than spelled `usize::MAX` at the call site because it is also
+/// the value the pricing fast path tests for: costing every op is a second
+/// whole serialisation of the journal, and a caller that cannot be cut short
+/// must not pay for it.
+pub const NO_BUDGET: usize = usize::MAX;
+
+/// Every op this node holds that `theirs` says the peer is missing, stopped
+/// at `budget_bytes` of serialised ops.
+///
+/// Returns `(ops, more)`. **`more` is the whole reason this is not a
+/// `Vec`**: "here is everything you lack" and "here is as much of it as fits"
+/// are different facts, and a truncation the caller cannot see is a silent
+/// substitution (ARCH §18.3). The receiver's body limit answers an oversized
+/// exchange at the extractor, so nothing downstream of a quiet truncation
+/// would ever have said otherwise.
+///
+/// # Why repeating this terminates (the sync loop's whole safety argument)
+///
+/// **The first op of a non-empty chunk is always one the peer does not
+/// hold.** A mark of `n` for an actor means their run is contiguous THROUGH
+/// `n`, so they do not hold `n + 1`; the selection filters on `seq > n` and
+/// orders by `(actor, seq)`, so the lowest element it can yield is exactly
+/// that op. A peer therefore ingests at least one new op per non-empty chunk,
+/// both holdings are finite, and the caller's loop
+/// (`sovereign-mesh/src/ring_sync.rs::exchange`) cannot spin against a peer
+/// that is merely behind.
+///
+/// # The budget is in WIRE bytes, and one op is never split
+///
+/// Cost is `serde_json` length plus the array's separating comma — the same
+/// serialisation the receiver's limit compares against, because any other
+/// number would be a second implementation of "how big is this" (ARCH §10.6).
+///
+/// An op that alone exceeds the budget is still sent. A chunk of none would
+/// be the spin this exists to prevent, and the honest failure for an op too
+/// large for any exchange is the receiver's refusal — not a sender that
+/// quietly stops.
+pub fn ops_missing_from_within(
+    ops: &[Op<SignedOp>],
+    theirs: &Digest,
+    budget_bytes: usize,
+) -> (Vec<Op<SignedOp>>, bool) {
+    let mut wanted: Vec<&Op<SignedOp>> = ops
         .iter()
         .filter(|op| match theirs.get(&op.actor) {
             Some(high_water) => op.kind.seq > *high_water,
             None => true,
         })
-        .cloned()
         .collect();
-    out.sort_by(|a, b| (&a.actor, a.kind.seq).cmp(&(&b.actor, b.kind.seq)));
-    out
+    wanted.sort_by(|a, b| (&a.actor, a.kind.seq).cmp(&(&b.actor, b.kind.seq)));
+
+    if budget_bytes == NO_BUDGET {
+        return (wanted.into_iter().cloned().collect(), false);
+    }
+
+    let mut out: Vec<Op<SignedOp>> = Vec::new();
+    let mut spent: usize = 0;
+    for op in wanted {
+        let cost = match serde_json::to_vec(op) {
+            // `+ 1` for the comma the enclosing array puts between elements.
+            Ok(bytes) => bytes.len() + 1,
+            // Unreachable for an op that came off a wire or out of a journal,
+            // but a price that cannot be computed must not read as free:
+            // charge the whole budget so such an op is only ever sent alone,
+            // and let the receiver — not a silent drop — judge it.
+            Err(_) => budget_bytes,
+        };
+        if !out.is_empty() && spent.saturating_add(cost) > budget_bytes {
+            return (out, true);
+        }
+        spent = spent.saturating_add(cost);
+        out.push(op.clone());
+    }
+    (out, false)
 }
 
 #[cfg(test)]
@@ -315,5 +388,100 @@ mod tests {
             ops_missing_from(&a, &Digest::new()),
             ops_missing_from(&b, &Digest::new())
         );
+    }
+
+    // ── the byte budget ──────────────────────────────────
+
+    fn wire_bytes(ops: &[Op<SignedOp>]) -> usize {
+        serde_json::to_vec(ops).unwrap().len()
+    }
+
+    /// The unbudgeted form is the budgeted one with a budget that cannot
+    /// bind — one selection rule, not two (ARCH §10.6).
+    #[test]
+    fn the_unbudgeted_form_is_the_budgeted_one_with_no_budget() {
+        let held: Vec<_> = (0..20).map(|s| op(1, s, 100 + s as i64)).collect();
+        let (all, more) = ops_missing_from_within(&held, &Digest::new(), NO_BUDGET);
+        assert_eq!(all, ops_missing_from(&held, &Digest::new()));
+        assert!(!more, "a budget that cannot bind never truncates");
+    }
+
+    /// A budget larger than the whole selection changes nothing and says so.
+    #[test]
+    fn a_budget_nothing_reaches_sends_everything_and_reports_no_more() {
+        let held: Vec<_> = (0..20).map(|s| op(1, s, 100 + s as i64)).collect();
+        let whole = wire_bytes(&held);
+        let (sent, more) = ops_missing_from_within(&held, &Digest::new(), whole * 2);
+        assert_eq!(sent.len(), 20);
+        assert!(!more);
+    }
+
+    /// **The truncation is visible, and it is the lowest ops that go.** A
+    /// chunk that quietly dropped the tail would leave the peer with a hole
+    /// it could never name.
+    #[test]
+    fn a_budget_that_binds_sends_the_lowest_ops_and_reports_more() {
+        let held: Vec<_> = (0..20).map(|s| op(1, s, 100 + s as i64)).collect();
+        let five = wire_bytes(&held[..5]);
+        let (sent, more) = ops_missing_from_within(&held, &Digest::new(), five);
+        assert!(more, "the budget cut it short and must say so");
+        assert!(
+            (1..20).contains(&sent.len()),
+            "a budget of five ops' bytes sent {} of 20",
+            sent.len()
+        );
+        assert_eq!(
+            sent.iter().map(|o| o.kind.seq).collect::<Vec<_>>(),
+            (0..sent.len() as u64).collect::<Vec<_>>(),
+            "the chunk is the contiguous LOW end, so the peer's mark advances"
+        );
+        assert!(
+            wire_bytes(&sent) <= five,
+            "the chunk must fit the budget it was given"
+        );
+    }
+
+    /// **A chunk of none would be the spin.** One op larger than the whole
+    /// budget still goes out alone; the receiver's refusal is the honest
+    /// failure, and a sender that returned nothing forever is not.
+    #[test]
+    fn an_op_bigger_than_the_whole_budget_is_still_sent_alone() {
+        let held: Vec<_> = (0..3).map(|s| op(1, s, 100 + s as i64)).collect();
+        let (sent, more) = ops_missing_from_within(&held, &Digest::new(), 1);
+        assert_eq!(sent.len(), 1, "exactly one, never zero");
+        assert_eq!(sent[0].kind.seq, 0);
+        assert!(more);
+    }
+
+    /// **K9, in the small.** Repeating the chunked selection against a peer
+    /// that ingests what it is sent converges, and the bound on the number of
+    /// rounds is the count of ops rather than anything larger: every non-empty
+    /// chunk starts at an op the peer provably lacks, so every round moves the
+    /// peer's mark.
+    #[test]
+    fn repeating_a_budgeted_chunk_converges_and_every_round_moves_the_mark() {
+        let held: Vec<_> = (0..40).map(|s| op(1, s, 100 + s as i64)).collect();
+        let budget = wire_bytes(&held[..3]);
+        let mut peer: Vec<Op<SignedOp>> = Vec::new();
+        let mut rounds = 0;
+        loop {
+            let (chunk, more) = ops_missing_from_within(&held, &digest(&peer), budget);
+            if chunk.is_empty() {
+                assert!(!more, "nothing to send cannot also mean more remains");
+                break;
+            }
+            let before = digest(&peer);
+            peer.extend(chunk);
+            assert_ne!(
+                digest(&peer),
+                before,
+                "round {rounds} sent a chunk that moved nothing — this is the spin"
+            );
+            rounds += 1;
+            assert!(rounds <= 40, "a 40-op journal must not need 40+ rounds");
+        }
+        assert_eq!(peer.len(), 40, "converged, in {rounds} rounds");
+        assert_eq!(digest(&peer), digest(&held), "two nodes, one claim");
+        assert!(rounds > 1, "the control: this budget really did chunk");
     }
 }

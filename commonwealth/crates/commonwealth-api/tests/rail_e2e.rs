@@ -30,7 +30,9 @@ use std::sync::Arc;
 use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
-use commonwealth_api::routes_internal::{RingSyncRequest, RingSyncResponse};
+use commonwealth_api::routes_internal::{
+    RingSyncRequest, RingSyncResponse, RING_SYNC_OPS_BUDGET_BYTES,
+};
 use commonwealth_api::server::client_router;
 use commonwealth_api::state::AppState;
 use commonwealth_core::ids::{MeshId, NodeId};
@@ -652,15 +654,25 @@ async fn a_node_without_ring_storage_refuses_the_exchange() {
     assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
 
-// ── the convergence ceiling ──────────────────────────────────
+// ── the convergence ceiling, and the budget that ended it ────
 //
-// `ops_missing_from` returns everything a peer lacks in ONE body, and the
-// receiver caps a request body at `MAX_REQUEST_BODY_BYTES`. Nothing in the
-// tree asserted what happens when those two meet. These four do.
+// `ops_missing_from` returned everything a peer lacks in ONE body, and the
+// receiver caps a request body at `MAX_REQUEST_BODY_BYTES`. Past ~9,599 ops
+// of the fixture below those two met, and the meeting was silent: the 413 is
+// answered at the extractor, so the handler never ran, the gauge it carries
+// could not fire, and the sender filed a reachable peer as unreachable at
+// DEBUG. The peer that had been refused the journal reported zero ops, zero
+// gaps and a COMPLETE ring.
 //
-// THE CEILING IS IN BYTES, NOT OPS, so every figure below names its fixture.
+// `RING_SYNC_OPS_BUDGET_BYTES` stops the selection at a byte budget and the
+// exchange repeats, so one body is no longer the unit of convergence.
+// **Nothing on the wire changed shape** — the exchange was always idempotent
+// — which is why every per-body figure below is unchanged and only what they
+// MEAN has moved: they now size a chunk, not a ceiling.
+//
+// THE FIGURES ARE IN BYTES, NOT OPS, so every one names its fixture.
 // Measured on this host with the production types (railread, release, and
-// reproduced by `the_measured_wire_cost_of_one_op` below):
+// reproduced by `one_budgeted_chunk_carries_less_than_a_whole_journal`):
 //
 //   fixture body   B/op on the wire   ops in 8 MiB
 //   594 B (order 2 §2's ledger)   873   9,608
@@ -668,7 +680,7 @@ async fn a_node_without_ring_storage_refuses_the_exchange() {
 //   ~274 B (a work-atlas obs.)    552  15,196
 //
 // The 594-byte fixture is the one carried here because it is the one order 2
-// priced, and it puts the ceiling nearest the round number the order named.
+// priced, and it puts the figure nearest the round number the order named.
 
 /// A `Payload` whose serialised `RailAct::Record` body is at least `target`
 /// bytes. Constructed rather than guessed: the envelope overhead is measured
@@ -752,12 +764,24 @@ fn node(
     (state, journal)
 }
 
-/// **The ceiling is a measurement, not arithmetic.** Pins the per-op wire
-/// cost of the fixture the other three tests use, so a change to the op
-/// envelope moves this number here — where it is one assertion — rather than
-/// silently moving the ceiling three tests below assume.
+/// **The measurement, not arithmetic.** Pins the per-op wire cost of the
+/// fixture the other tests use, and derives from it what one budgeted CHUNK
+/// carries — so a change to the op envelope or to the budget moves the number
+/// here, where it is one assertion, rather than silently un-chunking the
+/// convergence tests below.
+///
+/// All three bounds are alarms rather than descriptions:
+///
+/// - **860-890 B/op** is the envelope. It is what every figure in the table
+///   above is quoted against.
+/// - **Under 10,000 ops in one body** is 2a's ceiling. It has NOT moved and
+///   is not supposed to — the fix was to stop making one body the unit of
+///   convergence, not to make the body bigger.
+/// - **Under 10,000 ops in one chunk** is what keeps the tests below honest.
+///   If a chunk ever carried a whole 10,000-op journal, every convergence
+///   assertion here would pass without a second chunk ever being sent.
 #[tokio::test]
-async fn the_measured_wire_cost_of_one_op_puts_the_ceiling_under_ten_thousand() {
+async fn one_budgeted_chunk_carries_less_than_a_whole_journal() {
     let dir = tempfile::tempdir().unwrap();
     let key = SigningKey::from_bytes(&[1u8; 32]);
     const N: usize = 500;
@@ -770,7 +794,8 @@ async fn the_measured_wire_cost_of_one_op_puts_the_ceiling_under_ten_thousand() 
     };
     assert_eq!(body.ops.len(), N, "an empty digest asks for everything");
     let per_op = serde_json::to_vec(&body).unwrap().len() / N;
-    let ceiling = commonwealth_api::server::MAX_REQUEST_BODY_BYTES / per_op;
+    let one_body = commonwealth_api::server::MAX_REQUEST_BODY_BYTES / per_op;
+    let per_chunk = RING_SYNC_OPS_BUDGET_BYTES / per_op;
 
     assert!(
         (860..=890).contains(&per_op),
@@ -778,29 +803,94 @@ async fn the_measured_wire_cost_of_one_op_puts_the_ceiling_under_ten_thousand() 
          the wire, not the ~873 the ceiling table assumes"
     );
     assert!(
-        ceiling < 10_000,
-        "the ceiling moved to {ceiling} ops — retention, chunking or a bigger \
-         body limit landed, and the three tests below must move with it"
+        one_body < 10_000,
+        "one body now holds {one_body} ops — the envelope or the limit moved, \
+         and every figure in the table above is stale"
+    );
+    assert!(
+        (1..10_000).contains(&per_chunk),
+        "one chunk carries {per_chunk} ops — the convergence tests below stop \
+         exercising a second chunk"
     );
 }
 
-/// **The named failing input, and the whole finding.** One exchange carrying
-/// a 10,000-op journal is REFUSED by the receiver's body limit.
+/// **The sender's loop, driven against the real route.**
 ///
-/// The 9,000-op arm is the negative control: the same code path, the same
-/// fixture, one exchange under the ceiling, and it is served. Without it a
-/// 413 would be evidence of nothing — a route that refuses everything would
-/// pass just as well.
+/// The production spelling is `sovereign_mesh::ring_sync::exchange`, which
+/// this harness cannot call: that one needs a `reqwest` client against a live
+/// socket and this dispatches through `tower::oneshot`. (It is tested against
+/// a real listener, in that crate, beside the loop it drives.) What is NOT
+/// duplicated here is the DECISION — the chunk comes from the production
+/// `ops_missing_from_within` at the production `RING_SYNC_OPS_BUDGET_BYTES`,
+/// so a budget that stopped binding would fail these tests too.
+///
+/// Returns `(chunks, ops the peer reported as new)`.
+async fn push_until_converged(peer: AppState, journal: &RingJournal) -> (usize, usize) {
+    let mut chunks = 0usize;
+    let mut pushed = 0usize;
+    loop {
+        // Call 1 — learn what they hold. A digest is ~600 bytes whatever the
+        // journal weighs, which is why this half was never the problem.
+        let theirs = sync_once(peer.clone(), NS, journal.digest().unwrap(), Vec::new()).await;
+        let (ops, more) = journal
+            .ops_missing_from_within(&theirs.digest, RING_SYNC_OPS_BUDGET_BYTES)
+            .unwrap();
+        if ops.is_empty() {
+            assert!(!more, "nothing to send cannot also mean more remains");
+            return (chunks, pushed);
+        }
+        let offered = ops.len();
+        let push = RingSyncRequest {
+            namespace: NS.to_string(),
+            digest: journal.digest().unwrap(),
+            ops,
+        };
+        let bytes = serde_json::to_vec(&push).unwrap().len();
+        let (status, body) = sync_raw(peer.clone(), &push).await;
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "chunk {chunks} was {bytes} B and was refused — the budget exists \
+             to keep every chunk under the {} B limit",
+            commonwealth_api::server::MAX_REQUEST_BODY_BYTES
+        );
+        let ingested = body.expect("a 200 carries a response").ingested;
+        assert!(
+            ingested > 0,
+            "chunk {chunks} offered {offered} ops and moved none — a chunk \
+             whose first op the peer already holds is the spin the contiguous \
+             mark is supposed to make impossible"
+        );
+        pushed += ingested;
+        chunks += 1;
+        assert!(chunks < 64, "the push did not converge in 64 chunks");
+    }
+}
+
+/// **The limit is still real; the budget is what keeps us under it.**
+///
+/// Nothing about the receiver got more permissive in 2f, and this is where
+/// that is nailed down — otherwise "it converges now" could as easily mean
+/// somebody raised `MAX_REQUEST_BODY_BYTES` and moved the same failure a
+/// factor of two out.
+///
+/// - The whole selection in ONE body, the shape the loop sent until 2f, is
+///   still refused at 10,000 ops.
+/// - The 9,000-op arm is the negative control: a body under the limit is
+///   served, so the 413 is evidence about SIZE and not about a route that
+///   refuses everything.
+/// - The same 10,000-op journal offered as a budgeted CHUNK — what the loop
+///   sends now — is served.
 #[tokio::test]
-async fn one_exchange_past_the_ceiling_is_refused_by_the_receivers_body_limit() {
+async fn the_budgeted_chunk_is_served_where_the_whole_journal_is_refused() {
     let key = SigningKey::from_bytes(&[1u8; 32]);
-    let receiver = tempfile::tempdir().unwrap();
 
     for (n, want) in [
         (9_000usize, StatusCode::OK),
         (10_000, StatusCode::PAYLOAD_TOO_LARGE),
     ] {
         let sender_dir = tempfile::tempdir().unwrap();
+        let receiver = tempfile::tempdir().unwrap();
         let (_sender, journal) = node(sender_dir.path(), &key, n);
         // A node that has never seen this ring: it holds nothing, so
         // `ops_missing_from(&empty)` is the sender's whole journal.
@@ -816,150 +906,181 @@ async fn one_exchange_past_the_ceiling_is_refused_by_the_receivers_body_limit() 
         assert_eq!(
             status,
             want,
-            "{n} ops = {bytes} B against a {} B limit",
+            "{n} unbudgeted ops = {bytes} B against a {} B limit",
             commonwealth_api::server::MAX_REQUEST_BODY_BYTES
         );
     }
+
+    // And the same journal, budgeted the way the loop sends it.
+    let sender_dir = tempfile::tempdir().unwrap();
+    let receiver = tempfile::tempdir().unwrap();
+    let (_sender, journal) = node(sender_dir.path(), &key, 10_000);
+    let (peer, _) = node(receiver.path(), &SigningKey::from_bytes(&[2u8; 32]), 0);
+    let (ops, more) = journal
+        .ops_missing_from_within(&Digest::new(), RING_SYNC_OPS_BUDGET_BYTES)
+        .unwrap();
+    assert!(
+        more,
+        "the control: 10,000 ops must not fit one chunk, or the arm below \
+         proves only that a small body is served"
+    );
+    let push = RingSyncRequest {
+        namespace: NS.to_string(),
+        digest: journal.digest().unwrap(),
+        ops,
+    };
+    let bytes = serde_json::to_vec(&push).unwrap().len();
+    let (status, _) = sync_raw(peer, &push).await;
+    assert_eq!(status, StatusCode::OK, "the budgeted chunk was {bytes} B");
 }
 
-/// **What the refusal costs, and it is a silent wrong answer.**
+/// **The defect 2a named, flipped into the alarm.**
 ///
-/// The peer that could not be pushed to does not report a failure. It reports
-/// a ring: zero ops, zero gaps, `is_complete()` TRUE. "I hold the whole
-/// journal and there is nothing in it" and "the push that would have given me
-/// the journal was refused" are different facts, and this collapses them into
-/// the plausible one (ARCH §18.3).
+/// This test used to assert the defect: a peer refused the journal reported
+/// zero ops, zero gaps and `is_complete()` TRUE. "I hold the whole journal
+/// and there is nothing in it" and "the push that would have given me the
+/// journal was refused" are different facts, and one 413 at the extractor
+/// collapsed them into the plausible one (ARCH §18.3).
 ///
-/// Nothing on either side says otherwise:
+/// The same 10,000-op journal, over the same route, now converges — because
+/// the exchange is budgeted and repeated rather than made bigger.
 ///
-/// - The receiver never runs the handler, so `RING_PAYLOAD_WARN_BYTES`
-///   (`ring_sync.rs:43`) cannot fire — the body limit rejects at the
-///   extractor. That warning is computed on the RESPONSE (`:113-136`), which
-///   is the direction with no limit at all, so the one instrument the rail
-///   has watches the half that works.
-/// - The sender maps the status to `Err("HTTP 413")`
-///   (`sovereign-mesh/src/ring_sync.rs:246`), and `run_one_round` logs it at
-///   **debug** and counts the peer as `peers_unreachable` (`:171-183`). A
-///   reachable peer refusing an oversized body is filed as an unreachable
-///   one.
+/// **The bootstrap case is the one that had to work.** A node that has never
+/// seen this ring has no `rings/<ns>/` directory, so `run_one_round`
+/// enumerates nothing and returns before dialling anybody
+/// (`sovereign-mesh/src/ring_sync.rs:117`, `:124`): it can only ever be TOLD,
+/// over the direction that has a body limit. This peer is that node, and the
+/// assertion below is that being told now works at any journal size.
+///
+/// Watched RED against the unbudgeted shape (`RING_SYNC_OPS_BUDGET_BYTES`
+/// raised past the body limit): the first chunk comes back 413 and the fold
+/// reports the empty, complete ring the paragraph above describes.
 #[tokio::test]
-async fn a_refused_push_leaves_the_peer_reporting_a_complete_and_empty_ring() {
+async fn a_journal_past_the_old_ceiling_converges_onto_a_node_that_has_never_seen_the_ring() {
+    const N: usize = 10_000;
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let sender_dir = tempfile::tempdir().unwrap();
     let peer_dir = tempfile::tempdir().unwrap();
-    let (_sender, journal) = node(sender_dir.path(), &key, 10_000);
+    let (_sender, journal) = node(sender_dir.path(), &key, N);
     let (peer_state, peer_journal) = node(peer_dir.path(), &SigningKey::from_bytes(&[2u8; 32]), 0);
     peer_journal.set_roster(&solo_roster(&key)).unwrap();
 
-    let (status, body) = sync_raw(
-        peer_state,
-        &RingSyncRequest {
-            namespace: NS.to_string(),
-            digest: journal.digest().unwrap(),
-            ops: journal.ops_missing_from(&Digest::new()).unwrap(),
-        },
-    )
-    .await;
-    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    let (chunks, pushed) = push_until_converged(peer_state, &journal).await;
     assert!(
-        body.is_none(),
-        "the refusal carries no RingSyncResponse — the handler never ran"
+        chunks > 1,
+        "the control: {N} ops must take more than one chunk, or this passes \
+         without ever exercising the repeat"
     );
+    assert_eq!(pushed, N, "every op landed, in {chunks} chunks");
 
     let after = peer_journal
         .admit(&solo_roster(&key), &Ed25519Verifier)
         .unwrap();
-    assert!(after.ops.is_empty(), "nothing arrived");
+    assert_eq!(after.ops.len(), N, "the whole journal arrived");
     assert!(
         after.is_complete(),
-        "THIS is the defect: a peer that was refused the journal reports no \
-         gaps. Gaps: {:?}",
+        "a chunked bootstrap is not a holed one: {:?}",
         after.gaps
+    );
+    assert_eq!(
+        peer_journal.digest().unwrap(),
+        journal.digest().unwrap(),
+        "two nodes, one claim"
     );
 }
 
-/// **The ceiling is one-directional, and that is where the cheap fix is.**
+/// **The response is budgeted too, and it had to be.**
 ///
-/// `DefaultBodyLimit` bounds the REQUEST. The same journal comes back in a
-/// RESPONSE with no cap at all — so a peer that PULLS converges at a size
-/// where the identical peer being PUSHED to is refused.
+/// `DefaultBodyLimit` bounds the REQUEST. The same journal used to come back
+/// in a RESPONSE with no cap at all, which sounded like a free rescue and was
+/// two problems: the direction that could not bootstrap a fresh peer was also
+/// the one direction nothing bounded, on a route every peer that can route to
+/// this host may call. So the budget applies to both, and the pull converges
+/// by repeating exactly as the push does.
 ///
-/// It does not rescue a fresh peer today, and the reason is four lines in the
-/// mesh loop: `run_one_round` iterates `rail.namespaces()`, read from disk,
-/// and returns early when it is empty (`sovereign-mesh/src/ring_sync.rs:117`,
-/// `:124`). A node that has never seen this ring has no `rings/<ns>`
-/// directory, so it never dials anybody about it. **The only direction that
-/// can bootstrap it is the bounded one.**
+/// The bound is asserted every round rather than once, because a response
+/// that fits on round one and not on round three is the failure that would
+/// otherwise ship.
 #[tokio::test]
-async fn the_pull_direction_carries_what_the_push_direction_is_refused() {
+async fn the_pull_direction_is_budgeted_and_converges_by_repeating() {
+    const N: usize = 10_000;
     let key = SigningKey::from_bytes(&[1u8; 32]);
     let holder_dir = tempfile::tempdir().unwrap();
-    let (holder, journal) = node(holder_dir.path(), &key, 10_000);
+    let (holder, journal) = node(holder_dir.path(), &key, N);
 
-    // The same 10,000 ops the push arm above was refused, pulled instead: a
-    // fresh peer's empty digest, no ops offered.
-    let pull = RingSyncRequest {
-        namespace: NS.to_string(),
-        digest: Digest::new(),
-        ops: Vec::new(),
-    };
-    let (status, body) = sync_raw(holder, &pull).await;
-    assert_eq!(status, StatusCode::OK, "the pull is served");
-    let body = body.expect("a 200 carries a response");
-    assert_eq!(body.ops.len(), 10_000, "the whole journal, in one response");
-
-    let bytes = serde_json::to_vec(&body).unwrap().len();
-    assert!(
-        bytes > commonwealth_api::server::MAX_REQUEST_BODY_BYTES,
-        "the control is void unless the response really is over the limit: \
-         {bytes} B"
-    );
-
-    // And the ops that came back are the real thing, not a truncated body:
-    // a fresh peer ingesting them lands a complete ring.
     let fresh_dir = tempfile::tempdir().unwrap();
     let (_fresh, fresh_journal) = node(fresh_dir.path(), &SigningKey::from_bytes(&[2u8; 32]), 0);
     fresh_journal.set_roster(&solo_roster(&key)).unwrap();
-    assert_eq!(fresh_journal.ingest_all(&body.ops).unwrap(), 10_000);
+
+    let mut rounds = 0usize;
+    loop {
+        // A fresh peer's own digest, no ops offered — the pull direction.
+        let body = sync_once(
+            holder.clone(),
+            NS,
+            fresh_journal.digest().unwrap(),
+            Vec::new(),
+        )
+        .await;
+        let bytes = serde_json::to_vec(&body).unwrap().len();
+        assert!(
+            bytes <= commonwealth_api::server::MAX_REQUEST_BODY_BYTES,
+            "round {rounds}: the response was {bytes} B against a {} B limit — \
+             the pull direction is unbounded again",
+            commonwealth_api::server::MAX_REQUEST_BODY_BYTES
+        );
+        if body.ops.is_empty() {
+            break;
+        }
+        assert!(
+            fresh_journal.ingest_all(&body.ops).unwrap() > 0,
+            "round {rounds} carried ops the puller already held — the spin"
+        );
+        rounds += 1;
+        assert!(rounds < 64, "the pull did not converge in 64 rounds");
+    }
+    assert!(
+        rounds > 1,
+        "the control: {N} ops must take more than one pull"
+    );
+
     let admitted = fresh_journal
         .admit(&solo_roster(&key), &Ed25519Verifier)
         .unwrap();
-    assert_eq!(admitted.ops.len(), 10_000);
+    assert_eq!(admitted.ops.len(), N);
     assert!(admitted.is_complete(), "gaps: {:?}", admitted.gaps);
     assert_eq!(
-        admitted.ops.len(),
-        journal
-            .admit(&solo_roster(&key), &Ed25519Verifier)
-            .unwrap()
-            .ops
-            .len(),
+        fresh_journal.digest().unwrap(),
+        journal.digest().unwrap(),
         "two nodes, one answer"
     );
 }
 
-/// **Does the sealed floor (`dc9010181`) move the ceiling? Only the DELETE
-/// does, and nothing in the tree performs it.**
+/// **Does the sealed floor (`dc9010181`) reduce what goes on the wire? Only
+/// the DELETE does, and nothing in the tree performs it.**
 ///
 /// Two arms over the same journal, and the pair is the finding:
 ///
 /// - **A seal alone buys nothing on the wire.** `ops_missing_from` is
 ///   author-blind over what this node HOLDS, and a peer with an empty digest
 ///   is missing all of it, so appending a `Seal` while the retired lines are
-///   still on disk sends exactly the same body. Still 413.
+///   still on disk sends exactly the same ops — now over several chunks
+///   instead of one refused body, which is cheaper in nothing but failure.
 /// - **Deleting the retired lines is the whole mitigation.** The same push
-///   after compaction carries the suffix only, fits, and lands a fresh peer
-///   on a ring `admit` calls COMPLETE — the floor travels as the seal's own
-///   op, so what was retired is absent by agreement rather than a hole.
+///   after compaction carries the suffix only, in ONE chunk, and lands a
+///   fresh peer on a ring `admit` calls COMPLETE — the floor travels as the
+///   seal's own op, so what was retired is absent by agreement rather than a
+///   hole.
 ///
 /// The delete is done here, by this test, because there is no production
 /// routine that does it: `RailAct::Seal` is reachable through `append`, and
 /// `grep -rn "compact\|truncate"` over the rail crates, the API and
 /// `ring_cmd` finds no writer that removes a retired prefix and no verb that
-/// authors a seal. So at HEAD the ceiling is exactly where the tests above
-/// put it, and the sealed floor is the *precondition* for moving it rather
-/// than the move.
+/// authors a seal. The chunked exchange makes an uncompacted journal
+/// *converge*; the seal plus a delete is what makes it *small*, and those are
+/// different wins.
 #[tokio::test]
-async fn a_seal_moves_the_ceiling_only_once_the_retired_lines_are_deleted() {
+async fn a_seal_shortens_the_exchange_only_once_the_retired_lines_are_deleted() {
     const RETIRED: u64 = 10_000;
     const KEPT: u64 = 500;
     let key = SigningKey::from_bytes(&[1u8; 32]);
@@ -987,15 +1108,17 @@ async fn a_seal_moves_the_ceiling_only_once_the_retired_lines_are_deleted() {
         ops: journal.ops_missing_from(&Digest::new()).unwrap(),
     };
 
-    // ARM 1 — sealed, not compacted. The body is unchanged.
+    // ARM 1 — sealed, not compacted. The selection is unchanged, so the
+    // exchange still costs several chunks.
     let before = push(&journal);
     assert_eq!(before.ops.len(), (RETIRED + KEPT + 1) as usize);
     let peer_dir = tempfile::tempdir().unwrap();
-    let (peer, _) = node(peer_dir.path(), &SigningKey::from_bytes(&[2u8; 32]), 0);
-    let (status, _) = sync_raw(peer, &before).await;
-    assert_eq!(
-        status,
-        StatusCode::PAYLOAD_TOO_LARGE,
+    let (peer, peer_journal) = node(peer_dir.path(), &SigningKey::from_bytes(&[2u8; 32]), 0);
+    peer_journal.set_roster(&solo_roster(&key)).unwrap();
+    let (sealed_chunks, sealed_pushed) = push_until_converged(peer, &journal).await;
+    assert_eq!(sealed_pushed, (RETIRED + KEPT + 1) as usize);
+    assert!(
+        sealed_chunks > 1,
         "a seal is an op, not a delete: {} ops still go out",
         before.ops.len()
     );
@@ -1025,11 +1148,16 @@ async fn a_seal_moves_the_ceiling_only_once_the_retired_lines_are_deleted() {
     let peer_dir = tempfile::tempdir().unwrap();
     let (peer, peer_journal) = node(peer_dir.path(), &SigningKey::from_bytes(&[2u8; 32]), 0);
     peer_journal.set_roster(&solo_roster(&key)).unwrap();
-    let resp = sync_once(peer, NS, after.digest.clone(), after.ops.clone()).await;
+    assert_eq!(after.ops.len(), (KEPT + 1) as usize);
+    let (compacted_chunks, compacted_pushed) = push_until_converged(peer, &journal).await;
     assert_eq!(
-        resp.ingested,
+        compacted_pushed,
         (KEPT + 1) as usize,
         "the suffix fits and lands"
+    );
+    assert_eq!(
+        compacted_chunks, 1,
+        "and it lands in ONE chunk, against {sealed_chunks} before the delete"
     );
 
     // And the peer that has never seen this ring reads a COMPLETE journal:

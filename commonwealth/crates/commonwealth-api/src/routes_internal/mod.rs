@@ -55,7 +55,7 @@ pub use corpus_ingest::{
     ProgressSnapshotResponse,
 };
 pub use guest_grant::{guest_grant_issue, guest_grant_list, guest_grant_revoke};
-pub use ring_sync::{ring_sync, RingSyncRequest, RingSyncResponse};
+pub use ring_sync::{ring_sync, RingSyncRequest, RingSyncResponse, RING_SYNC_OPS_BUDGET_BYTES};
 // Crate-internal: the OICP ingest routes (`routes_oicp_ingest`) reuse the
 // same progress→fraction projection so the two surfaces can't diverge.
 pub(crate) use corpus_ingest::progress_fraction;

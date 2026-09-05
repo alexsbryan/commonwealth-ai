@@ -4606,39 +4606,55 @@ ops also arrive from disk. Watched: two-node partition drills at both levels
 (pure journals, and through the route), plus a half-delivered peer whose gap is
 named rather than silently totalled.
 
-**Convergence has a CEILING, crossing it is SILENT, and it binds in one
-direction only** (measured 2026-09-04, cw-lift rung 2a; four tests in
-`commonwealth-api/tests/rail_e2e.rs` §"the convergence ceiling"). The push
-sends everything a peer lacks in ONE body and the receiver caps a request at
-`MAX_REQUEST_BODY_BYTES` = 8 MiB (`server.rs:40`), so the ceiling is in BYTES
-and every figure names its fixture: **9,599 ops** at 873.9 B/op (order 2's
+**One BODY has a ceiling; convergence no longer does** (measured 2026-09-04,
+cw-lift rung 2a; chunked by rung 2f the same day —
+`commonwealth-api/tests/rail_e2e.rs` §"the convergence ceiling, and the budget
+that ended it", plus the loop's own tests in
+`sovereign-mesh/src/ring_sync.rs`). The receiver caps a request at
+`MAX_REQUEST_BODY_BYTES` = 8 MiB (`server.rs:40`), so the per-body figure is in
+BYTES and every one names its fixture: **9,599 ops** at 873.9 B/op (order 2's
 594-byte ledger body), 13,731 at 609 B/op, 15,164 at a work-atlas
-observation's 552 B/op. Past it `DefaultBodyLimit` answers **413 before the
-handler runs**, so `RING_PAYLOAD_WARN_BYTES` cannot fire — and that gauge is
-computed on the RESPONSE (`ring_sync.rs:113-136`), the direction nothing
-bounds, so the rail's one instrument watches the half that works. The sender
-maps the status to `Err("HTTP 413")` and files it at **debug** as
-`peers_unreachable` (`sovereign-mesh/src/ring_sync.rs:171-183`) — a reachable
-peer refusing an oversized body counted as an unreachable one. The peer that
-was refused then reports zero ops, zero gaps and `is_complete() == true`
-(§18.3). The asymmetry is where the cheap fix is: the same journal comes back
-in a RESPONSE over 8 MiB and a fresh peer ingesting it converges — but a node
-that has never seen this ring holds no `rings/<ns>` directory, so
-`run_one_round` finds no namespaces and returns early (`:117`, `:124`) and
-never dials. **The only direction that can bootstrap it is the bounded one.**
+observation's 552 B/op (re-derived by `examples/rail_read_cost.rs`). Until 2f
+that was the CONVERGENCE ceiling, and crossing it was silent: `DefaultBodyLimit`
+answers **413 before the handler runs**, so the gauge could not fire; the gauge
+was computed on the RESPONSE, the direction nothing bounds, so the rail's one
+instrument watched the half that works; the sender mapped the status to
+`Err("HTTP 413")` and filed a reachable peer at **debug** as
+`peers_unreachable`; and the peer that had been refused reported zero ops,
+zero gaps and `is_complete() == true` (§18.3). That mattered most in the one
+case that cannot self-rescue — a node that has never seen this ring holds no
+`rings/<ns>` directory, so `run_one_round` finds no namespaces and returns
+before dialling (`:117`, `:124`): **it can only ever be told, over the
+direction that has a limit.**
 
-**The sealed floor is the precondition for moving that ceiling, not the move.**
-Measured as a pair over one journal: a `Seal` appended while the retired lines
-are still on disk sends the identical body and is still refused —
-`ops_missing_from` is author-blind over what the node HOLDS, and an empty
-digest is missing all of it. **Deleting the retired lines is the whole
-mitigation**, and then it works: the suffix fits, and a peer that has never
-seen the ring lands on a journal `admit` calls COMPLETE, because the seal
-travels as its own op and holes are counted from the floor. Mutating that seal
-to an ordinary `Record` reports 10,000 `SequenceHole`s instead, so the floor
-is load-bearing and not the delete alone. What does not exist at HEAD is
-either half of the routine: no verb authors a seal and nothing removes a
-retired prefix, so the ceiling above is exactly where it stands.
+**The fix is a byte BUDGET and a repeated exchange, not a bigger limit.**
+`RING_SYNC_OPS_BUDGET_BYTES` (`routes_internal/ring_sync.rs`, one decider
+derived from `MAX_REQUEST_BODY_BYTES / 2` and never re-typed) stops
+`ops_missing_from_within` at a chunk in BOTH directions — the response was the
+unbounded half — and `exchange` repeats the pair until neither side moves,
+bounded by `MAX_CHUNKS_PER_EXCHANGE = 16`. **Nothing on the wire changed
+shape**: the exchange was already idempotent because `ingest_all` dedupes on
+the content-addressed op id, so a partial one is safe. It terminates because a
+chunk's first op is always one the receiver provably lacks — a contiguous mark
+of `n` means they do not hold `n + 1`, and the ordered selection yields exactly
+that op first — so every non-empty chunk moves the receiver's mark. The gauge
+now reads the REQUEST, and a 413 comes back as its own `ExchangeStop::Refused`
+counted in `RoundOutcome::peers_refused`, because a peer that answered is not
+a peer that could not be dialled. Watched: a 10,000-op journal converging onto
+a node with no `rings/<ns>/`, red first against an unbudgeted constant.
+
+**The sealed floor shortens the exchange; it never was what moved the
+ceiling.** Measured as a pair over one journal: a `Seal` appended while the
+retired lines are still on disk sends the identical ops — `ops_missing_from` is
+author-blind over what the node HOLDS, and an empty digest is missing all of it
+— so it costs the same several chunks. **Deleting the retired lines is the
+whole mitigation**: the suffix lands in ONE chunk, and a peer that has never
+seen the ring reads a journal `admit` calls COMPLETE, because the seal travels
+as its own op and holes are counted from the floor. Mutating that seal to an
+ordinary `Record` reports 10,000 `SequenceHole`s instead, so the floor is
+load-bearing and not the delete alone. What still does not exist is either half
+of the routine: no verb authors a seal and nothing removes a retired prefix, so
+an uncompacted journal converges but stays large.
 
 **`svrn ring` is the verb** (`sovereign-cli-llm/src/ring_cmd/`, ring-deploy
 S4): `ring new` scaffolds an app (page, reducer, and the reducer's tests),
@@ -4757,7 +4773,7 @@ carrying `dial=` is tunnelled or it is refused (§18.3).
 | `GET  /status`                | Node / mesh / inference / knowledge summary            |
 | `GET  /oicp/v1/capabilities`  | Provider manifest + federation info                    |
 | `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | **Ollama-native compatibility shim** (`routes_ollama.rs`). Pure translation over the OpenAI handlers above — lets Ollama-native clients (Open WebUI's Ollama mode, IDE plugins) connect. `chat`/`generate` are non-streaming-backed in v1: the inner handler runs `stream:false` and the complete answer is framed as Ollama NDJSON (one content frame + terminal). No CORS layer + the same auth posture as `/v1/*` (documented in-module); incremental streaming is a tracked follow-up. |
-| `POST /internal/ring/sync` | Ring-ledger anti-entropy for one namespace: the caller sends its per-actor contiguous high-water digest (and optionally ops), the responder ingests those and answers with its own digest plus everything the caller lacks. Own route on its own 60s cadence, not a namespace on `/internal/app/state`'s 10s full-snapshot push. |
+| `POST /internal/ring/sync` | Ring-ledger anti-entropy for one namespace: the caller sends its per-actor contiguous high-water digest (and optionally ops), the responder ingests those and answers with its own digest plus as much of what the caller lacks as fits `RING_SYNC_OPS_BUDGET_BYTES`. Both `ops` arrays are budgeted and the sender repeats the exchange, so one body is not the unit of convergence. Own route on its own 60s cadence, not a namespace on `/internal/app/state`'s 10s full-snapshot push. |
 | `POST /v1/rail/append`, `GET /v1/rail/log` | The ring rail. Appends one signed act to the caller's namespace, and reads back the admitted acts (already in the one order every node applies them) + gaps. The payload is the app's and the rail does not read inside it, so there is no balance here to return. The namespace comes from `Scope::Rails` on the grant, never from the request; an operator (no grant) passes `?namespace=`. Mounted on `Operator` and `Rail`, and on neither `Peer` nor `Guest` — a ring rail is loopback-only in M0. |
 | `/internal/guest/grant`, `…/revoke`, `…/list` | Mint / kill / list ephemeral guest grants. On the `ClientSurface::Operator` bind ONLY: `:9742` has no auth gate, so a mint route there would let any mesh peer forge guest credentials — and the peer/guest binds of the client router 404 it for the same reason. Unreachable by a guest because no `Scope` names it either. |
 | `/v1/mesh/*` `/v1/admin/*` `/mcp/*` | **Loopback-only** (router middleware + per-handler `enforce_localhost`) |
