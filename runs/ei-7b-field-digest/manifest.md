@@ -27,25 +27,49 @@ recall. The two digest texts, rendered by the same `render_landscape` from the
 two sources, are what the port has to be judged on.
 
 **Leg 2 is a does-not-regress check on a path the change cannot touch**, and is
-reported as such. Its useful yield is the `DIGEST_<arm>_<run>` line: the
-`field_digests` / `from_atlas` / `from_legacy_file` counts off the
-`retrieval_audit` target, which are the only direct evidence of which source
-served the digest.
+reported as such. Its yield is the `YIELD_<arm>_<run>` line.
 
 The arms are the two SOURCES `field_atoms::load_field_model` can serve from, on
 byte-identical corpora:
 
-| Arm | Corpus | v1 file | Atlas | Expected |
-|---|---|---|---|---|
-| `atoms` | `ei7b-fieldguide` | removed | 549 `Question` + 759 `Position` | `from_atlas=1`, `from_legacy_file=0` |
-| `legacy` | `ei7b-legacy` | kept | empty | `from_atlas=0`, `from_legacy_file=1` |
+| Arm | Corpus | v1 file | Atlas |
+|---|---|---|---|
+| `atoms` | `ei7b-fieldguide` | removed | 549 `Question` + 759 `Position` |
+| `legacy` | `ei7b-legacy` | kept | empty |
 
-The `legacy` arm IS the merge precondition in a run: it is the shape `sep` is
-in today, and it must still splice a digest. A third "no field model at all"
-arm was dropped — it measures nothing this change decides and would cost two
-more model runs. If BOTH arms read `field_digests=0` the instrument is dark and
-the source scores mean nothing for this comparison; `INSTRUMENT_NOTE_` says so
-explicitly rather than letting a plausible zero pass.
+The `legacy` arm IS the merge precondition in a run: it is the shape `sep` is in
+today, and it must still serve a digest.
+
+### What the 11:17 run got wrong, and what now catches it
+
+Both arms retrieved NOTHING and the lane still exited 0. Two independent
+defects, both in this script:
+
+1. **`cp -r` copies `_corpus_meta.json`, which carries `corpus_id`.** Both
+   fixtures advertised themselves as `sep`; `installed_indexes()` dedups on the
+   advertised id, kept the real `sep` and DROPPED both fixtures. Neither ever
+   appeared in the corpora list. Leg 0 now rewrites `corpus_id` per fixture
+   (ei-7a's `build_subset.py:210` always did) and ASSERTS it, exiting 94 rather
+   than proceeding. Leg 2 also fails loudly on `corpus_id collision` in the log
+   and on `corpora_searched_max=0 || final_chunks_total=0`.
+
+   It was NOT the ei-7a index trap. The reflink carried all five Lance index
+   files across verbatim — same UUIDs on `sep`, `ei7b-legacy` and
+   `ei7b-fieldguide` — so a filesystem copy is not a `write_dataset` copy and
+   does not lose indices.
+
+2. **`--prod-pipeline` cannot observe the digest at all.** It drives
+   `Runtime::retrieve_evidence` (context build → `kq_pipeline()` → merge →
+   truncate) and does NO synthesis, so it never assembles a system message.
+   `splice_ambient_field_digests` has exactly two callers — `turn.rs:593` and
+   `streaming.rs:4440` — and this mode enters neither. A `field_digests` counter
+   here was always going to read 0 for a reason that has nothing to do with the
+   port. The `DIGEST_` line is kept as a STATEMENT of that fact so the next
+   person does not design the same instrument, and the digest's evidence is leg
+   1 plus the unit tests.
+
+Both new checks were validated against the 11:17 logs before being trusted:
+they report `COULD-NOT-JUDGE` on that data, on each cause independently.
 
 ## Controls
 

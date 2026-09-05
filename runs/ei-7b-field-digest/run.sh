@@ -92,6 +92,30 @@ for id in ei7b-legacy ei7b-fieldguide; do
       "$INDEXES/$id/atlas/atoms.json"
     rm -f "$INDEXES/$id/atlas/_summary.json"
   fi
+  # THE COPY BRINGS THE PARENT'S IDENTITY WITH IT, AND THAT IS FATAL AND SILENT.
+  # `_corpus_meta.json` carries `corpus_id`, so a straight `cp -r` of `sep`
+  # yields a directory named `ei7b-legacy` that ADVERTISES itself as `sep`.
+  # `installed_indexes()` dedups on the advertised id, keeps the real `sep`, and
+  # DROPS the fixture: invisible to search, no error, exit 0, every question
+  # retrieving 0 chunks in BOTH arms. That is exactly what the 11:17 run did.
+  # ei-7a's `build_subset.py:210` does this rewrite; the reflink shortcut here
+  # skipped the one line that mattered.
+  python3 - "$INDEXES/$id/_corpus_meta.json" "$id" <<'META'
+import json, sys
+p, cid = sys.argv[1], sys.argv[2]
+m = json.load(open(p))
+m["corpus_id"] = cid
+if isinstance(m.get("corpus_name"), str):
+    m["corpus_name"] = f"SEP field-guide fixture ({cid}, ei-7b)"
+json.dump(m, open(p, "w"), indent=2)
+META
+done
+# Asserted, not assumed. A fixture still advertising `sep` produces a run that
+# cannot mean anything, and it has to stop HERE rather than at a plausible zero
+# forty minutes later.
+for id in ei7b-legacy ei7b-fieldguide; do
+  adv=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['corpus_id'])" "$INDEXES/$id/_corpus_meta.json")
+  [ "$adv" = "$id" ] || { echo "RC_FIXTURE=94 ($id advertises corpus_id '$adv' — it would be deduped away)"; exit 94; }
 done
 # The atoms arm drops the v1 file, so a digest it serves CANNOT have come from
 # the fallback. Without this the arms would not be separable and a green run
@@ -142,20 +166,39 @@ run () { # arm run_ix corpus
   python3 - "${tag}.log" "${arm}" "${ix}" <<'PYEOF'
 import re, sys
 # STRIP ANSI FIRST. `tracing` writes escapes BETWEEN the field name and the
-# `=`, so a naive `field_digests=[0-9]+` matches nothing and returns a clean,
-# plausible ZERO — indistinguishable from "no digest was spliced", which is
-# exactly what this leg has to tell apart (ei-7a paid for this one).
+# `=`, so a naive `field=[0-9]+` grep matches nothing and returns a clean,
+# plausible ZERO (ei-7a paid for this one).
 ansi = re.compile(r"\x1b\[[0-9;]*m")
 txt = ansi.sub("", open(sys.argv[1], errors="replace").read())
+arm, ix = sys.argv[2], sys.argv[3]
+
+# THE CORPUS MUST ACTUALLY HAVE BEEN SEARCHED. This is the check that would
+# have caught the 11:17 run, where both fixtures advertised `corpus_id = sep`,
+# were deduped away by `installed_indexes()`, and every question retrieved
+# nothing while the lane still exited 0.
+searched = [int(m) for m in re.findall(r"\bcorpora_searched=(\d+)", txt)]
+finals = [int(m) for m in re.findall(r"\bfinal_chunks=(\d+)", txt)]
+collided = "corpus_id collision" in txt
+print(f"YIELD_{arm}_{ix}: merged_events={len(searched)} "
+      f"corpora_searched_max={max(searched or [0])} final_chunks_total={sum(finals)}")
+if collided:
+    print(f"INSTRUMENT_FAIL_{arm}_{ix}: 'corpus_id collision' in the log — a fixture was "
+          f"deduped away and this arm searched nothing. COULD-NOT-JUDGE.")
+if max(searched or [0]) == 0 or sum(finals) == 0:
+    print(f"INSTRUMENT_FAIL_{arm}_{ix}: the target corpus was never searched "
+          f"(corpora_searched_max=0 or final_chunks_total=0). COULD-NOT-JUDGE, not a regression.")
+
+# THE DIGEST IS NOT OBSERVABLE FROM THIS MODE, and saying so beats printing a
+# zero. `--prod-pipeline` drives `Runtime::retrieve_evidence` — context build,
+# `kq_pipeline()`, merge, truncate — and does NO synthesis, so it never
+# assembles a system message. `splice_ambient_field_digests` has exactly two
+# callers, `turn.rs:593` and `streaming.rs:4440`, and this mode enters neither.
+# The digest's evidence is leg 1 (the two renderings, byte-identical) and the
+# unit tests; it was never going to be this counter. Kept as a STATEMENT so the
+# next person does not design the same instrument again.
 lines = [l for l in txt.splitlines() if "ambient field_model" in l]
-spliced = sum(int(m) for l in lines for m in re.findall(r"\bfield_digests=(\d+)", l))
-skipped = sum(1 for l in lines if "census says no Question atoms" in l
-                              or "no canonical questions" in l)
-print(f"DIGEST_{sys.argv[2]}_{sys.argv[3]}: lines={len(lines)} "
-      f"field_digests={spliced} skipped={skipped}")
-if not lines:
-    print(f"INSTRUMENT_NOTE_{sys.argv[2]}_{sys.argv[3]}: no 'ambient field_model' line at all "
-          f"— the step did not run, or retrieval_audit was not in the filter")
+print(f"DIGEST_{arm}_{ix}: ambient_field_model_lines={len(lines)} "
+      f"(EXPECTED 0 — --prod-pipeline does no synthesis and never reaches the step)")
 PYEOF
   python3 - "$tag" <<'PYEOF'
 import json, sys
