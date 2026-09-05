@@ -18,9 +18,17 @@
 #                 which kind of claim a green is.
 #   enforcement   `hard` (not-passed fails the run), `soft` (recorded, never
 #                 gates), `tracked` (recorded, no band exists yet).
-#   est_secs      the estimate the budget line prints. Replaced in practice
-#                 by the measured `secs` in summary.json — an estimate that
-#                 disagrees with three runs of actuals is a bug in this file.
+#   est_secs      what the lane costs, and what the budget rule reserves for
+#                 it: a lane whose est does not fit the remaining runway is
+#                 SKIP(budget) = could-not-judge, so an est that lies in
+#                 either direction is a bug here. Every value below was
+#                 re-set on 2026-09-04 from ONE measured run of that lane on
+#                 this host — one run is not a measurement (ARCH §18.5), so
+#                 read them as first actuals, not as settled figures. The
+#                 order's opening estimates were 300/150/120/90/30/240/180/
+#                 180; chaos-monkey came in at 799 s against 240 and synth at
+#                 546 against 180, which is the whole reason the measured
+#                 `secs` in summary.json is persisted.
 #   command       argv. `svrn` / `sovereign` / `sovereign-cli` resolve to the
 #                 RUNNING dispatcher, never to PATH.
 #   preconditions optional; a CLOSED set (quality_check_cmd::Precondition):
@@ -113,7 +121,7 @@ bank = "sovereign/bench/quality-check/throughput.toml"
 id = "routing"
 kind = "invariant"
 enforcement = "hard"
-est_secs = 120
+est_secs = 90
 command = [
     "svrn", "quality", "lane", "bench", "--id", "routing", "--reader", "bench-all", "--",
     "svrn", "bench", "all",
@@ -133,7 +141,7 @@ bank = "sovereign/bench/routing/cells_v1.toml"
 id = "retrieval-prod"
 kind = "invariant"
 enforcement = "hard"
-est_secs = 90
+est_secs = 110
 command = [
     "svrn", "quality", "lane", "bench", "--id", "retrieval-prod", "--reader", "bench-all", "--",
     "svrn", "bench", "all",
@@ -164,7 +172,7 @@ bank = "sovereign/bench/sep/questions.toml"
 id = "enrichment-f1"
 kind = "invariant"
 enforcement = "hard"
-est_secs = 30
+est_secs = 20
 command = [
     "svrn", "quality", "lane", "bench", "--id", "enrichment-f1", "--reader", "bench-all", "--",
     "svrn", "bench", "all",
@@ -180,7 +188,7 @@ bank = "sovereign/bench/literary/bk-book-1.toml"
 id = "chaos-monkey"
 kind = "judged"
 enforcement = "hard"
-est_secs = 240
+est_secs = 800
 command = [
     "svrn", "quality", "lane", "bench", "--id", "chaos-monkey", "--reader", "chaos-monkey", "--",
     "svrn", "bench", "chaos-monkey", "run",
@@ -204,7 +212,7 @@ bank = "sovereign/bench/chaos_monkey/secret_agent.toml"
 id = "knowledge-gym"
 kind = "judged"
 enforcement = "hard"
-est_secs = 180
+est_secs = 60
 command = [
     "svrn", "quality", "lane", "bench", "--id", "knowledge-gym", "--reader", "knowledge-gym", "--",
     "svrn", "knowledge-gym", "run", "--json",
@@ -216,7 +224,7 @@ preconditions = ["port-listening:9741", "slot-decodes:primary"]
 id = "synth"
 kind = "judged"
 enforcement = "hard"
-est_secs = 180
+est_secs = 560
 command = [
     "svrn", "quality", "lane", "bench", "--id", "synth", "--reader", "bench-all", "--",
     "svrn", "bench", "all",

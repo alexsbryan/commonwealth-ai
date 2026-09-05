@@ -8,11 +8,16 @@
 # suites either score a bank of short questions or judge answers with no
 # access to what the turn DID.
 #
-# Every number below is PRE-REGISTERED. The ceilings are the ones order
-# quality-check-lean fixed on 2026-09-04 from the issue's own 26.6 s turn,
-# with headroom, and they are NOT to be edited to fit a run that failed
-# them — that is the whole point of writing them down first (ARCH §18.4).
-# Raising one is an operator decision, made in this file, with the reason.
+# Every number below is PRE-REGISTERED, and they are NOT to be edited to fit
+# a run that failed them — that is the whole point of writing them down
+# first (ARCH §18.4). Raising one is an operator decision, made in this
+# file, with the reason.
+#
+# The ceilings were re-set once, on 2026-09-04, from a measured quiet-host
+# run under a rule fixed BEFORE the numbers were read (1.5x the median per
+# stage) — not to accommodate a failure. The old figures came from issue
+# #57's single 26.6 s turn, which is one run, and one run is not a
+# measurement (ARCH §18.5). The full derivation is in the ceilings block.
 
 schema_version = 1
 
@@ -70,16 +75,42 @@ control_flat = "I don't have enough information in the provided passages to answ
 # here is could-not-judge, not a pass — running a different model is not
 # evidence that this one got faster.
 #
-# Source: order quality-check-lean, from issue #57's measured turn
-# (retrieval 410 / draft 18,573 ×1 / citation 7,517 / total 26,605 ms).
+# RE-SET 2026-09-04 from a MEASURED run, replacing the order's opening
+# figures (which were derived from issue #57's single 26.6 s turn). Rule,
+# fixed before the numbers were read: **ceiling = 1.5x the measured median
+# for that stage.**
+#
+# The measurement: `svrn quality check --lane chat-ask` on a QUIET host —
+# `uptime` 1-min load 3.69, no cargo/rustc/nextest and no other chat
+# workload — three warm runs per question after one discarded warm-up, so
+# six turns in all. Medians (ms), from the run's own minted stage baseline:
+#
+#            q1      q2      ceiling basis
+#   retrieval    193     174   max 193  -> 290
+#   draft     14,249  22,573   max 22,573 -> 33,860
+#   citation   7,734       —   q1 only (q2 took the audit exit) -> 11,600
+#   audit      5,994   8,954   max 8,954 -> 13,430
+#   total     28,199  31,728   sum of stage medians, max -> 47,590
+#
+# `draft_calls` and `audit_calls` are NOT re-set: they are counts, not
+# times, this run recorded no fresh call figure, and 1.5x has no meaning on
+# a call count. They stay at the order's pre-registered values.
+#
+# WHAT THIS BAR DOES NOT TOLERATE, said plainly rather than discovered
+# later: 1.5x a quiet-host median is tight against this machine's real
+# variance. The run before this one — same lane, same bank, with a peer's
+# cargo build resident — measured `retrieval 2,979 ms` on q2, ten times the
+# new ceiling. So a loaded host WILL redden `per-stage ceilings`, and that
+# is a property of the bar as specified, not a defect in the lane. Raising
+# one is an operator decision, made here, with the reason.
 [ceilings."Qwen3.6-35B-A3B-UD-MTP-IQ4_NL"]
-retrieval_ms = 2000
-draft_ms = 30000
+retrieval_ms = 290
+draft_ms = 33860
 draft_calls = 1
-citation_ms = 15000
-audit_ms = 30000
+citation_ms = 11600
+audit_ms = 13430
 audit_calls = 12
-total_ms = 60000
+total_ms = 47590
 
 # ── The two questions ───────────────────────────────────────────────
 
@@ -112,12 +143,20 @@ allowed_gate_actions = [
 # STEMS, not whole words. The first run of this lane failed here on
 # `abstention` against an answer that said "the model must honestly
 # abstain" — a wording coupling, not a missing half, and exactly the defect
-# `scripts/lib/ci-bench-verdict.sh` is made of. `abstain` matches both. The
-# row still discriminates: `both_halves_answered_rejects_the_issue_57_shape`
-# runs it against the #57 answer verbatim.
+# `scripts/lib/ci-bench-verdict.sh` is made of.
+#
+# The fix went half way: `abstain` is not a substring of `abstention`
+# (a-b-s-t-a-i-n vs a-b-s-t-e-n-t-i-o-n — they diverge at the fifth letter),
+# so the row still failed on any answer that used the noun. `abst` is the
+# actual common prefix and matches both, at the cost of also matching
+# `abstract` — accepted, because a tour answer that says "abstract" while
+# saying nothing about the gate's refusal path is a far less likely shape
+# than one that picks the noun over the verb. The row still discriminates:
+# `both_halves_answered_rejects_the_issue_57_shape` runs it against the #57
+# answer verbatim.
 must_locate = [
     "sealed",
-    "abstain",
+    "abst",
 ]
 
 [[question]]
