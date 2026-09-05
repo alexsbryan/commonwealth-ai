@@ -34,6 +34,11 @@ run () { # arm run_ix corpus raptor_env
   local tag="$OUT/${arm}-run${ix}"
   local bank; bank=$(bank_for "$corpus")
   echo "=== arm=$arm run=$ix corpus=$corpus SOVEREIGN_RAPTOR_GROUNDING=$raptor ==="
+  # `retrieval_audit` is a CUSTOM tracing target: dark unless named in the
+  # filter, however high the level. The walk ledger — seeds, summary_seeds,
+  # summaries_appended — lives on it, and it is the yield this lane has to
+  # report, so a run without this filter reports a delta it cannot explain.
+  RUST_LOG="warn,retrieval_audit=debug" \
   SOVEREIGN_RAPTOR_GROUNDING=$raptor \
     "$CLI" eval run --bank "$bank" --prod-pipeline --isolate \
       --format json --output "${tag}.json" > "${tag}.log" 2>&1
@@ -43,7 +48,23 @@ run () { # arm run_ix corpus raptor_env
   # nothing for this comparison.
   grep -q "prod-pipeline mode" "${tag}.log" \
     || echo "INSTRUMENT_FAIL_${arm}_${ix}: not prod-pipeline mode"
-  tail -3 "${tag}.log"
+  # Yield, per §18.3: the walk's own counters, not inferred from the score.
+  local seeds appended carried
+  seeds=$(grep -oE "summary_seeds=[0-9]+" "${tag}.log" | cut -d= -f2 | paste -sd+ | bc 2>/dev/null)
+  appended=$(grep -oE "summaries_appended=[0-9]+" "${tag}.log" | cut -d= -f2 | paste -sd+ | bc 2>/dev/null)
+  carried=$(grep -c "Summary atoms appended late and reserved" "${tag}.log")
+  echo "YIELD_${arm}_${ix}: summary_seeds=${seeds:-0} summaries_appended=${appended:-0} late_append_calls=${carried:-0}"
+  python3 - "$tag" <<'PYEOF'
+import json, sys
+try:
+    d = json.load(open(sys.argv[1] + ".json"))
+except Exception as e:
+    print(f"SCORE_{sys.argv[1]}: unreadable ({e})"); raise SystemExit(0)
+rs = d.get("results") or []
+m = sum(len(r["source_score"].get("matched", [])) for r in rs)
+e = sum(r["source_score"].get("total_expected", 0) for r in rs)
+print(f"SCORE: sources {m}/{e} ({100*m/max(e,1):.1f}%) over {len(rs)} questions")
+PYEOF
 }
 
 # Both directions: OFF→ON, then ON→OFF. Two runs per arm, so a per-arm spread
