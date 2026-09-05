@@ -82,11 +82,28 @@ pub async fn run(args: ServeArgs) -> Result<()> {
     let indexes_dir = data_dir.join("indexes");
 
     if !args.corpora.is_empty() {
-        // The embedding model is declared BEFORE any pull: the restorer
-        // compares the snapshot's `compatible_embedding_model` against it, and
-        // an engine that never declared one cannot make that comparison.
-        let engine = CorpusEngine::new(recipes_dir.clone(), indexes_dir.clone(), embed.clone())
-            .with_embedding_model(&profile.embed_model);
+        // NO `.with_embedding_model(&profile.embed_model)` here, and the
+        // comment that used to justify one was wrong in a way that cost 93
+        // minutes of somebody's afternoon (run 20260905T181423Z).
+        //
+        // It claimed the restorer needs a declared model to compare against
+        // the snapshot's `compatible_embedding_model`. It does not work that
+        // way: `snapshot::check_embedding_compatibility` treats DIMENSIONS as
+        // the hard floor and a name difference as merely `NameMismatch`, which
+        // is then settled EMPIRICALLY by re-embedding a sample of the
+        // snapshot's own chunks (`ingest_prebuilt::probe_embedding_space`,
+        // mean cosine >= 0.92). Names are unreliable on purpose — they drift
+        // across dir, stem, repo and quant for one model.
+        //
+        // What the line actually did was feed the comparison a value from the
+        // WRONG NAMESPACE: `profile.embed_model` is whatever id the endpoint
+        // reports, which for llama-server is the GGUF FILENAME
+        // (`Qwen3-Embedding-0.6B-Q8_0.gguf`), while the snapshot declares the
+        // canonical `qwen-embedding-0.6b`. Those can never match. Passing
+        // nothing leaves the same NameMismatch verdict and the same probe, so
+        // dropping it loses no safety — it just stops the code claiming a
+        // comparison it was not making.
+        let engine = CorpusEngine::new(recipes_dir.clone(), indexes_dir.clone(), embed.clone());
         for id in &args.corpora {
             ensure_installed(&engine, id).await?;
         }
@@ -147,6 +164,28 @@ async fn ensure_installed(engine: &CorpusEngine, id: &str) -> Result<()> {
         "corpus-mcp: corpus `{id}` is not installed — pulling the prebuilt snapshot from \
          huggingface.co/datasets/{} ({})",
         prebuilt.hf_repo, prebuilt.hf_filename
+    );
+    // The degradation this verb CANNOT prevent, named before it can happen
+    // rather than discovered as a process that will not finish (ARCH §18.3).
+    //
+    // `CorpusEngine::ingest` restores the snapshot only if the embedding-space
+    // probe accepts it; on a failed or unrunnable probe it deletes what it
+    // extracted and falls through to a FULL acquire-extract-chunk-embed of the
+    // corpus from source. For `corpus ingest` that fall-through is correct —
+    // building is the point. For `serve` it is not what anyone asked for, and
+    // on `sep` (1,770 articles, ~182k paragraphs) it is hours through a local
+    // embedding endpoint.
+    //
+    // This host cannot intercept that decision — it is made inside `ingest`,
+    // after the download, and the restore entry point is `pub(crate)`. So the
+    // honest thing available here is to say so first, with the two ways out.
+    eprintln!(
+        "corpus-mcp: if `{}`'s embedding space does not match this endpoint, the restore is \
+         DISCARDED and `ingest` rebuilds `{id}` from source instead — hours, not minutes. \
+         Ctrl-C and run `corpus-mcp ingest` deliberately if that is what you want; set \
+         SOVEREIGN_FORCE_PREBUILT=1 to accept the snapshot on its declared name and skip \
+         the probe.",
+        prebuilt.compatible_embedding_model
     );
     tracing::debug!(
         corpus = id,

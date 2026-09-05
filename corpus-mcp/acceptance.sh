@@ -708,12 +708,27 @@ else
     echo '{"jsonrpc":"2.0","method":"notifications/initialized"}'
     printf '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"corpus_search","arguments":{"query":"%s","corpus":"%s"}}}\n' "$QUERY" "$PULL_CORPUS"
     echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"corpus_list","arguments":{}}}'
+  # The serve's stderr goes BESIDE THE ROOT and not into $work, which the EXIT
+  # trap deletes. Run 20260905T181423Z was killed 93 minutes into this leg and
+  # left no diagnostic at all: the one line naming what the pull had decided to
+  # do went into $work and died with it, so the failure had to be reconstructed
+  # from file mtimes. A leg whose evidence does not survive the leg is not
+  # instrumented (ARCH §9). This is the longest and least predictable step in
+  # the script; it is the last one whose output should be disposable.
+  pull_err="${PULL_ROOT%/}.pull.err"
+  echo "acceptance: pull-if-absent -> serve stderr streaming to $pull_err (survives a kill)"
   } | SOVEREIGN_DATA_DIR="$PULL_ROOT" "$CORPUS_MCP" serve \
         --base-url "http://127.0.0.1:$PORT/v1" --corpus "$PULL_CORPUS" \
-        >"$work/pull.jsonl" 2>"$work/pull.err" \
-    || { cat "$work/pull.err" >&2; fail "serve on a cold root exited non-zero"; }
-  grep -q 'is not installed — pulling the prebuilt snapshot' "$work/pull.err" \
-    || fail "the cold root did not pull — it was not cold, or the pull was silent: $(cat "$work/pull.err")"
+        >"$work/pull.jsonl" 2>"$pull_err" \
+    || { cat "$pull_err" >&2; fail "serve on a cold root exited non-zero"; }
+  grep -q 'is not installed — pulling the prebuilt snapshot' "$pull_err" \
+    || fail "the cold root did not pull — it was not cold, or the pull was silent: $(cat "$pull_err")"
+  # The fall-through this verb cannot prevent, ASSERTED rather than assumed:
+  # a discarded snapshot means `ingest` rebuilt from source, which is not a
+  # pull and must never be reported as one (ARCH §18.3).
+  if grep -qE 'probe FAILED|probe could not run|falling through to full ingest' "$pull_err"; then
+    fail "the snapshot was DISCARDED and the corpus rebuilt from source — that is not pull-if-absent. See $pull_err"
+  fi
   [[ -d "$PULL_ROOT/indexes/$PULL_CORPUS" ]] \
     || fail "the pull reported success but wrote no index under $PULL_ROOT/indexes/$PULL_CORPUS"
   # SERVES, not just installs: the done-when is "pulls and serves", so the

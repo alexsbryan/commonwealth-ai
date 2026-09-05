@@ -25,6 +25,26 @@ out="$here/$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$out"
 
 mark() { printf '%s rc=%s %s\n' "$1" "$2" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$out/markers.txt"; }
+
+# A TERMINAL MARKER ON EVERY EXIT PATH, INCLUDING A KILL.
+#
+# Run 20260905T181423Z was SIGTERMed 93 minutes in and wrote no DONE at all,
+# so the markers file was indistinguishable from a run still in progress —
+# the reader could not tell "killed" from "running" from "hung". The terminal
+# marker is the whole contract of this file: a run channel whose DONE is
+# missing exactly when something went wrong reports nothing when it matters
+# most (ARCH §18.2 — four verdicts, and "killed" is one of them).
+#
+# 143 = 128 + SIGTERM(15), the code the shell would have reported anyway.
+on_signal() {
+  local sig="$1" rc="$2"
+  printf 'DONE rc=%s KILLED-BY=%s %s\n' "$rc" "$sig" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$out/markers.txt"
+  box after 2>/dev/null || true
+  exit "$rc"
+}
+trap 'on_signal SIGTERM 143' TERM
+trap 'on_signal SIGINT 130'  INT
+trap 'on_signal SIGHUP 129'  HUP
 die() { mark "$1" 1; echo "DONE rc=1" >> "$out/markers.txt"; exit 1; }
 box() { { date -u +%Y-%m-%dT%H:%M:%SZ; free -g | sed -n 2p; df -h /home | tail -1;
           echo "builds: $(pgrep -af 'cargo|rustc' | grep -v lspmux | grep -vc pgrep)"; } > "$out/box-$1.txt"; }
