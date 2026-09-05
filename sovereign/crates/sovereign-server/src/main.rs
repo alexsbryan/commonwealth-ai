@@ -602,6 +602,10 @@ async fn main() {
             // host loaded the meta-atlas EAGERLY until 2026-08-26 — the one
             // place the desktop's 2026-06 conclusion had not reached.
             warmth: sovereign_runtime_recipe::LaneWarmth::Deferred,
+            // Serves every installed corpus, so every lane member is
+            // reachable. Byte-identical to the behaviour this host had
+            // before `LaneScope` existed.
+            scope: sovereign_runtime_recipe::LaneScope::All,
             // The provider here does not own a rerank slot, so a standalone
             // cross-encoder from `SOVEREIGN_RERANK_MODEL_PATH` is the only way
             // this surface gets one. The VRAM pre-flight inside that loader

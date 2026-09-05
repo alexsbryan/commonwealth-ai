@@ -33,7 +33,7 @@ use sovereign_core::runtime::Runtime;
 use sovereign_core::traits::{ApprovalChannel, InferenceProvider, StateStore};
 use sovereign_core::types::*;
 use sovereign_core::SkillRegistry;
-use sovereign_runtime_recipe::{LaneWarmth, RecipeInputs, RecipeProgress, RerankWiring};
+use sovereign_runtime_recipe::{LaneScope, LaneWarmth, RecipeInputs, RecipeProgress, RerankWiring};
 // Re-exported (not just `use`d) so the other CLI modules that referenced the
 // formerly-local `chat_cmd::bootstrap::SplitInferenceProvider` (raptor,
 // recipe_cmd) keep resolving after it was promoted to sovereign-inference.
@@ -76,6 +76,28 @@ pub async fn build_session(globals: &ChatGlobals) -> Result<ChatSession> {
     build_session_with_skills(globals, SkillRegistry::new()).await
 }
 
+/// Build a `ChatSession` SEALED to one corpus.
+///
+/// For a surface that has already resolved the single corpus it will ask
+/// about — a bench lane, a one-shot eval. The cross-corpus enrichment lane
+/// members (the wikipedia link graph, the meta-atlas, the bridge index) are
+/// then unreachable by construction, so [`LaneScope::Sealed`] does not load
+/// them. See that enum for why this is a no-op rather than a degradation.
+///
+/// Measured on the authoring host (`svrn bench chaos-monkey run --corpus
+/// chaos-secret-agent`, 316 chunks): startup 24.9 s → 2.6 s, because 22.3 s
+/// of it was a 7.85M-edge graph and a 981 MB meta-atlas JSON that a lane
+/// sealed to a 316-chunk corpus can never consult. `svrn quality check`
+/// pays that startup once per in-process bench lane, not once per run.
+pub async fn build_session_sealed(globals: &ChatGlobals, corpus_id: &str) -> Result<ChatSession> {
+    build_session_scoped(
+        globals,
+        SkillRegistry::new(),
+        LaneScope::Sealed(corpus_id.to_string()),
+    )
+    .await
+}
+
 /// Build a daemon-backed `ChatSession` with a caller-supplied
 /// `SkillRegistry`. The default `build_session` passes an empty
 /// registry — chat-as-chat doesn't need skills loaded. The Tier-B
@@ -87,6 +109,17 @@ pub async fn build_session(globals: &ChatGlobals) -> Result<ChatSession> {
 pub async fn build_session_with_skills(
     globals: &ChatGlobals,
     skills: SkillRegistry,
+) -> Result<ChatSession> {
+    build_session_scoped(globals, skills, LaneScope::All).await
+}
+
+/// The one body. `scope` is the host input every entry point above resolves
+/// — `All` for a general-purpose `svrn chat`, `Sealed` for a lane that has
+/// already picked its corpus (ARCH §10.6: one decider).
+async fn build_session_scoped(
+    globals: &ChatGlobals,
+    skills: SkillRegistry,
+    scope: LaneScope,
 ) -> Result<ChatSession> {
     // 1. Probe the daemon before we touch anything else. A fast fail
     //    here prints a clean "start the daemon" message instead of
@@ -287,6 +320,10 @@ pub async fn build_session_with_skills(
             // answer it with less. Byte-identical to the behaviour this
             // function had when the recipe was inline.
             warmth: LaneWarmth::Eager,
+            // Resolved by the entry point: `All` for chat-as-chat, and
+            // `Sealed` for a bench lane that already knows its one
+            // corpus. See `build_session_sealed` for the measurement.
+            scope,
             // The provider here is a `SplitInferenceProvider` over HTTP and
             // does not support rerank, so a standalone slot is the only way
             // this surface gets a cross-encoder at all.

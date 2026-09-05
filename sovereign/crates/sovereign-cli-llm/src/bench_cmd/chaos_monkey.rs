@@ -32,7 +32,7 @@ use crate::bench_cmd::live_runner::{
     caveat_credit, classify_abstain, classify_caveat, classify_extraction,
     extraction_scorer_enabled, judge_correctness, run_live_pinned, run_naked, verify_grounding,
 };
-use crate::chat_cmd::bootstrap::build_session;
+use crate::chat_cmd::bootstrap::build_session_sealed;
 use crate::chat_cmd::config::parse_globals;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
@@ -423,7 +423,7 @@ async fn run(rest: &[String]) -> i32 {
         eprintln!("[chaos] transport=desktop-bridge ({})", args.bridge_url);
         (None, Some(client))
     } else {
-        match build_session(&globals).await {
+        match build_session_sealed(&globals, &corpus).await {
             Ok(s) => (Some(s), None),
             Err(e) => {
                 eprintln!("error: could not build chat session: {e}");

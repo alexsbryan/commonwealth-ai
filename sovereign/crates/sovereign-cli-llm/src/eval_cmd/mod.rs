@@ -42,7 +42,35 @@ use runner_threads as threads;
 
 use std::path::PathBuf;
 
-use crate::chat_cmd::{bootstrap::build_session, config::parse_globals};
+use crate::chat_cmd::{
+    bootstrap::{build_session, build_session_sealed, ChatSession},
+    config::parse_globals,
+};
+
+/// A bench bank names the ONE corpus it questions, so the session it drives
+/// is sealed to that corpus and the cross-corpus lane members are not loaded
+/// (see `bootstrap::build_session_sealed` for the measured cost).
+///
+/// A bank that names no corpus is the honest exception: nothing has been
+/// resolved to seal to, so the scope stays `All` rather than being sealed to
+/// an empty id that matches nothing (ARCH §18.3 — never silently substitute).
+async fn build_session_for_bank(
+    globals: &crate::chat_cmd::config::ChatGlobals,
+    corpus: &str,
+) -> sovereign_core::error::Result<ChatSession> {
+    if corpus.trim().is_empty() {
+        // SAID, not silent. The scope widens back to every corpus here, and
+        // a run that pays the cross-corpus startup should say why it did
+        // (ARCH §18.3, §9.1).
+        eprintln!(
+            "lane scope: bank names no corpus, so the session loads every corpus \
+             (cross-corpus enrichment members included)"
+        );
+        build_session(globals).await
+    } else {
+        build_session_sealed(globals, corpus).await
+    }
+}
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const HELP: Help = Help {
@@ -630,7 +658,7 @@ async fn cmd_run(args: &[String]) -> i32 {
             "sovereign_cli=info,sovereign_tools::atlas_context_manager=info,\
              sovereign_tools::knowledge_view=warn",
         );
-        let session = match build_session(&globals).await {
+        let session = match build_session_for_bank(&globals, &bank.bank.corpus).await {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("bootstrap failed: {e}");
@@ -736,7 +764,7 @@ async fn cmd_run(args: &[String]) -> i32 {
          sovereign_tools::knowledge_view=warn",
     );
 
-    let session = match build_session(&globals).await {
+    let session = match build_session_for_bank(&globals, &bank.bank.corpus).await {
         Ok(s) => s,
         Err(e) => {
             eprintln!("bootstrap failed: {e}");

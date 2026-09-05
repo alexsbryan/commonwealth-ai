@@ -157,6 +157,73 @@ pub enum LaneWarmth {
     Deferred,
 }
 
+/// **Which corpora this host serves** — and therefore which lane members are
+/// worth loading at all.
+///
+/// Orthogonal to [`LaneWarmth`], and composed with it rather than conflated:
+/// warmth says WHEN a member loads, scope says WHETHER it is reachable. A
+/// third `LaneWarmth` variant would have forced the two questions onto one
+/// axis, and "deferred" is the wrong answer for a member the host can never
+/// consult — deferring a load still pays it, on a background thread, on the
+/// same contended box.
+///
+/// The fork is real because three of `build_lane`'s members are cross-corpus
+/// BY CONSTRUCTION and one is corpus-specific:
+///
+/// - the **meta-atlas** is canonical atoms clustered ACROSS corpora,
+/// - the **bridge** is edges BETWEEN corpora,
+/// - the **wikipedia graph** is one named corpus's link graph,
+///
+/// so a host sealed to a single non-wikipedia corpus cannot reach any of
+/// them. It loaded all four anyway until 2026-09-04: measured on this host,
+/// `svrn bench chaos-monkey` sealed to `chaos-secret-agent` (316 chunks)
+/// spent 22.3 s of a 24.9 s startup on a 7.85M-edge graph, a 981 MB
+/// meta-atlas JSON and a bridge index with zero edges — 89.6% of the fixed
+/// cost, paid again by every one-shot bench lane in `svrn quality check`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LaneScope {
+    /// Every installed corpus is reachable: a daemon, a desktop, a hub
+    /// server. Loads every lane member — byte-identical to the behaviour
+    /// this recipe had before the scope existed.
+    All,
+    /// This host answers questions about exactly ONE corpus and is sealed to
+    /// it (a bench lane, a one-shot eval). Cross-corpus members are not
+    /// loaded, and their absence is a no-op rather than a degradation:
+    /// there is no second corpus for a bridge edge to reach or a canonical
+    /// atom to cluster with.
+    Sealed(String),
+}
+
+impl LaneScope {
+    /// Is `corpus_id` reachable from this host?
+    ///
+    /// The one decider for every per-corpus member, so a member cannot
+    /// privately re-derive the answer (ARCH §10.6).
+    pub fn includes(&self, corpus_id: &str) -> bool {
+        match self {
+            LaneScope::All => true,
+            LaneScope::Sealed(id) => id == corpus_id,
+        }
+    }
+
+    /// Can a CROSS-corpus member (meta-atlas, bridge) say anything here?
+    ///
+    /// False under `Sealed` for the structural reason, not as a cost
+    /// heuristic: both members are defined over PAIRS of corpora, and a
+    /// sealed host has one.
+    pub fn spans_corpora(&self) -> bool {
+        matches!(self, LaneScope::All)
+    }
+
+    /// How this scope reads in a progress line.
+    pub fn label(&self) -> String {
+        match self {
+            LaneScope::All => "all corpora".to_string(),
+            LaneScope::Sealed(id) => format!("sealed to `{id}`"),
+        }
+    }
+}
+
 /// Where this host's cross-encoder rerank comes from — or why it has none.
 ///
 /// `SOVEREIGN_RERANK_MODEL_PATH` names ONE GGUF and TWO different things load
@@ -261,6 +328,13 @@ pub struct RecipeInputs {
     /// service looks hung, and a deferred one-shot silently answers its only
     /// question with a boost that had not landed yet.
     pub warmth: LaneWarmth,
+    /// Which corpora this host serves — see [`LaneScope`]. A field rather
+    /// than a default for the same reason `warmth` is one, and a sharper
+    /// one: the cost of getting it wrong is invisible in BOTH directions.
+    /// An over-broad scope on a sealed one-shot is 22 s of measured startup
+    /// nobody sees in a wall-clock lane total; an under-broad scope on a
+    /// service silently drops the cross-corpus boost.
+    pub scope: LaneScope,
     /// Rerank wiring — see [`RerankWiring`]. Getting it wrong loads the same
     /// GGUF twice in one process.
     pub rerank: RerankWiring,
@@ -334,6 +408,7 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
         switches,
         mcp_extra,
         warmth,
+        scope,
         rerank,
     } = inputs;
 
@@ -349,6 +424,7 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
         &indexes_dir,
         &embed_model,
         warmth,
+        scope,
         rerank,
         progress,
     )
@@ -578,16 +654,25 @@ async fn build_lane(
     indexes_dir: &Path,
     embed_model: &str,
     warmth: LaneWarmth,
+    scope: LaneScope,
     rerank: RerankWiring,
     progress: &dyn RecipeProgress,
 ) -> (LaneSources, Arc<AtlasContextManager>) {
     progress.phase(RecipePhase::BuildingLane);
+    progress.note(&format!("Lane scope:  {}", scope.label()));
     let mut lane = LaneSources::none();
     lane.conv_tiered = conv_tiered;
     lane.gliner = load_gliner(warmth);
 
     // Atlas Layer 0: the installed Wikipedia link graph, if one is built.
-    if let Some(graph) = load_wikipedia_graph(corpus_engine, indexes_dir, progress).await {
+    //
+    // The loader probes each INSTALLED corpus for a wikipedia-shaped graph
+    // and takes the first that opens, so the scope belongs inside it rather
+    // than as a corpus-id test out here: a host sealed to `wikipedia` still
+    // gets its graph, and one sealed to a 316-chunk bench corpus probes one
+    // corpus instead of forty-eight. Measured on the authoring host, 51,845
+    // articles / 7,853,503 edges = 2.2 s.
+    if let Some(graph) = load_wikipedia_graph(corpus_engine, indexes_dir, &scope, progress).await {
         progress.note(&format!(
             "Wiki graph:  {} articles, {} edges",
             graph.article_count().await,
@@ -621,9 +706,44 @@ async fn build_lane(
     // minute of bumps on a hard kill is acceptable for a statistical signal.
     let _bump_flusher = Arc::clone(&atlas_mgr).spawn_bump_flusher(30);
 
+    load_cross_corpus_members(&mut lane, warmth, &scope, progress);
+
+    load_reranker(&mut lane, rerank, progress);
+
+    (lane, atlas_mgr)
+}
+
+/// The lane members defined over PAIRS of corpora — the meta-atlas (canonical
+/// atoms clustered ACROSS corpora) and the bridge (edges BETWEEN corpora).
+///
+/// One function so that "is this member cross-corpus?" has one decider
+/// (ARCH §10.6). Both were loaded unconditionally until 2026-09-04, including
+/// by hosts sealed to a single corpus, where neither can say anything: there
+/// is no second corpus for a bridge edge to reach or a canonical atom to
+/// cluster with. Skipping them under [`LaneScope::Sealed`] is a no-op, not a
+/// degradation — the same argument [`LaneWarmth::Deferred`] makes about a
+/// boost that has not landed, except that here it never lands and never
+/// could.
+///
+/// Measured on the authoring host: meta-atlas 1,563,346 atoms out of a 981 MB
+/// JSON = 19.7-23.2 s, bridge 0 edges. That was 19.7 s of a 24.9 s
+/// `svrn bench chaos-monkey` startup against a 316-chunk corpus, paid again
+/// by every in-process bench lane in `svrn quality check`.
+fn load_cross_corpus_members(
+    lane: &mut LaneSources,
+    warmth: LaneWarmth,
+    scope: &LaneScope,
+    progress: &dyn RecipeProgress,
+) {
+    if !scope.spans_corpora() {
+        progress.note("Meta-atlas:  not loaded (lane spans one corpus)");
+        progress.note("Bridge:      not loaded (lane spans one corpus)");
+        return;
+    }
+
     // Cross-corpus meta-atlas (Move 5). Empty / absent file → the boost is a
     // no-op and retrieval falls back to cosine + existing entity-boost.
-    load_meta_atlas(&lane, warmth, progress);
+    load_meta_atlas(lane, warmth, progress);
 
     // Cross-corpus bridge edges (Phase 6). Empty/absent → bridge_boost is a
     // no-op; the boost only runs at all when `SOVEREIGN_META_BRIDGE` is set.
@@ -639,10 +759,6 @@ async fn build_lane(
         bridge_index.len()
     ));
     lane.bridge = Some(Arc::clone(&bridge_index));
-
-    load_reranker(&mut lane, rerank, progress);
-
-    (lane, atlas_mgr)
 }
 
 /// Fill (or arrange to fill) `lane.meta_atlas` — see [`LaneWarmth`] for why
@@ -773,6 +889,7 @@ fn load_gliner(warmth: LaneWarmth) -> Option<Arc<dyn sovereign_core::traits::Ent
 async fn load_wikipedia_graph(
     engine: &corpus_engine::CorpusEngine,
     indexes_dir: &Path,
+    scope: &LaneScope,
     progress: &dyn RecipeProgress,
 ) -> Option<Arc<dyn corpus_engine::WikipediaGraphApi>> {
     // Memory-pressure escape hatch. The graph is a 7M-edge sqlite mmap; on a
@@ -786,10 +903,21 @@ async fn load_wikipedia_graph(
     // (atlas/articles.lance + edges.lance) over the SQLite graph — the shared
     // `corpus_engine::open_wikipedia_graph` gate.
     let infos = engine.installed_indexes().await.ok()?;
+    let mut probed = 0usize;
     for info in infos {
+        // A lane scoped to one corpus probes one corpus. Out-of-scope
+        // corpora cannot contribute a graph this host could consult, so
+        // opening theirs is work whose result is unreachable.
+        if !scope.includes(&info.corpus_id) {
+            continue;
+        }
+        probed += 1;
         if let Some(g) = corpus_engine::open_wikipedia_graph(indexes_dir, &info.corpus_id).await {
             return Some(g);
         }
+    }
+    if probed == 0 {
+        progress.note("Wiki graph:  not loaded (out of lane scope)");
     }
     None
 }
@@ -960,5 +1088,90 @@ mod warmth_census {
                 );
             }
         }
+    }
+
+    /// The state this makes unrepresentable: a lane member that ignores the
+    /// SCOPE its host declared.
+    ///
+    /// Same failure shape as the warmth census above and the same reason the
+    /// compiler cannot hold it — dropping the parameter and its argument
+    /// together compiles clean and silently restores load-everything-always.
+    /// The cost of that regression is not a slow boot but a wrong claim: a
+    /// lane sealed to a 316-chunk corpus spent 22.3 s of a 24.9 s startup on
+    /// a 7.85M-edge graph and a 981 MB meta-atlas it could not consult, and
+    /// nothing in the run said so.
+    ///
+    /// Watched to fail by reverting `load_cross_corpus_members(&mut lane,
+    /// warmth, &scope, progress)` to drop `&scope`, and again by reverting
+    /// `load_wikipedia_graph`'s parameter.
+    #[test]
+    fn every_cross_corpus_lane_member_honours_the_declared_scope() {
+        let src = include_str!("lib.rs");
+        let code: Vec<&str> = src
+            .lines()
+            .filter(|l| {
+                let t = l.trim_start();
+                !(t.starts_with("//") || t.starts_with('*'))
+            })
+            .collect();
+
+        for member in ["load_cross_corpus_members", "load_wikipedia_graph"] {
+            // Signatures here span lines, so the census reads the parameter
+            // block rather than one line — the warmth census's single-line
+            // form would pass vacuously on either of these.
+            let start = code
+                .iter()
+                .position(|l| l.contains(&format!("fn {member}(")))
+                .unwrap_or_else(|| {
+                    panic!("{member} is gone — drop it here or say what replaced it")
+                });
+            let sig_end = code[start..]
+                .iter()
+                .position(|l| l.contains(')'))
+                .map(|o| start + o)
+                .unwrap_or(code.len() - 1);
+            let sig = code[start..=sig_end].join(" ");
+            assert!(
+                sig.contains("scope: &LaneScope"),
+                "{member} no longer takes the host's declared scope, so a lane \
+                 sealed to one corpus loads every corpus again:\n  {sig}"
+            );
+
+            let calls: Vec<&&str> = code
+                .iter()
+                .filter(|l| l.contains(&format!("{member}(")) && !l.contains("fn "))
+                .collect();
+            assert!(
+                !calls.is_empty(),
+                "{member} is declared but never called — this census would be vacuous"
+            );
+            for c in calls {
+                assert!(
+                    c.contains("scope"),
+                    "a call to {member} drops the declared scope:\n  {c}"
+                );
+            }
+        }
+    }
+
+    /// `Sealed` must actually narrow, and `All` must actually not. A scope
+    /// whose predicates both answered the same way would pass the census
+    /// above while changing nothing.
+    #[test]
+    fn sealed_scope_admits_only_its_own_corpus() {
+        use super::LaneScope;
+        let all = LaneScope::All;
+        assert!(all.includes("wikipedia"));
+        assert!(all.includes("chaos-secret-agent"));
+        assert!(all.spans_corpora());
+
+        let sealed = LaneScope::Sealed("chaos-secret-agent".to_string());
+        assert!(sealed.includes("chaos-secret-agent"));
+        assert!(!sealed.includes("wikipedia"));
+        assert!(
+            !sealed.spans_corpora(),
+            "a sealed lane has one corpus, so no member defined over pairs of \
+             them can say anything"
+        );
     }
 }
