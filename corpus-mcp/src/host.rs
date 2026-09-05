@@ -42,12 +42,28 @@ impl HostKind {
     }
 }
 
-pub async fn probe(base_url: &str, embed_model: Option<String>) -> Result<HostProfile> {
+/// Split a user-supplied endpoint into the two shapes every probe needs: the
+/// `/v1` base a request path hangs off, and the ROOT the OICP capability
+/// probe lives at. Accepts either form, because both are things a person
+/// types: `http://localhost:8080` and `http://localhost:8080/v1` name the
+/// same server.
+pub fn split_base(base_url: &str) -> (String, String) {
     let base = base_url.trim_end_matches('/').to_string();
-    let root = base.strip_suffix("/v1").unwrap_or(&base).to_string();
-    let client = reqwest::Client::new();
+    match base.strip_suffix("/v1") {
+        Some(root) => (base.clone(), root.to_string()),
+        None => (format!("{base}/v1"), base),
+    }
+}
 
-    // 1. Capability — detected, never configured.
+/// `GET <root>/oicp/v1/capabilities` — capability DETECTED, never configured
+/// (`docs/CODE_TOOLING_BOUNDARY.md` §5.3 rule 1), and the result printed
+/// whichever way it goes.
+///
+/// Its own function since order ei-5b-build-verb: `corpus ingest` probes TWO
+/// endpoints (chat and embeddings, one URL apart under llama-server) and both
+/// answer this question the same way. One implementation of it, not two
+/// (ARCH §10.6).
+pub async fn probe_capability(client: &reqwest::Client, root: &str, label: &str) -> HostKind {
     let cap_url = format!("{root}/oicp/v1/capabilities");
     let kind = match client.get(&cap_url).send().await {
         Ok(r) if r.status().is_success() => match r.json::<Value>().await {
@@ -65,13 +81,22 @@ pub async fn probe(base_url: &str, embed_model: Option<String>) -> Result<HostPr
     };
     match &kind {
         HostKind::Oicp { capabilities } => eprintln!(
-            "corpus-mcp: host {base}: OICP capabilities detected ({} top-level keys)",
+            "corpus-mcp: {label} {root}: OICP capabilities detected ({} top-level keys)",
             capabilities.as_object().map(|o| o.len()).unwrap_or(0)
         ),
         HostKind::Baseline { reason } => {
-            eprintln!("corpus-mcp: host {base}: baseline OpenAI-compatible path — {reason}")
+            eprintln!("corpus-mcp: {label} {root}: baseline OpenAI-compatible path — {reason}")
         }
     }
+    kind
+}
+
+pub async fn probe(base_url: &str, embed_model: Option<String>) -> Result<HostProfile> {
+    let (base, root) = split_base(base_url);
+    let client = reqwest::Client::new();
+
+    // 1. Capability — detected, never configured.
+    let kind = probe_capability(&client, &root, "host").await;
 
     // 2. The embedding model id — from the flag, else from what the host
     //    says it serves. Absence is refused, never defaulted (§18.3).

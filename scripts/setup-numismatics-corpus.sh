@@ -52,6 +52,9 @@
 #
 # Usage:  scripts/setup-numismatics-corpus.sh [--bin <cli>] [--skip-enrich]
 #         scripts/setup-numismatics-corpus.sh --assert-only   # step 5 alone
+#         scripts/setup-numismatics-corpus.sh --atlas <corpus-id>
+#                                        # step 5 against another corpus built
+#                                        # from this recipe (implies --assert-only)
 
 set -euo pipefail
 
@@ -59,22 +62,40 @@ CORPUS_ID="wessex-hoard"
 BIN="${SOVEREIGN_CLI:-target/debug/sovereign-cli}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RECIPE="${REPO_ROOT}/sovereign-recipes/${CORPUS_ID}/recipe.toml"
-IDX="${HOME}/.svrnmesh/indexes/${CORPUS_ID}"
-ATOMS="${IDX}/atlas/atoms.json"
-ONTOLOGY="${IDX}/atlas/ontology.json"
 TRUTH="${REPO_ROOT}/sovereign-recipes/${CORPUS_ID}/truth.json"
+# Which ATLAS step 5 judges. Defaults to the fixture's own id, and `--atlas`
+# points it at a different corpus built from the SAME recipe against the SAME
+# truth.json — which is how `corpus ingest`'s bare-endpoint build (ei-5b) is
+# scored beside the daemon-built control without overwriting it. Steps 1-4
+# always drive the fixture's own id: this flag scores, it does not build.
+ATLAS_CORPUS_ID="$CORPUS_ID"
 SKIP_ENRICH=""
 ASSERT_ONLY=""
+# The mtime half of the staleness check asks "was the recipe edited after the
+# atlas was built?" and answers it with the file's mtime — which a `git
+# checkout` resets. In a worktree (every campaign worker has one) the recipe is
+# always "newer" than an atlas built weeks ago in another checkout, and the
+# check reports COULD-NOT-JUDGE on a file nobody edited. This flag asserts the
+# content is unchanged; it is PRINTED as an assumption, never silent, and it
+# does not touch the structural type-name comparison above it, which still runs
+# and still catches a renamed or added type.
+RECIPE_UNCHANGED=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --bin) BIN="$2"; shift 2 ;;
+    --atlas) ATLAS_CORPUS_ID="$2"; ASSERT_ONLY=1; SKIP_ENRICH=1; shift 2 ;;
+    --recipe-unchanged) RECIPE_UNCHANGED=1; shift ;;
     --skip-enrich) SKIP_ENRICH=1; shift ;;
     --assert-only) ASSERT_ONLY=1; SKIP_ENRICH=1; shift ;;
     -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
   esac
 done
+
+IDX="${HOME}/.svrnmesh/indexes/${ATLAS_CORPUS_ID}"
+ATOMS="${IDX}/atlas/atoms.json"
+ONTOLOGY="${IDX}/atlas/ontology.json"
 
 command -v jq >/dev/null 2>&1 || { echo "FATAL: jq is required" >&2; exit 2; }
 [[ -f "$RECIPE" ]] || { echo "FATAL: recipe not found at $RECIPE" >&2; exit 2; }
@@ -101,7 +122,7 @@ if [[ -z "$ASSERT_ONLY" ]]; then
   fi
 fi
 
-echo "── 5. the payload: are the author's nouns in the atoms? ──"
+echo "── 5. the payload: are the author's nouns in the atoms of ${ATLAS_CORPUS_ID}? ──"
 
 # ── Provenance first. Four verdicts, not two (ARCH §18.2) ────────────────────
 #
@@ -133,16 +154,23 @@ if [[ "$built_names" != "$recipe_names" ]]; then
   echo "COULD-NOT-JUDGE: the atlas was built from a DIFFERENT declaration." >&2
   echo "  built:  $built_names" >&2
   echo "  recipe: $recipe_names" >&2
-  echo "  Rebuild before asserting: $BIN enrich build $CORPUS_ID --full" >&2
+  echo "  Rebuild before asserting: $BIN enrich build $ATLAS_CORPUS_ID --full" >&2
   exit 3
 fi
 
 mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1"; }
 if (( $(mtime "$RECIPE") > $(mtime "$ONTOLOGY") )); then
-  echo "COULD-NOT-JUDGE: $RECIPE was edited after the atlas was built." >&2
-  echo "  recipe:  $(date -r "$RECIPE" 2>/dev/null || true)" >&2
-  echo "  atlas:   $(date -r "$ONTOLOGY" 2>/dev/null || true)" >&2
-  exit 3
+  if [[ -n "$RECIPE_UNCHANGED" ]]; then
+    echo "ASSUMED: --recipe-unchanged — $RECIPE has a newer mtime than the atlas," >&2
+    echo "         and the caller asserts its CONTENT is the declaration the build used." >&2
+    echo "         The structural type-name check above ran and passed." >&2
+  else
+    echo "COULD-NOT-JUDGE: $RECIPE was edited after the atlas was built." >&2
+    echo "  recipe:  $(date -r "$RECIPE" 2>/dev/null || true)" >&2
+    echo "  atlas:   $(date -r "$ONTOLOGY" 2>/dev/null || true)" >&2
+    echo "  (a fresh git checkout resets mtimes; --recipe-unchanged says so out loud)" >&2
+    exit 3
+  fi
 fi
 
 # The corpus text under it. An atlas older than its own source is not evidence
@@ -151,8 +179,12 @@ SRC_REL=$(sed -n '/^\[acquire\]/,/^\[/p' "$RECIPE" | sed -n 's/^path = "\(.*\)"/
 SRC="${SRC_REL}"
 [[ "$SRC" = /* ]] || SRC="$(dirname "$RECIPE")/${SRC_REL}"
 if [[ -f "$SRC" ]] && (( $(mtime "$SRC") > $(mtime "$ATOMS") )); then
-  echo "COULD-NOT-JUDGE: $SRC is newer than the atlas built from it." >&2
-  exit 3
+  if [[ -n "$RECIPE_UNCHANGED" ]]; then
+    echo "ASSUMED: --recipe-unchanged — $SRC also has a checkout-fresh mtime." >&2
+  else
+    echo "COULD-NOT-JUDGE: $SRC is newer than the atlas built from it." >&2
+    exit 3
+  fi
 fi
 
 # `_summary.json` records the atoms.json it was written for. When it disagrees

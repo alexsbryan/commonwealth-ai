@@ -371,6 +371,9 @@ mod tests {
             chat_models: None,
             embed_model: "e".into(),
             base_url: "http://localhost:9741".into(),
+            // One host serves chat and embeddings on this path; the two-endpoint
+            // form is `corpus ingest`'s (ei-5b-build-verb).
+            embed_base_url: None,
             min_section_body_words: 0,
             toc_markers: None,
             max_output_tokens: 4096,

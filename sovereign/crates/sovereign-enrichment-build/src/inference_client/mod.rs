@@ -127,6 +127,15 @@ pub struct DaemonInferenceClient {
     /// provider's `base_url` against this to tell local-daemon
     /// dispatch from a remote payload.
     local_base: String,
+    /// Where `POST /v1/embeddings` goes, which is `base_url` for every
+    /// host that serves both models — a daemon, Ollama, vLLM — and a
+    /// DIFFERENT process for `llama-server`, which serves one model per
+    /// process (order ei-5b-build-verb). Set from
+    /// `EnrichConfig::embed_base`, so a corpus configured with two
+    /// endpoints reaches both from every phase rather than sending its
+    /// resolution embeddings to the chat process, which answers 200 with
+    /// a vector of the wrong width.
+    embed_base_url: String,
 }
 
 /// Cumulative token usage for a chat client. Atomic counters keep
@@ -199,7 +208,20 @@ impl DaemonInferenceClient {
             payload_custody: Custody::Personal,
             consent: None,
             local_base: local_daemon_base(&base_url_str),
+            // One host until told otherwise. `with_embed_base_url` is how a
+            // caller says the embeddings live somewhere else.
+            embed_base_url: base_url_str,
         })
+    }
+
+    /// Point `POST /v1/embeddings` at a different host from the chat one.
+    ///
+    /// The case this exists for is `llama-server`, which loads one model per
+    /// process: chat on :8090 and embeddings on :8089 are two servers, not
+    /// two routes. Callers that hold one URL for both never call this.
+    pub fn with_embed_base_url(mut self, base: impl Into<String>) -> Self {
+        self.embed_base_url = base.into();
+        self
     }
 
     /// Install the run-scoped consent grant consulted at the egress
@@ -304,6 +326,7 @@ impl DaemonInferenceClient {
             cfg.chat_model.clone(),
             cfg.embed_model.clone(),
         )?
+        .with_embed_base_url(cfg.embed_base())
         .with_max_output_tokens(cfg.max_output_tokens)
         .with_chat_models_by_phase(cfg.chat_models_by_phase_snapshot())
         .with_max_tokens_by_phase(max_tokens_by_phase)
@@ -470,7 +493,7 @@ impl DaemonInferenceClient {
     pub async fn embed_one(&self, text: &str) -> Result<Vec<f32>> {
         let started = std::time::Instant::now();
         let text_len_chars = text.chars().count();
-        let url = format!("{}/v1/embeddings", self.base_url);
+        let url = format!("{}/v1/embeddings", self.embed_base_url);
         let body = serde_json::json!({
             "model": self.embed_model,
             "input": text,

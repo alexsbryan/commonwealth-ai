@@ -80,6 +80,17 @@ pub fn indexes_dir() -> PathBuf {
     data_root().join("indexes")
 }
 
+/// `<data-root>/recipes` — where the recipe registry's step-1 lookup reads a
+/// user's own recipe (`corpus_engine::recipe_install` writes it there).
+///
+/// Here because a `CorpusEngine` built to read an enrichment corpus's chunks
+/// needs both this and [`indexes_dir`], and deriving one of the pair from a
+/// different root than the other is how a build ends up reading a config in
+/// one tree and its chunks in another.
+pub fn recipes_dir() -> PathBuf {
+    data_root().join("recipes")
+}
+
 /// `<data-root>/indexes/<corpus-id>/` — where the chapter manifest
 /// lives (and where a future LanceDB index would, too).
 pub fn index_root(corpus_id: &str) -> PathBuf {
@@ -88,6 +99,22 @@ pub fn index_root(corpus_id: &str) -> PathBuf {
 
 pub fn chapters_manifest_path(corpus_id: &str) -> PathBuf {
     index_root(corpus_id).join("chapters.json")
+}
+
+/// Create the enrichment tree a build writes into: the corpus root plus
+/// `exemplars/`, `cache/` and `runs/`.
+///
+/// Here rather than in a host because it is the LAYOUT, and this module is
+/// where the layout lives — the same reason [`config_path`] is here. Two
+/// hosts scaffold it today (`svrn enrich init` and `corpus ingest`), and a
+/// second copy of the directory list is how a host ends up writing a run
+/// report into a directory another host does not read.
+pub fn scaffold_dirs(corpus_id: &str) -> std::io::Result<()> {
+    std::fs::create_dir_all(enrichment_root(corpus_id))?;
+    std::fs::create_dir_all(exemplars_dir(corpus_id))?;
+    std::fs::create_dir_all(cache_dir(corpus_id))?;
+    std::fs::create_dir_all(runs_dir(corpus_id))?;
+    Ok(())
 }
 
 #[cfg(test)]

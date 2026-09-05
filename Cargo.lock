@@ -2523,6 +2523,7 @@ name = "corpus-mcp"
 version = "0.6.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "clap",
  "corpus-engine",
  "corpus-engine-vocab",
@@ -2531,6 +2532,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sovereign-contracts",
+ "sovereign-enrichment-build",
  "tempfile",
  "tokio",
  "tracing",

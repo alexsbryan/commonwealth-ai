@@ -7,6 +7,16 @@
 //! corpus-mcp --base-url http://localhost:8080/v1 --corpus sep
 //! ```
 //!
+//! Two verbs. With no subcommand it SERVES, which is what it has always done
+//! and what every existing invocation means. `corpus-mcp ingest <recipe.toml>`
+//! builds a corpus from a recipe against the same kind of endpoint — the
+//! second of `EPISTEMIC_INDEX.md` §4's three commands (order ei-5b-build-verb).
+//!
+//! ```sh
+//! corpus-mcp ingest my-coins.toml --chat-url http://localhost:8090/v1 \
+//!                                 --embed-url http://localhost:8089/v1
+//! ```
+//!
 //! Speaks MCP over stdio (newline-delimited JSON-RPC 2.0: `initialize`,
 //! `tools/list`, `tools/call`). Five tools: `ask` (the default — cited
 //! passages plus the map of ideas the atlas walk traversed to find them),
@@ -22,21 +32,29 @@
 
 mod ask;
 mod host;
+mod ingest;
 mod mcp;
 mod tools;
 
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
 #[command(name = "corpus-mcp", version, about)]
 struct Args {
+    /// What to do. Absent = serve, which is what every invocation of this
+    /// binary meant before `ingest` existed and still means. Adding a
+    /// subcommand rather than a mode flag keeps `--help` honest about which
+    /// flags belong to which verb.
+    #[command(subcommand)]
+    command: Option<Command>,
+
     /// Base URL of an OpenAI-compatible inference frontend, e.g.
-    /// `http://localhost:8080/v1`. The only required flag. Capability is
+    /// `http://localhost:8080/v1`. Required to SERVE. Capability is
     /// detected from it (`GET <root>/oicp/v1/capabilities`), never configured.
     #[arg(long)]
-    base_url: String,
+    base_url: Option<String>,
 
     /// Corpus id to serve (repeatable). Default: every installed index.
     #[arg(long = "corpus")]
@@ -57,6 +75,13 @@ struct Args {
     limit: usize,
 }
 
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Build a corpus from a recipe against a bare endpoint: acquire,
+    /// extract, chunk, embed, index, then the atlas enrichment.
+    Ingest(ingest::IngestArgs),
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Everything diagnostic goes to stderr: stdout is the MCP channel.
@@ -69,7 +94,20 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let args = Args::parse();
-    let profile = host::probe(&args.base_url, args.embed_model).await?;
+    if let Some(Command::Ingest(ingest_args)) = args.command {
+        return ingest::run(ingest_args).await;
+    }
+
+    // Serve. `--base-url` is what a serve needs and an ingest does not, so it
+    // is checked here rather than declared mandatory — a required flag would
+    // make `corpus-mcp ingest …` demand a URL it was given two better ones for.
+    let Some(base_url) = args.base_url else {
+        anyhow::bail!(
+            "serving needs --base-url <url> (an OpenAI-compatible endpoint, e.g. \
+             http://localhost:8080/v1). For `corpus-mcp ingest`, see --help."
+        );
+    };
+    let profile = host::probe(&base_url, args.embed_model).await?;
     let data_dir = args
         .data_dir
         .unwrap_or_else(sovereign_contracts::rebrand::data_dir);

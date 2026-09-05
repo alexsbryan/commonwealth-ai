@@ -27,6 +27,10 @@ use corpus_engine::{CorpusEngine, EmbedFn};
 use super::config::{EnrichConfig, TocMarkers, CONFIG_SCHEMA_VERSION};
 use super::inference_client::{probe_daemon, resolve_default_models};
 use super::paths;
+// The enrichment tree's directory list is the LAYOUT, and the layout lives in
+// `sovereign-enrichment-catalog::paths` — `corpus ingest` scaffolds the same
+// four directories (ei-5b-build-verb).
+use super::paths::scaffold_dirs;
 use super::templates;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 use sovereign_cli_shared::prompts::{confirm, stdin_is_tty};
@@ -432,6 +436,9 @@ pub async fn cmd_init(args: &[String]) -> i32 {
         chat_models: None,
         embed_model: embed.clone(),
         base_url,
+        // One host serves chat and embeddings on this path; the two-endpoint
+        // form is `corpus ingest`'s (ei-5b-build-verb).
+        embed_base_url: None,
         min_section_body_words: min_body_words,
         toc_markers,
         max_output_tokens: parsed.max_output_tokens,
@@ -617,6 +624,9 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
         chat_models: None,
         embed_model: embed.clone(),
         base_url,
+        // One host serves chat and embeddings on this path; the two-endpoint
+        // form is `corpus ingest`'s (ei-5b-build-verb).
+        embed_base_url: None,
         min_section_body_words: parsed.min_section_body_words,
         toc_markers: None,
         max_output_tokens: parsed.max_output_tokens,
@@ -663,239 +673,17 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
     0
 }
 
-/// Group LanceDB chunk rows by `(source_doc_id_or_title, section_path)`
-/// and emit one [`ChapterEntry`] per group.
+/// The from-corpus chapter manifest — a CALLER of
+/// `sovereign_enrichment_build::corpus_io::build_manifest_from_corpus_rows`,
+/// which is where the grouping lives.
 ///
-/// Falls back to `title` as the article-grouping key when
-/// `source_doc_id` is absent — older ingestions may have one but
-/// not the other.
-///
-/// `start_ordinal` is the first chapter ordinal to assign. First-run
-/// `enrich init --from-corpus` passes `1` (chapters are
-/// `sec_00001 …`). The incremental `enrich delta-manifest` path passes
-/// `existing_manifest_len + 1` so newly-detected chapters get
-/// `sec_NNNNN` ids that continue past the live manifest without
-/// colliding — the `chapter` field + `ordinal` metadata follow the
-/// same numbering.
-pub(crate) fn build_manifest_from_corpus_rows(
-    corpus_id: &str,
-    rows: Vec<corpus_engine::EnrichmentChunkRow>,
-    limit_articles: Option<usize>,
-    include_articles: Option<Vec<String>>,
-    start_ordinal: u32,
-) -> Result<ChapterManifest, String> {
-    use corpus_engine::WikipediaChunkMetadata;
-
-    // Per-(article, section) bucket. BTreeMap so chapter ids come
-    // out in deterministic order across runs.
-    type ArticleKey = String; // source_doc_id (or title) of the article
-    type SectionKey = String; // joined section_path; "" for lead
-
-    #[derive(Default)]
-    struct Bucket {
-        article_title: String,
-        section_name: String,
-        section_path_joined: String,
-        section_type: Option<String>,
-        pov_count: i64,
-        citation_needed_count: i64,
-        url: Option<String>,
-        chunk_ids: Vec<u64>,
-        chunks: Vec<(u64, String)>, // (id, content) — sorted by id at finalisation
-    }
-
-    let mut buckets: BTreeMap<(ArticleKey, SectionKey), Bucket> = BTreeMap::new();
-    let mut article_first_seen: BTreeMap<ArticleKey, usize> = BTreeMap::new();
-    let mut counter: usize = 0;
-
-    for row in rows {
-        // Article-grouping key: prefer title (per-article in Wikipedia /
-        // wiki-shaped corpora — every chunk in an article shares the
-        // same title) over source_doc_id (which the Wikipedia extractor
-        // sets to the per-section URL, so it varies *within* an article
-        // and groups too finely). Fall back to source_doc_id stripped
-        // of any URL fragment, then to "<untitled>" as a last resort.
-        let article_key = row
-            .title
-            .clone()
-            .or_else(|| {
-                row.source_doc_id
-                    .as_deref()
-                    .map(|s| s.split('#').next().unwrap_or(s).to_string())
-            })
-            .unwrap_or_else(|| "<untitled>".to_string());
-        let article_title = row.title.clone().unwrap_or_else(|| article_key.clone());
-
-        // Section identification — driven by Wikipedia-shaped
-        // metadata. Other referential extractors should serialise
-        // `WikipediaChunkMetadata`-compatible JSON for now (the
-        // section_path / section_name / section_type fields are
-        // the load-bearing ones); a generalisation lives behind
-        // the `Pipeline` trait if more shapes appear.
-        let (section_path_vec, section_name, section_type, pov_count, citation_needed_count) =
-            match row
-                .metadata_raw
-                .as_deref()
-                .and_then(|s| serde_json::from_str::<WikipediaChunkMetadata>(s).ok())
-            {
-                Some(m) => (
-                    m.section_path.clone(),
-                    m.section_name.clone(),
-                    Some(m.section_type.clone()),
-                    m.pov_count.unwrap_or(0),
-                    m.citation_needed_count.unwrap_or(0),
-                ),
-                None => (Vec::<String>::new(), String::new(), None, 0, 0),
-            };
-        let section_path_joined = section_path_vec.join(" › ");
-
-        article_first_seen
-            .entry(article_key.clone())
-            .or_insert_with(|| {
-                let n = counter;
-                counter += 1;
-                n
-            });
-
-        let bucket = buckets
-            .entry((article_key.clone(), section_path_joined.clone()))
-            .or_insert_with(|| Bucket {
-                article_title: article_title.clone(),
-                section_name: section_name.clone(),
-                section_path_joined: section_path_joined.clone(),
-                section_type: section_type.clone(),
-                pov_count,
-                citation_needed_count,
-                url: row.url.clone(),
-                chunk_ids: Vec::new(),
-                chunks: Vec::new(),
-            });
-        bucket.chunk_ids.push(row.id);
-        bucket.chunks.push((row.id, row.content));
-    }
-
-    // Apply the per-article cap and/or include-list. `include_articles`
-    // takes precedence — if the operator handed us an explicit title
-    // list (typically the top-K from `enrich triage-candidates`), keep
-    // exactly those articles regardless of order. Otherwise fall back
-    // to the existing first-seen-order limit.
-    //
-    // `--include-articles` is normalised through
-    // `corpus_engine::filters::normalize_title` to be tolerant of the
-    // operator's underscore vs space habits in their title file.
-    let total_articles = article_first_seen.len();
-    let kept_articles: std::collections::HashSet<ArticleKey> = if let Some(want) =
-        include_articles.as_ref()
-    {
-        let want_norm: std::collections::HashSet<String> = want
-            .iter()
-            .map(|t| corpus_engine::filters::normalize_title(t))
-            .collect();
-        let mut hits: std::collections::HashSet<ArticleKey> = std::collections::HashSet::new();
-        let mut missing_count = 0usize;
-        for (key, _) in article_first_seen {
-            if want_norm.contains(&corpus_engine::filters::normalize_title(&key)) {
-                hits.insert(key);
-            }
-        }
-        // Diagnostic so the operator knows how many of their listed
-        // titles actually exist in the source corpus.
-        let want_total = want_norm.len();
-        if hits.len() < want_total {
-            missing_count = want_total - hits.len();
-            eprintln!(
-                "manifest: --include-articles matched {}/{} titles ({} not present in source corpus)",
-                hits.len(),
-                want_total,
-                missing_count,
-            );
-        }
-        hits
-    } else if let Some(n) = limit_articles {
-        let mut articles: Vec<(ArticleKey, usize)> = article_first_seen.into_iter().collect();
-        articles.sort_by_key(|(_, ord)| *ord);
-        articles.into_iter().take(n).map(|(k, _)| k).collect()
-    } else {
-        article_first_seen.into_keys().collect()
-    };
-    eprintln!(
-        "manifest: {} articles, {} sections — keeping {} articles",
-        total_articles,
-        buckets.len(),
-        kept_articles.len(),
-    );
-
-    // Emit one ChapterEntry per surviving (article, section). The
-    // loop pre-increments `chapter_ord`, so seed it one below
-    // `start_ordinal` (saturating so a stray `0` still yields a valid
-    // `sec_00001` rather than underflowing).
-    let mut manifest = ChapterManifest::new(corpus_id);
-    let mut chapter_ord: u32 = start_ordinal.saturating_sub(1);
-    for ((article_key, _section_key), mut bucket) in buckets {
-        if !kept_articles.contains(&article_key) {
-            continue;
-        }
-        bucket.chunks.sort_by_key(|(id, _)| *id);
-        bucket.chunk_ids.sort_unstable();
-        let body: String = bucket
-            .chunks
-            .iter()
-            .map(|(_, c)| c.as_str())
-            .collect::<Vec<_>>()
-            .join("\n\n");
-        let word_count = body.split_whitespace().count() as u64;
-        let first_line = body
-            .lines()
-            .find(|l| !l.trim().is_empty())
-            .unwrap_or("")
-            .chars()
-            .take(160)
-            .collect::<String>();
-        let title = if bucket.section_name.is_empty() {
-            bucket.article_title.clone()
-        } else {
-            format!("{} — {}", bucket.article_title, bucket.section_name)
-        };
-        chapter_ord += 1;
-        let id = format!("sec_{:05}", chapter_ord);
-        let mut metadata: std::collections::BTreeMap<String, String> =
-            std::collections::BTreeMap::new();
-        metadata.insert("article_title".into(), bucket.article_title);
-        metadata.insert("section_path".into(), bucket.section_path_joined);
-        if let Some(st) = bucket.section_type {
-            metadata.insert("section_type".into(), st);
-        }
-        if bucket.pov_count > 0 {
-            metadata.insert("pov_count".into(), bucket.pov_count.to_string());
-        }
-        if bucket.citation_needed_count > 0 {
-            metadata.insert(
-                "citation_needed_count".into(),
-                bucket.citation_needed_count.to_string(),
-            );
-        }
-        if let Some(u) = bucket.url {
-            metadata.insert("url".into(), u);
-        }
-        metadata.insert("ordinal".into(), chapter_ord.to_string());
-
-        manifest
-            .chapters
-            .push(corpus_engine::enrichment::pipeline::ChapterEntry {
-                id,
-                title,
-                part: None,
-                chapter: Some(chapter_ord),
-                first_line,
-                word_count,
-                chunk_ids: bucket.chunk_ids,
-                characters_present: Vec::new(),
-                metadata,
-            });
-    }
-
-    Ok(manifest)
-}
+/// It was written out here until order ei-5b-build-verb, when `corpus ingest
+/// <recipe.toml>` needed the same manifest from a host that cannot link this
+/// crate. It moved down beside `fetch_all_corpus_chunks`, its only input
+/// (ARCH §10.6: one decider, one name). Re-exported rather than inlined at the
+/// two call sites so `enrich delta-manifest` keeps reaching it by the name it
+/// already uses.
+pub(crate) use sovereign_enrichment_build::corpus_io::build_manifest_from_corpus_rows;
 
 #[derive(Debug)]
 struct ParsedInit {
@@ -1292,15 +1080,6 @@ fn absolutise(p: PathBuf) -> PathBuf {
         Ok(cwd) => cwd.join(&p),
         Err(_) => p,
     }
-}
-
-fn scaffold_dirs(corpus_id: &str) -> std::io::Result<()> {
-    let root = paths::enrichment_root(corpus_id);
-    fs::create_dir_all(&root)?;
-    fs::create_dir_all(paths::exemplars_dir(corpus_id))?;
-    fs::create_dir_all(paths::cache_dir(corpus_id))?;
-    fs::create_dir_all(paths::runs_dir(corpus_id))?;
-    Ok(())
 }
 
 /// Resolve the template (built-in or path-supplied), materialise its

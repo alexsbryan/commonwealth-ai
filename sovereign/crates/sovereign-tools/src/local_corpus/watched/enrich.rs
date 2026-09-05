@@ -114,6 +114,7 @@ fn synthesize_watched_config(
         chat_models: None,
         embed_model: defaults.embed_model.clone(),
         base_url: defaults.base_url.clone(),
+        embed_base_url: None,
         min_section_body_words: 0,
         toc_markers: None,
         max_output_tokens: 16_384,

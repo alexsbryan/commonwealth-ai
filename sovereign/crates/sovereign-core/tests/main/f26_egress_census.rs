@@ -556,6 +556,8 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // corpus-mcp's host probe: `GET /oicp/v1/capabilities`, `GET /v1/models`,
     // one `POST /v1/embeddings` — all against the operator's `--base-url`.
     ("corpus-mcp/src/host.rs", Class::OperatorSurface, 1),
+    // `corpus ingest`: the chat endpoint's capability probe (embed reuses host.rs).
+    ("corpus-mcp/src/ingest.rs", Class::OperatorSurface, 1),
     // 2 -> 1 at cw-lift rung 2c: the queue-handoff unicast to
     // `/internal/app/state` built its own client with its own 10s timeout,
     // a second answer to "how long do we wait on a peer" beside

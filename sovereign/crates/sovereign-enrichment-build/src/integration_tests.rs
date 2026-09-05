@@ -97,6 +97,9 @@ fn scaffold_corpus(corpus_id: &str, source_path: &std::path::Path) -> EnrichConf
         chat_models: None,
         embed_model: "test-embed".into(),
         base_url: "http://localhost:9741".into(),
+        // One host serves chat and embeddings on this path; the two-endpoint
+        // form is `corpus ingest`'s (ei-5b-build-verb).
+        embed_base_url: None,
         // Synthetic fixture bodies are short; keep the filter off so
         // the test exercises the full phase-1 path end-to-end.
         min_section_body_words: 0,

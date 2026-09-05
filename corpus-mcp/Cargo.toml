@@ -25,6 +25,14 @@ path = "src/main.rs"
 [dependencies]
 corpus-engine = { workspace = true }
 corpus-engine-vocab = { workspace = true }
+# The atlas enrichment orchestrator — `corpus ingest`'s second half, and the
+# WRITER of everything the tools here read. It joined this `[[package]]` in
+# `quality/ARCH_LAYERS.toml` at ei-5a-build-cut, when the seven import sites
+# that dragged `sovereign-core` / `sovereign-tools` / `sovereign-inference`
+# through it were cut (closure 695 -> 590 crates). This dep is what that cut
+# was FOR: without it a person needs our daemon to build a corpus, and the
+# binary's whole claim is that they do not.
+sovereign-enrichment-build = { workspace = true }
 # The JSON-RPC envelope every MCP message rides on — a leaf.
 oicp-types = { workspace = true }
 # `sovereign_contracts::rebrand::data_dir()` is the ONE derivation of the data
@@ -33,6 +41,7 @@ oicp-types = { workspace = true }
 sovereign-contracts = { workspace = true }
 
 anyhow = { workspace = true }
+chrono = { workspace = true }
 clap = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }

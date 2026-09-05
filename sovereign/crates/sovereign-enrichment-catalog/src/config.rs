@@ -50,6 +50,17 @@ pub struct EnrichConfig {
     pub embed_model: String,
     #[serde(default = "default_base_url")]
     pub base_url: String,
+    /// Where `POST /v1/embeddings` goes, when that is NOT `base_url`.
+    ///
+    /// `None` — the default and the case for every corpus built before order
+    /// ei-5b-build-verb — means one host serves both models, which is true of
+    /// the daemon, of Ollama and of vLLM. It is NOT true of `llama-server`,
+    /// which loads one model per process: `corpus ingest --chat-url …
+    /// --embed-url …` writes both here so every later phase reaches the right
+    /// one. Read through [`EnrichConfig::embed_base`], never directly — one
+    /// accessor for the path (ARCH §10.6).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embed_base_url: Option<String>,
     /// Minimum whitespace-separated token count a section's body must
     /// have for the detector to keep it. A section regex can match
     /// once in a list-of-headings index and again at the real body;
@@ -175,6 +186,17 @@ fn default_max_output_tokens() -> u32 {
 }
 
 impl EnrichConfig {
+    /// The host `POST /v1/embeddings` goes to: [`Self::embed_base_url`] when
+    /// the corpus was configured with two endpoints, else [`Self::base_url`].
+    ///
+    /// The ONE reader of that pair. Every phase resolves its embedder through
+    /// `DaemonInferenceClient::from_enrich_config`, which calls this, so a
+    /// corpus cannot have one phase embedding against the chat process and
+    /// another against the embed one.
+    pub fn embed_base(&self) -> &str {
+        self.embed_base_url.as_deref().unwrap_or(&self.base_url)
+    }
+
     pub fn load(corpus_id: &str) -> Result<Option<Self>> {
         let path = paths::config_path(corpus_id);
         if !path.exists() {
@@ -293,6 +315,9 @@ mod tests {
             chat_models: None,
             embed_model: "embed-m".into(),
             base_url: "http://localhost:9741".into(),
+            // One host serves chat and embeddings on this path; the two-endpoint
+            // form is `corpus ingest`'s (ei-5b-build-verb).
+            embed_base_url: None,
             min_section_body_words: default_min_section_body_words(),
             toc_markers: None,
             max_output_tokens: default_max_output_tokens(),
@@ -333,6 +358,44 @@ mod tests {
     fn chat_models_by_phase_snapshot_is_empty_when_unset() {
         let cfg = sample_config();
         assert!(cfg.chat_models_by_phase_snapshot().is_empty());
+    }
+
+    /// The failure this accessor prevents: `llama-server` serves one model
+    /// per process, so a corpus ingested against two of them has a chat host
+    /// and an embed host. Reading `base_url` for both sends every resolution
+    /// embedding to the chat process, which answers 200 with a vector of the
+    /// wrong width — a corruption nothing downstream re-checks.
+    #[test]
+    fn embed_base_falls_back_to_base_url_and_is_overridden_when_set() {
+        let one = sample_config();
+        assert_eq!(one.embed_base(), one.base_url);
+        let two = EnrichConfig {
+            base_url: "http://127.0.0.1:8090".into(),
+            embed_base_url: Some("http://127.0.0.1:8089".into()),
+            ..sample_config()
+        };
+        assert_eq!(two.embed_base(), "http://127.0.0.1:8089");
+    }
+
+    /// Every config.json written before ei-5b-build-verb lacks the field, and
+    /// those corpora are one-host corpora — they must load and keep behaving
+    /// exactly as before.
+    #[test]
+    fn a_config_without_embed_base_url_loads_and_means_one_host() {
+        let json = r#"{
+            "schema_version": 1,
+            "corpus_id": "x",
+            "pipeline_id": "literary",
+            "source_path": "/tmp/x.txt",
+            "chapter_regex": "^Chapter",
+            "chat_model": "c",
+            "embed_model": "e",
+            "base_url": "http://localhost:9741",
+            "created_at": "t"
+        }"#;
+        let cfg: EnrichConfig = serde_json::from_str(json).unwrap();
+        assert!(cfg.embed_base_url.is_none());
+        assert_eq!(cfg.embed_base(), "http://localhost:9741");
     }
 
     #[test]

@@ -42,7 +42,7 @@ tiers as separate tools the client must compose.
 | Layer | What it is | Invariant | Today | Target |
 |---|---|---|---|---|
 | **Recipe** | one TOML: acquire, extract, chunk, index, `[enrichment]`, `[enrichment.ontology]` (`sovereign-recipes/SCHEMA.md`; templates under `_templates/ontology-v1/`) | the recipe is the whole declaration; nothing is configured anywhere else | as built (`svrn recipe new --ontology numismatics`, `recipe validate`) | unchanged in shape; the navigation section (§2) is added to the ontology block |
-| **Build** (ingest + enrich) | acquire → extract → chunk → embed → index → enrichment phases → resolve → v2 store + seed table + `ontology.json` | runs against ANY OpenAI-compatible chat + embeddings endpoint, in a binary that carries no inference stack | the orchestrator (`sovereign-enrichment-build`) talks plain HTTP (`DaemonInferenceClient`: `/v1/chat/completions` with `response_format: json_schema`, `/v1/embeddings`) but its closure carries llama.cpp via `sovereign-inference`, plus `sovereign-core` and `sovereign-tools`, through seven import sites (§4.1); `corpus install` embeds through the daemon | the seven sites move to leaves; build joins the `corpus-mcp` package as `corpus ingest <recipe>` |
+| **Build** (ingest + enrich) | acquire → extract → chunk → embed → index → enrichment phases → resolve → v2 store + seed table + `ontology.json` | runs against ANY OpenAI-compatible chat + embeddings endpoint, in a binary that carries no inference stack | **done (ei-5a-build-cut + ei-5b-build-verb, 2026-09-04)**: the seven sites are cut, `sovereign-enrichment-build` + `sovereign-enrichment-catalog` are in the `corpus-mcp` `[[package]]`, and `corpus-mcp ingest <recipe.toml>` drives the whole path — `corpus_engine::recipe_install::register` → `CorpusEngine::ingest` over an HTTP `EmbedFn` → one `config.json` → `build_with_progress_with_embedder`. Two endpoints, because llama-server loads one model per process: `--chat-url` / `--embed-url` (or `--base-url` for a host serving both), each probed and named before disk is touched, and both reaching `config.json` as `base_url` + `embed_base_url`. Closure 609 crates, no llama.cpp / ort / iroh / `sovereign-core` / `sovereign-tools` (`tests/no_inference_stack.rs`, boundary-gate). GLiNER is absent and the entity pass is the model's, printed as such | pull-if-absent and Ollama defaults (step 6) |
 | **Evidence** | chunks: LanceDB vectors + Tantivy FTS, `CorpusIndex::search` | every answer cites a chunk | universal | unchanged |
 | **Ideas** (the index) | atoms of the closed kinds (`AtomEnvelope`, `corpus-engine-vocab`), each with embed text, evidence anchors; typed edges; ANN seed table | `atoms.lance` + `edges.csr` + `atoms_ann.lance` are **mandatory** ingest artifacts, coverage reported | seed table mandatory at ingest (ei-3-index, 2026-09-04): `writer::write_atlas_full` takes an `AtlasSeeding` with no default, seeds through the one `backfill_ann` writer in the same write as the v2 store, and a `With` seed that fails fails the atlas write; coverage (`AnnSummary::embedded_atoms`) rides in `_summary.json` v5 and prints in `corpus_list` and `svrn corpus status`. SEP backfilled from 22 of 1,770. Wikipedia still on `edges.lance` + SQLite; `atoms.rkyv` leftovers | one store PROVIDER everywhere (operator 2026-09-04): the walk consumes one trait — atom by id, atoms of a kind, evidence anchors, edges from/to with a closed `EdgeType`, the seed table, the ontology — and a backend fulfils it; atom-class backends are `atoms.lance` + `edges.csr` + `atoms_ann.lance`, wiki-class is `articles.lance` + `edges.lance` + a seed table; `atoms.json` is export only |
 | **Map** (the ontology) | `atlas/ontology.json`, one per atlas, from **every** pipeline | an atlas that cannot describe itself is not an atlas | every pipeline writes it (ei-2-map, 2026-09-04): built-in vocabularies as version-1 TOML under `pipelines/ontologies/`, the envelope names its `pipeline_id`, `navigation` carries the §2.2 table as defaults; existing atlases get it on their next build — nothing reads `navigation` yet | three sections: schema, navigation policy, vocabulary + prose (§2); the walker reads `navigation` (step 4) |
@@ -241,6 +241,36 @@ lane names an owner and a scheduled measurement before it is accepted.
 5. Build: the seven-site cut (§4.1); `sovereign-enrichment-build` joins the
    package; `corpus ingest <recipe>` lands and the acceptance runs the whole
    of §4 on the wessex fixture against a bare endpoint.
+   **DONE 2026-09-04 (ei-5a-build-cut + ei-5b-build-verb).** Two things the
+   step surfaced that §4 had not said. (a) `EnrichConfig` carried ONE
+   `base_url` for chat and embeddings, which is right for the daemon, Ollama
+   and vLLM and wrong for llama-server; the resolution embeddings of every
+   phase went wherever the chat model was. It carries `embed_base_url` now,
+   read through the one accessor `EnrichConfig::embed_base`, `None` on every
+   corpus built before this and meaning "one host". (b) `config.json`'s
+   `base_url` is a ROOT, not a `/v1` base — `probe_daemon`, `embed_one` and
+   `providers::local_daemon_base` each append the version segment themselves.
+   The acceptance's ingest leg is opt-in (`ACCEPT_INGEST=1 CHAT_GGUF=…`)
+   because it wants a second llama-server and tens of minutes; unset it
+   reports NEVER-RAN by name rather than passing quietly.
+
+   One caveat the step surfaced and did not own, the sibling of step 4's.
+   §6 row 3 asks the map to name `coin` / `attribution` **and** a `Tension` or
+   `Grounds` edge. The `attribution` half holds: the seed table populates all
+   six kinds since ei-3c, so a `tension` question seeds on the recipe's own
+   claim type and the declared noun reaches the answer. The connected half
+   cannot: the `tension` row's §2.2 default walks `Tension` and `OpposesIn`,
+   and a declared-ontology corpus of this shape produces `Involves`
+   (claim → the coin it is about) and `Grounds` (claim → its evidence), so
+   from an attribution there is no hop of a kind the row traverses and `coin`
+   is unreachable however good the extraction was. That is a contract gap
+   between the §2.2 navigation defaults and the edge vocabulary a declared
+   ontology actually produces — the same shape as step 4's seed-kind gap, on
+   the walk side rather than the seed side. Widening the row to make the bar
+   green would be tuning a navigation default to the bench, so the acceptance
+   judges the connected half only when the row's walk kinds intersect the
+   atlas's, and reports COULD-NOT-JUDGE naming both sets otherwise. It belongs
+   to the navigation defaults, not to the build.
 6. Distribution: pull-if-absent and endpoint discovery; acceptance against
    Ollama; `corpus serve` and `corpus recipe new`.
 7. Ports, one per commit, each measured on its lane: RAPTOR, field model,

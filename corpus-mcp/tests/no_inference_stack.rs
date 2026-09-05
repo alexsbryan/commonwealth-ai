@@ -63,7 +63,18 @@ fn assert_no_inference_stack(package: &str, must_contain: &[&str]) {
 fn the_dep_tree_carries_no_inference_stack() {
     assert_no_inference_stack(
         "corpus-mcp",
-        &["corpus-engine", "corpus-engine-vocab", "lancedb", "tantivy"],
+        &[
+            "corpus-engine",
+            "corpus-engine-vocab",
+            "lancedb",
+            "tantivy",
+            // `corpus ingest <recipe.toml>` (ei-5b-build-verb): the host now
+            // links the atlas build orchestrator, so its closure is INSIDE
+            // this assertion rather than beside it. That is EI6 = 1.0 — the
+            // whole §4 path, acquire through atlas, with no inference stack.
+            "sovereign-enrichment-build",
+            "sovereign-enrichment-catalog",
+        ],
     );
 }
 

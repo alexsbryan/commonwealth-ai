@@ -157,15 +157,16 @@ fn read_corpus_chunks(
     source_corpus_id: &str,
     needed_ids: Option<&[u64]>,
 ) -> Result<Vec<corpus_engine::EnrichmentChunkRow>> {
-    let data_dir = sovereign_contracts::setup_config::SetupConfig::load()
-        .map(|c| c.data.dir)
-        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
+    // The SAME root every other enrichment path hangs from — `paths::`, i.e.
+    // `rebrand::data_dir()`, which honours `SOVEREIGN_DATA_DIR`. This derived
+    // its own from `SetupConfig.data.dir` (falling back to `svrnmesh_root()`)
+    // until order ei-5b-build-verb, which is the second root the enrichment
+    // store was warned about in `sovereign-enrichment-catalog::paths`'s module
+    // doc: a build read its `config.json` under the override and its CHUNKS
+    // under `~/.sovereign`, and reported `Index not found` for a corpus that
+    // had just been indexed. Reader and writer must agree (ARCH §10.6).
     let noop_embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(Vec::<f32>::new()) }));
-    let engine = CorpusEngine::new(
-        data_dir.join("recipes"),
-        data_dir.join("indexes"),
-        noop_embed,
-    );
+    let engine = CorpusEngine::new(paths::recipes_dir(), paths::indexes_dir(), noop_embed);
     let source_corpus = source_corpus_id.to_string();
     let ids = needed_ids.map(<[u64]>::to_vec);
     std::thread::scope(|s| {
@@ -333,4 +334,245 @@ pub fn build_corpus(cfg: &EnrichConfig) -> Result<(CorpusContext, ChapterManifes
         chapter_titles,
     };
     Ok((ctx, manifest))
+}
+
+// ── The chapter manifest an already-indexed corpus implies ───────────────────
+//
+// `enrich init --from-corpus <id>` and `corpus ingest <recipe.toml>` ask the
+// same question — what are this index's chapters? — and until order
+// ei-5b-build-verb only the CLI could answer it: the grouping lived in
+// `sovereign-cli-llm`'s `enrich_cmd::init`, a host `corpus-mcp` cannot link.
+// It is beside `fetch_all_corpus_chunks` now because that is its only input
+// (ARCH §10.6). The CLI is a caller; there is one implementation.
+
+/// Group LanceDB chunk rows by `(source_doc_id_or_title, section_path)`
+/// and emit one `ChapterEntry` per group.
+///
+/// Falls back to `title` as the article-grouping key when
+/// `source_doc_id` is absent — older ingestions may have one but
+/// not the other.
+///
+/// `start_ordinal` is the first chapter ordinal to assign. First-run
+/// `enrich init --from-corpus` passes `1` (chapters are
+/// `sec_00001 …`). The incremental `enrich delta-manifest` path passes
+/// `existing_manifest_len + 1` so newly-detected chapters get
+/// `sec_NNNNN` ids that continue past the live manifest without
+/// colliding — the `chapter` field + `ordinal` metadata follow the
+/// same numbering.
+pub fn build_manifest_from_corpus_rows(
+    corpus_id: &str,
+    rows: Vec<corpus_engine::EnrichmentChunkRow>,
+    limit_articles: Option<usize>,
+    include_articles: Option<Vec<String>>,
+    start_ordinal: u32,
+) -> std::result::Result<ChapterManifest, String> {
+    use corpus_engine::WikipediaChunkMetadata;
+    use std::collections::BTreeMap;
+
+    // Per-(article, section) bucket. BTreeMap so chapter ids come
+    // out in deterministic order across runs.
+    type ArticleKey = String; // source_doc_id (or title) of the article
+    type SectionKey = String; // joined section_path; "" for lead
+
+    #[derive(Default)]
+    struct Bucket {
+        article_title: String,
+        section_name: String,
+        section_path_joined: String,
+        section_type: Option<String>,
+        pov_count: i64,
+        citation_needed_count: i64,
+        url: Option<String>,
+        chunk_ids: Vec<u64>,
+        chunks: Vec<(u64, String)>, // (id, content) — sorted by id at finalisation
+    }
+
+    let mut buckets: BTreeMap<(ArticleKey, SectionKey), Bucket> = BTreeMap::new();
+    let mut article_first_seen: BTreeMap<ArticleKey, usize> = BTreeMap::new();
+    let mut counter: usize = 0;
+
+    for row in rows {
+        // Article-grouping key: prefer title (per-article in Wikipedia /
+        // wiki-shaped corpora — every chunk in an article shares the
+        // same title) over source_doc_id (which the Wikipedia extractor
+        // sets to the per-section URL, so it varies *within* an article
+        // and groups too finely). Fall back to source_doc_id stripped
+        // of any URL fragment, then to "<untitled>" as a last resort.
+        let article_key = row
+            .title
+            .clone()
+            .or_else(|| {
+                row.source_doc_id
+                    .as_deref()
+                    .map(|s| s.split('#').next().unwrap_or(s).to_string())
+            })
+            .unwrap_or_else(|| "<untitled>".to_string());
+        let article_title = row.title.clone().unwrap_or_else(|| article_key.clone());
+
+        // Section identification — driven by Wikipedia-shaped
+        // metadata. Other referential extractors should serialise
+        // `WikipediaChunkMetadata`-compatible JSON for now (the
+        // section_path / section_name / section_type fields are
+        // the load-bearing ones); a generalisation lives behind
+        // the `Pipeline` trait if more shapes appear.
+        let (section_path_vec, section_name, section_type, pov_count, citation_needed_count) =
+            match row
+                .metadata_raw
+                .as_deref()
+                .and_then(|s| serde_json::from_str::<WikipediaChunkMetadata>(s).ok())
+            {
+                Some(m) => (
+                    m.section_path.clone(),
+                    m.section_name.clone(),
+                    Some(m.section_type.clone()),
+                    m.pov_count.unwrap_or(0),
+                    m.citation_needed_count.unwrap_or(0),
+                ),
+                None => (Vec::<String>::new(), String::new(), None, 0, 0),
+            };
+        let section_path_joined = section_path_vec.join(" › ");
+
+        article_first_seen
+            .entry(article_key.clone())
+            .or_insert_with(|| {
+                let n = counter;
+                counter += 1;
+                n
+            });
+
+        let bucket = buckets
+            .entry((article_key.clone(), section_path_joined.clone()))
+            .or_insert_with(|| Bucket {
+                article_title: article_title.clone(),
+                section_name: section_name.clone(),
+                section_path_joined: section_path_joined.clone(),
+                section_type: section_type.clone(),
+                pov_count,
+                citation_needed_count,
+                url: row.url.clone(),
+                chunk_ids: Vec::new(),
+                chunks: Vec::new(),
+            });
+        bucket.chunk_ids.push(row.id);
+        bucket.chunks.push((row.id, row.content));
+    }
+
+    // Apply the per-article cap and/or include-list. `include_articles`
+    // takes precedence — if the operator handed us an explicit title
+    // list (typically the top-K from `enrich triage-candidates`), keep
+    // exactly those articles regardless of order. Otherwise fall back
+    // to the existing first-seen-order limit.
+    //
+    // `--include-articles` is normalised through
+    // `corpus_engine::filters::normalize_title` to be tolerant of the
+    // operator's underscore vs space habits in their title file.
+    let total_articles = article_first_seen.len();
+    let kept_articles: std::collections::HashSet<ArticleKey> = if let Some(want) =
+        include_articles.as_ref()
+    {
+        let want_norm: std::collections::HashSet<String> = want
+            .iter()
+            .map(|t| corpus_engine::filters::normalize_title(t))
+            .collect();
+        let mut hits: std::collections::HashSet<ArticleKey> = std::collections::HashSet::new();
+        for (key, _) in article_first_seen {
+            if want_norm.contains(&corpus_engine::filters::normalize_title(&key)) {
+                hits.insert(key);
+            }
+        }
+        // Diagnostic so the operator knows how many of their listed
+        // titles actually exist in the source corpus.
+        let want_total = want_norm.len();
+        if hits.len() < want_total {
+            eprintln!(
+                "manifest: --include-articles matched {}/{} titles ({} not present in source corpus)",
+                hits.len(),
+                want_total,
+                want_total - hits.len(),
+            );
+        }
+        hits
+    } else if let Some(n) = limit_articles {
+        let mut articles: Vec<(ArticleKey, usize)> = article_first_seen.into_iter().collect();
+        articles.sort_by_key(|(_, ord)| *ord);
+        articles.into_iter().take(n).map(|(k, _)| k).collect()
+    } else {
+        article_first_seen.into_keys().collect()
+    };
+    eprintln!(
+        "manifest: {} articles, {} sections — keeping {} articles",
+        total_articles,
+        buckets.len(),
+        kept_articles.len(),
+    );
+
+    // Emit one ChapterEntry per surviving (article, section). The
+    // loop pre-increments `chapter_ord`, so seed it one below
+    // `start_ordinal` (saturating so a stray `0` still yields a valid
+    // `sec_00001` rather than underflowing).
+    let mut manifest = ChapterManifest::new(corpus_id);
+    let mut chapter_ord: u32 = start_ordinal.saturating_sub(1);
+    for ((article_key, _section_key), mut bucket) in buckets {
+        if !kept_articles.contains(&article_key) {
+            continue;
+        }
+        bucket.chunks.sort_by_key(|(id, _)| *id);
+        bucket.chunk_ids.sort_unstable();
+        let body: String = bucket
+            .chunks
+            .iter()
+            .map(|(_, c)| c.as_str())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let word_count = body.split_whitespace().count() as u64;
+        let first_line = body
+            .lines()
+            .find(|l| !l.trim().is_empty())
+            .unwrap_or("")
+            .chars()
+            .take(160)
+            .collect::<String>();
+        let title = if bucket.section_name.is_empty() {
+            bucket.article_title.clone()
+        } else {
+            format!("{} — {}", bucket.article_title, bucket.section_name)
+        };
+        chapter_ord += 1;
+        let id = format!("sec_{chapter_ord:05}");
+        let mut metadata: BTreeMap<String, String> = BTreeMap::new();
+        metadata.insert("article_title".into(), bucket.article_title);
+        metadata.insert("section_path".into(), bucket.section_path_joined);
+        if let Some(st) = bucket.section_type {
+            metadata.insert("section_type".into(), st);
+        }
+        if bucket.pov_count > 0 {
+            metadata.insert("pov_count".into(), bucket.pov_count.to_string());
+        }
+        if bucket.citation_needed_count > 0 {
+            metadata.insert(
+                "citation_needed_count".into(),
+                bucket.citation_needed_count.to_string(),
+            );
+        }
+        if let Some(u) = bucket.url {
+            metadata.insert("url".into(), u);
+        }
+        metadata.insert("ordinal".into(), chapter_ord.to_string());
+
+        manifest
+            .chapters
+            .push(corpus_engine::enrichment::pipeline::ChapterEntry {
+                id,
+                title,
+                part: None,
+                chapter: Some(chapter_ord),
+                first_line,
+                word_count,
+                chunk_ids: bucket.chunk_ids,
+                characters_present: Vec::new(),
+                metadata,
+            });
+    }
+
+    Ok(manifest)
 }
