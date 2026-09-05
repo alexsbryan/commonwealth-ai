@@ -84,6 +84,14 @@ sovereign-tdd = { workspace = true }
 # Dial-by-key client access (Track M) — pulls the iroh feature into
 # default builds of this binary; everything else stays runtime-gated
 # behind `[iroh] enabled`.
+#
+# Same class as `sovereign-mesh`'s forcing, and refused for the same reason
+# (cw-lift 3b — the measurement is in that manifest). This crate has its own
+# `src/iroh_access.rs` naming `commonwealth_transport::iroh` outside any cfg,
+# so propagating instead of forcing is a one-line manifest change and a
+# multi-file source change behind it. Note this line does NOT reach
+# `sovereign-cli-daemon`: the server is not in the daemon's dependency tree,
+# so the bar's "two unconditional forcings" are one, for that bar's subject.
 commonwealth-transport = { workspace = true, features = ["iroh"] }
 corpus-engine = { workspace = true, features = ["treesitter"] }
 corpus-engine-notes = { workspace = true }

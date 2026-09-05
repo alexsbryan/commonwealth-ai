@@ -18,10 +18,31 @@ kernel-types = { workspace = true }
 # `features = ["iroh"]`: the daemon's dial-by-key binding (W1 of
 # TRANSPORT_MIGRATION.md) is compiled into the default build —
 # runtime-gated by `[iroh] enabled`, not cfg-gated — so the shipped
-# daemon actually binds an endpoint when configured. iroh is already
-# in the workspace's default build via sovereign-server, so this adds
-# no marginal compile cost. The heavier network e2e test stays behind
-# this crate's `iroh-experimental` feature.
+# daemon actually binds an endpoint when configured. The heavier network e2e
+# test stays behind this crate's `iroh-experimental` feature.
+#
+# THIS LINE IS THE SOLE ENABLER OF iroh IN THE DAEMON BUILD. It used to say
+# the opposite — "iroh is already in the workspace's default build via
+# sovereign-server, so this adds no marginal compile cost" — and that is
+# false: measured 2026-09-04 with `cargo tree -p sovereign-cli-daemon -e
+# features --invert iroh`, `sovereign-server` is not in the daemon's tree at
+# all, and the only path to `commonwealth-transport/iroh` is this one line.
+#
+# cw-lift 3b priced propagating instead of forcing, and REFUSED it. Dropping
+# `features` here and adding `iroh = ["commonwealth-transport/iroh"]` is one
+# line; making this crate COMPILE without it is not. Measured: 17 errors in 5
+# files from the manifest change alone, then 28 more once `iroh_access`,
+# `iroh_watchdog` and `guest_tunnel` are cfg-gated — `daemon.rs` (22),
+# `join.rs` (4), `guest_lender.rs` (2) — landing on `DaemonState`'s two
+# endpoint fields, `create_mesh`'s invite stamping, `start_daemon`'s bind,
+# `mesh_status`'s reachability section, and the public `join_with_link`.
+#
+# The second compiled shape would have no consumer. A local-only daemon
+# cannot drop this crate at all — it reaches 78 distinct `sovereign_mesh::`
+# items — so nothing would ever build the no-iroh arm, and a cfg-split join
+# path that never runs in production is exactly the drift mesh-of-one exists
+# to prevent, moved from runtime to compile time. iroh should leave WITH the
+# mesh when the mesh becomes optional, not on its own before that.
 commonwealth-transport = { path = "../../../commonwealth/crates/commonwealth-transport", features = ["iroh"] }
 commonwealth-discovery = { path = "../../../commonwealth/crates/commonwealth-discovery" }
 commonwealth-api = { path = "../../../commonwealth/crates/commonwealth-api" }
