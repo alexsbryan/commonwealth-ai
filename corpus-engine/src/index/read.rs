@@ -626,6 +626,118 @@ impl CorpusIndex {
         Ok(out)
     }
 
+    /// The embedding of each chunk in `wanted`, in ONE streaming pass — the
+    /// vectors only, never the text.
+    ///
+    /// Its sibling [`Self::all_chunks_with_embeddings`] answers the same
+    /// question and cannot serve this caller: it collects EVERY batch and
+    /// carries each row's `content`, `metadata` and `source_doc_id` along with
+    /// the vector. The wiki seed-table migration wants ~52k vectors out of
+    /// wikipedia's 1.9M chunks, and paying for 1.9M passages of text to get
+    /// them is tens of GB before the caller sees a row. This projects two
+    /// columns, consumes the stream batch by batch, and retains only the
+    /// wanted ids: resident cost is `|wanted| × dim`, not the corpus.
+    ///
+    /// **The dedupe rule, stated because the data needs one.**
+    /// `chunks.lance` `id` is NOT unique — 1 of 221 sampled ids had two rows
+    /// (`sovereign/bench/wikipedia/seed_migration`). FIRST SEEN in the scan
+    /// wins. An unfiltered Lance scan yields rows in row-position order, so
+    /// first-seen is the LOWEST row position: the same answer on every run,
+    /// where "whichever the map ended up holding" would not be. The count of
+    /// ids that had more than one row is traced, so a corpus where this is
+    /// common says so rather than silently picking.
+    ///
+    /// Ids in `wanted` with no row (or a null embedding) are simply absent
+    /// from the result — the caller reports the shortfall; this does not
+    /// invent a zero vector for them (ARCH §18.3).
+    pub async fn embeddings_for_chunk_ids(
+        &self,
+        wanted: &HashSet<u64>,
+    ) -> Result<HashMap<u64, Vec<f32>>> {
+        let mut out: HashMap<u64, Vec<f32>> = HashMap::with_capacity(wanted.len());
+        if wanted.is_empty() {
+            return Ok(out);
+        }
+        let mut stream = self
+            .table
+            .query()
+            .select(Select::Columns(vec![
+                "id".to_string(),
+                "embedding".to_string(),
+            ]))
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("embeddings_for_chunk_ids query: {e}")))?;
+
+        let mut scanned: u64 = 0;
+        let mut duplicate_ids: u64 = 0;
+        while let Some(batch) = stream
+            .try_next()
+            .await
+            .map_err(|e| Error::Database(format!("embeddings_for_chunk_ids stream: {e}")))?
+        {
+            scanned += batch.num_rows() as u64;
+            let ids = batch
+                .column_by_name("id")
+                .and_then(|c| c.as_any().downcast_ref::<Int64Array>())
+                .ok_or_else(|| Error::Serialization("missing id column".into()))?;
+            let embedding_col = batch
+                .column_by_name("embedding")
+                .ok_or_else(|| Error::Serialization("missing embedding column".into()))?;
+            // Both shapes, for the same reason `select_chunks_with_embeddings`
+            // handles both: the column ships as FixedSizeList or List depending
+            // on the schema version the row was written under.
+            let fixed = embedding_col.as_any().downcast_ref::<FixedSizeListArray>();
+            let variable = embedding_col.as_any().downcast_ref::<ListArray>();
+            for i in 0..batch.num_rows() {
+                let id = ids.value(i) as u64;
+                if !wanted.contains(&id) {
+                    continue;
+                }
+                if out.contains_key(&id) {
+                    // Already held from an earlier row position — first seen
+                    // wins, and the collision is counted, not swallowed.
+                    duplicate_ids += 1;
+                    continue;
+                }
+                let embedding: Option<Vec<f32>> = if let Some(fixed) = fixed {
+                    if fixed.is_null(i) {
+                        None
+                    } else {
+                        fixed
+                            .value(i)
+                            .as_any()
+                            .downcast_ref::<Float32Array>()
+                            .map(|a| a.values().to_vec())
+                    }
+                } else if let Some(variable) = variable {
+                    if variable.is_null(i) {
+                        None
+                    } else {
+                        variable
+                            .value(i)
+                            .as_any()
+                            .downcast_ref::<Float32Array>()
+                            .map(|a| a.values().to_vec())
+                    }
+                } else {
+                    None
+                };
+                if let Some(e) = embedding {
+                    out.insert(id, e);
+                }
+            }
+        }
+        tracing::info!(
+            wanted = wanted.len(),
+            resolved = out.len(),
+            scanned,
+            duplicate_ids,
+            "embeddings_for_chunk_ids: chunk-vector join"
+        );
+        Ok(out)
+    }
+
     /// Conv-tiered port (spec `CONV_TIERED_PORT.md`): scan the entire
     /// chunks index and return a `source_doc_id → chunk_id list` map.
     ///

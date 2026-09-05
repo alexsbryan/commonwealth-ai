@@ -28,6 +28,10 @@ const HELP: Help = Help {
                 "neighbors",
                 "Print an article's link-graph neighbors, with read latency.",
             ),
+            (
+                "seed-table",
+                "Build the ANN seed table by borrowing each article's chunk vector.",
+            ),
         ]),
     ],
 };
@@ -96,6 +100,41 @@ const NEIGHBORS_HELP: Help = Help {
     ],
 };
 
+const SEED_TABLE_HELP: Help = Help {
+    command: "svrn atlas wikipedia seed-table",
+    summary: "Build a wiki atlas's ANN seed table from borrowed chunk vectors (0 embeds).",
+    sections: &[
+        HelpSection::Usage("svrn atlas wikipedia seed-table <corpus-id> [--atlas-dir <path>]"),
+        HelpSection::Flags(&[
+            (
+                "<corpus-id>",
+                "ID of an installed Wikipedia-class corpus (e.g. `wikipedia`).",
+            ),
+            (
+                "--atlas-dir <path>",
+                "Seed the store here instead of <data-dir>/indexes/<corpus>/atlas. \
+                 The counterpart of `build-graph --atlas-dir`: seed the store you built \
+                 beside the installed one, not the installed one.",
+            ),
+            ("--help, -h", "Show this message."),
+        ]),
+        HelpSection::Notes(
+            "A NAMED SUBSTITUTION, not an equivalence. Each article's atom is seeded with \
+             the vector of the chunk it already cites — its lead passage — because a wiki \
+             atom's own embed text is a bare title (214 of 221 sampled articles have an \
+             empty description). Median cosine between the two is 0.323, so the walk seeds \
+             on the lead passage rather than on the title. The alternative was ~1 hour \
+             of fresh embedding over the least informative string in the store (the probe's \
+             33.1 h is the v1 atom set's 1.67M, not this store's 51,781 in-scope articles). \
+             \n\nZero embed calls and no model has to be resident. Reads `articles.lance` \
+             for the atom_id -> chunk_id join and `chunks.lance` for the vectors, and \
+             writes `atoms_ann.lance` through the same writer every other atlas uses. \
+             Articles with no chunk anchor and chunks with no vector are reported \
+             separately — they are different failures.",
+        ),
+    ],
+};
+
 pub async fn run(args: &[String]) -> i32 {
     if args.is_empty() {
         help::print(&HELP);
@@ -109,6 +148,7 @@ pub async fn run(args: &[String]) -> i32 {
     match first {
         "build-graph" => cmd_build_graph(&args[1..]).await,
         "neighbors" => cmd_neighbors(&args[1..]).await,
+        "seed-table" => cmd_seed_table(&args[1..]).await,
         other => {
             eprintln!("error: unknown wikipedia subcommand `{other}`");
             help::print(&HELP);
@@ -482,5 +522,102 @@ mod tests {
         assert!(parse_neighbors_args(&a(&[])).is_err());
         let e = parse_neighbors_args(&a(&["wikipedia", "T", "extra"])).unwrap_err();
         assert!(e.contains("extra"), "{e}");
+    }
+}
+
+/// `svrn atlas wikipedia seed-table <corpus-id> [--atlas-dir <path>]`
+///
+/// Same argument shape as `build-graph`, deliberately: they are the two halves
+/// of preparing one store, and a flag that means one thing in the first and
+/// another in the second is how a probe ends up reading the installed atlas
+/// while believing it read the rebuilt one.
+async fn cmd_seed_table(args: &[String]) -> i32 {
+    if args.iter().any(|a| matches!(a.as_str(), "--help" | "-h")) {
+        help::print(&SEED_TABLE_HELP);
+        return 0;
+    }
+
+    let mut corpus_id: Option<String> = None;
+    let mut atlas_dir_arg: Option<std::path::PathBuf> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--atlas-dir" => {
+                i += 1;
+                let Some(v) = args.get(i) else {
+                    eprintln!("error: --atlas-dir needs a value");
+                    return 2;
+                };
+                atlas_dir_arg = Some(std::path::PathBuf::from(v));
+            }
+            other if other.starts_with("--") => {
+                eprintln!("error: unknown flag `{other}`");
+                return 2;
+            }
+            other => {
+                if corpus_id.is_some() {
+                    eprintln!("error: unexpected positional `{other}`");
+                    return 2;
+                }
+                corpus_id = Some(other.to_string());
+            }
+        }
+        i += 1;
+    }
+
+    let Some(corpus_id) = corpus_id else {
+        eprintln!("error: <corpus-id> is required");
+        help::print(&SEED_TABLE_HELP);
+        return 2;
+    };
+
+    let data_dir = sovereign_core::setup_config::SetupConfig::load()
+        .map(|cfg| cfg.data.dir)
+        .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
+    let indexes = data_dir.join("indexes");
+
+    // Never embeds — that is the whole point of the borrowed table — so a noop
+    // EmbedFn satisfies CorpusEngine's pre-flight with no model resident.
+    let noop_embed: EmbedFn = Arc::new(|_| Box::pin(async { Ok(Vec::<f32>::new()) }));
+    let engine = CorpusEngine::new(data_dir.join("recipes"), indexes.clone(), noop_embed);
+    let index = match engine.open_index_for_corpus(&corpus_id).await {
+        Ok(i) => i,
+        Err(e) => {
+            eprintln!(
+                "error: could not open index for corpus `{corpus_id}`: {e}\n\
+                 hint: run `svrn corpus install {corpus_id}` first."
+            );
+            return 1;
+        }
+    };
+
+    let atlas_dir = atlas_dir_arg.unwrap_or_else(|| {
+        indexes
+            .join(&corpus_id)
+            .join(corpus_engine::enrichment::atlas::ATLAS_DIRNAME)
+    });
+    // Printed on EVERY run, like `neighbors` — the store a build touched is
+    // the one fact a later A/B cannot recover if it was not recorded.
+    eprintln!("seeding atlas store: {}", atlas_dir.display());
+
+    let t = std::time::Instant::now();
+    match corpus_engine::enrichment::atlas::wiki_store::build_borrowed_ann_seed_table(
+        &atlas_dir, &index, &corpus_id,
+    )
+    .await
+    {
+        Ok(stats) => {
+            println!("seed-table {corpus_id}: {}", stats.describe());
+            println!(
+                "  substitution: seeds are the article's LEAD-PASSAGE vector, borrowed from \
+                 chunks.lance — not an embedding of the atom's own text. 0 embed calls."
+            );
+            eprintln!("built in {} ms", t.elapsed().as_millis());
+            0
+        }
+        Err(e) => {
+            eprintln!("seed-table {corpus_id}: {e}");
+            1
+        }
     }
 }

@@ -836,7 +836,7 @@ identical schema for a full index or a shard.
 │       │                                # OWN atoms folded — those paths also serve
 │       │                                # non-wiki corpora — so a child layer wanting
 │       │                                # its parent's id routes through wiki_atom_id.
-│       └── edges.lance/                 # row per (source, section, target) wikilink, with
+│       ├── edges.lance/                 # row per (source, section, target) wikilink, with
 │                                        # `link_text` + `source_section_path` — the two
 │                                        # per-edge STRINGS `neighbors_for_axis` filters on
 │                                        # and a 10-byte CSR record cannot hold. This is why
@@ -858,6 +858,31 @@ identical schema for a full index or a shard.
 │                                        # `export-columnar` verb retired in W4; the build
 │                                        # is one step, `atlas wikipedia build-graph`.
 │                                        # See docs/specs/WIKIPEDIA_ATLAS_V2.md.
+│       └── atoms_ann.lance/             # the walk's seed table, and for a wiki-class atlas
+│                                        # it is REQUIRED, not an optimisation: seeding has
+│                                        # two sources — this table and name-matching over
+│                                        # an atom BAG — and a wiki store has no bag, so
+│                                        # without the table the walk resolves the store and
+│                                        # then seeds on nothing.
+│                                        # Built by BORROWING, not embedding: `atlas
+│                                        # wikipedia seed-table` joins each article's
+│                                        # `atom_id` to its `chunk_id`'s vector in
+│                                        # chunks.lance. Zero embed calls (51,781/51,781
+│                                        # articles in 3.4 s) against ~1 h to embed fresh —
+│                                        # but COST is not the argument; the probe's 33.1 h
+│                                        # is the v1 atom set's 1.67M, not this store's.
+│                                        # A NAMED SUBSTITUTION (ARCH §18.3): 214 of 221
+│                                        # sampled articles have an empty `description`, so
+│                                        # an atom's own embed text is a bare title and the
+│                                        # borrowed vector is its LEAD PASSAGE — cosine
+│                                        # 0.323 median between them, which refused the
+│                                        # interchangeability bar and was re-barred as a
+│                                        # retrieval question (bench/wikipedia/seed_migration).
+│                                        # Written through `build_persistent_ann_seed_table`,
+│                                        # the one `atoms_ann.lance` writer, and read through
+│                                        # `open_ann_seed_table`, the one opener — so an
+│                                        # atom-class and a wiki-class atlas cannot disagree
+│                                        # about whether a corpus can seed.
 ├── stackexchange-shard-0-6200000/       # same schema as a full index
 └── enron-sample-onemailbox/             # architecture-over-Enron substrate paths
     ├── _corpus_meta.json

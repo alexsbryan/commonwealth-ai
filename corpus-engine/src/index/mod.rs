@@ -1322,6 +1322,11 @@ mod tests {
         direction.to_vec()
     }
 
+    /// The `embeddings_for_chunk_ids` tests — see the module doc there for why
+    /// they are a sibling file and not more lines in this one. Plain `mod`,
+    /// so the path is the idiomatic `index/tests/read_tests.rs`.
+    mod read_tests;
+
     async fn create_test_index(dir: &Path) -> CorpusIndex {
         let db_path = dir.join("test-corpus");
         CorpusIndex::create(

@@ -793,3 +793,146 @@ async fn a_v1_store_serves_neighbors_and_reports_that_it_cannot_serve_the_walk()
         .unwrap()
         .has_v2_columns());
 }
+
+// ── the borrowed ANN seed table ─────────────────────────────────────────────
+
+/// A tiny two-chunk corpus index whose chunk ids are 1 and 2, so the wiki
+/// store's `chunk_id` anchors line up with real rows. `only_first` inserts
+/// chunk 1 alone — the shortfall case.
+async fn tiny_index(dir: &Path, only_first: bool) -> crate::index::CorpusIndex {
+    use crate::index::{InsertChunk, InsertCodeMeta};
+    let idx = crate::index::CorpusIndex::create(
+        &dir.join("wiki-test"),
+        "wiki-test",
+        "Wiki Test",
+        "test-model",
+        4,
+        false,
+        "MIT",
+    )
+    .await
+    .expect("create index");
+    let mk = |content: &str, v: [f32; 4]| {
+        (
+            InsertChunk {
+                content: content.into(),
+                title: None,
+                url: None,
+                metadata: None,
+                content_hash: None,
+                source_doc_id: None,
+                source_file: None,
+                code: InsertCodeMeta::default(),
+                unit_id: None,
+            },
+            v.to_vec(),
+        )
+    };
+    let mut rows = vec![mk("alpha lead passage", [1.0, 0.0, 0.0, 0.0])];
+    if !only_first {
+        rows.push(mk("beta lead passage", [0.0, 1.0, 0.0, 0.0]));
+    }
+    idx.insert_batch(&rows).await.expect("insert");
+    idx
+}
+
+/// Two articles, anchored to chunks 1 and 2 — the ids `tiny_index` allocates.
+async fn two_article_store(atlas_dir: &Path) {
+    build_wikipedia_columnar_store_from_chunks(
+        atlas_dir,
+        "wiki-test",
+        vec![
+            chunk(
+                1,
+                "Alpha",
+                meta_with(vec!["Lead"], "lead", None, vec![("Beta", "beta")]),
+            ),
+            chunk(2, "Beta", meta_with(vec!["Lead"], "lead", None, vec![])),
+        ],
+    )
+    .await
+    .expect("build wiki store");
+}
+
+/// EACH ATOM GETS ITS OWN ARTICLE'S CHUNK VECTOR.
+///
+/// The whole migration is a join, so the only way it can be wrong and still
+/// look right is by borrowing the WRONG row — every atom would still get a
+/// real 1024-d vector from a real article, the table would still have the
+/// right row count, and the walk would seed on other people's articles. So
+/// this asserts the pairing, not the count: search the written table with
+/// Alpha's chunk vector and Alpha's atom must come back holding exactly it.
+///
+/// Failing input: swap the two `chunk(...)` ids in `two_article_store`.
+#[tokio::test]
+async fn the_borrowed_seed_table_gives_each_atom_its_own_articles_vector() {
+    use crate::enrichment::atlas::ann_store::{ann_table_present, AnnSeedTable};
+    let tmp = tempfile::tempdir().unwrap();
+    let atlas = tmp.path().join("atlas");
+    std::fs::create_dir_all(&atlas).unwrap();
+    two_article_store(&atlas).await;
+    let idx = tiny_index(tmp.path(), false).await;
+
+    let stats = build_borrowed_ann_seed_table(&atlas, &idx, "wiki-test")
+        .await
+        .expect("borrowed seed table");
+    assert_eq!(
+        stats,
+        BorrowedSeedStats {
+            articles: 2,
+            with_chunk_anchor: 2,
+            resolved: 2,
+            written: 2,
+        }
+    );
+    assert!(
+        ann_table_present(&atlas),
+        "the walk gates on the table's PRESENCE in the atlas dir; a build that \
+         writes it somewhere else seeds nothing"
+    );
+
+    let table = AnnSeedTable::open_for_atlas(&atlas).await.unwrap();
+    let hits = table
+        .nearest_with_vectors(&[1.0, 0.0, 0.0, 0.0], 2)
+        .await
+        .unwrap();
+    let (key, vector) = hits.first().expect("a nearest hit");
+    assert_eq!(
+        key,
+        &wiki_atom_id("Alpha", "wiki-test"),
+        "Alpha's chunk vector must lead back to Alpha's atom, not Beta's"
+    );
+    assert_eq!(
+        vector.as_slice(),
+        [1.0_f32, 0.0, 0.0, 0.0].as_slice(),
+        "the stored seed must BE the chunk's vector — borrowed, not re-derived"
+    );
+}
+
+/// An article whose chunk has no row is a SHORTFALL, reported by number, not
+/// a zero vector and not a silent drop of the whole build (ARCH §18.3).
+///
+/// This is the shape a partially-reingested corpus takes, and the two numbers
+/// have to stay separable: `with_chunk_anchor` says the store had a join key,
+/// `resolved` says the index answered it. One number could not tell a
+/// chunk-less article from an unresolvable chunk.
+#[tokio::test]
+async fn an_article_whose_chunk_is_missing_is_counted_not_invented() {
+    let tmp = tempfile::tempdir().unwrap();
+    let atlas = tmp.path().join("atlas");
+    std::fs::create_dir_all(&atlas).unwrap();
+    two_article_store(&atlas).await;
+    let idx = tiny_index(tmp.path(), true).await; // chunk 2 never inserted
+
+    let stats = build_borrowed_ann_seed_table(&atlas, &idx, "wiki-test")
+        .await
+        .expect("a partial join still writes what it resolved");
+    assert_eq!(stats.with_chunk_anchor, 2, "both articles had a join key");
+    assert_eq!(stats.resolved, 1, "only one of them resolved to a vector");
+    assert_eq!(stats.written, 1);
+    assert!(
+        stats.describe().contains("1 of those"),
+        "the operator line must name the shortfall: {}",
+        stats.describe()
+    );
+}

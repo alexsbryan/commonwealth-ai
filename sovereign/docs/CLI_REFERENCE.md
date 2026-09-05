@@ -455,6 +455,8 @@ Atlas-style structural enrichment of an installed corpus (Wikipedia today). Oper
 
 The link graph lives at `<data-dir>/indexes/<corpus-id>/atlas/{articles,edges}.lance`. It replaced a SQLite `wikipedia_graph.db` in WIKIPEDIA_ATLAS_V2 W4; `atlas wikipedia build-graph` writes it directly from the indexed chunks, and the `export-columnar` verb that used to convert between them is gone.
 
+Building the graph is half of preparing a wiki atlas. `atlas wikipedia seed-table <corpus-id>` writes the other half, `atoms_ann.lance`, and for a wiki-class atlas it is **required, not an optimisation**: the grounding walk seeds either from that table or by name-matching over an atom bag, and a wiki store has no bag — so a graph with no seed table resolves and then grounds nothing. The table is built by BORROWING each article's already-embedded chunk vector rather than embedding its (near-empty) atom text, so it costs zero embed calls and needs no model resident. That is a named substitution — seeds are the article's lead passage, not its title — and the verb says so on every run. Both verbs take `--atlas-dir <path>` to build beside an installed store rather than over it.
+
 ### `svrn bench`
 
 Throughput + correctness benchmarks for enrichment LLM tasks. Operates against the running daemon at `localhost:9741`; the model under test is whichever `[models].primary` the daemon was started with.

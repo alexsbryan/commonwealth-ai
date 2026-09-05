@@ -683,5 +683,157 @@ pub async fn build_wikipedia_columnar_store_from_chunks(
     Ok(summary)
 }
 
+/// What the borrowed seed-table build actually did. Every number is a
+/// SEPARATE fact: an article with no chunk anchor and an article whose chunk
+/// carries no vector are different failures, and collapsing them into one
+/// "resolved" would hide which (ARCH §18.3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BorrowedSeedStats {
+    /// Rows in `articles.lance`.
+    pub articles: usize,
+    /// …of which carry a parseable `chunk_id` (the join key).
+    pub with_chunk_anchor: usize,
+    /// …of which resolved to a vector in `chunks.lance`.
+    pub resolved: usize,
+    /// Rows written to `atoms_ann.lance`.
+    pub written: usize,
+}
+
+impl BorrowedSeedStats {
+    /// One line for an operator surface; names each drop rather than
+    /// reporting a single ratio.
+    pub fn describe(&self) -> String {
+        format!(
+            "{} rows from {} articles — {} carried a chunk anchor, {} of those \
+             resolved to a chunk vector",
+            self.written, self.articles, self.with_chunk_anchor, self.resolved
+        )
+    }
+}
+
+/// Build a wiki-class atlas's ANN seed table by BORROWING each article's
+/// chunk vector — zero embed calls.
+///
+/// **Why borrowed and not embedded — the reason is the TEXT, not the clock.**
+/// A wiki atom's whole embed text is its bare title: 214 of 221 sampled
+/// articles have an empty `description`
+/// (`sovereign/bench/wikipedia/seed_migration`). Embedding those fresh spends
+/// an hour indexing the least informative string the store holds. (The 33.1 h
+/// figure in the probe is the v1 atom set's — 1.67M atoms including dangling
+/// link targets. This store holds the 51,781 IN-SCOPE articles, so the fresh
+/// path here is ~1 h at the probe's measured rate. Cost is why the question
+/// was asked; it is not why the answer is `borrow`.)
+///
+/// The chunk the atom already cites — its lead passage — is embedded, resident
+/// in `chunks.lance`, and in the same vector space the query slot runs. The
+/// cosine between the two is 0.323 median, so this is a SUBSTITUTION and not
+/// an equivalence: the walk seeds on the article's lead passage rather than on
+/// its title. That is named here, named in the CLI's output, and it is what
+/// the wikipedia lane A/B measures.
+///
+/// **The join.** `articles.lance` already carries both handles — `atom_id`
+/// (the walk's key) and `chunk_id` (the evidence anchor, the LOWEST chunk id
+/// of the article, so it is the lead section). So there is no derivation
+/// here, only a lookup: atom_id ← article → chunk_id → `chunks.lance`
+/// vector. The chunk-side dedupe rule lives with the reader that needs it
+/// ([`crate::index::CorpusIndex::embeddings_for_chunk_ids`]).
+///
+/// **The writer is the existing one.** [`build_persistent_ann_seed_table`] is
+/// the ONE `atoms_ann.lance` writer (ARCH §10.6) and it takes an
+/// [`AtlasContext`], so this hands it one built from borrowed vectors instead
+/// of embedded ones. `AtlasSeeding` gains no arm: that enum is about which
+/// LIFECYCLE POINT seeds an atlas write, and this is not an atlas write.
+pub async fn build_borrowed_ann_seed_table(
+    atlas_dir: &Path,
+    index: &crate::index::CorpusIndex,
+    atlas_corpus_id: &str,
+) -> Result<BorrowedSeedStats, String> {
+    use crate::enrichment::atlas::context::{
+        build_persistent_ann_seed_table, AtlasContext, AtlasEntry,
+    };
+
+    let graph = crate::wikipedia_columnar::ColumnarWikipediaGraph::open(atlas_dir).await?;
+    if !graph.has_v2_columns() {
+        return Err(format!(
+            "wiki store at {} is format v1 (no atom_id/chunk_id): there is no join key to \
+             borrow a vector by — rebuild with `svrn atlas wikipedia build-graph`",
+            atlas_dir.display()
+        ));
+    }
+    let rows = graph.article_rows().await?;
+    let articles = rows.len();
+
+    let mut wanted: std::collections::HashSet<u64> = std::collections::HashSet::new();
+    let mut anchored: Vec<(String, String, u64)> = Vec::new(); // (atom_id, title, chunk_id)
+    for r in &rows {
+        let Ok(chunk_id) = r.chunk_id.parse::<u64>() else {
+            continue;
+        };
+        if r.atom_id.is_empty() {
+            continue;
+        }
+        wanted.insert(chunk_id);
+        anchored.push((r.atom_id.clone(), r.title.clone(), chunk_id));
+    }
+    let with_chunk_anchor = anchored.len();
+    drop(rows);
+
+    let vectors = index
+        .embeddings_for_chunk_ids(&wanted)
+        .await
+        .map_err(|e| format!("borrowed seed table: chunk-vector join: {e}"))?;
+
+    let mut entries: Vec<AtlasEntry> = Vec::with_capacity(anchored.len());
+    for (atom_id, title, chunk_id) in anchored {
+        let Some(embedding) = vectors.get(&chunk_id) else {
+            continue;
+        };
+        entries.push(AtlasEntry {
+            atom_id,
+            canonical_name: title.clone(),
+            // The atom's own text, not the chunk's. `embed_text` is what a
+            // reader sees when asking WHAT this seed stands for, and the
+            // answer is the article — the vector is borrowed, the identity
+            // is not.
+            embed_text: title,
+            embedding: embedding.clone(),
+        });
+    }
+    let resolved = entries.len();
+    if resolved == 0 {
+        return Err(format!(
+            "borrowed seed table: 0 of {with_chunk_anchor} anchored articles resolved to a \
+             chunk vector in the index — nothing to write"
+        ));
+    }
+
+    let stats = build_persistent_ann_seed_table(
+        atlas_dir,
+        &AtlasContext {
+            atlas_corpus_id: atlas_corpus_id.to_string(),
+            entries,
+            top_k: 12,
+        },
+    )
+    .await?;
+
+    let out = BorrowedSeedStats {
+        articles,
+        with_chunk_anchor,
+        resolved,
+        written: stats.resolved,
+    };
+    tracing::info!(
+        corpus = atlas_corpus_id,
+        atlas = %atlas_dir.display(),
+        articles = out.articles,
+        with_chunk_anchor = out.with_chunk_anchor,
+        resolved = out.resolved,
+        written = out.written,
+        "wiki seed table: built from borrowed chunk vectors (0 embed calls)"
+    );
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests;
