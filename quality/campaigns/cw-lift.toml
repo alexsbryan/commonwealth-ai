@@ -85,7 +85,20 @@ status    = "active"
 #       RING_SYNC_OPS_BUDGET_BYTES), the senderless /internal/app/registry
 #       route deleted, and every_sender_of_replicated_state_is_declared as a
 #       STRUCTURAL census — cw-twin-visibility's instrument, watched red.
-#   3   triage the application layer (unscoped until 2 settles)
+#   3   THE LOCAL-ONLY DAEMON — re-scoped 2026-09-04 after Phase 2 closed.
+#       Was "triage the application layer (unscoped until 2 settles)". Phase 2
+#       settled it: retention is Phase 4, and Phase 3 is the campaign's own
+#       done-when, which Phase 2 moved by ZERO while costing +2,789 lines.
+#       Order: .sovereign/features/cw-lift-3-local-only-daemon/order.md
+#   3a  the two misnamed crates go home                            OPEN
+#   3b  the daemon's two neutral couplings dissolve                OPEN
+#   3c  two ports + a solo adapter that is the honest N=1          OPEN
+#   3d  iroh stops being forced                                    OPEN
+#   3e  the bar's instrument counts by PATH, not prefix            OPEN
+#   4   RETENTION (the sealed prefix) — was Phase 3's tail, now its own.
+#       K8 proved six namespaces cannot leave the 10s push until the journal
+#       can forget. Opener is 2c, which Phase 2 unblocked by accident: 2ce
+#       refused the projection for having no consumer, and 2d then landed one.
 #   T   the twin census + an instrument that can see a twin   <- OFF-PLAN
 #   R   the ratchets + the push decision                      <- OFF-PLAN
 #   G   gate integrity: two gates that pass without running   <- OFF-PLAN
@@ -458,6 +471,30 @@ status       = "open"
 # boundary cannot see a feature another crate enables. The claim is proven by
 # BUILDING THE DAEMON, which is why this bar's instrument is a build and not a
 # gate. Same caveat commonwealth/BOUNDARY.md already carries.
+#
+# ── TWO CORRECTIONS, MEASURED 2026-09-04 AT HEAD ────────────────────────────
+#
+# THE INSTRUMENT HAS A FALSE POSITIVE AND WILL REPORT >= 1 AT TRUE ZERO. It
+# counts direct `commonwealth-*` deps BY NAME PREFIX. `commonwealth-tdd` lives
+# at `sovereign/crates/commonwealth-tdd/`, is a "TDD-machine backend:
+# red-green-refactor solver loop", and every dependent is sovereign. Note
+# 91898eef already adjudicated it on this ground. Rung 3e re-derives the
+# instrument to count by PATH (substrate iff under `commonwealth/`), and it is
+# sequenced LAST so the phase's movement is not confused with the redefinition.
+#
+# K2 DOES NOT AIM AT THIS BAR. It says AppState (2,654 lines, 44 crossing refs)
+# cannot be cut without a ~300-line shim, so local and mesh state are fused.
+# `sovereign-cli-daemon` has ZERO type references to AppState — all 14 mentions
+# are prose in comments plus one log string. K2 is a real risk about extracting
+# commonwealth-api; it is not the risk gating this bar, and Phase 3 is NOT
+# sequenced behind it. The restated form is K13 in the order: if extracting
+# ConvergenceRecord drags AppState behind it, THEN the fusion is real.
+#
+# THE DAEMON'S ENTIRE SUBSTRATE COUPLING IS ELEVEN LINES IN TWO FILES
+# (bootstrap.rs x10, mod.rs:854). Two real types — MeshStore and
+# ConvergenceRecord. The other three sites are `kernel_types::NodeId` reached
+# through a re-export (§8.3) and one PURE partition function. So the bar reads
+# 3.0 and overstates the problem by about 2x.
 floor        = 3.0
 floor_basis  = "measured 2026-09-04: the three blocker classes above — direct commonwealth-* deps in sovereign-cli-daemon (Cargo.toml:56-63), two unconditional iroh forcings, one mesh-mint-to-boot site (daemon_cmd/mod.rs:1174-1186)"
 target       = 0.0
