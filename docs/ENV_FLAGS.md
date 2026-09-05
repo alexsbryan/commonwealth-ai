@@ -86,6 +86,20 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 |---|---|---|---|
 | `SOVEREIGN_DEMO_DR_FLAGS` | unset (real flows get the live port) | guard | The desktop's demo-only backend override (order deep-research-t3b evidence pass (f)): tests/e2e/demo's global-setup sets `--backend mock --mock-deck <bank v1 deck>` so the recorded beat films a deterministic deck run. Still spelled as flags because the demo global-setup and this registry already name it that way, but since the desktop stopped spawning the CLI it is PARSED into typed `launch::LaunchOptions` fields (`backend`, `mock_deck_dir`) rather than appended to a subprocess argv — a token the closed set does not name is ignored, not forwarded, because there is no second process to give it meaning. Read in exactly one place (`deep_research_commands::demo_backend_override`). Only the demo global-setup writes it; every real flow leaves it unset and gets the live port. |
 
+## desktop-e2e
+
+| flag | default | status | purpose |
+|---|---|---|---|
+| `SOVEREIGN_COMMAND_BRIDGE` | off | shipped | Open the desktop's command bridge so a harness can drive the REAL Tauri command handlers over loopback. Always set by the real-mode, faults and bridge-parity harnesses; the app's env inherits `process.env`, so anything exported reaches the desktop process. |
+| `SOVEREIGN_COMMAND_BRIDGE_LEDGER` | unset | shipped | Path the command bridge appends its invocation ledger to. Paired with SOVEREIGN_COMMAND_BRIDGE by every harness that sets one. |
+| `SOVEREIGN_INVOKE_COVERAGE` | unset (off entirely) | experiment | Record which of the 260 Tauri commands a run actually reached, as JSONL (`{"cmd": "<name>"}`), first sighting only. Read it with `npm run report:coverage`. A run that read no ledger rows exits 3 as could-not-judge rather than reporting 0% — a missing ledger is an absence, not a measurement. Deliberately coverage-of-surface rather than an assertion count: assertion counts inflate for free, surface reach cannot move without reaching a new command. |
+| `SOVEREIGN_REAL_ALLOW_ATTACH` | off | experiment | Attach the real-mode Playwright suite to an existing daemon on :9741 instead of starting a hermetic one. NON-HERMETIC by construction: knowledge and inference state become whatever the box already has, so a green under this flag is a claim about your machine, not about the build. Without it the setup REFUSES when :9741 is occupied — trading hermeticity for convenience is a decision the runner makes you state. |
+| `SOVEREIGN_REAL_CHAT_MODEL` | unset | guard | Path to the GGUF the real-mode suite drives. Setup FAILS if it does not resolve rather than falling back to a stub — the models are not in the repo, and a real-mode run against no model would report green on a suite that proved nothing. This refusal is the reason no CI job runs that suite. |
+| `SOVEREIGN_REAL_EMBED_MODEL` | unset | guard | Path to the embedding GGUF for the real-mode suite. Same refusal contract as SOVEREIGN_REAL_CHAT_MODEL: unresolvable means the setup fails, never that retrieval silently degrades. |
+| `SOVEREIGN_REAL_KEEP_PROFILE` | off | experiment | Do not wipe the real-mode scratch profile between runs. Triage only — a kept profile makes the next run non-hermetic in exactly the way SOVEREIGN_REAL_ALLOW_ATTACH does. |
+| `SOVEREIGN_REAL_PROFILE_DIR` | unset (a generated name) | shipped | Name the real-mode scratch profile directory under `test-artifacts/`. Set it when two runs must not share a profile. |
+| `SOVEREIGN_REAL_XVFB` | off | shipped | Wrap the desktop app in `xvfb-run -a` for the real-mode suite. Required on headless Linux; a no-op elsewhere. |
+
 ## dev-gates
 
 | flag | default | status | purpose |

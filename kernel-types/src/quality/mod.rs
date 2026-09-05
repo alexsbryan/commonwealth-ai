@@ -18,6 +18,12 @@
 //! that can see a checkout.
 
 mod instruments;
+mod render;
+
+pub use render::{
+    coverage_line, render_fidelity, render_layers, render_load_bearing, render_map, render_where,
+    venues,
+};
 
 pub use instruments::{
     Baseline, BaselineKind, Cost, Coverage, Enforcement, Fidelity, Instrument, Kind,

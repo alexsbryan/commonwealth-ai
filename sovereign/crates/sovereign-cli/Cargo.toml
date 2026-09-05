@@ -34,7 +34,11 @@ sovereign-contracts = { workspace = true }
 # edge points DOWN; it is not routed through sovereign-contracts because
 # kernel-types is a membrane meant to be named directly (ARCH §8.3 is about
 # re-exported types, not about the membrane itself).
-kernel-types = { workspace = true }
+# `quality-registry` is the parser + render for quality/instruments.toml, read
+# here by `quality map` and by posture's coverage line. Feature-gated in the
+# kernel so the four-dep budget holds for a lift of that leaf; `xtask` asks for
+# the same feature, so the workspace resolves ONE variant of kernel-types.
+kernel-types = { workspace = true, features = ["quality-registry"] }
 sovereign-agent-bench = { workspace = true, optional = true }
 sovereign-cli-shared = { workspace = true }
 # Flag surfaces are declared as structs (`#[derive(clap::Parser)]`), not

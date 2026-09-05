@@ -823,6 +823,7 @@ The curated breakage check — the lean tier `./scripts/sovereign-ci-bench.sh --
 ```
 svrn quality check [--lane <id>]... [--budget-secs 1800] [--mint] [--lane-table PATH]
 svrn quality lane <id>
+svrn quality map [--layers|--fidelity|--load-bearing|--where] [--update-golden]
 ```
 
 | Flag | Meaning | Default |
@@ -831,6 +832,8 @@ svrn quality lane <id>
 | `--budget-secs` | Total wall budget. A lane with under 60 s of runway is could-not-judge, not a pass (the rule ci-bench's `run_lane` already used) | 1800 |
 | `--mint` | Permit a lane to write a baseline for this stack fingerprint. Without it a first run against a new stack writes NONE | off |
 | `--lane-table` | Read a different lane table | `quality/check-lanes.toml` |
+
+`svrn quality map` is the third subcommand and the only one that runs nothing. It renders `quality/instruments.toml` — the declared registry of every instrument that verifies this repo — as four Markdown tables: **layers** (what each instrument is, and whether CI runs it), **fidelity** (how much each green is worth, with the "CI stops at F*n*" ceiling DERIVED from `runs_in` rather than asserted), **load-bearing** (flags and preconditions whose absence leaves a green meaning less), and **what runs where** (including the two populations nothing could be asked about before: what CI does not run, and what nothing runs at all). `--update-golden` refreshes `quality/quality-map.golden.md`, which a test in `xtask/tests/` diffs so the render cannot drift from the registry. Outside a source checkout it refuses with exit 3; an unknown section flag is refused with exit 2 and the legal ones named. The closure loop is `cargo xtask instrument-gate`: every command a declared quality surface reaches must have a row.
 
 Lanes are DATA in `quality/check-lanes.toml` — id, kind, enforcement, est_secs, argv, preconditions, baseline dir, bank. Each runs as a subprocess and states its own verdict on its LAST stdout line, as a `kernel_types::Judgement` (`{"subject","verdict","reason","as_of"}`); a lane that prints no such line is **never-ran**, with the exit code as the reason. Preconditions are a closed set — `port-listening:<port>`, `slot-decodes:<slot>` (a real one-token decode, not `/v1/models`'s self-reported `loaded`), `corpus-installed:<id>`, `binary:<name>` — and an unmet one is could-not-judge NAMING it, never a pass.
 

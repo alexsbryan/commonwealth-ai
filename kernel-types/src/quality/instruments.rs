@@ -132,7 +132,11 @@ pub enum Fidelity {
 /// runner does not yet have them. Phase 1 merges the two tables and the
 /// superset becomes the one closed set (ARCH §10.6 — stated here so the
 /// duplication is a scheduled merge rather than a discovery).
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+///
+/// No `Eq`/`Ord`: the load bound is an `f64`, and a total order over a type
+/// holding a float would be a lie. Preconditions are declared in the order the
+/// author wrote them and rendered that way.
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum Precondition {
     PortListening(u16),
     SlotDecodes(String),
@@ -140,9 +144,15 @@ pub enum Precondition {
     Binary(String),
     /// A toolbox/container the command must run inside.
     Container(String),
-    /// A machine with no competing load. Perf lanes measure the box, not the
-    /// code, when this is unmet — the failure `pre-push.sh` records at 261s.
-    HostQuiet,
+    /// The host's 1-minute load average is at or under this bound.
+    ///
+    /// The ARGUMENT is not decoration. A latency bar measured on a contended
+    /// box is could-not-judge, never failed, and the bound has to be per-lane:
+    /// the same binary and bank produced 50.7 tok/s at load 3.7 and 17.8 at
+    /// load 32 on this host (note d596639c). Wire form and semantics are
+    /// `quality_check_cmd::Precondition::HostQuiet`'s — this schema follows
+    /// the runner rather than inventing a bare spelling beside it (ARCH §10.6).
+    HostQuiet(f64),
 }
 
 /// What an instrument compares against, and in what currency.
@@ -751,9 +761,6 @@ impl BaselineKind {
 
 impl Precondition {
     pub fn parse(s: &str) -> Option<Precondition> {
-        if s == "host-quiet" {
-            return Some(Precondition::HostQuiet);
-        }
         let (head, arg) = s.split_once(':')?;
         if arg.is_empty() {
             return None;
@@ -764,6 +771,15 @@ impl Precondition {
             "corpus-installed" => Precondition::CorpusInstalled(arg.to_string()),
             "binary" => Precondition::Binary(arg.to_string()),
             "container" => Precondition::Container(arg.to_string()),
+            // Same refusal the runner makes: a non-positive or non-finite
+            // bound is not a load ceiling.
+            "host-quiet" => {
+                let max: f64 = arg.parse().ok()?;
+                if !(max.is_finite() && max > 0.0) {
+                    return None;
+                }
+                Precondition::HostQuiet(max)
+            }
             _ => return None,
         })
     }
@@ -775,7 +791,7 @@ impl Precondition {
             Precondition::CorpusInstalled(s) => format!("corpus-installed:{s}"),
             Precondition::Binary(s) => format!("binary:{s}"),
             Precondition::Container(s) => format!("container:{s}"),
-            Precondition::HostQuiet => "host-quiet".to_string(),
+            Precondition::HostQuiet(max) => format!("host-quiet:{max}"),
         }
     }
 }
@@ -824,7 +840,9 @@ impl Cost {
         match self {
             Cost::Secs(s) if s >= 60.0 => format!("{:.0}m", s / 60.0),
             Cost::Secs(s) if s >= 1.0 => format!("{s:.0}s"),
-            Cost::Secs(s) => format!("{s:.1}s"),
+            // Two decimals below a second: a 0.04s gate rendered as "0.0s"
+            // reads as free, and "free" is how a gate stops being priced.
+            Cost::Secs(s) => format!("{s:.2}s"),
             Cost::Unmeasured => "unmeasured".to_string(),
         }
     }
@@ -1124,7 +1142,7 @@ fidelity = "F7"
             "corpus-installed:sep",
             "binary:cargo-hack",
             "container:sovereign-vulkan",
-            "host-quiet",
+            "host-quiet:4",
         ] {
             assert_eq!(
                 Precondition::parse(s).map(|p| p.label()),
@@ -1156,7 +1174,8 @@ fidelity = "F7"
     #[test]
     fn unmeasured_renders_as_a_word_never_as_a_zero() {
         assert_eq!(Cost::Unmeasured.label(), "unmeasured");
-        assert_eq!(Cost::Secs(0.1).label(), "0.1s");
+        assert_eq!(Cost::Secs(0.1).label(), "0.10s");
+        assert_eq!(Cost::Secs(0.04).label(), "0.04s");
         assert_eq!(Cost::Secs(45.0).label(), "45s");
         assert_eq!(Cost::Secs(1745.0).label(), "29m");
     }

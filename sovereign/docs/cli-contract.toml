@@ -612,6 +612,22 @@ path = "quality lane"
 binary = "llm"
 feature = "dev-tools"
 classification = "daemon"
+# quality map — the THIRD subcommand, and the only one that runs nothing: it
+# renders `quality/instruments.toml` (the declared registry of every
+# instrument that verifies this repo) as the four tables
+# sovereign-desktop/QUALITY_SURFACE.md used to carry by hand. In-process,
+# repo-scoped, no daemon — classification "local".
+[[command]]
+path = "quality map"
+binary = "dispatcher"
+feature = "dev-tools"
+flags = [
+  { name = "--layers" },
+  { name = "--fidelity" },
+  { name = "--load-bearing" },
+  { name = "--where" },
+  { name = "--update-golden" },
+]
 
 # deep-research — the thin local-only research loop (T1): gated corpus +
 # web search, custody-stamped fetch, gap-audited rounds. In-process in the
@@ -3428,6 +3444,20 @@ note = """The BUDGET RULE is the assertable half of `quality check`. Driving a r
 [journey.step.expect]
 exit = 4
 stdout_contains = "out of budget"
+
+[[journey.step]]
+run = "quality map --fidelity"
+note = """`quality map` RUNS nothing, so unlike its sibling there is no budget rule to lean on and no daemon to need. The assertion is the one line in the render that is DERIVED rather than copied: "CI stops at F<n>" is the maximum fidelity among instruments some CI job runs, so the step fails if the registry does not parse, if no instrument declares a `ci:<job>` venue, or if the derivation stops running. QUALITY_SURFACE.md asserted that same sentence in prose for two months with nothing keeping it true."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "CI stops at F"
+
+[[journey.step]]
+run = "quality map --where"
+note = """The second derived claim: the population of instruments that NOTHING runs. That is the question the eleven private lists could not be asked, and it renders as a counted heading, so this step fails if `runs_in` stops being read. The closed-set refusal (`--nope` must be rejected with the legal sections named, never silently widened to the whole map) is deliberately NOT journeyed: the named alternatives go to stderr and `[journey.step.expect]` has no `stderr_contains`, so asserting exit 2 alone would be an exit code standing in for evidence — exactly what `live_read_steps_assert_output` refuses. It is proven instead by `quality_map_cmd::tests::every_section_round_trips_through_its_flag`."""
+[journey.step.expect]
+exit = 0
+stdout_contains = "### What nothing runs"
 
 [[journey.step]]
 run = "tools call work_in_flight --scope= --match_mode=file"

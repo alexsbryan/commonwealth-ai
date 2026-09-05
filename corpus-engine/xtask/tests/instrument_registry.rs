@@ -19,7 +19,7 @@
 
 use std::collections::BTreeSet;
 
-use kernel_types::quality::{Cost, Registry, RunsIn};
+use kernel_types::quality::{render_map, Cost, Registry, RunsIn};
 
 #[path = "shared/repo_root.rs"]
 mod repo_root;
@@ -170,5 +170,50 @@ fn the_venues_are_named_not_just_by_hand() {
     assert!(
         named > 40,
         "only {named} scheduled venues across the registry"
+    );
+}
+
+/// The golden render — the thing that keeps `QUALITY_SURFACE.md`'s pointer
+/// honest. The doc no longer carries the four tables; it points at `svrn
+/// quality map`, and this is what stops that pointer aiming at a render that
+/// silently stopped matching the registry.
+///
+/// ```text
+/// svrn quality map --update-golden      # or: UPDATE_QUALITY_MAP=1 cargo test -p xtask --test instrument_registry
+/// ```
+#[test]
+fn the_golden_render_matches_the_registry() {
+    let root = repo_root::repo_root();
+    let path = root.join("quality/quality-map.golden.md");
+    let rendered = render_map(&registry());
+
+    if std::env::var_os("UPDATE_QUALITY_MAP").is_some() {
+        std::fs::write(&path, &rendered).expect("write golden");
+        return;
+    }
+
+    let committed = std::fs::read_to_string(&path).unwrap_or_default();
+    if committed == rendered {
+        return;
+    }
+    // Name the FIRST differing line rather than dumping two 300-line files:
+    // a diff nobody reads is a failure message nobody acts on.
+    let (a, b) = (
+        committed.lines().collect::<Vec<_>>(),
+        rendered.lines().collect::<Vec<_>>(),
+    );
+    let at = a.iter().zip(b.iter()).position(|(x, y)| x != y);
+    let detail = match at {
+        Some(n) => format!(
+            "first difference at line {}:\n  committed: {}\n  rendered:  {}",
+            n + 1,
+            a[n],
+            b[n]
+        ),
+        None => format!("committed is {} lines, rendered is {}", a.len(), b.len()),
+    };
+    panic!(
+        "quality/quality-map.golden.md is stale — the registry changed and the render did not \
+         follow.\n{detail}\nRegenerate: svrn quality map --update-golden"
     );
 }

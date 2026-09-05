@@ -61,13 +61,14 @@
 #                      daemon · F3 real daemon + models · F4 supervised child ·
 #                      F5 the packaged boot chain
 #   preconditions    optional; a CLOSED set. Four spellings are
-#                    `quality/check-lanes.toml`'s
-#                    (`port-listening:<port>`, `slot-decodes:<slot>`,
-#                    `corpus-installed:<id>`, `binary:<name>`); `container:
-#                    <name>` and `host-quiet` are declared HERE first because
-#                    the shell harnesses need them and the lane runner does
-#                    not yet have them. Phase 1 merges the two tables and the
-#                    superset becomes the one closed set (ARCH §10.6)
+#                    `quality/check-lanes.toml`'s, argument included:
+#                    `port-listening:<port>`, `slot-decodes:<slot>`,
+#                    `corpus-installed:<id>`, `binary:<name>`,
+#                    `host-quiet:<max 1-min load>`. `container:<name>` is the
+#                    one spelling the lane runner does not have — the shell
+#                    harnesses need it and no lane does. Phase 1 merges the two
+#                    tables and the superset becomes the one closed set
+#                    (ARCH §10.6)
 #   baseline         { kind = "count" | "metrics" | "none", path = "..." }
 #                    (required; `none` carries no path)
 #   negative_control a `quality/sabotage/*.toml` mutant id, the id of a
@@ -898,7 +899,7 @@ command = "scripts/desktop-smoke.sh"
 cost_secs = 14400.0
 enforcement = "hard"
 fidelity = "F5"
-preconditions = ["host-quiet", "binary:sovereign-desktop", "binary:timeout"]
+preconditions = ["host-quiet:4", "binary:sovereign-desktop", "binary:timeout"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["by-hand"]
@@ -941,7 +942,7 @@ command = "scripts/mtp-probe.sh --n 5 --max-tokens 200"
 cost_secs = 180.0
 enforcement = "tracked"
 fidelity = "F3"
-preconditions = ["port-listening:9741", "slot-decodes:primary", "host-quiet"]
+preconditions = ["port-listening:9741", "slot-decodes:primary", "host-quiet:4"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["smoke:1"]
@@ -1105,7 +1106,7 @@ command = "scripts/daemon-soak.sh"
 cost_secs = "unmeasured"
 enforcement = "tracked"
 fidelity = "F3"
-preconditions = ["host-quiet"]
+preconditions = ["host-quiet:4"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = []
@@ -1142,7 +1143,7 @@ command = "scripts/mesh-soak.sh"
 cost_secs = "unmeasured"
 enforcement = "tracked"
 fidelity = "F3"
-preconditions = ["binary:podman", "host-quiet"]
+preconditions = ["binary:podman", "host-quiet:4"]
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = []
@@ -1176,7 +1177,7 @@ command = "scripts/throughput_probe.py"
 cost_secs = 400.0
 enforcement = "tracked"
 fidelity = "F3"
-preconditions = ["port-listening:9741", "slot-decodes:primary", "host-quiet"]
+preconditions = ["port-listening:9741", "slot-decodes:primary", "host-quiet:4"]
 baseline = { kind = "metrics", path = "sovereign/bench" }
 negative_control = "none"
 runs_in = ["check", "smoke:1"]

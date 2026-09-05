@@ -1,0 +1,53 @@
+# grounding-footguns F3 smoke subset — SIX rows copied VERBATIM out of
+# sovereign/bench/chaos_monkey/secret_agent.toml (2 present, 2 absent-adjacent,
+# 1 OOD, 1 distractor), so the before/after arms measure the bank's own
+# questions. Lives in the scratchpad, NOT the repo: adding a row to
+# sovereign/bench/smoke.toml would move `smoke_selection_digest` and
+# invalidate the quality-check baselines minted today.
+
+[meta]
+corpus = "chaos-secret-agent"
+description = "Grounded calibration on a single sealed literary corpus: answer + cite when present, abstain honestly when absent."
+
+[[questions]]
+id = "present-killer-weapon"
+qtype = "present"
+question = "With what kind of weapon does Winnie kill Adolf Verloc?"
+gold_keywords = ["knife"]
+rationale = "Winnie stabs Verloc with a carving knife (knife appears ~21x, including the killing)."
+
+[[questions]]
+id = "present-shop-street"
+qtype = "present"
+question = "On what street is Verloc's shop located?"
+gold_keywords = ["Brett"]
+rationale = "Brett Street is named ~21x as the location of the shop."
+
+[[questions]]
+id = "absent-mother-firstname"
+qtype = "absent_adjacent"
+acquisition_class = "unknowable"
+question = "What is the first name of Winnie's mother?"
+rationale = "Winnie's mother is only 'Winnie's mother' / 'the old woman' \u2014 no first name is given."
+
+[[questions]]
+id = "absent-embassy-country"
+qtype = "absent_adjacent"
+acquisition_class = "unknowable"
+question = "Which specific country's embassy employs Mr Vladimir?"
+rationale = "Conrad deliberately never names the country (often read as Russia, but 'Russia' appears 0x in the text)."
+
+[[questions]]
+id = "ood-australia-capital"
+qtype = "absent_out_of_domain"
+acquisition_class = "install_recipe"
+question = "What is the capital of Australia?"
+rationale = "Outside a Conrad novel; the sealed corpus contains nothing about this."
+
+[[questions]]
+id = "distract-bomb-maker"
+qtype = "distractor"
+question = "Which member of the anarchist circle is the bomb-maker who supplies the explosives and prides himself on the 'perfect detonator'?"
+gold_keywords = ["Professor"]
+distractor_quote = "Michaelis"
+rationale = "The Professor is the bomb-maker ('a perfect detonator'). Michaelis, the 'ticket-of-leave apostle' theorist, is the plausible-but-wrong answer for someone conflating the circle's members."

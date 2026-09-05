@@ -77,6 +77,8 @@ mod posture_cmd;
 mod project_init;
 #[cfg(feature = "dev-tools")]
 mod quality_check_cmd;
+#[cfg(feature = "dev-tools")]
+mod quality_map_cmd;
 // NOT feature-gated, deliberately: the daemon-facing project registry adds
 // zero dependencies and is the one thing a `curl | sh` user needs to reach
 // the code-intelligence pipeline the daemon already runs.
@@ -1120,6 +1122,13 @@ async fn async_main() {
                 // artifact age (drift/arch/capability/nightly/watchers/…).
                 let code = posture_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
+            }
+            // `map` RENDERS quality/instruments.toml and runs nothing, so it
+            // is intercepted before the lane runner rather than costing a
+            // tracing subscriber and a lane-table parse.
+            #[cfg(feature = "dev-tools")]
+            "quality" if raw_args.get(1).map(String::as_str) == Some("map") => {
+                std::process::exit(quality_map_cmd::run(&raw_args[2..]));
             }
             #[cfg(feature = "dev-tools")]
             "quality" => {

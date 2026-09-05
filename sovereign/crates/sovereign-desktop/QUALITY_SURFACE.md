@@ -1,12 +1,17 @@
-# Desktop quality surface — every gate, and which flags are load-bearing
+# Desktop quality surface — why the gates are shaped the way they are
 
 The desktop's verification is not one suite. It is nine, in four processes,
-across three Playwright configs, and several of them are silently useless if you
-omit a flag or leave a port occupied. This is the map, so the next person does
-not have to reconstruct it from shell history.
+across four Playwright configs, and several are silently useless if you omit a
+flag or leave a port occupied.
+
+**The WHAT is now data.** Every table this file carried by hand is rendered
+from `quality/instruments.toml` by `svrn quality map`, and `cargo xtask
+instrument-gate` fails on any command a quality surface reaches that has no
+row — including the commands named in this document. What is left here is the
+*why*: the postmortems, the consequences, and the parts no schema can hold.
 
 Companion docs: `AGENTS.md` answers *which tool to test a given kind of code
-with*. This answers *what exists, how to run it, and what it actually proves*.
+with*.
 
 ---
 
@@ -29,55 +34,42 @@ run](#what-ci-does-not-run), which is the most important section here.
 
 ## The layers
 
-| Layer | Command | What it actually proves | In CI |
-|---|---|---|---|
-| Types | `npm run check` | Svelte + TS typecheck across 663 files | yes |
-| Unit | `npm run test` | Logic in `src/**/*.{test,spec}.ts` under jsdom | yes |
-| Synthetic e2e | `npx playwright test` | The real Svelte frontend against a **mocked** Tauri backend | yes |
-| Negative controls | `npm run sabotage` | That the suites above can actually fail | yes |
-| Real-mode e2e | `npm run test:e2e:real` | The real frontend against a **real** desktop process + daemon | **no** |
-| Fault injection | `npm run test:e2e:faults` | Kill/restart/recover against a supervised desktop | **no** |
-| Demo reel | `npm run demo` | 9 product beats; a failed beat exports no clip | no |
-| a11y | `npm run a11y` | Accessibility report | no |
-| Soak / chaos / personas | `npm run soak` · `chaos` · `personas.mjs` | Long-run stability and answer quality | no |
-| **Production boot chain** | `scripts/wizard-verify.sh` | The path a **shipped install** actually takes: fresh wizard → `complete_setup` → supervised relaunch → `current_exe() --daemon-child` → Attach. Linux + macOS. | no |
-| Whole-stack smoke | `scripts/desktop-smoke.sh` | All of the above, budgeted, in one run | no |
+`svrn quality map --layers` — command, enforcement, cost, and whether CI runs
+it, per instrument. The `in CI` column is derived from the registry, not
+asserted here.
 
-### What the three Playwright configs are for
+### Why there are four Playwright configs
 
-Spec selection is **directory-based**, so a spec is in a suite by where it
-lives, not by how it is named.
+Spec selection is **directory-based**: a spec is in a suite by where it lives,
+not by how it is named. `playwright.config.ts` → `tests/e2e/specs` (mocked
+Tauri); `.real.` → `tests/e2e/real` minus `faults`; `.faults.` →
+`tests/e2e/real/faults`; `.demo.` → `tests/e2e/demo`. `real` and `faults` are
+separate because the fault specs kill processes and own ports — they cannot
+share a run with anything. Which `-c` each needs, and what a bare `playwright
+test` silently runs instead, is `svrn quality map --load-bearing`.
 
-| Config | `testDir` | Backend |
-|---|---|---|
-| `playwright.config.ts` (default) | `tests/e2e/specs` | Mocked via `fixtures/tauri-shim.js` |
-| `playwright.real.config.ts` | `tests/e2e/real` (ignores `**/faults/**`) | Real desktop binary via the command bridge |
-| `playwright.faults.config.ts` | `tests/e2e/real/faults` | Real desktop, supervised, own lifecycle |
-| `playwright.demo.config.ts` | `tests/e2e/demo` | Real, against the operator's live daemon |
+## Fidelity — how far each layer sits from what a user runs
 
-`real` and `faults` are separate configs because the fault specs kill processes
-and own ports — they cannot share a run with anything.
+The layer table says what each suite *proves*. Fidelity says how much that
+proof is worth for the **shipped** app, which is a different question and the
+one that actually governs confidence.
 
-### Fidelity — how far each layer sits from what a user runs
+`svrn quality map --fidelity` — F0 unit · F1 mocked backend · F2 real binary +
+fixture daemon · F3 real daemon + models · F4 supervised child · F5 the
+packaged boot chain, generalised so a daemon lane and a Playwright suite are
+comparable on one axis.
 
-The layer table says what each suite *proves*. This says how much that proof is
-worth for the **shipped** app, which is a different question and the one that
-actually governs confidence.
+**Where CI stops is COMPUTED** — the maximum fidelity among instruments with a
+`ci:<job>` venue, printed at the top of that render (`CI stops at F1` today).
+It was a sentence in this paragraph for two months with nothing keeping it
+true.
 
-| | Layer | Backend | Boot mode |
-|---|---|---|---|
-| F0 | vitest | jsdom | none |
-| F1 | synthetic e2e | mocked Tauri over `vite dev` | none |
-| F2 | real-mode e2e | real desktop binary + fixture daemon | `Local{DesktopLegacy}` / forced-local |
-| F3 | attach real-mode / demo | real daemon, real models | `Attach` |
-| F4 | fault suite | supervised child daemon | supervisor, **`SOVEREIGN_CLI_PATH` branch** |
-| F5 | `wizard-verify.sh` | real binary, private netns | supervisor, **`current_exe() --daemon-child`** |
-| — | packaged `.dmg`/`.exe`/`.AppImage` on a clean machine | — | **nothing automated** |
-
-**CI stops at F1.** Production is F5 (`supervisor_setup.rs:39-46` — supervised
-is the default since 2026-07-18; `:102-109` — a *fresh* boot is
-`Fresh`/`DesktopLegacy` and falls through to the wizard unsupervised, so the
-supervised chain only engages from the **second** launch onward).
+Production is F5 (`supervisor_setup.rs:39-46` — supervised is the default since
+2026-07-18; `:102-109` — a *fresh* boot is `Fresh`/`DesktopLegacy` and falls
+through to the wizard unsupervised, so the supervised chain only engages from
+the **second** launch onward). The packaged `.dmg`/`.exe`/`.AppImage` on a
+clean machine is covered by **nothing automated**, and no registry row can fix
+that — it is stated here because it is the one gap the map cannot show.
 
 Two consequences worth stating plainly:
 
@@ -101,14 +93,20 @@ Two consequences worth stating plainly:
 
 This is the part that is impossible to reconstruct from the code.
 
+The env-var tables below are the LAST hand-maintained tables here, kept for a
+stated reason: all nine knobs are now declared in `quality/env-flags.toml`
+(cluster `desktop-e2e`, rendered into `docs/ENV_FLAGS.md`), but `xtask
+env-gate` censuses `.rs` and `.sh` only and every read site is `.ts`/`.mjs` —
+so the registry has the declarations and no enforcement. Teaching the census
+those two extensions retires these tables.
+
 ### Flags you must not drop
 
-| Flag | Where | Why it is load-bearing |
-|---|---|---|
-| `--fail-on-warnings` | `npm run check` | Without it svelte-check exits 0 on warnings and the gate passes while the app has accessibility and unused-export problems. `check:loose` is the no-gate variant — do not wire it into CI. |
-| `-c playwright.real.config.ts` | real-mode | Bare `playwright test` silently runs the **synthetic** suite instead. Same for `-c playwright.faults.config.ts`. |
-| `--allow-empty` | `scripts/sovereign-test.sh` | A run matching zero tests exits **4**, not 0. Pass this only when you genuinely expect an empty scope; a filtered run that matched nothing verified nothing. |
-| `--allow-dirty` | `npm run sabotage` | Escape hatch only. The default refusal exists because the script rewrites tracked files and a SIGKILL mid-run would lose uncommitted work git cannot return. |
+`svrn quality map --load-bearing` — flags whose absence fails nothing and just
+makes the green mean less (`--fail-on-warnings`, `-c
+playwright.real.config.ts`, `--allow-empty`, `--allow-dirty`), beside the
+closed-set preconditions that must hold before an instrument can judge at all.
+An unmet precondition is could-not-judge NAMING it, never a pass.
 
 ### Real-mode e2e (`tests/e2e/real/global-setup.ts`)
 
@@ -149,12 +147,9 @@ from the daemon child the desktop re-execs, which inherits the environment.
 
 ## Ports — the invariant that silently invalidates runs
 
-| Port | Owner |
-|---|---|
-| `5173` | Vite dev server |
-| `9741` | The daemon |
-| `9745` | Command bridge (harness ↔ desktop) |
-| `9751` | The faults suite's child daemon |
+Four ports are spoken for: `5173` is the Vite dev server, `9741` the daemon,
+`9745` the command bridge between harness and desktop, and `9751` the faults
+suite's child daemon.
 
 **`:9741` must be FREE before a real-mode, faults, or full workspace test run.**
 This is measured, not folklore: with the daemon up, three `sovereign-compute`
@@ -219,9 +214,9 @@ different claims:
    covers the conversation ✕, the memory-budget guard, and draft persistence.
 
 There is also a **judge-calibration gate** for the chaos/persona rubrics
-(`tests/e2e/scripts/calibrate-judge.mjs`, sensitivity floor 0.85 / specificity
-floor 0.8): no rubric or judge change may score runs without passing it. See
-`tests/e2e/CHAOS_QA_METHODOLOGY.md`.
+(`calibrate-judge.mjs`, sensitivity floor 0.85 / specificity floor 0.8): no
+rubric or judge change may score runs without passing it
+(`tests/e2e/CHAOS_QA_METHODOLOGY.md`).
 
 ---
 
@@ -236,19 +231,21 @@ floor 0.8): no rubric or judge change may score runs without passing it. See
   all. Budgets are tunable per phase (`SMOKE_P<n>_SECS`), and skipped phases are
   always reported — no silent gaps. Exit 1 = a gate failed, 2 = hard stop or
   setup error.
-- **`scripts/desktop-soak.py`** — the canonical desktop chaos + persona soak
-  (`--mode dual|chaos|persona`); builds HEAD, restarts the daemon, health-gates.
-- **`npm run demo`** → `npm run demo:export` — the product reel as an acceptance
-  suite; a beat that fails its assertions exports no clip
+- **`npm run demo`** → `npm run demo:export` — the product reel as an
+  acceptance suite; a beat that fails its assertions exports no clip
   (`tests/e2e/demo/DEMO_BEATS.md`).
-- Reporting helpers: `report:soak`, `report:breaker`, `report:journeys`,
-  `report:ttfi`, `report:coverage`, `report:coverage:real`.
+
+The soaks, the personas and the six `report:*` helpers are rows in the
+registry: `svrn quality map --where`.
 
 ---
 
 ## What CI does not run
 
 Stated plainly, because the gap is the thing most likely to bite you:
+
+`svrn quality map --where` is the list, plus the two populations nothing could
+be asked about before: what no CI job runs, and what NOTHING runs (nine today).
 
 - **Real-mode e2e and the fault suite run in no workflow at all.** They need
   multi-GB GGUFs that are not in the repo (`git ls-files sovereign/models` is
