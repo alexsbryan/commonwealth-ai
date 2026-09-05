@@ -123,28 +123,82 @@ for c in "${CANDIDATES[@]}"; do
 done
 
 # ── the price, before the run (a projection is not a result) ────────────────
-# `tier2_count` in `_summary.json` is the same population the production
-# grounding filter admits (extracted-depth entities), so it is the honest
-# denominator for "how many embed calls is this".
-atoms=$(python3 - "$SVRN_ROOT" "${WORK[@]}" <<'PY'
-import json,os,sys
-root=sys.argv[1]; tot=0
-for c in sys.argv[2:]:
-    p=os.path.join(root,"indexes",c,"atlas","_summary.json")
-    try: tot+=json.load(open(p)).get("tier2_count",0)
-    except Exception: pass
-print(tot)
+# The denominator is the SEED POPULATION, not `tier2_count`.
+#
+# `tier2_count` was the right number until ei-3c (`c0f632403`): the seed table
+# was Entity-only, and that field counts Entities. Since then the population is
+# whatever the navigation map admits, and on this host that is seven kinds. The
+# gap is not small — measured 2026-09-05 over all 1,770 `sep-*` atlases,
+# 88,801 by `tier2_count` against 190,312 actually embedded, 2.14x — which is
+# the difference between a 1.8 h window and a 4 h one. A forecast that is
+# quietly half the real price is the exit-0-and-wrong failure in forecast form
+# (ARCH §18.3, §18.5).
+#
+# The kind list is NOT re-derived here. It is read from `atoms_ann.population`,
+# the marker the ONE writer (`context_loader::backfill_ann`) drops beside every
+# table it writes — so this projection has no policy of its own to drift from
+# the writer's (ARCH §10.6). If no atlas on this host carries a marker yet,
+# there is nothing to read and the projection SAYS it fell back to the old
+# denominator rather than printing a confident wrong number (ARCH §18.3, §6).
+read -r -d '' _price_py <<'PY' || true
+import json,os,sys,glob
+root, prefix = sys.argv[1], sys.argv[2]
+work = sys.argv[3:]
+# The writer's own kind list, from any marker on this host. Line 2 of the
+# marker is the comma-separated lowercase AtomType labels.
+kinds, src = None, "none"
+for m in sorted(glob.glob(os.path.join(root,"indexes",prefix+"*","atlas","atoms_ann.population"))) \
+       + sorted(glob.glob(os.path.join(root,"indexes","*","atlas","atoms_ann.population"))):
+    try:
+        lines = open(m).read().splitlines()
+        if len(lines) >= 2 and lines[1].strip():
+            kinds = [k.strip() for k in lines[1].split(",") if k.strip()]
+            src = os.path.relpath(m, root)
+            break
+    except Exception:
+        pass
+tot = tier2 = 0
+matched, unmatched = set(), set()
+for c in work:
+    p = os.path.join(root,"indexes",c,"atlas","_summary.json")
+    try: s = json.load(open(p))
+    except Exception: continue
+    tier2 += s.get("tier2_count",0)
+    ac = s.get("atom_counts") or {}
+    if kinds is None: continue
+    for k in kinds:
+        hit = [key for key in ac if key.lower().startswith(k)]
+        if hit: matched.add(k); tot += sum(ac[key] for key in hit)
+        else:   unmatched.add(k)
+if kinds is None:
+    print(f"{tier2}\tFALLBACK\tno atoms_ann.population marker on this host; priced on tier2_count (Entity-only, pre-ei-3c) — expect a ~2x UNDERESTIMATE")
+else:
+    # A kind that matched in ANY corpus is matched; `unmatched` accumulates
+    # per-corpus misses, so only kinds that never matched anywhere are absent.
+    absent = unmatched - matched
+    note = f"seed population {','.join(sorted(matched))} from {src}"
+    if absent: note += f"; declared but with no atoms anywhere in this worklist: {','.join(sorted(absent))}"
+    print(f"{tot}\tPOPULATION\t{note} (tier2_count would have said {tier2})")
 PY
-)
+_price=$(python3 -c "$_price_py" "$SVRN_ROOT" "$PREFIX" "${WORK[@]}")
+atoms=$(cut -f1 <<<"$_price")
+price_basis=$(cut -f2 <<<"$_price")
+price_note=$(cut -f3 <<<"$_price")
 need_store=0
 for c in "${WORK[@]}"; do
   [[ -d "$SVRN_ROOT/indexes/$c/atlas/atoms.lance" ]] || need_store=$((need_store+1))
 done
-# 14.0 embeds/s, measured 2026-09-04 against the resident 1024-d slot (40 calls,
-# 71.2 ms each). Re-measure rather than trusting this line on another host.
-rate=${EMBED_RATE:-14.0}
+# 13.3 embeds/s, measured 2026-09-05 on the 8f3c129fa binary against the
+# resident 1024-d slot: a two-point fit over two atlases of different size
+# (73 atoms / 5.87 s, 114 atoms / 8.96 s) = 75.4 ms per atom with 0.37 s of
+# fixed per-invocation overhead. ei-3 measured 14.0/s the same way on the
+# pre-ei-3c population. Re-measure rather than trusting this line on another
+# host. `atlas migrate-all` is 0.08 s per corpus (n=3, same date) — the store
+# half of this job is free and is not projected.
+rate=${EMBED_RATE:-13.3}
 echo "worklist: ${#WORK[@]} corpus(es) (${#SKIPPED[@]} already in the ledger)"
-echo "price:    $atoms atoms to embed at ${rate}/s ≈ $(python3 -c "print(f'{$atoms/$rate/60:.0f}')") min, plus $need_store v2 store build(s)"
+echo "price:    $atoms atoms to embed at ${rate}/s ≈ $(python3 -c "print(f'{$atoms/$rate/60:.0f}')") min ($(python3 -c "print(f'{$atoms/$rate/3600:.1f}')") h), plus $need_store v2 store build(s) at ~0.08s each"
+echo "basis:    $price_basis — $price_note"
 echo "ledger:   $LEDGER"
 echo "run log:  $RUN_LOG"
 (( DRY )) && { printf '%s\n' "${WORK[@]}"; exit 0; }
