@@ -99,7 +99,8 @@ ledger's old-binary line reads 41/41. Both are already-v2, already-ledgered
 atlases and `backfill-ann` has no skip path, so the rewrites are idempotent.
 
 `atlas migrate-all <corpus>`, n=3: **0.08 s**, 26–55 MB peak, stores verified
-on disk afterwards. The store half of this job is free.
+on disk afterwards — **and this projection was wrong by 24x**; see "The store
+phase" below. The peak-RSS half of it held.
 
 ## Expected price — and the defect that hid half of it
 
@@ -227,3 +228,59 @@ It never starts, stops, restarts or reconfigures the daemon, never swaps or
 loads a model, and never edits `~/.svrnmesh/config.toml`. One model resident at
 a time is the operator's rule; a busy box or an absent engine is a scheduling
 decision reported to the seat.
+
+
+## Result — the run, 2026-09-05
+
+`state: completed`, `driver_exit 0`, legs 1 and 2 both rc 0. Started 05:45:29,
+finished 10:31:09 — **4 h 46 min** (17,140 s).
+
+| | before | after |
+|---|---|---|
+| `atoms_ann.lance` | 29 | **1,770** |
+| `atoms.lance` (v2 store) | 692 | **1,770** |
+| ledger lines | 8 | 1,771 |
+
+`ls -d ~/.svrnmesh/indexes/sep-*/atlas/atoms_ann.lance | wc -l` = **1,770**, over
+1,770 `sep-*` atlases. The order's done-when is "1,770 minus the failed-by-name
+list", and that list is empty:
+
+| | had | built | failed BY NAME | no-seedable BY NAME |
+|---|---|---|---|---|
+| v2 store | 692 | 1,078 | **none** | — |
+| seed table | — | 1,770 | **none** | **none** |
+
+187,014 atoms embedded through the daemon's resident 1024-d
+**`Qwen3-Embedding-0.6B-Q8_0`** slot, which is the space `atlas_navigate_ann`
+queries in because the loader embeds through the QUERY-side `EmbedFn`.
+
+**The daemon was not OOM-killed.** `journalctl -k` over the exact run window
+(05:45:29–10:31:09) returns **0** lines matching `out of memory|oom-kill`, and
+the daemon is still pid 84765 — the pid captured before the first batch. The
+sampler's 45 batch readings span **71–73 GB available**, flat across 4 h 46 min,
+which is what a strictly serial embed with no fan should look like.
+
+### The store phase — the projection that missed by 24x
+
+The store phase is exact from `atoms.lance` mtimes, n=1,078 on the real
+population: **05:46:19 → 06:20:46, 2,066 s = 34.4 min, 1.92 s per store.**
+
+The n=3 measurement above said **0.08 s**. That is a 24x miss and **it is not
+explained**. The obvious explanations were checked and do not hold: the three
+atlases genuinely lacked stores (the selection predicate, and `atoms.lance`
+verified present afterwards), and they were not small — atom_count 188 / 161 /
+364 against a fleet median of 118, i.e. the 73rd, 64th and 98th percentile. So
+this is recorded as **could-not-judge** (ARCH §18.1), not as a diagnosis.
+
+It is the same class as the `tier2_count` denominator, and the sharper example
+of the two: a small measurement generalised to a population it had not been
+shown to represent. Principle 7 — one run is not a measurement, and n=3 on a
+non-random sample is barely more.
+
+### The forecast that held
+
+Embed phase 06:20:46 → 10:31:08 = 14,422 s = **240.4 min**, against a
+pre-registered **238–246 min**. 185,985 atoms in leg 2 at **12.90 atoms/s**,
+against a predicted 12.9–13.3. The population projection was 190,123 against
+187,014 actual, 1.7% high. The half derived from the writer's own marker
+predicted itself; the half derived from three hand-picked atlases did not.

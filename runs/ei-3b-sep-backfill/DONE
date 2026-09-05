@@ -1,0 +1,87 @@
+run:            ei-3b-sep-backfill
+state:          completed
+driver_exit:    0
+leg1_smoke_rc:  0
+leg2_sweep_rc:  0
+head:           95583b737 (newest source commit 7f60a09bd)
+scli:           /home/alexbryan/dev/ei3b-wt/target/debug/sovereign-cli (2026-09-05T05:26:53-07:00)
+box_at_start:   clean
+started:        2026-09-05T05:45:29-07:00
+finished:       2026-09-05T10:31:09-07:00
+wall_seconds:   17140
+claim:          FAILED (banked: claim surface broken 2026-09-04; seat's window is the interlock)
+sep_atlases:    1770
+atoms_ann:      29 -> 1770
+atoms_lance:    692 -> 1770
+ledger_lines:   8 -> 1771
+ledger:         /home/alexbryan/dev/ei3b-wt/sovereign/bench/sep_atlas/backfill-index.jsonl
+run_log:        /home/alexbryan/dev/ei3b-wt/runs/ei-3b-sep-backfill/run.log
+sampler:        /home/alexbryan/dev/ei3b-wt/runs/ei-3b-sep-backfill/sampler.log
+markers:        /home/alexbryan/dev/ei3b-wt/runs/ei-3b-sep-backfill/markers
+free_gb_final:  72
+daemon_alive:   true
+
+--- kernel OOM lines since start (the order's stop condition) ---
+(no lines above = the daemon was not OOM-killed during the run)
+
+--- closing table (driver) ---
+  ✓ sep-voting-methods — 97/97
+  ✓ sep-voting — 95/95
+  ✓ sep-walter-chatton — 37/37
+  ✓ sep-wang-yangming — 65/65
+  ✓ sep-war — 44/44
+  ✓ sep-watsuji-tetsuro — 59/59
+  ✓ sep-weakness-will — 56/56
+  ✓ sep-weber — 40/40
+  ✓ sep-well-being — 46/46
+  ✓ sep-wesley-salmon — 77/77
+progress: 1720/1758  (216s for 40)
+  ✓ sep-weyl — 267/267
+  ✓ sep-whewell — 32/32
+  ✓ sep-whitehead — 109/109
+  ✓ sep-wilhelm-humboldt — 97/97
+  ✓ sep-wilhelm-windelband — 51/51
+  ✓ sep-wilhelm-wundt — 43/43
+  ✓ sep-william-auvergne — 58/58
+  ✓ sep-william-champeaux — 45/45
+  ✓ sep-william-david-ross — 62/62
+  ✓ sep-william-jevons — 44/44
+  ✓ sep-william-sherwood — 36/36
+  ✓ sep-williams-bernard — 29/29
+  ✓ sep-williams-dc — 45/45
+  ✓ sep-wilson — 72/72
+  ✓ sep-wisdom — 41/41
+  ✓ sep-wittgenstein-aesthetics — 33/33
+  ✓ sep-wittgenstein-atomism — 59/59
+  ✓ sep-wittgenstein-mathematics — 83/83
+  ✓ sep-wittgenstein — 78/78
+  ✓ sep-wodeham — 50/50
+  ✓ sep-wolff-christian — 73/73
+  ✓ sep-wollstonecraft — 61/61
+  ✓ sep-word-meaning — 73/73
+  ✓ sep-work-labor — 90/90
+  ✓ sep-world-government — 83/83
+  ✓ sep-wright — 63/63
+  ✓ sep-wyclif-political — 44/44
+  ✓ sep-wyclif — 56/56
+  ✓ sep-xenocrates — 53/53
+  ✓ sep-xenophanes — 58/58
+  ✓ sep-xunzi — 119/119
+  ✓ sep-yorck — 56/56
+  ✓ sep-zabarella — 34/34
+  ✓ sep-zeno-elea — 61/61
+  ✓ sep-zermelo-set-theory — 68/68
+  ✓ sep-zhu-xi — 61/61
+  ✓ sep-zhuangzi — 71/71
+  ✓ sep-zombies — 51/51
+progress: 1758/1758  (204s for 38)
+
+state           corpora   atoms embedded
+----------------------------------------
+built              1758           185985
+no-seedable           0                0
+failed                0                0
+
+v2 store: had 680, built 1078, failed 0
+wall: 17089s over 1758 corpus(es)
+  leg 2 exit 0
