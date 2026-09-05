@@ -16,6 +16,11 @@ path = "src/main.rs"
 # enforcement halves drift on what the layer map means.
 [dependencies]
 arch-layers = { workspace = true }
+# instrument-gate reads quality/instruments.toml through the ONE parser for
+# that schema (ARCH §10.6) — the same file `svrn quality map` and `svrn
+# posture` read. The feature keeps the kernel's default dep budget intact for
+# anyone lifting that leaf.
+kernel-types = { workspace = true, features = ["quality-registry"] }
 # lint-gate parses `cargo clippy --message-format=json` — a hand-rolled
 # string scan mis-read diagnostics whose children precede the top-level
 # `level` field (every clippy lint with a help child), so: real parser.
@@ -33,8 +38,6 @@ regex = { workspace = true }
 # with its tests. `xtask` is in no package, so nothing lifts it. DEV-only, so
 # `cargo build -p xtask` (what the CI ratchets job runs) is unaffected.
 [dev-dependencies]
-# The requirement vocabulary the registry generator renders.
-kernel-types = { workspace = true }
 # The `covers:` tag scanner's AST reader. Same version/features as
 # corpus-engine's and kernel-types' were (ARCH §8.2 — one version per
 # third-party crate across the workspace).

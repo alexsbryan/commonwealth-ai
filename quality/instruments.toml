@@ -90,6 +90,28 @@
 
 schema_version = 1
 
+# The files `cargo xtask instrument-gate` censuses. Declared HERE, not
+# hardcoded in the gate: how far a closure loop reaches is policy, and policy
+# in this repo is data (ARCH §6). It is also the field to check when you want
+# to know whether a surface is actually covered.
+#
+# The three .md entries are here because of the postmortem this registry is
+# named after: `wizard-verify.sh` was referenced by DAEMON_RESILIENCE.md and by
+# nothing executable. Being NAMED by a quality-bearing doc is how an instrument
+# "exists", so a doc reference is a census hit and the registry answers with
+# the truth — `runs_in = []` when nothing runs it.
+censused_surfaces = [
+  ".github/workflows",
+  "scripts/pre-push.sh",
+  "scripts/pre-commit.sh",
+  "scripts/desktop-smoke.sh",
+  "scripts/run-if-stale.sh",
+  "sovereign/crates/sovereign-desktop/package.json",
+  "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md",
+  "sovereign/docs/TESTING_SURFACE.md",
+  "sovereign/docs/specs/DAEMON_RESILIENCE.md",
+]
+
 # ── xtask ratchets — the checks a diff cannot answer ─────────────────
 # Costs from scripts/pre-push.sh's re-measured budget ledger (2026-09-03).
 
@@ -103,7 +125,7 @@ fidelity = "F0"
 baseline = { kind = "none" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
-doc = "ARCH_PRINCIPLES.md §1.1"
+doc = "sovereign/ARCH_PRINCIPLES.md §1.1"
 
 [[instrument]]
 id = "arch-gate"
@@ -115,7 +137,7 @@ fidelity = "F0"
 baseline = { kind = "count", path = "quality/baselines/oversized.txt" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
-doc = "ARCH_PRINCIPLES.md §3.1"
+doc = "sovereign/ARCH_PRINCIPLES.md §3.1"
 
 [[instrument]]
 id = "boundary-gate"
@@ -139,7 +161,7 @@ fidelity = "F0"
 baseline = { kind = "count", path = "quality/baselines/fan_in.tsv" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
-doc = "ARCH_PRINCIPLES.md §8"
+doc = "sovereign/ARCH_PRINCIPLES.md §8"
 
 [[instrument]]
 id = "lock-gate"
@@ -151,7 +173,7 @@ fidelity = "F0"
 baseline = { kind = "count", path = "quality/baselines/lock_dups.txt" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
-doc = "ARCH_PRINCIPLES.md §8.2"
+doc = "sovereign/ARCH_PRINCIPLES.md §8.2"
 
 [[instrument]]
 id = "layout-gate"
@@ -163,7 +185,7 @@ fidelity = "F0"
 baseline = { kind = "count", path = "quality/baselines/corpus_layout.txt" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
-doc = "ARCH_PRINCIPLES.md §3"
+doc = "sovereign/ARCH_PRINCIPLES.md §3"
 
 [[instrument]]
 id = "env-gate"
@@ -190,7 +212,7 @@ fidelity = "F0"
 baseline = { kind = "count", path = "quality/baselines/clock_reads.txt" }
 negative_control = "none"
 runs_in = ["prepush", "ci:gates"]
-doc = "ARCH_PRINCIPLES.md §9"
+doc = "sovereign/ARCH_PRINCIPLES.md §9"
 
 [[instrument]]
 id = "concept-gate"
@@ -227,7 +249,7 @@ load_bearing = [
 id = "instrument-gate"
 kind = "gate"
 command = "cargo xtask instrument-gate"
-cost_secs = "unmeasured"
+cost_secs = 0.04
 enforcement = "hard"
 fidelity = "F0"
 baseline = { kind = "none" }
@@ -596,6 +618,7 @@ doc = "sovereign/crates/sovereign-desktop/QUALITY_SURFACE.md#the-layers"
 id = "desktop-e2e-synthetic"
 kind = "suite"
 command = "npm run test:e2e"
+also_invoked_as = ["npx playwright test"]
 cost_secs = 420.0
 enforcement = "hard"
 fidelity = "F1"
@@ -1050,6 +1073,195 @@ load_bearing = [
   { flag = "[watchers] enabled = false", why = "DISABLED in .sovereign/sovereign.toml since 2026-05-31 — the parallel cargo fan OOM'd the daemon under a resident big model. A declared opt-out is a healthy absence, which is why posture and doctor both report it Passed; the gate is the two toolbox scripts" },
 ]
 
+
+# ── The four the doc's "off the map" paragraph named ─────────────────
+#
+# `cargo xtask instrument-gate`'s FIRST run named all four among 24
+# unregistered keys, which is the only reason this section can be trusted to
+# be complete (ARCH §18.1). Three of them still run nowhere, and `runs_in = []`
+# is how the registry says so instead of leaving them invisible.
+
+[[instrument]]
+id = "wizard-verify"
+kind = "gate"
+command = "scripts/wizard-verify.sh"
+cost_secs = 900.0
+enforcement = "hard"
+fidelity = "F5"
+preconditions = ["binary:sovereign-desktop", "port-listening:9741"]
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["smoke:6", "by-hand"]
+doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+load_bearing = [
+  { flag = "SOVEREIGN_CLI_PATH UNSET", why = "every other supervised lane in the repo SETS it, so resolve_daemon_child() takes the env branch. This is the only coverage of the `current_exe() --daemon-child` branch a packaged install actually takes" },
+  { flag = "a private netns (Linux) / checked-free ports (macOS)", why = "there is no netns equivalent on darwin, so it REFUSES to start unless :9741 and :9745 are free — which desktop-smoke.sh Phase 6 arranges" },
+]
+
+[[instrument]]
+id = "daemon-soak"
+kind = "probe"
+command = "scripts/daemon-soak.sh"
+cost_secs = "unmeasured"
+enforcement = "tracked"
+fidelity = "F3"
+preconditions = ["host-quiet"]
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = []
+doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+
+[[instrument]]
+id = "daemon-soak-report"
+kind = "probe"
+command = "scripts/daemon-soak-report.sh"
+cost_secs = "unmeasured"
+enforcement = "tracked"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = []
+doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+
+[[instrument]]
+id = "daemon-supervised"
+kind = "suite"
+command = "scripts/daemon-supervised.sh"
+cost_secs = "unmeasured"
+enforcement = "tracked"
+fidelity = "F4"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = []
+doc = "sovereign/docs/specs/DAEMON_RESILIENCE.md"
+
+[[instrument]]
+id = "mesh-soak"
+kind = "suite"
+command = "scripts/mesh-soak.sh"
+cost_secs = "unmeasured"
+enforcement = "tracked"
+fidelity = "F3"
+preconditions = ["binary:podman", "host-quiet"]
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = []
+doc = "commonwealth/docs/MESH_QA.md"
+load_bearing = [
+  { flag = "the podman backend", why = "real partitions and cgroup OOM. The nightly workflow deliberately runs the LOCAL-subprocess backend instead, so this script's fault classes are covered by nothing scheduled" },
+]
+
+# ── The rest of what the gate's first run found ──────────────────────
+
+[[instrument]]
+id = "xtask-quality"
+kind = "suite"
+command = "cargo xtask quality"
+cost_secs = 21.0
+enforcement = "hard"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["by-hand"]
+doc = "corpus-engine/xtask/src/quality_cmd.rs"
+load_bearing = [
+  { flag = "check-mode only", why = "baseline mutations stay explicit per-gate, so a habit-run can never silently move a ratchet" },
+  { flag = "four verdicts, not two", why = "a gate that could not reach its evidence did not pass, and one that never ran did not pass either — the summary keeps PASS / FAIL / COULD-NOT-JUDGE / NEVER-RAN apart" },
+]
+
+[[instrument]]
+id = "throughput-probe"
+kind = "bench"
+command = "scripts/throughput_probe.py"
+cost_secs = 400.0
+enforcement = "tracked"
+fidelity = "F3"
+preconditions = ["port-listening:9741", "slot-decodes:primary", "host-quiet"]
+baseline = { kind = "metrics", path = "sovereign/bench" }
+negative_control = "none"
+runs_in = ["check", "smoke:1"]
+doc = "sovereign/bench/README.md"
+
+[[instrument]]
+id = "clippy-json"
+kind = "gate"
+command = "cargo clippy --workspace --all-targets --message-format=json"
+cost_secs = "unmeasured"
+enforcement = "advisory"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = []
+doc = "corpus-engine/xtask/src/lint_gate.rs"
+load_bearing = [
+  { flag = "--message-format=json", why = "lint-gate consumes the stream. A hand-rolled string scan mis-read diagnostics whose children precede the top-level `level` field, which is every clippy lint with a help child" },
+]
+
+[[instrument]]
+id = "dst-scenarios"
+kind = "suite"
+command = "cargo test -p sovereign-mesh --features dst,treesitter --test main dst_scenarios"
+cost_secs = "unmeasured"
+enforcement = "tracked"
+fidelity = "F1"
+baseline = { kind = "none" }
+negative_control = "dst-fe19-convergence"
+runs_in = []
+doc = ".github/workflows/ci.yml (the commented-out `dst` job)"
+
+[[instrument]]
+id = "cli-contract-live-verify"
+kind = "check"
+command = "sovereign/scripts/cli-contract-live-verify.sh"
+cost_secs = "unmeasured"
+enforcement = "tracked"
+fidelity = "F3"
+preconditions = ["port-listening:9741"]
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["by-hand"]
+doc = "sovereign/docs/TESTING_SURFACE.md"
+
+[[instrument]]
+id = "cli-journey-sandbox"
+kind = "suite"
+command = "sovereign/scripts/cli-journey-sandbox.sh"
+cost_secs = "unmeasured"
+enforcement = "tracked"
+fidelity = "F3"
+baseline = { kind = "none" }
+negative_control = "cli-journey-selftest"
+runs_in = ["by-hand"]
+doc = "sovereign/docs/TESTING_SURFACE.md"
+load_bearing = [
+  { flag = "an isolated HOME + a non-default daemon port", why = "the only way a MUTATING journey tier may run: its steps install/remove corpora and join/leave meshes, so on the operator's real root it would eat live state" },
+]
+
+[[instrument]]
+id = "check-desktop-version"
+kind = "gate"
+command = "scripts/check-desktop-version.sh"
+cost_secs = "unmeasured"
+enforcement = "hard"
+fidelity = "F0"
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["ci:cli-release", "ci:desktop-release"]
+doc = ".github/workflows/desktop-release.yml"
+
+[[instrument]]
+id = "windows-crosscheck"
+kind = "gate"
+command = "scripts/windows-crosscheck.sh"
+cost_secs = "unmeasured"
+enforcement = "tracked"
+fidelity = "F0"
+preconditions = ["binary:cargo-xwin"]
+baseline = { kind = "none" }
+negative_control = "none"
+runs_in = ["by-hand"]
+doc = ".github/workflows/desktop-release.yml"
+
 # ── Commands the census reaches that verify nothing ──────────────────
 #
 # Every exemption carries a reason. The closure gate has NO skip-list of its
@@ -1108,13 +1320,49 @@ key = "npm:report:ttfi:save-baseline"
 why = "a `cp` that promotes a report to a baseline — a ratchet MOVE, not a measurement"
 
 [[not_instrument]]
-key = "npm:ci"
-why = "dependency install"
-
-[[not_instrument]]
 key = "scripts/build-desktop-linux.sh"
 why = "builds the desktop binary that the smoke's phases then exercise"
 
 [[not_instrument]]
 key = "scripts/deletion-manifest.py"
 why = "registered as `deletion-manifest`; the bare path also appears in prose"
+
+[[not_instrument]]
+key = "npx:playwright install"
+why = "downloads the chromium bundle; the suite it enables is `desktop-e2e-synthetic`"
+
+[[not_instrument]]
+key = "scripts/bootstrap.sh"
+why = "installs the dev toolchain; CI pins the same versions from it"
+
+[[not_instrument]]
+key = "scripts/lib/cargo-scope.sh"
+why = "a sourced library that resolves the repo's feature contract for the two gate scripts — not itself runnable"
+
+[[not_instrument]]
+key = "scripts/install-journey-nightly.sh"
+why = "installs the systemd timer for `contract-nightly`; the lane is the instrument, this is its installer"
+
+[[not_instrument]]
+key = "scripts/release-all.sh"
+why = "the release driver — it builds and publishes, and the gates it calls are registered separately"
+
+[[not_instrument]]
+key = "scripts/release-cli-local.sh"
+why = "a local release build"
+
+[[not_instrument]]
+key = "scripts/build-desktop-macos.sh"
+why = "builds the macOS desktop bundle"
+
+[[not_instrument]]
+key = "scripts/build-desktop-windows.sh"
+why = "builds the Windows desktop bundle"
+
+[[not_instrument]]
+key = "scripts/fetch-desktop-binaries.sh"
+why = "downloads prebuilt sidecar binaries into the bundle"
+
+[[not_instrument]]
+key = "scripts/bump-desktop-version.sh"
+why = "edits version fields; `check-desktop-version` is the gate over its result"

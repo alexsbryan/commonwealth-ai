@@ -57,6 +57,13 @@ pub struct Instrument {
     pub runs_in: Vec<RunsIn>,
     /// The owning section a reader should open for the "why".
     pub doc: String,
+    /// Other spellings of the same command at real call sites — `npx
+    /// playwright test` for what `package.json` calls `npm run test:e2e`,
+    /// `cargo run -p xtask -- api-gate` for `cargo xtask api-gate`. Declared
+    /// rather than guessed: the closure gate matches an OBSERVED invocation
+    /// against these strings, and a gate that infers equivalence would be
+    /// deciding on its own that two commands are one instrument.
+    pub also_invoked_as: Vec<String>,
     /// Flags and env knobs that change what this instrument PROVES — the
     /// half `QUALITY_SURFACE.md` carried as prose because no schema could
     /// hold it. Optional; most instruments have none.
@@ -199,6 +206,11 @@ pub struct NotAnInstrument {
 pub struct Registry {
     pub instruments: Vec<Instrument>,
     pub not_instruments: Vec<NotAnInstrument>,
+    /// The files the closure gate censuses, declared HERE rather than
+    /// hardcoded in the gate: how far a gate reaches is policy, and policy in
+    /// this repo is data (ARCH §6). It is also the field a reader checks when
+    /// they want to know whether a surface is actually covered.
+    pub censused_surfaces: Vec<String>,
 }
 
 /// The line posture prints every session — the closure trigger.
@@ -289,10 +301,28 @@ impl Registry {
             }
         }
 
+        let censused_surfaces: Vec<String> = value
+            .get("censused_surfaces")
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if censused_surfaces.is_empty() {
+            errors.push(
+                "missing `censused_surfaces` — a closure gate whose reach is unstated cannot be \
+                 reviewed, and an empty reach finds nothing while reporting green (ARCH §18.1)"
+                    .to_string(),
+            );
+        }
+
         if errors.is_empty() {
             Ok(Registry {
                 instruments,
                 not_instruments,
+                censused_surfaces,
             })
         } else {
             Err(errors)
@@ -465,6 +495,8 @@ fn instrument(row: &toml::Value, index: usize) -> Result<Instrument, Vec<String>
     let baseline = baseline_field(row, &id, &mut errors);
     let negative_control = negative_control_field(row, &id, &mut errors);
 
+    let also_invoked_as = string_list(row, "also_invoked_as");
+
     let mut load_bearing = Vec::new();
     if let Some(toml::Value::Array(rows)) = row.get("load_bearing") {
         for lb in rows {
@@ -509,6 +541,7 @@ fn instrument(row: &toml::Value, index: usize) -> Result<Instrument, Vec<String>
         negative_control,
         runs_in,
         doc,
+        also_invoked_as,
         load_bearing,
     })
 }
@@ -818,18 +851,50 @@ runs_in = ["prepush", "ci:gates"]
 doc = "ARCH_PRINCIPLES.md §3.1"
 "#;
 
+    /// Every fixture needs the declared reach, or `Registry::parse` refuses
+    /// it — which is itself the point of the field.
+    fn with_surfaces(rows: &str) -> String {
+        format!("censused_surfaces = [\".github/workflows/ci.yml\"]\n{rows}")
+    }
+
     fn parse(text: &str) -> Registry {
-        match Registry::parse(text) {
+        match Registry::parse(&with_surfaces(text)) {
             Ok(r) => r,
             Err(e) => panic!("expected a clean parse, got {e:?}"),
         }
     }
 
     fn errors(text: &str) -> Vec<String> {
-        match Registry::parse(text) {
+        match Registry::parse(&with_surfaces(text)) {
             Ok(_) => panic!("expected a refusal, got a clean parse"),
             Err(e) => e,
         }
+    }
+
+    /// A gate whose reach is unstated cannot be reviewed, and an empty reach
+    /// finds nothing while reporting green — the §18.1 shape this whole
+    /// registry exists to end.
+    #[test]
+    fn a_registry_that_declares_no_censused_surfaces_refuses() {
+        let e = match Registry::parse(GOOD) {
+            Ok(_) => panic!("a registry with no declared reach must refuse"),
+            Err(e) => e,
+        };
+        assert!(e.iter().any(|m| m.contains("censused_surfaces")), "{e:?}");
+    }
+
+    #[test]
+    fn an_alias_is_declared_never_inferred() {
+        let text = GOOD.replace(
+            r#"command = "cargo xtask arch-gate""#,
+            "command = \"cargo xtask arch-gate\"\nalso_invoked_as = [\"./target/debug/xtask arch-gate\"]",
+        );
+        assert_eq!(
+            parse(&text).instruments[0].also_invoked_as,
+            vec!["./target/debug/xtask arch-gate".to_string()]
+        );
+        // Absent means absent — nothing is guessed from the command string.
+        assert!(parse(GOOD).instruments[0].also_invoked_as.is_empty());
     }
 
     #[test]

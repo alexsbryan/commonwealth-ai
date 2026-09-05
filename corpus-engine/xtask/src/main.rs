@@ -10,6 +10,7 @@
 //!   cargo xtask layer-gate [--update-baseline|--tighten]  Cargo-declared deps obey quality/ARCH_LAYERS.toml + fan-in ratchet
 //!   cargo xtask lock-gate  [--update-baseline|--tighten]  No NEW duplicate crate versions in Cargo.lock
 //!   cargo xtask env-gate   [--update-baseline|--tighten|--update-doc]  Observed env vars obey quality/env-flags.toml
+//!   cargo xtask instrument-gate                    Every command a quality surface reaches is in quality/instruments.toml
 //!   cargo xtask target-arch [--update-doc|--measure]  quality/TARGET_ARCHITECTURE.md renders from CONCEPTS.toml + ARCH_LAYERS.toml + the graph
 //!
 //! Ratchet contract (uniform across gates): baselines live in
@@ -26,6 +27,7 @@ mod common;
 mod concept_gate;
 mod docs_gate;
 mod env_gate;
+mod instrument_gate;
 mod layer_gate;
 mod layout_gate;
 mod lint_gate;
@@ -52,6 +54,7 @@ fn main() {
         "concept-gate" => concept_gate::run(&args[1..]),
         "api-gate" => api_gate::run(&args[1..]),
         "env-gate" => env_gate::run(&args[1..]),
+        "instrument-gate" => instrument_gate::run(&args[1..]),
         "layer-gate" => layer_gate::run(&args[1..]),
         "layout-gate" => layout_gate::run(&args[1..]),
         "lint-gate" => lint_gate::run(&args[1..]),
