@@ -2505,6 +2505,61 @@ contract or the audit ladder, and
 `the_longform_pivot_changes_the_route_and_not_the_holding` pins that the same
 content at 1,799 and 1,801 characters releases the same holding and differs
 only in `mode` (`single_claim` vs `per_claim`).
+**Value-presence became a VETO on 2026-09-04, and the probe decides**
+(order `grounding-footguns`, the same split 571849a89 made for quotes,
+extended to values). `value_presence.rs` answers "is the specific this answer
+asserts grounded?" for THREE consumers at once — the gate's entity-anchored
+branch (`judge.rs`, to decide), the chaos scorer's `asserted_value_grounded`
+(to measure), and the deep-research containment checks. Until this date a
+deterministic substring test decided BOTH directions, and its own doc stated
+the positive one: "a real corpus token (even mis-roled, or the surname inside a
+full name carrying the asked-for part) is exactly-present and released as best
+effort." That is how the fabrication "Winnie's mother is **Mrs Neale**" — Mrs
+Neale is the charwoman of Brett Street — scored GROUNDED on the chaos corpus,
+and, through `is_honest_absent`, scored HONEST. Now: `value_present_in_chunks`
+may only REFUSE (a value whose tokens appear nowhere is ungrounded, cheaply,
+with no model call), and the positive verdict comes from
+`judge::claim_chunk_support` at `config::grounding_gate_threshold()` — the same
+register and the same threshold the audit pass and the citation stage use, and
+no second threshold is minted. The probe is asked ONCE, against the chunks that
+CARRY the value joined into one passage (which chunks is decided by the same
+veto predicate applied per chunk — one implementation, never two), with the
+claim composed from the question's own frame. **The 18-word role-word stop list
+is deleted**: it existed only to make presence generous enough to say
+"grounded" about a mis-roled value, and the words it was generous about
+(`mrs`, `sir`, `chief`, `inspector`, …) are exactly the ones a mis-roled
+fabrication gets wrong. Measured on the chaos corpus's own paragraphs
+(`svrn bench judge-replay --register chunk_judge`, 3 repeats, identical each
+time): the mother fabrication scores support 0.0045 and "Mrs Neale is the
+charwoman" scores 0.9999 against the SAME evidence — three orders of magnitude
+apart, a separation no substring test can express — while the competence case a
+strict extractive judge used to lose ("Yundt's first name is Karl", against a
+paragraph that only ever writes "Karl Yundt") scores 0.9997. Showing the probe
+the value's whole neighbourhood rather than one chunk is load-bearing and was
+measured: the same fabrication scores 0.2956 and 0.4001 against two single
+chunks that merely mention Mrs Neale near Winnie — both of which RELEASE at tau
+— and 0.0060 against the two together.
+
+**Every fail-open exit names WHY, at one site** (2026-09-04). `judge_failed_open`
+released turns under load and the ledger recorded only that it had happened, so
+the class could not be fixed: the queue shedding the call, a slot mid-restart
+and an unreadable verdict take three different fixes.
+`GroundingDecisionLine::judge_failure` and `grounding_gate.judge_failure` now
+carry `{reason, calls_attempted, calls_answered}` on every action
+`runtime::epistemic::action_is_fail_open` recognises — attached in
+`gate::record_gate_decision`, the funnel that already owns the journal, so a
+future exit that ships unverified cannot forget. `JudgeFailureReason` is a
+closed set derived from a closed set: six variants are `Error` variants matched
+on the ENUM (never sniffed from a message), and two are arithmetic over the
+turn's own call census — `verdict_unparseable` when every judging call answered
+and no verdict was reached, `no_judge_call` when none was attempted. MEASURED
+on this host, 32 turns under a second concurrent `chat ask`: 5 `judge_failed_open`
+exits, **5 of 5 `queue_shed` with zero calls answered**, plus 5 whole turns that
+died at the DRAFT on the same shed. The class is host admission
+(`sovereign-inference::model_slot::acquire_with_queue_gauge`'s priority-blind
+pre-park gate), not the gate — note `d6e13797` records the measurement and why
+no gate-side retry was shipped for it.
+
 **Per-turn STACK ATTRIBUTION — the strip that says which system spent the
 turn (G4, 2026-08-12).** `NATIVE_GROUNDING_ECONOMY.md` §3.4 named G4 ("the
 system can tell what it decided and why") as a function no stage owned, on

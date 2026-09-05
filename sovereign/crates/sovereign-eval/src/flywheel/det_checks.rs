@@ -52,27 +52,14 @@ pub fn gold_match(answer: &str, keywords: &[String]) -> bool {
 /// production checker where sovereign-core is available — this port gates
 /// generation, the original gates export. Keep the two in sync; the parity
 /// tests below pin the behaviours corruption-site checking depends on.
+///
+/// **Synced 2026-09-04 with the veto conversion.** The source dropped its
+/// role-word stop list when presence stopped deciding groundedness and became
+/// a veto, so this port drops it in the same commit — a port that keeps a
+/// rule the original deleted is two implementations of one predicate
+/// disagreeing (ARCH §10.6), and the export path would then abort on cases
+/// this generator had just certified.
 pub fn value_present(value: &str, chunks: &[String]) -> bool {
-    const STOP: &[&str] = &[
-        "mr",
-        "mrs",
-        "miss",
-        "ms",
-        "the",
-        "of",
-        "a",
-        "an",
-        "and",
-        "sir",
-        "dr",
-        "comrade",
-        "chief",
-        "inspector",
-        "lady",
-        "lord",
-        "saint",
-        "st",
-    ];
     let hay: String = chunks
         .join(" ")
         .to_lowercase()
@@ -92,7 +79,7 @@ pub fn value_present(value: &str, chunks: &[String]) -> bool {
     }
     let sig: Vec<String> = value
         .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| w.chars().count() >= 2 && !STOP.contains(&w.to_lowercase().as_str()))
+        .filter(|w| w.chars().count() >= 2)
         .map(|w| w.to_lowercase())
         .collect();
     !sig.is_empty() && sig.iter().all(|w| hay.contains(w.as_str()))
@@ -186,9 +173,15 @@ mod tests {
         ));
     }
 
+    /// The stop list is gone, so a bare honorific is PRESENT — and that is
+    /// the veto's honest answer: "Mr" really is in the text. It grounds
+    /// nothing, because presence no longer grounds anything; the source's
+    /// probe decides. Pinned so this port and the source keep saying the same
+    /// thing about the same string.
     #[test]
-    fn value_present_bare_honorific_cannot_self_ground() {
-        assert!(!value_present("Mr", &ev("Mr Verloc kept a shop")));
+    fn value_present_reads_a_bare_honorific_literally() {
+        assert!(value_present("Mr", &ev("Mr Verloc kept a shop")));
+        assert!(!value_present("Mr", &ev("Verloc kept a shop")));
     }
 
     #[test]

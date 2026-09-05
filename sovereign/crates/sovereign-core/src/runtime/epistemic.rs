@@ -68,7 +68,13 @@ pub(crate) struct EpistemicInputs<'a> {
 /// Actions whose release shipped WITHOUT a completed verification
 /// (judge unavailable / verdict unparseable) — holdings under these
 /// actions are `FailOpen`, per the gate's documented posture.
-fn action_is_fail_open(action: &str) -> bool {
+///
+/// **The one decider for "did this release ship unverified"** (ARCH
+/// §10.6). The gate's journal funnel (`grounding::gate`) asks the same
+/// question to decide which turns must carry a `judge_failure` reason, so
+/// the ledger's FailOpen holdings and the reason on the wire can never
+/// disagree about which turns they are talking about.
+pub(crate) fn action_is_fail_open(action: &str) -> bool {
     matches!(
         action,
         "judge_failed_open" | "retry_released_unverified" | "rewrite_released_unverified"

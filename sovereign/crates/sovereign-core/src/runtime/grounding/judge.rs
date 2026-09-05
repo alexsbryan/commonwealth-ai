@@ -91,7 +91,7 @@ pub(crate) struct GateVerdict {
 /// over one passage) have very different prefill shapes, and a census that
 /// could not tell them apart is the blindness `call_census` exists to end.
 async fn forced_choice_ab(
-    inference: &Arc<dyn InferenceProvider>,
+    inference: &dyn InferenceProvider,
     prompt: &str,
     stable_prefix_len: Option<usize>,
     posture: ShardingPrivacy,
@@ -123,7 +123,7 @@ async fn forced_choice_ab(
         temperature: Some(0.0),
         ..Default::default()
     };
-    match gate_call(&**inference, &req, mechanism).await {
+    match gate_call(inference, &req, mechanism).await {
         Ok(resp) => {
             let m: std::collections::HashMap<String, f64> =
                 serde_json::from_str(resp.text.trim()).ok()?;
@@ -279,26 +279,43 @@ pub(crate) async fn verify_grounding(
     // (a forced-choice judge false-positived an absent "Thomas"; substring can't)
     // and than a gestalt "list the claim's absent specifics" (the frame drowns
     // the one invented token: it missed "Russian" in "the Russian embassy").
-    if entity_anchored {
-        use super::value_presence::{assess_asserted_value, AssertedValue};
-        match assess_asserted_value(&**inference, question, answer, chunks, posture).await {
-            AssertedValue::Grounded(value) => {
-                dbg(&format!(
-                    "value-presence: {value:?} present in corpus → vp=0.0 (release best-effort)"
-                ));
-                return Some(GateVerdict {
-                    violation_prob: 0.0,
-                    outcome: ClaimCheckOutcome::Measured,
-                    claim: Some(claim),
-                    claim_evidence: Vec::new(),
-                });
-            }
-            AssertedValue::Ungrounded(value) => {
+    //
+    // THE VETO IS UNCONDITIONAL; ONLY THE POSITIVE VERDICT IS GATED ON
+    // `entity_anchored` (2026-09-04). Until this date the whole mechanism sat
+    // behind that flag, and the flag is a GAZETTEER LOOKUP:
+    // `question_is_entity_anchored` asks whether the question names an entity
+    // in the corpus's enrichment atlas. A corpus with no atlas can never be
+    // entity-anchored — and `chaos-secret-agent`, the bench that exists to
+    // measure this exact failure, declares `[enrichment] enabled = false` on
+    // purpose (an LLM summary asserted "the Russian agent Vladimir" and broke
+    // the bank's "country never named" premise). So the countermeasure was
+    // structurally off on the corpus built to catch it, and the release it was
+    // built to stop shipped: MEASURED 2026-09-04, `absent-embassy-country`
+    // released "Mr Vladimir is employed by the **Russian** embassy in London"
+    // at `violation_prob 0.2897` — the confirmatory loop below, doing exactly
+    // what the comment above says it does, clearing a partly-true claim at
+    // support 0.71. `entity_anchored` was `false` on all 141 journal rows of
+    // that session.
+    //
+    // Refusing needs no gazetteer. "The answer asserts a specific that appears
+    // nowhere in the evidence" is corpus-agnostic and cheap (one 24-token
+    // extraction plus a substring test), so it runs on every gated turn. What
+    // still needs the flag is the SHORT-CIRCUIT: `Present` returning vp=0.0
+    // skips the confirmatory loop entirely, and that shortcut was calibrated
+    // for in-world questions. Off the flag, `Present` means only "not refused"
+    // and the loop runs as before — no probe call is made, because its verdict
+    // would be discarded (ARCH §7.6: the veto stays in code and may only
+    // refuse).
+    {
+        use super::value_presence::{value_is_supported, value_presence_of, ValuePresence};
+        match value_presence_of(&**inference, question, answer, chunks, posture).await {
+            ValuePresence::Absent(value) => {
                 tracing::info!(
                     target: "grounding_gate",
                     value = %value,
                     claim = %claim.chars().take(90).collect::<String>(),
-                    "value-presence: the answer's specific is absent from the corpus → vp=1.0"
+                    entity_anchored,
+                    "value-presence VETO: the answer's specific is absent from the corpus → vp=1.0"
                 );
                 dbg(&format!(
                     "value-presence: {value:?} absent from corpus → vp=1.0 (blatant confab)"
@@ -310,10 +327,41 @@ pub(crate) async fn verify_grounding(
                     claim_evidence: Vec::new(),
                 });
             }
-            // No checkable value (a decline, or extraction unavailable) — fall
-            // through to the confirmatory loop rather than fail the turn.
-            AssertedValue::NoValue => {
-                dbg("value-presence: no asserted value → confirmatory fallback");
+            ValuePresence::Present(value) if entity_anchored => {
+                match value_is_supported(&**inference, question, &value, chunks, posture).await {
+                    Some(true) => {
+                        dbg(&format!("value-presence: {value:?} supported → vp=0.0"));
+                        return Some(GateVerdict {
+                            violation_prob: 0.0,
+                            outcome: ClaimCheckOutcome::Measured,
+                            claim: Some(claim),
+                            claim_evidence: Vec::new(),
+                        });
+                    }
+                    Some(false) => {
+                        tracing::info!(
+                            target: "grounding_gate",
+                            value = %value,
+                            claim = %claim.chars().take(90).collect::<String>(),
+                            "value-presence: the evidence carries the token and does not support it → vp=1.0"
+                        );
+                        return Some(GateVerdict {
+                            violation_prob: 1.0,
+                            outcome: ClaimCheckOutcome::Measured,
+                            claim: Some(claim),
+                            claim_evidence: Vec::new(),
+                        });
+                    }
+                    // The probe did not answer — could-not-judge, so the
+                    // confirmatory loop below decides rather than this
+                    // mechanism failing the turn on an instrument fault.
+                    None => dbg("value-presence: probe gave no verdict → confirmatory fallback"),
+                }
+            }
+            // Present with no short-circuit, or nothing checkable asserted:
+            // the confirmatory loop decides, exactly as before.
+            ValuePresence::Present(_) | ValuePresence::NoValue => {
+                dbg("value-presence: not refused → confirmatory loop");
             }
         }
     }
@@ -361,7 +409,7 @@ pub(crate) async fn verify_grounding(
     let mut max_support: f64 = 0.0;
     let mut checked = 0usize;
     for (is_extra, c) in judged.into_iter().take(cap) {
-        if let Some(support) = claim_chunk_support(inference, c, &claim, posture).await {
+        if let Some(support) = claim_chunk_support(&**inference, c, &claim, posture).await {
             let effective = if is_extra && support < CLAIM_RESCUE_FLOOR {
                 0.0
             } else {
@@ -406,7 +454,7 @@ pub(crate) async fn verify_grounding(
 /// can never drift — same contract as `extract_claim_list`'s wrapper.
 /// `None` = judge failure (caller decides fail-open vs retry).
 pub(super) async fn claim_chunk_support(
-    inference: &Arc<dyn InferenceProvider>,
+    inference: &dyn InferenceProvider,
     passage: &str,
     claim: &str,
     posture: ShardingPrivacy,

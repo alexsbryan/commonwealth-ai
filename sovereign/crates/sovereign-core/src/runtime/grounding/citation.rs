@@ -447,7 +447,7 @@ async fn verify_pair(
     let support = if none || !quote_present || veto.is_some() {
         None
     } else {
-        super::judge::claim_chunk_support(inference, evidence, &answer, posture).await
+        super::judge::claim_chunk_support(&**inference, evidence, &answer, posture).await
     };
     let judge_unavailable = !none && quote_present && veto.is_none() && support.is_none();
     let violation_prob = support.map(|s| 1.0 - s);

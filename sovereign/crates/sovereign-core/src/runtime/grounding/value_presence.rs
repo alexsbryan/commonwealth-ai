@@ -16,14 +16,41 @@
 //!   * (later) production telemetry / the desktop glassbox, to MONITOR / SHOW.
 //! One notion of "is this asserted value grounded," one implementation.
 //!
-//! Two steps, deliberately split by what each is good at: an LLM extracts the
+//! # Presence VETOES; the probe DECIDES (2026-09-04)
+//!
+//! Three steps, and the middle one may only ever REFUSE. An LLM extracts the
 //! answer's value (a short noun phrase — the one judgment a small model does
-//! reliably), then a DETERMINISTIC substring test decides presence. The split
-//! is load-bearing — a forced-choice judge asked the presence question directly
-//! false-positived an absent "Thomas"; a substring test cannot. And it tests
-//! token-PRESENCE ("is 'Karl' anywhere in the text?" — yes, inside "Karl
-//! Yundt"), not role-INFERENCE ("does the text state his first name is Karl?"),
-//! which is why it keeps competence a strict extractive check would lose.
+//! reliably); a DETERMINISTIC substring test asks whether that value's tokens
+//! appear in the evidence AT ALL, and a value that appears nowhere is refused
+//! on the spot, cheaply, with no model call; only then does
+//! [`judge::claim_chunk_support`] — the calibrated forced-choice register the
+//! audit pass itself runs, at the audit's own tau — decide whether the
+//! evidence actually SUPPORTS the value as the answer to this question.
+//!
+//! Until this change the substring test decided BOTH directions, and its
+//! positive direction was the footgun: its own doc said "a real corpus token
+//! (even mis-roled …) is exactly-present and released as best effort", which
+//! is how a fabricated "Winnie's mother is Mrs Neale" scored GROUNDED —
+//! Mrs Neale is the charwoman of Brett Street, and "Neale" is in the chunks.
+//! Measured on the chaos corpus's own paragraphs with the probe that now
+//! decides (`svrn bench judge-replay --register chunk_judge`, 3 repeats,
+//! identical every time): "Winnie's mother is Mrs Neale" scores support
+//! 0.0045, "Mrs Neale is the charwoman" scores 0.9999 — three orders of
+//! magnitude apart on the SAME evidence, which is the separation a substring
+//! test cannot express at all.
+//!
+//! Competence survives, and that was measured too rather than hoped for:
+//! "Yundt's first name is Karl" against the paragraph that only ever writes
+//! "Karl Yundt" scores 0.9997. The register's own prompt is what does the
+//! work — it asks whether the passage "states or clearly implies" the claim
+//! and says outright that "merely mentioning the people or things involved,
+//! without establishing the claimed connection between them, does NOT count".
+//!
+//! The split is still load-bearing, in the other direction now: a
+//! forced-choice judge asked the presence question DIRECTLY false-positived an
+//! absent "Thomas", so presence is never asked of the model — it is a
+//! substring test, and it is a veto (ARCH §7.6: the exact rule survives in
+//! code, and code may only refuse).
 
 use crate::oicp::ShardingPrivacy;
 use crate::slot_policy::Workload;
@@ -31,6 +58,7 @@ use crate::traits::InferenceProvider;
 use crate::types::{CompletionRequest, Speed};
 
 use super::config::dbg;
+use super::judge::CHUNK_JUDGE_PASSAGE_CHARS;
 
 /// The groundedness of the one specific value an answer asserts.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,8 +71,17 @@ pub enum AssertedValue {
     /// invented from nothing (the qualifier "Russian" in "the Russian embassy",
     /// the invented "Vincent Macx"). Abstain.
     Ungrounded(String),
-    /// No checkable specific was asserted (an abstention, a decline, or a
-    /// discursive answer), or extraction was unavailable — nothing to ground.
+    /// Nothing was decided. Either no checkable specific was asserted (an
+    /// abstention, a decline, a discursive answer), or the assessment could
+    /// not be completed — extraction was unavailable, or the probe returned
+    /// no verdict.
+    ///
+    /// **This is the could-not-judge bucket, not a pass** (ARCH §18.1). Both
+    /// consumers already treat it that way and neither had to change: the
+    /// gate falls through to its confirmatory loop rather than deciding on
+    /// nothing, and the chaos scorer records `grounded: null`, which
+    /// `bench_verdict` routes to `answered_novalue` and the scoreboard
+    /// excludes from the decline rate.
     NoValue,
     // NOTE (2026-06-17): a measured detour. Extending this to check EVERY
     // specific the answer mentions (not just the answer value) exploded the
@@ -68,16 +105,185 @@ pub async fn assess_asserted_value(
     chunks: &[String],
     posture: ShardingPrivacy,
 ) -> AssertedValue {
-    match extract_answer_value(inference, question, answer, posture).await {
-        Some(value) => {
-            if value_present_in_chunks(&value, chunks) {
-                AssertedValue::Grounded(value)
-            } else {
-                AssertedValue::Ungrounded(value)
+    match value_presence_of(inference, question, answer, chunks, posture).await {
+        ValuePresence::NoValue => AssertedValue::NoValue,
+        ValuePresence::Absent(value) => AssertedValue::Ungrounded(value),
+        ValuePresence::Present(value) => {
+            match value_is_supported(inference, question, &value, chunks, posture).await {
+                Some(true) => AssertedValue::Grounded(value),
+                Some(false) => AssertedValue::Ungrounded(value),
+                None => AssertedValue::NoValue,
             }
         }
-        None => AssertedValue::NoValue,
     }
+}
+
+/// What the deterministic veto found. **`Present` is not a verdict** — it is
+/// the absence of a refusal, and only [`value_is_supported`] can turn it into
+/// one.
+///
+/// The two halves are split because they have different costs and different
+/// callers. The veto is one cheap extraction call plus a substring test, and
+/// it applies to EVERY gated turn; the probe is a second model call, needed
+/// only where the mechanism is allowed to return a POSITIVE verdict. A caller
+/// that can only ever refuse must not pay for a verdict it would discard.
+pub(crate) enum ValuePresence {
+    /// No checkable specific was asserted, or extraction was unavailable.
+    NoValue,
+    /// The value's tokens appear NOWHERE in the evidence — invented from
+    /// nothing. Refuse; no probe verdict can license it.
+    Absent(String),
+    /// The value's tokens are in the evidence. That is all this says.
+    Present(String),
+}
+
+/// THE VETO, on its own: one extraction call and a substring test, no probe,
+/// and no verdict about groundedness.
+pub(crate) async fn value_presence_of(
+    inference: &dyn InferenceProvider,
+    question: &str,
+    answer: &str,
+    chunks: &[String],
+    posture: ShardingPrivacy,
+) -> ValuePresence {
+    let Some(value) = extract_answer_value(inference, question, answer, posture).await else {
+        return ValuePresence::NoValue;
+    };
+    if value_present_in_chunks(&value, chunks) {
+        return ValuePresence::Present(value);
+    }
+    tracing::info!(
+        target: "grounding_gate",
+        event = "value_presence",
+        value = %value,
+        decision = "vetoed_absent",
+        "the answer's specific is absent from the evidence"
+    );
+    ValuePresence::Absent(value)
+}
+
+/// THE DECIDER: does the evidence SUPPORT this value as the answer to this
+/// question? A judgement about open text, so it goes to the one register that
+/// already owns it — the audit pass's calibrated forced-choice probe, at the
+/// audit's own threshold. `None` = the probe did not answer.
+///
+/// Only ever asked about a value the veto already found PRESENT. Asking it
+/// about an absent one would let a yes-biased judge license a fabrication,
+/// which is exactly why the veto runs first and may not be overruled.
+pub(crate) async fn value_is_supported(
+    inference: &dyn InferenceProvider,
+    question: &str,
+    value: &str,
+    chunks: &[String],
+    posture: ShardingPrivacy,
+) -> Option<bool> {
+    let (evidence, held, dropped) = value_evidence(value, chunks);
+    let claim = value_claim(question, value);
+    let tau = super::config::grounding_gate_threshold();
+    match super::judge::claim_chunk_support(inference, &evidence, &claim, posture).await {
+        Some(support) => {
+            // THE AUDIT'S OWN COMPARISON, not a second threshold (§10.6):
+            // `verify_grounding` computes `violation_prob = 1 - max_support`
+            // and `gate_answer_inner` releases iff `violation_prob < tau`.
+            let violation_prob = 1.0 - support;
+            let grounded = violation_prob < tau;
+            // ONE glassbox channel for one decision. The `dbg()` mirror
+            // this file used to carry beside every event was the §10.6
+            // smell 571849a89 removed from the citation stage for the same
+            // reason; the structured event carries strictly more, and
+            // `dbg()` still serves the extraction site below, which has no
+            // structured event of its own.
+            tracing::debug!(
+                target: "grounding_gate",
+                event = "value_presence",
+                value = %value,
+                support = format!("{support:.4}").as_str(),
+                violation_prob = format!("{violation_prob:.4}").as_str(),
+                tau,
+                evidence_chunks = held,
+                evidence_dropped = dropped,
+                decision = if grounded { "grounded" } else { "unsupported" },
+                "value-presence probe"
+            );
+            Some(grounded)
+        }
+        // The probe did not answer. That is a fact about the instrument,
+        // never a verdict about the answer — could-not-judge (ARCH §18.1).
+        None => {
+            tracing::warn!(
+                target: "grounding_gate",
+                event = "value_presence",
+                value = %value,
+                decision = "could_not_judge",
+                "the value-support probe returned no verdict"
+            );
+            None
+        }
+    }
+}
+
+/// The claim the probe is asked, built from the question's own frame and the
+/// value the answer offered.
+///
+/// Deterministic on purpose: composing it with a second model call would
+/// double the cost of every entity-anchored turn for a sentence the question
+/// already contains. Measured equivalent to a hand-written natural claim on
+/// the chaos corpus (`judge-replay --register chunk_judge`, 3 repeats):
+/// this framing scores 0.0016 / 0.9999 / 0.9997 on the mother-fabrication /
+/// charwoman-truth / Karl-implied triple where hand-written claims score
+/// 0.0011 / 0.9999 / 0.9998.
+fn value_claim(question: &str, value: &str) -> String {
+    format!(
+        "The answer to the question \"{q}\" is: {value}.",
+        q = question.trim().chars().take(300).collect::<String>(),
+    )
+}
+
+/// The evidence the probe is shown: the chunks that CARRY the value's tokens,
+/// in snapshot order, up to the register's own passage cap.
+///
+/// Returns `(passage, chunks_held, chunks_dropped)`.
+///
+/// Which chunks is decided by the same predicate the veto just ran, applied
+/// one chunk at a time — one implementation of "does this text carry the
+/// value", never two (ARCH §10.6). Showing the probe the value's whole
+/// neighbourhood rather than one chosen chunk is a MEASURED choice: on the
+/// chaos corpus the same fabrication scored 0.2956 and 0.4001 against two
+/// single chunks that merely mention Mrs Neale near Winnie (both would have
+/// released at tau) and 0.0060 against those two chunks TOGETHER — the
+/// register can only apply its "merely mentioning … does NOT count" rule
+/// when it can see what the evidence does and does not establish.
+///
+/// Truncation is reported, never silent (§18.3), and it is safe in one
+/// direction only: less evidence can make the probe refuse, never approve.
+fn value_evidence(value: &str, chunks: &[String]) -> (String, usize, usize) {
+    let carrying: Vec<&String> = chunks
+        .iter()
+        .filter(|c| value_present_in_chunks(value, std::slice::from_ref(*c)))
+        .collect();
+    // The veto passed, so the value's tokens are in the evidence — but they
+    // may be spread across chunks with no single chunk carrying all of them.
+    // Then the honest passage is what the veto itself looked at.
+    let selected: Vec<&String> = if carrying.is_empty() {
+        chunks.iter().collect()
+    } else {
+        carrying
+    };
+    let mut passage = String::new();
+    let mut held = 0usize;
+    for c in &selected {
+        if !passage.is_empty()
+            && passage.chars().count() + c.chars().count() + 2 > CHUNK_JUDGE_PASSAGE_CHARS
+        {
+            break;
+        }
+        if !passage.is_empty() {
+            passage.push_str("\n\n");
+        }
+        passage.push_str(c);
+        held += 1;
+    }
+    (passage, held, selected.len().saturating_sub(held))
 }
 
 /// Extract the value the answer gives in reply to the question — the one step
@@ -153,35 +359,32 @@ async fn extract_answer_value(
     }
 }
 
-/// Deterministic token-presence: are ALL significant words of `value` present
-/// (case-insensitive substring) in the chunks? Honorifics/titles/short function
-/// words are dropped so "Mrs Verloc" matches on "Verloc" and "Sir Ethelred" on
-/// "Ethelred"; a multi-part invention ("Vladimir Stepanovich Haldin") fails
-/// because Stepanovich/Haldin are absent even though Vladimir is present. A value
-/// invented from nothing is exactly-absent; a real corpus token (even mis-roled,
-/// or the surname inside a full name carrying the asked-for part) is exactly-
-/// present and released as best effort.
+/// Deterministic token-presence: are ALL words of `value` (two characters or
+/// more) present, case-insensitively, somewhere in the chunks?
+///
+/// **This is a VETO and it answers a literal question.** It says whether the
+/// value's tokens are in the text — nothing about whether the text SUPPORTS
+/// the value as an answer, which is [`judge::claim_chunk_support`]'s job. A
+/// multi-part invention ("Vladimir Stepanovich Haldin") is exactly-absent
+/// because Stepanovich and Haldin are not there; a value invented from
+/// nothing is exactly-absent; everything else is merely NOT REFUSED.
+///
+/// # The role-word stop list is gone (2026-09-04)
+///
+/// It held `mr / mrs / miss / ms / sir / dr / comrade / chief / inspector /
+/// lady / lord / saint / st` plus five function words, and it existed for one
+/// reason: to make presence generous enough to say GROUNDED for a value whose
+/// ROLE was wrong — "Mrs Verloc" clearing on "Verloc". Presence no longer says
+/// grounded, so the generosity has no job, and the words it was generous about
+/// are exactly the ones a mis-roled fabrication gets wrong. A stop list that
+/// only vetoes needs no role words.
+///
+/// Dropping it makes the veto STRICTER, which is the safe direction for a
+/// veto: it can refuse a little more and can never approve anything. The
+/// verbatim-phrase path below is what keeps a correct title answer ("Chief
+/// Inspector", every word of which the list used to swallow) from being
+/// refused on a technicality.
 pub fn value_present_in_chunks(value: &str, chunks: &[String]) -> bool {
-    const STOP: &[&str] = &[
-        "mr",
-        "mrs",
-        "miss",
-        "ms",
-        "the",
-        "of",
-        "a",
-        "an",
-        "and",
-        "sir",
-        "dr",
-        "comrade",
-        "chief",
-        "inspector",
-        "lady",
-        "lord",
-        "saint",
-        "st",
-    ];
     let hay: String = chunks
         .join(" ")
         .to_lowercase()
@@ -205,7 +408,7 @@ pub fn value_present_in_chunks(value: &str, chunks: &[String]) -> bool {
     }
     let sig: Vec<String> = value
         .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| w.chars().count() >= 2 && !STOP.contains(&w.to_lowercase().as_str()))
+        .filter(|w| w.chars().count() >= 2)
         .map(|w| w.to_lowercase())
         .collect();
     !sig.is_empty() && sig.iter().all(|w| hay.contains(w.as_str()))
@@ -213,7 +416,11 @@ pub fn value_present_in_chunks(value: &str, chunks: &[String]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::value_present_in_chunks;
+    use super::{
+        assess_asserted_value, value_claim, value_evidence, value_present_in_chunks, AssertedValue,
+    };
+    use crate::oicp::ShardingPrivacy;
+    use crate::runtime::grounding::tests::GateMock;
 
     /// One Conrad passage that names Yundt by his full name. The deterministic
     /// presence test must read "Karl" out of "Karl Yundt" — the inference a
@@ -227,56 +434,188 @@ mod tests {
         ]
     }
 
+    /// THE VETO'S TWO HALVES, on the same fixture. What it must still catch is
+    /// the invention; what it must NOT do is pronounce anything grounded.
     #[test]
-    fn releases_implied_correct_value() {
-        // "Karl" lives inside "Karl Yundt" → competence preserved.
-        assert!(value_present_in_chunks("Karl", &chunks()));
+    fn the_veto_still_refuses_a_value_invented_from_nothing() {
+        assert!(!value_present_in_chunks("Vernon", &chunks()));
+        assert!(!value_present_in_chunks("Russian", &chunks()));
+        // Vladimir present, Stepanovich/Haldin not → not all present.
+        let c = vec!["Mr Vladimir spoke to the First Secretary.".to_string()];
+        assert!(!value_present_in_chunks("Vladimir Stepanovich Haldin", &c));
     }
 
+    /// The veto lets through what it cannot refuse — and "lets through" is all
+    /// it means now. Each of these once RELEASED an answer on this function's
+    /// say-so; today each only reaches the probe.
     #[test]
-    fn releases_value_present_but_misroled() {
-        // Best effort, the real bar: a real corpus token, even if the role is
-        // wrong, is not a blatant fabrication.
-        assert!(value_present_in_chunks("Mrs. Verloc", &chunks()));
+    fn the_veto_passes_a_present_token_without_grounding_it() {
+        assert!(value_present_in_chunks("Karl", &chunks())); // inside "Karl Yundt"
+        assert!(value_present_in_chunks("Mrs. Verloc", &chunks())); // mis-role
         assert!(value_present_in_chunks("Sir Ethelred", &chunks()));
         assert!(value_present_in_chunks("Alexander", &chunks()));
     }
 
+    /// The verbatim-phrase path is what survives the stop list's deletion: a
+    /// correct answer that IS a title ("Chief Inspector") appears contiguously
+    /// in the corpus, and every one of its words used to be a stop word.
     #[test]
-    fn catches_value_invented_from_nothing() {
-        // Blatant confabulation: the specific appears nowhere in the evidence.
-        assert!(!value_present_in_chunks("Vernon", &chunks()));
-        assert!(!value_present_in_chunks("Russian", &chunks()));
-    }
-
-    #[test]
-    fn catches_multipart_invention_with_one_real_token() {
-        let c = vec!["Mr Vladimir spoke to the First Secretary.".to_string()];
-        // Vladimir present, Stepanovich/Haldin not → not all present.
-        assert!(!value_present_in_chunks("Vladimir Stepanovich Haldin", &c));
-        // The bare mis-roled token is released.
-        assert!(value_present_in_chunks("Vladimir", &c));
-    }
-
-    #[test]
-    fn honorifics_alone_do_not_count_as_present() {
-        // A value that reduces to only stop-words must not be treated as grounded.
-        assert!(!value_present_in_chunks("Mr.", &chunks()));
-    }
-
-    #[test]
-    fn verbatim_multiword_value_is_grounded() {
-        // B1: a correct answer that IS a title/rank ("Chief Inspector") appears
-        // verbatim inside the corpus ("Chief Inspector Heat") → grounded, even
-        // though every word is a stop-word and the significant-word path would
-        // drop it to empty. The ≥2-word guard keeps a bare honorific out.
+    fn a_verbatim_multiword_value_still_passes_the_veto() {
         let c = vec![
             "Chief Inspector Heat of the Special Crimes Department changed his tone.".to_string(),
         ];
         assert!(value_present_in_chunks("Chief Inspector", &c));
-        // Not present verbatim AND a significant word ("russian") is absent → still caught.
+        // Not present verbatim AND a word ("russian") is absent → refused.
         assert!(!value_present_in_chunks("Russian embassy", &c));
-        // The ≥2-word guard: a bare honorific still does not self-ground.
-        assert!(!value_present_in_chunks("Mr.", &c));
+    }
+
+    // ── The mother / charwoman pair, from the chaos corpus's own prose ──
+    //
+    // `chaos-secret-agent` is Conrad's *The Secret Agent*; these are the
+    // paragraphs that carry "Mrs Neale". The pair is the whole point of the
+    // F1 conversion: "Neale" is in the evidence either way, so PRESENCE
+    // cannot tell the fabrication from the fact and the probe must.
+    //
+    // Live, against the register that now decides (`svrn bench judge-replay
+    // --register chunk_judge`, 3 repeats, identical each time):
+    //   "the answer to 'What is the first name of Winnie's mother?' is Mrs Neale"
+    //        support 0.0045  → violation 0.9955 ≥ tau → UNGROUNDED
+    //   "the answer to 'Who is the charwoman of Brett Street?' is Mrs Neale"
+    //        support 0.9999  → violation 0.0001 <  tau → grounded
+    fn neale_chunks() -> Vec<String> {
+        vec![
+            "Mrs Neale was the charwoman of Brett Street. Victim of her marriage with a \
+             debauched joiner, she was oppressed by the needs of many infant children."
+                .to_string(),
+            "There Mrs Neale was scrubbing the floor. At Stevie's appearance she groaned \
+             lamentably, having observed that he could be induced easily to bestow for the \
+             benefit of her infant children the shilling his sister Winnie presented him \
+             with from time to time."
+                .to_string(),
+        ]
+    }
+
+    const MOTHER_Q: &str = "What is the first name of Winnie's mother?";
+    const CHARWOMAN_Q: &str = "Who is the charwoman of Brett Street?";
+
+    /// THE DECIDER DECIDES. Same value, same evidence, same veto verdict
+    /// (present, both times) — and the outcome follows the PROBE.
+    ///
+    /// FAILS IF the positive-presence branch comes back: presence says
+    /// "Neale is in the chunks" on both halves, so a presence-decided
+    /// assessment returns `Grounded` for both and the first half reddens.
+    #[tokio::test]
+    async fn the_probe_and_not_presence_decides_a_value_it_can_see() {
+        let refusing = GateMock {
+            support: Some(false),
+        };
+        let m = assess_asserted_value(
+            &refusing,
+            MOTHER_Q,
+            "Mrs Neale",
+            &neale_chunks(),
+            ShardingPrivacy::LocalOnly,
+        )
+        .await;
+        assert_eq!(
+            m,
+            AssertedValue::Ungrounded("Mrs Neale".into()),
+            "the evidence carries the token and does not support the claim"
+        );
+
+        let supporting = GateMock {
+            support: Some(true),
+        };
+        let c = assess_asserted_value(
+            &supporting,
+            CHARWOMAN_Q,
+            "Mrs Neale",
+            &neale_chunks(),
+            ShardingPrivacy::LocalOnly,
+        )
+        .await;
+        assert_eq!(
+            c,
+            AssertedValue::Grounded("Mrs Neale".into()),
+            "the same evidence DOES support the charwoman claim"
+        );
+    }
+
+    /// A VETO CANNOT APPROVE. The probe is told to support everything; the
+    /// value is absent; the answer is still ungrounded, and the probe is
+    /// never even asked.
+    ///
+    /// FAILS IF the veto is moved after the probe, or softened into an
+    /// input the probe may overrule.
+    #[tokio::test]
+    async fn an_absent_value_is_refused_even_when_the_probe_approves() {
+        let approving = GateMock {
+            support: Some(true),
+        };
+        let v = assess_asserted_value(
+            &approving,
+            "Which country's embassy employs Mr Vladimir?",
+            "Russian",
+            &neale_chunks(),
+            ShardingPrivacy::LocalOnly,
+        )
+        .await;
+        assert_eq!(v, AssertedValue::Ungrounded("Russian".into()));
+    }
+
+    /// A probe that does not answer is could-not-judge, never a release and
+    /// never a refusal attributed to the answer (ARCH §18.1/§18.3).
+    #[tokio::test]
+    async fn a_probe_that_does_not_answer_grounds_nothing_and_refuses_nothing() {
+        let silent = GateMock { support: None };
+        let v = assess_asserted_value(
+            &silent,
+            CHARWOMAN_Q,
+            "Mrs Neale",
+            &neale_chunks(),
+            ShardingPrivacy::LocalOnly,
+        )
+        .await;
+        assert_eq!(v, AssertedValue::NoValue);
+    }
+
+    /// An answer that asserts no value never reaches either half.
+    #[tokio::test]
+    async fn a_decline_asserts_no_value() {
+        let approving = GateMock {
+            support: Some(true),
+        };
+        let v = assess_asserted_value(
+            &approving,
+            MOTHER_Q,
+            "NONE",
+            &neale_chunks(),
+            ShardingPrivacy::LocalOnly,
+        )
+        .await;
+        assert_eq!(v, AssertedValue::NoValue);
+    }
+
+    /// The probe is shown the chunks that CARRY the value, joined — measured
+    /// better than any single chunk (0.0060 across the pair vs 0.2956 and
+    /// 0.4001 against each alone, both of which would have released).
+    #[test]
+    fn the_probe_sees_every_chunk_that_carries_the_value() {
+        let mut chunks = neale_chunks();
+        chunks.push("The Assistant Commissioner walked to Westminster.".to_string());
+        let (passage, held, dropped) = value_evidence("Mrs Neale", &chunks);
+        assert_eq!((held, dropped), (2, 0), "both Neale chunks, and only those");
+        assert!(passage.contains("charwoman") && passage.contains("scrubbing"));
+        assert!(!passage.contains("Westminster"));
+    }
+
+    /// The claim carries the QUESTION'S frame, not just the value — without
+    /// it the probe is asked whether a passage supports the bare string
+    /// "Mrs Neale", which every one of these chunks does.
+    #[test]
+    fn the_claim_carries_the_questions_frame() {
+        let c = value_claim(MOTHER_Q, "Mrs Neale");
+        assert!(c.contains("first name of Winnie's mother"), "{c}");
+        assert!(c.contains("Mrs Neale"), "{c}");
     }
 }

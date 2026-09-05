@@ -34,7 +34,7 @@ pub async fn claim_chunk_support(
     claim: &str,
     posture: crate::oicp::ShardingPrivacy,
 ) -> Option<f64> {
-    judge::claim_chunk_support(inference, passage, claim, posture).await
+    judge::claim_chunk_support(&**inference, passage, claim, posture).await
 }
 
 /// The gate's JOINT per-claim register, exported for the judge-replay

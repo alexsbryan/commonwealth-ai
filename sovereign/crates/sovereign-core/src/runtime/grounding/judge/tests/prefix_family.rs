@@ -227,7 +227,7 @@ async fn the_gate_shares_one_prefix_family() {
     // makes the assertion real. Its prompt is a single passage carrying no
     // family boundary, so it is excluded from the prefix loop and checked
     // only for the system turn.
-    claim_chunk_support(&inf, &leaves[1], "Babbage designed it.", posture).await;
+    claim_chunk_support(&*inf, &leaves[1], "Babbage designed it.", posture).await;
 
     let all = cap.0.lock().unwrap();
     assert_eq!(all.len(), 3, "two claim checks and one chunk check");

@@ -493,7 +493,7 @@ pub async fn claim_violation_joint(
     let family = EvidenceFamily::new(&chunks[..split]);
     let (prompt, stable_prefix_len) = family.claim_prompt(&chunks[split..seen], claim);
     let (a, b) = forced_choice_ab(
-        inference,
+        &**inference,
         &prompt,
         stable_prefix_len,
         posture,

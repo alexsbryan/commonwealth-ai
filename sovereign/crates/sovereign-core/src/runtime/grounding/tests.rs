@@ -216,6 +216,35 @@ impl crate::traits::InferenceProvider for GateMock {
                 // Not a distribution: the judge did not answer.
                 None => "I cannot judge this.".to_string(),
             }
+        } else if request
+            .prompt
+            .contains("Reply with only the specific value the ANSWER gives")
+        {
+            // The value extractor (`value_presence::extract_answer_value`).
+            // The mock ECHOES the answer when the answer IS a short value,
+            // and answers NONE otherwise — a test then writes the value it
+            // wants by writing the answer, and nothing here has to be kept
+            // in step with a second field.
+            //
+            // The ≤3-word rule is what makes it a faithful stand-in rather
+            // than a convenient one. The real extractor is asked for "the
+            // specific value … not the surrounding sentence" and returns
+            // NONE for a discursive answer; a mock that hands back a whole
+            // sentence as "the value" would put function words through a
+            // substring test that no real extraction ever produces.
+            let echoed = request
+                .prompt
+                .split("ANSWER: ")
+                .nth(1)
+                .and_then(|t| t.split("\n\n").next())
+                .unwrap_or("NONE")
+                .trim()
+                .to_string();
+            if echoed.split_whitespace().count() <= 3 {
+                echoed
+            } else {
+                "NONE".to_string()
+            }
         } else if request.prompt.contains("single central factual claim") {
             "The shop is located on Crescent Lane.".to_string()
         } else if request.prompt.contains("List the SPECIFIC factual claims") {
@@ -1068,6 +1097,75 @@ async fn verify_only_supported_claim_releases() {
     assert_eq!(outcome.answer.text(), draft);
 }
 
+/// THE EMBASSY DEFECT (2026-09-04, order `grounding-footguns`). A turn on a
+/// corpus with NO enrichment atlas is never `entity_anchored`
+/// (`question_is_entity_anchored` is a gazetteer lookup), and until this date
+/// the whole value-presence mechanism sat behind that flag — so the answer's
+/// asserted specific was never checked and the confirmatory judge, which has a
+/// documented yes-bias on partly-true claims, cleared it.
+///
+/// Measured on `chaos-secret-agent` (which declares `[enrichment] enabled =
+/// false` on purpose): `absent-embassy-country` released "Mr Vladimir is
+/// employed by the **Russian** embassy in London" at `violation_prob 0.2897`
+/// while the bench's own oracle scored `asserted_value_grounded: false`.
+/// `entity_anchored` was `false` on all 141 journal rows of that session.
+///
+/// Here the judge is told to support EVERYTHING, and the veto still refuses:
+/// a veto cannot be overruled by the mechanism it guards.
+///
+/// FAILS IF the veto goes back behind `entity_anchored` — the fixture's
+/// `entity_anchored` is `false`, so the mechanism would not run and the
+/// approving judge would release the fabrication.
+#[tokio::test]
+async fn an_absent_specific_is_refused_on_a_corpus_with_no_gazetteer() {
+    let approving: Arc<dyn crate::traits::InferenceProvider> = Arc::new(GateMock {
+        support: Some(true),
+    });
+    let profile = GateSurface::Refinement.profile();
+    let evidence = refinement_evidence();
+    assert!(
+        !evidence.entity_anchored,
+        "the fixture must be the un-gazetteered case this test is about"
+    );
+
+    // The fabrication: a specific that appears nowhere in "The shop sits on
+    // Harbour Row, by the quay."
+    let out = gate_answer(
+        &approving,
+        "Which street is the chandlery on?",
+        "Crescent Lane.".to_string(),
+        &evidence,
+        &CompletionRequest::default(),
+        &profile,
+    )
+    .await;
+    let action = out.meta.get("action").and_then(|a| a.as_str());
+    assert!(
+        action.is_some_and(|a| a.starts_with("abstained")),
+        "an absent specific must not release even when the judge approves; got {action:?}, meta={}",
+        out.meta
+    );
+
+    // The control, same fixture and same approving judge: a specific the
+    // evidence DOES carry is not refused, so the veto is not simply refusing
+    // everything.
+    let out = gate_answer(
+        &approving,
+        "Which street is the shop on?",
+        "Harbour Row.".to_string(),
+        &evidence,
+        &CompletionRequest::default(),
+        &profile,
+    )
+    .await;
+    assert_eq!(
+        out.meta.get("action").and_then(|a| a.as_str()),
+        Some("released"),
+        "a present specific still releases; meta={}",
+        out.meta
+    );
+}
+
 fn native_verdict(
     decision: sovereign_contracts::types::GroundingDecision,
     answerability: f32,
@@ -1663,9 +1761,12 @@ impl crate::traits::InferenceProvider for LadderMock {
         let text = if forced_choice {
             self.judge_calls.fetch_add(1, Ordering::SeqCst);
             if self.judges_fail {
-                return Err(Error::NotImplemented(
-                    "host busy: ~75850 ms predicted wait at queue position 1".into(),
-                ));
+                // The STRUCTURED shed the admission queue really returns,
+                // not prose that reads like one: the fail-open reason is
+                // classified off the error VARIANT, so a mock that fakes
+                // a shed with `NotImplemented("host busy: …")` would prove
+                // the classifier works on a case production never sends.
+                return Err(Error::queue_shed(1, 75_850));
             }
             r#"{"A": 0.98, "B": 0.02}"#.to_string()
         } else if p.contains("List the SPECIFIC factual claims") {
@@ -1808,6 +1909,26 @@ async fn unjudged_claims_exit_judge_failed_open_never_released() {
         6,
         "each claim was offered to the judge exactly once"
     );
+    // F2(a): a fail-open exit that does not say WHY cannot be fixed. The
+    // reason is classified off the error VARIANT the provider returned
+    // (`Error::QueueShed`), and the two counts make it checkable: eight
+    // judging calls (one claim-list extraction + six per-claim judges +
+    // the holistic specifics scan), two of them answered — the two that
+    // are not forced-choice.
+    let jf = outcome.meta.get("judge_failure").unwrap_or_else(|| {
+        panic!(
+            "every judge_failed_open exit carries a reason; meta={}",
+            outcome.meta
+        )
+    });
+    assert_eq!(
+        jf.get("reason").and_then(|r| r.as_str()),
+        Some("queue_shed"),
+        "the admission queue shed the calls and the ledger must name that, not \
+         'the judge failed'; judge_failure={jf}"
+    );
+    assert_eq!(jf.get("calls_attempted").and_then(|v| v.as_u64()), Some(8));
+    assert_eq!(jf.get("calls_answered").and_then(|v| v.as_u64()), Some(2));
 }
 
 /// CHANGE 3'S REGRESSION GUARD (issue #57, 2026-09-02). `claims x corpora`

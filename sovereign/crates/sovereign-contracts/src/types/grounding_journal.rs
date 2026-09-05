@@ -238,6 +238,111 @@ pub struct GateCallRow {
     pub start_offset_ms: u64,
 }
 
+/// WHY a gate turn ended without a judge verdict.
+///
+/// **A closed set derived from a closed set** (ARCH §2.1). Every variant
+/// but the last two is one `sovereign_contracts::Error` variant, matched
+/// on the ENUM — not sniffed out of a message string, which would be the
+/// §2.4 keyword classifier this repo keeps deleting. The last two are
+/// arithmetic over the turn's own call census and cannot come from an
+/// error at all.
+///
+/// # Why the reason and not just the count
+///
+/// `judge_failed_open` released turns under load and the ledger said only
+/// that it had happened. The three candidate causes — the admission queue
+/// shed the call, the slot was mid-restart, the verdict came back
+/// unreadable — take three different fixes, so "how often" was never
+/// enough to act on and tuning without naming the owner is the
+/// mole-whacking ARCH §0 forbids.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum JudgeFailureReason {
+    /// The host refused the call rather than queue it (`Error::QueueShed`)
+    /// — the load case, and the only one a priority or a retry can fix.
+    QueueShed,
+    /// A compute slot was unreachable: warming, mid-restart, or gone
+    /// (`Error::ComputeUnavailable`).
+    ComputeUnavailable,
+    /// The judge's model was not resident (`Error::ModelNotLoaded`).
+    ModelNotLoaded,
+    /// No slot or peer could be selected at all (`Error::Routing`).
+    Routing,
+    /// The backend failed mid-request (`Error::Inference`) — transport,
+    /// HTTP status, a dropped connection.
+    Inference,
+    /// The provider returned some other error. Named rather than folded
+    /// into `Inference`, so a new failure class shows up as itself.
+    ProviderOther,
+    /// EVERY judge call came back `Ok` and the verdict still could not be
+    /// read — a parse gap, not an availability failure. Derived from the
+    /// census: `calls_answered == calls_attempted > 0`.
+    VerdictUnparseable,
+    /// The exit fell open without any judging call being attempted at all
+    /// (`calls_attempted == 0`).
+    NoJudgeCall,
+}
+
+impl JudgeFailureReason {
+    /// Classify one provider failure by the error's VARIANT.
+    ///
+    /// The match is exhaustive over the shapes a judge call can return, so
+    /// a new `Error` variant that starts reaching the gate lands in
+    /// `ProviderOther` and is visible as itself rather than being silently
+    /// absorbed into a neighbour (ARCH §18.3).
+    #[must_use]
+    pub fn from_error(e: &crate::error::Error) -> Self {
+        use crate::error::Error;
+        match e {
+            Error::QueueShed { .. } => JudgeFailureReason::QueueShed,
+            Error::ComputeUnavailable { .. } => JudgeFailureReason::ComputeUnavailable,
+            Error::ModelNotLoaded(_) => JudgeFailureReason::ModelNotLoaded,
+            Error::Routing(_) => JudgeFailureReason::Routing,
+            Error::Inference(_) => JudgeFailureReason::Inference,
+            _ => JudgeFailureReason::ProviderOther,
+        }
+    }
+
+    /// The word the reader sees. One name per reason (ARCH §10.6).
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            JudgeFailureReason::QueueShed => "queue_shed",
+            JudgeFailureReason::ComputeUnavailable => "compute_unavailable",
+            JudgeFailureReason::ModelNotLoaded => "model_not_loaded",
+            JudgeFailureReason::Routing => "routing",
+            JudgeFailureReason::Inference => "inference",
+            JudgeFailureReason::ProviderOther => "provider_other",
+            JudgeFailureReason::VerdictUnparseable => "verdict_unparseable",
+            JudgeFailureReason::NoJudgeCall => "no_judge_call",
+        }
+    }
+}
+
+/// Why a `judge_failed_open` turn shipped unverified, with the two counts
+/// that make the reason checkable rather than asserted.
+///
+/// **Counts and a closed-set token, like everything else on this line.**
+/// The provider's own message is deliberately NOT here: it is free text
+/// from a subsystem this struct does not control, and this line is
+/// metadata-only by construction. The message goes to the
+/// `grounding_gate` tracing event at the call site instead.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct JudgeFailure {
+    /// Which of the closed reasons this turn hit. When several calls
+    /// failed for different reasons, the FIRST failure's reason — the one
+    /// that started the cascade.
+    pub reason: JudgeFailureReason,
+    /// Judging calls this turn issued (extraction, per-claim, chunk,
+    /// scan, batched). Retry/rewrite/surgery calls are synthesis, not
+    /// judgement, and are excluded.
+    pub calls_attempted: u32,
+    /// How many of those returned `Ok`. `attempted - answered` is the
+    /// number the provider refused; equality with a non-zero attempted
+    /// count is what makes `VerdictUnparseable` derivable.
+    pub calls_answered: u32,
+}
+
 /// One evidence handle the gate judged — enough to re-fetch the exact
 /// chunk from the corpus at mining time. Identity only, never text.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -330,6 +435,16 @@ pub struct GroundingDecisionLine {
     /// could-not-judge, not passed).
     #[serde(default)]
     pub calls: Vec<GateCallRow>,
+    /// Why this turn shipped without a verdict, on the exits that did.
+    ///
+    /// `Some` exactly when `action` is one of the fail-open actions
+    /// (`judge_failed_open`, `retry_released_unverified`,
+    /// `rewrite_released_unverified`) — those releases are the ones ARCH
+    /// §18.3 calls an `Err` collapsed into a success shape, and until this
+    /// field they carried no cause at all. `None` on every other action:
+    /// there was nothing to explain.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub judge_failure: Option<JudgeFailure>,
 }
 
 impl GroundingDecisionLine {
@@ -354,6 +469,7 @@ impl GroundingDecisionLine {
             top_similarity: None,
             gate_ms,
             calls: Vec::new(),
+            judge_failure: None,
         }
     }
 }
