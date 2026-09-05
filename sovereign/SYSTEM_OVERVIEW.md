@@ -4691,7 +4691,7 @@ named rather than silently totalled.
 
 **One BODY has a ceiling; convergence no longer does** (measured 2026-09-04,
 cw-lift rung 2a; chunked by rung 2f the same day —
-`commonwealth-api/tests/rail_e2e.rs` §"the convergence ceiling, and the budget
+`commonwealth-api/tests/rail_e2e/ceiling.rs` §"the convergence ceiling, and the budget
 that ended it", plus the loop's own tests in
 `sovereign-mesh/src/ring_sync.rs`). The receiver caps a request at
 `MAX_REQUEST_BODY_BYTES` = 8 MiB (`server.rs:40`), so the per-body figure is in

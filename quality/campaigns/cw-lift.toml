@@ -633,7 +633,7 @@ status       = "open"
 # crates cite it, including two of the mirrors' own justifications.
 #
 # THE TESTS DO NOT TEST THIS: sovereign-mesh/src/ring_sync.rs has ZERO tests in
-# 251 lines; rail_e2e.rs:471-496 drives both sides with serde_json::Value (a
+# 251 lines; rail_e2e/main.rs:471-496 drives both sides with serde_json::Value (a
 # third untyped copy) under a doc comment claiming it mirrors the mesh loop
 # (§7.2, prose not test); model_fetch.rs's spawn_test_server is a hand-rolled
 # replica of the CLIENT's own types citing a circular dep that does not exist.

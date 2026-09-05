@@ -13,7 +13,7 @@
 //! An example rather than a test because a 50k-op sweep is ~40 s and every
 //! number here is a CONSTANT in N: the curve's shape is settled, and what a
 //! test can usefully pin (the chunk size, and that convergence outruns it) is
-//! pinned in `tests/rail_e2e.rs` §"the convergence ceiling, and the budget
+//! pinned in `tests/rail_e2e/ceiling.rs` §"the convergence ceiling, and the budget
 //! that ended it". Precedent for the target kind:
 //! `commonwealth-transport/examples/tunnel_bench.rs`.
 //!
