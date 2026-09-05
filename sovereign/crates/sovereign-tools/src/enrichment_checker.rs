@@ -5,15 +5,15 @@
 //! actually leaves behind and the `_enrichment_checkpoint.json` resume state.
 //!
 //! **What "a field model was built here" means changed on 2026-09-05 (ei-7b).**
-//! The pipeline used to publish `field_skeleton.json` beside the index; it now
-//! publishes `Question` and `Position` atoms into the corpus atlas. So the
-//! check below accepts EITHER signal: the `field_questions` LanceDB tables the
-//! v1 pipeline wrote, or an atlas whose census reports `Question` atoms. A
-//! corpus enriched before the port keeps passing on the first; one enriched
-//! after passes on the second. Requiring only the old signal would have turned
-//! every newly-enriched corpus into a `LowEnrichmentCoverage` issue reporting
-//! 0% coverage for a corpus that is fully enriched — a false alarm that reads
-//! exactly like a real one.
+//! The pipeline used to publish `field_skeleton.json` beside the index; an
+//! `AtlasAtoms` domain now publishes `Question` and `Position` atoms into the
+//! corpus atlas instead. So the check below accepts EITHER signal: the
+//! `field_questions` LanceDB tables, or a field model
+//! `field_atoms::load_field_model` can read — which is the atlas when the
+//! corpus has been migrated and the v1 file when it has not. Requiring only
+//! the old signal would have turned every newly-enriched corpus into a
+//! `LowEnrichmentCoverage` issue reporting 0% coverage for a corpus that is
+//! fully enriched — a false alarm that reads exactly like a real one.
 //!
 //! It looks at TWO sets of directories, because the corpora that failed
 //! hardest are the ones the normal listing cannot see:
@@ -117,7 +117,7 @@ impl HealthCheckable for EnrichmentChecker {
                 // Either signal counts as "the field model was built": the v1
                 // LanceDB tables, or field-model atoms in the atlas (ei-7b).
                 let has_field_model =
-                    index.has_field_model_tables().await || atlas_has_field_model(&index);
+                    index.has_field_model_tables().await || has_readable_field_model(&index);
 
                 if !has_field_model {
                     // No field model — enrichment was enabled but never completed.
@@ -260,39 +260,16 @@ mod tests {
     }
 }
 
-/// True when this corpus's atlas carries the atoms the field-model pipeline
-/// publishes (ei-7b).
+/// True when this corpus has a field model the ambient digest can read
+/// (ei-7b).
 ///
-/// Reads the atlas's own census (`_summary.json`) when it is CURRENT for
-/// `atoms.json`, and falls through to the atoms themselves when it is absent or
-/// stale — a missing census is not evidence of a missing field model (§18.3).
-fn atlas_has_field_model(index: &CorpusIndex) -> bool {
-    use corpus_engine::enrichment::atlas::atoms::AtomType;
-    let atlas_dir = index
-        .path()
-        .join(corpus_engine::enrichment::atlas::ATLAS_DIRNAME);
-    if let Some(census) = corpus_engine::enrichment::atlas::read_current_atlas_summary(&atlas_dir) {
-        return census
-            .atom_counts
-            .get(&AtomType::Question)
-            .copied()
-            .unwrap_or(0)
-            > 0;
-    }
-    match corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir) {
-        Ok(file) => !corpus_engine::enrichment::field_atoms::skeleton_from_atoms(
-            index.corpus_id(),
-            &file.atoms,
-        )
-        .is_empty(),
-        Err(e) => {
-            tracing::debug!(
-                corpus = %index.corpus_id(),
-                atlas_dir = %atlas_dir.display(),
-                error = %e,
-                "enrichment check: no readable atlas — field-model atoms unknown"
-            );
-            false
-        }
-    }
+/// Delegates to `field_atoms::load_field_model` — THE accessor for that
+/// question (ARCH §10.6) — rather than re-deriving "does this atlas carry
+/// field-model atoms" here. That matters because the accessor also carries the
+/// v1-file fallback: a corpus enriched before the port still has a field
+/// model, and a checker that only looked at the atlas would report 0%
+/// enrichment coverage for every one of them.
+fn has_readable_field_model(index: &CorpusIndex) -> bool {
+    corpus_engine::enrichment::field_atoms::load_field_model(&index.path(), index.corpus_id())
+        .is_some()
 }

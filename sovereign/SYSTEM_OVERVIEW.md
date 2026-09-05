@@ -1375,7 +1375,19 @@ means one thing.
   `enrichment/field_atoms.rs` is the whole port: `skeleton_to_atoms` on the
   write side, `skeleton_from_atoms` on the read side, `publish_to_atlas` as
   the one write path both the pipeline and the one-shot
-  `svrn enrich field-atoms <corpus> [--into <corpus>]` migration go through.
+  `svrn enrich field-atoms <corpus> [--into <corpus>]` migration go through,
+  and `load_field_model` as the ONE accessor for where a corpus's field model
+  lives — the atlas when it carries one, `field_skeleton.json` as a MIGRATION
+  FALLBACK when it does not, `None` when neither. That fallback is why the
+  port can land without taking a digest dark: `sep` still carries its 549
+  canonical questions in the v1 file and has an EMPTY atlas, so an atlas-only
+  reader would silently stop splicing its Field guide. **Which source a corpus
+  serves from is a DATA choice** — run `svrn enrich field-atoms <corpus>` and
+  it moves, with no code or config change — and the `retrieval_audit` line
+  reports `from_atlas` and `from_legacy_file` separately, because "the digest
+  fired" and "the digest fired off an un-migrated file" are different facts.
+  `the_atlas_wins_the_v1_file_is_the_fallback_and_neither_is_none` pins all
+  three arms.
   There is NO second renderer — `skeleton_from_atoms` rebuilds the
   `FieldSkeleton` view and the existing `FieldSkeleton::render_landscape` does
   the rest, with the digest text pinned byte-identical across the two sources
@@ -1397,9 +1409,9 @@ means one thing.
   `load_field_skeleton` so an interrupted pre-port run still resumes and a
   `JsonAndLance` domain still reads its own artifact).
   `EnrichmentChecker` accepts EITHER signal as "a field model was built here":
-  the v1 `field_questions` LanceDB tables, or an atlas whose census reports
-  `Question` atoms — requiring only the old one would have reported 0%
-  coverage for every corpus enriched after the port. Fields with no home in
+  the v1 `field_questions` LanceDB tables, or a field model `load_field_model`
+  can read — requiring only the old one would have reported 0% coverage for
+  every corpus enriched after the port. Fields with no home in
   the atom vocabulary (position proponents, cluster ids, centroid chunk ids,
   discovery confidence, `primary_entries`) are dropped by the projection and
   named in `field_atoms`'s module doc; none is read by the digest, and all are

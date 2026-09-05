@@ -1,0 +1,28 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+Projecting 'sep' field skeleton (549 canonical questions, 0 open) into 'ei7b-fieldguide' atlas…
+[2m2026-09-05T17:49:47.066539Z[0m [32m INFO[0m field model: published skeleton atoms into the atlas [3matlas_dir[0m[2m=[0m/home/alexbryan/.sovereign/indexes/ei7b-fieldguide/atlas [3mprojected[0m[2m=[0m1308 [3mwritten[0m[2m=[0m1308 [3malready_present[0m[2m=[0m0 [3matoms_before[0m[2m=[0m0
+  1308 atoms projected -> 1308 written, 0 already present (atlas held 0 before)
+  digest: identical to the v1 file's (372 chars)
+
+--- digest from field_skeleton.json ---
+Field guide — sep:
+
+  Settled concerns:
+    — Do the EPR/B correlations imply non-locality and what is the exact nature of this non-locality?
+    — What is the status of the view: actualism?
+    — What is the status of the view: naturalist interaction theory?
+    — What is the status of the view: philosophy of art?
+    — What is the status of the view: cognitivist tradition?
+
+
+--- digest from the atlas atoms ---
+Field guide — ei7b-fieldguide:
+
+  Settled concerns:
+    — Do the EPR/B correlations imply non-locality and what is the exact nature of this non-locality?
+    — What is the status of the view: actualism?
+    — What is the status of the view: naturalist interaction theory?
+    — What is the status of the view: philosophy of art?
+    — What is the status of the view: cognitivist tradition?
+
+

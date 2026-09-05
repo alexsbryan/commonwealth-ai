@@ -458,6 +458,119 @@ pub fn publish_to_atlas(
     Ok(report)
 }
 
+/// Where a corpus's field model was read from. Printed and traced, never
+/// inferred: "the digest is empty" and "the digest came from the legacy file"
+/// are different facts and an operator has to be able to tell them apart
+/// (ARCH §18.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FieldModelSource {
+    /// `atlas/atoms.json` — the ported shape.
+    Atlas,
+    /// `field_skeleton.json` — a corpus enriched before ei-7b whose atoms have
+    /// not been published yet. Run `svrn enrich field-atoms <corpus>` to move
+    /// it.
+    LegacyFile,
+}
+
+impl FieldModelSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            FieldModelSource::Atlas => "atlas",
+            FieldModelSource::LegacyFile => "legacy_file",
+        }
+    }
+}
+
+/// Load a corpus's field model, from wherever it actually is.
+///
+/// THE ONE ACCESSOR for that question (ARCH §10.6). `turn_prepass`'s ambient
+/// digest is its caller today; the KnowledgeView manager is the next one when
+/// its reader is ported.
+///
+/// Precedence, and why it is this way round:
+///
+/// 1. **The atlas**, when it carries canonical questions. The ported shape
+///    wins wherever it exists, so migrating a corpus is the whole switch and
+///    nothing has to be turned off afterwards.
+/// 2. **`field_skeleton.json`**, when the atlas has no field model and the
+///    v1 file is still on disk. This is a MIGRATION FALLBACK and it is the
+///    reason the port can land without taking a corpus's digest dark: `sep`
+///    carries 549 canonical questions in that file and an EMPTY atlas, so an
+///    atlas-only reader would silently stop splicing its Field guide. Which
+///    source a corpus uses is therefore a DATA choice — run
+///    `svrn enrich field-atoms <corpus>` and it moves — not a code or config
+///    one.
+/// 3. **`None`** when neither has a field model. The caller splices nothing.
+///
+/// Cost. Reading a whole `atlas/atoms.json` on every turn is a much bigger
+/// parse than the v1 file was on a large atlas, so the atlas's own census
+/// (`_summary.json`, written by the atlas writer) is consulted first and the
+/// atlas is skipped without being read when it reports zero `Question` atoms.
+/// A census that is ABSENT or STALE is NOT read as "no questions" — that falls
+/// through to the full read, which is correct and merely slower.
+pub fn load_field_model(
+    index_dir: &std::path::Path,
+    corpus_id: &str,
+) -> Option<(FieldSkeleton, FieldModelSource)> {
+    use super::atlas::atoms::AtomType;
+    use super::atlas::{read_atlas_atoms, read_current_atlas_summary, ATLAS_DIRNAME};
+
+    let atlas_dir = index_dir.join(ATLAS_DIRNAME);
+    let census_says_none = read_current_atlas_summary(&atlas_dir)
+        .is_some_and(|c| c.atom_counts.get(&AtomType::Question).copied().unwrap_or(0) == 0);
+    if !census_says_none {
+        match read_atlas_atoms(&atlas_dir) {
+            Ok(file) => {
+                let view = skeleton_from_atoms(corpus_id, &file.atoms);
+                if !view.is_empty() {
+                    return Some((view, FieldModelSource::Atlas));
+                }
+            }
+            Err(e) => {
+                tracing::debug!(
+                    corpus = %corpus_id,
+                    atlas_dir = %atlas_dir.display(),
+                    error = %e,
+                    "field model: no readable atlas — falling back to the v1 file if there is one"
+                );
+            }
+        }
+    }
+
+    let legacy = index_dir.join(LEGACY_ARTIFACT);
+    if !legacy.exists() {
+        return None;
+    }
+    match std::fs::read_to_string(&legacy)
+        .map_err(|e| e.to_string())
+        .and_then(|raw| serde_json::from_str::<FieldSkeleton>(&raw).map_err(|e| e.to_string()))
+    {
+        Ok(skel) if !skel.is_empty() => {
+            tracing::debug!(
+                corpus = %corpus_id,
+                questions = skel.canonical_questions.len(),
+                "field model: read from the v1 file — this corpus has not been migrated \
+                 (run `svrn enrich field-atoms` to publish its atoms)"
+            );
+            Some((skel, FieldModelSource::LegacyFile))
+        }
+        Ok(_) => None,
+        Err(e) => {
+            tracing::warn!(
+                corpus = %corpus_id,
+                path = %legacy.display(),
+                error = %e,
+                "field model: v1 file present but unreadable — reporting no field model"
+            );
+            None
+        }
+    }
+}
+
+/// The pre-ei-7b artifact name. One spelling, here, so the fallback and the
+/// index accessor cannot disagree about which file they mean.
+pub const LEGACY_ARTIFACT: &str = crate::index::enrichment::FIELD_SKELETON_FILENAME;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -726,6 +839,49 @@ mod tests {
                 .unwrap_or(0)
                 > 0
         );
+    }
+
+    /// The precedence `load_field_model` implements, all three arms, on the
+    /// same fixture. This is the merge precondition in a test: a corpus that
+    /// has not been migrated must NOT lose its digest, and one that has must
+    /// serve from the atlas rather than from a file that is now stale.
+    #[test]
+    fn the_atlas_wins_the_v1_file_is_the_fallback_and_neither_is_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let index = dir.path();
+        let skel = skeleton();
+        let expected = skel.render_landscape(HEADING, BUDGET);
+
+        // 3. Neither.
+        assert!(load_field_model(index, "sep").is_none());
+
+        // 2. The v1 file alone — the un-migrated corpus, e.g. `sep` today.
+        std::fs::write(
+            index.join(LEGACY_ARTIFACT),
+            serde_json::to_string(&skel).unwrap(),
+        )
+        .unwrap();
+        let (view, source) = load_field_model(index, "sep").expect("the v1 file must still serve");
+        assert_eq!(source, FieldModelSource::LegacyFile);
+        assert_eq!(view.render_landscape(HEADING, BUDGET), expected);
+
+        // 1. Both — the atlas wins, so migrating a corpus is the whole switch
+        //    and the stale file does not have to be deleted to take effect.
+        publish_to_atlas(&index.join("atlas"), &skel).unwrap();
+        let (view, source) = load_field_model(index, "sep").expect("the atlas must serve");
+        assert_eq!(source, FieldModelSource::Atlas);
+        assert_eq!(view.render_landscape(HEADING, BUDGET), expected);
+        assert_eq!(view.extraction_method, ATOM_SOURCED_METHOD);
+    }
+
+    /// An unreadable v1 file is reported as no field model, never as an empty
+    /// one — a truncated file and a corpus with nothing to say must not look
+    /// the same to the caller (ARCH §18.3).
+    #[test]
+    fn a_corrupt_v1_file_is_an_absence_not_an_empty_digest() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(LEGACY_ARTIFACT), b"{\"canonical_q").unwrap();
+        assert!(load_field_model(dir.path(), "sep").is_none());
     }
 
     /// A field-model-only corpus has no atlas pass to have created one, so the

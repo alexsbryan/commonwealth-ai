@@ -3,7 +3,7 @@
 //! with IVF-PQ vector search and Tantivy full-text search.
 
 mod create;
-mod enrichment;
+pub(crate) mod enrichment;
 mod evidence;
 mod maintain;
 mod provenance;

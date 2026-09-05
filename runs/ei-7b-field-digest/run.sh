@@ -26,10 +26,16 @@
 # same three indices. A delta here cannot be an embedding or an index
 # difference.
 #
-# THE ARMS differ in ONE thing: whether the corpus's atlas carries field-model
-# atoms.
-#   ARM none  : corpus `ei7b-plain`      — empty atlas, so no digest is spliced
-#   ARM atoms : corpus `ei7b-fieldguide` — same bytes + `enrich field-atoms`
+# THE ARMS are the two SOURCES `field_atoms::load_field_model` can serve from,
+# on byte-identical corpora:
+#   ARM legacy : corpus `ei7b-legacy`     — empty atlas, v1 `field_skeleton.json`
+#                kept; the un-migrated shape `sep` is in TODAY
+#   ARM atoms  : corpus `ei7b-fieldguide` — same bytes, v1 file REMOVED,
+#                `enrich field-atoms` run; the migrated shape
+#
+# So the comparison is "the same digest from the two sources", which is the
+# port's actual question. A third "no field model at all" arm was dropped: it
+# measures nothing this change decides, and it would cost two more model runs.
 set -uo pipefail
 cd "$(dirname "$0")/../.." || exit 1
 
@@ -64,19 +70,22 @@ fi
 # ── Leg 0: the fixtures ─────────────────────────────────────────────────────
 # Reflink, so two 1.1 GB copies cost ~0 bytes until they diverge. `cp` is used
 # rather than a Lance copy precisely because it brings the indices along.
-for id in ei7b-plain ei7b-fieldguide; do
+for id in ei7b-legacy ei7b-fieldguide; do
   if [ ! -d "$INDEXES/$id" ]; then
     cp --reflink=auto -r "$SRC" "$INDEXES/$id" || { echo "RC_FIXTURE=92"; exit 92; }
-    # The fixture must not inherit the v1 artifact: `ei7b-plain` is the
-    # no-digest arm, and leaving the file there would splice a digest from it
-    # on a build that still read it. This build does not, but the arm should
-    # be true by construction, not by trusting the build.
-    rm -f "$INDEXES/$id/field_skeleton.json"
-    python3 -c "import json,sys; p=sys.argv[1]; json.dump({'atoms':[],'schema_version':'2.0'},open(p,'w'))" \
+    # Both start from the same bytes with an EMPTY atlas (which is what `sep`
+    # has). They then diverge in exactly one thing.
+    python3 -c "import json,sys; json.dump({'atoms':[],'schema_version':'2.0'},open(sys.argv[1],'w'))" \
       "$INDEXES/$id/atlas/atoms.json"
     rm -f "$INDEXES/$id/atlas/_summary.json"
   fi
 done
+# The atoms arm drops the v1 file, so a digest it serves CANNOT have come from
+# the fallback. Without this the arms would not be separable and a green run
+# would prove nothing about the atlas path.
+rm -f "$INDEXES/ei7b-fieldguide/field_skeleton.json"
+[ -f "$INDEXES/ei7b-legacy/field_skeleton.json" ] \
+  || { echo "RC_FIXTURE=93 (legacy arm lost its v1 file)"; exit 93; }
 echo "RC_FIXTURE=0"
 
 # ── Leg 1: the digests, side by side (the actual evidence) ──────────────────
@@ -149,10 +158,10 @@ PYEOF
 }
 
 # Both directions, so an ordering effect cannot hide inside a per-arm spread.
-run atoms 1 ei7b-fieldguide
-run none  1 ei7b-plain
-run none  2 ei7b-plain
-run atoms 2 ei7b-fieldguide
+run atoms  1 ei7b-fieldguide
+run legacy 1 ei7b-legacy
+run legacy 2 ei7b-legacy
+run atoms  2 ei7b-fieldguide
 
 box after
 echo DONE

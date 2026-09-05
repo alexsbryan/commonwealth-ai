@@ -101,26 +101,32 @@ impl Runtime {
     /// Runs AFTER `splice_landscape_digests`, so it APPENDS to (never clobbers)
     /// any view digests the provider produced. No-op when the turn is unscoped
     /// (`enabled_corpora` empty/None — we don't pay to scan every installed
-    /// corpus's atlas) or the scoped corpus's atlas holds no `Question` atoms.
+    /// corpus) or the scoped corpus has no field model in either place.
     ///
     /// ## ei-7b: the source moved, the renderer did not
     ///
     /// Until 2026-09-05 this read `field_skeleton.json` — a parallel artifact
-    /// beside the index that only this function ever read. It now reads the
-    /// atlas the rest of retrieval already reads, through
-    /// `field_atoms::skeleton_from_atoms`, and hands the result to the SAME
-    /// `render_landscape` (ARCH §10.6: one renderer, two sources; the digest
-    /// text is pinned byte-identical across the two by
+    /// beside the index that only this function ever read. It now asks
+    /// `field_atoms::load_field_model`, the ONE accessor for where a corpus's
+    /// field model lives: the atlas when it carries one, that same v1 file as
+    /// a MIGRATION FALLBACK when it does not. Either way the result goes to
+    /// the SAME `render_landscape` (ARCH §10.6: one renderer, two sources; the
+    /// digest text is pinned byte-identical across the two by
     /// `field_atoms::tests::digest_from_atoms_is_byte_identical_to_digest_from_the_v1_file`).
     ///
-    /// Cost. The v1 read was one JSON per scoped corpus and so is this one, but
-    /// `atoms.json` is a whole atlas where `field_skeleton.json` was one
-    /// pipeline's output — on a large corpus that is a much bigger parse to pay
-    /// on every turn. So the atlas's own census (`_summary.json`, already
-    /// written by the atlas writer) is consulted first and the corpus is skipped
-    /// when it reports zero `Question` atoms. A census that is ABSENT or STALE
-    /// is not read as "no questions" (ARCH §18.3) — that falls through to the
-    /// full read, which is correct and merely slower.
+    /// The fallback is why this port can land: `sep` carries 549 canonical
+    /// questions in the v1 file and an EMPTY atlas, so an atlas-only reader
+    /// would silently stop splicing its Field guide. Which source a corpus
+    /// uses is a DATA choice — `svrn enrich field-atoms <corpus>` moves it —
+    /// and the `retrieval_audit` line below reports `from_atlas` and
+    /// `from_legacy_file` separately, because "the digest fired" and "the
+    /// digest fired off an un-migrated file" are different facts.
+    ///
+    /// Cost. Reading a whole `atlas/atoms.json` per turn is a much bigger
+    /// parse than the v1 file was on a large atlas, so `load_field_model`
+    /// consults the atlas's own census (`_summary.json`) first and skips the
+    /// read when it reports zero `Question` atoms; an absent or stale census
+    /// falls through to the full read rather than being read as an absence.
     pub(crate) async fn splice_ambient_field_digests(&self, context: &mut ConversationContext) {
         let Some(engine) = self.corpus_engine.as_ref() else {
             return;
@@ -133,6 +139,11 @@ impl Runtime {
         // matching the KnowledgeViewManager's per-view budgets (300/200).
         const FIELD_DIGEST_BUDGET_TOKENS: usize = 250;
         let mut added: Vec<crate::types::LandscapeDigest> = Vec::new();
+        // Which SOURCE each spliced digest came from. An operator reading the
+        // audit line has to be able to tell "the atlas served it" from "the
+        // un-migrated v1 file served it" — same digest, different fact
+        // (ARCH §18.3).
+        let mut sources: Vec<corpus_engine::enrichment::field_atoms::FieldModelSource> = Vec::new();
         for corpus_id in &corpora {
             let index = match engine.open_index_for_corpus(corpus_id).await {
                 Ok(idx) => idx,
@@ -141,50 +152,18 @@ impl Runtime {
                     continue;
                 }
             };
-            let atlas_dir = index.path().join("atlas");
-            if let Some(census) =
-                corpus_engine::enrichment::atlas::read_current_atlas_summary(&atlas_dir)
-            {
-                let questions = census
-                    .atom_counts
-                    .get(&corpus_engine::enrichment::atlas::atoms::AtomType::Question)
-                    .copied()
-                    .unwrap_or(0);
-                if questions == 0 {
-                    tracing::debug!(
-                        corpus = %corpus_id,
-                        atoms = census.atom_count,
-                        "ambient field_model: census says no Question atoms — skipped without reading the atlas"
-                    );
-                    continue;
-                }
-            }
-            let atoms = match corpus_engine::enrichment::atlas::read_atlas_atoms(&atlas_dir) {
-                Ok(f) => f.atoms,
-                Err(e) => {
-                    tracing::debug!(corpus = %corpus_id, error = %e, "ambient field_model: read_atlas_atoms failed");
-                    continue;
-                }
-            };
-            let skeleton =
-                corpus_engine::enrichment::field_atoms::skeleton_from_atoms(corpus_id, &atoms);
-            if skeleton.is_empty() {
-                // `FieldSkeleton::is_empty` asks about CANONICAL questions
-                // only, so an atlas whose questions are all `Open` renders
-                // nothing here. That is unchanged from the v1 file — SEP's
-                // skeleton carries 0 open questions and every per-article
-                // `sep-<slug>` atlas carries only open ones — and it is left
-                // alone deliberately: widening it would start splicing a
-                // digest into per-article turns that never had one, which is a
-                // behaviour change this order does not measure.
-                tracing::debug!(
-                    corpus = %corpus_id,
-                    atoms = atoms.len(),
-                    open_questions = skeleton.open_questions.len(),
-                    "ambient field_model: atlas carries no canonical questions — nothing to splice"
-                );
+            // ONE accessor for "where is this corpus's field model" (ARCH
+            // §10.6): the atlas when it carries one, the v1
+            // `field_skeleton.json` as a migration fallback when it does not.
+            // Which source a corpus uses is a DATA choice — `svrn enrich
+            // field-atoms <corpus>` moves it — so this port cannot take an
+            // un-migrated corpus's digest dark.
+            let Some((skeleton, source)) =
+                corpus_engine::enrichment::field_atoms::load_field_model(&index.path(), corpus_id)
+            else {
                 continue;
-            }
+            };
+            sources.push(source);
             let heading = format!("Field guide — {corpus_id}");
             let body = skeleton.render_landscape(&heading, FIELD_DIGEST_BUDGET_TOKENS);
             if !body.trim().is_empty() {
@@ -208,11 +187,17 @@ impl Runtime {
         // Glassbox: the same `retrieval_audit` channel the atom-enum /
         // atlas-grounding steps log to, so an operator can confirm the field
         // digest fired for this turn.
+        let from_atlas = sources
+            .iter()
+            .filter(|s| **s == corpus_engine::enrichment::field_atoms::FieldModelSource::Atlas)
+            .count();
         tracing::info!(
             target: "retrieval_audit",
             scoped_corpora = corpora.len(),
             field_digests = field_count,
-            "ambient field_model: spliced corpus field-skeleton digests"
+            from_atlas,
+            from_legacy_file = sources.len() - from_atlas,
+            "ambient field_model: spliced corpus field-model digests"
         );
     }
 
