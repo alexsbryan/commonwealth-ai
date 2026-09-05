@@ -40,7 +40,24 @@ set -uo pipefail
 cd "$(dirname "$0")/../.." || exit 1
 
 OUT=runs/ei-7b-field-digest/out
+
+# A FAILED RUN'S ARTIFACTS MUST NOT SURVIVE INTO THE NEXT ONE.
+# Every leg writes to a fixed filename, so before this the 11:17 failure's
+# `atoms-run2.json` sat beside the 11:39 run's fresh `atoms-run1.json`, and
+# nothing in the file told them apart. Reading the directory as a set while a
+# run was still in flight reported INSTRUMENT_FAIL on arms that had simply not
+# been reached yet — correctly, for the stale data it was actually reading.
+# That is a plausible, well-formed, WRONG verdict from a green process, which
+# is the failure this whole lane exists to avoid making.
+#
+# The previous run is MOVED, not deleted — a single overwritten slot, so the
+# evidence survives one generation without unbounded growth.
+rm -rf "$OUT.prev"
+[ -d "$OUT" ] && mv "$OUT" "$OUT.prev"
 mkdir -p "$OUT"
+# The launch stamp every artifact is checked against. An artifact older than
+# this file did not come from this run.
+date -u +%s > "$OUT/RUN_ID"
 CLI=./target/debug/sovereign-cli-llm
 INDEXES="${SOVEREIGN_INDEXES:-$HOME/.svrnmesh/indexes}"
 SRC="$INDEXES/sep"
@@ -163,6 +180,11 @@ run () { # arm run_ix corpus
   # nothing here.
   grep -q "prod-pipeline mode" "${tag}.log" \
     || echo "INSTRUMENT_FAIL_${arm}_${ix}: not prod-pipeline mode"
+  # Freshness, asserted per arm: a log older than the launch stamp is a
+  # leftover, and reading one is how a stale failure becomes this run's verdict.
+  if [ "${tag}.log" -ot "$OUT/RUN_ID" ]; then
+    echo "INSTRUMENT_FAIL_${arm}_${ix}: ${tag}.log predates this run's RUN_ID — STALE, not a result"
+  fi
   python3 - "${tag}.log" "${arm}" "${ix}" <<'PYEOF'
 import re, sys
 # STRIP ANSI FIRST. `tracing` writes escapes BETWEEN the field name and the

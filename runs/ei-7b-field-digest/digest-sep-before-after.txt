@@ -1,7 +1,7 @@
 svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
 Projecting 'sep' field skeleton (549 canonical questions, 0 open) into 'ei7b-fieldguide' atlas…
-[2m2026-09-05T17:49:47.066539Z[0m [32m INFO[0m field model: published skeleton atoms into the atlas [3matlas_dir[0m[2m=[0m/home/alexbryan/.sovereign/indexes/ei7b-fieldguide/atlas [3mprojected[0m[2m=[0m1308 [3mwritten[0m[2m=[0m1308 [3malready_present[0m[2m=[0m0 [3matoms_before[0m[2m=[0m0
-  1308 atoms projected -> 1308 written, 0 already present (atlas held 0 before)
+[2m2026-09-05T18:38:35.244233Z[0m [32m INFO[0m field model: published skeleton atoms into the atlas [3matlas_dir[0m[2m=[0m/home/alexbryan/.sovereign/indexes/ei7b-fieldguide/atlas [3mprojected[0m[2m=[0m1308 [3mwritten[0m[2m=[0m0 [3malready_present[0m[2m=[0m1308 [3matoms_before[0m[2m=[0m1308
+  1308 atoms projected -> 0 written, 1308 already present (atlas held 1308 before)
   digest: identical to the v1 file's (372 chars)
 
 --- digest from field_skeleton.json ---
