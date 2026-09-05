@@ -21,14 +21,14 @@ asserts = 8
 requirement = "FE-90"
 test = "sovereign-core::mesh_measurements::tests::a_witness_accounts_for_the_digest_it_was_built_from"
 file = "sovereign/crates/sovereign-core/src/mesh_measurements.rs"
-line = 2291
+line = 2322
 asserts = 2
 
 [[claim]]
 requirement = "FE-92"
 test = "sovereign-core::mesh_measurements::tests::no_co_residents_is_reported_as_a_finding_not_as_silence"
 file = "sovereign/crates/sovereign-core/src/mesh_measurements.rs"
-line = 2953
+line = 2984
 asserts = 2
 
 [[claim]]
@@ -56,7 +56,7 @@ asserts = 5
 requirement = "GR-2"
 test = "sovereign-core::runtime::grounding::tests::rewrite_note_includes_corrective_passages"
 file = "sovereign/crates/sovereign-core/src/runtime/grounding/tests.rs"
-line = 2180
+line = 2329
 asserts = 3
 
 [[claim]]
@@ -112,21 +112,21 @@ asserts = 6
 requirement = "GR-46"
 test = "sovereign-core::runtime::epistemic::tests::one_assembly_returns_holdings_verdict_and_gaps_that_agree_with_each_other"
 file = "sovereign/crates/sovereign-core/src/runtime/epistemic.rs"
-line = 862
+line = 868
 asserts = 9
 
 [[claim]]
 requirement = "GR-47"
 test = "sovereign-core::runtime::epistemic::tests::tool_derived_verdicts"
 file = "sovereign/crates/sovereign-core/src/runtime/epistemic.rs"
-line = 800
+line = 806
 asserts = 3
 
 [[claim]]
 requirement = "GR-50"
 test = "sovereign-core::runtime::grounding::call_census::tests::no_gate_module_calls_inference_complete_behind_the_censuss_back"
 file = "sovereign/crates/sovereign-core/src/runtime/grounding/call_census.rs"
-line = 288
+line = 384
 asserts = 1
 
 [[claim]]
@@ -140,7 +140,7 @@ asserts = 2
 requirement = "GR-6"
 test = "sovereign-core::runtime::grounding::tests::tombstoned_repair_releases_the_audited_draft_with_its_claims_marked"
 file = "sovereign/crates/sovereign-core/src/runtime/grounding/tests.rs"
-line = 1197
+line = 1314
 asserts = 8
 
 [[claim]]
